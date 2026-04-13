@@ -1,0 +1,3001 @@
+# GOAL-CONDITIONED REINFORCEMENT LEARNING
+## WITH SUBGOALS GENERATED FROM RELABELING
+
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+In goal-conditioned reinforcement learning (RL), the primary objective is to develop a goal-conditioned policy capable of reaching diverse desired goals, a process
+often hindered by sparse reward signals. To address the challenges associated with
+sparse rewards, existing approaches frequently employ hindsight relabeling, substituting original goals with achieved goals. However, these methods exhibit a
+tendency to prioritize the optimization of closer achieved goals during training,
+leading to the loss of potentially valuable information from the trajectory and low
+sample efficiency. Our key insight is that achieved goals, derived from hindsight
+relabeling, can serve as effective subgoals to facilitate the learning of policies that
+can reach long-horizon desired goals within the same trajectory. By leveraging
+these subgoals, we aim to incorporate more longer trajectory information within the
+same hindsight framework. From this perspective, we propose a novel framework
+called Goal-Conditioned reinforcement learning with Q-BC (i.e, behavior cloning
+(BC)-regularized Q) and Subgoals (GCQS) for goal-conditioned RL. GCQS is
+a innovative goal-conditioned actor-critic framework that systematically exploits
+more trajectory information to improve policy learning and sample efficiency. As
+an extension of the traditional goal-conditioned actor-critic framework, GCQS
+further exploits longer trajectory information, treating them as subgoals that guide
+the learning process and improve the accuracy of action predictions. Experimental results in simulated robotic environments demonstrate that GCQS markedly
+improves sample efficiency and overall performance when compared to existing
+goal-conditioned methods. Additionally, GCQS demonstrated competitive performance on long-horizon AntMaze tasks, achieving results comparable to such
+state-of-the-art subgoal-based methods.
+
+
+1 INTRODUCTION
+
+
+The integration of Reinforcement Learning (RL) and Deep Learning (DL) has resulted in remarkable
+progress across various domains. These include advanced robotic control (Quiroga et al., 2022; Qi
+et al., 2023; Plasencia-Salgueiro, 2023; Zheng et al., 2024), mastery in computer gaming (Quiroga
+et al., 2022; Zhang et al., 2023a; Plasencia-Salgueiro, 2023; Roayaei Ardakany & Afroughrh, 2024),
+and sophisticated language processing capabilities (Akakzia et al., 2020; Sharifani & Amini, 2023;
+Uc-Cetina et al., 2023; Shinn et al., 2024). A critical challenge in RL is fostering efficient learning
+in scenarios characterized by sparse rewards, a difficulty that is magnified in goal-conditioned RL,
+thereby adversely affecting sample efficiency. To tackle this issue, Andrychowicz et al. (2017)
+proposed hindsight experience replay (HER), an approach aimed at significantly enhancing sample
+efficiency in goal-conditioned RL. HER leverages the abundant repository of failed experiences by
+relabeling the desired goals in training trajectories with the achieved goals that were actually reached
+during these failed attempts. This method effectively maximizes the utility of the data available,
+promoting a more efficient learning process.
+
+
+HER offers a practical principle for generating pseudo demonstrations to train control policies. Based
+on HER, several efficient goal-conditioned methods have been proposed, including goal-conditioned
+actor-critic (GCAC) (Andrychowicz et al., 2017; Fang et al., 2019; Yang et al., 2021) and goalconditioned weighted supervised learning (GCWSL) methods (Yang et al., 2022; Ma et al., 2022;
+
+
+1
+
+
+Figure 1: GCQS framework with phasic goal structure in goal-conditioned RL. During training, the
+policy _π_ is constrained to remain close to the prior policy _π_ _[piror]_ through KL-regularization. The prior
+policy _π_ _[piror]_ is defined as the as the distribution of actions required to reach intermediate subgoals
+_sg_ of the task. Notably, the subgoal policy and subgoals are only employed during the training of the
+target policy _π_ . At test time, the trained policy _π_ is used directly to generate appropriate actions.
+
+
+Hejna et al., 2023). GCAC focuses on maximizing the Q-function through Temporal Difference
+(TD)-learning, whereas GCWSL employs weighted behavior cloning.
+
+
+Despite their success in effectively learning from sparse rewards across various goal-reaching tasks,
+as we find, both GCAC and GCWSL often exhibit a bias towards sampling short-horizon achieved
+goals generated from relabeling during policy updates. This bias may lead to suboptimal actions for
+desired goals that require longer horizons to reach.
+
+
+From this perspective, we introduce a novel goal-conditioned actor-critic framework, GCQS, designed
+to enhance action prediction accuracy and further exploit the longer information within the same
+trajectory. GCQS initially optimizes a Q-BC (i.e, behavior cloning (BC)-regularized Q) objective
+to efficiently learn to reach achieved (relabeled) goals, similar to the approach employed by GCAC.
+And then, it utilizes longer achieved goals as subgoals to refine and improve the policy for attaining
+the desired goals. Specifically, to incorporate subgoals into policy learning, we propose a prior
+policy within the GCQS framework, which is defined as a distribution over the actions needed to
+achieve intermediate subgoals (refer to Fig. 3). In light of the results from Paster et al. (2020) and
+Eysenbach et al. (2022), which demonstrate that imitation learning employed in GCWSL can produce
+suboptimal policies when dealing with relabeled suboptimal data, we optimize a Q-function objective
+regularized by behavior cloning (Q-BC) to generate an optimal policy for reaching these subgoals.
+The prior policy serves as an initial approximation for reaching the desired goals when subgoals are
+introduced. To refine this process, we implement a policy iteration framework, augmented with a
+Kullback-Leibler (KL) divergence constraint, specifically designed to guide the refinement of the
+prior policy (see Fig. 1). We refer to this as a phasic goal structure. To evaluate GCQS, we conduct
+experiments in standard goal-conditioned gym robotics environments. The experimental results
+demonstrate that GCQS obtains superior performance and sample efficiency compared to previous
+goal-conditioned methods, including DDPG+HER (Andrychowicz et al., 2017), Model-based HER
+(Yang et al., 2021), and various GCWSL approaches (Chane-Sane et al., 2021; Yang et al., 2022; Ma
+et al., 2022; Hejna et al., 2023). Additionally, GCQS outperforms several advanced subgoal-based
+algorithms on complex AntMaze tasks. The overall framework of GCQS is shown in Fig. 1.
+
+
+We briefly summarize our contributions as follows: (1) We demonstrate that both the GCAC and
+GCWSL methodologies exhibit a tendency to prioritize the learning of actions associated with shorthorizon achieved goals, as relabeled from the replay buffer. (2) We propose GCQS, a subgoal-based
+extension of the GCAC that incorporates longer trajectory information within the hindsight relabeling
+framework to enhance policy learning efficiency and performance. To the best of our knowledge,
+GCQS is the first approach to leverage relabeled goals as subgoals to enhance the performance
+of goal-conditioned policies. Additionally, we provide a detailed analysis demonstrating that this
+phasic policy structure more accurately predicts actions required to reach desired goals compared
+to the conventional flat policy structure. (3) Experimental evidence reveals that GCQS outperforms
+
+
+2
+
+
+State
+
+
+Desired goal
+
+
+Achieved goal
+
+
+_s_
+
+
+_g_
+
+
+_g_ 
+
+
+( | _s_, _g_ )
+
+
+GCAC and GCWSL in terms of both performance and sample efficiency across various complex
+goal-conditioned tasks. On more complex long-horizon AntMaze tasks, GCQS achieved performance
+comparable to such state-of-the-art subgoal-based methods.
+
+
+2 RELATED WORK
+
+
+**Goal-conditioned Methods** Addressing goal-conditioned RL tasks involves significant complexities due to the requirement for agents to reach multiple goals concurrently. The major challenge in
+goal-conditioned RL is managing sparse rewards. To address the issue of sparse rewards, the concept
+of hindsight was developed, which reinterprets past failures as successes. HER (Andrychowicz et al.,
+2017) integrates off-policy learning by incorporating hindsight transitions into the replay buffer. This
+approach enables agents to learn from their experiences by relabeling the goals they initially aimed
+for with they actually reached (achieved goals). Based on HER, curriculum hindsight experience
+replay (CHER) (Fang et al., 2019) and model-based hindsight experience replay (MHER) (Yang et al.,
+2021) introduce heuristically goal selection from failed attempts and model-based goal relabeling,
+respectively. Goal-conditioned weighted supervised learning (GCWSL) methods (Chane-Sane et al.,
+2021; Yang et al., 2022; Ma et al., 2022; Hejna et al., 2023) provide theoretical guarantees that
+learning from achieved goals (relabeled goals) optimizes a lower bound on the goal-conditioned RL
+objective. In contrast to these methods, GCQS aims to obtain optimal policies to reach these achieved
+goals by employing a Q-BC objective. This method integrates reinforcement learning and imitation
+learning, accelerating the learning process. Experimental results demonstrate its superior sample
+efficiency and performance compared to previous goal-conditioned methods.
+
+
+**Subgoal Based Approaches** Several previous studies have suggested employing subgoals to tackle
+goal-reaching tasks (Jurgenson et al., 2020; Chane-Sane et al., 2021; Kim et al., 2021; Islam et al.,
+2022; Lee et al., 2022; Zhang et al., 2023b; Kim et al., 2023; Yoon et al., 2024). Our approach diverges
+from these hierarchical RL methods in that it does not require additional algorithms for subgoal
+discovery. The closest related work is by Chane-Sane et al. (2021). However, there are significant
+differences between their method and our GCQS framework. Firstly, Chane-Sane et al. (2021)
+assumes that the state and goal are identical, which is not applicable in our general goal-conditioned
+RL environments where states and goals are distinct. Secondly, our method utilizes the relabeled
+goals within a goal-conditioned RL setting as natural subgoals, thus eliminating the need for separate
+subgoal discovery mechanisms. This approach has been validated through extensive experimental
+evaluations. Moreover, Chane-Sane et al. (2021) lacks a theoretical framework explaining why
+subgoals can enhance policy performance. In contrast, our approach systematically integrates
+subgoals into the learning process, demonstrating through empirical evidence how these subgoals
+contribute to improved policy efficiency and effectiveness in realizing possible long-horizon tasks.
+
+
+3 PRELIMINARIES
+
+
+3.1 GOAL-CONDITIONED RL AND HINDSIGHT EXPERIENCE REPLAY
+
+
+Goal-conditioned reinforcement learning (RL) can be characterized by the tuple
+_,_ _,_ _,_ _, r, γ, ρ_ 0 _, T_, where,,, _γ_, _ρ_ 0 and _T_ respectively represent the state space,
+_⟨S_ _A_ _G_ _P_ _⟩_ _S_ _A_ _G_
+action space, goal space, discounted factor, the distribution of initial states and the horizon of the
+episode. _P_ : _P_ ( _s_ _[′]_ _|s, a_ ) is the dynamic transition function, and _r_ : _r_ ( _s, a, g_ ) is typically a simple
+unshaped binary signal. A typical sparse reward function employed in goal-conditioned RL can be
+expressed as follows:
+
+
+where _ϕ_ ( _st_ ) is the achieved goals, _µ_ is a threshold and _ϕ_ : is a known state-to-goal mapping
+_S_ _→G_
+function from states to achieved goals. HER (Andrychowicz et al., 2017) is an innovative technique
+designed to enhance learning from unsuccessful attempts and to address the problem of sparse
+rewards in goal-conditioned RL. HER incorporates four distinct replay strategies to improve the
+learning process: (1) Final: Replaying transitions corresponding to the final achieved goals of an
+episode. (2) Future: Replaying transitions with random future achieved goals from the same episode
+
+
+3
+
+
+_r_ ( _st, at, g_ ) =
+
+
+0 _,_ _||ϕ_ ( _st_ ) _−_ _g||_ 2 _< µ_ _,_ (1)
+
+_−_ 1 _,_ otherwise
+
+
+as the transition being replayed. (3) Episode: Replaying transitions with random achieved goals
+from within the same episode. (4) Random: Replaying transitions with random achieved goals
+encountered throughout the entire training process. Among these strategies, the future scheme is
+generally preferred for goal replay in practical applications. Therefore most prior works and our
+framework adopt this future strategy to replace desired goals with achieved goals.
+
+
+3.2 GOAL-CONDITIONED ACTOR-CRITIC (GCAC)
+
+
+GCAC is an efficient temporal-difference (TD)-based RL family of methods enabling agent learns to
+reach multiple goals with a goal-conditioned policy in goal-conditioned RL. Formally, the objective
+of a goal-conditioned policy is to maximize expected discounted return:
+
+
+and
+_V_ _[π]_ ( _s, g_ ) = E _a∼π_ ( _·|s,g_ ) _Q_ _[π]_ ( _s, a, g_ ) _._ (5)
+
+GCAC aims to approximate the _Q_ _[π]_ ( _s, a, g_ ) and develop a goal-conditioned policy _π_ ( _a|s, g_ ) that
+selects actions to maximize _Q_ _[π]_ ( _s, a, g_ ). This is obtained through the use of a function approximator,
+typically a neural network. The learning process involves an iterative approach where the regression
+of _Q_ _[π]_ ( _s, a, g_ ) alternates with the optimization of _π_ . During this process, the neural network is trained
+to predict _Q_ _[π]_ ( _s, a, g_ ) while simultaneously optimizing _π_ ( _a|s, g_ ) to choose actions that result in high
+values as determined by _Q_ _[π]_ ( _s, a, g_ ). This iterative process ensures that the policy continuously
+improves by leveraging the learned value function. GCAC is following the standard off-policy actorcritic paradigm such as DQN (Mnih et al., 2015), DDPG (Silver et al., 2014), TD3 (Fujimoto et al.,
+2018), and SAC (Haarnoja et al., 2018). To further enhance sampling efficiency in goal-conditioned
+RL, the GCAC framework is often combined with HER. This combination leverages the on the
+benefits of both approaches, enabling more efficient learning and improved handling of sparse reward
+environments in goal-conditioned scenarios. In this paper, GCAC refers to the goal-conditioned
+actor-critic approach combined with the HER variant.
+
+
+During training, the value function _Q_ _[π]_ is updated to minimize the TD error:
+
+
+               _T D_ = E( _st,at,g′,st_ +1) _∼Br_ ( _rt_ _[′]_ [+] _[ γ]_ [ ˆ] _[Q][π]_ [(] _[s][t]_ [+1] _[, π]_ [(] _[s][t]_ [+1] _[, g][′]_ [)] _[, g][′]_ [)] _[ −]_ _[Q][π]_ [(] _[s][t][, a][t][, g][′]_ [))][2][�] _,_ (6)
+_L_
+
+where _r_ is the data distribution after hindsight relabeling, _g_ _[′]_ represents the achieved goals from
+_B_
+_r_, and _Q_ [ˆ] refers to the target network which is slowly updated to stabilize training. The policy _π_ is
+_B_
+trained with policy gradient on the following objective in GCAC:
+
+_JGCAC_ ( _π_ ) = E( _st,g′_ ) _∼Br_ [ _Q_ _[π]_ ( _st, π_ ( _st, g_ _[′]_ ) _, g_ _[′]_ )] _._ (7)
+
+
+3.3 GOAL-CONDITIONED WEIGHTED SUPERVISED LEARNING (GCWSL)
+
+
+In contrast to GCAC methods, which focus on directly optimizing the discounted cumulative return,
+GCWSL provides theoretical guarantees that weighted supervised learning from hindsight relabeled
+
+
+4
+
+
+(2)
+
+
+( _π_ ) = E _g∼ρg,τ_ _∼dπ_ ( _.|g_ )
+_J_
+
+
+- _T_
+
+
+_γ_ _[t]_ _r_ ( _st, at, g_ )
+
+_t_
+
+
+under the distribution
+
+
+_d_ _[π]_ ( _τ_ _g_ ) = _ρ_ 0( _s_ 0)
+_|_
+
+
+_T_
+
+- _π_ ( _at_ _st, g_ ) ( _st_ +1 _st, at_ ) (3)
+
+_|_ _P_ _|_
+_t_
+
+
+induced by the policy _π_, the initial state _s_ 0 and desired goal distribution _g_ _ρg_ . The policy _π_ ( _a_ _s, g_ )
+_∼_ _|_
+utilized in this study yields a probability distribution over continuous actions _a_, conditioned on the
+state _s_ and desired goal _g_ . Several algorithms fundamentally rely on the effective estimation of the
+state-action-goal value function _Q_ _[π]_ and the state-goal value function _V_ _[π]_, which are mathematically
+expressed as follows::
+
+
+_T_
+
+
+_Q_ _[π]_ ( _s, a, g_ ) = E _s_ 0= _s,a_ 0= _a,τ_ _∼dπ_ ( _·|g_ )[
+
+
+_γ_ _[t]_ _r_ ( _st, at, g_ )] (4)
+
+_t_
+
+
+Figure 2: Four example histograms illustrate the distances between initial states and achieved goals
+when calculating the achieved goals used to update the targets network for DDPG+HER and WGCSL
+in the Fetch and Hand series tasks. These tasks were trained over a fixed number of epochs: 20 for the
+Fetch series and 50 for the Hand series. The _X_ axis denotes the horizon between the initial states and
+achieved goals, while the _Y_ axis represents the percentage of each bin relative to the total updates.
+This phenomenon suggests a tendency to optimize for shorter distances during the training process,
+potentially leading to biased learning towards short-horizon goals.
+
+
+data optimizes a lower bound on the goal-conditioned RL objective. During training, trajectories are
+sampled form a relabeled dataset by utilizing hindsight mechanisms (Kaelbling, 1993; Andrychowicz
+et al., 2017). And the policy optimization satisfies the following definition:
+
+_JGCW SL_ ( _π_ ) = E( _st,at,g_ ) _∼Dr_ [ _w ·_ log _πθ_ ( _at|st, g_ )] _,_ (8)
+
+where _r_ denotes relabeled data, _g_ = _ϕ_ ( _si_ ) denotes the relabeled goal for _i_ _t_ . The weighted
+_D_ _≥_
+function _w_ exists various forms in GCWSL methods (Ghosh et al., 2021; Yang et al., 2022; Ma et al.,
+2022; Hejna et al., 2023) and can be considered as the scheme choosing optimal path between _s_
+and _g_ . Therefore GCWSL includes typical two process, acquiring sub-trajectories corresponding to
+( _s, g_ ) pairs and imitating them. In the process of imitation, GCWSL first train the specific weighted
+function _w_, and then extract the policy with the Equation 10. Note that GCSL (Ghosh et al., 2021) is
+a special case, and for convenience, we include GCWSL here. Generally, _w_ = 1.
+
+
+4 GCAC AND GCWSL ARE OFTEN BIASED TOWARDS LEARNING SHORT
+TRAJECTORIES
+
+
+The core principle in GCAC and GCWSL is the substitution of desired goals with achieved goals to
+facilitate the learning process. This strategy leverages the agent’s capacity to learn from the states
+it has successfully reached, thereby promoting effective learning even in the presence of sparse
+rewards. By focusing on the achieved goals, these frameworks encourage the agent to reinforce
+its ability to navigate towards goal states it has previously encountered, thus optimizing its policy for a broader range of goal conditions. We use _τ_ = ( _s_ 1 _, a_ 1 _, g, r_ 1) _,_ ( _s_ 2 _, a_ 2 _, g, r_ 2) _. . .,_ ( _sT −_ 1 _,_
+_{_
+_aTmax−_ 1 _, g, rTmax−_ 1) _, sTmax_ ) to denote a trajectory visited by state in replay buffer, and _τ_ _[g][′]_ =
+_}_
+_ϕ_ ( _s_ 1) _, ϕ_ ( _s_ 2) _, . . ., ϕ_ ( _sTmax−_ 1) _, ϕ_ ( _sTmax_ ) denotes the achieved goal trajectory. GCAC and GCWSL
+_{_ _}_
+alternates _g_ and _rt_ in the t-th transition ( _st, at, g, rt, st_ +1) with a future achieved goal _g_ _[′]_ =
+_ϕ_ in the same suffix.( _si_ + _t_ +1) _,_ 1 _≤_ _i ≤_ Upon relabeling, transitions within failed trajectories can be assigned non-negative _Tmax −_ _t_ selected from achieved goal trajectory and _rt_ _[′]_ [=] _[ r]_ [(] _[s][i]_ [+] _[t]_ [+1] _[, a][i]_ [+] _[t]_ [+1] _[, g][′]_ [)]
+rewards. Consequently, HER effectively mitigates the primary challenge of sparse rewards in goalconditioned RL. To be precise, the process involves sampling _t_ _U_ (1 _, Tmax_ 1) which determines
+the current state _τ_ ( _st_ ). Subsequently, an achieved goal is selected from the achieved goal trajectory: _∼_ _−_
+_τ_ _[g][′]_ ( _ϕ_ ( _si_ + _t_ +1)) _, i_ _U_ (1 _, Tmax_ _t_ ), where _i_ is the chosen future offset. We define _p_ ( _i_ ) probability
+of selecting a future offset with a horizon length _∼_ _−_ _i_ . This leads us to establish the following theorem:
+**Theorem 4.1.** _The cumulative function S_ ( _x_ ( _K_ )) := [�] _k≥K_ _[x][k]_ _[of the probability][ p][ of fixed offset]_
+
+_horizon length I_ _for GCAC and GCWSL updates is characterized by a monotonically decreasing_
+_function:_
+_S_ ( _p_ ( _I_ + 1)) _≤_ _S_ ( _p_ ( _I_ )) _._ (9)
+
+The proof is available in Appendix A.1. This theorem remains unaffected by the value of _p_ ( _i_ ), even
+though _p_ ( _i_ ) is derived from the transition dynamics _P_ and the behavior policy, as demonstrated
+in Eq. (2) and Eq. (3). Consequently, we infer that within the HER framework, both GCAC and
+
+
+5
+
+
+8
+
+6
+
+4
+
+2
+
+
+Trajectory horizon
+
+
+8
+
+6
+
+4
+
+2
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+
+Trajectory horizon
+
+
+Trajectory horizon
+
+
+0
+
+
+14
+
+10
+
+6
+
+2
+
+
+Trajectory horizon
+
+
+GCWSL are predisposed to select achieved goals with shorter horizons for relabeling and updating.
+We performed a statistical analysis on the time step offsets _i_ used for updates in a fixed number of
+DDPG+HER examples within GCAC and GCWSL, determining the percentage distribution of each
+time step offset (refer to Fig. 2).
+
+
+The analysis demonstrates that a significant portion of the updates is concentrated on relatively short
+segments of sub-trajectories, despite the trajectories often reaching their maximum permissible length,
+_Tmax_, illustrated at the furthest right of the _X_ axis. This pattern indicates a pronounced inclination
+within these methods to favor updates concerning immediate goals, resulting in a model that primarily
+acquires information from scenarios involving goals with shorter horizons.
+
+
+5 GCQS: AN EXTENDED VERSION OF GCAC
+
+
+Based on the insights and analysis from Section 4, we have developed a novel framework for goalconditioned RL called GCQS. The primary motivation behind GCQS is to leverage more extensive
+long trajectories for updates. Overall of this framework is illustrated in Fig. 1. Since we find
+that GCWSL underperforms compared to GCAC in our experiments, which may be attributed to
+GCWSL’s lack of stitching capability (Cheikhi & Russo, 2023; Ghugare et al., 2024). Therefore
+GCQS integrates the SAC following GCAC. The core of GCQS is grounded in the observation
+that it is generally more straightforward to identify future achieved goals that lead to the ultimate
+desired goals, rather than determining the optimal action directly from the initial state. By redefining
+these achieved goals as subgoals and embedding them within GCAC models, the accuracy of action
+predictions can be significantly enhanced. This process not only simplifies the learning trajectory but
+also improves the overall efficiency and effectiveness of the policy learning framework.
+
+
+In the following sections we describe the specific implementation and analysis of GCQS. We first
+introduce a policy _π_ ( _·|s, g_ _[′]_ ) for reaching achieved goals, as detailed in Section 5.1. Next, we
+enhance the desired goal-conditioned policy _π_ ( _·|s, g_ ) by using achieved goals trajectory as subgoals
+distribution, as discussed in Section 5.2.
+
+
+5.1 OBTAIN THE OPTIMAL POLICY TO REACH THE ACHIEVED GOALS VIA Q-BC
+
+
+In this section, we elucidate the process for training a policy to effectively reach achieved goals,
+specifically when utilizing the future strategy.
+
+
+First, we posit the existence of a relabeling policy _πrelabel_ capable of generating achieved goals _g_ _[′]_
+within the relabeled data _r_ . Our goal-conditioned policy that reaching achieved goals is then trained
+_B_
+to optimize the following objective function while adhering to KL-divergence constraints:
+
+arg maxE( _s,g′_ ) _∼Br,a∼π_ ( _s,g′_ )[ _Q_ _[π]_ ( _s, a, g_ _[′]_ )] _,_ s.t. KL ( _π_ _πrelabel_ ) _ϵ._ (10)
+_π_ _D_ _∥_ _≤_
+
+
+Since minimizing the KL-divergence corresponds to optimizing for maximum likelihood (LeCun
+et al., 2015):
+min _D_ KL ( _π||πrelabel_ ) = min E _Br_ [log _π_ ( _a|s, g_ _[′]_ )] _._ (11)
+
+and considering a stochastic policy, we have the following Lagrangian equation:
+
+_L_ ( _λ, π_ ) = E _a∼π_ ( _·|s,ϕ_ ( _s_ )) [ _Q_ _[π]_ ( _s, a, g_ _[′]_ )] + _λ_ E( _s,a,ϕ_ ( _s_ )) _∼Br_ log _π_ ( _a|s, g_ _[′]_ ) _._
+
+In this case, the stochastic policy _π_ ( _s, g_ _[′]_ ) can be regarded as a Dirac-Delta function thus, the
+
+- _a_ _[π]_ [(] _[a][|][s, g][′]_ [)] _[da]_ [ = 1][ constraint always satisfies.] [Therefore optimization objective become:]
+
+arg maxE( _s,a,g′_ ) _∼Br_ [ _Q_ _[π]_ ( _s, a, g_ _[′]_ ) + log( _π_ ( _a_ _s, g_ _[′]_ ))] _._ (12)
+_π_ _|_
+
+
+We refer to our goal-conditioned policy objective that reaches achieved goals in Eq. (12) as Q-BC.
+
+
+**Compared** **with** **GCAC** In practice, the Q-BC objective integrates reinforcement learning (by
+maximizing _Q_ _[π]_ ) with imitation learning (by maximizing the behavior cloning). This integration
+effectively accelerates the GCAC learning process through behavior cloning regularization derived
+from relabeled data. This concept aligns with various methods designed to expedite reinforcement
+
+
+6
+
+
+learning through demonstrations (Atkeson & Schaal, 1997). Historically, behavior cloning has been
+employed to regularize policy optimization using natural policy gradients (Kakade, 2001; Lillicrap
+et al., 2015; Rajeswaran et al., 2017; Nair et al., 2018; Goecks et al., 2019), often incorporating
+additional complexities such as modified replay buffers and pre-training stage. Moreover, our Q-BC
+approach eliminates the need for additional parameters while maintaining training stability, akin to
+the methods discussed in Fujimoto & Gu (2021).
+
+
+5.2 POLICY IMPROVEMENT WITH SUBGOALS DERIVED FROM ACHIEVED GOALS
+
+
+In this section, we redefine the well-learned achieved goals _g_ _[′]_ as subgoals _sg_ that facilitate reaching the
+desired goals _g_ . This approach enhances the learning process by integrating intermediate objectives
+that guide the agent towards its ultimate goal, leveraging the structure provided by the achieved goals
+to optimize the overall policy. The key perspectives in this section can be visualized in the Fig. 3. To
+formalize this notion, we first introduce a KL constraint on the policy distribution, conditioning on
+desired goals _g_ and subgoals _sg_ :
+
+_D_ KL ( _π_ ( _·|s, g_ ) _||π_ ( _·|s, sg_ )) _≤_ _η._ (13)
+
+In goal-conditioned RL, for a given state _s_ and desired goal _g_, we implement a bootstrapping technique
+to estimate the policy’s performance at subgoals _sg_ .
+These subgoals are sampled from the trajectory distribution of achieved goals _τ_ _[g][′]_ . Then we have the
+following definition for the prior goal-conditioned
+policy that reaches desired goals:
+
+_π_ _[prior]_ ( _a_ _s, g_ ) := E _sg∼τ g_ _[′]_ [ _π_ ( _a_ _s, sg_ )] _._ (14)
+_|_ _|_
+
+Given the premise that subgoals are typically more
+reachable than final desired goals, we utilize the
+prior policy as a valuable initial estimate to guide the Figure 3: Achieved goals _g_ _[′]_ are considered subsearch for optimal actions. To ensure proper align- goals _sg_ because they are easy to reach and boundment of the policy behavior, we introduce a policy ing KL-constrained optimal path for reaching _sg_
+iteration framework that incorporates an additional and desired goals _g_ .
+KL divergence constraint. During the policy improvement stage, in addition to maximizing the Q-function as specified in Eq. (12), we integrate a KL
+regularization term to maintain the policy’s proximity to the prior policy. This regularization helps
+ensure consistency with the initial estimate, thereby facilitating a more efficient search for optimal
+actions.
+
+
+Therefore the desired goal-conditioned policy objective can be expressed as follows:
+
+arg maxE( _s,g_ ) _∼B_ E _a∼π_ ( _·|s,g_ )     - _Q_ _[π]_ ( _s, a, g_ ) _β_ KL     - _π_ ( _s, g_ ) _π_ _[prior]_ ( _s, g_ )�)� _,_ (15)
+_π_ _−_ _D_ _·|_ _∥_ _·|_
+
+
+where _β_ is a hyperparameter. The construction of prior policy in Eq. (14) and KL-divergence term in
+Eq. (15) are estimated by Monte-Carlo approximation followed Chane-Sane et al. (2021), ensuring
+stable convergence. This phasic goal-conditioned policy structure enables the derivation of more
+optimal actions for potentially long-horizon goals. We will provide practical implementation of the
+entire algorithm and analyze why this phasic structure is better than the previous flat structure in
+detail in Appendix B.1.
+
+
+Although prior work on subgoal policies has rarely provided performance guarantees, we draw upon
+the insights from Ma et al. (2022) to demonstrate that iterative learning under the structured properties
+of phasic structure policy can yield statistical guarantees for the optimal policy of GCQS, as described
+in Eq. (15).
+
+**Theorem 5.1** (Performance Guarantee) **.** _Assume_ sup _r_ ( _s, a, g_ ) _R_ max _._ _Consider a policy class_
+_|_ _| ≤_
+Π : _{S_ _→_ ∆( _A_ ) _} such that π_ _[∗]_ _∈_ Π _._ _Then, for any δ,with probability at least_ 1 _−_ _δ,GCQS framework_
+_will return a policy_ _π_ ˆ _such that:_
+
+
+sup
+_s,g_
+
+
+~~�~~
+
+   - _|_ Π _|_   2 log _δ_
+
+
+_._ (16)
+_N_
+
+
+�� _V_ _∗_ ( _s, g_ ) _V_ _π_ ˆ( _s, g_ )�� _R_ max _√_ 2 _η_ + _R_ max
+_−_ _≤_ 1 _γ_
+_−_
+
+
+7
+
+
+~~_√_~~
+
+
+The proof is available in Appendix A.2. This theorem provides a theoretical performance guarantee
+for the GCQS algorithm in goal-conditioned reinforcement learning, explicitly defining the upper
+bound on the V-value function error between the learned policy _π_ ˆ and the optimal policy _π_ _[∗]_ . The
+theorem demonstrates that the error bound is influenced by the upper bound on KL-divergence _η_ and
+the number of samples _N_ . By controlling _η_, the policy deviation can be constrained, ensuring stability
+during policy optimization. Additionally, increasing the sample size improves the approximation
+accuracy of the policy. While the theorem depends on the quality of the prior policy, it offers a strong
+theoretical foundation for the practical effectiveness and sample efficiency of the GCQS algorithm.
+
+
+6 EXPERIMENTS
+
+
+We begin by presenting the benchmarks and baseline methodologies utilized in our study, accompanied by a detailed description of the experimental procedures. Following this, we report the results
+and provide a thorough analysis, demonstrating how they corroborate our initial assumptions and
+theoretical framework.
+
+
+**Benchmarks** We utilize the established goal-conditioned research benchmarks as detailed by
+Plappert et al. (2018), encompassing four manipulation tasks on the _Shadow −_ _hand_ and all tasks
+on the _Fetch_ robot. We also conducted comparisons with an advanced subgoal algorithm on the
+complex long-horizon AntMaze tasks used in Hu et al. (2023). Fig. 4 presents examples of the tasks.
+
+
+(a) (b) (c) (d) (e) (f) (g) (h) (i) (j)
+
+
+Figure 4: Goal-conditioned example tasks: (a) FetchReach, (b) FetchPush, (c) FetchSlide, (d)
+FetchPickAndPlace, (e) HandReach, (f) HandManipulateBlock. (h) L-AntMaze. (i) U-AntMaze. (j)
+S-AntMaze. (g) _π_ -AntMaze.
+
+
+**Baselines** In this section, we conduct a comparative analysis of our proposed method against
+various established goal-conditioned policy learning algorithms. We implemented the baseline
+algorithms within the same off-policy actor-critic framework as our method to ensure a consistent
+and fair evaluation. All experiments are conducted using five random seeds. Detailed algorithm
+implementation is described in Appendix C. We compare with following goal-conditioned baselines
+including GCAC and GCWSL methods: (1) **DDPG** (Lillicrap et al., 2015), which is an off-policy
+actor-critic method for learning continuous actions. (2) **DDPG+HER** (Andrychowicz et al., 2017),
+which combines DDPG with HER, which learns from failed experiences with sparse rewards. (3)
+**MHER** (Yang et al., 2021), which constructs a dynamics model using historical trajectories and
+combines current policy to generate virtual future trajectories for goal relabeling. (4) **GCSL** (Ghosh
+et al., 2021), which incorporates hindsight relabeling in conjunction with behavior cloning to imitate
+the suboptimal trajectory. (5) **WGCSL** (Yang et al., 2022) builds upon GCSL by incorporating
+both goal relabeling and advantage-weighted updates into the policy learning process, and can be
+applied to both online and offline settings. (6) **GoFar** (Ma et al., 2022) employs advantage-weighted
+regression with _f_ -divergence regularization based on state-occupancy matching. (7) **DWSL** (Hejna
+et al., 2023), which initially creates a model to quantify the distance between given state and the goal
+and policy derivation involves imitating actions that effectively minimize this distance metric. We
+also performed comparisons with state-of-the-art subgoal-based methods on complex AntMaze tasks,
+as described in Yoon et al. (2024). These methods include BEAG (Yoon et al., 2024), PIG (Hu et al.,
+2023), DHRL (Lee et al., 2022), and HIGL (Kim et al., 2021).
+
+
+6.1 PERFORMANCE EVALUATION ON GOAL-CONDITIONED BENCHMARKS RESULTS
+
+
+For all experiments, we use a single GPU to train the agent for 20 epochs in Fetch tasks and 50
+epochs in Hand tasks. Upon completing the training stage, the most effective policy is evaluated by
+testing it on the designated tasks. The performance outcomes are then expressed as mean success
+
+
+8
+
+
+DDPG+HER WGCSL GCQS
+
+
+Figure 6: Histogram of lengths of successful trajectories in the four goal-conditioned tasks. X axis
+is the length of the successful trajectory, Y axis is the bin count for that length. The histograms
+show that GCQS successes are more concentrated on long trajectories compared to DDPG+HER and
+WGCSL.
+
+
+rate. Performance comparisons across training epochs are illustrated in Fig. 5. As illustrated in Fig. 5,
+GCQS demonstrates significantly superior performance compared to the other baseline methods,
+coupled with a markedly faster learning speed. The results indicate that DDPG and Actionable
+Models exhibit slow learning across all tasks, whereas other methods benefit from HER, showcasing
+its critical role in enhancing learning efficiency and handling sparse rewards in goal-conditioned RL.
+
+
+Interestingly, the advanced algorithms DWSL and GoFar perform poorly, likely due to their configurations being more suited for offline goal-conditioned RL. Furthermore, we compared our method
+with two representative approaches, DDPG+HER and WGCSL, during the update process, as shown
+in Fig. 6. It is evident that GCQS effectively addresses the issue of short trajectory updates, applying
+robustly across all trajectory lengths, especially for longer trajectories.
+
+
+6.2 PERFORMANCE EVALUATION ON COMPLEX ANTMAZE RESULTS
+
+
+As illustrated in Fig. 7, although GCQS does not incorporate additional algorithms to determine
+subgoal selection, it demonstrates performance comparable to the advanced SOTA algorithms on
+L-Antmaze task. This indicates that selecting subgoals from relabeled data is highly effective. In the
+U-Antmaze, S-Antmaze, and _π_ -Antmaze environments, GCQS demonstrates performance slightly
+inferior to or comparable with PIG, but outperforms both HIGL and DHRL. Further research could
+focus on refining methods for choosing more suitable subgoals from the relabeled goals.
+
+
+9
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+Figure 5: Performance on eight robot goal-reaching tasks in goal-conditioned benchmarks. Results
+are averaged over five random seeds and the shaded region represents the standard deviation.
+
+
+Trajectory horizon
+
+
+7
+6
+5
+4
+3
+2
+1
+0
+
+
+Trajectory horizon
+
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+
+Trajectory horizon
+
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+
+Trajectory horizon
+
+
+7
+6
+5
+4
+3
+2
+1
+0
+
+
+GCQS BEAG PIG HIGL DHRL
+
+
+Figure 8: Ablation studies in FetchReach, FetchPick, FetchPush and HandReach.
+
+
+6.3 ABLATION STUDIES
+
+
+To evaluate the significance of subgoals and BC regularization during the stage of learning achieved
+goals in the GCQS framework, we conducted a series of ablation experiments comparing GCQS
+variants with HER. In these experiments, the number of subgoals corresponds to all achieved goals,
+and the parameter _β_ is set to 0.2 by default. We experiment with the following settings:
+
+
+    - **GCQS** SAC+Q-BC+Subgoals.
+
+
+    - **No BC-Regularized Q** which is equivalent to remove KL constraints.
+
+
+    - **No Subgoals** which is equivalent to apply flat goal-conditioned policy.
+
+
+The empirical results shown in Fig. 8 demonstrate that subgoals are more pivotal than BC-Regularized
+Q within the GCQS framework. The GCQS method attains faster learning compared to competitive
+baseline DDPG+HER, while the state-of-the-art DWSL struggles to learn effectively in these tasks,
+with the exception of FetchReach. This observation implies that supervised learning (SL) approaches
+are suboptimal for relabeled data.
+
+
+Integrating BC-Regularized Q with subgoals leads to substantial performance enhancements. This
+improvement arises from the synergistic interaction between BC-Regularized Q and subgoals within
+the GCQS framework. Subgoals offer an improved policy for attaining desired goals, while BCRegularized Q fine-tunes this policy, thereby efficiently directing the subgoal curriculum.
+
+
+7 CONCLUSION
+
+
+This paper presents GCQS, an advanced GCAC framework for goal-conditioned RL that incorporates
+a subgoal generation strategy. This approach is motivated by the observation that existing goalconditioned methods tend to prioritize updates on short-horizon trajectories. A distinctive feature of
+GCQS is its ability to autonomously generate subgoals using the same relabeling technique applied to
+the same trajectory, thereby removing the need for additional discovery mechanisms. By leveraging
+longer trajectories as intermediate subgoals, GCQS enhances the agent’s capacity to predict more
+accurate actions. Future work will focus on developing more refined techniques for identifying
+subgoals from accomplished outcomes, further optimizing the training of goal-conditioned policies.
+
+
+10
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+Environment step
+
+
+0.0
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+
+Environment step
+
+
+Environment step
+
+
+Environment step
+
+
+0.0
+
+
+0.0
+
+
+Figure 7: Performance on four complex long-horizon Antmaze tasks. We note that certain baselines
+may not be visible in specific environments due to overlapping values, especially at zero success
+rates.
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+
+0.0
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+REFERENCES
+
+
+Ahmed Akakzia, Cédric Colas, Pierre-Yves Oudeyer, Mohamed Chetouani, and Olivier Sigaud.
+Grounding language to autonomously-acquired skills via goal generation. _arXiv_ _preprint_
+_arXiv:2006.07185_, 2020.
+
+
+Marcin Andrychowicz, Filip Wolski, Alex Ray, Jonas Schneider, Rachel Fong, Peter Welinder, Bob
+McGrew, Josh Tobin, OpenAI Pieter Abbeel, and Wojciech Zaremba. Hindsight experience replay.
+_Advances in neural information processing systems_, 30, 2017.
+
+
+Christopher G Atkeson and Stefan Schaal. Robot learning from demonstration. In _ICML_, volume 97,
+pp. 12–20. Citeseer, 1997.
+
+
+G Brockman. Openai gym. _arXiv preprint arXiv:1606.01540_, 2016.
+
+
+Elliot Chane-Sane, Cordelia Schmid, and Ivan Laptev. Goal-conditioned reinforcement learning with
+imagined subgoals. 2021.
+
+
+David Cheikhi and Daniel Russo. On the statistical benefits of temporal difference learning. In
+_International Conference on Machine Learning_, pp. 4269–4293. PMLR, 2023.
+
+
+Benjamin Eysenbach, Soumith Udatha, Russ R Salakhutdinov, and Sergey Levine. Imitating past
+successes can be very suboptimal. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 35:
+6047–6059, 2022.
+
+
+Meng Fang, Tianyi Zhou, Yali Du, Lei Han, and Zhengyou Zhang. Curriculum-guided hindsight
+experience replay. _Advances in neural information processing systems_, 32, 2019.
+
+
+Scott Fujimoto and Shixiang Shane Gu. A minimalist approach to offline reinforcement learning.
+_Advances in neural information processing systems_, 34:20132–20145, 2021.
+
+
+Scott Fujimoto, Herke Hoof, and David Meger. Addressing function approximation error in actorcritic methods. In _International conference on machine learning_, pp. 1587–1596. PMLR, 2018.
+
+
+Dibya Ghosh, Abhishek Gupta, Ashwin Reddy, Justin Fu, Coline Manon Devin, Benjamin Eysenbach,
+and Sergey Levine. Learning to reach goals via iterated supervised learning. In _International_
+_Conference on Learning Representations_, 2021. [URL https://openreview.net/forum?](https://openreview.net/forum?id=rALA0Xo6yNJ)
+[id=rALA0Xo6yNJ.](https://openreview.net/forum?id=rALA0Xo6yNJ)
+
+
+Raj Ghugare, Matthieu Geist, Glen Berseth, and Benjamin Eysenbach. Closing the gap between td
+learning and supervised learning–a generalisation point of view. _arXiv preprint arXiv:2401.11237_,
+2024.
+
+
+Vinicius G Goecks, Gregory M Gremillion, Vernon J Lawhern, John Valasek, and Nicholas R
+Waytowich. Integrating behavior cloning and reinforcement learning for improved performance in
+dense and sparse reward environments. _arXiv preprint arXiv:1910.04281_, 2019.
+
+
+Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy
+maximum entropy deep reinforcement learning with a stochastic actor. In _International conference_
+_on machine learning_, pp. 1861–1870. PMLR, 2018.
+
+
+Joey Hejna, Jensen Gao, and Dorsa Sadigh. Distance weighted supervised learning for offline
+interaction data. _arXiv preprint arXiv:2304.13774_, 2023.
+
+
+Wassily Hoeffding. Probability inequalities for sums of bounded random variables. _The collected_
+_works of Wassily Hoeffding_, pp. 409–426, 1994.
+
+
+Edward S Hu, Richard Chang, Oleh Rybkin, and Dinesh Jayaraman. Planning goals for exploration.
+_arXiv preprint arXiv:2303.13002_, 2023.
+
+
+Riashat Islam, Hongyu Zang, Anirudh Goyal, Alex M Lamb, Kenji Kawaguchi, Xin Li, Romain
+Laroche, Yoshua Bengio, and Remi Tachet des Combes. Discrete compositional representations
+as an abstraction for goal conditioned reinforcement learning. _Advances in Neural Information_
+_Processing Systems_, 35:3885–3899, 2022.
+
+
+11
+
+
+Tom Jurgenson, Or Avner, Edward Groshev, and Aviv Tamar. Sub-goal trees - a framework for
+goal-based reinforcement learning. 2020.
+
+
+Leslie Pack Kaelbling. Learning to achieve goals. In _IJCAI_, volume 2, pp. 1094–8. Citeseer, 1993.
+
+
+Sham M Kakade. A natural policy gradient. _Advances in neural information processing systems_, 14,
+2001.
+
+
+Junsu Kim, Younggyo Seo, and Jinwoo Shin. Landmark-guided subgoal generation in hierarchical
+reinforcement learning. _Advances in neural information processing systems_, 34:28336–28349,
+2021.
+
+
+Junsu Kim, Younggyo Seo, Sungsoo Ahn, Kyunghwan Son, and Jinwoo Shin. Imitating graph-based
+planning with goal-conditioned policies. _arXiv preprint arXiv:2303.11166_, 2023.
+
+
+Diederik P Kingma. Adam: A method for stochastic optimization. _arXiv preprint arXiv:1412.6980_,
+2014.
+
+
+Yann LeCun, Yoshua Bengio, and Geoffrey Hinton. Deep learning. _nature_, 521(7553):436–444,
+2015.
+
+
+Seungjae Lee, Jigang Kim, Inkyu Jang, and H Jin Kim. Dhrl: a graph-based approach for longhorizon and sparse hierarchical reinforcement learning. _Advances in Neural Information Processing_
+_Systems_, 35:13668–13678, 2022.
+
+
+Timothy P Lillicrap, Jonathan J Hunt, Alexander Pritzel, Nicolas Heess, Tom Erez, Yuval Tassa,
+David Silver, and Daan Wierstra. Continuous control with deep reinforcement learning. _arXiv_
+_preprint arXiv:1509.02971_, 2015.
+
+
+Jason Yecheng Ma, Jason Yan, Dinesh Jayaraman, and Osbert Bastani. Offline goal-conditioned
+reinforcement learning via _f_ -advantage regression. _Advances in Neural Information Processing_
+_Systems_, 35:310–323, 2022.
+
+
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei A Rusu, Joel Veness, Marc G Bellemare,
+Alex Graves, Martin Riedmiller, Andreas K Fidjeland, Georg Ostrovski, et al. Human-level control
+through deep reinforcement learning. _nature_, 518(7540):529–533, 2015.
+
+
+Ashvin Nair, Bob McGrew, Marcin Andrychowicz, Wojciech Zaremba, and Pieter Abbeel. Overcoming exploration in reinforcement learning with demonstrations. In _2018 IEEE international_
+_conference on robotics and automation (ICRA)_, pp. 6292–6299. IEEE, 2018.
+
+
+Seohong Park, Dibya Ghosh, Benjamin Eysenbach, and Sergey Levine. Hiql: Offline goal-conditioned
+rl with latent states as actions. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Keiran Paster, Sheila A McIlraith, and Jimmy Ba. Planning from pixels using inverse dynamics
+models. _arXiv preprint arXiv:2012.02419_, 2020.
+
+
+Xue Bin Peng, Aviral Kumar, Grace Zhang, and Sergey Levine. Advantage-weighted regression:
+Simple and scalable off-policy reinforcement learning. _arXiv preprint arXiv:1910.00177_, 2019.
+
+
+Mark S Pinsker. Information and information stability of random variables and processes. _Holden-_
+_Day_, 1964.
+
+
+Matthias Plappert, Marcin Andrychowicz, Alex Ray, Bob McGrew, Bowen Baker, Glenn Powell,
+Jonas Schneider, Josh Tobin, Maciek Chociej, Peter Welinder, et al. Multi-goal reinforcement learning: Challenging robotics environments and request for research. _arXiv preprint arXiv:1802.09464_,
+2018.
+
+
+Armando de Jesús Plasencia-Salgueiro. Deep reinforcement learning for autonomous mobile robot
+navigation. In _Artificial_ _Intelligence_ _for_ _Robotics_ _and_ _Autonomous_ _Systems_ _Applications_, pp.
+195–237. Springer, 2023.
+
+
+Wen Qi, Haoyu Fan, Hamid Reza Karimi, and Hang Su. An adaptive reinforcement learning-based
+multimodal data fusion framework for human–robot confrontation gaming. _Neural Networks_, 164:
+489–496, 2023.
+
+
+12
+
+
+Francisco Quiroga, Gabriel Hermosilla, Gonzalo Farias, Ernesto Fabregas, and Guelis Montenegro.
+Position control of a mobile robot through deep reinforcement learning. _Applied Sciences_, 12(14):
+7194, 2022.
+
+
+Aravind Rajeswaran, Vikash Kumar, Abhishek Gupta, Giulia Vezzani, John Schulman, Emanuel
+Todorov, and Sergey Levine. Learning complex dexterous manipulation with deep reinforcement
+learning and demonstrations. _arXiv preprint arXiv:1709.10087_, 2017.
+
+
+Mehdy Roayaei Ardakany and Ali Afroughrh. Maximize score in stochastic match-3 games using
+reinforcement learning. _Signal and Data Processing_, 20(4):129–140, 2024.
+
+
+Koosha Sharifani and Mahyar Amini. Machine learning and deep learning: A review of methods and
+applications. _World Information Technology and Engineering Journal_, 10(07):3897–3904, 2023.
+
+
+Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu Yao. Reflexion:
+Language agents with verbal reinforcement learning. _Advances in Neural Information Processing_
+_Systems_, 36, 2024.
+
+
+David Silver, Guy Lever, Nicolas Heess, Thomas Degris, Daan Wierstra, and Martin Riedmiller.
+Deterministic policy gradient algorithms. In _International conference on machine learning_, pp.
+387–395. Pmlr, 2014.
+
+
+Victor Uc-Cetina, Nicolas Navarro-Guerrero, Anabel Martin-Gonzalez, Cornelius Weber, and Stefan
+Wermter. Survey on reinforcement learning for language processing. _Artificial Intelligence Review_,
+56(2):1543–1575, 2023.
+
+
+Rui Yang, Meng Fang, Lei Han, Yali Du, Feng Luo, and Xiu Li. Mher: Model-based hindsight
+experience replay. _arXiv preprint arXiv:2107.00306_, 2021.
+
+
+Rui Yang, Yiming Lu, Wenzhe Li, Hao Sun, Meng Fang, Yali Du, Xiu Li, Lei Han, and Chongjie
+Zhang. Rethinking goal-conditioned supervised learning and its connection to offline rl. _arXiv_
+_preprint arXiv:2202.04478_, 2022.
+
+
+Wenyan Yang, Huiling Wang, Dingding Cai, Joni Pajarinen, and Joni-Kristen Kämäräinen. Swapped
+goal-conditioned offline reinforcement learning. _arXiv preprint arXiv:2302.08865_, 2023.
+
+
+Youngsik Yoon, Gangbok Lee, Sungsoo Ahn, and Jungseul Ok. Breadth-first exploration on adaptive
+grid for reinforcement learning. In _Forty-first International Conference on Machine Learning_,
+2024.
+
+
+Shuaiqi Zhang, Guodong Zhao, Peng Lin, Mingshuo Liu, Jianhua Dong, and Haoyu Zhang. Deep
+reinforcement learning for a humanoid robot basketball player. In _2023_ _IEEE_ _International_
+_Conference on Robotics and Biomimetics (ROBIO)_, pp. 1–6. IEEE, 2023a.
+
+
+Zichen Zhang, Yunshuang Li, Osbert Bastani, Abhishek Gupta, Dinesh Jayaraman, Yecheng Jason
+Ma, and Luca Weihs. Universal visual decomposer: Long-horizon manipulation made easy. _arXiv_
+_preprint arXiv:2310.08581_, 2023b.
+
+
+Chongyi Zheng, Benjamin Eysenbach, Homer Rich Walke, Patrick Yin, Kuan Fang, Ruslan Salakhutdinov, and Sergey Levine. Stabilizing contrastive RL: Techniques for robotic goal reaching from
+offline data. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+13
+
+
+## **Contents of Appendix**
+
+**A** **Proofs** **15**
+
+
+A.1 Proof of Theorem 4.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+
+
+A.2 Proof of Theorem 5.1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+
+
+**B** **GCQS Technical Details** **16**
+
+
+B.1 Practical GCQS Algorithm . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+
+
+B.2 Phasic Policy Structure Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+
+
+**C** **Experimental Details** **19**
+
+
+C.1 Algorithm and Architecture . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+
+
+C.2 Evaluation Setup . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+C.3 Experimental Hyperparameters . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+C.4 Environment Details . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20
+
+
+**D** **Additional Results** **21**
+
+
+D.1 The Impact Number of Subgoals . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+
+
+D.2 The Impact of Hyperparameter _β_ . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+D.3 Error Bars of Mean Performance . . . . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+D.4 Robust to Environmental Stochasticity . . . . . . . . . . . . . . . . . . . . . . . . 22
+
+
+D.5 Sample Efficiency . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+
+
+D.6 Relabeling Ratio . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 24
+
+
+14
+
+
+A PROOFS
+
+
+In this section, we restate theorems in the paper and present their proofs.
+
+
+A.1 PROOF OF THEOREM 4.1
+
+
+First we write _S_ ( _p_ ( _I_ )) as:
+
+
+_√_ 2 _η_
+_≤_ _[R]_ [max] 1 _γ_
+_−_
+
+
+_S_ - _p_ ( _I_ )� = 
+
+
+- _pi_ = 
+
+_i≥I_ _i≥I_
+
+
+- _pi_ + 
+_i≥I_ _i<I_
+
+
+_pi_ 0 _._ (17)
+_i<I_ _·_
+
+
+Then we can obtain _S_ ( _p_ ( _I_ + 1)) as:
+
+
+_S_ - _p_ ( _I_ + 1)� = 
+
+
+- _pi_ + 
+_i≥I_ +1 _i<I_
+
+
+_pi_ 0 _._ (18)
+_i<I_ +1 _·_
+
+
+Comparing Eq. (17) and Eq. (18), we can see that:
+_S_            - _p_ ( _I_ )� = _p_ ( _I_ ) + _S_            - _p_ ( _I_ + 1)� _,_ (19)
+since _p_ ( _I_ ) _≥_ 0, we have that the cumulative function _S_ of the probability of fixed offset horizon
+length _I_ is monotonically decreasing:
+_S_             - _p_ ( _I_ + 1)� _≤_ _S_             - _p_ ( _I_ )� _._ (20)
+
+
+A.2 PROOF OF THEOREM 5.1
+
+
+**Notation** . Let _π_ _[∗]_ be the optimal policy and _π_ ˆ be the policy returned by GCQS. The _π_ _[∗]_ satisfies
+_V_ _[∗]_ ( _s, g_ ) = max _π_ ˆ _V_ _[π]_ [ˆ] ( _s, g_ ). _γ_ _∈_ (0 _,_ 1) is the discount factor.
+
+**Assumptions** . Before proving this theorem, we first have the following assumptions:
+
+
+1. For all states _s_, actions _a_, and goals _g_, the reward function satisfies _r_ ( _s, a, g_ ) _R_ max.
+_|_ _| ≤_
+2. The size of the policy class Π is _|_ Π _|_ and _δ_ represents the confidence level controlling the
+error bound.
+
+3. The training samples _a_ 1 _, a_ 2 _, . . ., aN_ are independently and identically distributed (IID)
+from the policy .
+
+
+**Proof** . Since our algorithm is built on the basis of GCAC, we can define the error between _V_ _[∗]_ ( _s, g_ )
+and _V_ _[π]_ [ˆ] ( _s, g_ ) as:
+
+_δV_ ( _s, g_ ) =: _V_ _[∗]_ ( _s, g_ ) _−_ _V_ _[π]_ [ˆ] ( _s, g_ )
+
+= max [ _r_ ( _s, a, g_ ) + _γ_ E _s′∼P_ [ _V_ _[∗]_ ( _s_ _[′]_ _, g_ )]] E _a∼π_ ˆ     - _r_ ( _s, a, g_ ) + _γ_ E _s′∼P_     - _V_ _[π]_ [ˆ] ( _s_ _[′]_ _, g_ )��
+_a_ _−_
+
+= _γ_ E _s′∼P_    - _V_ _[∗]_ ( _s_ _[′]_ _, g_ ) _V_ _[π]_ [ˆ] ( _s_ _[′]_ _, g_ )� + �max _r_ ( _s, a, g_ ) E _a∼π_ ˆ[ _r_ ( _s, a, g_ )]�
+_−_ _a_ _−_
+
+(21)
+Since _δV_ ( _s, g_ ) reflects the difference between the policies _π_ ˆ and _π_ _[∗]_, we need to quantify this
+difference further. In GCQS, the policy _π_ ˆ satisfies a KL-divergence constraint with respect to the
+prior policy _π_ _[piror]_ :
+_D_ KL(ˆ _π_ ( _s, g_ ) _π_ prior( _s, g_ )) _η,_ _s, g._ (22)
+_·|_ _∥_ _·|_ _≤_ _∀_
+Using Pinsker’s Inequality (Pinsker, 1964),we can obtain:
+
+_π_ ˆ( _s, g_ ) _π_ _[prior]_ ( _s, g_ ) 1 �2 _D_ KL(ˆ _π_ ( _s, g_ ) _π_ _[prior]_ ( _s, g_ )) ~~�~~ 2 _η._ (23)
+_∥_ _·|_ _−_ _·|_ _∥_ _≤_ _·|_ _∥_ _·|_ _≤_
+We consider the impact of policy differences on the V-value function error. Using the recursive nature
+of Bellman error and the maximum difference impact, we have:
+
+
+_δV_ ( _s, g_ ) max _r_ ( _s, a, g_ ) E _a∼π_ ˆ[ _r_ ( _s, a, g_ )] + _γ_ E _s′∼P_   - _V_ _[∗]_ ( _s_ _[′]_ _, g_ ) _V_ _[π]_ [ˆ] ( _s_ _[′]_ _, g_ )   _|_ _| ≤_ ��� _a_ _−_ ��� _|_ _−_ _|_
+
+
+_R_ max _π_ _[∗]_ ( _s, g_ ) _πθ_ ˆ( _s, g_ ) 1 + _γ_ E _s′∼P_ - _V_ _[∗]_ ( _s_ _[′]_ _, g_ ) _V_ _[π]_ [ˆ] ( _s_ _[′]_ _, g_ ) _≤_ _∥_ _·|_ _−_ _·|_ _∥_ _|_ _−_ _|_
+
+
+(24)
+
+
+_R_ max ~~�~~ 2 _η_ + _γ_ E _s′∼P_ - _V_ _[∗]_ ( _s_ _[′]_ _, g_ ) _V_ _[π]_ [ˆ] ( _s_ _[′]_ _, g_ ) _≤_ _|_ _−_ _|_
+
+
+15
+
+
+The first line utilizes the inequality E[ _|X|_ ] _≥|_ E[ _X_ ] _|_ . The second line shows that the discrepancy in
+immediate rewards can be controlled through the distribution of action selection. The fourth line is
+derived through the recursive expansion of the future value differences. Additionally, considering
+the effect of sample size _N_ on policy learning, we use Hoeffding’s inequality (Hoeffding, 1994) to
+further limit the value function estimation error under finite samples. Here’s the detailed process.
+First, let us review Hoeffding’s inequality. Hoeffding’s inequality is a concentration inequality that
+provides a bound on the deviation of the sum of bounded independent random variables. For given
+random variables ( _X_ 1 _, X_ 2 _, . . ., XN_ ) bounded within an interval [ _a, b_ ], the probability of deviation
+from the expected value can be bounded as follows:
+
+
+B GCQS TECHNICAL DETAILS
+
+
+In this section, we provide additional technical details of GCQS that are omitted in the main text.
+These include (1) detail of the overall GCQS algorithm, and (2) phasic policy structure analysis in
+GCQS.
+
+
+B.1 PRACTICAL GCQS ALGORITHM
+
+
+The complete GCQS algorithm is detailed in Algorithm 1. GCQS extends the SAC framework within
+GCAC. For each episode, a goal _g_ is sampled from the desired goal distribution, and a trajectory
+is collected using the current policy as behavior policy. This trajectory is subsequently stored in
+the replay buffer _B_ . Following data collection, a minibatch _m_ is sampled from the replay buffer.
+The future strategy is employed to relabel goals in the minibatch with achieved goals _g_ _[′]_ = _ϕ_ ( _si_ ).
+After hindsight relabeling, the minibatch _m_ belongs to the relabeled distribution _r_ and is used to
+_B_
+train both the _Q_ _[π]_ network and the policy network. The _Q_ _[π]_ network is updated according to Eq. (6),
+and the subgoal policy is trained to minimize the Q-BC objective as described in Eq. (12). Finally,
+these achieved goals are reused as subgoals to refine the policy by maximizing the KL-divergence
+regularized _Q_ _[π]_ function as described in Eq. (15).
+
+
+B.2 PHASIC POLICY STRUCTURE ANALYSIS
+
+
+To further elucidate the advantages of our phasic goal-conditioned policy structure in Section 5.2,
+we analyze an example trajectory between a randomly selected state and a desired goal ( _s, g_ ) under
+
+
+16
+
+
+_Xi_ E[ _X_ ]
+_i_ =1 _−_
+
+
+   2 exp
+_≤_ _−_ ( _b_ [2] _[Nϵ]_ _a_ [2] ) [2]
+
+_−_
+
+
+(25)
+
+
+����� _≥_ _ϵ_
+
+
+_P_
+
+
+1
+
+_N_
+������
+
+
+_N_
+
+
+Equivalently, for a given confidence level 1 _−_ _δ_, the inequality can be inverted to yield an upper
+bound on the deviation:
+1            - _N_            - ( _b_ _a_ ) [2] log(2 _/δ_ )
+
+_Xi_ E[ _X_ ] _−_ (26)
+
+����� _N_ _i_ =1 _−_ ����� _≤_ 2 _N_
+
+
+Then, we apply it to value function estimation. To apply Hoeffding’s inequality within our setting,
+we assume that we have _N_ independent samples ( _s, a, g_ ) for estimating the value function _V_ _[π]_ ( _s, g_ ).
+Given that the reward function _r_ ( _s, a, g_ )is bounded by _r_ ( _s, a, g_ ) _R_ max,the discrepancy between
+the empirical and true values of _V_ _[π]_ ( _s, g_ ) can be controlled using Hoeffding’s inequality. _|_ _| ≤_ Specifically,
+we obtain the following bound on the error of the value function estimation with confidence 1 _−_ _δ_ :
+
+
+_N_
+
+
+����� _≤_
+
+
+(26)
+2 _N_
+
+
+_Xi_ E[ _X_ ]
+_i_ =1 _−_
+
+
+- ( _b −_ _a_ ) [2] log(2 _/δ_ )
+
+
+sup _[∗]_ [(] _[s, g]_ [)] _[ −]_ _[V]_ _[π]_ [(] _[s, g]_ [)] _[| ≤]_ _[R]_ [max]
+_s,g_
+
+_[|][V]_
+
+
+~~�~~ 2 log( _|_ Π _|/δ_ )
+
+
+(27)
+_N_
+
+
+Finally, combining the infinite-sample bound from Eq. (24) with the finite-sample bound derived via
+Hoeffding’s inequality, we arrive at the following refined bound:
+
+
+~~�~~
+
+   - _|_ Π _|_   2 log _δ_
+
+
+sup
+_s,g_
+
+
+�� _V_ _∗_ ( _s, g_ ) _V_ _π_ ˆ( _s, g_ )�� _R_ max _√_ 2 _η_ + _R_ max
+_−_ _≤_ 1 _γ_
+_−_
+
+
+~~_√_~~ _N_ _._ (28)
+
+
+**Algorithm 1** GCQS For Goal-conditioned RL
+
+1: **Initialize** off-policy replay buffer _B_
+2: **Initialize** policy _πθ_, policy target network weights _θ_ [¯] _θ_, value _Qψ_, value target network
+_←_
+weights _ψ_ [¯] _←_ _ψ_
+3: **while** a fixed number of iteration **do**
+4: Sample goal from desired goal distribution _g_ _∼_ _p_ ( _g_ )
+5: Collect trajectories with the policy _π_ and save to the replay buffer _B_
+6: **for** Update goal-conditioned policy step **do**
+7: Sample a minibatch _m_ from the replay buffer: ( _st, at, g, rt_ )
+_{_ _} ∼B_
+8: Relabel _g_ with achieved goals through future strategy for minibatch _m_ : _m_ _←_
+( _st, at, ϕ_ ( _si_ ) _, r_ ( _st, at, ϕ_ ( _si_ ))) _, i_ _t_, where _ϕ_ ( _si_ ) is the achieved goals
+_{_ _≥_ _}_
+9: Compute target _yt_ with _yt_ = _rt_ _[′]_ [+] _[ γ]_ [ ˆ] _[Q]_ _ψ_ [ ¯][(] _[s][t]_ [+1] _[, π]_ [(] _[s][t]_ [+1] _[, g][′]_ [)] _[, g][′]_ [)][ and minimize critic loss in]
+Eq. (6)
+10: //Subgoal Policy Learning
+11: Update _πθ_ _[piror]_ with minimize actor loss in Eq. (12)
+12: //Policy Improvement with Subgoals Derived from Achieved Goals
+13: Update _πθ_ with minimize actor loss in Eq. (15)
+14: Soft update the target policy and value network: _θ_ [¯] _←_ _τθ_ + (1 _−_ _τ_ ) _θ_ [¯], _ψ_ [¯] _←_ _τψ_ + (1 _−_ _τ_ ) _ψ_ [¯]
+
+
+GCQS builds upon the GCAC framework by first fitting a _Q_ _[π]_ function and then extracting a policy
+that selects actions leading to high-value outcomes. However, when the goal _g_ is distant from the
+current state _s_, the goal-conditioned value function may struggle to provide a clear learning signal for
+a straightforward goal-conditioned policy. This issue arises for two main reasons:
+
+
+The first is the precise estimation of the value function. As the distance between _s_ and _g_ increases,
+the precision of the _Q_ _[π]_ values tends to decrease. This reduction in precision occurs because the
+differences in _Q_ _[π]_ values for subsequent states _Q_ _[π]_ ( _st_ +1 _, a, g_ ) may be minimal. Consequently,
+suboptimal actions can be easily corrected within a few steps, resulting in only minor penalties.
+
+
+17
+
+
+Figure 9: One-dimensional state space and goal space trajectory example between _s_ and _g_ . In this trajectory,
+the agent can only perform left or right actions at each time step with equal transition probability. Similar to
+reward definition in Eq. (1), the agent gets a reward of 0 when it reaches the desired goal and -1 in otherwise.
+We assume that _T_ is the horizon distance between state _s_ and desired goal _g_ which satisfies _g_ = _s_ + _T_, _i_ is the
+horizon distance between state _s_ and subgoal _sg_ .
+
+
+certain assumptions motivated by Park et al. (2024), as illustrated in Fig. 9. This example demonstrates
+the intermediate stages and decision points within the trajectory, highlighting the effectiveness of
+integrating subgoals into the learning process. Through this analysis, we aim to provide a clearer
+understanding of how phasic structure enhances the policy’s ability to navigate towards long-horizon
+goals while maintaining adaptability and robustness.
+
+
+Based on the above description the optimal goal-conditioned _Q_ -value function is hence given as
+
+
+_Q_ _[∗]_ = _−T_ _−_ 1 _._ (29)
+
+
+**Proof** . In the one-dimensional state space and goal space example in Fig. 9, we obviously obtain
+_γ_ the optimal [�] _s_ _[′]_ _∈S_ _V_ [(] _[s]_ -value is _[′]_ _[s, a]_ [)] _[V]_ _[π]_ _V_ [(] _[s][∗][′][, g]_ ( _s, g_ [)][ we can obtain:] ) = _−T_ (assume that _γ_ = 1). According to _Q_ _[π]_ ( _s, a, g_ ) = _r_ ( _s, a, g_ ) +
+
+
+_s_ _[′]_ _∈S_ _[π]_ [(] _[s][′][, g]_ [)][ we can obtain:]
+
+_[P]_ [(] _[s][′][|][s, a]_ [)] _[V]_
+
+
+_Q_ _[∗]_ ( _s, a, g_ ) = 1 + 1 _V_ _[∗]_ ( _s_ 1 _, g_ ) + 2 _V_ _[∗]_ ( _s_ + 1 _, g_ )
+_−_ _P_ _−_ _P_
+= 1 + 1( _T_ 1) + 2( _T_ + 1)
+_−_ _P_ _−_ _P_
+= _T_ + 2 1 1
+_−_ _P_ _−P_ _−_
+= _−T_ _−_ 1 _._
+
+
+(30)
+
+
+The second is the noise and error accumulation. The _Q_ _[π]_ function’s noise and errors, including
+sampling and approximation errors, become more pronounced when the goal _g_ is far from the
+current state _s_ . These errors can overshadow the minor differences in value estimates, making it
+challenging for the policy to distinguish between optimal and suboptimal actions effectively. This
+issue is exacerbated when the magnitude of the value function, and consequently its noise, is large
+due to the long horizon involved. By addressing these two issues, GCQS aims to provide a more
+robust and efficient approach to goal-conditioned RL, particularly in scenarios involving long-horizon
+goals.
+
+
+We assume that the noise in the learned value function _Q_ ˆ _[π]_ ( _s, a, g_ ) is proportional to the optimal value: i.e., _Q_ ˆ _[π]_ ( _s, a, g_ ) = _Q_ _[∗]_ ( _s, a, g_ ) + _σzs,gQ_ _[∗]_ ( _s, a, g_ ),
+where _zs,g_ is sampled independently from the standard normal distribution,
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+
+
+where _z_ represent a standard Gaussian random variable. We leverage the property that the sum of
+two independent Gaussian random variables with standard deviations _σ_ 1 and _σ_ 2 results in a Gaussian
+distribution with a standard deviation of ~~�~~ _σ_ 1 [2] [+] _[ σ]_ 2 [2][.]
+
+
+18
+
+
+and _σ_ is its standard deviation. This assumption implies that noise
+increases as the desired goal becomes more distant. We illustrate
+this concept with references in Fig. 10, where the distance represents the horizon length between the state _s_ and the desired goal
+_g_ . The curve illustrates a clear trend: as the distance between the
+state and the goal increases, the learned value function exhibits
+greater noise.
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+distance
+
+
+In this case, we assess the probability of selecting incorrect ac- distance
+tions when comparing flat and phasic goal-conditioned policies.
+Note that we define achieved goal policy as subgoal policy. The Figure 10: The relationship curve
+subgoal policy evaluates values atthat are _i_ -steps away. For the phasic structure approach, both the _s ± i_ by considering subgoals between distance and standard devia-tion in the FetchPick Task.
+subgoal and desired goal policies are queried at each step. This methodology allows us to derive the
+bounds on the error probability for both approaches, as follows:
+
+
+Figure 10: The relationship curve
+between distance and standard deviation in the FetchPick Task.
+
+
+**Theorem** **B.1.** _In_ _the_ _trajectory_ _depicted_ _in_ _Fig._ _9,_ _the_ _probability_ _of_ _the_ _flat_ _policy_ _π_ _selecting_
+
+
+            - ~~_√_~~
+_an_ _incorrect_ _action_ _is_ _given_ _as_ Ω( _π_ ) = Φ
+
+_−_ _σ_ ~~_[√]_~~ _T_ (
+
+
+2
+_σ_ ~~_[√]_~~ _T_ (
+
+
+_T_ ( _T_ +2)
+
+
+_and_ _the_ _probability_ _of_ _the_ _phasic_ _pol-_
+
+
+_icy_ _structure_ _πsubgoal_ _πdeisredgoal_ _selecting_ _an_ _incorrect_ _action_ _is_ _bounded_ _as_ Ω( _πsg_ _πdg_ )
+
+ - ~~_√_~~ _◦_ - - ~~_√_~~ - _◦_ _≤_
+
+
+ - ~~_√_~~
+Φ
+
+_−_ _σ_ ~~_[√]_~~ ( _T/i_ )
+
+
+2
+_σ_ ~~_[√]_~~ ( _T/i_ ) [2]
+
+
+( _T/i_ ) [2] +2( _T/i_ )
+
+
+- - ~~_√_~~
++ Φ
+
+_−_ _σ_ ~~_[√]_~~ _i_ (
+
+
+2
+_σ_ ~~_[√]_~~ _i_ ( _i_
+
+
+_i_ ( _i_ +2)
+
+
+_, where_ Φ _denotes the cumulative distribution function_
+
+
+1
+_of the standard normal distribution_ Φ( _x_ ) = P [ _z_ _≤_ _x_ ] = _−_ ~~_√_~~ 2 _π_
+
+
+- _x_
+
+_e_ _[−][T]_ [ 2] _[/]_ [2] d _T_ _._
+_−∞_
+
+
+**Proof** . Defining _z_ 1 := _z_ 1 _,T_ and _z_ 2 := _z_ 1 _,T_, the probability of the flat policy _π_ selecting an incorrect
+action can be computed as follows:
+
+
+Ω( _π_ ) = P          - _Q_ ˆ( _s_ + 1 _, a, g_ ) _≤_ _Q_ ˆ( _s −_ 1 _, a, g_ )�
+
+
+= P [ _T_ (1 + _σz_ 1) ( _T_ + 2)(1 + _σz_ 2)]
+
+_−_ _≤−_
+= P [ _z_ 1 _σ_ ( _T_ ) _z_ 2 _σ_ ( _T_ + 2) 2]
+_−_ _≤_ _−_
+
+
+(31)
+
+
+  -   = P _zσ_ _T_ ( _T_ + 2) _≤−√_
+
+
+ 2
+
+
+2
+
+
+_σ_ ~~�~~ _T_ ( _T_ + 2)
+
+
+_√_
+
+
+= Φ
+
+
+_−_
+
+
+_,_
+
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Similar to the flat policy, the probability of the phasic policy selecting an incorrect action can be
+estimated using a union bound as follows:
+
+
+Figure 11: The phasic policy structure in GCQS outperforms traditional flat policies in learning under
+noisy Q-values. _g_ is the desired goal. (a) Noisy Q-values are inherent in this gridworld environment.
+(b) The traditional flat policy is prone to producing incorrect actions ( _→_ ), especially in states that are
+far from the desired goal. (c) The phasic policy is still able to produce correct actions ( _→_ ), thanks to
+the subgoal mechanism.
+
+
+C EXPERIMENTAL DETAILS
+
+
+In this section, we provide experimental details omitted in Section 6 of the main paper. These
+include (1) technical and architecture details for all methods, (2) experimental evaluating setup, (3)
+hyperparameters for all methods.
+
+
+C.1 ALGORITHM AND ARCHITECTURE
+
+
+We employ the off-policy actor-critic algorithm with HER (Andrychowicz et al., 2017) as our
+foundational goal-conditioned RL framework. This sequential comparison experiment allows us to
+directly assess the relative performance and effectiveness of each approach under identical conditions.
+Additionally, temporal difference (TD) learning is utilized for value function estimation, and soft
+updates are applied to network parameters. Our implementation adheres to the optimal parameter
+settings as outlined in Plappert et al. (2018). The hyperparameters for all baseline methods remain
+consistent. For GCQS, the policy objective parameter _β_ is set to 0.2. For further details, refer to
+
+
+19
+
+
+Ω( _πsubgoal_ _πdesiredgoal_ ) Ω( _πsubgoal_ ) + Ω( _πdesiredgoal_ )
+_◦_ _≤_ = P      - _Q_ ˆ( _s_ + _i, a, g_ ) _≤_ _Q_ ˆ( _s −_ _i, a, g_ )� +
+
+P         - _Q_ ˆ( _s_ + 1 _, a, s_ + _i_ ) _≤_ _Q_ ˆ( _s −_ 1 _, a, s_ + _i_ )�
+
+
+= P - _Q_ ˆ( _i, a, T_ ) _≤_ _Q_ ˆ( _−i, a, T_ )� + P - _Q_ ˆ(1 _, a, i_ ) _≤_ _Q_ ˆ( _−_ 1 _, a, i_ )�
+
+
+(32)
+
+
+2
+
+
+2
+
+
+_σ_ �( _T/i_ ) [2] + 2( _T/i_ )
+
+
+_√_
+
+
+_σ_ - _i_ ( _i_ + 2)
+
+
+_√_
+
+
+= Φ
+
+
+_−_
+
+
+_−_
+
+
++ Φ
+
+
+_._
+
+
+We observe that the error terms in the phasic goal-conditioned policy bound are consistently smaller
+than or equal to those in the flat policy. This implies that the accuracy of both the subgoal and desired
+goal policies surpasses that of the flat policy.
+
+
+To evaluate the effectiveness of our phasic policy in selecting the correct actions, we conducted
+experiments on the gridworld environment, following the methodology outlined in Park et al. (2024).
+Specifically, we tested whether the policy learned by GCQS could reliably reach the desired goals.
+As illustrated in Fig. 11, under noisy Q-values, traditional flat policies do not always produce correct
+actions and may even generate erroneous actions, particularly in states far from the desired goal. In
+contrast, our GCQS approach demonstrates the ability to consistently generate correct policies that
+direct the agent towards the desired goals.
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Appendix D.2. Our implementation of baselines and GCQS draw knowledge from and references the
+following four code repositories:
+
+
+    - DDPG, DDPG+HER, MHER, GCSL, WGCSL: [https://github.com/](https://github.com/Cranial-XIX/metric-residual-network)
+[Cranial-XIX/metric-residual-network;](https://github.com/Cranial-XIX/metric-residual-network)
+
+
+    - Actionable Models, GoFar: [https://github.com/JasonMa2016/GoFAR;](https://github.com/JasonMa2016/GoFAR)
+
+
+    - [DWSL: https://github.com/jhejna/dwsl/;](https://github.com/jhejna/dwsl/)
+
+
+    - [RIS: https://github.com/elliotchanesane31/RIS;](https://github.com/elliotchanesane31/RIS)
+
+
+    - [BEAG, PIG, HIGL, CQM: https://github.com/ml-postech/BEAG;](https://github.com/ml-postech/BEAG)
+
+
+Notably, although GoFar and DWSL are offline goal-conditioned methods, Yang et al. (2023) and
+(Hejna et al., 2023) indicate that they are both derived from Advantage-Weighted Regression (AWR)
+(Peng et al., 2019). Therefore, we re-implemented them, and they remain effective in the online
+setting.
+
+
+C.2 EVALUATION SETUP
+
+
+For each baseline and task, we conducted evaluations using random five seeds (e.g,
+_{_ 100 _,_ 200 _,_ 300 _,_ 400 _,_ 500 _}_ ). The policy was trained for 1000 episodes per epoch. Upon completing
+each training epoch, the policy’s performance was measured by calculating the mean success rate
+from 100 independent rollouts, each using randomly selected desired goals. These success rates were
+averaged across five seeds and plotted over the learning epochs, with the standard deviation illustrated
+as a shaded region on the performance figure.
+
+
+C.3 EXPERIMENTAL HYPERPARAMETERS
+
+
+We consistently utilize the Adam optimizer (Kingma, 2014) across all experimental setups. For
+each state, goals are uniformly relabeled by sampling from all future states within its trajectory.
+In environments applying discount factors, we set _γ_ = 0 _._ 98 for all goal-conditioned tasks. Each
+algorithm follows a predetermined set of hyperparameters specifically designed for goal-conditioned
+environments. PIG, DWSL, GoFar, WGCSL, GCSL, MHER, and DDPG have been previously
+calibrated for our task set, and we have adopted the parameter values as reported in prior research.
+Our implementation of PIG shares the same network architecture as DDPG, thus utilizing DDPG’s
+hyperparameter values. Detailed hyperparameter configurations used in this study are provided in
+Table 1, which have been identified through the aforementioned parameter search process.
+
+
+C.4 ENVIRONMENT DETAILS
+
+
+In this section, we describe the tasks in our experiments in Section 6. All goal-conditioned tasks are
+derived from OpenAI Gym (Brockman, 2016).
+
+
+**Fetch Tasks** The Fetch tasks (i.e, FetchReach, FetchPush, FetchSlide, FetchPick), involve controlling a 7-DoF robotic arm to complete various goal-directed actions such as reaching, pushing, sliding,
+or picking up an object and moving it to a target location. These environments share common characteristics, including a multidimensional state space that represents the arm’s position and velocities,
+and a 4-dimensional action space for movement and gripper control. The tasks are goal-conditioned,
+with the reward function defined by whether the arm or object reaches the desired goal within an
+allowable margin of error. The main variation between tasks lies in the specific goal (i.e, reaching,
+pushing, or picking) and the interactions with the object, such as sliding it beyond the robot’s direct
+reach or placing it at a target on the table or in the air. The allowable error in Fetch tasks is _µ_ = 0 _._ 05.
+The reward function is defined as:
+
+
+_r_ ( _s, a, gXY Z_ ) = 1( _ϕ_ ( _s_ ) _gXY Z_ 2
+_∥_ _−_ _∥_ [2] _[≤]_ _[µ]_ [)] _[.]_
+
+
+**Hand Tasks** The Hand tasks (i.e, HandReach, BlockRotateZ, BlockRotateXYZ, BlockRotateParallel) focus on controlling a Shadow Dexterous Hand to manipulate objects in high-dimensional
+tasks, requiring precise control over 20 independent joints. Each task features complex observations,
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Table 1: Hyperparameters for Baselines.
+
+
+Actor and critic networks Value
+
+
+Learning rate 1e-3
+Buffer size 10 [6] transitions
+
+Polyak-averaging coeffi- 0.95
+cient
+
+
+Action L2 norm coefficient 1.0
+
+Observation clipping [-200,200]
+
+warmup steps 5000
+
+Batch size 256
+
+Rollouts per MPI worker 2
+
+Number of MPI workers 16
+
+Cycles per epoch 50
+
+Batches per cycle 40
+
+Test rollouts per epoch 10
+
+Probability of random ac- 0.3
+tions
+
+
+Normalized clipping [-5, 5]
+
+_β_ 0.2
+
+
+including joint positions, velocities, and object state information (position, rotation, and velocities).
+The reward structure is sparse and binary, with goals achieved when the object reaches a specified
+position or rotation within a defined tolerance. These tasks, which vary in manipulation complexity
+(e.g., specific axis rotations), present a challenging testbed for advanced goal-conditioned reinforcement learning algorithms in high-dimensional control settings. The reward function is the same as
+Fetch tasks and the allowable threshold ( _µ_ = 0 _._ 01).
+
+
+**AntMaze Tasks** A quadruped ant robot is trained to reach a random goal from a random location
+and tested under the most difficult setting for each maze. The states of ant is 30-dimension, including
+positions and velocities. An ant should reach the target point within 500 steps for U-shaped mazes,
+and 1000 steps for S-, _ω_ -, and Π-shaped mazes. The reward function is the same as Fetch tasks and
+the allowable threshold ( _µ_ = 0 _._ 1).
+
+
+D ADDITIONAL RESULTS
+
+
+This section evaluates the resilience of GCQS across several factors, including the number of
+subgoals, the hyperparameter _β_, robustness to environmental stochasticity, and the relabeling ratio.
+Due to space limitations, not all of these variations were discussed in the main body of this study.
+These details are provided below.
+
+
+D.1 THE IMPACT NUMBER OF SUBGOALS
+
+
+In our approach, subgoals play a pivotal role, and thus, apart from their selection, investigating the
+optimal quantity of subgoals is imperative. We systematically vary the proportion of subgoals selected
+from _τ_ _[g][′]_ relative to the total trajectory goals, and benchmark these against competitive algorithms
+such as WGCSL, DDPG+HER, GoFar, and DWSL. We evaluate algorithmic performance across four
+different subgoal proportions _{_ 20% _,_ 50% _,_ 90% _,_ 100% _}_ . Analysis presented in Fig. 12 demonstrates
+
+
+21
+
+
+Scale of additive Gaussian
+noise
+
+
+Probability of HER experience replay
+
+
+0.2
+
+
+0.8
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+Figure 13: Hyperparameter _β_ ablation studies in such goal-conditioned tasks.
+
+
+D.3 ERROR BARS OF MEAN PERFORMANCE
+
+
+To further assess the effectiveness and robustness of the algorithm, we present error bar plots for
+each task based on the mean ± standard deviation (SD) of results across five seeds for each algorithm.
+As shown in Fig. 14, the GCQS algorithm demonstrates a significant advantage across all goalconditioned tasks. Its mean success rate approaches 100% on simpler tasks (e.g., FetchReach and
+BlockRotateZ), and it substantially outperforms other algorithms on moderately challenging tasks
+(e.g., FetchPush and HandReach), with shorter error bars indicating greater result stability and
+robustness. However, in more difficult tasks (e.g., BlockRotateXYZ and BlockRotateParallel), the
+performance of GCQS declines, as evidenced by lower success rates and longer error bars, suggesting
+performance fluctuations. Overall, GCQS exhibits strong learning capabilities in complex goal spaces
+but still has room for improvement, particularly in handling extreme tasks such as high-dimensional
+rotations and parallel rotations.
+
+
+D.4 ROBUST TO ENVIRONMENTAL STOCHASTICITY
+
+
+To test whether our GCQS is robust to random environmental factors, we follow GoFar’s settings.
+Specifically, we examine a modified FetchPush environment characterized by the introduction of
+Gaussian noise with a zero mean before action execution. This modification generates various
+
+
+22
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+Figure 12: Subgoal number ablation studies in some goal-conditioned tasks.
+
+
+that GCQS consistently surpasses the performance of the aforementioned algorithms, regardless
+of the percentage of subgoals employed. This finding highlights the robustness of our method in
+response to variations in the quantity of subgoals utilized.
+
+
+D.2 THE IMPACT OF HYPERPARAMETER _β_
+
+
+Since the addition of KL regularization term in the policy improvement stage of our method (as
+shown in Eq. (15)), this section explores the influence of the balancing parameter _β_ . We evaluate
+_β_ values from the set _{_ 0 _._ 2 _,_ 0 _._ 5 _,_ 1 _._ 0 _,_ 3 _._ 0 _}_ and compare the results against competitive HER-based
+algorithms such as WGCSL and DDPG+HER, as shown in Fig. 13. The findings in Fig. 13 reveal
+that GCQS consistently delivers superior performance over the other algorithms, regardless of the _β_
+parameter variation. This demonstrates that our method maintains robustness and is not significantly
+affected by changes in the _β_ parameter.
+
+
+Epoch
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+|FetchPush|Col2|Col3|
+|---|---|---|
+||||
+|QS<br>SL<br>~~Far~~<br>|||
+
+
+From the FetchPush task, depicted on
+the left side of Fig. 16, we observe that
+to attain the 0.45 mean success rate,
+the competitive baseline DDPG+HER
+requires over 6000 training samples,
+whereas GCQS only needs approximately 4000 samples. This indicates
+that GCQS is 1.5 times more sample
+efficient than DDPG+HER.
+
+
+In another task, BlockRotateZ, GCQS
+uses the fewest number of samples
+to attain the same 0.5 mean success
+
+
+FetchPick
+
+
+~~0~~ ~~20~~ ~~40~~ ~~60~~ ~~80~~ ~~10~~ 0
+Mean Success Rate (%)
+
+
+~~0~~ ~~20~~ ~~40~~ ~~60~~ ~~80~~ ~~10~~ 0
+Mean Success Rate (%)
+
+
+~~0~~ ~~20~~ ~~40~~ ~~60~~ ~~80~~ ~~10~~ 0
+Mean Success Rate (%)
+
+
+~~0~~ ~~20~~ ~~40~~ ~~60~~ ~~80~~ ~~10~~ 0
+Mean Success Rate (%)
+
+
+GCQS
+
+DWSL
+
+GoFar
+
+WGCSL
+
+GCSL
+
+HER
+
+MHER
+
+DDPG
+
+
+WGCSL
+
+
+HER
+
+
+GCQS
+
+DWSL
+
+GoFar
+
+WGCSL
+
+GCSL
+
+HER
+
+MHER
+
+DDPG
+
+
+WGCSL
+
+
+HER
+
+
+~~0~~ ~~20~~ ~~40~~ ~~60~~ ~~80~~ ~~10~~ 0
+Mean Success Rate (%)
+
+
+~~0~~ ~~20~~ ~~40~~ ~~60~~ ~~80~~ ~~10~~ 0
+Mean Success Rate (%)
+
+
+~~0~~ ~~20~~ ~~40~~ ~~60~~ ~~80~~ ~~10~~ 0
+Mean Success Rate (%)
+
+BlockRotateParallel
+
+
+~~0~~ ~~20~~ ~~40~~ ~~60~~ ~~80~~ ~~10~~ 0
+Mean Success Rate (%)
+
+
+Figure 14: The error bars for each goal-conditioned task presented in Fig. 5. Error bars represent the
+standard error of the mean (SEM) for each algorithm’s average performance across multiple seeds in
+each task.
+
+
+environmental conditions with standard deviations of _{_ 0 _._ 2 _,_ 0 _._ 5 _,_ 1 _._ 0 _,_ 1 _._ 5 _}_, allowing us to analyze the
+robustness and performance of the proposed method under differing levels of stochasticity.
+
+
+As we see in Fig. 15, GCQS is the most robust to stochasticity in the FetchPush environment,
+also outperforming baseline algorithms in terms of mean success rate under various noise levels. WGCSL exhibits minimal sensitivity to variations in all noise levels, whereas DDPG+HER
+is moderately sensitive. At a noise level of 0.5, the performance gap continues to widen,
+
+
+with GoFar exhibiting a significant collapse, underscoring its heightened sensitivity to noise. Despite
+DWSL’s insensitivity to noise, its overall performance remains suboptimal. Overall, the phsic structural policy optimization in GCQS indeed confers
+greater robustness to environmental stochasticity.
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+100
+
+
+0
+
+
+overly optimistic performance assessments in stochastic environments. In contrast, reinforcement learning Figure 15:
+methods have the ability to effectively adapt to these stochastic changes.
+
+
+0
+
+
+Noise Level
+
+
+Figure 15: Mean success rate (%) for FetchPush
+task under environment stochasticity.
+
+
+D.5 SAMPLE EFFICIENCY
+
+
+To assess the sample efficiency of baseline methods in comparison to GCQS, we examined the number of training samples (i.e., _⟨s, a, g_ _[′]_ _, g⟩_ tuples) necessary to obtain
+a particular mean success rate. This comparative analysis is depicted in Fig. 16.
+
+
+|Col1|Col2|
+|---|---|
+|||
+
+
+Figure 16: Number of training samples needed with respect
+to mean success rate for Fetchpush and HandManipulateBlockRotateZ tasks (the lower the better).
+
+
+23
+
+
+1.00
+
+0.80
+
+0.60
+0.45
+
+0.20
+
+0.00
+
+
+Training Samples(x2e3)
+
+
+1.00
+
+0.80
+
+0.60
+0.45
+
+0.20
+
+0.00
+
+
+Training Samples(x2e3)
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+rate. These findings demonstrate that
+GCQS significantly enhances sample efficiency compared to other baseline methods, underscoring
+its effectiveness in improving learning performance with fewer training samples.
+
+
+D.6 RELABELING RATIO
+
+
+Given our approach to learning in goal-conditioned RL settings, which assumes data annotated
+with relabeled goals, this study examines the influence of explicit goal labels on performance.
+We conducted experiments across four distinct relabeling ratios (i.e, 0 _._ 2 _,_ 0 _._ 5 _,_ 0 _._ 8 _,_ 1 _._ 0) in various
+environments to evaluate algorithmic efficacy. As illustrated in Fig. 17, GCQS exhibits substantial
+resilience to variations in the relabeling ratio. Furthermore, GCQS consistently surpasses competing
+algorithms such as WGCSL and DDPG+HER across different labeling ratios.
+
+
+Figure 17: Relabel ratio ablation studies in some goal-conditioned tasks.
+
+
+24
+
+
+Epoch
+
+
+1.0
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+
+Epoch
+
+
+Epoch
+
+
+Epoch

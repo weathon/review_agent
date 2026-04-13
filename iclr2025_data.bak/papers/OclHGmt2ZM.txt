@@ -1,0 +1,2103 @@
+# CMAMBA: CHANNEL CORRELATION ENHANCED STATE SPACE MODELS FOR MULTIVARIATE TIME SERIES FORECASTING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Recent advancements in multivariate time series forecasting have been propelled by Linear-based, Transformer-based, and Convolution-based models, with
+Transformer-based architectures gaining prominence for their efficacy in temporal and cross-channel mixing. More recently, Mamba, a state space model, has
+emerged with robust sequence and feature mixing capabilities. However, the suitability of the vanilla Mamba design for time series forecasting remains an open
+question, particularly due to its inadequate handling of cross-channel dependencies. Capturing cross-channel dependencies is critical in enhancing the performance of multivariate time series prediction. Recent findings show that selfattention excels in capturing cross-channel dependencies, whereas other simpler
+mechanisms, such as MLP, may degrade model performance. This is counterintuitive, as MLP, being a learnable architecture, should theoretically capture both correlations and irrelevances, potentially leading to neutral or improved performance.
+Diving into the self-attention mechanism, we attribute the observed degradation in
+MLP performance to its lack of data dependence and global receptive field, which
+result in MLP’s lack of generalization ability. Considering the powerful sequence
+modeling capabilities of Mamba and the high efficiency of MLP, the combination
+of the two is an effective strategy for solving multivariate time series prediction.
+Based on the above insights, we introduce a refined Mamba variant tailored for
+time series forecasting. Our proposed model, **CMamba**, incorporates a modified
+Mamba (M-Mamba) module for temporal dependencies modeling, a global datadependent MLP (GDD-MLP) to effectively capture cross-channel dependencies,
+and a Channel Mixup mechanism to mitigate overfitting. Comprehensive experiments conducted on seven real-world datasets demonstrate the efficacy of our
+model in improving forecasting performance.
+
+
+1 INTRODUCTION
+
+
+Multivariate (or Multichannel) time series forecasting (MTSF) plays a crucial role in diverse applications, such as weather prediction (Chen et al., 2023), traffic management (Liu et al., 2023b;c),
+economics (Xu & Cohen, 2018), and event prediction (Xue et al., 2023). MTSF aims to predict
+future values of temporal variations based on historical observations. Given its practical importance, numerous deep learning models have been developed in recent years, notably including,
+Linear-based (Zeng et al., 2023; Li et al., 2023; Das et al., 2023; Wang et al., 2023), Transformerbased (Zhou et al., 2022; Zhang & Yan, 2022; Wu et al., 2021; Nie et al., 2022; Liu et al., 2023a),
+and Convolution-based (Liu et al., 2022; Wang et al., 2022; Wu et al., 2022; Luo & Wang, 2024)
+models, which have demonstrated significant advancements.
+
+
+Among these, Transformer-based models are particularly distinguished by their capacity to separately mix temporal and channel embeddings using mechanisms such as MLP or self-attention. The
+recently introduced Mamba model (Gu & Dao, 2023), which operates within a state space framework, exhibits notable sequence and feature mixing capabilities. Mamba has shown progress not
+only in natural language processing but also in other domains, including computer vision (Liu et al.,
+2024; Zhu et al., 2024) and graph-based applications (Wang et al., 2024a). Nevertheless, recent
+studies on Mamba in time series (Patro & Agneeswaran, 2024; Wang et al., 2024d) mostly focus on
+
+
+1
+
+
+how to align the input format of time series with other fields so that the original Mamba architecture can be migrated while ignoring the exploration of whether the components of Mamba itself are
+suitable for time series. In addition, the vanilla Mamba lacks cross-channel dependency modeling
+capabilities. S-Mamba (Wang et al., 2024d) solves this by treating different channels as a sequence
+and modeling their dependencies with state space mechanisms. However, the strategy of treating
+channels as sequences is not practical and also results in large complexity.
+
+
+In the design of iTransformer, cross-channel dependen
+_MULL_ means Middle UseLess Load.
+
+cies are captured in a data-dependent and global manner.
+That is, each channel is characterized by its historical sequence, and the self-attention mechanism
+adaptively captures the dependencies between channels according to the data. In contrast, the parameters of channel mixing are the same for different inputs in the original MLP. Moreover, because
+the data at each time point is mixed independently during training, the model focuses too much on
+the local dependencies between channels while ignoring the global dependencies. The lack of data
+dependence and global receptive field, which are crucial for the complex, long-term dependencies
+observed in real-world data, results in the discrepancy between MLP and self-attention. To validate
+our claims, we depict the curves of two variables (channels) over time in the ETT dataset in Fig. 1.
+We find that: (i) Despite the fluctuations, the relationship between these two variables remains stable
+over a long time, i.e., _MULL_ (Middle UseLess Load) is roughly equivalent to half of _HULL_ (High
+UseLess Load). (ii) This relationship can vary across different time periods. The above observations indicate that multivariate time series have relatively stable long-term channel dependencies at
+different periods. Hence, a data-dependent and global channel modeling approach is more suitable
+for capturing cross-channel dependencies.
+
+
+Based on the above motivations, we propose enhancements to Mamba for multivariate time series
+prediction, incorporating a modified Mamba (M-Mamba) module for long-term temporal dependencies modeling and a global data-dependent MLP (GDD-MLP) to model channel dependencies
+more efficiently. GDD-MLP endows the original MLP with the advantages of data dependence and
+a global receptive field. Additionally, to mitigate the overfitting and generalization issues associated
+with Channel-Dependent (CD) models (Han et al., 2023), we introduce a Channel Mixup strategy.
+This method combines channels linearly during training to create virtual channels that integrate
+characteristics from multiple channels while preserving their shared temporal dependencies, which
+is expected to improve the generalizability of models.
+
+
+In summary, we adapt Mamba to multivariate time series forecasting by evaluating the effectiveness of its components and equipping it with channel mixing capabilities. The resulting model,
+**CMamba**, leveraging both cross-time and cross-channel dependencies, achieves consistent stateof-the-art performance across seven real-world datasets. Technically, our main contributions are
+summarized as follows:
+
+
+    - We tailor the vanilla Mamba module for long-term time series forecasting. A modified
+Mamba (M-Mamba) module is proposed for better cross-time dependency modeling.
+
+    - We enable Mamba to capture multivariate correlations using the proposed global datadependent MLP (GDD-MLP) and Channel Mixup. Coupled with the M-Mamba module,
+the proposed **CMamba** captures both cross-time and cross-channel dependencies to learn
+better representations for multivariate time series forecasting.
+
+
+2
+
+
+Capturing cross-channel dependencies is critical in enhancing the performance of multivariate time series prediction. Recent findings (Liu et al., 2023a) show that
+self-attention excels in capturing cross-channel dependencies. The resulting model, iTransformer, achieves excellent performance on multiple datasets. Whereas, as another important component of the Transformer encoder
+block, modeling cross-channel dependencies with MLP
+(i.e., the FFN layer) degrades model performance (Liu
+et al., 2023a; Nie et al., 2022). Being a lightweight and
+learnable architecture, MLP should be an ideal structure
+to capture cross-channel dependencies as it could theoretically capture both correlations and irrelevances, leading
+to neutral or improved performance.
+
+
+Figure 1: An illustration of the relationship of variables in the ETT dataset.
+_HULL_ means High UseLess Load and
+_MULL_ means Middle UseLess Load.
+
+
+- Experiments on seven real-world benchmarks demonstrate that our proposed framework
+achieves superior performance. We extensively apply the proposed GDD-MLP and Channel Mixup to other models. The improved forecasting performance indicates the broad
+versatility of our framework.
+
+
+2 RELATED WORK
+
+
+2.1 STATE SPACE MODELS FOR SEQUENCE MODELING
+
+
+Traditional state space models (SSMs), such as hidden Markov models and recurrent neural networks (RNNs), process sequences by storing messages in their hidden states and using these states
+along with the current input to update the output. This recurrent mechanism limits their training efficiency and leads to problems like vanishing and exploding gradients (Hochreiter & Schmidhuber,
+1997). Recently, several SSMs with linear-time complexity have been proposed, including S4 (Gu
+et al., 2021), H3 (Fu et al., 2022), SpaceTime (Zhang et al., 2023), and Mamba (Gu & Dao, 2023).
+Among these, Mamba further enhances S4 by introducing a data-dependent selection mechanism
+that balances short-term and long-term dependencies. Mamba has demonstrated powerful longsequence modeling capabilities and has been successfully extended to the visual (Liu et al., 2024;
+Zhu et al., 2024) and graph domains (Wang et al., 2024a).
+
+
+In the time series domain, many recent works (Patro & Agneeswaran, 2024; Wang et al., 2024d) have
+focused on aligning the input format of time series with other fields so that the original Mamba architecture can be migrated. Specifically, S-Mamba (Wang et al., 2024d) modifies iTransformer (Liu
+et al., 2023a) by replacing its self-attention layer with Mamba, thereby modeling inter-channel relationships by treating different channels as sequential data. Time-SSM (Hu et al., 2024) provides an
+in-depth examination of various SSM kernel variants within the Mamba framework for time series
+analysis. Bi-Mamba+ (Liang et al., 2024) explores the impact of sequence modeling direction and
+proposes a bidirectional Mamba architecture for multivariate time series forecasting. Despite these
+advancements, existing works overlook the critical evaluation of whether the internal components
+of Mamba are inherently well-suited for time series data. Moreover, while addressing Mamba’s limited capacity for channel modeling, existing strategies are too direct (e.g., S-Mamba, which models
+cross-channel dependencies in a sequential manner) and introduce large computational overhead. In
+this paper, we explore the practicality of Mamba components and propose a more lightweight and
+efficient strategy to model cross-channel dependencies.
+
+
+2.2 CHANNEL STRATEGIES IN MTSF
+
+
+Channel strategies are fundamental in determining how to handle relationships between variables
+in multivariate time series forecasting (MTSF). Broadly, there are two primary approaches: the
+Channel-Independent (CI) strategy, which disregards cross-channel dependencies, and the ChannelDependent (CD) strategy, which integrates channels according to specific mechanisms. Each strategy has its respective strengths and weaknesses. CD methods offer greater representational capacity
+but tend to be less robust when confronted with distributional shifts in time series data, while CI
+methods sacrifice capacity for more stable, robust predictions (Han et al., 2023).
+
+
+A significant number of state-of-the-art models adhere to the CI strategy. These models (Zeng
+et al., 2023; Nie et al., 2022; Wang et al., 2023) treat multivariate time series as a collection of
+independent univariate time series and simply treat different channels as different training samples.
+However, recent work has demonstrated the efficacy of explicitly capturing multivariate correlations
+through mechanisms such as self-attention (Liu et al., 2023a) and convolution (Luo & Wang, 2024).
+These methods have achieved strong empirical results, underscoring the importance of cross-channel
+dependency modeling in MTSF. Despite these advances, there remains a need for more effective and
+efficient mechanisms to capture and model cross-channel dependencies.
+
+
+2.3 MIXUP FOR GENERALIZABILITY
+
+
+Mixup is an effective data augmentation technique widely used in vision (Zhang et al., 2017; Yun
+et al., 2019; Verma et al., 2019), natural language processing (Guo et al., 2019; Sun et al., 2020),
+and more recently, time series analysis (Zhou et al., 2023; Ansari et al., 2024). The vanilla mixup
+
+
+3
+
+
+technique randomly mixes two input data samples via linear interpolation. Its variants extend this
+by mixing either input samples or hidden embeddings to gain better generalization. In multivariate
+time series, each sample contains multiple time series. Hence, rather than mixing two samples, our
+proposed Channel Mixup mixes the time series of the same sample. This strategy not only enhances
+the generalization of models but also facilitates the CD approach.
+
+
+3 PRELIMINARY
+
+
+3.1 MULTIVARIATE TIME SERIES FORECASTING
+
+
+In multivariate time series forecasting, we are given a historical time series **X** = _{_ **x** 1 _, ...,_ **x** _L}_ _∈_
+R _[L][×][V]_ with a look-back window _L_ and the number of channels _V_ . The objective is to predict the
+_T_ future values **Y** = _{_ **x** _L_ +1 _, ...,_ **x** _L_ + _T }_ _∈_ R _[T][ ×][V]_ . In the following sections, we denote **X** _t,_ : as
+the value of all channels at time step _t_, and **X** : _,v_ as the entire sequence of the channel indexed by
+_v_ . The same annotation is also applied to **Y** . In this paper, we focus on the long-term time series
+forecasting task, where the prediction length is greater than or equal to 96.
+
+
+3.2 MAMBA
+
+
+Given an input **x** ( _t_ ) _∈_ R, the continuous state space model (SSM) produces a response **y** ( _t_ ) _∈_ R
+based on the observation of hidden state **h** ( _t_ ) _∈_ R _[S]_ and the input **x** ( _t_ ), which can be formulated as:
+
+
+**h** _[′]_ ( _t_ ) = **Ah** ( _t_ ) + **Bx** ( _t_ ) _,_
+
+(1)
+**y** ( _t_ ) = **Ch** ( _t_ ) + **D** _·_ **x** ( _t_ ) _,_
+
+
+where **A** _∈_ R _[S][×][S]_ is the state transition matrix, **B** _∈_ R _[S][×]_ [1] and **C** _∈_ R [1] _[×][S]_ are projection matrices,
+and **D** _∈_ R is the skip connection parameter. When both input and response contain _E_ features,
+i.e., **x** ( _t_ ) _∈_ R _[E]_ and **y** ( _t_ ) _∈_ R _[E]_, the SSM is applied independently to each feature, that is, **A** _∈_
+R _[E][×][S][×][S]_, **B** _∈_ R _[E][×][S]_, **C** _∈_ R _[E][×][S]_, and **D** _∈_ R _[E]_ . For efficient memory utilization, **A** can be
+compressed to R _[E][×][S]_ . Hereafter, unless otherwise stated, we only consider multi-feature systems
+and the compressed form of **A** . For the discrete system, Eq. 1 could be discretized as:
+
+
+**A** = exp(∆ **A** ) _,_
+
+
+where ∆ _∈_ R _[E]_ is the sampling time interval. These operations can be efficiently computed through
+global convolution:
+
+~~_L_~~ _−_ 1
+**K** = ( **CB** _,_ **CAB** _, ...,_ **CA** **B** ) _,_
+
+(3)
+**Y** = **X** _∗_ **K** + **D** _·_ **X** _,_
+
+
+where _L_ is the sequence length, and **X**, **Y** _∈_ R _[L][×][E]_ .
+
+
+**Selective** **Scan** **Mechanism** Traditional approaches (Gu et al., 2021) keep transfer parameters
+(e.g., **B** and **C** ) unchanged during sequence processing, ignoring their relationships with the input.
+Mamba (Gu & Dao, 2023) adopts a selective scan strategy where **B** _∈_ R _[L][×][S]_, **C** _∈_ R _[L][×][S]_, and
+∆ _∈_ R _[L][×][E]_ are dynamically derived from the input **X** _∈_ R _[L][×][E]_ . As a result, **A** and **B** _∈_ R _[L][×][E][×][S]_
+are dependent on both time steps and features. This data-dependent mechanism allows Mamba to
+incorporate contextual information and selectively execute state transitions.
+
+
+4 METHODOLOGY
+
+
+The overall structure of CMamba is illustrated in Fig. 2. Before training, the Channel Mixup module
+mixes the input multivariate time series along the channel dimension. This is followed by the core
+architecture comprising the modified Mamba (M-Mamba) module and the global data-dependent
+MLP (GDD-MLP) module, designed to capture both cross-time and cross-channel dependencies.
+
+
+4
+
+
+**B** = (∆ **A** ) _[−]_ [1] (exp(∆ **A** ) _−_ **I** )∆ **B** _,_
+
+
+**h** _t_ = **Ah** _t−_ 1 + **Bx** _t,_
+**y** _t_ = **Ch** _t_ + **D** _·_ **x** _t,_
+
+
+(2)
+
+
+Figure 2: The overall framework of CMamba. (a) The Channel Mixup module, active during training, fuses different channels of a sample to create a virtual sample. New samples are normalized via
+instance norm and segmented into patches before being fed into the model. (b) The CMamba block
+consists of two parts: the M-Mamba module and GDD-MLP before residual connection. (c) The
+M-Mamba module captures cross-time dependencies. (d) The GDD-MLP module captures crosschannel dependencies.
+
+
+These two modules form the CMamba block together. CMamba takes patch-wise sequences as
+input and makes predictions using a single linear layer. The following sections provide detailed
+explanations of these components.
+
+
+4.1 CMAMBA BLOCK
+
+
+The CMamba block consists of two key components: the M-Mamba module and the GDD-MLP
+module, each responsible for modeling cross-time and cross-channel dependencies, respectively.
+
+
+4.1.1 M-MAMBA
+
+
+Mamba has demonstrated significant potential in NLP (Gu & Dao, 2023), CV (Zhu et al., 2024; Liu
+et al., 2024), and stock prediction (Shi, 2024). In these fields, the semantic consistency of features
+allows elements like words, image patches, or financial indicators to be treated as tokens. In contrast,
+in multivariate time series, different channels often represent disparate physical quantities (Liu et al.,
+2023a), making it unsuitable to treat channels at the same time point as a token. While a single time
+step of each channel lacks semantic meaning, patching (Dosovitskiy et al., 2020; Nie et al., 2022)
+aggregates time points into subseries-level patches, enriching the semantic information and local
+receptive fields of tokens. Hence, we divide the input time series into patches to serve as the input
+of our model.
+
+
+**Patching** Given multivariate time series **X**, for each univariate series **X** : _v_ _∈_ R _[L]_, we segment it
+into patches through moving window with patch length _P_ and stride _S_ :
+
+
+**X** ˆ : _v_ = Patching( **X** : _v_ ) _,_ (4)
+
+
+where **X** [ˆ] : _v_ _∈_ R _[N]_ _[×][P]_ is a sequence of patches and _N_ = _⌊_ [(] _[L][−]_ _S_ _[P]_ [ )] _⌋_ + 2 is the number of patches.
+
+
+In addition to modifying the input structure, the model architecture of Mamba also needs to be
+adapted to suit the characteristics of multivariate time series data. Our Mamba variant is called MMamba, as shown in Fig. 3 (b). Compared with the vanilla Mamba module, our module has the
+following differences: (1) We remove the x-branch convolution operation. (2) We no longer learn
+a transition matrix **A** for each feature, i.e., **A** _∈_ R _[S]_ in M-Mamba. (3) The skip connection matrix
+**D** is derived from the input time series, meaning that **D** is also data-dependent. The reasons for our
+design will be discussed in detail in Section 5.2.
+
+
+5
+
+
+Figure 3: Architectures of the vanilla Mamba module and M-Mamba module.
+
+
+4.1.2 GDD-MLP
+
+
+To model cross-channel dependencies as simply and effectively as possible, we propose the global
+data-dependent MLP (GDD-MLP) module. Fig. 2 (b) and (d) illustrate its structure and pipeline.
+For the patch-wise multivariate time series embeddings generated after the _l_ _[th]_ M-Mamba module,
+denoted as **H** _l_ _∈_ R _[V][ ×][N]_ _[×][E]_, the data-dependent weight and bias of GDD-MLP could be formulated
+as:
+**Weight** _l_ = sigmoid(MLP1(Pooling( **H** _l_ ))) _,_ (5)
+**Bias** _l_ = sigmoid(MLP2(Pooling( **H** _l_ ))) _._
+
+Here, Pooling is applied along the embedding dimension, generating descriptors **F** _[l]_ _∈_ R _[V][ ×][N]_ that
+encapsulate the overall characteristics of each patch for every channel. To improve the extraction
+of global information for each channel, we employ both Average Pooling and Max Pooling. The
+average and max descriptors share the same MLP, whose outputs are added up to produce the final
+channel representations in the latent space. The weight and bias are then applied to the input features
+to embed cross-channel dependencies:
+
+**H** _[′]_ _l_ [=] **[ Weight]** _l_ _[⊙]_ **[H]** _[l]_ [+] **[ Bias]** _[l][.]_ (6)
+
+
+4.2 CHANNEL MIXUP
+
+
+Previous mixup strategies (Zhang et al., 2017) generate new training samples through linear interpolation between two existing samples. For two feature-target pairs ( _xi, yi_ ) and ( _xj, yj_ ) randomly
+drawn from the training set, the process is described as:
+
+
+_x_ ˜ = _λxi_ + (1 _−_ _λ_ ) _xj,_
+(7)
+_y_ ˜ = _λyi_ + (1 _−_ _λ_ ) _yj,_
+
+
+where (˜ _x,_ ˜ _y_ ) is the synthesized virtual sample, and _λ_ _∈_ [0 _,_ 1] is a mixing coefficient. In the context
+of multivariate time series, directly applying this mixup approach can yield suboptimal results and
+even degrade model performance (Zhou et al., 2023), as mixing samples from distinct time intervals
+may disrupt temporal features such as periodicity. In contrast, different channels within a multivariate time series often exhibit similar temporal characteristics, which explains the effectiveness of the
+CI strategy (Han et al., 2023). Mixing different channels could introduce new variables while preserving their shared temporal features. Considering that the CD strategy tends to cause overfitting
+due to its lack of robustness to distributionally drifted time series (Han et al., 2023), training with
+unseen channels should mitigate this issue. Generally, the Channel Mixup could be formulated as
+follows:
+**X** _[′]_ = **X** : _,i_ + _λ_ **X** : _,j,_ _i, j_ = 0 _, ..., V_ _−_ 1 _,_
+
+(8)
+**Y** _[′]_ = **Y** : _,i_ + _λ_ **Y** : _,j,_ _i, j_ = 0 _, ..., V_ _−_ 1 _,_
+
+where **X** _[′]_ _∈_ R _[L][×]_ [1] and **Y** _[′]_ _∈_ R _[T][ ×]_ [1] are hybrid channels resulting from the linear combination of
+channel _i_ and channel _j_ . _λ_ _∼_ _N_ (0 _, σ_ [2] ) is the linear combination coefficient with _σ_ as the standard
+deviation. We use a normal distribution with a mean of 0, ensuring that the overall characteristics
+of each channel remain unchanged. In practice, as shown in Alg. 1, we mix the channels of each
+sample and replace the original sample with the constructed virtual sample, where randperm( _V_ )
+generates a randomly arranged array of 0 _∼_ _V_ _−_ 1.
+
+
+6
+
+
+**(c) SSM Layer**
+
+
+**(a) Vanilla Mamba Module**
+
+
+**(b) M-Mamba Module**
+
+
+**(d) M-SSM Layer**
+
+
+**Algorithm 1:** Channel Mixup for multivariate time series forecasting
+
+**Input:** training data **X** _∈_ R _[L][×][V]_ _,_ **Y** _∈_ R _[T][ ×][V]_ ; standard deviation _σ_ ; the number of channels _V_
+
+1: perm = randperm( _V_ ) # perm _∈_ R _[V]_
+
+2: _λ_ = normal(mean = 0, std = _σ_, size = ( _V_,))
+3: **X** _[′]_ = **X** + _λ_ - **X** [:, perm]
+4: **Y** _[′]_ = **Y** + _λ_ - **Y** [:, perm]
+**Output:** ( **X** _[′]_ _,_ **Y** _[′]_ )
+
+
+4.3 OVERALL PIPELINE
+
+
+In this section, we summarize the aforementioned procedures and outline the process of training and
+testing our model.
+
+
+In the training stage, given a sample _{_ **X** _,_ **Y** _}_, it is first transformed into a virtual sample using
+the Channel Mixup technique, followed by instance normalization that mitigates the distributional
+shifts:
+**X** _[′]_ _,_ **Y** _[′]_ = ChannelMixup( **X** _,_ **Y** ) _,_
+
+(9)
+**X** _[′]_ _norm_ [=][ InstanceNorm][(] **[X]** _[′]_ [)] _[.]_
+
+Subsequently, each channel is partitioned into patches of equal patch length _P_ and patch number _N_ .
+These patch-wise tokens are then linearly projected into vectors of size _E_ followed by the addition
+of a position encoding **W** _pos_ . This process could be described as:
+
+
+**X** ˆ = Patching( **X** _[′]_ _norm_ [)] _[,]_
+
+(10)
+**Z** 0 = **XW** [ˆ] _p_ + **W** _pos,_
+
+
+where **X** [ˆ] _∈_ R _[V][ ×][N]_ _[×][P]_, **W** _p_ _∈_ R _[P][ ×][E]_, **W** _pos_ _∈_ R _[N]_ _[×][E]_, and **Z** 0 _∈_ R _[V][ ×][N]_ _[×][E]_ . **Z** 0 is then fed into the
+CMamba encoder, consisting of _k_ CMamba blocks:
+
+
+**H** _l_ = M-Mamba( **Z** _l−_ 1) _,_
+(11)
+**Z** _l_ = GDD-MLP( **H** _l_ ) + **Z** _l−_ 1 _,_
+
+
+where _l_ = 1 _, ..., k_ . The final prediction is generated through a linear projection of the output from
+the last CMamba block:
+
+**Y** ˆ = DeNorm(Flatten(Silu( **Z** _k_ )) **W** _proj_ ) _,_ (12)
+
+
+where **W** _proj_ _∈_ **R** [(] _[N]_ _[∗][E]_ [)] _[×][T]_ and **Y** [ˆ] _∈_ R _[V][ ×][T]_ . In the testing stage, the Channel Mixup module is
+excluded, and the model is evaluated directly on the original testing set.
+
+
+5 EXPERIMENTS
+
+
+**Datasets** We evaluate the performance of CMamba on seven well-established datasets: ETTm1,
+ETTm2, ETTh1, ETTh2, Electricity, Weather, and Traffic. All of these datasets are publicly available (Wu et al., 2021). We follow the public splits and apply zero-mean normalization to each
+dataset. More details about datasets are provided in Appendix A.1.
+
+
+**Baselines** We select ten advanced models as our baselines, including (i) Linear-based models:
+DLinear (Zeng et al., 2023), RLinear (Li et al., 2023), TiDE (Das et al., 2023), TimeMixer (Wang
+et al., 2023); (ii) Transformer-based models: Crossformer (Zhang & Yan, 2022), PatchTST (Nie
+et al., 2022), iTransformer (Liu et al., 2023a); and (iii) Convolution-based models: MICN (Wang
+et al., 2022), TimesNet (Wu et al., 2022), ModernTCN (Luo & Wang, 2024).
+
+
+**Implementation** We set the look-back window to _L_ = 96 and report the Mean Squared
+Error (MSE) as well as the Mean Absolute Error (MAE) for four prediction lengths _T_ _∈_
+_{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . We reuse most of the baseline results from iTransformer (Liu et al., 2023a)
+but we rerun MICN (Wang et al., 2022), TimeMixer (Wang et al., 2023), and ModernTCN (Luo &
+Wang, 2024) due to their different experimental settings. All experiments are repeated three times,
+and we report the mean. More details about hyperparameters can be found in Appendix A.2.
+
+
+7
+
+
+Table 1: Average results of the long-term forecasting task with prediction lengths _T_ _∈_
+_{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . We fix the look-back window _L_ = 96 and report the average performance
+
+|Models<br>Metric|CMamba ModernTCN iTransformer TimeMixer RLinear PatchTST Crossformer TiDE TimesNet MICN DLinear<br>(Ours) (2024) (2023a) (2023) (2023) (2022) (2022) (2023) (2022) (2022) (2023)<br>MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|ETTm1|**0.376**<br>**0.379**|0.386<br>0.401|0.407<br>0.410|0.384<br>0.397|0.414<br>0.407|0.387<br>0.400|0.513<br>0.496|0.419<br>0.419|0.400<br>0.406|0.407<br>0.432|0.403<br>0.407|
+|ETTm2|**0.273**<br>**0.316**|0.278<br>0.322|0.288<br>0.332|0.279<br>0.325|0.286<br>0.327|0.281<br>0.326|0.757<br>0.610|0.358<br>0.404|0.291<br>0.333|0.339<br>0.386|0.350<br>0.401|
+|ETTh1|**0.433**<br>**0.425**|0.445<br>0.432|0.454<br>0.447|0.470<br>0.451|0.446<br>0.434|0.469<br>0.454|0.529<br>0.522|0.541<br>0.507|0.458<br>0.450|0.559<br>0.524|0.456<br>0.452|
+|ETTh2|**0.368**<br>**0.391**|0.381<br>0.404|0.383<br>0.407|0.389<br>0.409|0.374<br>0.398|0.387<br>0.407|0.942<br>0.684|0.611<br>0.550|0.414<br>0.427|0.580<br>0.526|0.559<br>0.515|
+|Electricity|**0.169**<br>**0.258**|0.197<br>0.282|0.178<br>0.270|0.183<br>0.272|0.219<br>0.298|0.216<br>0.304|0.244<br>0.334|0.251<br>0.344|0.192<br>0.295|0.185<br>0.296|0.212<br>0.300|
+|Weather|**0.237**<br>**0.259**|0.240<br>0.271|0.258<br>0.279|0.245<br>0.274|0.272<br>0.291|0.259<br>0.281|0.259<br>0.315|0.271<br>0.320|0.259<br>0.287|0.267<br>0.318|0.265<br>0.317|
+|Traffc|0.444<br>**0.265**|0.546<br>0.348|**0.428**<br>0.282|0.496<br>0.298|0.626<br>0.378|0.555<br>0.362|0.550<br>0.304|0.760<br>0.473|0.620<br>0.336|0.544<br>0.319|0.625<br>0.383|
+
+
+5.1 MAIN RESULTS
+
+
+The comprehensive results for multivariate long-term time series forecasting are presented in Table 1. We report the average performance across four prediction horizons _T_ _∈{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_
+in the main text, with full results available in Appendix D.1. Compared to other state-of-the-art
+methods, CMamba ranks top 1 in **13** out of the 14 settings of varying metrics and top 2 in **all** settings. Actually, across all prediction lengths and metrics, encompassing 70 settings, CMamba ranks
+top 1 in **65** settings and top 2 in **all** settings (detailed in Appendix D.1). Notably, for datasets with
+numerous time series, such as Electricity, Weather, and Traffic, CMamba performs as well as or
+better than iTransformer. iTransformer captures cross-channel dependencies via the self-attention
+mechanism, incurring high computational costs. Our GDD-MLP module achieves comparable data
+dependencies and global receptive field, but the computational cost is significantly reduced. These
+results demonstrate our method’s effectiveness. For experiments with the optimal look-back length,
+we provide the results in Appendix C.4.
+
+
+5.2 ABLATION STUDY
+
+
+**Ablation** **of** **M-Mamba** **Design** In Sec- Table 2: Ablation of M-Mamba on Weather. **FS** :
+tion 4.1.1, we describe the differences between feature-specific, **FI** : feature-independent, **F** : free
+the M-Mamba and vanilla Mamba modules, in- variables, **DD** : data-dependent variables.
+
+design choices. As shown in Table 2, we conduct experiments on the Weather dataset with
+
+convolution operation and the z-branch does
+
+|Case|Conv z-branch A D|MSE MAE|
+|---|---|---|
+|Vanilla|✓<br>✓<br>FS<br>F|0.240<br>0.261|
+|①|-<br>✓<br>FS<br>F|0.238<br>0.260|
+|②|✓<br>-<br>FS<br>F|0.239<br>0.261|
+|③|-<br>-<br>FS<br>F|0.239<br>0.261|
+|④|✓<br>✓<br>FI<br>F|0.240<br>0.261|
+|⑤|✓<br>✓<br>FI<br>DD|0.239<br>0.260|
+|CMamba|-<br>✓<br>FI<br>DD|**0.237**<br>**0.259**|
+
+not provide further improvement, suggesting that retaining the z-branch is beneficial. Moreover,
+Case Vanilla and Case ④ demonstrate that learning a feature-specific transfer matrix **A** is unnecessary, given the similar temporal characteristics within each patch. On the other hand, due to the
+differences between channels and patches, making the skip connection matrix **D** data-dependent is
+justified, as indicated by the comparison between Case ④ and Case ⑤.
+
+
+**Ablation** **of** **GDD-MLP** **and** **Channel** **Mixup** To assess the contributions of each module in
+CMamba, we conduct ablation studies on the GDD-MLP and Channel Mixup modules. The results,
+summarized in Table 3, present the average performance across four prediction horizons, with full
+results available in Appendix D.2. Overall, the combination of both modules leads to state-of-theart performance, demonstrating the efficacy of their integration. In most cases, both modules could
+function independently, yielding significant improvements over baseline models. However, for the
+Traffic dataset, using GDD-MLP in isolation results in substantial performance degradation. This
+supports our hypothesis that the Channel-Dependent (CD) strategy, when applied without Channel
+Mixup, is vulnerable to distributional shifts and prone to overfitting.
+
+
+8
+
+
+Table 2: Ablation of M-Mamba on Weather. **FS** :
+feature-specific, **FI** : feature-independent, **F** : free
+variables, **DD** : data-dependent variables.
+
+
+Table 3: Ablation of GDD-MLP and Channel Mixup. We list the average MSE and MAE of different
+
+
+|prediction lengths.|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+|GDD<br>MLP<br>Channel<br>Mixup<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|GDD<br>MLP<br>Channel<br>Mixup<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|GDD<br>MLP<br>Channel<br>Mixup<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|GDD<br>MLP<br>Channel<br>Mixup<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|GDD<br>MLP<br>Channel<br>Mixup<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|GDD<br>MLP<br>Channel<br>Mixup<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|GDD<br>MLP<br>Channel<br>Mixup<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|GDD<br>MLP<br>Channel<br>Mixup<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|GDD<br>MLP<br>Channel<br>Mixup<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|
+|-<br>-<br>✓<br>✓|-<br>✓<br>-<br>✓|0.387<br>0.387<br>0.383<br>0.382<br>0.388<br>0.387<br>**0.376**<br>**0.379**|0.282<br>0.322<br>0.280<br>0.321<br>0.275<br>0.317<br>**0.273**<br>**0.316**|0.431<br>0.42<br><br>**0.430**<br>0.42<br><br>0.437<br>0.42<br><br>0.433<br>**0.42**|8<br>**0.367**<br>**0.391**<br>6<br>0.373<br>0.393<br>8<br>0.372<br>0.394<br>**5**<br>0.368<br>**0.391**|0.190<br>0.268<br>0.189<br>0.267<br>0.175<br>0.266<br>**0.169**<br>**0.258**|0.255<br>0.271<br>0.254<br>0.270<br>0.241<br>0.262<br>**0.237**<br>**0.259**|0.479<br>**0.264**<br>0.483<br>0.267<br>0.525<br>0.285<br>**0.444**<br>0.265|
+
+
+5.3 MODEL ANALYSIS
+
+
+**Effectiveness of GDD-MLP and Channel Mixup** Here, we further demonstrate the advantages
+of our proposed GDD-MLP and Channel Mixup over traditional mixup and MLP by visualizing the
+optimization process, with the patch-wise M-Mamba as our base model. (1) As shown in Fig. 4 (a)
+and (b), compared to the vanilla mixup, Channel Mixup successfully suppresses the oversmoothing
+caused by the CD strategy and brings significantly excellent generalization capabilities. (2) As
+depicted in Fig. 4 (c) and (d), the traditional MLP does show a stronger fitting ability, but because
+it is position-dependent rather than data-dependent, its generalization ability is weaker than that of
+GDD-MLP. Moreover, due to the data-dependent mechanism, GDD-MLP is more compatible with
+Channel Mixup than traditional MLP.
+
+
+Figure 4: Loss curves for the Traffic dataset with look-back length and prediction length fixed at
+96. All curves are generated by models that combine the specified module with M-Mamba. For
+example, GDD-MLP + Channel Mixup corresponds to CMamba.
+
+
+**Generalizability** **of** **GDD-MLP** **and** **Channel** **Mixup** We evaluate the effectiveness and versatility of GDD-MLP and Channel Mixup on four recent models: iTransformer (Liu et al., 2023a)
+and PatchTST (Nie et al., 2022) (Transformer-based), RLinear (Li et al., 2023) (Linear-based), and
+TimesNet (Wu et al., 2022) (Convolution-based). Among them, iTransformer and TimesNet adopt
+CD strategies, while PatchTST and RLinear utilize CI approaches. We retain the original architectures of these models but process the input via Channel Mixup during training and insert the GDDMLP module into the original frameworks. The modified architectures are detailed in Appendix B.2.
+As shown in Table 4, our pipeline consistently enhances performance over various models, yielding
+an average improvement of **5** % across all metrics. For iTransformer and TimesNet, which have already taken cross-channel dependencies into account, the proposed modules do not result in major
+
+
+Table 4: Performance promotion obtained by our proposed GDD-MLP and Channel Mixup when
+applying them to other frameworks. We fix the look-back window _L_ = 96 and report the average
+performance of four prediction lengths _T_ _∈{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ .
+
+
+|Method iTransformer|Col2|Col3|PatchTST|RLinear|TimesNet|
+|---|---|---|---|---|---|
+|Metric<br>MSE<br>MAE|Metric<br>MSE<br>MAE|Metric<br>MSE<br>MAE|MSE<br>MAE|MSE<br>MAE|MSE<br>MAE|
+|Electricity<br>Original<br>0.178<br>0.270<br>0.216<br>0.304<br>0.219<br>0.298<br>0.192<br>0.295<br>w/ GDD-MLP and Channel Mixup<br>**0.170**<br>**0.264**<br>**0.178**<br>**0.273**<br>**0.203**<br>**0.290**<br>**0.182**<br>**0.284**<br>Promotion<br>**4.6%**<br>**2.1%**<br>**17.8%**<br>**10.2%**<br>**7.5%**<br>**2.6%**<br>**5.2%**<br>**3.7%**|Original<br>w/ GDD-MLP and Channel Mixup|0.178<br>0.270<br>**0.170**<br>**0.264**|0.216<br>0.304<br>**0.178**<br>**0.273**|0.219<br>0.298<br>**0.203**<br>**0.290**|0.192<br>0.295<br>**0.182**<br>**0.284**|
+|Electricity<br>Original<br>0.178<br>0.270<br>0.216<br>0.304<br>0.219<br>0.298<br>0.192<br>0.295<br>w/ GDD-MLP and Channel Mixup<br>**0.170**<br>**0.264**<br>**0.178**<br>**0.273**<br>**0.203**<br>**0.290**<br>**0.182**<br>**0.284**<br>Promotion<br>**4.6%**<br>**2.1%**<br>**17.8%**<br>**10.2%**<br>**7.5%**<br>**2.6%**<br>**5.2%**<br>**3.7%**|Promotion|**4.6%**<br>**2.1%**|**17.8%**<br>**10.2%**|**7.5%**<br>**2.6%**|**5.2%**<br>**3.7%**|
+|Weather<br>Original<br>0.258<br>0.279<br>0.259<br>0.281<br>0.272<br>0.291<br>0.259<br>0.287<br>w/ GDD-MLP and Channel Mixup<br>**0.250**<br>**0.274**<br>**0.248**<br>**0.272**<br>**0.258**<br>**0.285**<br>**0.257**<br>**0.282**<br>Promotion<br>**3.1%**<br>**1.9%**<br>**4.4%**<br>**3.3%**<br>**5.1%**<br>**2.1%**<br>**0.9%**<br>**1.6%**|Original<br>w/ GDD-MLP and Channel Mixup|0.258<br>0.279<br>**0.250**<br>**0.274**|0.259<br>0.281<br>**0.248**<br>**0.272**|0.272<br>0.291<br>**0.258**<br>**0.285**|0.259<br>0.287<br>**0.257**<br>**0.282**|
+|Weather<br>Original<br>0.258<br>0.279<br>0.259<br>0.281<br>0.272<br>0.291<br>0.259<br>0.287<br>w/ GDD-MLP and Channel Mixup<br>**0.250**<br>**0.274**<br>**0.248**<br>**0.272**<br>**0.258**<br>**0.285**<br>**0.257**<br>**0.282**<br>Promotion<br>**3.1%**<br>**1.9%**<br>**4.4%**<br>**3.3%**<br>**5.1%**<br>**2.1%**<br>**0.9%**<br>**1.6%**|Promotion|**3.1%**<br>**1.9%**|**4.4%**<br>**3.3%**|**5.1%**<br>**2.1%**|**0.9%**<br>**1.6%**|
+
+
+9
+
+
+improvements. However, for PatchTST and RLinear, which adopt CI strategies, the integration of
+our modules effectively mitigates oversmoothing, leading to substantial performance gains.
+
+
+**Computational Cost of GDD-MLP** We report the computational cost introduced by the GDDMLP module in Table 5, quantified by FLOPs (G). To ensure a fair comparison, we conduct experiments on our CMamba with a fixed hidden size of 128, three layers, and a batch size of 64 for
+the ETT, Weather, and Electricity datasets. Due to memory limitations, the batch size of the Traffic
+dataset is set to 32. As shown in Table 5, the GDD-MLP module contributes minimally to the overall
+computational cost. Notably, even for the Traffic dataset, which includes 862 channels, the increase
+in FLOPs is only 1.35%, indicating the module’s efficiency.
+
+
+Table 5: Computational cost of GDD-MLP. We use FLOPs (G) to measure the computational complexity.
+
+
+Dataset ETT Weather Electricity Traffic
+Channel 7 21 321 862
+
+
+w/o GDD-MLP 1.3322 3.9966 61.0916 82.0264
+w/ GDD-MLP 1.3368 4.0130 61.7558 83.1327
+
+
+FLOPs increment 0.35% 0.41% 1.09% 1.35%
+
+
+**Longer Look-back Length** The look-back length determines the extent of temporal information
+available within time series data. A model’s ability to deliver improved forecasting performance with
+an extended historical window indicates its proficiency in capturing long-range temporal dependencies. Fig. 5 illustrates the performance trajectories of CMamba across varying look-back lengths.
+Consistent with other state-of-the-art models (Nie et al., 2022; Liu et al., 2023a), CMamba’s performance improves as the look-back window lengthens, aligning with the hypothesis that an expanded
+receptive field contributes to more accurate predictions.
+
+
+Figure 5: Performance promotion with longer look-back lengths. We vary the look-back length
+_L_ in _{_ 96 _,_ 192 _,_ 336 _,_ 512 _}_ and report the performance curves of four prediction lengths _T_ _∈_
+_{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ under the Weather and Electricity dataset.
+
+
+6 CONCLUSION
+
+
+We propose CMamba, a novel state space model for multivariate time series forecasting. To balance cross-time and cross-channel dependencies, CMamba consists of three key components: a MMamba module that facilitates Mamba for cross-time dependencies modeling, a GDD-MLP module that captures cross-channel dependencies, and a Channel Mixup training strategy that enhances
+generalization and facilitates the CD approach. Extensive experiments demonstrate that CMamba
+achieves state-of-the-art performance on seven real-world datasets. Notably, the GDD-MLP and
+Channel Mixup modules could be seamlessly inserted into other models with minimal cost, showcasing remarkable framework versatility. In the future, we aim to explore more effective techniques
+to capture cross-time and cross-channel dependencies.
+
+
+10
+
+
+REFERENCES
+
+
+Abdul Fatir Ansari, Lorenzo Stella, Caner Turkmen, Xiyuan Zhang, Pedro Mercado, Huibin Shen,
+Oleksandr Shchur, Syama Sundar Rangapuram, Sebastian Pineda Arango, Shubham Kapoor, et al.
+Chronos: Learning the language of time series. _arXiv preprint arXiv:2403.07815_, 2024.
+
+
+Shengchao Chen, Guodong Long, Tao Shen, Tianyi Zhou, and Jing Jiang. Spatial-temporal prompt
+learning for federated weather forecasting. _arXiv preprint arXiv:2305.14244_, 2023.
+
+
+Abhimanyu Das, Weihao Kong, Andrew Leach, Shaan Mathur, Rajat Sen, and Rose Yu. Long-term
+forecasting with tide: Time-series dense encoder. _arXiv preprint arXiv:2304.08424_, 2023.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An
+image is worth 16x16 words: Transformers for image recognition at scale. _arXiv_ _preprint_
+_arXiv:2010.11929_, 2020.
+
+
+Daniel Y Fu, Tri Dao, Khaled K Saab, Armin W Thomas, Atri Rudra, and Christopher R´e.
+Hungry hungry hippos: Towards language modeling with state space models. _arXiv_ _preprint_
+_arXiv:2212.14052_, 2022.
+
+
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces. _arXiv_
+_preprint arXiv:2312.00752_, 2023.
+
+
+Albert Gu, Karan Goel, and Christopher R´e. Efficiently modeling long sequences with structured
+state spaces. _arXiv preprint arXiv:2111.00396_, 2021.
+
+
+Hongyu Guo, Yongyi Mao, and Richong Zhang. Augmenting data with mixup for sentence classification: An empirical study. _arXiv preprint arXiv:1905.08941_, 2019.
+
+
+Lu Han, Han-Jia Ye, and De-Chuan Zhan. The capacity and robustness trade-off: Revisiting the channel independent strategy for multivariate time series forecasting. _arXiv_ _preprint_
+_arXiv:2304.05206_, 2023.
+
+
+Sepp Hochreiter and J¨urgen Schmidhuber. Long short-term memory. _Neural_ _computation_, 9(8):
+1735–1780, 1997.
+
+
+Jiaxi Hu, Disen Lan, Ziyu Zhou, Qingsong Wen, and Yuxuan Liang. Time-ssm: Simplifying and
+unifying state space models for time series forecasting. _arXiv preprint arXiv:2405.16312_, 2024.
+
+
+Taesung Kim, Jinhee Kim, Yunwon Tae, Cheonbok Park, Jang-Ho Choi, and Jaegul Choo. Reversible instance normalization for accurate time-series forecasting against distribution shift. In
+_International Conference on Learning Representations_, 2021.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv_ _preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Zhe Li, Shiyi Qi, Yiduo Li, and Zenglin Xu. Revisiting long-term time series forecasting: An
+investigation on linear mapping. _arXiv preprint arXiv:2305.10721_, 2023.
+
+
+Aobo Liang, Xingguo Jiang, Yan Sun, and Chang Lu. Bi-mamba4ts: Bidirectional mamba for time
+series forecasting. _arXiv preprint arXiv:2404.15772_, 2024.
+
+
+Minhao Liu, Ailing Zeng, Muxi Chen, Zhijian Xu, Qiuxia Lai, Lingna Ma, and Qiang Xu. Scinet:
+Time series modeling and forecasting with sample convolution and interaction. _Advances_ _in_
+_Neural Information Processing Systems_, 35:5816–5828, 2022.
+
+
+Yong Liu, Tengge Hu, Haoran Zhang, Haixu Wu, Shiyu Wang, Lintao Ma, and Mingsheng Long.
+itransformer: Inverted transformers are effective for time series forecasting. _arXiv_ _preprint_
+_arXiv:2310.06625_, 2023a.
+
+
+Yue Liu, Yunjie Tian, Yuzhong Zhao, Hongtian Yu, Lingxi Xie, Yaowei Wang, Qixiang Ye, and
+Yunfan Liu. Vmamba: Visual state space model. _arXiv preprint arXiv:2401.10166_, 2024.
+
+
+11
+
+
+Zhanyu Liu, Chumeng Liang, Guanjie Zheng, and Hua Wei. Fdti: Fine-grained deep traffic inference
+with roadnet-enriched graph. In _Joint European Conference on Machine Learning and Knowledge_
+_Discovery in Databases_, pp. 174–191. Springer, 2023b.
+
+
+Zhanyu Liu, Guanjie Zheng, and Yanwei Yu. Cross-city few-shot traffic forecasting via traffic
+pattern bank. In _Proceedings_ _of_ _the_ _32nd_ _ACM_ _International_ _Conference_ _on_ _Information_ _and_
+_Knowledge Management_, pp. 1451–1460, 2023c.
+
+
+Donghao Luo and Xue Wang. Moderntcn: A modern pure convolution structure for general time
+series analysis. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+Yuqi Nie, Nam H Nguyen, Phanwadee Sinthong, and Jayant Kalagnanam. A time series is worth 64
+words: Long-term forecasting with transformers. _arXiv preprint arXiv:2211.14730_, 2022.
+
+
+Badri N Patro and Vijay S Agneeswaran. Simba: Simplified mamba-based architecture for vision
+and multivariate time series. _arXiv preprint arXiv:2403.15360_, 2024.
+
+
+Zhuangwei Shi. Mambastock: Selective state space model for stock prediction. _arXiv_ _preprint_
+_arXiv:2402.18959_, 2024.
+
+
+Lichao Sun, Congying Xia, Wenpeng Yin, Tingting Liang, Philip S Yu, and Lifang He. Mixuptransformer: dynamic data augmentation for nlp tasks. _arXiv preprint arXiv:2010.02394_, 2020.
+
+
+Vikas Verma, Alex Lamb, Christopher Beckham, Amir Najafi, Ioannis Mitliagkas, David LopezPaz, and Yoshua Bengio. Manifold mixup: Better representations by interpolating hidden states.
+In _International conference on machine learning_, pp. 6438–6447. PMLR, 2019.
+
+
+Chloe Wang, Oleksii Tsepa, Jun Ma, and Bo Wang. Graph-mamba: Towards long-range graph
+sequence modeling with selective state spaces. _arXiv preprint arXiv:2402.00789_, 2024a.
+
+
+Huiqiang Wang, Jian Peng, Feihu Huang, Jince Wang, Junhui Chen, and Yifei Xiao. Micn: Multiscale local and global context modeling for long-term series forecasting. In _The Eleventh Inter-_
+_national Conference on Learning Representations_, 2022.
+
+
+Shiyu Wang, Haixu Wu, Xiaoming Shi, Tengge Hu, Huakun Luo, Lintao Ma, James Y Zhang, and
+JUN ZHOU. Timemixer: Decomposable multiscale mixing for time series forecasting. In _The_
+_Twelfth International Conference on Learning Representations_, 2023.
+
+
+Yuxuan Wang, Haixu Wu, Jiaxiang Dong, Yong Liu, Mingsheng Long, and Jianmin Wang. Deep
+time series models: A comprehensive survey and benchmark. _arXiv preprint arXiv:2407.13278_,
+2024b.
+
+
+Yuxuan Wang, Haixu Wu, Jiaxiang Dong, Yong Liu, Yunzhong Qiu, Haoran Zhang, Jianmin Wang,
+and Mingsheng Long. Timexer: Empowering transformers for time series forecasting with exogenous variables. _arXiv preprint arXiv:2402.19072_, 2024c.
+
+
+Zihan Wang, Fanheng Kong, Shi Feng, Ming Wang, Han Zhao, Daling Wang, and Yifei Zhang. Is
+mamba effective for time series forecasting? _arXiv preprint arXiv:2403.11144_, 2024d.
+
+
+Zixuan Weng, Jindong Han, Wenzhao Jiang, and Hao Liu. Simplified mamba with disentangled
+dependency encoding for long-term time series forecasting. _arXiv_ _preprint_ _arXiv:2408.12068_,
+2024.
+
+
+Haixu Wu, Jiehui Xu, Jianmin Wang, and Mingsheng Long. Autoformer: Decomposition transformers with auto-correlation for long-term series forecasting. _Advances_ _in_ _neural_ _information_
+_processing systems_, 34:22419–22430, 2021.
+
+
+Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, and Mingsheng Long. Timesnet:
+Temporal 2d-variation modeling for general time series analysis. In _The_ _eleventh_ _international_
+_conference on learning representations_, 2022.
+
+
+Yumo Xu and Shay B Cohen. Stock movement prediction from tweets and historical prices. In
+_Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume_
+_1:_ _Long Papers)_, pp. 1970–1979, 2018.
+
+
+12
+
+
+Siqiao Xue, Xiaoming Shi, Zhixuan Chu, Yan Wang, Fan Zhou, Hongyan Hao, Caigao Jiang, Chen
+Pan, Yi Xu, James Y Zhang, et al. Easytpp: Towards open benchmarking the temporal point
+processes. _arXiv preprint arXiv:2307.08097_, 2023.
+
+
+Sangdoo Yun, Dongyoon Han, Seong Joon Oh, Sanghyuk Chun, Junsuk Choe, and Youngjoon Yoo.
+Cutmix: Regularization strategy to train strong classifiers with localizable features. In _Proceed-_
+_ings of the IEEE/CVF international conference on computer vision_, pp. 6023–6032, 2019.
+
+
+Ailing Zeng, Muxi Chen, Lei Zhang, and Qiang Xu. Are transformers effective for time series
+forecasting? In _Proceedings_ _of_ _the_ _AAAI_ _conference_ _on_ _artificial_ _intelligence_, volume 37, pp.
+11121–11128, 2023.
+
+
+Hongyi Zhang, Moustapha Cisse, Yann N Dauphin, and David Lopez-Paz. mixup: Beyond empirical
+risk minimization. _arXiv preprint arXiv:1710.09412_, 2017.
+
+
+Michael Zhang, Khaled K Saab, Michael Poli, Tri Dao, Karan Goel, and Christopher R´e. Effectively
+modeling time series with simple discrete state spaces. _arXiv preprint arXiv:2303.09489_, 2023.
+
+
+Yunhao Zhang and Junchi Yan. Crossformer: Transformer utilizing cross-dimension dependency
+for multivariate time series forecasting. In _The_ _eleventh_ _international_ _conference_ _on_ _learning_
+_representations_, 2022.
+
+
+Tian Zhou, Ziqing Ma, Qingsong Wen, Xue Wang, Liang Sun, and Rong Jin. Fedformer: Frequency
+enhanced decomposed transformer for long-term series forecasting. In _International conference_
+_on machine learning_, pp. 27268–27286. PMLR, 2022.
+
+
+Yun Zhou, Liwen You, Wenzhen Zhu, and Panpan Xu. Improving time series forecasting with mixup
+data augmentation. 2023.
+
+
+Lianghui Zhu, Bencheng Liao, Qian Zhang, Xinlong Wang, Wenyu Liu, and Xinggang Wang. Vision mamba: Efficient visual representation learning with bidirectional state space model. _arXiv_
+_preprint arXiv:2401.09417_, 2024.
+
+
+13
+
+
+A IMPLEMENTATION DETAILS
+
+
+A.1 DATASET DESCRIPTIONS
+
+
+We conduct experiments on seven real-world datasets following the setups in previous works (Liu
+et al., 2023a; Nie et al., 2022). (1) Four _ETT_ (Electricity Transformer Temperature) datasets contain seven indicators from two different electric transformers in two years, each of which includes
+two different resolutions: 15 minutes ( _ETTm1_ and _ETTm2_ ) and 1 hour ( _ETTh1_ and _ETTh2_ ). (2)
+_Electricity_ comprises the hourly electricity consumption of 321 customers in two years. (3) _Weather_
+contains 21 meteorological factors recorded every 10 minutes in Germany in 2020. (4) _Traffic_ collects the hourly road occupancy rates from 862 different sensors on San Francisco freeways in two
+years. More details are provided in Table 6.
+
+
+Table 6: Detailed dataset descriptions. _Channel_ indicates the number of variates. _Frequency_
+denotes the sampling intervals of time steps. _Domain_ indicates the physical realm of each dataset.
+_Prediction Length_ denotes the future time points to be predicted. The last row indicates the ratio
+of training, validation, and testing sets.
+
+|Dataset|Channel|Frequency|Domain|Prediction Length|Training:Validation:Testing|
+|---|---|---|---|---|---|
+|ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>Electricity<br>Weather<br>Traffc|7<br>7<br>7<br>7<br>321<br>21<br>862|15 minutes<br>15 minutes<br>1 hour<br>1 hour<br>1 hour<br>10 minutes<br>1 hour|Electricity<br>Electricity<br>Electricity<br>Electricity<br>Electricity<br>Weather<br>Transportation|_{_96_,_ 192_,_ 336_,_ 720_}_<br>_{_96_,_ 192_,_ 336_,_ 720_}_<br>_{_96_,_ 192_,_ 336_,_ 720_}_<br>_{_96_,_ 192_,_ 336_,_ 720_}_<br>_{_96_,_ 192_,_ 336_,_ 720_}_<br>_{_96_,_ 192_,_ 336_,_ 720_}_<br>_{_96_,_ 192_,_ 336_,_ 720_}_|6:2:2<br>6:2:2<br>6:2:2<br>6:2:2<br>7:1:2<br>7:1:2<br>7:1:2|
+
+
+A.2 HYPERPARAMETERS
+
+
+We conduct experiments on a single NVIDIA A100 40GB GPU. We utilize Adam (Kingma & Ba,
+2014) optimizer with L1 loss and tune the initial learning rate in _{_ 0 _._ 0001 _,_ 0 _._ 0005 _,_ 0 _._ 001 _}_ . We fix the
+patch length at 16 and the patch stride at 8. The embedding of patches is selected from _{_ 128 _,_ 256 _}_ .
+The number of CMamba blocks is searched in _{_ 2 _,_ 3 _,_ 4 _,_ 5 _}_ . The standard deviation ( _σ_ ) of Channel
+Mixup is tuned from 0 _._ 1 to 5. The dropout rate is searched in _{_ 0 _,_ 0 _._ 1 _}_ . For the M-Mamba module,
+we fix the dimension of the hidden state at 16 and the expansion rate of the linear layer at 1. To
+ensure robustness, we run our model three times under three random seeds (2020, 2021, 2022) in
+each setting. The average performance along with the standard deviation is presented in Table 7.
+
+
+Table 7: Robustness of the proposed CMamba performance. The results are generated from three
+
+|random seeds.|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+|<br>Horizon<br>Dataset|<br>Horizon<br>Dataset|ETTm1|ETTm2|ETTh1|ETTh2|Electricity|Weather|Traffc|
+|96|MSE<br>MAE|0.308_±_0.004<br>0.338_±_0.003|0.171_±_0.001<br>0.248_±_0.001|0.372_±_0.001<br>0.386_±_0.000|0.281_±_0.001<br>0.329_±_0.001|0.141_±_0.000<br>0.231_±_0.001|0.150_±_0.001<br>0.187_±_0.000|0.414_±_0.003<br>0.251_±_0.001|
+|192|MSE<br>MAE|0.359_±_0.001<br>0.364_±_0.001|0.235_±_0.001<br>0.292_±_0.000|0.422_±_0.003<br>0.416_±_0.001|0.361_±_0.000<br>0.381_±_0.000|0.157_±_0.002<br>0.245_±_0.002|0.200_±_0.001<br>0.236_±_0.001|0.432_±_0.001<br>0.257_±_0.001|
+|336|MSE<br>MAE|0.390_±_0.005<br>0.389_±_0.001|0.296_±_0.000<br>0.334_±_0.001|0.466_±_0.003<br>0.438_±_0.001|0.413_±_0.001<br>0.419_±_0.001|0.175_±_0.001<br>0.265_±_0.001|0.260_±_0.000<br>0.281_±_0.000|0.446_±_0.002<br>0.265_±_0.002|
+|720|MSE<br>MAE|0.447_±_0.003<br>0.425_±_0.001|0.392_±_0.002<br>0.391_±_0.001|0.470_±_0.003<br>0.461_±_0.000|0.419_±_0.001<br>0.435_±_0.000|0.203_±_0.002<br>0.289_±_0.001|0.339_±_0.002<br>0.334_±_0.001|0.485_±_0.003<br>0.286_±_0.003|
+
+
+B BASELINES
+
+
+B.1 BASELINE DESCRIPTIONS
+
+
+We carefully selected 10 state-of-the-art models for our study. Their details are as follows:
+
+
+14
+
+
+1) DLinear (Zeng et al., 2023) is a Linear-based model utilizing decomposition and a ChannelIndependent strategy. The source code is available at [https://github.com/cure-lab/](https://github.com/cure-lab/LTSF-Linear)
+[LTSF-Linear.](https://github.com/cure-lab/LTSF-Linear)
+
+
+2) MICN (Wang et al., 2022) is a Convolution-based model featuring multi-scale hybrid decomposition and multi-scale convolution. The source code is available at [https://github.com/](https://github.com/wanghq21/MICN)
+[wanghq21/MICN.](https://github.com/wanghq21/MICN)
+
+
+3) TimesNet (Wu et al., 2022) decomposes 1D time series into 2D time series based on multiperiodicity and captures intra-period and inter-period correlations via convolution. The source code
+[is available at https://github.com/thuml/Time-Series-Library.](https://github.com/thuml/Time-Series-Library)
+
+
+4) TiDE (Das et al., 2023) adopts a pure MLP structure and a Channel-Independent strategy. The source code is available at [https://github.com/google-research/](https://github.com/google-research/google-research/tree/master/tide)
+[google-research/tree/master/tide.](https://github.com/google-research/google-research/tree/master/tide)
+
+
+5) Crossformer (Zhang & Yan, 2022) is a patch-wise Transformer-based model with two-stage attention that captures cross-time and cross-channel dependencies, respectively. The source code is
+[available at https://github.com/Thinklab-SJTU/Crossformer.](https://github.com/Thinklab-SJTU/Crossformer)
+
+
+6) PatchTST (Nie et al., 2022) is a patch-wise Transformer-based model that adopts a ChannelIndependent strategy. The source code is available at [https://github.com/yuqinie98/](https://github.com/yuqinie98/PatchTST)
+[PatchTST.](https://github.com/yuqinie98/PatchTST)
+
+
+7) RLinear (Li et al., 2023) is a Linear-based model with RevIN and a Channel-Independent strategy.
+[The source code is available at https://github.com/plumprc/RTSF.](https://github.com/plumprc/RTSF)
+
+
+8) TimeMixer (Wang et al., 2023) is a fully MLP-based model that leverages multiscale time series.
+It makes predictions based on the multiscale seasonal and trend information of time series. The
+[source code is available at https://github.com/kwuking/TimeMixer.](https://github.com/kwuking/TimeMixer)
+
+
+9) iTransformer (Liu et al., 2023a) is an inverted Transformer-based model that captures crosschannel dependencies via the self-attention mechanism and cross-time dependencies via linear projection. [The source code is available at https://github.com/thuml/iTransformer.](https://github.com/thuml/iTransformer)
+
+
+10) ModernTCN (Luo & Wang, 2024) is a Convolution-based model with larger receptive fields.
+It utilizes depth-wise convolution to learn the patch-wise temporal information and two point-wise
+convolution layers to capture cross-time and cross-channel dependencies respectively. The source
+[code is available at https://github.com/luodhhh/ModernTCN.](https://github.com/luodhhh/ModernTCN)
+
+
+Notably, the source code of most of these models is available at [https://github.com/](https://github.com/thuml/Time-Series-Library)
+[thuml/Time-Series-Library (Wang et al., 2024b).](https://github.com/thuml/Time-Series-Library)
+
+
+|Multivariat<br>Linear P|e Prediction<br>rojection|
+|---|---|
+|**Multivariate Attention**<br>**LayerNorm**<br>**Channel attention**<br>**Feed-forward**<br>**LayerNorm**<br>**GDD-MLP**|**Multivariate Attention**<br>**LayerNorm**<br>**Channel attention**<br>**Feed-forward**<br>**LayerNorm**<br>**GDD-MLP**|
+|**Embedding**<br>**Channel Mixup**|**Embedding**<br>**Channel Mixup**|
+
+
+|Multivariat<br>Flatten<br>Proje|e Prediction<br>& Linear<br>ction|
+|---|---|
+|**Multipatch Attention**<br>**LayerNorm**<br>**Channel attention**<br>**Feed-forward**<br>**LayerNorm**<br>**GDD-MLP**|**Multipatch Attention**<br>**LayerNorm**<br>**Channel attention**<br>**Feed-forward**<br>**LayerNorm**<br>**GDD-MLP**|
+|**Patch Embedding**<br>**Channel Mixup**|**Patch Embedding**<br>**Channel Mixup**|
+
+
+|Multivari<br>GD|Col2|ate Prediction<br>D-MLP|Col4|
+|---|---|---|---|
+||**Variate**|** Projection**||
+|**Tim**|**Tim**|**esBlock**|**esBlock**|
+|**Em**|**Em**|**bedding**|**bedding**|
+|**Channel Mixup**|**Channel Mixup**|**Channel Mixup**|**Channel Mixup**|
+
+
+Figure 6: Modifications of the four chosen baselines. We retain the original architecture unchanged
+but apply Channel Mixup during training and insert the GDD-MLP module into the original model.
+The _∗_ modules represent GDD-MLP and Channel Mixup.
+
+
+15
+
+
+**k ×**
+
+
+**k ×**
+
+
+**(c) PatchTST**
+
+
+**(d) TimesNet**
+
+
+**k ×**
+
+
+**(a) RLinear** **(b) iTransformer**
+
+
+Table 8: Performance promotion obtained by our proposed GDD-MLP and Channel Mixup when
+applying them to other frameworks. We fix the look-back window _L_ = 96 and report the performance of four prediction lengths _T_ _∈{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . Avg means the average metrics for four
+prediction lengths. _↑_ indicates improved performance and _↓_ denotes decreasing performance.
+
+
+|Method iTransformer|Col2|Col3|PatchTST|RLinear|TimesNet|
+|---|---|---|---|---|---|
+|Metric<br>MSE<br>MAE|Metric<br>MSE<br>MAE|Metric<br>MSE<br>MAE|MSE<br>MAE|MSE<br>MAE|MSE<br>MAE|
+|Electricity<br>Original<br>96<br>0.148<br>0.240<br>0.195<br>0.285<br>0.201<br>0.281<br>0.168<br>0.272<br>192<br>0.162<br>0.253<br>0.199<br>0.289<br>0.201<br>0.283<br>0.184<br>0.289<br>336<br>0.178<br>0.269<br>0.215<br>0.305<br>0.215<br>0.298<br>0.198<br>0.300<br>720<br>0.225<br>0.317<br>0.256<br>0.337<br>0.257<br>0.331<br>0.220<br>0.320<br>Avg<br>0.178<br>0.270<br>0.216<br>0.304<br>0.219<br>0.298<br>0.192<br>0.295<br>w/ GDD-MLP and Channel Mixup<br>96<br>0.142_↑_<br>0.238_↑_<br>0.151_↑_<br>0.250_↑_<br>0.182_↑_<br>0.274_↑_<br>0.163_↑_<br>0.268_↑_<br>192<br>0.161_↑_<br>0.255_↓_<br>0.165_↑_<br>0.259_↑_<br>0.187_↑_<br>0.276_↑_<br>0.172_↑_<br>0.274_↑_<br>336<br>0.179_↓_<br>0.274_↓_<br>0.178_↑_<br>0.276_↑_<br>0.202_↑_<br>0.291_↑_<br>0.183_↑_<br>0.286_↑_<br>720<br>0.196_↑_<br>0.290_↑_<br>0.217_↑_<br>0.306_↑_<br>0.239_↑_<br>0.321_↑_<br>0.211_↑_<br>0.308_↑_<br>Avg<br>0.170_↑_<br>0.264_↑_<br>0.178_↑_<br>0.273_↑_<br>0.203_↑_<br>0.290_↑_<br>0.182_↑_<br>0.284_↑_<br>Promotion Count (Promotion / Total)<br>-<br>4 / 5<br>3 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5|96<br>192<br>336<br>720<br>Avg|0.148<br>0.240<br>0.162<br>0.253<br>0.178<br>0.269<br>0.225<br>0.317<br>0.178<br>0.270|0.195<br>0.285<br>0.199<br>0.289<br>0.215<br>0.305<br>0.256<br>0.337<br>0.216<br>0.304|0.201<br>0.281<br>0.201<br>0.283<br>0.215<br>0.298<br>0.257<br>0.331<br>0.219<br>0.298|0.201<br>0.281<br>0.201<br>0.283<br>0.215<br>0.298<br>0.257<br>0.331<br>0.219<br>0.298|
+|Electricity<br>Original<br>96<br>0.148<br>0.240<br>0.195<br>0.285<br>0.201<br>0.281<br>0.168<br>0.272<br>192<br>0.162<br>0.253<br>0.199<br>0.289<br>0.201<br>0.283<br>0.184<br>0.289<br>336<br>0.178<br>0.269<br>0.215<br>0.305<br>0.215<br>0.298<br>0.198<br>0.300<br>720<br>0.225<br>0.317<br>0.256<br>0.337<br>0.257<br>0.331<br>0.220<br>0.320<br>Avg<br>0.178<br>0.270<br>0.216<br>0.304<br>0.219<br>0.298<br>0.192<br>0.295<br>w/ GDD-MLP and Channel Mixup<br>96<br>0.142_↑_<br>0.238_↑_<br>0.151_↑_<br>0.250_↑_<br>0.182_↑_<br>0.274_↑_<br>0.163_↑_<br>0.268_↑_<br>192<br>0.161_↑_<br>0.255_↓_<br>0.165_↑_<br>0.259_↑_<br>0.187_↑_<br>0.276_↑_<br>0.172_↑_<br>0.274_↑_<br>336<br>0.179_↓_<br>0.274_↓_<br>0.178_↑_<br>0.276_↑_<br>0.202_↑_<br>0.291_↑_<br>0.183_↑_<br>0.286_↑_<br>720<br>0.196_↑_<br>0.290_↑_<br>0.217_↑_<br>0.306_↑_<br>0.239_↑_<br>0.321_↑_<br>0.211_↑_<br>0.308_↑_<br>Avg<br>0.170_↑_<br>0.264_↑_<br>0.178_↑_<br>0.273_↑_<br>0.203_↑_<br>0.290_↑_<br>0.182_↑_<br>0.284_↑_<br>Promotion Count (Promotion / Total)<br>-<br>4 / 5<br>3 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5|96<br>192<br>336<br>720<br>Avg|0.142_↑_<br>0.238_↑_<br>0.161_↑_<br>0.255_↓_<br>0.179_↓_<br>0.274_↓_<br>0.196_↑_<br>0.290_↑_<br>0.170_↑_<br>0.264_↑_|0.151_↑_<br>0.250_↑_<br>0.165_↑_<br>0.259_↑_<br>0.178_↑_<br>0.276_↑_<br>0.217_↑_<br>0.306_↑_<br>0.178_↑_<br>0.273_↑_|0.182_↑_<br>0.274_↑_<br>0.187_↑_<br>0.276_↑_<br>0.202_↑_<br>0.291_↑_<br>0.239_↑_<br>0.321_↑_<br>0.203_↑_<br>0.290_↑_|0.182_↑_<br>0.274_↑_<br>0.187_↑_<br>0.276_↑_<br>0.202_↑_<br>0.291_↑_<br>0.239_↑_<br>0.321_↑_<br>0.203_↑_<br>0.290_↑_|
+|Electricity<br>Original<br>96<br>0.148<br>0.240<br>0.195<br>0.285<br>0.201<br>0.281<br>0.168<br>0.272<br>192<br>0.162<br>0.253<br>0.199<br>0.289<br>0.201<br>0.283<br>0.184<br>0.289<br>336<br>0.178<br>0.269<br>0.215<br>0.305<br>0.215<br>0.298<br>0.198<br>0.300<br>720<br>0.225<br>0.317<br>0.256<br>0.337<br>0.257<br>0.331<br>0.220<br>0.320<br>Avg<br>0.178<br>0.270<br>0.216<br>0.304<br>0.219<br>0.298<br>0.192<br>0.295<br>w/ GDD-MLP and Channel Mixup<br>96<br>0.142_↑_<br>0.238_↑_<br>0.151_↑_<br>0.250_↑_<br>0.182_↑_<br>0.274_↑_<br>0.163_↑_<br>0.268_↑_<br>192<br>0.161_↑_<br>0.255_↓_<br>0.165_↑_<br>0.259_↑_<br>0.187_↑_<br>0.276_↑_<br>0.172_↑_<br>0.274_↑_<br>336<br>0.179_↓_<br>0.274_↓_<br>0.178_↑_<br>0.276_↑_<br>0.202_↑_<br>0.291_↑_<br>0.183_↑_<br>0.286_↑_<br>720<br>0.196_↑_<br>0.290_↑_<br>0.217_↑_<br>0.306_↑_<br>0.239_↑_<br>0.321_↑_<br>0.211_↑_<br>0.308_↑_<br>Avg<br>0.170_↑_<br>0.264_↑_<br>0.178_↑_<br>0.273_↑_<br>0.203_↑_<br>0.290_↑_<br>0.182_↑_<br>0.284_↑_<br>Promotion Count (Promotion / Total)<br>-<br>4 / 5<br>3 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5|-|4 / 5<br>3 / 5|5 / 5<br>5 / 5|5 / 5<br>5 / 5|5 / 5<br>5 / 5|
+|Weather<br>Original<br>96<br>0.174<br>0.214<br>0.177<br>0.218<br>0.192<br>0.232<br>0.172<br>0.220<br>192<br>0.221<br>0.254<br>0.225<br>0.256<br>0.240<br>0.271<br>0.219<br>0.261<br>336<br>0.278<br>0.296<br>0.278<br>0.297<br>0.292<br>0.307<br>0.280<br>0.306<br>720<br>0.358<br>0.349<br>0.354<br>0.348<br>0.364<br>0.353<br>0.365<br>0.359<br>Avg<br>0.258<br>0.279<br>0.259<br>0.281<br>0.272<br>0.291<br>0.259<br>0.287<br>w/ GDD-MLP and Channel Mixup<br>96<br>0.164_↑_<br>0.207_↑_<br>0.164_↑_<br>0.207_↑_<br>0.181_↑_<br>0.228_↑_<br>0.166_↑_<br>0.213_↑_<br>192<br>0.214_↑_<br>0.250_↑_<br>0.211_↑_<br>0.249_↑_<br>0.223_↑_<br>0.264_↑_<br>0.221_↓_<br>0.259_↑_<br>336<br>0.272_↑_<br>0.292_↑_<br>0.269_↑_<br>0.289_↑_<br>0.277_↑_<br>0.301_↑_<br>0.282_↓_<br>0.305_↑_<br>720<br>0.350_↑_<br>0.345_↑_<br>0.346_↑_<br>0.342_↑_<br>0.352_↑_<br>0.347_↑_<br>0.357_↑_<br>0.353_↑_<br>Avg<br>0.250_↑_<br>0.274_↑_<br>0.248_↑_<br>0.272_↑_<br>0.258_↑_<br>0.285_↑_<br>0.257_↑_<br>0.282_↑_<br>Promotion Count (Promotion / Total)<br>-<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>3 / 5<br>5 / 5|96<br>192<br>336<br>720<br>Avg|0.174<br>0.214<br>0.221<br>0.254<br>0.278<br>0.296<br>0.358<br>0.349<br>0.258<br>0.279|0.177<br>0.218<br>0.225<br>0.256<br>0.278<br>0.297<br>0.354<br>0.348<br>0.259<br>0.281|0.192<br>0.232<br>0.240<br>0.271<br>0.292<br>0.307<br>0.364<br>0.353<br>0.272<br>0.291|0.192<br>0.232<br>0.240<br>0.271<br>0.292<br>0.307<br>0.364<br>0.353<br>0.272<br>0.291|
+|Weather<br>Original<br>96<br>0.174<br>0.214<br>0.177<br>0.218<br>0.192<br>0.232<br>0.172<br>0.220<br>192<br>0.221<br>0.254<br>0.225<br>0.256<br>0.240<br>0.271<br>0.219<br>0.261<br>336<br>0.278<br>0.296<br>0.278<br>0.297<br>0.292<br>0.307<br>0.280<br>0.306<br>720<br>0.358<br>0.349<br>0.354<br>0.348<br>0.364<br>0.353<br>0.365<br>0.359<br>Avg<br>0.258<br>0.279<br>0.259<br>0.281<br>0.272<br>0.291<br>0.259<br>0.287<br>w/ GDD-MLP and Channel Mixup<br>96<br>0.164_↑_<br>0.207_↑_<br>0.164_↑_<br>0.207_↑_<br>0.181_↑_<br>0.228_↑_<br>0.166_↑_<br>0.213_↑_<br>192<br>0.214_↑_<br>0.250_↑_<br>0.211_↑_<br>0.249_↑_<br>0.223_↑_<br>0.264_↑_<br>0.221_↓_<br>0.259_↑_<br>336<br>0.272_↑_<br>0.292_↑_<br>0.269_↑_<br>0.289_↑_<br>0.277_↑_<br>0.301_↑_<br>0.282_↓_<br>0.305_↑_<br>720<br>0.350_↑_<br>0.345_↑_<br>0.346_↑_<br>0.342_↑_<br>0.352_↑_<br>0.347_↑_<br>0.357_↑_<br>0.353_↑_<br>Avg<br>0.250_↑_<br>0.274_↑_<br>0.248_↑_<br>0.272_↑_<br>0.258_↑_<br>0.285_↑_<br>0.257_↑_<br>0.282_↑_<br>Promotion Count (Promotion / Total)<br>-<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>3 / 5<br>5 / 5|96<br>192<br>336<br>720<br>Avg|0.164_↑_<br>0.207_↑_<br>0.214_↑_<br>0.250_↑_<br>0.272_↑_<br>0.292_↑_<br>0.350_↑_<br>0.345_↑_<br>0.250_↑_<br>0.274_↑_|0.164_↑_<br>0.207_↑_<br>0.211_↑_<br>0.249_↑_<br>0.269_↑_<br>0.289_↑_<br>0.346_↑_<br>0.342_↑_<br>0.248_↑_<br>0.272_↑_|0.181_↑_<br>0.228_↑_<br>0.223_↑_<br>0.264_↑_<br>0.277_↑_<br>0.301_↑_<br>0.352_↑_<br>0.347_↑_<br>0.258_↑_<br>0.285_↑_|0.181_↑_<br>0.228_↑_<br>0.223_↑_<br>0.264_↑_<br>0.277_↑_<br>0.301_↑_<br>0.352_↑_<br>0.347_↑_<br>0.258_↑_<br>0.285_↑_|
+|Weather<br>Original<br>96<br>0.174<br>0.214<br>0.177<br>0.218<br>0.192<br>0.232<br>0.172<br>0.220<br>192<br>0.221<br>0.254<br>0.225<br>0.256<br>0.240<br>0.271<br>0.219<br>0.261<br>336<br>0.278<br>0.296<br>0.278<br>0.297<br>0.292<br>0.307<br>0.280<br>0.306<br>720<br>0.358<br>0.349<br>0.354<br>0.348<br>0.364<br>0.353<br>0.365<br>0.359<br>Avg<br>0.258<br>0.279<br>0.259<br>0.281<br>0.272<br>0.291<br>0.259<br>0.287<br>w/ GDD-MLP and Channel Mixup<br>96<br>0.164_↑_<br>0.207_↑_<br>0.164_↑_<br>0.207_↑_<br>0.181_↑_<br>0.228_↑_<br>0.166_↑_<br>0.213_↑_<br>192<br>0.214_↑_<br>0.250_↑_<br>0.211_↑_<br>0.249_↑_<br>0.223_↑_<br>0.264_↑_<br>0.221_↓_<br>0.259_↑_<br>336<br>0.272_↑_<br>0.292_↑_<br>0.269_↑_<br>0.289_↑_<br>0.277_↑_<br>0.301_↑_<br>0.282_↓_<br>0.305_↑_<br>720<br>0.350_↑_<br>0.345_↑_<br>0.346_↑_<br>0.342_↑_<br>0.352_↑_<br>0.347_↑_<br>0.357_↑_<br>0.353_↑_<br>Avg<br>0.250_↑_<br>0.274_↑_<br>0.248_↑_<br>0.272_↑_<br>0.258_↑_<br>0.285_↑_<br>0.257_↑_<br>0.282_↑_<br>Promotion Count (Promotion / Total)<br>-<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>5 / 5<br>3 / 5<br>5 / 5|-|5 / 5<br>5 / 5|5 / 5<br>5 / 5|5 / 5<br>5 / 5|5 / 5<br>5 / 5|
+
+
+B.2 BASELINE MODIFICATION
+
+
+In Section 5.3, we evaluate the effects of GDD-MLP and Channel Mixup modules on four stateof-the-art models: iTransformer (Liu et al., 2023a) and PatchTST (Nie et al., 2022) (Transformerbased), RLinear (Li et al., 2023) (Linear-based), and TimesNet (Wu et al., 2022) (Convolutionbased). During experiments, we retain the original architecture unchanged but process the input
+via Channel Mixup during training and insert the GDD-MLP module into the original model. The
+modified frameworks of these models are shown in Fig. 6. All models adopt instance norm or
+RevIN (Kim et al., 2021) based on their original settings. We only tune the standard deviation _σ_,
+and learning rate _lr_ for optimal performance. The full results are shown in Table 8.
+
+
+C MORE EVALUATION
+
+
+C.1 FULL ABLATION OF MAMBA DESIGN
+
+
+In the main text, we assess the effectiveness of M-Mamba on the Weather dataset. Here, we present
+a more comprehensive evaluation across all datasets and prediction lengths. As detailed in Table 9,
+M-Mamba achieves performance gains in **58** out of 70 scenarios, with improvements becoming increasingly prominent at longer prediction horizons. This phenomenon is consistent with our architectural adjustments: removing the convolution operation and adopting a feature-independent matrix
+**A**, which deemphasizes local temporal dependencies, allowing Mamba to better capture long-term
+dependencies. Recent studies, including iTransformer (Liu et al., 2023a) and ModernTCN (Luo
+& Wang, 2024), underscore the importance of a global receptive field and long-term dependency
+modeling for effective long-term time series forecasting. Specifically, iTransformer utilizes selfattention to achieve this, while ModernTCN leverages large convolution kernels. By removing
+modules emphasizing local dependencies, we enable Mamba to prioritize global dependency capture, as evidenced by the significant improvements in experimental results. These findings validate
+the effectiveness of our modifications in enhancing Mamba’s capacity for long-term forecasting.
+
+
+16
+
+
+Table 9: Comparisons of the vanilla Mamba and M-Mamba under all datasets and prediction lengths.
+Avg means the average metrics for four prediction lengths. _↑_ indicates improved performance and _↓_
+denotes decreasing performance.
+
+|Dataset<br>Metric|Col2|ETTm1 ETTm2 ETTh1 ETTh2 Electricity Weather Traffci<br>MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+|Mamba|96<br>192<br>336<br>720<br>Avg|0.312<br>0.341<br>0.365<br>0.367<br>0.398<br>0.392<br>0.455<br>0.427|0.173<br>0.251<br>0.239<br>0.296<br>0.300<br>0.336<br>0.398<br>0.393|0.376<br>0.390<br>0.423<br>0.417<br>0.468<br>0.439<br>0.474<br>0.466|0.283<br>0.331<br>0.360<br>0.381<br>0.416<br>0.422<br>0.419<br>0.437|0.140<br>0.231<br>0.159<br>0.247<br>0.177<br>0.265<br>0.214<br>0.298|0.152<br>0.189<br>0.201<br>0.236<br>0.264<br>0.283<br>0.344<br>0.337|0.404<br>0.250<br>0.429<br>0.255<br>0.455<br>0.265<br>0.483<br>0.286<br>0.443<br>0.264|
+|Mamba|96<br>192<br>336<br>720<br>Avg|0.383<br>0.381|0.277<br>0.319|0.435<br>0.428|0.370<br>0.393|0.173<br>0.260|0.240<br>0.261|0.240<br>0.261|
+|M-Mamba|96<br>192<br>336<br>720<br>Avg|0.308_↑_<br>0.338_↑_<br>0.359_↑_<br>0.364_↑_<br>0.390_↑_<br>0.389_↑_<br>0.447_↑_<br>0.425_↑_|0.171_↑_<br>0.248_↑_<br>0.235_↑_<br>0.292_↑_<br>0.296_↑_<br>0.334_↑_<br>0.392_↑_<br>0.391_↑_|0.372_↑_<br>0.386_↑_<br>0.422_↑_<br>0.416_↑_<br>0.466_↑_<br>0.438_↑_<br>0.470_↑_<br>0.461_↑_|0.281_↑_<br>0.329_↑_<br>0.361_↓_<br>0.381_↓_<br>0.413_↑_<br>0.419_↑_<br>0.419_↑_<br>0.435_↑_|0.141_↓_<br>0.231_↓_<br>0.157_↑_<br>0.245_↑_<br>0.175_↑_<br>0.265_↑_<br>0.203_↑_<br>0.289_↑_|0.150_↑_<br>0.187_↑_<br>0.200_↑_<br>0.236_↑_<br>0.260_↑_<br>0.281_↑_<br>0.339_↑_<br>0.334_↑_|0.414_↓_<br>0.251_↓_<br>0.432_↓_<br>0.257_↓_<br>0.446_↑_<br>0.265_↑_<br>0.485_↓_<br>0.286_↓_<br>0.444_↓_<br>0.265_↓_|
+|M-Mamba|96<br>192<br>336<br>720<br>Avg|0.376_↑_<br>0.379_↑_|0.273_↑_<br>0.316_↑_|0.433_↑_<br>0.425_↑_|0.368_↑_<br>0.391_↑_|0.169_↑_<br>0.258_↑_|0.237_↑_<br>0.259_↑_|0.237_↑_<br>0.259_↑_|
+|Promotion Count|Promotion Count|5 / 5<br>5 / 5|5 / 5<br>5 / 5|5 / 5<br>5 / 5|4 / 5<br>4 / 5|4 / 5<br>4 / 5|5 / 5<br>5 / 5|1 / 5<br>1 / 5|
+
+
+C.2 EFFICIENCY ANALYSIS
+
+
+In this section, we evaluate the efficiency of CMamba on the Weather and Electricity datasets, each
+with 21 and 321 channels, respectively. Both training time and model size are taken into account,
+as shown in Fig. 7. We can find that CMamba is the most lightweight model on average except
+for the Linear-based model (e.g., RLinear and TimeMixer). This indicates that CMamba’s excellent
+performance stems more from its capacity to capture historical time series patterns than from an
+increase in parameters. However, CMamba’s running speed is not outstanding, which is primarily
+due to the suboptimal parallelism inherent to state space models (SSMs) compared to attentionbased architectures. Nevertheless, CMamba’s strong performance and lightweight model size still
+make it a highly efficient model, effectively balancing accuracy and computational efficiency.
+
+
+|RLinear Times<br>69.84k, 13ms 1.25M, 3<br>iTransformer<br>5.15M, 28ms<br>PatchTST<br>10.74M, 33ms<br>TimeMixer<br>0.22M, 43ms<br>ModernTCN<br>3.09M, 29ms<br>CMamba<br>1.35M, 29ms|RLinear Times<br>69.84k, 13ms 1.25M, 3<br>iTransformer<br>5.15M, 28ms<br>PatchTST<br>10.74M, 33ms<br>TimeMixer<br>0.22M, 43ms|Net|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|~~**PatchTST**~~<br>**10.74M, 33ms**<br>**ModernTCN**<br>**3.09M, 29ms**<br>~~**RLinear**~~<br>**69.84k, 13ms**<br>**iTransformer**<br>**5.15M, 28ms**<br>~~**Times**~~<br>**1.25M, 3**<br>**TimeMixer**<br>**0.22M, 43ms**<br>~~**CMamba**~~<br>**1.35M, 29ms**|~~**PatchTST**~~<br>**10.74M, 33ms**<br>~~**RLinear**~~<br>**69.84k, 13ms**<br>**iTransformer**<br>**5.15M, 28ms**<br>~~**Times**~~<br>**1.25M, 3**<br>**TimeMixer**<br>**0.22M, 43ms**|** 25ms**||||
+|~~**PatchTST**~~<br>**10.74M, 33ms**<br>**ModernTCN**<br>**3.09M, 29ms**<br>~~**RLinear**~~<br>**69.84k, 13ms**<br>**iTransformer**<br>**5.15M, 28ms**<br>~~**Times**~~<br>**1.25M, 3**<br>**TimeMixer**<br>**0.22M, 43ms**<br>~~**CMamba**~~<br>**1.35M, 29ms**|~~**PatchTST**~~<br>**10.74M, 33ms**<br>~~**RLinear**~~<br>**69.84k, 13ms**<br>**iTransformer**<br>**5.15M, 28ms**<br>~~**Times**~~<br>**1.25M, 3**<br>**TimeMixer**<br>**0.22M, 43ms**|||||
+|~~**PatchTST**~~<br>**10.74M, 33ms**<br>**ModernTCN**<br>**3.09M, 29ms**<br>~~**RLinear**~~<br>**69.84k, 13ms**<br>**iTransformer**<br>**5.15M, 28ms**<br>~~**Times**~~<br>**1.25M, 3**<br>**TimeMixer**<br>**0.22M, 43ms**<br>~~**CMamba**~~<br>**1.35M, 29ms**|**ModernTCN**<br>**3.09M, 29ms**<br>~~**CMamba**~~|||||
+|~~**PatchTST**~~<br>**10.74M, 33ms**<br>**ModernTCN**<br>**3.09M, 29ms**<br>~~**RLinear**~~<br>**69.84k, 13ms**<br>**iTransformer**<br>**5.15M, 28ms**<br>~~**Times**~~<br>**1.25M, 3**<br>**TimeMixer**<br>**0.22M, 43ms**<br>~~**CMamba**~~<br>**1.35M, 29ms**|**ModernTCN**<br>**3.09M, 29ms**<br>~~**CMamba**~~|||||
+
+
+|RLinear Patc<br>69.84k, 65ms 10.74M<br>Modern<br>129M, 1<br>iTransformer TimeMixer<br>5.15M, 71ms 0.22M, 173ms<br>CMam<br>1.65M, 44|RLinear Patc<br>69.84k, 65ms 10.74M|hTST<br>, 473m|s|Col5|Col6|
+|---|---|---|---|---|---|
+|**Modern**<br>**129M, 1**<br>**CMam**<br>**1.65M, 44**<br>~~**TimeMixer**~~<br>**0.22M, 173ms**<br>~~**iTransformer**~~<br>**5.15M, 71ms**<br>**RLinear**<br>**69.84k, 65ms**<br>**Patc**<br>**10.74M**|**Modern**<br>**129M, 1**|**TCN**<br>** 80ms**||**Tim**<br>**150M,**|**esNet**<br>** 3883ms**|
+|**Modern**<br>**129M, 1**<br>**CMam**<br>**1.65M, 44**<br>~~**TimeMixer**~~<br>**0.22M, 173ms**<br>~~**iTransformer**~~<br>**5.15M, 71ms**<br>**RLinear**<br>**69.84k, 65ms**<br>**Patc**<br>**10.74M**|~~**TimeMixer**~~<br>**0.22M, 173ms**<br>~~**iTransformer**~~<br>**5.15M, 71ms**|||||
+|**Modern**<br>**129M, 1**<br>**CMam**<br>**1.65M, 44**<br>~~**TimeMixer**~~<br>**0.22M, 173ms**<br>~~**iTransformer**~~<br>**5.15M, 71ms**<br>**RLinear**<br>**69.84k, 65ms**<br>**Patc**<br>**10.74M**|~~**TimeMixer**~~<br>**0.22M, 173ms**<br>~~**iTransformer**~~<br>**5.15M, 71ms**|**ba**<br>** 2ms**|**ba**<br>** 2ms**|||
+
+
+**(a) Weather** **(b) Electricity**
+
+
+Figure 7: Efficiency comparison on the (a) Weather and (b) Electricity dataset. The look-back
+window is 96 and the horizon is 720.
+
+
+C.3 HYPERPARAMETER SENSITIVITY
+
+
+We conduct a thorough evaluation of the hyperparameters influencing CMamba’s performance, focusing on two critical factors: the standard deviation ( _σ_ ) in the Channel Mixup mechanism and
+the expansion rate ( _r_ ) for the GDD-MLP. Experiments are performed on the ETTh1 and ETTm1
+datasets, maintaining a fixed look-back window and forecasting horizon of 96. All other hyperparameters remain consistent with those reported in Table 1. The results, visualized in Fig. 8, highlight
+the following: (1) The standard deviation ( _σ_ ) controls the extent of perturbation and mixing across
+channels, directly influencing the robustness of the model. Proper tuning is essential, as it governs
+the balance between stability and generalization. A standard normal distribution tends to yield stable performance across various scenarios, likely due to its balance in perturbation magnitude. (2)
+The expansion rate ( _r_ ) controls the dimensionality of the hidden layers in the GDD-MLP. While
+larger hidden layers increase computational demands, they may also detrimentally affect model performance. This suggests that excessive emphasis on cross-channel dependencies can diminish the
+
+
+17
+
+
+model’s ability to capture cross-temporal dynamics, which are more critical for multivariate time
+series forecasting. Conversely, an expansion rate that is too small can result in underfitting, as the
+model may lack sufficient capacity to capture the necessary dependencies across channels.
+
+
+Figure 8: Hyperparameter sensitivity of the standard deviation _σ_ for Channel Mixup (left) and the
+expansion rate _r_ for GDD-MLP (right).
+
+
+C.4 UPPER BOUND EVALUATION
+
+
+Considering that the performance of different models is influenced by the look-back length, we
+further compare our model with state-of-the-art frameworks under the **optimal** look-back length. As
+shown in Table 10, we compare the performance of each model using their best look-back window.
+For CMamba, we search the look-back length in _{_ 96 _,_ 192 _,_ 336 _,_ 512 _}_ . For other benchmarks, we
+rerun iTransformer since its look-back length is fixed at 96 in the original paper, and we collect
+results for other models from tables in ModernTCN (Luo & Wang, 2024), TimeMixer (Wang et al.,
+2023), and TiDE (Das et al., 2023). The results indicate that our model still achieves state-of-the-art
+performance.
+
+
+Table 10: Full results of the long-term forecasting task under the **optimal** look-back window. We
+search the look-back window of CMamba in _{_ 96 _,_ 192 _,_ 336 _,_ 512 _}_ . We report the performance of
+four prediction lengths _T_ _∈{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . Avg means the average metrics for four prediction
+
+|Models<br>Metric|Col2|CMamba ModernTCN iTransformer TimeMixer RLinear PatchTST Crossformer TiDE TimesNet MICN DLinear<br>(Ours) (2024) (2023a) (2023) (2023) (2022) (2022) (2023) (2022) (2022) (2023)<br>MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|ETTm1|96<br>192<br>336<br>720<br>Avg|**0.283**<br>**0.329**<br>0.332<br>**0.357**<br>**0.357**<br>**0.378**<br>0.414<br>**0.410**|0.292<br>0.346<br>0.332<br>0.368<br>0.365<br>0.391<br>0.416<br>0.417|0.295<br>0.344<br>0.336<br>0.370<br>0.373<br>0.391<br>0.432<br>0.427|0.291<br>0.340<br>**0.327**<br>0.365<br>0.360<br>0.381<br>0.415<br>0.417|0.301<br>0.342<br>0.335<br>0.363<br>0.370<br>0.383<br>0.425<br>0.414|0.290<br>0.342<br>0.332<br>0.369<br>0.366<br>0.392<br>0.416<br>0.420|0.316<br>0.373<br>0.377<br>0.411<br>0.431<br>0.442<br>0.600<br>0.547|0.306<br>0.349<br>0.335<br>0.366<br>0.364<br>0.384<br>**0.413**<br>0.413|0.338<br>0.375<br>0.371<br>0.387<br>0.410<br>0.411<br>0.478<br>0.450|0.314<br>0.360<br>0.359<br>0.387<br>0.398<br>0.413<br>0.459<br>0.464|0.299<br>0.343<br>0.335<br>0.365<br>0.369<br>0.386<br>0.425<br>0.421<br>0.357<br>0.379|
+|ETTm1|96<br>192<br>336<br>720<br>Avg|**0.347**<br>**0.368**|0.351<br>0.381|0.359<br>0.383|0.348<br>0.375|0.358<br>0.376|0.351<br>0.381|0.431<br>0.443|0.355<br>0.378|0.400<br>0.406|0.383<br>0.406|0.383<br>0.406|
+|ETTh1|96<br>192<br>336<br>720<br>Avg|**0.358**<br>**0.387**<br>**0.399**<br>0.415<br>0.427<br>0.437<br>**0.428**<br>**0.451**|0.368<br>0.394<br>0.405<br>0.413<br>**0.391**<br>**0.412**<br>0.450<br>0.461|0.386<br>0.405<br>0.441<br>0.436<br>0.461<br>0.452<br>0.503<br>0.491|0.361<br>0.390<br>0.409<br>0.414<br>0.430<br>0.429<br>0.445<br>0.460|0.366<br>0.391<br>0.404<br>**0.412**<br>0.420<br>0.423<br>0.442<br>0.456|0.370<br>0.399<br>0.413<br>0.421<br>0.422<br>0.436<br>0.447<br>0.466|0.386<br>0.429<br>0.419<br>0.444<br>0.440<br>0.461<br>0.519<br>0.524|0.375<br>0.398<br>0.412<br>0.422<br>0.435<br>0.433<br>0.454<br>0.465|0.384<br>0.402<br>0.436<br>0.429<br>0.491<br>0.469<br>0.521<br>0.500|0.396<br>0.427<br>0.430<br>0.453<br>0.433<br>0.458<br>0.474<br>0.508|0.375<br>0.399<br>0.405<br>0.416<br>0.439<br>0.443<br>0.472<br>0.490<br>0.423<br>0.437|
+|ETTh1|96<br>192<br>336<br>720<br>Avg|**0.403**<br>0.422|0.404<br>**0.420**|0.448<br>0.446|0.411<br>0.423|0.408<br>0.421|0.413<br>0.431|0.441<br>0.465|0.419<br>0.430|0.458<br>0.450|0.433<br>0.462|0.433<br>0.462|
+|Electricity|96<br>192<br>336<br>720<br>Avg|**0.128**<br>**0.220**<br>0.146<br>0.239<br>0.162<br>0.258<br>**0.186**<br>**0.278**|0.129<br>0.226<br>0.143<br>0.239<br>**0.161**<br>0.259<br>0.191<br>0.286|0.132<br>0.228<br>0.154<br>0.247<br>0.172<br>0.266<br>0.210<br>0.303|0.129<br>0.224<br>**0.140**<br>**0.220**<br>**0.161**<br>**0.255**<br>0.194<br>0.287|0.140<br>0.235<br>0.154<br>0.248<br>0.171<br>0.264<br>0.209<br>0.297|0.129<br>0.222<br>0.147<br>0.240<br>0.163<br>0.259<br>0.197<br>0.290|0.219<br>0.314<br>0.231<br>0.322<br>0.246<br>0.337<br>0.280<br>0.363|0.132<br>0.229<br>0.147<br>0.243<br>**0.161**<br>0.261<br>0.196<br>0.294|0.168<br>0.272<br>0.184<br>0.289<br>0.198<br>0.300<br>0.220<br>0.320|0.159<br>0.267<br>0.168<br>0.279<br>0.196<br>0.308<br>0.203<br>0.312|0.153<br>0.237<br>0.152<br>0.249<br>0.169<br>0.267<br>0.233<br>0.344<br>0.177<br>0.274|
+|Electricity|96<br>192<br>336<br>720<br>Avg|**0.156**<br>0.249|**0.156**<br>0.253|0.167<br>0.261|**0.156**<br>**0.246**|0.169<br>0.261|0.159<br>0.253|0.244<br>0.334|0.159<br>0.257|0.192<br>0.295|0.182<br>0.292|0.182<br>0.292|
+|Weather|96<br>192<br>336<br>720<br>Avg|**0.141**<br>**0.180**<br>**0.187**<br>**0.229**<br>**0.238**<br>**0.267**<br>**0.310**<br>**0.321**|0.149<br>0.200<br>0.196<br>0.245<br>**0.238**<br>0.277<br>0.314<br>0.334|0.162<br>0.212<br>0.204<br>0.252<br>0.256<br>0.290<br>0.326<br>0.338|0.147<br>0.197<br>0.189<br>0.239<br>0.241<br>0.280<br>**0.310**<br>0.330|0.175<br>0.225<br>0.218<br>0.260<br>0.265<br>0.294<br>0.329<br>0.339|0.149<br>0.198<br>0.194<br>0.241<br>0.245<br>0.282<br>0.314<br>0.334|0.153<br>0.217<br>0.197<br>0.269<br>0.252<br>0.311<br>0.318<br>0.363|0.166<br>0.222<br>0.209<br>0.263<br>0.254<br>0.301<br>0.313<br>0.340|0.172<br>0.220<br>0.219<br>0.261<br>0.280<br>0.306<br>0.365<br>0.359|0.161<br>0.226<br>0.220<br>0.283<br>0.275<br>0.328<br>0.311<br>0.356|0.152<br>0.237<br>0.220<br>0.282<br>0.265<br>0.319<br>0.323<br>0.362<br>0.240<br>0.300|
+|Weather|96<br>192<br>336<br>720<br>Avg|**0.219**<br>**0.249**|0.224<br>0.264|0.237<br>0.273|0.222<br>0.262|0.247<br>0.279|0.226<br>0.264|0.230<br>0.290|0.236<br>0.282|0.259<br>0.287|0.242<br>0.298|0.242<br>0.298|
+
+
+C.5 EFFECTIVENESS OF MAE LOSS
+
+
+The choice of the loss function plays a pivotal role in both the optimization process and the convergence behavior of time series forecasting models. While many prior models predominantly employ
+L2 loss, also known as Mean Squared Error (MSE), our proposed model adopts L1 loss, also referred to as Mean Absolute Error (MAE). The rationale behind this choice stems from empirical
+observations across various datasets, where the mean absolute error is typically small. In such cases,
+the gradients produced by L2 loss tend to be small, which can impede the model’s ability to escape
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+local minima during training, as depicted in Fig. 9. Moreover, time series data often exhibit outliers,
+and L2 loss is known to be more sensitive to these outliers, which can lead to instability during
+training. In contrast, L1 loss is more robust to outliers, promoting greater stability in model training
+and convergence.
+
+
+|1|Col2|
+|---|---|
+|**1**||
+|**0.5**|**0.**<br>**-1**|
+
+
+|Col1|1|
+|---|---|
+|||
+|**1**||
+
+
+|1|Col2|
+|---|---|
+|**1**||
+||**-1**|
+
+
+|Col1|1|
+|---|---|
+|||
+|**1**||
+
+
+**(a) L1 Loss** **(b) L2 Loss**
+
+
+Figure 9: Visualization of L1 and L2 loss.
+
+
+To substantiate this choice, we evaluate the performance of five state-of-the-art models from different architectural families: CMamba (our proposed model, SSM-based), ModernTCN (Convolutionbased), iTransformer (Transformer-based), TimeMixer (Linear-based), and PatchTST (Transformerbased). We assess the performance of these models using both MSE and MAE loss functions. The
+results are exhibited in Table 11, where **37** out of 40 cases have improved performance after switching from MSE loss to MAE loss. Even when considering different loss functions, our model consistently outperforms the alternatives, achieving the best average performance, which underscores the
+effectiveness and robustness of CMamba under various training conditions.
+
+
+Table 11: Performance promotion obtained by changing MSE loss to MAE loss. We fix the
+look-back window _L_ = 96 and report the average performance of four prediction lengths _T_ _∈_
+_{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . The best under each loss is highlighted in **red** . _↑_ indicates improved performance and _↓_ denotes decreasing performance.
+
+
+Method CMamba ModernTCN iTransformer TimeMixer PatchTST
+
+|Metric MSE MAE|Col2|Col3|MSE MAE|MSE MAE|MSE MAE|MSE MAE|
+|---|---|---|---|---|---|---|
+|ETTm2|MSE Loss<br>MAE Loss|**0.278**<br>0.324<br>**0.273**_↑_<br>**0.316**_↑_|**0.278**<br>**0.322**<br>0.276_↑_<br>0.317_↑_|0.288<br>0.332<br>0.283_↑_<br>0.322_↑_|0.279<br>0.325<br>0.274_↑_<br>0.317_↑_|0.281<br>0.326<br>0.279_↑_<br>0.318_↑_|
+|ETTh2|MSE Loss<br>MAE Loss|**0.380**<br>**0.403**<br>0.368_↑_<br>**0.391**_↑_|0.381<br>0.404<br>0.379_↑_<br>0.398_↑_|0.383<br>0.407<br>0.379_↑_<br>0.400_↑_|0.389<br>0.409<br>0.377_↑_<br>0.396_↑_|0.387<br>0.407<br>**0.363**_↑_<br>**0.391**_↑_|
+|Electricity|MSE Loss<br>MAE Loss|**0.172**<br>**0.265**<br>**0.169**_↑_<br>**0.258**_↑_|0.197<br>0.282<br>0.211_↓_<br>0.290_↓_|0.178<br>0.270<br>0.175_↑_<br>0.259_↑_|0.183<br>0.272<br>0.185_↓_<br>0.271_↑_|0.216<br>0.304<br>0.206_↑_<br>0.285_↑_|
+|Weather|MSE Loss<br>MAE Loss|**0.240**<br>**0.270**<br>0.237_↑_<br>**0.259**_↑_|**0.240**<br>0.271<br>**0.236**_↑_<br>0.263_↑_|0.258<br>0.279<br>0.255_↑_<br>0.271_↑_|0.245<br>0.274<br>0.245_↑_<br>0.265_↑_|0.259<br>0.281<br>0.255_↑_<br>0.270_↑_|
+
+
+C.6 LIMITATIONS
+
+
+In this work, we mainly focus on the multivariate time series forecasting task with endogenous variables, meaning that the values we aim to predict and the values treated as features only differ in
+terms of time steps. However, real-world scenarios often involve the influence of exogenous variables on the variables we seek to predict, a topic extensively discussed in prior research (Wang
+et al., 2024c). In addition, the experimental results show that our model exhibits significant improvements on some datasets with large-scale channels, such as Weather and Electricity. However,
+the improvements in MAE are relatively limited on the Traffic dataset, which contains 862 channels.
+This discrepancy could be attributed to the pronounced periodicity observed in traffic data compared
+to other domains. These periodic patterns are highly time-dependent, causing different channels to
+exhibit similar characteristics and obscuring their physical interconnections. Therefore, incorporating external variables and utilizing prior knowledge about the relationships between channels, such
+as the connectivity of traffic roads, might further enhance the prediction accuracy.
+
+
+19
+
+
+**w**
+
+
+**w**
+
+
+**w**
+
+
+**w**
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 12: Full results of the long-term forecasting task. We fix the look-back window _L_ = 96 and
+make predictions for _T_ = _{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . Avg means the average metrics for four prediction
+lengths. The best is highlighted in **red** and the runner-up in blue. We report the average results of
+
+|Models<br>Metric|Col2|CMamba ModernTCN iTransformer TimeMixer RLinear PatchTST Crossformer TiDE TimesNet MICN DLinear<br>(Ours) (2024) (2023a) (2023) (2023) (2022) (2022) (2023) (2022) (2022) (2023)<br>MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE MSE MAE|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|ETTm1|96<br>192<br>336<br>720<br>Avg|**0.308**<br>**0.338**<br>**0.359**<br>**0.364**<br>**0.390**<br>**0.389**<br>**0.447**<br>**0.425**|0.317<br>0.362<br>0.363<br>0.389<br>0.403<br>0.412<br>0.461<br>0.443|0.334<br>0.368<br>0.377<br>0.391<br>0.426<br>0.420<br>0.491<br>0.459|0.320<br>0.355<br>0.362<br>0.382<br>0.396<br>0.406<br>0.458<br>0.445|0.355<br>0.376<br>0.391<br>0.392<br>0.424<br>0.415<br>0.487<br>0.450|0.329<br>0.367<br>0.367<br>0.385<br>0.399<br>0.410<br>0.454<br>0.439|0.404<br>0.426<br>0.450<br>0.451<br>0.532<br>0.515<br>0.666<br>0.589|0.364<br>0.387<br>0.398<br>0.404<br>0.428<br>0.425<br>0.487<br>0.461|0.338<br>0.375<br>0.374<br>0.387<br>0.410<br>0.411<br>0.478<br>0.450|0.317<br>0.367<br>0.382<br>0.413<br>0.417<br>0.443<br>0.511<br>0.505|0.345<br>0.372<br>0.380<br>0.389<br>0.413<br>0.413<br>0.474<br>0.453<br>0.403<br>0.407|
+|ETTm1|96<br>192<br>336<br>720<br>Avg|**0.376**<br>**0.379**|0.386<br>0.401|0.407<br>0.410|0.384<br>0.397|0.414<br>0.407|0.387<br>0.400|0.513<br>0.496|0.419<br>0.419|0.400<br>0.406|0.407<br>0.432|0.407<br>0.432|
+|ETTm2|96<br>192<br>336<br>720<br>Avg|**0.171**<br>**0.248**<br>**0.235**<br>**0.292**<br>**0.296**<br>**0.334**<br>**0.392**<br>**0.391**|0.173<br>0.255<br>**0.235**<br>0.296<br>0.308<br>0.344<br>0.398<br>0.394|0.180<br>0.264<br>0.250<br>0.309<br>0.311<br>0.348<br>0.412<br>0.407|0.176<br>0.259<br>0.242<br>0.303<br>0.303<br>0.339<br>0.396<br>0.399|0.182<br>0.265<br>0.246<br>0.304<br>0.307<br>0.342<br>0.407<br>0.398|0.175<br>0.259<br>0.241<br>0.302<br>0.305<br>0.343<br>0.402<br>0.400|0.287<br>0.366<br>0.414<br>0.492<br>0.597<br>0.542<br>1.730<br>1.042|0.207<br>0.305<br>0.290<br>0.364<br>0.377<br>0.422<br>0.558<br>0.524|0.187<br>0.267<br>0.249<br>0.309<br>0.321<br>0.351<br>0.408<br>0.403|0.182<br>0.278<br>0.288<br>0.357<br>0.370<br>0.413<br>0.519<br>0.495|0.193<br>0.292<br>0.284<br>0.362<br>0.369<br>0.427<br>0.554<br>0.522<br>0.350<br>0.401|
+|ETTm2|96<br>192<br>336<br>720<br>Avg|**0.273**<br>**0.316**|0.278<br>0.322|0.288<br>0.332|0.279<br>0.325|0.286<br>0.327|0.281<br>0.326|0.757<br>0.610|0.358<br>0.404|0.291<br>0.333|0.339<br>0.386|0.339<br>0.386|
+|ETTh1|96<br>192<br>336<br>720<br>Avg|**0.372**<br>**0.386**<br>**0.422**<br>**0.416**<br>**0.466**<br>**0.438**<br>**0.470**<br>**0.461**|0.386<br>0.394<br>0.436<br>0.423<br>0.479<br>0.445<br>0.481<br>0.469|0.386<br>0.405<br>0.441<br>0.436<br>0.487<br>0.458<br>0.503<br>0.491|0.384<br>0.400<br>0.437<br>0.429<br>0.472<br>0.446<br>0.586<br>0.531|0.386<br>0.395<br>0.439<br>0.424<br>0.479<br>0.446<br>0.481<br>0.470|0.414<br>0.419<br>0.460<br>0.445<br>0.501<br>0.466<br>0.500<br>0.488|0.423<br>0.448<br>0.471<br>0.474<br>0.570<br>0.546<br>0.653<br>0.621|0.479<br>0.464<br>0.525<br>0.492<br>0.565<br>0.515<br>0.594<br>0.558|0.384<br>0.402<br>0.436<br>0.429<br>0.491<br>0.469<br>0.521<br>0.500|0.417<br>0.436<br>0.488<br>0.476<br>0.599<br>0.549<br>0.730<br>0.634|0.386<br>0.400<br>0.437<br>0.432<br>0.481<br>0.459<br>0.519<br>0.516<br>0.456<br>0.452|
+|ETTh1|96<br>192<br>336<br>720<br>Avg|**0.433**<br>**0.425**|0.445<br>0.432|0.454<br>0.447|0.470<br>0.451|0.446<br>0.434|0.469<br>0.454|0.529<br>0.522|0.541<br>0.507|0.458<br>0.450|0.559<br>0.524|0.559<br>0.524|
+|ETTh2|96<br>192<br>336<br>720<br>Avg|**0.281**<br>**0.329**<br>**0.361**<br>**0.381**<br>**0.413**<br>**0.419**<br>**0.419**<br>**0.435**|0.292<br>0.340<br>0.377<br>0.395<br>0.424<br>0.434<br>0.433<br>0.448|0.297<br>0.349<br>0.380<br>0.400<br>0.428<br>0.432<br>0.427<br>0.445|0.297<br>0.348<br>0.369<br>0.392<br>0.427<br>0.435<br>0.462<br>0.463|0.288<br>0.338<br>0.374<br>0.390<br>0.415<br>0.426<br>0.420<br>0.440|0.302<br>0.348<br>0.388<br>0.400<br>0.426<br>0.433<br>0.431<br>0.446|0.745<br>0.584<br>0.877<br>0.656<br>1.043<br>0.731<br>1.104<br>0.763|0.400<br>0.440<br>0.528<br>0.509<br>0.643<br>0.571<br>0.874<br>0.679|0.340<br>0.374<br>0.402<br>0.414<br>0.452<br>0.452<br>0.462<br>0.468|0.355<br>0.402<br>0.511<br>0.491<br>0.618<br>0.551<br>0.835<br>0.660|0.333<br>0.387<br>0.477<br>0.476<br>0.594<br>0.541<br>0.831<br>0.657<br>0.559<br>0.515|
+|ETTh2|96<br>192<br>336<br>720<br>Avg|**0.368**<br>**0.391**|0.381<br>0.404|0.383<br>0.407|0.389<br>0.409|0.374<br>0.398|0.387<br>0.407|0.942<br>0.684|0.611<br>0.550|0.414<br>0.427|0.580<br>0.526|0.580<br>0.526|
+|Electricity|96<br>192<br>336<br>720<br>Avg|**0.141**<br>**0.231**<br>**0.157**<br>**0.245**<br>**0.175**<br>**0.265**<br>**0.203**<br>**0.289**|0.173<br>0.260<br>0.181<br>0.267<br>0.196<br>0.283<br>0.238<br>0.316|0.148<br>0.240<br>0.162<br>0.253<br>0.178<br>0.269<br>0.225<br>0.319|0.153<br>0.244<br>0.168<br>0.259<br>0.185<br>0.275<br>0.227<br>0.312|0.201<br>0.281<br>0.201<br>0.283<br>0.215<br>0.298<br>0.257<br>0.331|0.195<br>0.285<br>0.199<br>0.289<br>0.215<br>0.305<br>0.256<br>0.337|0.219<br>0.314<br>0.231<br>0.322<br>0.246<br>0.337<br>0.280<br>0.363|0.237<br>0.329<br>0.236<br>0.330<br>0.249<br>0.344<br>0.284<br>0.373|0.168<br>0.272<br>0.184<br>0.289<br>0.198<br>0.300<br>0.220<br>0.320|0.172<br>0.285<br>0.177<br>0.287<br>0.186<br>0.297<br>0.204<br>0.314|0.197<br>0.282<br>0.196<br>0.285<br>0.209<br>0.301<br>0.245<br>0.333<br>0.212<br>0.300|
+|Electricity|96<br>192<br>336<br>720<br>Avg|**0.169**<br>**0.258**|0.197<br>0.282|0.178<br>0.270|0.183<br>0.272|0.219<br>0.298|0.216<br>0.304|0.244<br>0.334|0.251<br>0.344|0.192<br>0.295|0.185<br>0.296|0.185<br>0.296|
+|Weather|96<br>192<br>336<br>720<br>Avg|**0.150**<br>**0.187**<br>**0.200**<br>**0.236**<br>**0.260**<br>**0.281**<br>**0.339**<br>**0.334**|0.155<br>0.203<br>0.202<br>0.247<br>0.263<br>0.293<br>0.341<br>0.343|0.174<br>0.214<br>0.221<br>0.254<br>0.278<br>0.296<br>0.358<br>0.349|0.162<br>0.208<br>0.208<br>0.252<br>0.263<br>0.293<br>0.345<br>0.345|0.192<br>0.232<br>0.240<br>0.271<br>0.292<br>0.307<br>0.364<br>0.353|0.177<br>0.218<br>0.225<br>0.259<br>0.278<br>0.297<br>0.354<br>0.348|0.158<br>0.230<br>0.206<br>0.277<br>0.272<br>0.335<br>0.398<br>0.418|0.202<br>0.261<br>0.242<br>0.298<br>0.287<br>0.335<br>0.351<br>0.386|0.172<br>0.220<br>0.219<br>0.261<br>0.280<br>0.306<br>0.365<br>0.359|0.194<br>0.253<br>0.240<br>0.301<br>0.284<br>0.334<br>0.351<br>0.387|0.196<br>0.255<br>0.237<br>0.296<br>0.283<br>0.335<br>0.345<br>0.381<br>0.265<br>0.317|
+|Weather|96<br>192<br>336<br>720<br>Avg|**0.237**<br>**0.259**|0.240<br>0.271|0.258<br>0.279|0.245<br>0.274|0.272<br>0.291|0.259<br>0.281|0.259<br>0.315|0.271<br>0.320|0.259<br>0.287|0.267<br>0.318|0.267<br>0.318|
+|Traffc|96<br>192<br>336<br>720<br>Avg|0.414<br>**0.251**<br>0.432<br>**0.257**<br>0.446<br>**0.265**<br>0.485<br>**0.286**|0.550<br>0.355<br>0.527<br>0.337<br>0.537<br>0.342<br>0.570<br>0.359|**0.395**<br>0.268<br>**0.417**<br>0.276<br>**0.433**<br>0.283<br>**0.467**<br>0.302|0.473<br>0.287<br>0.486<br>0.294<br>0.488<br>0.298<br>0.536<br>0.314|0.649<br>0.389<br>0.601<br>0.366<br>0.609<br>0.369<br>0.647<br>0.387|0.544<br>0.359<br>0.540<br>0.354<br>0.551<br>0.358<br>0.586<br>0.375|0.522<br>0.290<br>0.530<br>0.293<br>0.558<br>0.305<br>0.589<br>0.328|0.805<br>0.493<br>0.756<br>0.474<br>0.762<br>0.477<br>0.719<br>0.449|0.593<br>0.321<br>0.617<br>0.336<br>0.629<br>0.336<br>0.640<br>0.350|0.521<br>0.310<br>0.536<br>0.314<br>0.550<br>0.321<br>0.571<br>0.329|0.650<br>0.396<br>0.598<br>0.370<br>0.605<br>0.373<br>0.645<br>0.394<br>0.625<br>0.383|
+|Traffc|96<br>192<br>336<br>720<br>Avg|0.444<br>**0.265**|0.546<br>0.348|**0.428**<br>0.282|0.496<br>0.298|0.626<br>0.378|0.555<br>0.362|0.550<br>0.304|0.760<br>0.473|0.620<br>0.336|0.544<br>0.319|0.544<br>0.319|
+|1stCount|1stCount|**30**<br>**35**|1<br>0|5<br>0|0<br>0|0<br>0|0<br>0|0<br>0|0<br>0|0<br>0|0<br>0|0<br>0|
+
+
+Table 13: Full results of ablation studies for ETTm1, ETTm2, ETTh1, and ETTh2. We fix the lookback window _L_ = 96 and make predictions for _T_ = _{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . The best is highlighted in
+
+|red and the runner-up in blue.|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|GDD<br>MLP<br>Channel<br>Mixup<br>Metric<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720|GDD<br>MLP<br>Channel<br>Mixup<br>Metric<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720|GDD<br>MLP<br>Channel<br>Mixup<br>Metric<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720|GDD<br>MLP<br>Channel<br>Mixup<br>Metric<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720|GDD<br>MLP<br>Channel<br>Mixup<br>Metric<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720|GDD<br>MLP<br>Channel<br>Mixup<br>Metric<br>ETTm1<br>ETTm2<br>ETTh1<br>ETTh2<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720<br>96<br>192<br>336<br>720|
+|-<br>-|MSE<br>MAE|0.320<br>0.373<br>0.401<br>0.455<br>0.345<br>0.373<br>0.398<br>0.434|0.175<br>0.244<br>0.304<br>0.404<br>0.254<br>0.300<br>0.339<br>0.397|0.374<br>**0.422**<br>**0.458**<br>0.471<br>0.390<br>0.418<br>0.439<br>0.463|0.284<br>**0.361**<br>**0.410**<br>**0.415**<br>0.331<br>**0.380**<br>**0.419**<br>**0.435**|
+|-<br>✓|MSE<br>MAE|0.312<br>0.370<br>0.399<br>0.453<br>0.339<br>0.369<br>0.390<br>0.429|0.177<br>0.242<br>0.301<br>0.402<br>0.255<br>0.297<br>0.337<br>0.396|**0.372**<br>0.423<br>0.462<br>**0.462**<br>0.390<br>0.419<br>**0.437**<br>0.459|0.284<br>0.363<br>0.428<br>0.419<br>0.331<br>**0.380**<br>0.427<br>**0.435**|
+|✓<br>-|MSE<br>MAE|0.317<br>0.363<br>0.391<br>0.481<br>0.341<br>0.372<br>0.394<br>0.441|0.172<br>0.238<br>**0.293**<br>0.397<br>0.250<br>0.294<br>**0.333**<br>0.393|0.382<br>0.430<br>0.470<br>0.465<br>0.394<br>0.420<br>0.440<br>**0.457**|0.285<br>0.364<br>0.417<br>0.423<br>0.332<br>0.382<br>0.422<br>0.439|
+|✓<br>✓|MSE<br>MAE|**0.308**<br>**0.359**<br>**0.390**<br>**0.447**<br>**0.338**<br>**0.364**<br>**0.389**<br>**0.425**|**0.171**<br>**0.235**<br>0.296<br>**0.392**<br>**0.248**<br>**0.292**<br>0.334<br>**0.391**|**0.372**<br>**0.422**<br>0.466<br>0.470<br>**0.386**<br>**0.416**<br>0.438<br>0.461|**0.281**<br>**0.361**<br>0.413<br>0.419<br>**0.329**<br>0.381<br>**0.419**<br>**0.435**|
+
+
+Table 14: Full results of ablation studies for Electricity, Weather, and Traffic. We fix the look-back
+window _L_ = 96 and make predictions for _T_ = _{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . The best is highlighted in **red**
+and the runner-up in blue.
+
+|GDD Channel Electricity Weather Traffci<br>Metric<br>MLP Mixup<br>96 192 336 720 96 192 336 720 96 192 336 720|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+|-<br>-|MSE<br>MAE|0.163<br>0.173<br>0.190<br>0.233<br>0.243<br>0.253<br>0.270<br>0.306|0.173<br>0.219<br>0.276<br>0.352<br>0.207<br>0.247<br>0.289<br>0.339|0.454<br>0.467<br>0.479<br>0.514<br>**0.251**<br>**0.257**<br>**0.264**<br>**0.284**|
+|-<br>✓<br>MSE<br>0.164<br>0.173<br>0.190<br>0.229<br>0.173<br>0.218<br>0.273<br>0.352<br>0.467<br>0.463<br>0.483<br>0.518<br>MAE<br>0.243<br>0.252<br>0.270<br>0.302<br>0.206<br>0.246<br>0.287<br>0.339<br>0.257<br>0.259<br>0.268<br>0.285|-<br>✓<br>MSE<br>0.164<br>0.173<br>0.190<br>0.229<br>0.173<br>0.218<br>0.273<br>0.352<br>0.467<br>0.463<br>0.483<br>0.518<br>MAE<br>0.243<br>0.252<br>0.270<br>0.302<br>0.206<br>0.246<br>0.287<br>0.339<br>0.257<br>0.259<br>0.268<br>0.285|-<br>✓<br>MSE<br>0.164<br>0.173<br>0.190<br>0.229<br>0.173<br>0.218<br>0.273<br>0.352<br>0.467<br>0.463<br>0.483<br>0.518<br>MAE<br>0.243<br>0.252<br>0.270<br>0.302<br>0.206<br>0.246<br>0.287<br>0.339<br>0.257<br>0.259<br>0.268<br>0.285|-<br>✓<br>MSE<br>0.164<br>0.173<br>0.190<br>0.229<br>0.173<br>0.218<br>0.273<br>0.352<br>0.467<br>0.463<br>0.483<br>0.518<br>MAE<br>0.243<br>0.252<br>0.270<br>0.302<br>0.206<br>0.246<br>0.287<br>0.339<br>0.257<br>0.259<br>0.268<br>0.285|-<br>✓<br>MSE<br>0.164<br>0.173<br>0.190<br>0.229<br>0.173<br>0.218<br>0.273<br>0.352<br>0.467<br>0.463<br>0.483<br>0.518<br>MAE<br>0.243<br>0.252<br>0.270<br>0.302<br>0.206<br>0.246<br>0.287<br>0.339<br>0.257<br>0.259<br>0.268<br>0.285|
+|✓<br>-<br>MSE<br>0.147<br>0.166<br>**0.174**<br>0.212<br>**0.150**<br>**0.199**<br>0.269<br>0.345<br>0.471<br>0.499<br>0.546<br>0.585<br>MAE<br>0.240<br>0.258<br>**0.265**<br>0.299<br>**0.186**<br>**0.236**<br>0.287<br>0.337<br>0.272<br>0.281<br>0.289<br>0.300|✓<br>-<br>MSE<br>0.147<br>0.166<br>**0.174**<br>0.212<br>**0.150**<br>**0.199**<br>0.269<br>0.345<br>0.471<br>0.499<br>0.546<br>0.585<br>MAE<br>0.240<br>0.258<br>**0.265**<br>0.299<br>**0.186**<br>**0.236**<br>0.287<br>0.337<br>0.272<br>0.281<br>0.289<br>0.300|✓<br>-<br>MSE<br>0.147<br>0.166<br>**0.174**<br>0.212<br>**0.150**<br>**0.199**<br>0.269<br>0.345<br>0.471<br>0.499<br>0.546<br>0.585<br>MAE<br>0.240<br>0.258<br>**0.265**<br>0.299<br>**0.186**<br>**0.236**<br>0.287<br>0.337<br>0.272<br>0.281<br>0.289<br>0.300|✓<br>-<br>MSE<br>0.147<br>0.166<br>**0.174**<br>0.212<br>**0.150**<br>**0.199**<br>0.269<br>0.345<br>0.471<br>0.499<br>0.546<br>0.585<br>MAE<br>0.240<br>0.258<br>**0.265**<br>0.299<br>**0.186**<br>**0.236**<br>0.287<br>0.337<br>0.272<br>0.281<br>0.289<br>0.300|✓<br>-<br>MSE<br>0.147<br>0.166<br>**0.174**<br>0.212<br>**0.150**<br>**0.199**<br>0.269<br>0.345<br>0.471<br>0.499<br>0.546<br>0.585<br>MAE<br>0.240<br>0.258<br>**0.265**<br>0.299<br>**0.186**<br>**0.236**<br>0.287<br>0.337<br>0.272<br>0.281<br>0.289<br>0.300|
+|✓<br>✓<br>MSE<br>**0.141**<br>**0.157**<br>0.175<br>**0.203**<br>**0.150**<br>0.200<br>**0.260**<br>**0.339**<br>**0.414**<br>**0.432**<br>**0.446**<br>**0.485**<br>MAE<br>**0.231**<br>**0.245**<br>**0.265**<br>**0.289**<br>0.187<br>**0.236**<br>**0.281**<br>**0.334**<br>**0.251**<br>**0.257**<br>0.265<br>0.286|✓<br>✓<br>MSE<br>**0.141**<br>**0.157**<br>0.175<br>**0.203**<br>**0.150**<br>0.200<br>**0.260**<br>**0.339**<br>**0.414**<br>**0.432**<br>**0.446**<br>**0.485**<br>MAE<br>**0.231**<br>**0.245**<br>**0.265**<br>**0.289**<br>0.187<br>**0.236**<br>**0.281**<br>**0.334**<br>**0.251**<br>**0.257**<br>0.265<br>0.286|✓<br>✓<br>MSE<br>**0.141**<br>**0.157**<br>0.175<br>**0.203**<br>**0.150**<br>0.200<br>**0.260**<br>**0.339**<br>**0.414**<br>**0.432**<br>**0.446**<br>**0.485**<br>MAE<br>**0.231**<br>**0.245**<br>**0.265**<br>**0.289**<br>0.187<br>**0.236**<br>**0.281**<br>**0.334**<br>**0.251**<br>**0.257**<br>0.265<br>0.286|✓<br>✓<br>MSE<br>**0.141**<br>**0.157**<br>0.175<br>**0.203**<br>**0.150**<br>0.200<br>**0.260**<br>**0.339**<br>**0.414**<br>**0.432**<br>**0.446**<br>**0.485**<br>MAE<br>**0.231**<br>**0.245**<br>**0.265**<br>**0.289**<br>0.187<br>**0.236**<br>**0.281**<br>**0.334**<br>**0.251**<br>**0.257**<br>0.265<br>0.286|✓<br>✓<br>MSE<br>**0.141**<br>**0.157**<br>0.175<br>**0.203**<br>**0.150**<br>0.200<br>**0.260**<br>**0.339**<br>**0.414**<br>**0.432**<br>**0.446**<br>**0.485**<br>MAE<br>**0.231**<br>**0.245**<br>**0.265**<br>**0.289**<br>0.187<br>**0.236**<br>**0.281**<br>**0.334**<br>**0.251**<br>**0.257**<br>0.265<br>0.286|
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Table 15: Full results of the long-term forecasting task with SSM variants. We fix the look-back
+window _L_ = 96 and make predictions for _T_ = _{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . Avg means the average metrics
+
+|for four prediction lengths. The best is highlighted in red and the runner-up in blue.|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|Models<br>**CMamba**<br>**(Ours)**<br>Bi-Mamba+<br>(2024)<br>SiMBA<br>(2024)<br>Time-SSM<br>(2024)<br>SAMBA<br>(2024)<br>S-Mamba<br>(2024d)<br>Metric<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|Models<br>**CMamba**<br>**(Ours)**<br>Bi-Mamba+<br>(2024)<br>SiMBA<br>(2024)<br>Time-SSM<br>(2024)<br>SAMBA<br>(2024)<br>S-Mamba<br>(2024d)<br>Metric<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|Models<br>**CMamba**<br>**(Ours)**<br>Bi-Mamba+<br>(2024)<br>SiMBA<br>(2024)<br>Time-SSM<br>(2024)<br>SAMBA<br>(2024)<br>S-Mamba<br>(2024d)<br>Metric<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|Models<br>**CMamba**<br>**(Ours)**<br>Bi-Mamba+<br>(2024)<br>SiMBA<br>(2024)<br>Time-SSM<br>(2024)<br>SAMBA<br>(2024)<br>S-Mamba<br>(2024d)<br>Metric<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|Models<br>**CMamba**<br>**(Ours)**<br>Bi-Mamba+<br>(2024)<br>SiMBA<br>(2024)<br>Time-SSM<br>(2024)<br>SAMBA<br>(2024)<br>S-Mamba<br>(2024d)<br>Metric<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|Models<br>**CMamba**<br>**(Ours)**<br>Bi-Mamba+<br>(2024)<br>SiMBA<br>(2024)<br>Time-SSM<br>(2024)<br>SAMBA<br>(2024)<br>S-Mamba<br>(2024d)<br>Metric<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|Models<br>**CMamba**<br>**(Ours)**<br>Bi-Mamba+<br>(2024)<br>SiMBA<br>(2024)<br>Time-SSM<br>(2024)<br>SAMBA<br>(2024)<br>S-Mamba<br>(2024d)<br>Metric<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE<br>MSE<br>MAE|
+|ETTm1<br>96<br>**0.308**<br>**0.338**<br>0.320<br>0.360<br>0.324<br>0.360<br>0.329<br>0.365<br>0.315<br>0.357<br>0.331<br>0.368<br>192<br>**0.359**<br>**0.364**<br>0.361<br>0.383<br>0.363<br>0.382<br>0.370<br>0.379<br>0.360<br>0.383<br>0.371<br>0.387<br>336<br>0.390<br>**0.389**<br>**0.386**<br>0.402<br>0.395<br>0.405<br>0.396<br>0.402<br>0.389<br>0.405<br>0.417<br>0.418<br>720<br>0.447<br>**0.425**<br>**0.445**<br>0.437<br>0.451<br>0.437<br>0.449<br>0.440<br>0.448<br>0.440<br>0.471<br>0.448<br>Avg<br>**0.376**<br>**0.379**<br>0.378<br>0.396<br>0.383<br>0.396<br>0.386<br>0.397<br>0.378<br>0.396<br>0.398<br>0.405|**0.308**<br>**0.338**<br>**0.359**<br>**0.364**<br>0.390<br>**0.389**<br>0.447<br>**0.425**|0.320<br>0.360<br>0.361<br>0.383<br>**0.386**<br>0.402<br>**0.445**<br>0.437|0.324<br>0.360<br>0.363<br>0.382<br>0.395<br>0.405<br>0.451<br>0.437|0.329<br>0.365<br>0.370<br>0.379<br>0.396<br>0.402<br>0.449<br>0.440|0.315<br>0.357<br>0.360<br>0.383<br>0.389<br>0.405<br>0.448<br>0.440|0.315<br>0.357<br>0.360<br>0.383<br>0.389<br>0.405<br>0.448<br>0.440|
+|ETTm1<br>96<br>**0.308**<br>**0.338**<br>0.320<br>0.360<br>0.324<br>0.360<br>0.329<br>0.365<br>0.315<br>0.357<br>0.331<br>0.368<br>192<br>**0.359**<br>**0.364**<br>0.361<br>0.383<br>0.363<br>0.382<br>0.370<br>0.379<br>0.360<br>0.383<br>0.371<br>0.387<br>336<br>0.390<br>**0.389**<br>**0.386**<br>0.402<br>0.395<br>0.405<br>0.396<br>0.402<br>0.389<br>0.405<br>0.417<br>0.418<br>720<br>0.447<br>**0.425**<br>**0.445**<br>0.437<br>0.451<br>0.437<br>0.449<br>0.440<br>0.448<br>0.440<br>0.471<br>0.448<br>Avg<br>**0.376**<br>**0.379**<br>0.378<br>0.396<br>0.383<br>0.396<br>0.386<br>0.397<br>0.378<br>0.396<br>0.398<br>0.405|**0.376**<br>**0.379**|0.378<br>0.396|0.383<br>0.396|0.386<br>0.397|0.378<br>0.396|0.378<br>0.396|
+|ETTm2<br>96<br>**0.171**<br>**0.248**<br>0.176<br>0.263<br>0.177<br>0.263<br>0.176<br>0.260<br>0.172<br>0.259<br>0.179<br>0.263<br>192<br>**0.235**<br>**0.292**<br>0.242<br>0.304<br>0.245<br>0.306<br>0.246<br>0.305<br>0.238<br>0.301<br>0.253<br>0.310<br>336<br>**0.296**<br>**0.334**<br>0.304<br>0.344<br>0.304<br>0.343<br>0.305<br>0.344<br>0.300<br>0.340<br>0.312<br>0.348<br>720<br>**0.392**<br>**0.391**<br>0.402<br>0.402<br>0.400<br>0.399<br>0.406<br>0.405<br>0.394<br>0.394<br>0.412<br>0.408<br>Avg<br>**0.273**<br>**0.316**<br>0.281<br>0.328<br>0.282<br>0.328<br>0.283<br>0.329<br>0.276<br>0.324<br>0.289<br>0.332|**0.171**<br>**0.248**<br>**0.235**<br>**0.292**<br>**0.296**<br>**0.334**<br>**0.392**<br>**0.391**|0.176<br>0.263<br>0.242<br>0.304<br>0.304<br>0.344<br>0.402<br>0.402|0.177<br>0.263<br>0.245<br>0.306<br>0.304<br>0.343<br>0.400<br>0.399|0.176<br>0.260<br>0.246<br>0.305<br>0.305<br>0.344<br>0.406<br>0.405|0.172<br>0.259<br>0.238<br>0.301<br>0.300<br>0.340<br>0.394<br>0.394|0.172<br>0.259<br>0.238<br>0.301<br>0.300<br>0.340<br>0.394<br>0.394|
+|ETTm2<br>96<br>**0.171**<br>**0.248**<br>0.176<br>0.263<br>0.177<br>0.263<br>0.176<br>0.260<br>0.172<br>0.259<br>0.179<br>0.263<br>192<br>**0.235**<br>**0.292**<br>0.242<br>0.304<br>0.245<br>0.306<br>0.246<br>0.305<br>0.238<br>0.301<br>0.253<br>0.310<br>336<br>**0.296**<br>**0.334**<br>0.304<br>0.344<br>0.304<br>0.343<br>0.305<br>0.344<br>0.300<br>0.340<br>0.312<br>0.348<br>720<br>**0.392**<br>**0.391**<br>0.402<br>0.402<br>0.400<br>0.399<br>0.406<br>0.405<br>0.394<br>0.394<br>0.412<br>0.408<br>Avg<br>**0.273**<br>**0.316**<br>0.281<br>0.328<br>0.282<br>0.328<br>0.283<br>0.329<br>0.276<br>0.324<br>0.289<br>0.332|**0.273**<br>**0.316**|0.281<br>0.328|0.282<br>0.328|0.283<br>0.329|0.276<br>0.324|0.276<br>0.324|
+|ETTh1<br>96<br>**0.372**<br>**0.386**<br>0.378<br>0.395<br>0.379<br>0.395<br>0.377<br>0.394<br>0.376<br>0.400<br>0.386<br>0.406<br>192<br>**0.422**<br>**0.416**<br>0.427<br>0.428<br>0.432<br>0.424<br>0.423<br>0.424<br>0.432<br>0.429<br>0.448<br>0.444<br>336<br>**0.466**<br>0.438<br>0.471<br>0.445<br>0.473<br>0.443<br>**0.466**<br>**0.437**<br>0.477<br>**0.437**<br>0.494<br>0.468<br>720<br>0.470<br>0.461<br>0.470<br>0.457<br>0.483<br>0.469<br>**0.452**<br>**0.448**<br>0.488<br>0.471<br>0.493<br>0.488<br>Avg<br>0.433<br>**0.425**<br>0.437<br>0.431<br>0.442<br>0.433<br>**0.430**<br>0.426<br>0.443<br>0.434<br>0.455<br>0.452|**0.372**<br>**0.386**<br>**0.422**<br>**0.416**<br>**0.466**<br>0.438<br>0.470<br>0.461|0.378<br>0.395<br>0.427<br>0.428<br>0.471<br>0.445<br>0.470<br>0.457|0.379<br>0.395<br>0.432<br>0.424<br>0.473<br>0.443<br>0.483<br>0.469|0.377<br>0.394<br>0.423<br>0.424<br>**0.466**<br>**0.437**<br>**0.452**<br>**0.448**|0.376<br>0.400<br>0.432<br>0.429<br>0.477<br>**0.437**<br>0.488<br>0.471|0.376<br>0.400<br>0.432<br>0.429<br>0.477<br>**0.437**<br>0.488<br>0.471|
+|ETTh1<br>96<br>**0.372**<br>**0.386**<br>0.378<br>0.395<br>0.379<br>0.395<br>0.377<br>0.394<br>0.376<br>0.400<br>0.386<br>0.406<br>192<br>**0.422**<br>**0.416**<br>0.427<br>0.428<br>0.432<br>0.424<br>0.423<br>0.424<br>0.432<br>0.429<br>0.448<br>0.444<br>336<br>**0.466**<br>0.438<br>0.471<br>0.445<br>0.473<br>0.443<br>**0.466**<br>**0.437**<br>0.477<br>**0.437**<br>0.494<br>0.468<br>720<br>0.470<br>0.461<br>0.470<br>0.457<br>0.483<br>0.469<br>**0.452**<br>**0.448**<br>0.488<br>0.471<br>0.493<br>0.488<br>Avg<br>0.433<br>**0.425**<br>0.437<br>0.431<br>0.442<br>0.433<br>**0.430**<br>0.426<br>0.443<br>0.434<br>0.455<br>0.452|0.433<br>**0.425**|0.437<br>0.431|0.442<br>0.433|**0.430**<br>0.426|0.443<br>0.434|0.443<br>0.434|
+|ETTh2<br>96<br>**0.281**<br>**0.329**<br>0.291<br>0.342<br>0.290<br>0.339<br>0.290<br>0.341<br>0.288<br>0.340<br>0.298<br>0.349<br>192<br>**0.361**<br>**0.381**<br>0.368<br>0.392<br>0.373<br>0.390<br>0.368<br>0.387<br>0.373<br>0.390<br>0.379<br>0.398<br>336<br>0.413<br>0.419<br>0.407<br>0.424<br>**0.376**<br>**0.406**<br>0.416<br>0.430<br>0.380<br>**0.406**<br>0.417<br>0.432<br>720<br>0.419<br>0.435<br>0.421<br>0.439<br>**0.407**<br>**0.431**<br>0.424<br>0.439<br>0.412<br>0.432<br>0.431<br>0.449<br>Avg<br>0.368<br>**0.391**<br>0.372<br>0.399<br>**0.362**<br>0.392<br>0.375<br>0.399<br>0.363<br>0.392<br>0.381<br>0.407|**0.281**<br>**0.329**<br>**0.361**<br>**0.381**<br>0.413<br>0.419<br>0.419<br>0.435|0.291<br>0.342<br>0.368<br>0.392<br>0.407<br>0.424<br>0.421<br>0.439|0.290<br>0.339<br>0.373<br>0.390<br>**0.376**<br>**0.406**<br>**0.407**<br>**0.431**|0.290<br>0.341<br>0.368<br>0.387<br>0.416<br>0.430<br>0.424<br>0.439|0.288<br>0.340<br>0.373<br>0.390<br>0.380<br>**0.406**<br>0.412<br>0.432|0.288<br>0.340<br>0.373<br>0.390<br>0.380<br>**0.406**<br>0.412<br>0.432|
+|ETTh2<br>96<br>**0.281**<br>**0.329**<br>0.291<br>0.342<br>0.290<br>0.339<br>0.290<br>0.341<br>0.288<br>0.340<br>0.298<br>0.349<br>192<br>**0.361**<br>**0.381**<br>0.368<br>0.392<br>0.373<br>0.390<br>0.368<br>0.387<br>0.373<br>0.390<br>0.379<br>0.398<br>336<br>0.413<br>0.419<br>0.407<br>0.424<br>**0.376**<br>**0.406**<br>0.416<br>0.430<br>0.380<br>**0.406**<br>0.417<br>0.432<br>720<br>0.419<br>0.435<br>0.421<br>0.439<br>**0.407**<br>**0.431**<br>0.424<br>0.439<br>0.412<br>0.432<br>0.431<br>0.449<br>Avg<br>0.368<br>**0.391**<br>0.372<br>0.399<br>**0.362**<br>0.392<br>0.375<br>0.399<br>0.363<br>0.392<br>0.381<br>0.407|0.368<br>**0.391**|0.372<br>0.399|**0.362**<br>0.392|0.375<br>0.399|0.363<br>0.392|0.363<br>0.392|
+|Electricity<br>96<br>0.141<br>**0.231**<br>**0.140**<br>0.238<br>0.165<br>0.253<br>-<br>-<br>0.146<br>0.244<br>0.142<br>0.238<br>192<br>0.157<br>**0.245**<br>**0.155**<br>0.253<br>0.173<br>0.262<br>-<br>-<br>0.164<br>0.260<br>0.169<br>0.267<br>336<br>0.175<br>**0.265**<br>**0.170**<br>0.269<br>0.188<br>0.277<br>-<br>-<br>0.179<br>0.274<br>0.178<br>0.275<br>720<br>0.203<br>**0.289**<br>**0.197**<br>0.293<br>0.214<br>0.305<br>-<br>-<br>0.206<br>0.300<br>0.207<br>0.303<br>Avg<br>0.169<br>**0.258**<br>**0.166**<br>0.263<br>0.185<br>0.274<br>-<br>-<br>0.174<br>0.270<br>0.174<br>0.271|0.141<br>**0.231**<br>0.157<br>**0.245**<br>0.175<br>**0.265**<br>0.203<br>**0.289**|**0.140**<br>0.238<br>**0.155**<br>0.253<br>**0.170**<br>0.269<br>**0.197**<br>0.293|0.165<br>0.253<br>0.173<br>0.262<br>0.188<br>0.277<br>0.214<br>0.305|-<br>-<br>-<br>-<br>-<br>-<br>-<br>-|0.146<br>0.244<br>0.164<br>0.260<br>0.179<br>0.274<br>0.206<br>0.300|0.146<br>0.244<br>0.164<br>0.260<br>0.179<br>0.274<br>0.206<br>0.300|
+|Electricity<br>96<br>0.141<br>**0.231**<br>**0.140**<br>0.238<br>0.165<br>0.253<br>-<br>-<br>0.146<br>0.244<br>0.142<br>0.238<br>192<br>0.157<br>**0.245**<br>**0.155**<br>0.253<br>0.173<br>0.262<br>-<br>-<br>0.164<br>0.260<br>0.169<br>0.267<br>336<br>0.175<br>**0.265**<br>**0.170**<br>0.269<br>0.188<br>0.277<br>-<br>-<br>0.179<br>0.274<br>0.178<br>0.275<br>720<br>0.203<br>**0.289**<br>**0.197**<br>0.293<br>0.214<br>0.305<br>-<br>-<br>0.206<br>0.300<br>0.207<br>0.303<br>Avg<br>0.169<br>**0.258**<br>**0.166**<br>0.263<br>0.185<br>0.274<br>-<br>-<br>0.174<br>0.270<br>0.174<br>0.271|0.169<br>**0.258**|**0.166**<br>0.263|0.185<br>0.274|-<br>-|0.174<br>0.270|0.174<br>0.270|
+|Weather<br>96<br>**0.150**<br>**0.187**<br>0.159<br>0.205<br>0.176<br>0.219<br>0.167<br>0.212<br>0.165<br>0.211<br>0.166<br>0.210<br>192<br>**0.200**<br>**0.236**<br>0.205<br>0.249<br>0.222<br>0.260<br>0.217<br>0.255<br>0.214<br>0.255<br>0.215<br>0.253<br>336<br>**0.260**<br>**0.281**<br>0.264<br>0.291<br>0.275<br>0.297<br>0.274<br>0.291<br>0.271<br>0.297<br>0.276<br>0.298<br>720<br>**0.339**<br>**0.334**<br>0.343<br>0.344<br>0.350<br>0.349<br>0.351<br>0.345<br>0.346<br>0.347<br>0.353<br>0.349<br>Avg<br>**0.237**<br>**0.259**<br>0.243<br>0.272<br>0.256<br>0.281<br>0.252<br>0.277<br>0.249<br>0.278<br>0.253<br>0.278|**0.150**<br>**0.187**<br>**0.200**<br>**0.236**<br>**0.260**<br>**0.281**<br>**0.339**<br>**0.334**|0.159<br>0.205<br>0.205<br>0.249<br>0.264<br>0.291<br>0.343<br>0.344|0.176<br>0.219<br>0.222<br>0.260<br>0.275<br>0.297<br>0.350<br>0.349|0.167<br>0.212<br>0.217<br>0.255<br>0.274<br>0.291<br>0.351<br>0.345|0.165<br>0.211<br>0.214<br>0.255<br>0.271<br>0.297<br>0.346<br>0.347|0.165<br>0.211<br>0.214<br>0.255<br>0.271<br>0.297<br>0.346<br>0.347|
+|Weather<br>96<br>**0.150**<br>**0.187**<br>0.159<br>0.205<br>0.176<br>0.219<br>0.167<br>0.212<br>0.165<br>0.211<br>0.166<br>0.210<br>192<br>**0.200**<br>**0.236**<br>0.205<br>0.249<br>0.222<br>0.260<br>0.217<br>0.255<br>0.214<br>0.255<br>0.215<br>0.253<br>336<br>**0.260**<br>**0.281**<br>0.264<br>0.291<br>0.275<br>0.297<br>0.274<br>0.291<br>0.271<br>0.297<br>0.276<br>0.298<br>720<br>**0.339**<br>**0.334**<br>0.343<br>0.344<br>0.350<br>0.349<br>0.351<br>0.345<br>0.346<br>0.347<br>0.353<br>0.349<br>Avg<br>**0.237**<br>**0.259**<br>0.243<br>0.272<br>0.256<br>0.281<br>0.252<br>0.277<br>0.249<br>0.278<br>0.253<br>0.278|**0.237**<br>**0.259**|0.243<br>0.272|0.256<br>0.281|0.252<br>0.277|0.249<br>0.278|0.249<br>0.278|
+|Traffc<br>96<br>0.414<br>**0.251**<br>**0.375**<br>0.258<br>0.468<br>0.268<br>-<br>-<br>0.403<br>0.270<br>0.381<br>0.261<br>192<br>0.432<br>**0.257**<br>**0.394**<br>0.269<br>0.413<br>0.317<br>-<br>-<br>0.427<br>0.278<br>0.397<br>0.267<br>336<br>0.446<br>**0.265**<br>**0.406**<br>0.274<br>0.529<br>0.284<br>-<br>-<br>0.440<br>0.284<br>0.423<br>0.276<br>720<br>0.485<br>**0.286**<br>**0.440**<br>0.288<br>0.564<br>0.297<br>-<br>-<br>0.470<br>0.302<br>0.458<br>0.300<br>Avg<br>0.444<br>**0.265**<br>**0.404**<br>0.272<br>0.494<br>0.292<br>-<br>-<br>0.435<br>0.284<br>0.415<br>0.276|0.414<br>**0.251**<br>0.432<br>**0.257**<br>0.446<br>**0.265**<br>0.485<br>**0.286**|**0.375**<br>0.258<br>**0.394**<br>0.269<br>**0.406**<br>0.274<br>**0.440**<br>0.288|0.468<br>0.268<br>0.413<br>0.317<br>0.529<br>0.284<br>0.564<br>0.297|-<br>-<br>-<br>-<br>-<br>-<br>-<br>-|0.403<br>0.270<br>0.427<br>0.278<br>0.440<br>0.284<br>0.470<br>0.302|0.403<br>0.270<br>0.427<br>0.278<br>0.440<br>0.284<br>0.470<br>0.302|
+|Traffc<br>96<br>0.414<br>**0.251**<br>**0.375**<br>0.258<br>0.468<br>0.268<br>-<br>-<br>0.403<br>0.270<br>0.381<br>0.261<br>192<br>0.432<br>**0.257**<br>**0.394**<br>0.269<br>0.413<br>0.317<br>-<br>-<br>0.427<br>0.278<br>0.397<br>0.267<br>336<br>0.446<br>**0.265**<br>**0.406**<br>0.274<br>0.529<br>0.284<br>-<br>-<br>0.440<br>0.284<br>0.423<br>0.276<br>720<br>0.485<br>**0.286**<br>**0.440**<br>0.288<br>0.564<br>0.297<br>-<br>-<br>0.470<br>0.302<br>0.458<br>0.300<br>Avg<br>0.444<br>**0.265**<br>**0.404**<br>0.272<br>0.494<br>0.292<br>-<br>-<br>0.435<br>0.284<br>0.415<br>0.276|0.444<br>**0.265**|**0.404**<br>0.272|0.494<br>0.292|-<br>-|0.435<br>0.284|0.435<br>0.284|
+|1stCount|**18**<br>**31**|12<br>0|3<br>2|3<br>2|0<br>2|0<br>0|
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+D FULL RESULTS
+
+
+D.1 FULL MAIN RESULTS
+
+
+Here, we present the complete results of all chosen models and our CMamba under four different prediction lengths in Table 12. Generally, the proposed CMamba demonstrates stable performance across various datasets and prediction lengths, consistently ranking among the top performers. Specifically, our model ranks top 1 in **65** out of 70 settings and ranks top 2 in **all** settings, while
+the runner-up, iTransformer (Liu et al., 2023a) ranks top 1 in only 5 settings and top 2 in 18 settings.
+
+
+D.2 FULL ABLATION RESULTS OF GDD-MLP AND CHANNEL MIXUP
+
+
+In the main text, we only present the improvements brought by the proposed modules in the average
+case. To validate the effectiveness of our design, we provide the complete results in Table 13 and
+Table 14. Consistent with our claims, GDD-MLP alone can easily lead to oversmoothing. However,
+when combined with the Channel Mixup, our model consistently achieves state-of-the-art performance.
+
+
+D.3 COMPARISON WITH OTHER SSMS
+
+
+Since Mamba (Gu & Dao, 2023) was proposed, there have been many remarkable works trying to
+apply it to multivariate time series prediction, e.g., Bi-Mamba+ (Liang et al., 2024), SiMBA (Patro & Agneeswaran, 2024), Time-SSM (Hu et al., 2024), SAMBA (Weng et al., 2024), and SMamba (Wang et al., 2024d). In Table 15, we compare our CMamba with these methods on the
+same 7 real-world datasets. It is worth noting that since some methods are tested on other datasets
+in the original paper, there will be missing results on some of the datasets we use. Among all these
+Mamba variants, our model achieves the best average performance. Specifically, our model ranks
+top 1 in **49** out of 70 settings and ranks top 2 in **59** settings, while the runner-up, Bi-Mamba+ ranks
+top 1 in only 12 settings and top 2 in 39 settings. The results demonstrate the superiority of our
+model.
+
+
+E SHOWCASES
+
+
+E.1 COMPARISON WITH BASELINES
+
+
+As depicted in Fig. 10, Fig. 11, Fig. 12, and Fig. 13, Fig. 14, Fig. 15, we visualize the forecasting
+results on the Electricity and Traffic dataset of our model, ModernTCN (Luo & Wang, 2024), and
+TimeMixer (Wang et al., 2023). Overall, our model fits the data better. Especially when dealing with
+non-periodic changes. For instance, in Prediction-96 of the Electricity dataset, our model exhibits
+significantly better performance compared to the others.
+
+
+E.2 MORE SHOWCASES
+
+
+As shown in Fig. 16, Fig. 17, Fig. 18, Fig. 19, and Fig. 20, we visualize the forecasting results of
+other datasets under CMamba. The results demonstrate that CMamba achieves consistently stable
+performance under various datasets.
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 10: Prediction cases for Electricity under CMamba.
+
+
+22
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 11: Prediction cases for Electricity under ModernTCN.
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 12: Prediction cases for Electricity under TimeMixer.
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 13: Prediction cases for Traffic under CMamba.
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 14: Prediction cases for Traffic under ModernTCN.
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 15: Prediction cases for Traffic under TimeMixer.
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 16: Prediction cases for ETTm1 under CMamba.
+
+
+23
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 17: Prediction cases for ETTm2 under CMamba.
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 18: Prediction cases for ETTh1 under CMamba.
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 19: Prediction cases for ETTh2 under CMamba.
+
+
+Prediction-96 Prediction-192 Prediction-336 Prediction-720
+
+
+Figure 20: Prediction cases for Weather under CMamba.
+
+
+24

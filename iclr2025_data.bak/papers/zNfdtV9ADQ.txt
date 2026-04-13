@@ -1,0 +1,1296 @@
+# SRPCA: SPARSE REVERSE OF PRINCIPAL COMPO## NENT ANALYSIS FOR FAST LOW-RANK MATRIX COM- PLETION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Supervised and unsupervised learning methods experience a decline in performance when applied to incomplete, corrupted, or noisy datasets. Matrix completion is a common task to impute the missing values in sparsely observed matrices. Given a matrix **X** _∈_ R _[m][×][n]_, low-rank matrix completion computes a
+rank- _r_ approximation of **X**, where _r_ _≪_ min _{m, n}_, by only observing a few
+random entries of **X** . It is commonly applied for recommender systems, image
+processing, and multi-output collaborative modeling. Existing matrix completion
+methods suffer either from slow convergence or failure under significant missing data levels. This paper proposes a novel approach, the Sparse Reverse of
+Principal Component Analysis (SRPCA), that reformulates matrix factorization
+based low-rank completion (min **U** _,_ **V** _∥P_ **Ω** ( **X** _−_ **UV** _[T]_ ) _∥_ [2] _F_ [)] [to] [iteratively] [learn] [a]
+single low-rank subspace representation by solving the convex optimization problem min **V** _∥P_ **Ω** ( **X** _−_ **PV** _[T]_ ) _∥_ [2] _F_ [under the principal component analysis framework,]
+resulting in a significant convergence acceleration. SRPCA converges iteratively
+and is computationally tractable with a proven controllable upper bound on the
+number of iterations until convergence. Unlike existing matrix completion algorithms, the proposed SRPCA applies iterative pre-processing resets that maintain
+smoothness across the reconstructed matrix, which results in a performance boost
+for smooth matrices. The performance of the proposed technique is validated on
+case studies for image processing, multivariate time-series imputation, and collaborative filtering. SRPCA is also compared with state-of-the-art benchmarks for
+matrix completion.
+
+
+1 INTRODUCTION
+
+
+Matrix completion is a common task for recovering missing or corrupted data in matrices (Wang
+& Fan, 2024). It has constantly received tremendous attention from many research fields such as
+collaborative filtering (e.g., recommender systems) (Yu et al., 2009; Chen & Wang, 2022), link
+analysis (Gleich & Lim, 2011), distance embedding (Cand`es & Recht, 2009), computer vision (Chen
+& Suter, 2004; Li et al., 2012), image processing (Ji et al., 2010; Jia et al., 2022), and so forth. In
+any field, missing data in high volumes has a negative impact on various data analysis processes, as
+many supervised and unsupervised learning methods cannot be applied directly to incomplete data
+(Audigier et al., 2016). Consequently, scalable and novel algorithms for matrix completion are still
+in constant demand, especially for applications with high levels of missing data.
+
+
+The low-rank matrix has a key characteristic where the important information it contains, expressed
+in terms of degree of freedom, is significantly smaller than the total number of entries. This means
+that even if only a few entries are observed, there is still a good possibility of being able to reconstruct
+the entire matrix (Nguyen et al., 2019). Many data matrices analyzed are low-rank or approximately
+low-rank structured (Cand`es & Recht, 2009). Taking a movie recommender system as an example,
+there are only few factors that may contribute to users’ preferences, suggesting that the data matrix
+recording users’ rating scores is actually low-rank structured.
+
+
+Most approaches that solve low-rank matrix completion problems can be mainly divided into two
+categories, nuclear norm based and matrix factorization based (Sun & Luo, 2016). In the first cate
+
+1
+
+
+gory, the objective of matrix rank minimization is approximated by nuclear norm minimization. This
+category’s methods include interior-point-based Semi-Definite Programming (SDP) solver (Cand`es
+& Recht, 2009), conjugate gradient method (Blanchard et al., 2015), Singular Value Threshold
+(SVT) algorithm (Cai et al., 2010), Augmented Lagrange Multiplier (ALM) algorithm (Lin et al.,
+2010), and robust principal component analysis (Zhang et al., 2012), etc. In the second category,
+the original matrix is compactly represented as the product of two low-rank matrices. The two
+low-rank matrices are usually iteratively updated through various algorithms such as Alternating
+Least Squares (ALS) (Jain et al., 2013; Gu et al., 2024) and Stochastic Gradient Descent (SGD)
+(Gemulla et al., 2011; Qin et al., 2024). Nuclear norm based algorithms are known to be more
+time-consuming as matrix dimension increases, while matrix factorization algorithms, which are
+non-convex heuristics, scale badly with high levels of missing data Gu et al. (2024). There is a very
+important requirement for a realistically and practically good matrix completion, which is the local
+and global smoothness in the reconstructed matrix. For example, in image processing, it is critical
+to obtain smoothness over the image. Often, this requirement comes at the cost of moderately updating the observed values, e.g., Gaussian filters and Variational Bayesian techniques (Kawasumi &
+Takeda, 2018; Paliwal et al., 2022).
+
+
+To address this limitation, we propose the Sparse Reverse of the Principle Component Analysis
+(SRPCA) to complete matrices in their original space. The proposed approach maintains a high level
+of smoothness by iteratively finding the principal components of the matrix based on the predicted
+values of both the missing and the observed parts of the matrix, while guaranteeing that the principal
+components are capable of reconstructing the observed part of the matrix with minimal differences.
+The main contributions of the paper can be summarized in the following:
+
+
+    - A novel low-rank matrix completion method called SRPCA is proposed. It leverages both
+the missing and the observed part of the matrix-to-recover to iteratively learn the principle
+components that adequately represent the underlying low-rank matrix. SRPCA maintains
+smoothness across the reconstructed matric by applying an iterative pre-processing step.
+
+    - SRPCA is a matrix factorization based algorithm that modifies the non-convex problem to a
+convex one where it iteratively learns a single low-rank subspace representation, instead of
+two, by leveraging the principle component analysis framework. This aids in accelerating
+convergence.
+
+    - SRPCA is proved to improve in performance iteratively until convergence with a controllable upper bound on the number of iterations.
+
+    - An extension of SRPCA, called FastSRPCA, is proposed to offer a faster convergence in
+matrix completion applications where convergence rate is valued more than further improving a sub-optimal matrix recovery.
+
+    - SRPCA is evaluated on three diverse low-rank matrix completion based case studies and is
+shown to improve on other state-of-the-art benchmarks in terms of computational time and
+matrix recovery.
+
+
+2 PRELIMINARIES
+
+
+2.1 MATRIX COMPLETION
+
+
+If we assume that the data matrix to be recovered has a low-rank structure, the matrix completion
+problem should be defined as follows (Cand`es & Recht, 2009):
+
+
+min s.t. _Xi,j_ = _Mi,j, ∀_ ( _i, j_ ) _∈_ **Ω** (1)
+_**M**_ [rank][(] _**[M]**_ [)] _[,]_
+
+where _**X**_ _∈_ R _[m][×][n]_ is the sparse observed matrix, _**M**_ _∈_ R _[m][×][n]_ the reconstructed matrix of _**X**_, and
+**Ω** represents the observed entries of _**X**_ .
+
+
+This problem is a simple explanation of the low-rank matrix completion problem. Unfortunately, the
+rank minimization is NP-hard and has led researchers to propose different relaxations to solve the
+problem. Specifically, a commonly used convex relaxation for the rank is the nuclear norm, _∥_ _**M**_ _∥∗_,
+which approximates problem (1) as (Cand`es & Recht, 2009; Sun & Luo, 2016; Hardt & Wootters,
+2014):
+min s.t. _Xi,j_ = _Mi,j, ∀_ ( _i, j_ ) _∈_ **Ω** (2)
+_**M**_ _[∥]_ _**[M]**_ _[∥][∗]_ _[,]_
+
+
+2
+
+
+where _∥·∥_ [2] _F_ [is the Frobenius norm and] _[ τ]_ [is apositive penalty parameter.] [Equations (2) & (3) can be]
+conveniently optimized through some interior-point-method-based SDP solvers (Cand`es & Recht,
+2009), like SDPT3 and SeDuMi. Cai et al. (2010) further proposed an SVT algorithm to solve
+(2) & (3). In the SVT, the estimate _**M**_ converges to a unique solution of (3) through an iterative
+algorithm.Unfortunately, both SDP solvers and the SVT algorithm are problematic when applied to
+a large-size data set (Sun & Luo, 2016). Especially for the SVT, SVD computation is required at
+each iteration, which is time-consuming.
+
+
+Another common approach to relax the rank is via matrix factorization, in which the unknown data
+matrix is expressed as the product of two low-rank matrices, _**U**_ and _**V**_ Sun & Luo (2016). In this
+case, the low-rank condition is satisfied automatically, and problem (1) can be transformed to:
+
+_**U**_ min _,_ _**V**_ �� _P_ **Ω** ( _**X**_ _−_ _**UV**_ _T_ )��2 _F_ _[,]_ s.t. _**M**_ = _**UV**_ _[T]_ (4)
+
+
+Problem 4 is clearly a non-convex optimization problem. Compared with the nuclear norm based
+approach, the matrix factorization based approach performs much better on computation time. ALS
+is one of the popular matrix factorization-based methods, which originates from the power factorization method (Haldar & Hernando, 2009). In the ALS algorithm, the observed entries are randomly
+partitioned into a number of subsets at first. Then, _**U**_ and _**V**_ are initialized through the SVD of
+the first subset of the observed matrix. Next, at each iteration when moving to the next subset, _**U**_
+and _**V**_ are alternatively updated to minimize the difference between _**UV**_ _[T]_ and the observed entries
+of that subset. ALS decreases the computational time because it does not apply SVD at each iteration. However, it may lead to high inaccuracies at high levels of missing data, and it ignores the
+smoothness of the data set due to the random partitioning of the original matrix. A recent matrix factorization based method is the Gauss-Newton Matrix Recovery (GNMR) (Zilber & Nadler, 2022),
+which utilizes a Gauss-Newton method to solve for the two factor matrices every iteration. Another
+method we use for benchmarking is Low-Rank Gaussian Copula (LRGC) (Zhao & Udell, 2020)
+which is a semiparametric algorithm for data imputation that also offers uncertainty quantification.
+For more comprehensive surveys, we refer readers Nguyen et al. (2019).
+
+
+2.2 PRINCIPLE COMPONENT ANALYSIS (PCA)
+
+
+PCA is one of the most widely used statistical tools for data analysis and dimensionality reduction
+(Cand`es et al. (2011)). It has been applied in many different areas, such as quantitative finance
+(Han et al., 2023; Chin et al., 2023), neuroscience (Lawrence et al., 2023), and image processing
+(Mishra et al., 2024). PCA provides a roadmap for transforming the original data set to a new basis
+with a lower dimension, thus filtering out the noise and revealing the hidden simplified dynamics.
+Therefore, with PCA, it is possible to extract critically important information from original data,
+thus simplifying the data structure.
+
+
+Suppose we have a data matrix _**M**_ . The goal of PCA is to find an orthonormal matrix where
+_**P**_ = _**MV**_, such that the covariance matrix of _**P**_ is diagonalized and expressed as:
+
+
+1
+_**SP**_ = (5)
+_n −_ 1 _**[P]**_ _[ T]_ _**[ P]**_
+
+
+Since _**P**_ = _**MV**_, then:
+
+
+1 1
+_**SP**_ = _[T]_ [ (] _**[M]**_ _[ T]_ _**[ M]**_ [)] _**[V]**_ (6)
+_n −_ 1 [(] _**[MV]**_ [ )] _[T]_ [ (] _**[MV]**_ [ ) =] _n −_ 1 _**[V]**_
+
+Let _**V**_ be the eigenvectors matrix of _**M**_ _[T]_ _**M**_ ; hence, matrix _**SP**_ is diagonalized. This is because
+_**M**_ _[T]_ _**M**_ = _**V DV**_ _[T]_ and:
+
+1 1 1
+_**SP**_ = _[T]_ [ (] _**[V DV]**_ _[T]_ [ )] _**[V]**_ [=] _[T]_ _**[ V]**_ [ )] _**[D]**_ [(] _**[V]**_ _[T]_ _**[ V]**_ [ ) =] (7)
+_n −_ 1 _**[V]**_ _n −_ 1 [(] _**[V]**_ _n −_ 1 _**[D]**_
+
+
+PCA is statistically intuitive and helps reduce the data’s dimensions; however, applying PCA iteratively for matrix completion is time-consuming. Therefore, in this paper, we initialize the matrices
+_**P**_ and _**V**_ via PCA and efficiently update them via the proposed algorithm in the next section.
+
+
+3
+
+
+Or:
+
+
+min
+_**M**_
+
+
+_τ ∥_ _**M**_ _∥∗_ + [1] 2 _[∥]_ _**[X]**_ _[−]_ _**[M]**_ _[∥]_ [2] _F_
+
+
+(3)
+
+
+3 THE SPARSE REVERSE OF PCA (SRPCA)
+
+
+3.1 PROBLEM FORMULATION
+
+
+Based on the general matrix completion problem, the goal is to construct a matrix _**M**_ _∈_ R _[m][×][n]_ that
+estimates the missing part of matrix _**X**_ _∈_ R _[m][×][n]_ . Let **Ω** = _{_ ( _i, j_ ) : _Xi,j_ is observed _}_, _P_ **Ω** ( _**X**_ ) _∈_
+R _[m][×][n]_ to be the matrix that preserves the entities in Ω and replaces the remaining entities by 0,
+and **Ω** _[⊥]_ to be the complement of **Ω** . Contrary to the matrix factorization approach in 4, where the
+purpose is to consectively minimize for each of the two factor matrices, we minimize the problem
+to a convex problem, where we only solve for one of them as per the following with _**M**_ = _**P V**_ _[T]_ :
+
+min _**P**_ �� _P_ **Ω** ( _**X**_ _−_ _**P V**_ _T_ )��2 _F_ (8)
+
+
+where _**P**_ is the principal component matrix, and _**V**_ is the eigenvector matrix of _**M**_ _[T]_ _**M**_ .
+
+
+3.2 PRINCIPAL COMPONENTS ESTIMATION
+
+
+To obtain the principal components, we first decompose the matrix _**M**_ _[T]_ _**M**_ = _**V**_ **Λ** _**V**_ _[T]_, where **Λ** is a
+diagonal matrix with _λj_ as its _j_ [th] diagonal element, _λj_ is the _j_ [th] eigenvalue of _**M**_ _[T]_ _**M**_ corresponding
+to its _j_ [th] eigenvector _**V**_ : _,j_ . Then, the principle components are estimated as:
+
+
+_**P**_ = _**MR**_ _[T]_ _,_ where _**R**_ _[T]_ = [ _**V**_ : _,_ _**r**_ ] _∈_ R _[n][×][r]_ (9)
+
+
+with _**r**_ _∈_ R _[r]_ being a vector of indices corresponding to the top _r_ eigenvectors. The selection of the
+top _r_ is for computational efficiency, compression and smoothing purposes. For matrix completion,
+_**P**_ and _**R**_ are updated iteratively.
+
+
+3.3 THE SRPCA ALGORITHM
+
+
+The first step in the proposed approach is data standardization, which is common in data analytics:
+
+_**X**_ : _,j_ = _**X**_ : _,j_ _−_ _µ_ _**X**_ : _,_ **Ω** _j_ (10)
+
+_σ_ _**X**_ : _,_ **Ω** _j_ + _ϵ_
+
+
+where _**X**_ : _,j_ is the _j_ [th] column of the matrix _**X**_, _µ_ _**X**_ : _,_ **Ω** _j_ and _σ_ _**X**_ : _,_ **Ω** _j_ are the mean and standard deviation of the available elements in the _j_ [th] column _**X**_, and _ϵ_ is a small constant to avoid numerical
+instabilities when _σ_ _**X**_ : _,_ **Ω** _j_ _→_ 0.
+
+
+A fair and an intuitive first approximation _**M**_ [(0)] is:
+
+_Mi,j_ =               - _NXi,j_ (0 _,_ 1) ifif ( ( _i, ji, j_ )) _∈ ∈_ **ΩΩ** _[⊥]_ (11)
+
+
+Unlike many existing approaches, each iteration in SRPCA starts with _**M**_ **Ω** [(] _[k]_ [)] = _**X**_ **Ω** because the
+observed values of _**X**_ are unbiased estimates of the values in **Ω** . This serves a pre-processing reset
+from which all iterations start. Then, we proceed from (11) to obtain the new updates for _**P**_ and _**M**_ :
+
+
+_**P**_ [(] _[k]_ [)] = _**M**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [)] _[T]_ (12)
+
+_**M**_ [(] _[k]_ [+1)] = _**M**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [)] _[T]_ _**R**_ [(] _[k]_ [+1)] = _**P**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [+1)] (13)
+where _**R**_ [(] _[k]_ [+1)] is iteratively returned by the algorithm.
+
+
+Those updates conclude some major advantages of the proposed SRPCA so far:
+
+
+(i) _Unbiased Estimate._ It starts with an unbiased estimate of the observed part of the matrix at
+every iteration. This is critical for scenarios with high percentages of missing data, because
+the first few iterative updates of the matrix are highly dependent on unreliable random
+prior estimates of the missing part of the matrix, which may slow the convergence or lead
+to divergent estimates of the matrix _**M**_ . Therefore, by keeping an unbiased estimate of the
+observed part of the matrix, it boosts the accuracy of the SRPCA to a certain extent.
+
+
+4
+
+
+(ii) _Smoothness._ The new update _**M**_ [(] _[k]_ [+1)] is smoother than the prior update _**M**_ [(] _[k]_ [)] . Therefore,
+the SRPCA also helps to smoothen the original observed part of the matrix.
+
+(iii) _Nonlinear Update._ The principal components are updated iteratively as shown in (13). This
+adds a layer of nonlinearity to the SRPCA.
+
+
+As shown in (13), the update _**M**_ [(] _[k]_ [+1)] depends on the updated eigenvectors _**R**_ [(] _[k]_ [+1)] . The SRPCA
+updates _**R**_ [(] _[k]_ [+1)] to maintain a certain level of accuracy for the observed data by solving for:
+
+
+Lemma 3.2 provides an upper bound on the number of iterations until convergence, which also sets
+an upper bound on the computational time until convergence.
+
+
+5
+
+
+_**R**_ [(] _[k]_ [+1)] = arg min
+_**R**_ [(] _[k]_ [+1)]
+
+
+2
+_P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1)) (14)
+��� ��� _F_
+
+
+The objective function (14) serves two purposes by aiming to drive _P_ **Ω** ( _**X**_ _−_ _**P**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [+1)] ) _→_ 0:
+(i) it ensures a smooth transition from _**M**_ **Ω** [(] _[k]_ [+1)] = ( _**P**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [+1)] ) **Ω** at the end of the _k_ [th] iteration to
+_**M**_ **Ω** [(] _[k]_ [+1)] = _**X**_ **Ω** at the beginning of the next _k_ + 1 iteration; and (ii) it quantifies and minimizes
+the differences between _**M**_ [(] _[k]_ [+1)] and the true matrix _**X**_ . Thus, the updated _**M**_ [(] _[k]_ [+1)] is expected to
+provide a more realistic estimate of the missing data because now it provides a better estimate of the
+observed data.
+
+
+Furthermore, because each column of _**X**_ can be expressed independently as a combination of the
+principal components, minimizing (14) is equivalent to the following convex optimization problem:
+
+arg min ( _**X**_ : _,j_ _−_ _**P**_ [(] _[k]_ [)] _**R**_ : [(] _,j_ _[k]_ [+1)] ) _[T]_ _**W**_ [(] _[j]_ [)] ( _**X**_ : _,j_ _−_ _**P**_ [(] _[k]_ [)] _**R**_ : [(] _,j_ _[k]_ [+1)] ) _,_ _∀j_ (15)
+
+_**R**_ : [(] _,j_ _[k]_ [+1)]
+
+
+where _**W**_ [(] _[j]_ [)] _∈_ R _[m][×][m]_ is the weight matrix for the _j_ [th] column of _**X**_ and it is a diagonal matrix
+such that _Wi,i_ [(] _[j]_ [)] [=] [1][ if][ (] _[i, j]_ [)] _[∈]_ **[Ω]** [and 0 otherwise.] [The sparse weight matrix] _**[ W]**_ [ (] _[j]_ [)] [provides all the]
+weights corresponding to the observed values. Therefore, the solution of (15) is solely based on the
+observed part of _**X**_, and it can be written as per the following weighted least squares solution:
+
+_**R**_ _j_ [(] _[k]_ [+1)] = ( _**P**_ [(] _[k]_ [)] _[T]_ _**W**_ [(] _[j]_ [)] _**P**_ [(] _[k]_ [)] ) _[−]_ [1] _**P**_ [(] _[k]_ [)] _[T]_ _**W**_ [(] _[j]_ [)] _**X**_ : _,j,_ _∀j_ (16)
+
+
+Applying (16) is scalable for big data in the presence of parallel computation capabilities, allowing
+the simultaneous computation of different vectors of _**R**_ [(] _[k]_ [+1)] independently. Furthermore, the weight
+matrices are sparse and they do not require full matrix operations.
+
+
+Finally, the algorithm converges when the improvement between two successive iterations is
+smaller than a predefined tolerance threshold. In other words, the algorithm terminates when
+�� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ _[−]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[≤]_ _[ϵ]_ [tol][,] [where] _**[M]**_ [ (] _[k]_ [+1)] [=] _**[P]**_ [ (] _[k]_ [)] _**[R]**_ [(] _[k]_ [+1)]
+and _ϵ_ tol is the tolerance threshold. Clearly, increasing _ϵ_ tol speeds up the algorithm convergence, but
+it also leads to a higher mean squared deviation �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ +1))��2 _F_ [.] [Therefore] [the] [choice] [of]
+_ϵ_ tol depends on the application and the trade-off between speed and accuracy.
+
+
+The pseudo-algorithm is demonstrated in Algorithm 1.
+
+
+3.4 CONVERGENCE STUDY OF SRPCA
+
+**Lemma 3.1** _The_ _SRPCA_ _converges_ _iteratively_ _with_ �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ +1))��2 _F_ _≤_
+�� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ _[.]_ _[Check Appendix A.1 for proof.]_
+
+
+Unlike some approaches in the literature, Lemma 3.1 shows that the performance of the SRPCA
+improves iteratively until it converges. This is a key finding, because if the algorithm terminates
+for external reasons (e.g., computational time constraints), the algorithm output will be the bestcalculated estimate until the unexpected termination.
+
+
+**Lemma 3.2** _The_ _SRPCA_ _converges_ _at_ _an_ _iteration_ _K_ _<_ - _∥P_ **Ω** ( _**X**_ _−_ _**P**_ _ϵtol_ (0) _**R**_ (1)) _∥_ 2 _F_
+
+
+_pendix A.1 for proof._
+
+
++ 1 _._ _Check_ _Ap-_
+
+
+**Algorithm 1** The SRPCA for Matrix Completion.
+
+1: _Mi,j_ = - _XNi,j_ (0 _,_ 1) ifif ( ( _i, ji, j_ )) _∈ ∈_ **ΩΩ** _[⊥]_ _▷_ Data standardization and preprocessing
+
+2: **for** _q_ _∈_ [1 _, ..., n_ ] **do**
+3: _**W**_ [(] _[q]_ [)] = **0** _▷_ Construct the sparse weight matrices once
+
+4: _Wi,i_ [(] _[q]_ [)] [= 1] _[,]_ _[∀]_ [(] _[i, q]_ [)] _[ ∈]_ **[Ω]**
+5: **end for**
+6: _**V**_ [(0)] **Λ** [(0)] _**V**_ [(0)] _[T]_ = _**M**_ [(0)] _[T]_ _**M**_ [(0)] _▷_ Initial eigenvector decomposition.
+
+7: _**R**_ [(0)] = [ _**V**_ : _,_ _**r**_ ] _[T]_, _**P**_ [(0)] = _**M**_ [(0)] _**R**_ [(0)] _[T]_, _**M**_ [(1)] = _**M**_ [(0)] _▷_ Construct initial matrices
+8: **for** _k_ _∈_ [1 _, ..., maxIter_ ] **do**
+9: Matrix smoothing _▷_ Optional
+
+10: _**M**_ **Ω** [(] _[k]_ [)] = _**X**_ **Ω** _▷_ Update for the the observed values
+
+11: _**P**_ [(] _[k]_ [)] = _**M**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [)] _[T]_ _▷_ Construct principal components
+12: **for** _j_ _∈_ [1 _, ..., n_ ] **do**
+
+13: _**R**_ _j_ [(] _[k]_ [+1)] = ( _**P**_ [(] _[k]_ [)] _[T]_ _**W**_ [(] _[j]_ [)] _**P**_ [(] _[k]_ [)] ) _[−]_ [1] _**P**_ [(] _[k]_ [)] _[T]_ _**W**_ [(] _[j]_ [)] _**X**_ : _,j_ _▷_ Eigenvectors update
+14: **end for**
+15: _**M**_ [(] _[k]_ [+1)] = _**M**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [)] _[T]_ _**R**_ [(] _[k]_ [+1)] = _**P**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [+1)] _▷_ Update Matrix Estimate
+
+16: **if** �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ _[−]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[≤]_ _[ϵ]_ [tol] **[ then]**
+
+17: Stop and Break _▷_ Stop when algorithm converges.
+18: **end if**
+19: **end for**
+
+
+3.5 EXTENSION: THE FAST SRPCA ALGORITHM
+
+
+For many applications, the convergence rate is critical, and it is often acceptable to converge to
+solutions that are close enough to optimality. Recall that each iteration of the SRPCA starts with
+_**M**_ **Ω** [(] _[k]_ [)] = _**X**_ **Ω** as a reliable unbiased estimate for the observed entities; however, this tends to slow
+down the convergence when ( _**P**_ [(] _[k][−]_ [1)] _**R**_ [(] _[k]_ [)] ) **Ω** is close but not equal to _**X**_ **Ω** . Therefore, we propose
+the fast SRPCA (see Algorithm 2 in Appendix B), which starts each iteration with teh following
+pre-processing reset that is different than the original one in Algorithm 1:
+
+_**M**_ **Ω** [(] _[k]_ [)] = (1 _−_ _α_ _[∗]_ )( _**P**_ [(] _[k][−]_ [1)] _**R**_ [(] _[k]_ [)] ) **Ω** + _α_ _[∗]_ _**X**_ **Ω** (17)
+where _α_ _[∗]_ _∈_ [0 _,_ 1] is a balancing scaler that is initialized to 1.
+
+
+There are two main advantages for the choice of (17). First, _α_ _[∗]_ serves as a step-size because
+_**M**_ **Ω** [(] _[k]_ [)] = ( _**P**_ [(] _[k][−]_ [1)] _**R**_ [(] _[k]_ [)] ) **Ω** + _α_ _[∗]_ [�] _**X**_ **Ω** _−_ ( _**P**_ [(] _[k][−]_ [1)] _**R**_ [(] _[k]_ [)] ) **Ω** �; therefore, it is expected that _α_ _[∗]_ _→_ 0
+when ( _**P**_ [(] _[k][−]_ [1)] _**R**_ [(] _[k]_ [)] ) **Ω** is close enough to _**X**_ **Ω** . Second, _α_ _[∗]_ serves as a smoothing parameter for
+noisy datasets where _**X**_ **Ω** is a noisy estimate for the observed entries **Ω** . For such noisy datasets, it
+is important to set _α_ _[∗]_ _→_ 0 after enough iterations to avoid converging to a noisy estimate _**M**_ **Ω** [(] _[k]_ [)] that
+is close to _**X**_ **Ω** .
+
+
+**Lemma 3.3** _If_ _α_ _[∗]_ = 0 _at_ _the_ _beginning_ _of_ _iteration_ _K,_ _the_ _fast_ _SRPCA_ _converges_ _at_ _iteration_ _K_
+_with_ _**M**_ [(] _[K]_ [+1)] = _**M**_ [(] _[K]_ [)] = _**P**_ [(] _[K]_ [)] _**R**_ [(] _[K]_ [+1)] = _**P**_ [(] _[K][−]_ [1)] _**R**_ [(] _[K]_ [)] _._ _Check Appendix A.2 for proof._
+
+
+From Lemma 3.3, it is intuitive to define _α_ _[∗]_ as a decreasing function with respect to the iteration
+number _k_ . This speeds up the SRPCA convergence when �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ +1))��2 _F_ [converges slowly]
+
+to �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _K−_ 1) _**R**_ ( _K_ ))��2 _F_ [.] [However,] [a] [random] [choice] [of] _[α][∗]_ [may] [result] [in] [an] [unreliable] [es-]
+timate even for the observed part of the matrix with a large error �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ ))��. Thus, the
+choice of _α_ _[∗]_ depends on �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ ))��. Here, we propose _α∗_ to be the solution for:
+
+
+where _δ_ is a tuning parameter and for this specific choice of the objective function, it is the convergence threshold for �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ ))�� _F_ [as shown in Lemma 3.4.]
+
+
+6
+
+
+arg min
+_α_
+
+
+_P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ ))  - (18)
+���� ��� _F_ [+] _[ δ][|][α][|]_
+
+
+Table 1: The computational time and the full matrix recovery error �� _**X**_ _−_ _**M**_ ( _K_ +1)��2 _F_ [for 50 repli-]
+cations at various missing data levels (50%, 70%, 80%) of a natural image (as seen in Figure 1).
+
+|Time (secs) Full Reconstruction Error�×10−3<br>Method<br>50% 70% 80% 50% 70% 80%|Col2|Col3|
+|---|---|---|
+|**SRPCA**<br>**ALM**<br>**SVT**<br>**ALS**<br>**LRCG**<br>**GNMR**|**0**_._**77**_ ±_** 0**_._<br>**0**_._**91**_ ±_** 0**_._<br>**0**_._**90**_ ±_** 0**_._<br>1_._99_ ±_ 0_._014<br>1_._95_ ±_ 0_._014<br>1_._74_ ±_ 0_._032<br>1_._55_ ±_ 0_._014<br>3_._43_ ±_ 0_._363<br>16_._02_ ±_ 0_._580<br>1_._59_ ±_ 0_._020<br>1_._57_ ±_ 0_._069<br>1_._92_ ±_ 0_._580<br>31_._84_ ±_ 0_._251<br>14_._20_ ±_ 0_._608<br>9_._55_ ±_ 0_._357<br>22_._85_ ±_ 1_._933<br>7_._17_ ±_ 0_._048<br>4_._02_ ±_ 0_._153|**7**_._**0**_ ±_** 0**_._**27**<br>**21**_._**7**_ ±_** 0**_._**58**<br>**40**_._**2**_ ±_** 1**_._**29**<br>19_._5_ ±_ 0_._49<br>57_._0_ ±_ 1_._64<br>79_._3_ ±_ 2_._19<br>19_._5_ ±_ 0_._49<br>52_._4_ ±_ 3_._68<br>134_._9_ ±_ 28_._16<br>43_._1_ ±_ 2_._00<br>108_._1_ ±_ 6_._09<br>395_._0_ ±_ 25_._5<br>27_._2_ ±_ 0_._65<br>73_._1_ ±_ 1_._82<br>150_._9_ ±_ 5_._41<br>38_._8_ ±_ 1_._40<br>123_._8_ ±_ 4_._37<br>309_._7_ ±_ 10_._90|
+
+
+**Lemma 3.4** _The closed-form solution for (18) can be written as (proof in Appendix A.3):_
+
+
+_α_ _[∗]_ = �0 if �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ ))�� _F_ _[≤]_ _[δ]_ (19)
+1 otherwise
+
+
+Lemma 3.4 shows that the fast SRPCA sets _**M**_ **Ω** [(] _[k]_ [)] = _**X**_ **Ω** only when _**P**_ [(] _[K]_ [)] _**R**_ [(] _[K]_ [+1)] does not accurately reconstruct the observed part of the matrix (i.e., when �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ ))�� _F_ _[>]_ _[δ]_ [).] [This also]
+supports the validity of Lemmas 3.1 and 3.2 for the fastSRPCA, because for _α_ _[∗]_ = 1 it becomes
+equivalent to the SRPCA and for _α_ _[∗]_ = 0 it terminates at the same iteration.
+
+
+4 EXPERIMENTATION AND RESULTS
+
+
+We validate the efficacy of the SRPCA approach on case studies related to (i) image inpainting, (ii)
+multivariate time-series imputation, and (iii) collaborative filtering. All experiments were executed
+using the Intel Core i9-9980XE CPU with 62 GB RAM and done with Python 3.12.2, Numpy 1.26.4,
+SciPy 1.13.1
+
+
+**Benchmark Models.** SRPCA is compared to state-of-the-art matrix completion methods: (i) inexact
+Augmented Lagrange Multiplier (ALM) (Lin et al., 2010), (ii) Single Value Thresholding (SVT)
+(Cai et al., 2010), (iii) Alternating Least Squares (ALS) (Duan, 2020), (iv) Low-Rank Gaussian
+Copula (LRGC) (Zhao & Udell, 2020), and (v) Gauss-Newton for Matrix Recovery (GNMR) (Zilber
+& Nadler, 2022). We note that not all benchmark models are designed to have the matrix’s rank be
+a-priori appointed; the ones that do are ALS, LRGC and GNMR, along with SRPCA.
+
+
+4.1 CASE STUDY 1: IMAGE INPAINTING
+
+
+Images are often stored in the form of matrices, in which the intensity for pixel ( _i, j_ ) is stored in the
+matrix entry ( _i, j_ ). Furthermore, some pixels are often noisy or hard to obtain, and it is common to
+use matrix completion to reconstruct images. In this case study, a natural image of size 475 _×_ 344
+is used to validate the algorithm. Specifically, a uniform randomly selected subset – 50%, 70%, and
+80% – of the pixels are removed and the matrix completion methods are then applied to reconstruct
+the image with _ϵtol_ = 10 _[−]_ [4] .
+
+
+**Results.** Figures 1, 2 and 3 show the outcomes of the matrix completion methods applied on a
+natural image with varying levels of missing data. While all the methods appear to decently recover
+the image at 50% missing level, the gap of the quality of reconstruction of that of SRPCA and the
+remaining methods increases as the level of missing data increases to 70% and 80%. This if further
+validated in Table 1, which shows the computational time required to reconstruct the image and the
+mean squared difference, _∥_ _**X**_ _−_ _**M**_ _∥_ [2] _F_ [, of the standardized values of all entries of the matrix.] [The]
+reconstruction error, for each method, increases with increase in missing data; this is natural because
+the matrix rank is probably underestimated with less observed data, leading to higher erros. SRPCA
+outperforms other methods in time and reconstruction error across all missing data levels, especially
+at large levels of 80% where other methods largely deteriorate. SRPCA considers the smoothness
+of the matrix and efficiently updates the principal components and eigenvectors in each iteration
+without explicitly running the eigenvector decomposition.
+
+
+7
+
+
+(a) Given (b) SRPCA (c) ALM (d) SVT (e) ALS (f) LRGC (g) GNMR
+
+
+Figure 1: Reconstructed images with 50% missing pixels (the rank is set to 80).
+
+
+(a) Given (b) SRPCA (c) ALM (d) SVT (e) ALS (f) LRGC (g) GNMR
+
+
+Figure 2: Reconstructed images with 70% missing pixels (the rank is set to 40).
+
+
+(a) Given (b) SRPCA (c) ALM (d) SVT (e) ALS (f) LRGC (g) GNMR
+
+
+Figure 3: Reconstructed images with 80% missing pixels (the rank is set to 30).
+
+
+Table 2: The computational time and the full matrix recovery error �� _**X**_ _−_ _**M**_ ( _K_ +1)��2 _F_ [for 50 repli-]
+cations at different levels of missing data (10%, 30%, 50%, 70%) of turbine enignes dataset.
+
+|Time (secs) Full Reconstruction Error�×10−3<br>Method<br>10% 30% 50% 70% 10% 30% 50% 70%|Col2|Col3|
+|---|---|---|
+|**SRPCA**<br>**ALM**<br>**SVT**<br>**ALS**<br>**LRCG**<br>**GNMR**|2_._11_ ±_ 0_._047<br>2_._23_ ±_ 0_._054<br>2_._44_ ±_ 0_._042<br>2_._88_ ±_ 0_._038<br>**0**_._**12**_ ±_** 0**_._<br>**0**_._**12**_ ±_** 0**_._<br>**0**_._**14**_ ±_** 0**_._<br>**0**_._**16**_ ±_** 0**_._<br>0_._70_ ±_ 0_._022<br>0_._71_ ±_ 0_._020<br>0_._71_ ±_ 0_._015<br>0_._70_ ±_ 0_._025<br>4_._16_ ±_ 0_._265<br>4_._38_ ±_ 0_._430<br>–<br>–<br>4_._61_ ±_ 0_._039<br>4_._59_ ±_ 0_._041<br>2_._55_ ±_ 0_._032<br>8_._44_ ±_ 0_._058<br>6_._29_ ±_ 0_._049<br>5_._52_ ±_ 0_._139<br>4_._43_ ±_ 0_._025<br>3_._22_ ±_ 0_._013|**31**_ ±_** 0**_._**3**<br>**96**_ ±_** 0**_._**5**<br>_ ±_** 0**_._**8**<br>286_ ±_ 2_._4<br>**31**_ ±_** 0**_._**3**<br>98_ ±_ 0_._6<br>181_ ±_ 4_._7<br>279_ ±_ 3_._0<br>264_ ±_ 0_._3<br>275_ ±_ 0_._7<br>296_ ±_ 1_._2<br>349_ ±_ 2_._6<br>263_ ±_ 0_._3<br>271_ ±_ 0_._6<br>–<br>–<br>32_ ±_ 0_._3<br>97_ ±_ 0_._5<br>171_ ±_ 0_._9<br>_ ±_** 2**_._**4**<br>263_ ±_ 0_._3<br>271_ ±_ 0_._6<br>289_ ±_ 1_._0<br>345_ ±_ 2_._4|
+
+
+4.2 CASE STUDY 2: MULTIVARIATE TIME-SERIES IMPUTATION
+
+
+Multivariate time series data frequently contains missing features with varying ratios and patterns
+depending on distinct sampling periods or measurement methods (Choi & Lee, 2024). These missing
+features can significantly impact downstream tasks. Time-series imputation is crucial in practical
+domains such as healthcare and prognostics. We evalaute the matrix completion algorithms on a
+multisensor monitoring data, in specific on a public aircraft gas turbine engines dataset (Saxena
+et al., 2008). The dataset contains measurements from 21 sensors recorded on 100 distinct engines
+that ran until failure. We focus on 12 sensors that show consistent trends across the 100 engines.
+Accordingly, the multisensor data from all 100 engines are stacked in one matrix with shape 20631 _×_
+12. A uniform randomly selected subset - 10%, 30%, 50%, and 70% - of the matrix entries are
+removed and the matrix completion methods are then applied to recover the original matrix with
+_ϵtol_ = 10 _[−]_ [4] . The rank for the underlying matrix is set to _r_ = 1.
+
+
+8
+
+
+Figure 4: Reconstructed multisensor signals via the SRPCA approach with 70% missing data.
+
+
+**Results.** The challenges in recovering this matrix lie in the fact that it (i) is already low-dimensional
+and (ii) has a high noise-to-signal ratio. This is evident in Figure 4 with the red scattered points of
+the original signal. The SRPCA reconstructs a filtered version of the signals eliminating a big part
+of the noise from the original. Table 2 shows the computational time required to reconstruct the
+signals and the mean squared difference, _∥_ _**X**_ _−_ _**M**_ _∥_ [2] _F_ [,] [of] [the] [standardized] [values] [of] [all] [entries] [of]
+the matrix. In terms of reconstruction, SRPCA, along with ALM and LRCG, produce the top matrix
+recoveries performances. Even though the low-dimensionality suits nuclear norm based methods
+like ALM, the SRPCA still produce top performances in acceptable timing. The ALS, on the other
+hand, diverges for high missing data levels of 50% and 70%.
+
+
+4.3 CASE STUDY 3: COLLABORATIVE FILTERING
+
+
+Collaborative filtering is a notable low-rank matrix completion application (Rennie & Srebro, 2005).
+It is one of the state-of-the-art techniques in recommender systems where the user-item interaction
+is embedded in matrix Li et al. (2021). Movie recommendations are a common recommender systems case study. The dataset we utilize for movie recommendations is the MovieLens 100k dataset
+that is available at https://grouplens.org/datasets/movielens/ (Harper & Konstan, 2015). The dataset
+contains 100k recommendations from 943 users for 1682 movies, which can be represented in a matrix of size 1682x943. The performance is evaluated by the normalized mean absolute error metric
+(NMAE) (Yang et al., 2018):
+
+
+where _x_ max and _x_ min are the maximum and minimum values, respectively, of the recommendation
+ratings. The rank of the underlying matrix is set to _r_ = 4 and the threshold to _ϵtol_ = 10 _[−]_ [3] . The
+matrix in this dataset poses different challenges than the previous too; it is heavily sparse in nature
+where only 100k entries are available, and that is because users tend to rate a select few movies. We
+analyze scenarios where 20%, 30%, 50% and 80% of the recommendations are randomly removed.
+
+
+**Results.** Table 3 demonstrates the computational times and the reconstruction error of the missing
+entries (NMAE) for all methods across diverse missing data levels. It can be seen that SRPCA
+outperforms all other methods both in time to convergence and in the imputation of the missing
+
+
+9
+
+
+NMAE =
+
+
+( _i,j_ ) _∈_ **Ω** _[⊥]_ _[|][M][i,j]_ _[−]_ _[X][i,j][|]_
+
+
+(20)
+( _x_ max _−_ _x_ min) _|_ **Ω** _[⊥]_ _|_
+
+
+Table 3: The computational time and the normalized missing entries error NMAE for 50 replications
+at different levels of missing data (20%, 30%, 50%, 60%) of Movie100k dataset.
+
+
+**Time (secs)** **NMAE**                    - _×_ 10 _[−]_ [3][�]
+**Method**
+
+20% 30% 50% 60% 20% 30% 50% 60%
+
+
+**SRPCA** **9** _._ **64** _±_ **0** _._ **9** _._ **86** _±_ **0** _._ **9** _._ **89** _±_ **0** _._ **8** _._ **09** _±_ **1** _._ _±_ **1** _._ **1** _±_ **0** _._ **8** _±_ **7** _._ **0** _±_ **14** _._ **1**
+**ALM** 17 _._ 78 _±_ 1 _._ 281 17 _._ 46 _±_ 1 _._ 063 17 _._ 02 _±_ 2 _._ 718 11 _._ 09 _±_ 4 _._ 973 221 _±_ 3 _._ 3 212 _±_ 1 _._ 4 207 _±_ 6 _._ 6 220 _±_ 16 _._ 9
+**SVT** 14 _._ 82 _±_ 6 _._ 165 18 _._ 44 _±_ 9 _._ 761 30 _._ 16 _±_ 7 _._ 861 15 _._ 97 _±_ 10 _._ 403 278 _±_ 90 _._ 6 408 _±_ 106 _._ 0 513 _±_ 7 _._ 2 467 _±_ 14 _._ 6
+**ALS** 14 _._ 44 _±_ 2 _._ 339 14 _._ 12 _±_ 2 _._ 712 15 _._ 69 _±_ 3 _._ 040 17 _._ 56 _±_ 3 _._ 474 190 _±_ 1 _._ 6 195 _±_ 1 _._ 9 208 _±_ 2 _._ 3 219 _±_ 2 _._ 1
+**LRCG** 20 _._ 64 _±_ 0 _._ 114 21 _._ 28 _±_ 0 _._ 885 16 _._ 16 _±_ 2 _._ 391 13 _._ 97 _±_ 9 _._ 171 262 _±_ 1 _._ 8 273 _±_ 1 _._ 6 307 _±_ 2 _._ 2 322 _±_ 5 _._ 8
+**GNMR** 11 _._ 97 _±_ 0 _._ 254 11 _._ 58 _±_ 0 _._ 345 10 _._ 11 _±_ 0 _._ 832 9 _._ 89 _±_ 0 _._ 566 218 _±_ 11 _._ 3 243 _±_ 1 _._ 7 355 _±_ 15 _._ 6 406 _±_ 9 _._ 4
+
+
+data. This is a particularly huger dataset than the previous two case studies with much more intrinsic
+sparsity and extremely low rank. SRPCA leverages the smoothness in estimate update to converge
+faster than other methods. Taking advantage of iteratively resetting observed matrix entries, SRPCA
+achieves a lower error in recovering the unobserved ones.
+
+
+5 CONCLUSION
+
+
+Missing or corrupted data is pervasive across various fields, thus, affecting downstream learning
+tasks. Low-rank matrix completion is a common task to recover the missing entries of a partially
+observed matrix. Existing methods either fail under significant missing data levels or suffer from
+slow convergence. Th paper proposes a novel low-rank matrix completion method for incomplete
+datasets, called the Sparse Reverse of the Principle Component Analysis (SRPCA). The contributions are multi-fold: (i) this approach maintains a certain level of smoothness across the matrix; (ii)
+it modifies the non-convex matrix factorization problem into a convex optimization problem with a
+closed for solution, leveraging subspace representation in terms of principal components; (iii) it converges iteratively, which is critical for scenarios that stop the algorithm after reaching the maximum
+number of iterations or due to external reasons; and (iv) it is also computationally tractable, with a
+controlled upper bound on the number of iterations until convergence. In addition, a faster extension
+
+- fastSRPCA – is provided to improve on convergence rate at the expense of marginal missing data
+recovery. The efficacy of the SRPCA algorithm is validated on a natural image, multisensor dataset,
+and movie ratings dataset.
+
+
+**Limitations.** (i) The first obvious limitation of SRPCA is that it requires the knowledge of the rank
+as an input. In most cases, this information is not readily available. However, there are low-rank
+matrix completion methods in literature (Nguyen et al., 2019) that we can influence from to make
+the rank selection adaptive. (ii) SRPCA suffers from singularity results in random predicitons for a
+column that has all its entries missing, which happens scarcely or for extremely high missing levels
+of data ( 90%). (iii) SRPCA is based on an assumption that the matrix completion environment is
+based on Missing-Completely-At-Random (MCAR). It is interesting for future studies to see how to
+develop it for Missing-At-Random (MAR) and Missing-Not-At-Random (MNAR) environments.
+
+
+10
+
+
+REFERENCES
+
+
+Vincent Audigier, Franc¸ois Husson, and Julie Josse. A principal component method to impute
+missing values for mixed data. _Advances_ _in_ _Data_ _Analysis_ _and_ _Classification_, 10, 2016. doi:
+10.1007/s11634-014-0195-1.
+
+
+Jeffrey D. Blanchard, Jared Tanner, and Ke Wei. Conjugate gradient iterative hard thresholding:
+Observed noise stability for compressed sensing. _IEEE_ _Transactions_ _on_ _Signal_ _Processing_, 63
+(2):528–537, 2015. doi: 10.1109/TSP.2014.2379665.
+
+
+Jian-Feng Cai, Emmanuel J. Cand`es, and Zuowei Shen. A singular value thresholding algorithm
+for matrix completion. _SIAM_ _Journal_ _on_ _Optimization_, 20(4):1956–1982, 2010. doi: 10.1137/
+080738970.
+
+
+Emmanuel J. Cand`es, Xiaodong Li, Yi Ma, and John Wright. Robust principal component analysis?
+_J. ACM_, 58(3), jun 2011. ISSN 0004-5411. doi: 10.1145/1970392.1970395.
+
+
+Emmanuel J. Cand`es and Benjamin Recht. Exact matrix completion via convex optimization. _Foun-_
+_dations of Computational Mathematics_, 9:717–772, 2009. doi: 10.1007/s10208-009-9045-5.
+
+
+P. Chen and D. Suter. Recovering the missing components in a large noisy low-rank matrix: application to sfm. _IEEE Transactions on Pattern Analysis and Machine Intelligence_, 26(8):1051–1063,
+2004. doi: 10.1109/TPAMI.2004.52.
+
+
+Zhaoliang Chen and Shiping Wang. A review on matrix completion for recommender systems.
+_Knowledge and Information Systems_, 64:1–34, 2022. doi: 10.1007/s10115-021-01629-6.
+
+
+Liem Chin, Agus Sukmana, and Erwinna Chendra. Portfolio management using principal component analysis approach. _AIP_ _Conference_ _Proceedings_, 2877(1):030010, 12 2023. ISSN 0094243X. doi: 10.1063/5.0177736.
+
+
+MinGyu Choi and Changhee Lee. Conditional information bottleneck approach for time series
+imputation. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+Tony Duan. Lightweight python library for in-memory matrix completion., 2020. URL [https:](https://github.com/tonyduan/matrix-completion)
+[//github.com/tonyduan/matrix-completion.](https://github.com/tonyduan/matrix-completion)
+
+
+Rainer Gemulla, Erik Nijkamp, Peter J. Haas, and Yannis Sismanis. Large-scale matrix factorization with distributed stochastic gradient descent. In _Proceedings_ _of_ _the_ _17th_ _ACM_ _SIGKDD_
+_International Conference on Knowledge Discovery and Data Mining_, KDD ’11, pp. 69–77, New
+York, NY, USA, 2011. Association for Computing Machinery. ISBN 9781450308137. doi:
+10.1145/2020408.2020426.
+
+
+David F. Gleich and Lek-heng Lim. Rank aggregation via nuclear norm minimization. In _Pro-_
+_ceedings of the 17th ACM SIGKDD international conference on Knowledge discovery and data_
+_mining_, KDD ’11, pp. 60–68, New York, NY, USA, 2011. Association for Computing Machinery.
+ISBN 9781450308137. doi: 10.1145/2020408.2020425.
+
+
+Yuzhou Gu, Zhao Song, Junze Yin, and Lichen Zhang. Low rank matrix completion via robust alternating minimization in nearly linear time. In _The Twelfth International Conference on Learning_
+_Representations_, 2024.
+
+
+Justin P. Haldar and Diego Hernando. Rank-constrained solutions to linear matrix equations using
+powerfactorization. _IEEE_ _Signal_ _Processing_ _Letters_, 16(7):584–587, 2009. doi: 10.1109/LSP.
+2009.2018223.
+
+
+Ning Han, Yinnan Chen, Xinchao Zhao, and Mingzhang Han. Portfolio optimization based on
+principal component analysis and second-order surrogate-assisted memetic differential evolution
+algorithm. In _2023_ _5th_ _International_ _Conference_ _on_ _Data-driven_ _Optimization_ _of_ _Complex_ _Sys-_
+_tems (DOCS)_, pp. 1–7, 2023. doi: 10.1109/DOCS60977.2023.10294769.
+
+
+Moritz Hardt and Mary Wootters. Fast matrix completion without the condition number. In
+Maria Florina Balcan, Vitaly Feldman, and Csaba Szepesv´ari (eds.), _Proceedings_ _of_ _The_ _27th_
+_Conference on Learning Theory_, volume 35 of _Proceedings of Machine Learning Research_, pp.
+638–678, Barcelona, Spain, 13–15 Jun 2014. PMLR.
+
+
+11
+
+
+F. Maxwell Harper and Joseph A. Konstan. The movielens datasets: History and context. _ACM_
+_Trans. Interact. Intell. Syst._, 5(4), December 2015. ISSN 2160-6455. doi: 10.1145/2827872.
+
+
+Prateek Jain, Praneeth Netrapalli, and Sujay Sanghavi. Low-rank matrix completion using alternating minimization. In _Proceedings_ _of_ _the_ _Forty-Fifth_ _Annual_ _ACM_ _Symposium_ _on_ _Theory_ _of_
+_Computing_, STOC ’13, pp. 665–674, New York, NY, USA, 2013. Association for Computing
+Machinery. ISBN 9781450320290. doi: 10.1145/2488608.2488693.
+
+
+Hui Ji, Chaoqiang Liu, Zuowei Shen, and Yuhong Xu. Robust video denoising using low rank
+matrix completion. In _2010 IEEE Computer Society Conference on Computer Vision and Pattern_
+_Recognition_, pp. 1791–1798, 2010. doi: 10.1109/CVPR.2010.5539849.
+
+
+Zhigang Jia, Qiyu Jin, Michael K. Ng, and Xi-Le Zhao. Non-local robust quaternion matrix completion for large-scale color image and video inpainting. _IEEE Transactions on Image Processing_,
+31:3868–3883, 2022. doi: 10.1109/TIP.2022.3176133.
+
+
+Ryota Kawasumi and Koujin Takeda. Approximate method of variational bayesian matrix factorization/completion with sparse prior. _Journal of Statistical Mechanics:_ _Theory and Experiment_,
+2018(5):053404, may 2018. doi: 10.1088/1742-5468/aabc7d.
+
+
+Steven Lawrence, Bridget R. Mueller, Patrick Kwon, and Jessica Robinson-Papp. Phenotyping autonomic neuropathy using principal component analysis. _Autonomic Neuroscience_, 245:103056,
+2023. ISSN 1566-0702. doi: https://doi.org/10.1016/j.autneu.2022.103056.
+
+
+Anchen Li, Bo Yang, Huan Huo, and Farookh Khadeer Hussain. Leveraging implicit relations for
+recommender systems. _Information_ _Sciences_, 579:55–71, 2021. ISSN 0020-0255. doi: https:
+//doi.org/10.1016/j.ins.2021.07.084.
+
+
+Kun Li, Qionghai Dai, Wenli Xu, Jingyu Yang, and Jianmin Jiang. Three-dimensional motion
+estimation via matrix completion. _IEEE Transactions on Systems, Man, and Cybernetics, Part B_
+_(Cybernetics)_, 42(2):539–551, 2012. doi: 10.1109/TSMCB.2011.2168953.
+
+
+Zhouchen Lin, Minming Chen, and Yi Ma. The augmented lagrange multiplier method for exact
+recovery of corrupted low-rank matrices, 2010.
+
+
+Amarendra Kumar Mishra, Manjeet Kumar, and Mahipal Singh Choudhry. Underwater image enhancement by using transmission optimization and background light estimation via principal
+component analysis fusion. _Signal,_ _Image_ _and_ _Video_ _Processing_, 18:3855–3865, 2024. doi:
+10.1007/s11760-024-03047-x.
+
+
+Luong Trung Nguyen, Junhan Kim, and Byonghyo Shim. Low-rank matrix completion: A contemporary survey. _IEEE Access_, 7:94215–94237, 2019. doi: 10.1109/ACCESS.2019.2928130.
+
+
+Charul Paliwal, Pravesh Biyani, and Ketan Rajawat. Variational bayesian filtering with subspace
+information for extreme spatio-temporal matrix completion, 2022.
+
+
+Wen Qin, Xin Luo, and MengChu Zhou. Adaptively-accelerated parallel stochastic gradient descent
+for high-dimensional and incomplete data representation learning. _IEEE_ _Transactions_ _on_ _Big_
+_Data_, 10(1):92–107, 2024. doi: 10.1109/TBDATA.2023.3326304.
+
+
+Jasson D. M. Rennie and Nathan Srebro. Fast maximum margin matrix factorization for collaborative prediction. In _Proceedings_ _of_ _the_ _22nd_ _International_ _Conference_ _on_ _Machine_ _Learning_,
+ICML ’05, pp. 713–719, New York, NY, USA, 2005. Association for Computing Machinery.
+ISBN 1595931805. doi: 10.1145/1102351.1102441.
+
+
+Abhinav Saxena, Kai Goebel, Don Simon, and Neil Eklund. Damage propagation modeling for
+aircraft engine run-to-failure simulation. In _2008_ _International_ _Conference_ _on_ _Prognostics_ _and_
+_Health Management_, pp. 1–9, 2008. doi: 10.1109/PHM.2008.4711414.
+
+
+Ruoyu Sun and Zhi-Quan Luo. Guaranteed matrix completion via non-convex factorization. _IEEE_
+_Transactions on Information Theory_, 62(11):6535–6579, 2016. doi: 10.1109/TIT.2016.2598574.
+
+
+Bingyan Wang and Jianqing Fan. Robust matrix completion with heavy-tailed noise. _Journal of the_
+_American Statistical Association_, 0(0):1–13, 2024. doi: 10.1080/01621459.2024.2375037.
+
+
+12
+
+
+Linxiao Yang, Jun Fang, Huiping Duan, Hongbin Li, and Bing Zeng. Fast low-rank bayesian matrix
+completion with hierarchical gaussian prior models. _IEEE Transactions on Signal Processing_, 66
+(11):2804–2817, 2018. doi: 10.1109/TSP.2018.2816575.
+
+
+Kai Yu, Shenghuo Zhu, John Lafferty, and Yihong Gong. Fast nonparametric matrix factorization for large-scale collaborative filtering. In _Proceedings_ _of_ _the_ _32nd_ _international_ _ACM_ _SI-_
+_GIR conference on Research and development in information retrieval_, SIGIR ’09, pp. 211–218,
+New York, NY, USA, 2009. Association for Computing Machinery. ISBN 9781605584836. doi:
+10.1145/1571941.1571979.
+
+
+Hui Zhang, Jian-Feng Cai, Lizhi Cheng, and Jubo Zhu. Strongly convex programming for exact
+matrix completion and robust principal component analysis, 2012. ISSN 1930-8337.
+
+
+Yuxuan Zhao and Madeleine Udell. Matrix completion with quantified uncertainty through low
+rank gaussian copula. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin (eds.),
+_Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 33, pp. 20977–20988. Curran Associates, Inc., 2020.
+
+
+Pini Zilber and Boaz Nadler. Gnmr: A provable one-line algorithm for low rank matrix recovery.
+_SIAM Journal on Mathematics of Data Science_, 4(2):909–934, 2022. doi: 10.1137/21M1433812.
+
+
+13
+
+
+A PROOFS OF LEMMAS
+
+
+A.1 LEMMAS 3.1 AND 3.2
+
+
+This appendix provides proofs for Lemmas 3.1 and 3.2. First, the rationale of adding _**M**_ **Ω** [(] _[k]_ [)] = _**X**_ **Ω**
+is expected to iteratively improve the performance for scenarios where �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_
+is large. Intuitively, the algorithm should terminate when �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ _[−]_
+�� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[≤]_ _[ϵ]_ [tol][,] [meaning] [when] [the] [error] [term] �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ [is]
+not significantly decreasing anymore.
+
+Next, we show that �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ _[−]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[≤]_ _[ϵ]_ [tol] [will] [keep]
+decreasing until it becomes smaller than _ϵ_ tol. Specifically, at each iteration _k_, it is either:
+
+
+which satisfies �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _K−_ 1) _**R**_ ( _K_ ))��2 _F_ _[−]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _K_ ) _**R**_ ( _K_ +1))��2 _F_ _[≤]_ _[ϵ]_ [tol][.] [This concludes]
+the proof for Lemma 3.2.
+
+
+14
+
+
+2
+_P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))
+��� ���
+
+
+(21)
+_F_ [+] _[ ϵ]_ [tol]
+
+
+2 2
+
+_P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))
+_F_ _[≤]_ ��� ���
+
+
+Or:
+2
+_P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))
+��� ���
+
+
+(22)
+_F_ _[−]_ _[ϵ]_ [tol]
+
+
+2 2
+
+_P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))
+_F_ _[<]_ ��� ���
+
+
+For the first case in (21), the algorithm terminates at iteration _k_ by satisfying
+�� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ _[−]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[≤]_ _[ϵ]_ [tol][.]
+
+For the second case, (22) leads to �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[<]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ [be-]
+cause _ϵ_ tol _>_ 0, and we move to the next iteration _k_ + 1. Afterwards, similarly, either the SRPCA terminates at _k_ + 1 or �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ +1) _**R**_ ( _k_ +2))��2 _F_ _[<]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[−]_ _[ϵ]_ [tol] _[<]_
+�� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[<]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ [.]
+
+This concludes the fact that �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ decreases iteratively until
+�� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ _[−]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _≤_ _ϵ_ tol is satisfied. This concludes
+the proof for Lemma 3.1.
+
+Next, we show that there exists an iteration _K_ such that �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ _[−]_
+�� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[≤]_ _[ϵ]_ [tol][.] [Assume that the algorithm did not converge at iteration] _[ K]_ _[−]_ [1][;]
+therefore,
+
+
+2
+0 _≤_ _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))
+��� ��� _F_
+
+2
+_<_ _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 2) _**R**_ ( _k−_ 1))
+��� ��� _F_ _[−]_ _[ϵ]_ [tol]
+
+
+2
+_<_ _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 3) _**R**_ ( _k−_ 2))
+��� ��� _F_ _[−]_ [2] _[ϵ]_ [tol]
+
+_< ..._
+
+
+(23)
+
+
+2
+_<_ _P_ **Ω** ( _**X**_ _−_ _**P**_ (0) _**R**_ (1))
+��� ��� _F_ _[−]_ [(] _[K][ −]_ [1)] _[ϵ]_ [tol]
+
+
+However, for those inequalities to hold, we must have �� _P_ **Ω** ( _**X**_ _−_ _**P**_ (0) _**R**_ (1))��2 _F_ _[−]_ [(] _[K][ −]_ [1)] _[ϵ]_ [tol] _[>]_ [ 0][.]
+Thus, the algorithm will terminate at an iteration _K_ such that:
+
+
+_K_ _<_
+
+
+��� _P_ **Ω** ( _**X**_ _−_ _**P**_ (0) _**R**_ (1))��2 _F_
+_ϵ_ tol
+
+
++ 1 (24)
+
+
+A.2 LEMMA 3.3
+
+
+This appendix proves Lemma 3.3. If _α_ _[∗]_ = 0 at the beginning of iteration _K_, then the solution for:
+
+
+arg min ( _**X**_ : _,j_ _−_ _**P**_ [(] _[K]_ [)] _**R**_ : [(] _,j_ _[K]_ [+1)] ) _[T]_ _**W**_ [(] _[j]_ [)] ( _**X**_ : _,j_ _−_ _**P**_ [(] _[K]_ [)] _**R**_ : [(] _,j_ _[K]_ [+1)] ) _,_ _∀j_ = 1 _, .., n_ (25)
+
+_**R**_ : [(] _,j_ _[K]_ [+1)]
+
+
+is:
+_**R**_ : [(] _,j_ _[K]_ [+1)] = ( _**P**_ [(] _[K]_ [)] _[T]_ _**W**_ [(] _[j]_ [)] _**P**_ [(] _[K]_ [)] ) _[−]_ [1] _**P**_ [(] _[K]_ [)] _[T]_ _**W**_ [(] _[j]_ [)] _**X**_ : _,j,_ _∀j_ = 1 _, .., n_ (26)
+This is also the solution for:
+
+arg min ( _**X**_ : _,j_ _−_ _**M**_ [(] _[K]_ [)] _**R**_ [(] _[K]_ [)] _[T]_ _**R**_ : [(] _,j_ _[K]_ [+1)] ) _[T]_ _**W**_ [(] _[j]_ [)] ( _**X**_ : _,j_ _−_ _**M**_ [(] _[K]_ [)] _**R**_ [(] _[K]_ [)] _[T]_ _**R**_ : [(] _,j_ _[K]_ [+1)] ) _,_ _∀j_ = 1 _, .., n_
+
+_**R**_ : [(] _,j_ _[K]_ [+1)]
+
+(27)
+which, because _α_ _[∗]_ = 0, can be written as:
+
+
+arg min ( _**X**_ : _,j_ _−_ _**P**_ [(] _[K][−]_ [1)] _**R**_ [(] _[K]_ [)] _**R**_ [(] _[K]_ [)] _[T]_ _**R**_ : [(] _,j_ _[K]_ [+1)] ) _[T]_ _**W**_ [(] _[j]_ [)] ( _**X**_ : _,j_ _−_ _**P**_ [(] _[K][−]_ [1)] _**R**_ [(] _[K]_ [)] _**R**_ [(] _[K]_ [)] _[T]_ _**R**_ : [(] _,j_ _[K]_ [+1)] ) _,_
+
+_**R**_ : [(] _,j_ _[K]_ [+1)]
+
+
+_∀j_ = 1 _, .., n_ (28)
+
+
+Therefore,
+
+_**R**_ [(] _[K]_ [)] _**R**_ [(] _[K]_ [)] _[T]_ _**R**_ : [(] _,j_ _[K]_ [+1)] =( _**P**_ [(] _[K][−]_ [1)] _[T]_ _**W**_ [(] _[j]_ [)] _**P**_ [(] _[K][−]_ [1)] ) _[−]_ [1] _**P**_ [(] _[K][−]_ [1)] _[T]_ _**W**_ [(] _[j]_ [)] _**X**_ : _,j,_ _∀j_ = 1 _, .., n_
+
+(29)
+= _**R**_ : [(] _,j_ _[K]_ [)] _[,]_ _∀j_ = 1 _, .., n_
+
+
+Finally, multiplying both sides of the equation by _**P**_ [(] _[K][−]_ [1)] :
+
+_**P**_ [(] _[K][−]_ [1)] _**R**_ [(] _[K]_ [)] _**R**_ [(] _[K]_ [)] _[T]_ _**R**_ : [(] _,j_ _[K]_ [+1)] = _**P**_ [(] _[K][−]_ [1)] _**R**_ : [(] _,j_ _[K]_ [)] _[,]_ _∀j_ = 1 _, .., n_ (30)
+
+which, because _α_ _[∗]_ = 0, can be consecutively developed into:
+
+_**M**_ [(] _[K]_ [)] _**R**_ [(] _[K]_ [)] _[T]_ _**R**_ : [(] _,j_ _[K]_ [+1)] = _**M**_ : [(] _,j_ _[K]_ [)] _[,]_ _∀j_ = 1 _, .., n_ (31)
+
+
+_**P**_ [(] _[K]_ [)] _**R**_ : [(] _,j_ _[K]_ [+1)] = _**M**_ : [(] _,j_ _[K]_ [)] _[,]_ _∀j_ = 1 _, .., n_ (32)
+
+_**M**_ : [(] _,j_ _[K]_ [+1)] = _**M**_ : [(] _,j_ _[K]_ [)] _[,]_ _∀j_ = 1 _, .., n_ (33)
+Thus, the fast SRPCA, in Algorithm 2, converges at the end of iteration _K_ by satisfying the
+�� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _K−_ 1) _**R**_ ( _K_ ))��2 _F_ _[−]_ �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _K_ +1))��2 _F_ [=] [0] _[≤]_ _[ϵ]_ [tol][.] [This] [concludes] [the] [proof]
+of Lemma 3.3.
+
+
+A.3 LEMMA 3.4
+
+
+This appendix proves Lemma 3.4. First we rewrite 18 as:
+
+
+Knowing that �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))�� _F_ _[>]_ [0][ and] _[ δ]_ _[>]_ [0][, then, the solution will satisfy][ 0] _[≤]_ _[α][∗]_ _[≤]_
+1.
+
+Specifically, if �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))�� _F_ _[< δ]_ [, then:]
+_P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))    - _|_ 1 _−_ _α|_ _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))    - (37)
+��� ��� _F_ [= min] _α_ ��� ��� _F_ [+] _[ δ][|][α][|]_
+
+with _α_ _[∗]_ = 0.
+
+
+15
+
+
+min
+_α_
+
+
+= min
+_α_
+
+
+= min
+_α_
+
+
+_P_ **Ω**  - _**X**_ _−_ (1 _−_ _α_ ) _**P**_ [(] _[k][−]_ [1)] _**R**_ [(] _[k]_ [)] _−_ _α_ _**X**_  - (34)
+���� ���� _F_ [+] _[ δ][|][α][|]_
+
+(1 _−_ _α_ ) _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))  - (35)
+���� ��� _F_ [+] _[ δ][|][α][|]_
+
+- _|_ 1 _−_ _α|_ _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ )) - (36)
+��� ��� _F_ [+] _[ δ][|][α][|]_
+
+
+Otherwise, if �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))�� _F_ _[> δ]_ [, then:]
+
+
+with _α_ _[∗]_ = 1.
+
+For the case �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))�� _F_ [=] _[δ]_ [,] [any] [value] [0] _[≤]_ _[α][∗]_ _[≤]_ [1] [is] [a] [valid] [solution,] [but] [we]
+chose _α_ _[∗]_ = 0 to speed up the convergence of the algorithm. This concludes the proof for Lemma
+3.4.
+
+
+16
+
+
+_δ_ = min
+_α_
+
+
+- _|_ 1 _−_ _α|_ _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ )) - (38)
+��� ��� _F_ [+] _[ δ][|][α][|]_
+
+
+B FASTSRPCA ALGORITHM
+
+
+We provide the pseudo-algorithm of FastSRPCA as below:
+
+
+**Algorithm 2** The Fast SRPCA for Matrix Completion.
+
+1: _Mi,j_ = - _XNi,j_ (0 _,_ 1) ifif ( ( _i, ji, j_ )) _∈ ∈_ **ΩΩ** _[⊥]_ _▷_ Data standardization and preprocessing
+
+2: **for** _q_ _∈_ [1 _, ..., n_ ] **do**
+3: _**W**_ [(] _[q]_ [)] = **0** _▷_ Construct the sparse weight matrices once
+
+4: _Wi,i_ [(] _[q]_ [)] [= 1] _[,]_ _[∀]_ [(] _[i, q]_ [)] _[ ∈]_ **[Ω]**
+5: **end for**
+6: _**V**_ [(0)] **Λ** [(0)] _**V**_ [(0)] _[T]_ = _**M**_ [(0)] _[T]_ _**M**_ [(0)] _▷_ Initial eigenvector decomposition.
+
+7: _**R**_ [(0)] = [ _**V**_ : _,_ _**r**_ ] _[T]_, _**P**_ [(0)] = _**M**_ [(0)] _**R**_ [(0)] _[T]_, _**M**_ [(1)] = _**M**_ [(0)] _▷_ Construct initial matrices
+8: **for** _k_ _∈_ [1 _, ..., maxIter_ ] **do**
+9: Matrix smoothing if _α_ _[∗]_ = 0 _▷_ Optional
+
+10: _**M**_ **Ω** [(] _[k]_ [)] = (1 _−_ _α_ _[∗]_ )( _**P**_ [(] _[k][−]_ [1)] _**R**_ [(] _[k]_ [)] ) **Ω** + _α_ _[∗]_ _**X**_ **Ω** _▷_ Update for the observed values
+
+11: _**P**_ [(] _[k]_ [)] = _**M**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [)] _[T]_ _▷_ Construct principal components
+12: **for** _j_ _∈_ [1 _, ..., n_ ] **do**
+
+13: _**R**_ _j_ [(] _[k]_ [+1)] = ( _**P**_ [(] _[k]_ [)] _[T]_ _**W**_ [(] _[j]_ [)] _**P**_ [(] _[k]_ [)] ) _[−]_ [1] _**P**_ [(] _[k]_ [)] _[T]_ _**W**_ [(] _[j]_ [)] _**X**_ : _,j_ _▷_ Eigenvectors update
+14: **end for**
+15: _**M**_ [(] _[k]_ [+1)] = _**P**_ [(] _[k]_ [)] _**R**_ [(] _[k]_ [+1)] _▷_ Update Matrix Estimate
+
+�0 if �� _P_ **Ω** ( _**X**_ _−_ _**M**_ ( _k_ ))�� _≤_ _δ_
+16: _α_ _[∗]_ = _▷_ Update step-size.
+1 otherwise
+
+17: **if** �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k−_ 1) _**R**_ ( _k_ ))��2 _F_ _[−]_ �� _P_ **Ω** ( _**X**_ _−_ _**P**_ ( _k_ ) _**R**_ ( _k_ +1))��2 _F_ _[≤]_ _[ϵ]_ [tol] **[ then]**
+
+18: Stop and Break _▷_ Stop when algorithm converges.
+19: **end if**
+20: **end for**
+
+
+17
+
+
+C EXTENDED RESULTS
+
+
+C.1 DESIGN OF EXPERIMENTS
+
+
+In Table 4, we show the hyperparameters utilized to obtain the results corresponding to both SRPCA
+and fastSRPCA for this paper across the three case study datasets.
+
+
+Table 4: List of hyperparameters pertaining to the SRPCA and fastSRPCA across all dataset. _δ_ only
+corresponds to fastSRPCA.
+
+|Datasets|% - list|rank|maxIter|ϵ|ϵtol|Optional Smoothing|Standardization (10)|δ|
+|---|---|---|---|---|---|---|---|---|
+|**Image**<br>**Multisensor**<br>**MovieLens**|[50_,_ 70_,_ 80]<br>[10_,_ 30_,_ 50_,_ 70]<br>[20_,_ 30_,_ 50_,_ 60]|[80_,_ 40_,_ 30]<br>1<br>4|50<br>50<br>50|10_−_5<br>10_−_5<br>10_−_5|10_−_4<br>10_−_4<br>10_−_3|True<br>False<br>False|True<br>True<br>True|0.08<br>0.4<br>0.7|
+
+
+C.2 FASTSRPCA RESULTS
+
+
+We extend the results shown in the paper with the performances produced by the fastSRPCA across
+the three datasets introduced. Figure 5 shows the reconstruced matrix by fastSRPCA across three
+distinct missing data levels. The recovered images look qualitatively as good as those produced by
+SRPCA.
+
+
+(a) Missing 50% (b) fastSRPCA (c) Missing 70% (d) fastSRPCA (e) Missing 80% (f) fastSRPCA
+
+
+Figure 5: Reconstructed images by fastSRPCA with diverse missing levels of pixels (the ranks are
+80, 40 and 30 for 50%, 70% and 80%, respectively).
+
+
+Table 5 shows the fastSRPCA computational time and matrix recovery performance in comparison
+to that of SRPCA for image dataset. While the performance is, as expected, secondary to that of
+SRPCA, the fastSRPCA still outperforms the other benchmarks shown in Table 1. Moreover, it
+converges faster than the SRPCA, almost taking hal the time SRPCA took for data missing levels of
+50% and 70%.
+
+
+Table 6 shows the fastSRPCA computational time and matrix recovery performance in comparison
+to that of SRPCA for the multisensor dataset. At low missing data levels, the fastSRPCA is capable
+of reaching the same or slightly worse matrix completion performance in less time. As the level of
+missing data increases, the gap between the two performances starts increasing.
+
+
+Table 7 shows the fastSRPCA computational time and matrix recovery performance in comparison
+to that of SRPCA for the movie ratings dataset. The SRPCA was shown to be much faster than
+the other benchmarks in Table 3; however, the fastSRPCA is capable of converging in at least two
+seconds less across all missing data levels. Moreover, the matrix recovery descripency, demonstrated
+by the missing data error NMAE, between the two methods is small across all missing data levels.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Table 5: FastSRPCA’s computational time and full matrix recovery error �� _**X**_ _−_ _**M**_ ( _K_ +1)��2 _F_ [for 50]
+replications at various missing data levels (50%, 70%, 80%) of a natural image (as seen in Figure
+1).
+
+
+**Time (secs)** **Full Reconstruction Error**                   - _×_ 10 _[−]_ [3][�]
+**Method**
+
+50% 70% 80% 50% 70% 80%
+
+
+**SRPCA** 0 _._ 77 _±_ 0 _._ 034 0 _._ 91 _±_ 0 _._ 057 0 _._ 90 _±_ 0 _._ 040 7 _._ 0 _±_ 0 _._ 27 21 _._ 7 _±_ 0 _._ 58 40 _._ 2 _±_ 1 _._ 29
+
+
+**fastSRPCA** 0 _._ 35 _±_ 0 _._ 009 0 _._ 46 _±_ 0 _._ 027 0 _._ 68 _±_ 0 _._ 034 13 _._ 4 _±_ 0 _._ 56 27 _._ 4 _±_ 1 _._ 05 41 _._ 8 _±_ 1 _._ 54
+
+
+Table 6: FastSRPCA’s computational time and full matrix recovery error �� _**X**_ _−_ _**M**_ ( _K_ +1)��2 _F_ [for 50]
+replications at different levels of missing data (10%, 30%, 50%, 70%) of turbine engines dataset.
+
+
+**Time (secs)** **Full Reconstruction Error**                    - _×_ 10 _[−]_ [3][�]
+**Method**
+
+10% 30% 50% 70% 10% 30% 50% 70%
+
+
+**SRPCA** 2 _._ 11 _±_ 0 _._ 047 2 _._ 23 _±_ 0 _._ 054 2 _._ 44 _±_ 0 _._ 042 2 _._ 88 _±_ 0 _._ 038 31 _±_ 0 _._ 3 96 _±_ 0 _._ 5 170 _±_ 0 _._ 8 286 _±_ 2 _._ 4
+
+
+**fastSRPCA** 2 _._ 08 _±_ 0 _._ 051 2 _._ 12 _±_ 0 _._ 053 2 _._ 11 _±_ 0 _._ 049 2 _._ 19 _±_ 0 _._ 037 31 _±_ 0 _._ 3 97 _±_ 0 _._ 7 181 _±_ 1 _._ 0 314 _±_ 5 _._ 4
+
+
+Table 7: The computational time and the normalized missing entries error NMAE for 50 replications
+at different levels of missing data (20%, 30%, 50%, 60%) of Movie100k dataset.
+
+
+**Time (secs)** **NMAE**                    - _×_ 10 _[−]_ [3][�]
+**Method**
+
+20% 30% 50% 60% 20% 30% 50% 60%
+
+
+**SRPCA** 9 _._ 64 _±_ 0 _._ 086 9 _._ 86 _±_ 0 _._ 156 9 _._ 89 _±_ 0 _._ 856 8 _._ 09 _±_ 1 _._ 287 180 _±_ 1 _._ 1 182 _±_ 0 _._ 8 189 _±_ 7 _._ 0 204 _±_ 14 _._ 1
+
+
+**fastSRPCA** 6 _._ 98 _±_ 0 _._ 049 7 _._ 04 _±_ 0 _._ 069 7 _._ 09 _±_ 0 _._ 145 7 _._ 06 _±_ 0 _._ 122 187 _±_ 1 _._ 2 188 _±_ 0 _._ 8 194 _±_ 5 _._ 9 206 _±_ 12 _._ 8
+
+
+19

@@ -1,0 +1,1330 @@
+# LEARNING AND STEERING GAME DYNAMICS
+
+## TOWARDS DESIRABLE OUTCOMES
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Game dynamics, which describe how agents’ strategies evolve over time based on
+past interactions, can exhibit a variety of undesirable behaviours including convergence to suboptimal equilibria, cycling, and chaos. While central planners can
+employ incentives to mitigate such behaviors and steer game dynamics towards
+desirable outcomes, the effectiveness of such interventions critically relies on accurately predicting agents’ responses to these incentives—a task made particularly challenging when the underlying dynamics are unknown and observations
+are limited. To address this challenge, this work introduces the Side Information
+Assisted Regression with Model Predictive Control (SIAR-MPC) framework. We
+extend the recently introduced SIAR method to incorporate the effect of control,
+enabling it to utilize side-information constraints inherent to game-theoretic applications to model agents’ responses to incentives from scarce data. MPC then
+leverages this model to implement adaptive incentive adjustments. Our experiments demonstrate the efficiency of SIAR-MPC in guiding systems towards socially optimal equilibria, stabilizing chaotic and cycling behaviors. Comparative
+analyses in data-scarce settings show SIAR-MPC’s superior performance compared to pairing MPC with state-of-the-art alternatives like Sparse Identification of
+Nonlinear Dynamics (SINDy) and Physics Informed Neural Networks (PINNs).
+
+
+1 INTRODUCTION
+
+
+Game theory provides a mathematical framework for studying strategic interactions among selfinterested decision-making agents, i.e., players. The Nash equilibrium (NE) is the central solution
+concept in game theory, describing a state where no player has an incentive to deviate (Nash, 1950).
+Over time, research has shifted from simply assuming that an NE exists and players will eventually play it, to understanding _how_ equilibrium is reached (Smale, 1976; Papadimitriou & Piliouras,
+2019). This shift has led to a focus on _learning_ in games, exploring how strategies evolve over time
+based on past outcomes, adopting a dynamical systems perspective (Fudenberg & Levine, 1998;
+Sandholm, 2010). It has been shown that game dynamics do not necessarily converge to NE but instead can display a variety of undesirable behaviors, including cycling, chaos, Poincar´e recurrence,
+or convergence to suboptimal equilibria (Hart & Mas-Colell, 2003; Sato et al., 2002; Mertikopoulos
+et al., 2018; Milionis et al., 2023). Motivated by these challenges, our primary objective in this work
+is to determine:
+
+
+_Can we steer game dynamics towards desirable outcomes?_
+
+
+To address this problem, we adopt the perspective of a central planner who seeks to influence player
+behaviour by designing incentives. Our goal is to achieve this with minimal effort, ensuring that
+the incentives are both cost-effective and efficient. More importantly, we operate in a setting with
+unknown game dynamics and limited observational data, reflecting real-world scenarios where information is often incomplete or uncertain. To tackle these challenges, we introduce a new computational framework called Side Information Assisted Regression with Model Predictive Control
+(SIAR-MPC), designed to steer game dynamics by integrating cutting-edge techniques for real-time
+system identification and control. In the system identification step, we predict agents’ reactions to
+incentives, which is especially challenging for settings where observational data is limited, difficult
+to obtain, or costly. To address this problem, we extend the recently introduced SIAR method
+
+
+1
+
+
+(Sakos et al., 2023), which was originally developed to identify agents’ learning dynamics from a
+short burst of a system trajectory. To compensate for the absence of data, SIAR searches for polynomial regressors that approximate the dynamics, satisfying side-information constraints native to
+game theoretical applications. To adapt it to our needs, we broaden the scope of SIAR to incorporate the influence of control parameters and enable it to model the controlled dynamics, resulting in
+SIAR with control (SIARc).
+
+
+Figure 1: Replicator dynamics trajectories in the matching pennies game with and without control.
+Starting from three initial conditions, _(left)_ without control the system cycles around the equilibrium;
+_(right)_ with control, trajectories are guided towards the specified equilibrium (indicated by _⋆_ .)
+
+
+Once agent responses to incentives are modeled with SIARc, we use MPC in the subsequent control
+step to develop a dynamic incentive scheme that steers the system towards desirable outcomes (see
+Fig. 1 for an example illustrating the impact of control). MPC is a control technique that leverages
+a mathematical model of the system to predict future behavior and calculate optimal control inputs
+that minimize a given objective function (Camacho & Bordons, 2007). A key advantage of MPC
+is its ability to handle input constraints, which is particularly relevant in our context since there are
+practical limits to the incentives that can be offered to agents. However, the effectiveness of MPC depends on having an accurate system model, highlighting the importance of the system identification
+step for its successful application.
+
+
+Our key contributions are:
+
+
+    - **Framework** **for** **steering** **game** **dynamics:** We introduce the SIAR-MPC framework for
+steering game dynamics towards desirable outcomes when the underlying agent behaviours
+are unknown and observational data are scarce.
+
+    - **Demonstration** **of** **performance** **across** **diverse** **game** **types:** We demonstrate the effectiveness of our framework across a diverse range of game types, from zero-sum games like
+Matching Pennies and Rock-Paper-Scissors to coordination games such as Stag Hunt. Our
+experimental results show that SIAR-MPC can successfully steer system dynamics towards
+socially optimal equilibria and stabilize chaotic and cycling learning dynamics.
+
+    - **Superior** **performance** **in** **data-scarce** **settings:** We benchmark SIAR-MPC against an
+unconstrained regression method, Sparse Identification of Nonlinear Dynamics with control (SINDYc), as well as Physics-Informed Neural Network (PINN) coupled with MPC.
+Our results demonstrate that SIAR-MPC consistently achieves superior convergence and
+reduced control costs in data-scarce settings.
+
+
+2 RELATED WORK
+
+
+**Control** **of** **Game** **Dynamics:** Recently, incentive-based control has been applied extensively in
+multi-player environments (see, e.g., Riehl et al. (2018) and references therein). In addition, optimal
+control solutions have been given for specific evolutionary games and dynamics (Paarporn et al.,
+2018; Gong et al., 2022; Martins et al., 2023). However, in the aforementioned works the player
+behavior is known, and to the best of our knowledge a setup where the game dynamics are not a
+
+
+2
+
+
+1
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+
+1
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1
+
+
+priori known to the controller has only been explored in the recent works of Zhang et al. (2024)
+and Huang et al. (2024). Zhang et al. (2024) study the problem of steering no-regret agents in
+normal- and extensive-form games, under both full and bandit feedback. However, in their setup the
+agents are adversarial and not bound to fixed dynamics, making their setup incompatible with system
+identification. On the other hand, Huang et al. (2024) study this problem in the richer environment
+of Markov games under the additional assumption that the players’ dynamics belong to some known
+_finite_ class. This assumption allows the controller to utilize simulators of the class of dynamics to
+optimize for controls that identify the exact update rule with high probability. In contrast, SIARMPC does not rely on this assumption and instead takes advantage of the approximation guarantees
+of polynomial regression to acquire an accurate representation of an unknown system.
+
+
+**System Identification:** In the last decades, the overall success of data-driven approaches in the scientific communities has inspired the development of Deep Learning (DL) architectures focused on
+the discovery of dynamical systems, e.g., Neural ODEs (Lu et al., 2018). More recently, increasing
+demand for more interpretable ”black-box” models led to the development of various specialized architectures including Physics Informed Neural Networks (PINNs) (Raissi et al., 2019), KolmogorovArnold Network ODEs (KAN-ODEs) (Koenig et al., 2024), Learning Across Dynamical Systems
+(LEADS) (Yin et al., 2021), and Deep Projection Networks (DPNets) (Kostic et al., 2024). Among
+the aforementioned data-driven technologies, we single out PINNs, and PINN-based architectures
+(Geneva & Zabaras, 2020; Ren et al., 2022; Lu et al., 2021), due to their ability to incorporate side
+information, e.g., physical laws, in their training process. This allows PINNs to also be used in
+data-scarce environments provided that the amount of side information available is adequate.
+
+
+Two recent non-DL system identification frameworks that account for data scarcity are Sparse Identification of Nonlinear Dynamics (SINDy) (Brunton et al., 2016) and the work of Ahmadi & Khadir
+(2023), which rely respectively on Sparse-Polynomial Regression and Sum-of-Squares Optimization. SINDy is a sparsity-promoting method initially developed for the discovery of ODEs which
+has been extended through different approaches (Rudy et al., 2017; Mangan et al., 2016; Quade
+et al., 2018; Chu & Hayashibe, 2020) and applied extensively. An important extension of SINDy is
+SINDy with control (SINDYc) which incorporates the effects of control inputs (Kaiser et al., 2018).
+However, SINDy-based frameworks only allow for the incorporation of linear constraints with the
+notable exception of SINDy-SI (Machado & Jones, 2024), which allows for the integration of polynomial nonnegativity constraints based on the novel framework of Ahmadi & Khadir (2023). Even
+so, SINDy-SI is not tailored for the discovery of game dynamics. On the other hand, the recently introduced Side Information Assisted Regression (SIAR) (Sakos et al., 2023) method extends the work
+of Ahmadi & Khadir (2023) to games, incorporating various well-studied game-theoretic properties
+as polynomial nonnegativity constraints on the dynamics. At a technical level, both SINDy-SI and
+SIAR solve a hierarchy of semidefinite problems. In this work, we follow this approach and develop
+the SIAR-MPC framework with a focus on the identification and _control_ of game dynamics through
+semidefinite programming in a data-scarce environment.
+
+
+3 PRELIMINARIES
+
+
+In this work, we model a multi-agent system as a time-evolving normal-form game of _n_ players.
+Each player _i_ is equipped with a finite set of strategies _Ai_ of size _mi_, and a time-varying reward
+function _ui_ : _A ×_ Ω _→_ R, where _A ≡_ [�] _[n]_ _i_ =1 _[A][i]_ [is the game’s strategy space, of the form]
+
+
+_ui_ ( _a, ω_ ( _t_ )) = _ui_ ( _a,_ 0) + _ωi,a_ ( _t_ ) _,_ for _t ∈_ R+, _a ∈A._ (1)
+
+
+The value _ωi,a_ ( _t_ ) denotes the control signal from the policy maker towards player _i_ regarding the
+strategy profile _a_ := ( _a_ 1 _, . . ., an_ ) at time _t_, where _ai_ _∈Ai_ . We refer to the ensemble _ωi_ ( _t_ ) :=
+
+- _ωi,a_ ( _t_ )� _a∈A_ [as the control signal of] _[ i]_ [ at time] _[ t]_ [, and to] _[ ω]_ [(] _[t]_ [)] [:=] - _ωi_ ( _t_ ) _, . . ., ωn_ ( _t_ )� as the system’s
+
+control signal at _t_ . Typically, we restrict the control signals _ωi_ ( _t_ ) in some semialgebraic sets Ω _i_ .
+We are going to refer to the product Ω _≡_ [�] _[n]_ _i_ =1 [Ω] _[i]_ [as the game’s control space.] [The value] _[ u][i]_ [(] _[a]_ [) :=]
+_ui_ ( _a,_ 0) describes the reward of player _i_ at strategy profile _a_ in the absence of any control by the
+policy maker. The utilities _ui_ ( _·_ ), _i_ = 1 _, . . ., n_ will be considered common knowledge throughout
+this work.
+
+
+In addition to the above, each player _i_ is allowed access to a set of mixed strategies _Xi_ _≡_ ∆( _Ai_ ),
+which is the ( _mi −_ 1)-simplex that corresponds to the set of distributions over the pure strategies _Ai_
+
+
+3
+
+
+of _i_ . The players’ reward function naturally extends to the space of mixed strategy profiles _X_ _≡_
+
+- _ni_ =1 _[X][i]_ [ with] _[ u][i]_ - _x, ω_ - = E[ _ui_ ( _a, ω_ )] for all _x ∈X_ and _ω_ _∈_ Ω, where the expectation is taken with
+respect to the distributions _x_ 1 _, . . ., xn_ over the player’s pure strategies.
+
+
+Finally, we assume that the evolution of the above game is dictated by some controlled learning
+dynamics of the form
+_x_ ˙ ( _t_ ) = _f_ ( _x_ ( _t_ ) _, ω_ ( _t_ )) for _t ∈_ R+ _,_
+(2)
+_x_ (0) _∈X_ _,_
+
+where the update policies _fi_ : _X_ _×_ Ω _i_ _→_ R _[m][i]_, _i_ = 1 _, . . ., n_ and the ensemble thereof, given by
+_f_ ( _x, ω_ ) := - _f_ 1( _x, ω_ 1) _, . . ., fn_ ( _x, ωn_ )�, are considered unknown, and are going to be discovered
+in the identification step of the framework described below. Notice that the above assumption also
+implies that, at each time _t_, the control signal _ωi_ ( _t_ ) of player _i_ is observed by that player, while the
+strategy profile _x_ ( _t_ ) is observed by all the players.
+
+
+Throughout this work, given some strategy profile _x_, we adopt the common game-theoretic shorthand ( _xi, x−i_ ) to distinguish between the strategy of player _i_ and the strategies of the other players.
+Furthermore, if _xi_ corresponds to a pure strategy _ai_ of _i_, we write ( _ai, x−i_ ) to point to that fact.
+
+
+4 THE SIAR-MPC FRAMEWORK
+
+
+In this section, we describe the SIAR-MPC framework for the real-time identification and control of
+game dynamics. As outlined in the introduction, SIAR-MPC involves two steps. First, the system
+identification step aims to approximate the controlled dynamics in (2) using only a limited number of
+samples. Second, once the agents’ reactions to payoffs are modeled, the control step employs MPC
+to steer the system towards a desirable outcome by optimizing specific objectives. The following
+subsections details these two steps.
+
+
+4.1 THE SYSTEM IDENTIFICATION STEP
+
+
+To model the controlled dynamics in (2) we extend the SIAR framework introduced in Sakos et al.
+(2023), which was in turn motivated by recent results in data-scarce system identification (Ahmadi
+& Khadir, 2023). SIAR relies on polynomial regression to approximate agents’ learning dynamics
+of the form _x_ ˙ ( _t_ ) = _f_ - _x_ ( _t_ )� based on a small number of potentially noisy observations _x_ ( _tk_ ) _,_ _x_ ˙ ( _tk_ )
+(typically, _K_ = 5 samples) taken along a short burst of a single system trajectory. To ensure
+the accuracy of the derived system model, SIAR searches for polynomial regressors that satisfy
+side-information constraints native to game-theoretic applications, which serve as a regularization
+mechanism.
+
+
+For our control-oriented scenario, we extend the SIAR method to account for the influence of the
+control signal _ω_ ( _t_ ). We refer to this extended method as SIAR with control (SIARc). The aim
+of SIARc is to model the controlled dynamics in (2) for each agent _i_ through a polynomial vector
+field _pi_ ( _x, ω_ ). To do so, during the data collection phase, we assemble a dataset _x_ ( _tk_ ) _, ω_ ( _tk_ ) _,_ _x_ ˙ ( _tk_ ),
+where _x_ ( _tk_ ) represents a snapshot of the system state, _ω_ ( _tk_ ) is a randomly (typically, normally distributed) generated input reflecting various possible incentives given to players (cf. equation 1), and
+_x_ ˙ ( _tk_ ) is the velocity at time _tk_, which is obtained either through direct measurement (if possible)
+or estimated from the state variables. The process of training the SIARc model essentially involves
+solving an optimization problem to find a polynomial vector field that minimizes the mean square error relative to this dataset. However, straightforward regression often yields suboptimal models due
+to the limited available samples. To overcome this challenge, we search over regressors that satisfy
+additional side-information constraints, encapsulating essential game-theoretic application features
+and refining the search for applicable models. Formally, a generic SIARc instance is given by
+
+
+s.t. _pi_ are polynomial vector fields in _x_ and _ω_
+_pi_ satisfy side-information constraints _._
+
+
+In this work, we utilize two specific types of side-information constraints (though a broader array
+is available; see, e.g., Sakos et al. (2023)). The first side-information constraint we use ensures that
+
+
+4
+
+
+_n_
+��� _pi_ - _x_ ( _tk_ ) _, ω_ ( _tk_ )� _−_ _x_ ˙ _i_ ( _tk_ )��2
+
+
+_i_ =1
+
+
+(3)
+
+
+min
+_p_ 1 _,...,pn_
+
+
+_K_
+
+
+_k_ =1
+
+
+where _xn|t_, _n_ = 1 _, . . ., N_ correspond to values of the forecasted trajectory, and _x_ _[∗]_ is a desirable target system state. The first term of _J_ ( _ωt_ ) penalizes deviations of the predicted states _xn|t_ from the target value _x_ _[∗]_, while the latter term accounts for the control effort at weight _α_ . In addition to the above,
+large control signal variations can also be penalized by adding the term [�] _n_ _[N]_ =1 _[∥][ω][n][|][t][ −]_ _[ω][n][−]_ [1] _[|][t][∥]_ [2] [at]
+some desired weight. The optimal control sequence is obtained by solving the constrained optimiza
+
+5
+
+
+the state space _X_ of the system, i.e., the product of the simplices _Xi_ _≡_ ∆( _Ai_ ), _i_ = 1 _, . . ., n_, is
+robust forward invariant with respect to the controlled dynamics in (2). This implies that, for any
+initialization _x_ (0) _∈X_, we have that _x_ ( _t_ ) _∈X_ for all subsequent times _t_ _>_ 0, and for any control
+signal _ω_ ( _t_ ) _∈_ Ω. To search over regressors that satisfy robust forward invariance (RFI), we rely
+on a specific characterization of the property that dictates a set remains robustly forward invariant
+under system (2) only if _f_ ( _x, ω_ ) lies in the tangent cone of _X_ at _x_ for every control _ω_ _∈_ Ω. Using
+the characterization of the tangent cone at each simplex _Xi_ (Nagumo, 1942), enforcing RFI is then
+reduced to verifying that, for all _x ∈X_ and _ω_ _∈_ Ω:
+
+    
+
+
+_piai_ ( _x, ω_ ) = 0 _,_
+_ai∈Ai_
+
+
+(RFI)
+_piai_ ( _x, ω_ ) _≥_ 0 _,_ whenever _xiai_ = 0 _._
+
+
+The second type of side-information constraint we use is based on a fundamental assumption about
+agent behavior that arises from their strategic nature. The agents as strategic entities are expected
+to behave rationally, preferring actions that enhance their immediate benefits—a property known as
+positive correlation (PC) (Sandholm, 2010). Specifically, agents are inclined to choose actions that
+are likely to increase their expected utility, assuming other agents’ behaviors remain unchanged, i.e.,
+for all _x ∈X_ and _ω_ _∈_ Ω
+
+
+_⟨∇xiui_ ( _x, ω_ ) _,_ _pi_ ( _x, ω_ ) _⟩_ _>_ 0 _,_ whenever _p_ ( _x, ω_ ) _̸_ = 0 _._ (PC)
+
+
+To enforce these side-information constraints computationally in our polynomial regression problem, we utilize sum-of-squares (SOS) optimization (Parrilo, 2000; Prestel & Delzell, 2001; Lasserre,
+2001; Parrilo, 2003; Lasserre, 2006; Laurent, 2008). Both RFI and PC are represented as polynomial inequality or nonnegative constraints over the semialgebraic sets _X_ and Ω (in PC’s case, we
+need to relax the inequality (Sakos et al., 2023)). Using the SOS approach, instead of searching over polynomials _p_ ( _x_ ) that are nonnegative over a semialgebraic set _S_ _≡_ - _x_ �� _gj_ ( _x_ ) _≥_
+0 _, hℓ_ ( _x_ ) = 0 _,_ _j_ _∈_ [ _m_ ] _,_ _ℓ_ _∈_ [ _r_ ]�, we search over polynomials _p_ ( _x_ ) that can be expressed as
+_p_ ( _x_ ) = _σ_ 0( _x_ ) + [�] _j_ _[m]_ =1 _[σ][j]_ [(] _[x]_ [)] _[g][j]_ [(] _[x]_ [) +][ �] _ℓ_ _[r]_ =1 _[q][ℓ]_ [(] _[x]_ [)] _[h][ℓ]_ [(] _[x]_ [)][ where] _[ q][ℓ]_ [are polynomials and] _[ σ][j]_ [are sum-]
+of-squares polynomials. Such polynomials _p_ are guaranteed to be nonnegative over _S_, a condition
+that is also necessary under mild assumptions on the set _S_ (Laurent, 2008, Theorem 3.20). Furthermore, for any given degree _d_, we can look for SOS certificates of degree _d_ through semidefinite
+programming, creating a hierarchy of semidefinite problems.
+
+
+4.2 THE CONTROL STEP
+
+
+After estimating the controlled dynamics which describes how players’ strategies ( _x_ ) respond to the
+incentives ( _ω_ ), our next goal is to steer the system towards desirable outcomes. To achieve this, we
+employ MPC, which formulates an optimization problem to identify the optimal sequence of control
+actions over a defined horizon, subject to constraints on control inputs. In our context, these control
+constraints represent practical limits on the incentives that can be offered to agents. The essence of
+MPC lies in its ability to leverage a mathematical model of the system to predict future behavior
+over a specified prediction horizon _T_ . Each prediction is based on the current state measurement
+_x_ ( _t_ ) and a sequence of future control signals _ωt_ := _{ω_ 0 _|t, . . ., ωN_ _−_ 1 _|t}_ _⊂_ Ω, which is calculated
+by solving a constrained optimization problem. Here, _N_ is the number of control steps within the
+control horizon _T_ := _N_ _·_ ∆ _t_ that determines the time period over which the control sequence is
+optimized. Typically, the objective function of the MPC is given by
+
+
+_N_ _−_ 1
+
+- _∥ωn|t∥_ [2] _,_ (4)
+
+
+_n_ =0
+
+
+_J_ ( _ωt_ ) =
+
+
+_N_
+
+- _∥xn|t −_ _x_ _[∗]_ _∥_ [2] + _α_
+
+_n_ =0
+
+
+tion problem
+min _J_ ( _ωt_ )
+_ωt_
+
+s.t. _ωn|t_ _∈_ Ω _,_ 0 _≤_ _n ≤_ _N_
+
+_xn_ +1 _|t_ = _xn|t_ + ∆ _t · p_ ( _xn|t, ωn|t_ ) _,_ 1 _≤_ _n ≤_ _N_
+
+_x_ 0 _|t_ = _x_ ( _t_ ) _._
+
+
+For expositional purposes, we restrict the game’s evolution to a subset of symmetric two-player twoaction games given by the control signals _ω_ 1 _,a_ 1 _,a_ 2( _t_ ) = _ω_ 2 _,a_ 2 _,a_ 1( _t_ ) _∈_ [0 _,_ 2] for all _t_ . Furthermore,
+
+
+6
+
+
+(5)
+
+
+The first control signal _ω_ 0 _|t_ is then applied to the system and the optimization is repeated at time
+_t_ + ∆ _t_ once the new state measurement _x_ ( _t_ + ∆ _t_ ) is obtained.
+
+
+It is important to emphasize two key features of MPC: First, by optimizing control actions over a
+finite horizon, it can predict and maintain the system within predefined operational limits to avoid
+critical conditions. Second, by applying only the first control action at each time step, then shifting
+the horizon, and re-solving the optimization with the most up-to-date measurements, MPC can adapt
+to unexpected disturbances and generate a new sequence of control inputs accordingly.
+
+
+5 EXPERIMENTS
+
+
+In this section, we demonstrate the applicability and the performance improvements of the
+SIAR-MPC framework compared to combining MPC with solutions obtained from SINDYc and
+PINN, across various normal-form games of independent interest. The implementation of SINDYc
+follows the methodology described in Kaiser et al. (2018). For solving the sparse regression problem, we employ a sequential least squares procedure, as detailed in the supplementary information
+of Brunton et al. (2016). For PINN, the method is straightforward: side-information constraints are
+integrated into the neural network during its training as terms in the loss function that penalize violations of the desired constraints. In our examples, we enforce RFI and PC as such constraints. Given
+the limited number of training samples—in most cases, 5 samples—we are restricted to a simple
+neural network architecture consisting of two hidden layers of size 5. This limitation in the neural
+network’s expressivity is counterbalanced by the simplicity of the ground-truth update policies _f_
+(which, in most cases, are polynomial). As activation functions we use the tanh function. Finally,
+the side-information constraints are enforced using 2 _,_ 500 collocation points. Further details on the
+construction of the loss function and the generation of collocation points can be found in Appendix
+B.
+
+
+We begin our demonstration with a well-known coordination game: the stag hunt. As coordination games correspond to non-cooperative setups where convergence to a socially optimal equilibrium is desirable, the stag hunt game is a natural candidate for comparing the performance of
+different system identification methods, combined with MPC, in guiding agents towards the game’s
+optimal outcome. Next, moving away from the ideal landscape of coordination games, and into
+the more challenging regime of two-player zero-sum games, we demonstrate the performance of
+the SIAR-MPC framework in achieving two primary objectives: steering possibly non-polynomial
+learning dynamics with non-vanishing regret towards a Nash equilibrium of the game; and steering
+a provably chaotic system. In addition to the detailed analyses presented in this section, we conduct
+simulations across a large and diverse set of settings to gain a statistically significant understanding
+of each methods’ performance. The results of these simulations can be found in Appendix A.
+
+
+5.1 STAG HUNT GAME
+
+
+The stag hunt game is a two-player two-action coordination game that models a strategic interaction
+in which both players benefit by coordinating their actions towards a specific superior outcome (the
+hunt of a stag). However, if that outcome is not possible, each player prefers to take advantage of
+the lack of coordination and come out on top of their opponent by choosing the alternative (hunt a
+rabbit by themselves) rather than coordinating to an inferior outcome (hunt a rabbit together). In
+this example, in the absence of control the players default to a stag hunt game given by the players’
+reward functions _u_ ( _·_ ) := _u_ ( _·,_ 0)
+
+
+�4 1
+_u_ 1( _a_ ) = _u_ 2( _a_ ) = **A** _a_ 1 _,a_ 2 _,_ where **A** = 3 3
+
+
+_._ (6)
+
+
+for tractability purposes, we fix _ω_ 1 _,_ 2 _,_ 2( _t_ ) := 0. We assume that the agents’ behavior is dictated by
+the replicator dynamics given, for player _i_ and action _ai_ of _i_, by the polynomial update policies
+
+
+_fi,ai_ ( _x, ω_ ) = _xi,ai_ ( _ui_ ( _ai, x−i, ω_ ) _−_ _ui_ ( _x, ω_ )) (7)
+
+
+for all _x ∈X_ and _ω_ _∈_ Ω.
+
+
+We are going to search for _f_ using the SIARc framework. Specifically, for each _i_ and _ai_, we are
+going to search for polynomial _pi,ai_ : _X_ _×_ Ω _→_ R such that _pi,ai_ - _x_ ( _t_ ) _, ω_ ( _t_ )� _≈_ _fi,ai_ - _x_ ( _t_ ) _, ω_ ( _t_ )�
+
+for all _t_ _∈_ R+. As side-information constraints, we are going to impose the RFI and PC properties
+as given in the previous sections. Then, by substituting (6) to (PC) we have the following SIARc
+problem
+
+
+Figure 2: Performance comparison of the SINDY-MPC _(left)_, PINN-MPC _(center)_, and
+SIAR-MPC _(right)_ solutions in steering the replicator dynamics for the stag hunt game. A dataset of
+4 samples is used to train the system identification methods. Only the SIAR-MPC solution succeeds
+in steering the system to the superior Nash equilibrium in _x_ _[∗]_ 1 _,_ 1 [=] _[ x]_ 2 _[∗]_ _,_ 1 [= 1][.]
+
+
+7
+
+
+min
+_p_
+
+
+_K_
+��� _p_ - _x_ ( _tk_ ) _, ω_ ( _tk_ )� _−_ _x_ ˙ ( _tk_ )��2
+
+
+_k_ =1
+
+
+s.t. _pi,_ 1( _x, ω_ ) + _pi,_ 2( _x, ω_ ) = 0 _,_ _∀i_
+
+_pi,_ 1�(0 _,_ 1) _, x−i, ω_                   - _≥_ 0 _,_ _∀i_
+
+_pi,_ 2�(1 _,_ 0) _, x−i, ω_                   - _≥_ 0 _,_ _∀i_
+
+_vi,_ 1( _x, ω_ ) _pi,_ 1( _x, ω_ ) + _vi,_ 2( _x, ω_ ) _pi,_ 2 _≥_ 0 _,_ _∀i,_
+
+where _x ∈X_, _ω_ _∈_ Ω, and _vi,ai_ : _X_ _×_ Ω _→_ R are given by
+
+
+(8)
+
+
+_v_ 1 _,_ 1( _x, ω_ ) = (4 + _ω_ 1 _,_ 1) _x_ 2 _,_ 1 + (1 + _ω_ 1 _,_ 2) _x_ 2 _,_ 2 (9a)
+_v_ 1 _,_ 2( _x, ω_ ) = (3 + _ω_ 2 _,_ 1) _x_ 2 _,_ 1 + 3 _x_ 2 _,_ 2 (9b)
+_v_ 2 _,_ 1( _x, ω_ ) = (4 + _ω_ 1 _,_ 1) _x_ 1 _,_ 1 + (1 + _ω_ 1 _,_ 2) _x_ 1 _,_ 2 (9c)
+_v_ 2 _,_ 2( _x, ω_ ) = (3 + _ω_ 2 _,_ 1) _x_ 1 _,_ 1 + 3 _x_ 1 _,_ 2 _._ (9d)
+
+
+Since the update policies _fi,ai_ in (7) correspond to the replicator dynamics, the solution to the
+above optimization problem can be recovered by a 7-degree SOS relaxation (Sakos et al., 2023).
+Fig. 2 _(right)_ shows the performance of the SIAR-MPC using this solution as a model for the MPC
+method. In the top panel of the figure, we have the trajectory _x_ ( _t_ ) initialized at _x_ 0 = (0 _._ 4 _,_ 0 _._ 3)
+corresponding to the control signal _ω_ ( _t_ ) depicted in the bottom panel. The plot is divided into three
+sections, corresponding to the system identification phase, an evaluation period, and a control phase.
+In the first section, we set the control signals to normally distributed noise with mean zero (bounded
+in Ω) and a sample of _K_ = 4 datapoints from the resulting trajectory. In doing so, we achieve two
+things. On the one hand, the noise supplies variety between the data samples, which improves the
+efficiency of the system identification methods. On the other hand, we make sure to maintain a low
+aggregated control cost during the system identification phase. At the end of this phase, we solve
+the optimization problem in (8) and acquire a model of the system’s update policies. In the second
+section of the plot, we compare the ground-truth dynamics with the model’s predicted trajectory (in
+
+
+1
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0
+0 2 4 6 8 10
+
+
+2
+
+
+1.5
+
+
+1
+
+
+0.5
+
+
+0
+0 2 4 6 8 10
+
+
+1
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0
+0 2 4 6 8 10
+
+
+2
+
+
+1.5
+
+
+1
+
+
+0.5
+
+
+0
+0 2 4 6 8 10
+
+
+1
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0
+0 2 4 6 8 10
+
+
+2
+
+
+1.5
+
+
+1
+
+
+0.5
+
+
+0
+0 2 4 6 8 10
+
+
+dashed red lines); here, the control signal is chosen randomly. Finally, in the steering phase, we
+steer the ground truth using the output of the MPC as the control signal: the objective is to steer the
+system to the superior Nash equilibrium of the stag hunt game at _x_ _[∗]_ 1 _,_ 1 [=] _[ x]_ 2 _[∗]_ _,_ 1 [= 1][, which is achieved]
+by the SIAR-MPC framework at _t ≈_ 8. In comparison, the SINDY-MPC and PINN-MPC solutions
+(Fig. 2 _(left)_ and Fig. 2 _(center)_, respectively) fail to complete the steering objective.
+
+
+5.2 ZERO-SUM GAMES & CHAOS
+
+
+The stag hunt game arguably provides an ideal landscape for the steering of game dynamics to a
+Nash equilibrium. This is because of the existence of a socially optimal Nash equilibrium (the hunt
+of a stag) that has a positive-measure basin of attraction. The class of zero-sum games, on the other
+hand, does not possess such merit, since in a zero-sum game, by definition, the player rewards sum
+up to zero independently of the strategies chosen by the players. To make matters worse, well-known
+game dynamics, e.g., the replicator dynamics, are known to exhibit undesirable behavior in zero-sum
+games such as Poincar´e recurrence (Akin & Losert, 1984), or even chaos (Sato et al., 2002). Even
+if we amuse ourselves by instead pondering the more relaxed notion of time-average convergence,
+positive results in that area revolve around the notion of no-regret dynamics (Sorin, 2024), and the
+steering of learning dynamics of non-vanishing regret is, to the best of our knowledge, unexplored.
+In that regard, in the next couple of examples we demonstrate the performance of SIAR-MPC in
+steering the log-barrier dynamics—well-known learning dynamics of non-vanishing regret—in the
+matching pennies game and in the steering of chaotic replicator dynamics in an _ϵ_ -perturbed rockpaper-scissors ( _ϵ_ -RPS) game. In both cases, we demonstrate the SIAR-MPC framework is able to
+steer the system towards the desired Nash equilibrium of the game.
+
+
+**Matching Pennies Game** The matching pennies game is a two-player, two-action zero-sum game
+where one player benefits by the existence of coordination among the two, while the other player
+benefits by the lack thereof. Formally, a matching pennies game is encoded in the uncontrolled
+players’ reward functions in (1) by
+
+
+                  - 1 _−_ 1�
+_u_ 1( _a_ ) = _−u_ 2( _a_ ) = **A** _a_ 1 _,a_ 2 _,_ where **A** = _−_ 1 1 _._ (10)
+
+
+For similar reasons as in the previous example, we are going to restrict the game’s evolution to a
+subset of two-player two-action zero-sum games given by _ω_ 1 _,a_ ( _t_ ) = _ω_ 2 _,a_ ( _t_ ) _∈_ [0 _,_ 1] for all _t_, and
+set _ω_ 1 _,_ 2 _,_ 2( _t_ ) := 0. The log-barrier dynamics of the above time-varying game are, for player _i_ and
+action _ai_ of _i_, given by the rational update policies
+
+
+for all _t_ _∈_ R+ and _x_ _∈X_, where the shorthand _ui,xj_ := _ui_ ( _xj, x−i, ω_ ) is used for compactness.
+Observe that, as is the case for the updated policies of the replicator dynamics in (7), _fi_ depends on
+_ω_ ( _t_ ) through _ui_ . In Fig. 3, we show that SIAR-MPC solution is able to steer a trajectory _x_ ( _t_ ) of the
+
+
+Figure 3: Performance comparison of the SINDY-MPC _(left)_, PINN-MPC _(center)_, and
+SIAR-MPC _(right)_ solutions in steering the log-barrier dynamics for the matching pennies game.
+
+
+8
+
+
+_fi,ai_ - _x, ω_ - = _x_ [2] _i,ai_
+
+
+- _i,_ 1 _[u][i,]_ [1] [+] _[ x]_ [2] _i,_ 2 _[u][i,]_ [2]
+_ui,ai_ _−_ _[x]_ [2] _x_ [2] _i,_ 1 [+] _[ x]_ _i,_ [2] 2
+
+
+(11)
+
+
+above system initialized at _x_ (0) = (0 _._ 2 _,_ 0 _._ 6) to the unique mixed Nash equilibrium _x_ _[∗]_ 1 _,_ 1 [=] _[x][∗]_ 2 _,_ 1 [=]
+1 _/_ 2 of the matching pennies game with only _K_ = 6 training samples.
+
+
+Figure 4: Performance comparison of the PINN-MPC, and SIAR-MPC solutions in steering the
+replicator dynamics for a 0 _._ 25-RPS game.
+
+
+6 CONCLUSIONS
+
+
+In this work, we introduced SIAR-MPC, a new computational framework that extends SIAR for system identification of controlled game dynamics and integrates it with MPC for dynamic incentive
+adjustments, aiming to steer game dynamics towards desirable outcomes with limited data availability. Our results demonstrated that SIAR-MPC effectively steers systems towards optimal equilibria,
+stabilizes chaotic and cycling dynamics. Comparative analysis showed that SIAR-MPC outperforms
+alternative methods in data-scarce settings.
+
+
+Future research can explore several potential directions. First, we intend to address a broader question: Given the inherent limitations of game dynamics, where convergence to NE is not always
+guaranteed, what are the necessary and sufficient conditions for achieving global stability in controlled game dynamics? Second, we aim to extend our framework to encompass games beyond the
+normal form, thereby expanding its applicability to a wider range of strategic interactions. Finally,
+we plan to investigate the scalability of our approach by exploring the uncoupling assumption, which
+could potentially enable its application to larger systems involving numerous agents.
+
+
+9
+
+
+_ϵ_ **-RPS Game** In our last example, we use the SIAR-MPC method to steer the replicator dynamics in an _ϵ_ -perturbed rock-paper-scissors game ( _ϵ_ -RPS), a two-player, three-action zero-sum game
+where the replicator dynamics exhibit chaotic behavior (Sato et al., 2002; Hu et al., 2019). In a
+nutshell, this means that any two initialization of the system—even the ones that are infinitesimally
+close to each other—may lead to completely different trajectories. In other words, the accurate estimation of the agents’ update policies is futile due to the finite precision of any numerical method. A
+_ϵ_ -RPS game may be encoded in the players’ reward functions by replacing the payoff matrix in (10)
+with
+
+
+**A** =
+
+
+- _ϵ_ _−_ 1 1
+1 _ϵ_ _−_ 1
+
+_−_ 1 1 _ϵ_
+
+
+_._ (12)
+
+
+Due to the larger dimensionality of this game, compared to ones in the previous examples, we are
+going to consider time-evolving games in the subset of two-player three-action zero-sum games
+given by _ω_ 1 _,a_ ( _t_ ) = _ω_ 2 _,a_ ( _t_ ) _∈_ [ _−_ 1 _,_ 1] for all _t_, and only four non-zero signals, namely, _ω_ 1 _,_ 1 _,_ 2( _t_ ),
+_ω_ 1 _,_ 1 _,_ 3( _t_ ), _ω_ 1 _,_ 2 _,_ 1( _t_ ), and _ω_ 1 _,_ 3 _,_ 1( _t_ ). In Fig. 4, we show the successful steering to the chaotic replicator
+dynamics for the 0 _._ 25-RPS game, given as in equation 7, towards the unique mixed Nash equilibrium
+of the game _x_ _[∗]_ 1 [=] _[ x]_ 2 _[∗]_ [= (1] _[/]_ [3] _[,]_ [ 1] _[/]_ [3] _[,]_ [ 1] _[/]_ [3)][ based on a dataset of] _[ K]_ [= 11][ samples.]
+
+
+1
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0
+0 2 4 6 8 10 12 14
+
+
+1
+
+
+0.5
+
+
+0
+
+
+-0.5
+
+
+-1
+0 2 4 6 8 10 12 14
+
+
+1
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0
+0 2 4 6 8 10 12 14
+
+
+1
+
+
+0.5
+
+
+0
+
+
+-0.5
+
+
+-1
+0 2 4 6 8 10 12 14
+
+
+REFERENCES
+
+
+Amir Ali Ahmadi and Bachir El Khadir. Learning dynamical systems with side information. _SIAM_
+_Review_, 65(1):183–223, 2023.
+
+
+Ethan Jon Akin and Viktor Losert. Evolutionary dynamics of zero-sum games. _Journal of Mathe-_
+_matical Biology_, 20(3):231–258, October 1984.
+
+
+Steven L. Brunton, Joshua L. Proctor, and J. Nathan Kutz. Discovering governing equations
+from data by sparse identification of nonlinear dynamical systems. _Proceedings of the National_
+_Academy of Sciences_, 113(15):3932–3937, 2016.
+
+
+E. F. Camacho and C. Bordons. _Model_ _Predictive_ _Control_ . Advanced Textbooks in Control and
+Signal Processing. Springer London, 2 edition, 2007.
+
+
+Hoang K. Chu and Mitsuhiro Hayashibe. Discovering interpretable dynamics by sparsity promotion
+on energy and the lagrangian. _IEEE Robotics and Automation Letters_, 5(2):2154–2160, 2020.
+
+
+D. Fudenberg and D. K. Levine. _The_ _theory_ _of_ _learning_ _in_ _games_ . MIT Press, Cambridge, MA.,
+1998.
+
+
+Nicholas Geneva and Nicholas Zabaras. Modeling the dynamics of pde systems with physicsconstrained deep auto-regressive networks. _Journal of Computational Physics_, 403:109056, 2020.
+
+
+Lulu Gong, Weijia Yao, Jian Gao, and Ming Cao. Limit cycles analysis and control of evolutionary
+game dynamics with environmental feedback. _Automatica_, 145:110536, 2022.
+
+
+Sergiu Hart and Andreu Mas-Colell. Uncoupled dynamics do not lead to Nash equilibrium. _The_
+_American Economic Review_, 93(5):1830–1836, December 2003.
+
+
+Wenjun Hu, Gang Zhang, Haiyan Tian, and Zhiwei Wang. Chaotic dynamics in asymmetric rockpaper-scissors games. _IEEE Access_, 7:175614–175621, 2019.
+
+
+Jiawei Huang, Vinzenz Thoma, Zebang Shen, Heinrich H Nax, and Niao He. Learning to steer
+markovian agents under model uncertainty. _arXiv preprint arXiv:2407.10207_, 2024.
+
+
+E. Kaiser, J. N. Kutz, and S. L. Brunton. Sparse identification of nonlinear dynamics for model predictive control in the low-data limit. _Proceedings of the Royal Society A: Mathematical, Physical_
+_and Engineering Sciences_, 474(2219):20180335, 2018.
+
+
+Benjamin C. Koenig, Suyong Kim, and Sili Deng. Kan-odes: Kolmogorov–arnold network ordinary
+differential equations for learning dynamical systems and hidden physics. _Computer Methods in_
+_Applied Mechanics and Engineering_, 432:117397, 2024.
+
+
+Vladimir R Kostic, Pietro Novelli, Riccardo Grazzi, Karim Lounici, and massimiliano pontil. Learning invariant representations of time-homogeneous stochastic dynamical systems. In _The Twelfth_
+_International Conference on Learning Representations_, 2024.
+
+
+Jean Bernard Lasserre. Global optimization with polynomials and the problem of moments. _SIAM_
+_Journal on Optimization_, 11(3):796–817, January 2001.
+
+
+Jean Bernard Lasserre. A sum of squares approximation of nonnegative polynomials. _SIAM Journal_
+_on Optimization_, 16(3):751–765, January 2006.
+
+
+Monique Laurent. Sums of squares, moment matrices and optimization over polynomials. In Mihai
+Putinar, Seth Sullivant, Douglas Norman Arnold, and Arnd Scheel (eds.), _Emerging applications_
+_of algebraic geometry_, number 149 in The IMA volumes in mathematics and its applications, pp.
+157–270. Springer, New York City, New York, United States, 1 edition, September 2008.
+
+
+Lu Lu, Rapha¨el Pestourie, Wenjie Yao, Zhicheng Wang, Francesc Verdugo, and Steven G. Johnson.
+Physics-informed neural networks with hard constraints for inverse design. _SIAM_ _Journal_ _on_
+_Scientific Computing_, 43(6):B1105–B1132, 2021.
+
+
+10
+
+
+Yiping Lu, Aoxiao Zhong, Quanzheng Li, and Bin Dong. Beyond finite layer neural networks:
+Bridging deep architectures and numerical differential equations. In Jennifer Dy and Andreas
+Krause (eds.), _Proceedings of the 35th International Conference on Machine Learning_, volume 80
+of _Proceedings of Machine Learning Research_, pp. 3276–3285. PMLR, 10–15 Jul 2018.
+
+
+Gabriel F. Machado and Morgan Jones. Sparse identification of nonlinear dynamics with side information (sindy-si). In _2024 American Control Conference (ACC)_, pp. 2879–2884, 2024.
+
+
+Niall M. Mangan, Steven L. Brunton, Joshua L. Proctor, and J. Nathan Kutz. Inferring biological networks by sparse identification of nonlinear dynamics. _IEEE_ _Transactions_ _on_ _Molecular,_
+_Biological, and Multi-Scale Communications_, 2(1):52–63, 2016.
+
+
+Nuno C. Martins, Jair Cert´orio, and Richard J. La. Epidemic population games and evolutionary
+dynamics. _Automatica_, 153:111016, 2023.
+
+
+Panayotis Mertikopoulos, Christos Papadimitriou, and Georgios Piliouras. Cycles in adversarial
+regularized learning. In _Proceedings_ _of_ _the_ _2018_ _Annual_ _ACM-SIAM_ _Symposium_ _on_ _Discrete_
+_Algorithms (SODA)_, pp. 2703–2717, 2018.
+
+
+Jason Milionis, Christos Papadimitriou, Georgios Piliouras, and Kelly Spendlove. An impossibility theorem in game dynamics. _Proceedings_ _of_ _the_ _National_ _Academy_ _of_ _Sciences_, 120(41):
+e2305349120, 2023.
+
+
+Mitio Nagumo. Uber die Lage der Integralkurven gew¨ohnlicher Differentialgleichungen. [¨] _Proceed-_
+_ings of the Physico-Mathematical Society of Japan_, 24:551–559, 1942.
+
+
+John F. Nash. Equilibrium points in in n-person games. _Proceedings_ _of_ _the_ _National_ _Academy_ _of_
+_Sciences_, 36(1):48–49, 1950.
+
+
+Keith Paarporn, Ceyhun Eksin, Joshua S. Weitz, and Yorai Wardi. Optimal control policies for
+evolutionary dynamics with environmental feedback. In _2018 IEEE Conference on Decision and_
+_Control (CDC)_, pp. 1905–1910, 2018.
+
+
+Christos Papadimitriou and Georgios Piliouras. Game dynamics as the meaning of a game. _SIGecom_
+_Exch._, 16(2):53–63, may 2019.
+
+
+Pablo A. Parrilo. _Structured semidefinite programs and semialgebraic geometry methods in robust-_
+_ness_ _and_ _optimization_ . Ph.D. thesis, California Institute of Technology, California, Pasadena,
+United States, May 2000.
+
+
+Pablo A. Parrilo. Semidefinite programming relaxations for semialgebraic problems. _Mathematical_
+_Programming_, 96(2):293–320, May 2003.
+
+
+Alexander Prestel and Charles Neal Delzell. _Positive_ _polynomials:_ _from_ _Hilbert’s_ _17th_ _problem_
+_to_ _real_ _algebra_ . Springer monographs in mathematics. Springer, Berlin, Germany, 1 edition,
+September 2001.
+
+
+Markus Quade, Markus Abel, J. Nathan Kutz, and Steven L. Brunton. Sparse identification of
+nonlinear dynamics for rapid model recovery. _Chaos:_ _An Interdisciplinary Journal of Nonlinear_
+_Science_, 28(6):063116, 06 2018.
+
+
+M. Raissi, P. Perdikaris, and G.E. Karniadakis. Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential
+equations. _Journal of Computational Physics_, 378:686–707, 2019.
+
+
+Pu Ren, Chengping Rao, Yang Liu, Jian-Xun Wang, and Hao Sun. Phycrnet: Physics-informed
+convolutional-recurrent network for solving spatiotemporal pdes. _Computer Methods in Applied_
+_Mechanics and Engineering_, 389:114399, 2022.
+
+
+James Riehl, Pouria Ramazi, and Ming Cao. A survey on the analysis and control of evolutionary
+matrix games. _Annual Reviews in Control_, 45:87–106, 2018.
+
+
+Samuel H. Rudy, Steven L. Brunton, Joshua L. Proctor, and J. Nathan Kutz. Data-driven discovery
+of partial differential equations. _Science Advances_, 3(4):e1602614, 2017.
+
+
+11
+
+
+Iosif Sakos, Antonios Varvitsiotis, and Georgios Piliouras. Discovering how agents learn using few
+data, July 2023.
+
+
+W.H. Sandholm. _Population_ _Games_ _and_ _Evolutionary_ _Dynamics_ . Economic Learning and Social
+Evolution. MIT Press, 2010.
+
+
+Yuzuru Sato, Eizo Akiyama, and J. Doyne Farmer. Chaos in learning a simple two-person game.
+_Proceedings_ _of_ _the_ _National_ _Academy_ _of_ _Sciences_, 99(7):4748–4751, April 2002. ISSN 00278424.
+
+
+Stephen Smale. Dynamics in general equilibrium theory. _The American Economic Review_, 66(2):
+288–294, May 1976.
+
+
+Sylvain Sorin. No-regret algorithms in on-line learning, games and convex optimization. _Mathe-_
+_matical Programming_, 203(1-2):645–686, January 2024.
+
+
+Yuan Yin, Ibrahim Ayed, Emmanuel de B´ezenac, Nicolas Baskiotis, and Patrick Gallinari. Leads:
+Learning dynamical systems that generalize across environments. In M. Ranzato, A. Beygelzimer, Y. Dauphin, P.S. Liang, and J. Wortman Vaughan (eds.), _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, volume 34, pp. 7561–7573. Curran Associates, Inc., 2021.
+
+
+Brian Hu Zhang, Gabriele Farina, Ioannis Anagnostides, Federico Cacciamani, Stephen Marcus
+McAleer, Andreas Alexander Haupt, Andrea Celli, Nicola Gatti, Vincent Conitzer, and Tuomas
+Sandholm. Steering no-regret learners to a desired equilibrium, 2024.
+
+
+12
+
+
+A ADDITONAL EXPERIMENTAL RESULTS
+
+
+To supplement the detailed analyses presented in Section 5, we conducted simulations across a wide
+range of diverse settings to obtain a statistically significant understanding of each methods’ performance. For each setting, we generated 100 random initial conditions, and applied the SIAR-MPC,
+PINN-MPC and SINDY-MPC frameworks. The first three columns in the tables below present different metrics used to assess the performance of each framework, focusing on tracking accuracy,
+steady-state error and cost efficiency. Additionally, we generated 100 trajectories using SIARc,
+PINN and SINDYc to evaluate how accurately these models can replicate the true system dynamics.
+
+
+A.1 STAG HUNT GAME
+
+
+We generated 100 initial conditions using Latin hypercube sampling and then applied SIAR-MPC,
+PINN-MPC and SINDY-MPC to the stag hunt game described in Section 5.1.
+
+
+**Method** **MSE (Ref.)** **Steady-State Error** **Cost** **MSE (True)**
+
+
+_x_ 1 _,_ 1 _x_ 2 _,_ 1 _x_ 1 _,_ 1 _x_ 2 _,_ 1 _x_ 1 _,_ 1 _x_ 2 _,_ 1
+SIARc 3.41 _×_ 10 _[−]_ [2] 3.54 _×_ 10 _[−]_ [2] 2.26 _×_ 10 _[−]_ [4] 1.60 _×_ 10 _[−]_ [4] 5.02 _×_ 10 [1] 1.21 _×_ 10 _[−]_ [12] 3.32 _×_ 10 _[−]_ [9]
+
+PINN 5.65 _×_ 10 _[−]_ [1] 5.59 _×_ 10 _[−]_ [1] 6.55 _×_ 10 _[−]_ [1] 6.55 _×_ 10 _[−]_ [1] 1.09 _×_ 10 [3] 7.37 _×_ 10 _[−]_ [3] 7.89 _×_ 10 _[−]_ [3]
+
+SINDYc 6.67 _×_ 10 _[−]_ [1] 6.67 _×_ 10 _[−]_ [1] 7.80 _×_ 10 _[−]_ [1] 7.80 _×_ 10 _[−]_ [1] 1.27 _×_ 10 [3] 1.05 _×_ 10 [3] 6.50 _×_ 10 [2]
+
+
+Table 1: Results for the stag hunt game across 100 initial conditions. The first three metrics compare
+the performance of the SIAR-MPC, PINN-MPC and SINDY-MPC frameworks: **MSE(Ref.)** shows
+the mean squared error between the estimated and the reference trajectories; **Steady-State** **Error**
+measures the deviation of the final state from the reference state; **Cost** represents the accumulated
+cost of steering the system to the reference state. The last metric, **MSE(True)**, evaluates the accuracy
+of the SIARc, PINN, and SINDYc models in predicting the true system dynamics by reflecting the
+average squared error between the estimated _x_ ˙ and the true _x_ ˙ . All results are averaged across the
+initial conditions. The results clearly demonstrate that SIAR-MPC and SIARc consistently achieve
+lower error values and control cost compared to the other methods.
+
+
+A.2 MATCHING PENNIES GAME
+
+
+We generated 100 initial conditions using Latin hypercube sampling. We then applied SIAR-MPC,
+PINN-MPC and SINDY-MPC to the matching pennies game described in Section 5.2. However,
+as the latter two methods are data-driven techniques, for fairness we did the comparison based on a
+larger training dataset of _K_ = 50 samples.
+
+
+**Method** **MSE (Ref.)** **Steady-State Error** **Cost** **MSE (True)**
+
+
+_x_ 1 _,_ 1 _x_ 2 _,_ 1 _x_ 1 _,_ 1 _x_ 2 _,_ 1 _x_ 1 _,_ 1 _x_ 2 _,_ 1
+SIARc 5.13 _×_ 10 _[−]_ [2] 6.30 _×_ 10 _[−]_ [2] 9.90 _×_ 10 _[−]_ [2] 1.00 _×_ 10 _[−]_ [1] 2.26 _×_ 10 [2] 6.25 _×_ 10 _[−]_ [4] 1.32 _×_ 10 _[−]_ [3]
+
+PINN 7.56 _×_ 10 _[−]_ [2] 7.83 _×_ 10 _[−]_ [2] 2.13 _×_ 10 _[−]_ [1] 1.88 _×_ 10 _[−]_ [1] 2.69 _×_ 10 [2] 6.50 _×_ 10 _[−]_ [3] 6.26 _×_ 10 _[−]_ [3]
+
+SINDYc 9.62 _×_ 10 _[−]_ [2] 1.05 _×_ 10 _[−]_ [1] 2.71 _×_ 10 _[−]_ [1] 2.90 _×_ 10 _[−]_ [1] 3.00 _×_ 10 [9] 7.97 _×_ 10 [2] 2.31 _×_ 10 [5]
+
+
+Table 2: Results for the matching pennies game across 100 initial conditions. We compare the
+performance of the SIARc, PINN and SINDYc models across the metrics described in Table 1.
+The results clearly demonstrate that SIARc consistently achieve lower error values and control cost
+compared to the other methods.
+
+
+A.3 _ϵ_ -RPS GAME
+
+
+We generated 100 initial conditions by uniformly sampling from the 3-dimensional simplex and then
+applied SIAR-MPC, PINN-MPC and SINDY-MPC to the _ϵ_ -RPS game described in Section 5.2.
+
+
+13
+
+
+**Method** **MSE (Ref.)** **Steady-State Error** **Cost**
+
+
+_x_ 1 _,_ 1 _x_ 1 _,_ 2 _x_ 2 _,_ 1 _x_ 2 _,_ 2 _x_ 1 _,_ 1 _x_ 1 _,_ 2 _x_ 2 _,_ 1 _x_ 2 _,_ 2
+SIARc 9.73 _×_ 10 _[−]_ [3] 1.09 _×_ 10 _[−]_ [2] 1.01 _×_ 10 _[−]_ [2] 7.90 _×_ 10 _[−]_ [3] 3.03 _×_ 10 _[−]_ [3] 2.14 _×_ 10 _[−]_ [3] 3.14 _×_ 10 _[−]_ [3] 4.92 _×_ 10 _[−]_ [3] 2.68 _×_ 10 [1]
+
+PINN 3.50 _×_ 10 _[−]_ [2] 3.65 _×_ 10 _[−]_ [2] 1.71 _×_ 10 _[−]_ [2] 2.89 _×_ 10 _[−]_ [2] 1.06 _×_ 10 _[−]_ [1] 1.44 _×_ 10 _[−]_ [1] 5.98 _×_ 10 _[−]_ [2] 7.45 _×_ 10 _[−]_ [2] 1.03 _×_ 10 [2]
+
+SINDYc 7.14 _×_ 10 _[−]_ [2] 5.29 _×_ 10 _[−]_ [2] 5.54 _×_ 10 _[−]_ [2] 5.11 _×_ 10 _[−]_ [2] 2.39 _×_ 10 _[−]_ [1] 2.10 _×_ 10 _[−]_ [1] 1.92 _×_ 10 _[−]_ [1] 2.06 _×_ 10 _[−]_ [1] 7.04 _×_ 10 [34]
+
+
+Table 3: Results for the _ϵ_ -RPS game for 100 initial conditions. We compare the performance of the
+SIARc, PINN and SINDYc models across the metrics MSE (Ref.), Steady-State Error, and Cost as
+described in Table 1. The results clearly demonstrate that SIARc consistently achieve lower error
+values and control cost compared to the other methods.
+
+
+**Method** **MSE (True)**
+
+
+_x_ 1 _,_ 1 _x_ 1 _,_ 2 _x_ 2 _,_ 1 _x_ 2 _,_ 2
+SIARc 1.18 _×_ 10 _[−]_ [7] 2.48 _×_ 10 _[−]_ [7] 1.02 _×_ 10 _[−]_ [9] 3.08 _×_ 10 _[−]_ [10]
+
+PINN 1.31 _×_ 10 _[−]_ [2] 1.25 _×_ 10 _[−]_ [2] 9.05 _×_ 10 _[−]_ [3] 1.25 _×_ 10 _[−]_ [2]
+
+SINDYc 7.48 _×_ 10 [7] 2.92 _×_ 10 [4] 1.42 _×_ 10 [8] 1.95 _×_ 10 [6]
+
+
+Table 4: Results for the _ϵ_ -RPS game for 100 initial conditions. We compare the performance of
+the SIARc, PINN and SINDYc models in terms of MSE (True) as described in Table 1. The results
+clearly demonstrate that SIARc consistently achieve lower error values compared to the other methods.
+
+
+A.4 STATE AVOIDANCE CONSTRAINTS
+
+
+In this section, we revisit the example of a matching pennies game to illustrate a key feature of MPC:
+its ability to incorporate state constraints (Camacho & Bordons, 2007). In our case, the purpose of
+these state constraints is to keep the system trajectory away from specific, undesirable areas of the
+state space. Consider a scenario where the policymaker aims to steer the system towards the mixed
+Nash equilibrium at _x_ _[∗]_ 1 _,_ 1 [=] _[x][∗]_ 2 _,_ 1 [=] [1] _[/]_ [2][,] [while] [simultaneously] [ensuring] [that] [the] [system] [trajectory]
+avoids a ball of radius 0 _._ 4 centered at [(0 _,_ 1) _,_ (1 _,_ 0)]. This constraint can be incorporated into the
+MPC problem and as illustrated in Fig. 5, SIAR-MPC can steer the system to the desired equilibrium
+while also avoiding the restricted area of the state space (shaded in blue).
+
+
+Figure 5: Vector field of the steering direction of the SIAR-MPC when the additional state avoidance
+constraint is _(left)_, and is not _(right)_ imposed. The restricted area is shaded in blue. The green line
+corresponds to a controlled trajectory of the replicator dynamics for the matching pennies game.
+
+
+14
+
+
+B DETAILS OF PINN
+
+
+Consider a two-player two-action game. Given that each player has two actions, the state space can
+be reduced to ( _x_ 1 _, x_ 2) _∈_ [0 _,_ 1] _×_ [0 _,_ 1], where _x_ 1 and _x_ 2 represent the first state of each player [1] . We
+train a neural network to approximate the dynamics _f_ 1 and _f_ 2 such that
+
+
+_x_ ˙ _i_ = _fi_ ( _x_ 1 _, x_ 2 _, ω_ ) _≈_ _pi_ ( _x_ 1 _, x_ 2 _, ω_ ) = _x_ ˆ [˙] _i,_ _i_ = 1 _,_ 2 _,_
+
+
+where _ω_ _∈_ Ω _._ The neural network takes _x_ 1 _, x_ 2 _, ω_ as inputs and outputs an approximation _x_ ˆ [˙] _i_
+of _x_ ˙ _i_ . The training dataset is generated as described in Section 4.1 and is represented as _D_ :=
+_{_ ( _x_ 1 _,i, x_ 2 _,i, ωi,_ _x_ ˙ 1 _,i,_ _x_ ˙ 2 _,i_ ) _}_ _[N]_ _i_ =1 _[D]_ [.]
+
+
+B.1 PHYSICS INFORMATION AND COLLOCATION DATASET GENERATION
+
+
+To incorporate the physical knowledge into the PINN training, we consider two sets of side information constraints: Robust Forward Invariance (RFI) and Positive Correlation (PC).
+
+
+_Robust Forward Invariance_
+
+
+For the reduced state space, the RFI constraint can be written as:
+
+
+_p_ 1(0 _, x_ 2 _, ω_ ) _≥_ 0 _,_ _∀x_ 2 _∈_ [0 _,_ 1] _,_ _ω_ _∈_ Ω
+_p_ 1(1 _, x_ 2 _, ω_ ) _≤_ 0 _,_ _∀x_ 2 _∈_ [0 _,_ 1] _,_ _ω_ _∈_ Ω
+_p_ 2( _x_ 1 _,_ 0 _, ω_ ) _≥_ 0 _,_ _∀x_ 1 _∈_ [0 _,_ 1] _,_ _ω_ _∈_ Ω
+_p_ 2( _x_ 1 _,_ 1 _, ω_ ) _≤_ 0 _,_ _∀x_ 1 _∈_ [0 _,_ 1] _,_ _ω_ _∈_ Ω
+
+
+To enforce this side information constraint during training, we generate a set of _NC_ [RFI] collocation
+points. Specifically, we create the following sets:
+
+_C_ 1 [RFI] := _{_ ( _x_ 1 _,i, x_ 2 _,i, ωi_ ) _}Ni_ =1 _C_ [RFI] 1 [with] _[ x]_ [1] _[,i]_ [= 0] _[,]_ _[x]_ [2] _[,i]_ _[∼]_ _[U]_ [[0] _[,]_ [ 1]][ and] _[ ω][i]_ _[∼]_ _[U]_ [Ω]
+
+_C_ 2 [RFI] := _{_ ( _x_ 1 _,i, x_ 2 _,i, ωi_ ) _}Ni_ =1 _C_ [RFI] 2 [with] _[ x]_ [1] _[,i]_ [= 1] _[,]_ _[x]_ [2] _[,i]_ _[∼]_ _[U]_ [[0] _[,]_ [ 1]][ and] _[ ω][i]_ _[∼]_ _[U]_ [Ω]
+
+_C_ 3 [RFI] := _{_ ( _x_ 1 _,i, x_ 2 _,i, ωi_ ) _}Ni_ =1 _C_ [RFI] 3 [with] _[ x]_ [2] _[,i]_ [= 0] _[,]_ _[x]_ [1] _[,i]_ _[∼]_ _[U]_ [[0] _[,]_ [ 1]][ and] _[ ω][i]_ _[∼]_ _[U]_ [Ω]
+
+_C_ 4 [RFI] := _{_ ( _x_ 1 _,i, x_ 2 _,i, ωi_ ) _}Ni_ =1 _C_ [RFI] 4 [with] _[ x]_ [2] _[,i]_ [= 1] _[,]_ _[x]_ [1] _[,i]_ _[∼]_ _[U]_ [[0] _[,]_ [ 1]][ and] _[ ω][i]_ _[∼]_ _[U]_ [Ω]
+
+
+where _x_ _∼_ _U_ _S_ denotes that _x_ is sampled uniformly from set _S_ . The combined set of collocation
+points for RFI is then _C_ [RFI] = _C_ 1 [RFI] _∪_ _C_ 2 [RFI] _∪_ _C_ 3 [RFI] _∪_ _C_ 4 [RFI] _._
+
+
+_Positive Correlation_
+
+
+For the reduced state space, the PC constraints can be written as:
+
+
+_⟨∇x_ 1 _u_ 1( _x_ 1 _, x_ 2 _, ω_ ) _,_ _p_ 1( _x_ 1 _, x_ 2 _, ω_ ) _⟩≥_ 0 _, ∀x_ 1 _, x_ 2 _∈_ [0 _,_ 1] _,_ _ω_ _∈_ Ω
+_⟨∇x_ 2 _u_ 2( _x_ 1 _, x_ 2 _,, ω_ ) _,_ _p_ 2( _x_ 1 _, x_ 2 _,, ω_ ) _⟩≥_ 0 _, ∀x_ 1 _, x_ 2 _∈_ [0 _,_ 1] _,_ _ω_ _∈_ Ω
+
+
+To enforce this side information constraint during training, we generate a set of _NC_ [PC] [collocation]
+points. Specifically, we create the following set:
+
+_C_ [PC] := _{_ ( _x_ 1 _,i, x_ 2 _,i, ωi_ ) _}_ _[N]_ _i_ =1 _C_ [ PC] [with] _[ x]_ [1] _[,i][,]_ _[x]_ [2] _[,i]_ _[∼]_ _[U]_ [[0] _[,]_ [ 1]][ and] _[ ω][i]_ _[∼]_ _[U]_ [Ω] _[.]_
+
+
+B.2 PINN LOSS FUNCTION
+
+
+The loss function for PINN integrates three components: a loss function for the supervised learning
+over dataset _D_ and two physics-informed loss functions over the collocation points _C_ [RFI] and _C_ [PC] to
+enforce side information constraints RFI and PC.
+
+
+1Note that the second state of each player is simply 1 _−xi_ for _i_ = 1 _,_ 2, and thus, the corresponding dynamics
+are given by _−fi_ for each _i_ = 1 _,_ 2.
+
+
+15
+
+
+_Supervised Loss_
+
+
+The supervised loss is the standard squared error loss to ensure neural netwrok predictions align
+closely with the training data and is given as:
+
+
+_ℓ_ [0] =        - ( _p_ 1( _x_ 1 _, x_ 2 _, ω_ ) _−_ _x_ ˙ 1) [2] + ( _p_ 2( _x_ 1 _, x_ 2 _, ω_ ) _−_ _x_ ˙ 2) [2]
+
+
+( _x_ 1 _,x_ 2 _,ω,_ ˙ _x_ 1 _,_ ˙ _x_ 2) _∈D_
+
+
+_Physics Loss_
+
+
+The physics loss for RFI is defined as:
+
+
+Similarly, the physics loss for the PC constraint is defined as:
+
+
+_ℓ_ [PC] =        - max �0 _, −∇x_ 1 _u_ 1( _x_ 1 _, x_ 2 _, ω_ ) _· p_ 1( _x_ 1 _, x_ 2 _, ω_ )�
+
+
+( _x_ 1 _,x_ 2 _,ω_ ) _∈C_ [PC]
+
++       - max �0 _, −∇x_ 2 _u_ 2( _x_ 1 _, x_ 2 _, ω_ ) _· p_ 2( _x_ 1 _, x_ 2 _, ω_ )� _._
+
+
+( _x_ 1 _,x_ 2 _,ω_ ) _∈C_ [PC]
+
+
+Then, the loss function for PINN with a weighted summation is given as:
+
+
+_ℓ_ = _λ_ 0 _ℓ_ [0] + _λ_ RFI _ℓ_ [RFI] + _λ_ PC _ℓ_ [PC] _._
+
+
+16
+
+
+_ℓ_ [RFI] = 
+
+( _x_ 1 _,x_ 2 _,ω_ ) _∈C_ 1 [RFI]
+
+
+max(0 _, −p_ 1( _x_ 1 _, x_ 2 _, ω_ )) + 
+( _x_ 1 _,x_ 2 _,ω_ ) _∈C_ 2 [RFI]
+
+
+max(0 _, p_ 1( _x_ 1 _, x_ 2 _, ω_ ))
+
+
++ 
+
+( _x_ 1 _,x_ 2 _,ω_ ) _∈C_ 3 [RFI]
+
+
+max(0 _, −p_ 2( _x_ 1 _, x_ 2 _, ω_ )) + 
+( _x_ 1 _,x_ 2 _,ω_ ) _∈C_ 4 [RFI]
+
+
+max(0 _, p_ 2( _x_ 1 _, x_ 2 _, ω_ )) _._

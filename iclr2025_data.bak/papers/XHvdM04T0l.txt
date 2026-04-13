@@ -1,0 +1,908 @@
+# LEARNING STRUCTURE-DYNAMICS-AWARE REPRE- SENTATIONS FOR EFFICIENT AND ROBUST 3D POSE ESTIMATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Recent works in 2D-to-3D pose uplifting for monocular 3D Human Pose Estimation (HPE) have shown significant progress. However, two key challenges persist
+in real-world applications: vulnerability to joint noise and high computational
+costs. These issues arise from the dense joint-frame connections and iterative correlations typically employed by mainstream GNN-based and Transformer-based
+methods. To address these challenges, we propose a novel approach that leverages
+human physical structure and long-range dynamics to learn spatial part- and temporal frameset-based representations. This method is inherently robust to missing
+or erroneous joints while also reducing model parameters. Specifically, in the
+Spatial Encoding stage, coarse-grained body parts are used to construct structural
+correlations with a fully adaptive graph topology. This spatial correlation representation is integrated with muti-granularity pose attributes to generate a comprehensive pose representation for each frame. In Temporal Encoding and Decoding
+stages, Skipped Self-Attention is performed in framesets to establish long-term
+temporal dependencies from multiple perspectives of movement. On this basis,
+a compact Graph and Skipped Transformer (G-SFormer) is proposed, which realises efficient and robust 3D HEP in both experimental and practical scenarios.
+Extensive experiments on Human3.6M, MPI-INF-3DHP and Human-Eva benchmarks demonstrate that G-SFormer series models can compete and outperform
+the state-of-the-arts but takes only a fraction of parameters and around 1% computational cost. It also exhibits outstanding robustness to inaccurately detected 2D
+poses. The source code will be available at _[sites.google.com/view/g-sformer](https://sites.google.com/view/g-sformer)_ .
+
+
+1 INTRODUCTION
+
+
+3D Human Pose Estimation (HPE) is a fundamental task which aims to reconstruct 3D body joint
+locations from images or videos. Monocular 3D HPE is more friendly for downstream applications
+such as action recognition (Shi et al., 2019b; Yan et al., 2018; Shi et al., 2019a), human-computer
+interaction (Sinha et al., 2010; Lazar et al., 2017; Pavlovic et al., 1997), motion and trajectory prediction (Martinez et al., 2017; Wang et al., 2021; Rudenko et al., 2020) for the convenience in data
+acquisition.
+
+
+Benefits from rapid development in 2D pose detectors (Chen et al., 2018; Sun et al., 2019), 2Dto-3D pose lifting methods have drawn extensive attentions for its high spatial precision and light
+data volume of 2D skeletons. Despite the superior performance, 2D-to-3D lifting method is inherently an ill-pose problem for depth ambiguity and self-occlusion (Cheng et al., 2019; 2020; Li et al.,
+2022b). To alleviate this issue, recent works focused on aggregating temporal motion information in
+videos to aid pose reconstruction. Transformer has become a prevalent approach for its long-range
+dependency modeling capacity. Prior methods typically deploy self-attention to establish joint-wise
+correlations, as well as frame-wise correlations for each joint individually or for the encoded pose
+representation (Zhang et al., 2022; Zheng et al., 2021). This is computationally expensive especially when dealing with lengthy sequences (81, 243 or even more), rendering it impractical for
+deployment on resource-limited mobile devices and consumer hardware. Given the information redundancy in adjacent frames, improving the efficiency of Transformers becomes an essential issue.
+Additionally, inaccuracies in detected 2D poses, including missing and erroneous joints also present
+
+
+1
+
+
+Figure 1: (a) MPJPE (mm) vs. MFLOPs of G-SFormer and competitors on Human3.6M, where
+marker size indicates model size. (b) Robustness comparison with MixSTE (Zhang et al., 2022) and
+PoseFormerV2 (Zhao et al., 2023) regarding errors in detected 2D joints (marked in yellow circles).
+
+
+challenges to 3D HPE. Factors such as self-occlusion, fast-motion, as well as unconstrained environment and image quality significantly increase the error rate of detected 2D joints, making model
+robustness an important property in practical applications. Some efforts have been made on these
+two challenges, Li et al. (2022a) and Shan et al. (2022) introduce strided convolutional layers to
+FFN in transformer to selectively aggregate useful information; Einfalt et al. (2023) perform temporal upsampling on encoded pose sequence to realise efficient pose uplifting from sparse tokens;
+Zhao et al. (2023) obtain low-frequency pose components through filtering out high-frequency noise
+and integrate them with sampled temporal features to generate a robust pose representation. Li et al.
+(2024) propose token pruning cluster module to select a few representative tokens to reduce temporal redundancy. However, it is worth noting that reducing pose tokens in temporal domain will lead
+to performance degradation since partial information is inevitably lost. Furthermore, none of them
+cut to the optimization of the biggest computational overhead – the Self Attention calculation which
+is quadratic to the number of tokens.
+
+
+In this paper, we propose a Frameset-based Skipped Transformer architecture for temporal feature
+representation and aggregation. The input pose sequence is sampled into framesets to implement
+Skipped Self-Attention (SSA) in parallel, establishing global-range alignments across multiple temporal perspectives. As a result, the model acquires a composite understanding of the entire motion
+process, integrating various aspects of movements. This brings two main benefits: first, it significantly improves model efficiency by establishing correlations among distinct frame tokens; second,
+it captures long-range dynamics and supplement each frame with enhanced contextual information.
+For the spatial modeling of pose within each frame, we maintain the global approach by employing
+coarse-grained body parts to construct a compact Part-based Adaptive GNN. Unlike present methods
+which compute joint-wise connections (Zhang et al., 2022; Tang et al., 2023; Yu et al., 2023; Peng
+et al., 2024), our approach builds spatial correlations among body parts to better represent the coordination of human body and the interaction between body parts during movement. For instance, the
+arms and torso are closely related during ”Eating”, while the legs are correlated for ”Sitting”. The
+part-based graph structure is fully adaptive, learned through a graph attention mechanism without
+relying on pre-defined skeletal topology as priors (Soroush Mehraban, 2024; Yu et al., 2023; Peng
+et al., 2024), thereby enhancing model flexibility and generalization across diverse poses. Meanwhile, fine-grained joint features are integrated to the part-based representation to enrich the spatial
+cues. Thus, a comprehensive pose representation is obtained, incorporating global spatial correlations and multi-granularity pose attributes. It is also a robust representation with less sensitivity to
+local joint deviations.
+
+
+The main modules of Part-based Adaptive GNN and Frameset-based Skipped Transformer construct
+the Graph and Skipped Transformer (G-SFormer) architecture. Different from existing GraphTransformer hybrid methods (Zhu et al., 2021; Zhao et al., 2022; Soroush Mehraban, 2024) that
+embed GCN into Transformer block to assist self-attention in spatial modeling, G-SFormer integrates part-based adaptive GNN and Skipped Transformer to efficiently exploit spatial and temporal
+information, respectively. The compact and adaptive framework realises high accuracy, efficient
+and robust 3D pose reconstruction in a global approach. Extensive experiments are conducted on
+three benchmarks, i.e., Human3.6M, MPI-INF-3DHP, and HumanEva. G-SFormer can compete
+
+
+2
+
+
+and outperform the state-of-the-arts, and obtain performance-enhancement with the prior-knowledge
+brought by direct pre-training on large-scale motion capture data. More importantly, as shown in
+Figure 1(a), the multi-scale G-SFormer models exhibit steady and advance performance with significantly less computational cost and parameters, making them highly suitable for practical 3D
+HPE applications on resource-limited platforms. In summary, our main contributions are listed as
+follows:
+
+
+    - We propose two novel modules of Part-based Adaptive GNN and Frameset-based Skipped
+Transformer to learn comprehensive pose representations and multi-perspective dynamic
+representations, enabling efficient and robust 3D pose estimation in a global approach.
+
+    - Effective data completion methods are developed to enhance the spatial structure and temporal motion information of input 2D poses, including Sinusoidal Positional Encoding and
+Data Rolling strategies, which are parameter-free and easy to implement.
+
+    - The formulated compact G-SFormer achieves advance performance across 3 large-to-small
+benchmarks. Multi-scale G-SFormer models can compete and outperform the state-ofthe-arts with only a fraction of parameters and around 1% computational cost, offering an
+effective and practical approach to realise high-accuracy 3D HPE with small-scale model
+size and minimal computational cost.
+
+
+2 RELATED WORKS
+
+
+Traditional 2D-to-3D pose lifting includes CNN-based methods (Pavllo et al., 2019; Chen et al.,
+2021), GCN-based methods(Zeng et al., 2021; Yu et al., 2023), and Transformer-based methods
+(Zheng et al., 2021; Tang et al., 2023). Recently, the diffusion framework has also been introduced
+into 3D HPE, delivering outstanding performance through the aggregation and selection among
+multiple iterations and hypotheses (Holmquist & Wandt, 2023; Shan et al., 2023; Peng et al., 2024).
+However, the diffusion process also considerably increase computational overhead and inference
+time. Therefore, we build upon traditional methods and propose a light-weight architecture to realise
+efficient and robust 3D pose estimation.
+
+
+2.1 GCN-BASED 3D HPE
+
+
+Recent lifting-based approaches exploit contextual information from neighboring frames to improve
+robustness and accuracy. Pavllo et al. (2019) present a fully-convolutional model with dilated temporal convolutions to regress temporal information. Chen et al. (2021) leverage CNN-based bone
+length and bone direction prediction networks to derive 3D joint locations. Due to natural correlations with human skeleton structures, GCN-based methods are adopted to incorporate spatial priors.
+Cai et al. (2019) construct a spatial-temporal graph to process and consolidate pose features across
+scales. Wang et al. (2020) design a U-shaped GCN to capture motion information and leverage motion supervision for 3D sequence reconstruction. Similar to 2s-AGCN (Shi et al., 2019b), methods
+like GLA-GCN and KTPFormer (Yu et al., 2023; Peng et al., 2024) add a learnable graph to the
+predefined adjacency matrix based on skeletal structure to improve graph adaptation. However, the
+predefined graph which is used to maintain performances and stabilize training somewhat restricts
+model flexibility. Besides, the joint-based graph topology lacks global coordination between body
+parts and introduces computational redundancy.
+
+
+2.2 TRANSFORMER-BASED 3D HPE
+
+
+Transformer architecture proposed by Vaswani et al. (2017) has shown promising performance in
+computer vision (Zhu et al., 2020; Dosovitskiy et al., 2020). With the outstanding ability in capturing
+long-range dependencies, transformer with powerful self-attention mechanism is introduced to 3D
+HPE task. Zheng et al. (2021) firstly apply Transformer to model spatial and temporal aspects
+in 2D-to-3D pose lifting. Considering the characteristics of transformer, pre-training operations
+such as self-supervised (Shan et al., 2022) and large-scale dataset based (Einfalt et al., 2023; Zhu
+et al., 2023) are implemented for performance improvement. MixSTE (Zhang et al., 2022) models
+temporal motion of each joint and stacks spatial and temporal transformer blocks several loops to
+strength sequence coherence. On this basis, other architectures learning separate single joint motion
+trajectory have been developed. They either perform spatial and temporal modeling sequentially in
+
+
+3
+
+
+Figure 2: Graph and Skipped Transformer (G-SFormer) consists of three modules: Spatial Graph
+Encoder for part-based structural learning within each frame, Skipped Transformer Encoder and
+Decoder for hierarchical extraction and aggregation of temporal features. After being encoded by
+the Skipped-Transformer, skip-sampled framesets are reordered back to the original sequence and
+progressively aggregated by Skipped Multi-head Self-Attention (MSA) to get the target pose representation in the temporal decoding stage.
+
+
+an iterative process (Peng et al., 2024; Soroush Mehraban, 2024; Zhu et al., 2023) or utilize a parallel
+modeling approach (Tang et al., 2023). However, the repetitive and redundant frame-wise and jointwise connections make up large and complex networks, introducing considerable computational
+overhead and increasing model sensitivity to local features.
+
+
+3 METHOD
+
+
+Following 2D-to-3D pose lifting pipelines (Shan et al., 2022; Tang et al., 2023; Zhao et al., 2023), the
+proposed G-SFormer regress 3D pose of the center frame from input 2D pose sequence estimated by
+off-the-shelf 2D pose detectors. As shown in Figure 2, Graph Neural Network (GNN) and Skipped
+Transformer are engaged as key components for spatio-temporal feature learning.
+
+
+3.1 SPATIAL GRAPH CONSTRUCTION
+
+
+In the spatial modeling of the 2D pose in each frame, human joints are grouped into 5 parts according
+to their physical relationships. Without any predefined connections as priors (Hu et al., 2021; Peng
+et al., 2024; Yu et al., 2023), a flexible graph topology is learned by a totally data-driven approach to
+better represent the interaction between body parts. As shown in Figure 3 (a), the grouped 2D joint
+coordinates _lp_ are passed into a parameter-sharing Parts Encoding Layer composed of Multi-Layer
+Perceptron (MLP) structure to get part feature _fp_, which is a _T_ _× Np × C_ tensor, where _T_, _Np_ and
+_C_ refer to frame length, number of body parts and channel dimension. A learnable part positional
+embedding _Ep_ _∈_ R _[N][p][×][C]_ is added with _fp_ to integrate the structure information.
+
+
+_fp_ = _MLP_ ( _lp_ ) + _Ep_ (1)
+
+
+Then, the _Np_ _× Np_ adjacency matrix is obtained by performing attention calculation among part
+features, where the attention coefficients can be calculated by:
+
+
+_ei,j_ = **W** _× |fpi_ + _fpj|_ (2)
+
+
+Part features are added to establish alignments with each other. **W** is the weight vector of 1 _×_ 1
+convolution which transforms the dimension of attention map into 1. Attention coefficients are
+normalized using the _Sigmoid_ function to obtain the inter-part correlation strength.
+
+
+_αi,j_ = _Sigmoid_ ( _ei,j_ ) = 1 _/_ (1 + _exp_ ( _ei,j_ )) (3)
+
+
+4
+
+
+Figure 3 (b) illustrates the updating process of graph nodes. Part features are aggregated with attention coefficients to obtain the graph feature, which is then concatenated with the original part feature
+_′_
+to get the refreshed _fp_ [.]
+
+
+Finally, the encoded frame tokens in each sampling set are reordered back to original sequence to
+keep temporal dimension unchanged. Similar to Vaswani et al. (2017), the multi-head setting for
+self-attention and the feed-forward network is also deployed in the Skipped Transformer block. The
+temporal encoder is composed of a stack of _L_ 1 layers for hierarchical temporal feature extraction.
+
+
+5
+
+
+_fpi′_ [=] _[ Concat]_ - _σ_ (� _Nj_ =1 _p_ _[α][i,j][f][pj]_ [)] _[, f][pi]_
+
+
+(4)
+
+
+_σ_ is the nonlinear activation function, and _||_ represents concatenation. In order to preserve the finegrained spatial information, joint feature encoded by Fully Connected layer is residually added to
+_′_
+_fp_ [to obtain the comprehensive pose representation] _[ F][P]_ _[∈]_ [R] _[T][ ×][D]_ [.]
+
+
+Figure 3: (a) Architecture of the Spatial Graph Encoder. (b) Updating process of graph nodes.
+Using part feature _fp_ 5 as an example, it is concatenated with the aggregated part features weighted
+_′_
+by attention coefficients to get the refreshed _fp_ 5 [.]
+
+
+3.2 SKIPPED TRANSFORMER FOR TEMPORAL MODELING
+
+
+Skipped Transformer-based Encoder and Decoder are deployed in the temporal modeling process.
+Both modules work in a computationally efficient manner by concurrently establishing long-range
+dynamics in multiple framesets. Corresponding complexity analysis of them is also presented.
+
+
+3.2.1 SKIPPED TRANSFORMER FOR TEMPORAL ENCODING
+
+
+The proposed Skipped Self-Attention (SSA) builds global dependencies among distinct frame tokens. Specifically, skipped connection with interval _m_ is performed on temporal dimension to construct long-range attention alignments. The sampling process is conducted _m_ times until all tokens
+are established associations.
+
+
+_Attn_ ( _Qi, Ki, Vi_ ) = _Softmax_ ( _[Q]_ ~~_√_~~ _[i][K]_ _i_ _[T]_
+
+
+) _Vi_
+_D_
+
+
+_D_ (5)
+
+= _AiVi, i_ = 1 _,_ 2 _, ...m_
+
+
+where _Qi_, _Ki_ and _Vi_ are obtained by linearly transformation of skipped sampling frameset _Zi_ _∈_
+_T_
+R _m_ _[×][D]_ with parameters _WQ, WK_ and _WV_ .
+
+
+_Qi_ = _ZiWQ, Ki_ = _ZiWK, Vi_ = _ZiWV_ (6)
+
+
+The frameset consists of _mT_ [tokens] [and] [the] [attention] [map] _[A][i]_ [is] [with] [the] [shape] [of] [(] _[T]_
+
+
+_m_ _[T]_ [)] _[×]_ [(] _[T]_
+
+
+The frameset consists of _m_ [tokens] [and] [the] [attention] [map] _[A][i]_ [is] [with] [the] [shape] [of] [(] _m_ [)] _[×]_ [(] _m_ [)][.]
+
+Therefore, the computational complexity for attention map calculation and token association is significantly reduced to _m_ 1 [times] [compared] [with] [the] [Self-Attention] [in] [Vanilla] [Transformer.] [Thus] [the]
+compression ratio can be derived as 30%, as skipped factor _m_ is set to 3 in the proposed architecture.:
+
+
+Ω( _SSA_ ) = [2] _[T]_ [ 2] _[D]_ (7)
+
+_m_
+
+
+Figure 4: Data completion strategies for 2D pose input. Taking target frame at t=3 as example, where
+2 previous frames need to be completed for a full 9-frame input sequence. Unlike conventional
+methods which copy edge frame at t=1 (b), Data Expanding and Data Rolling strategies are proposed
+to replicate 2D pose step by step (c), or to capture a clip of the pose sequence for completion (d).
+
+
+3.2.2 SKIPPED TRANSFORMER FOR TEMPORAL DECODING
+
+
+In the decoding stage, the encoded pose feature sequence is aggregated by layers using Skipped
+Self-Attention (SSA). Unlike the encoding stage, _m_ skipped sampling framesets are concatenated in
+the channel dimension, generating a decoded feature sequence with the shape of _m_ _[T]_ _[×]_ [(] _[m]_ _[·]_ _[D]_ [)][, which]
+
+is then linearly transformed to _m_ _[T]_ _[×][ D]_ [.] [Thus,] [the temporal dimension is progressively reduced by]
+
+1
+_m_ [through each decoding layer until the center frame representation is obtained in the last] _[ L]_ [2][ layer.]
+
+
+Skipped Transformer aggregates temporal features directly in self-attention calculation. It offers a
+simple yet effective way compared to the widely-adopted Strided Transformer (Einfalt et al., 2023;
+Shan et al., 2022; Li et al., 2022a). For Skipped Transformer block (SKT), the complexity for key
+components is:
+
+
+Quantitatively, comparing a SKT with _m_ =3 and a STT with _k_ =3 and _s_ =3, the computational cost of
+the former is less than 60% of the latter under the same setting.
+
+
+3.3 DATA COMPLETION STRATEGIES FOR 2D POSE INPUT
+
+
+We perform data completion in both spatial and temporal domains. Sinusoidal Positional Encoding
+is introduced to supplement the relative positional relationships and differences between body joints
+in 2D pose input. This spatial positional encoding is conducted in an economic parameter-free
+manner as follows, where J denotes the number of joints:
+
+
+_Ej,x_ = _sin_ ( _j_ ) _, Ej,y_ = _cos_ ( _j_ ) _, j_ = 1 _,_ 2 _, ...J_ (10)
+
+
+To reconstruct 3D pose of the center frame, 2D poses from (T-1)/2 previous and subsequent frames
+are required to form an input sequence with length T. Hence, target frames at the beginning and
+end of the video suffer from missing 2D poses. The previous method involved replicating frames at
+_t_ = 1 or _t_ = _T_ like edge padding (Tang et al., 2023; Zheng et al., 2021; Shan et al., 2022). However,
+we argue that such monotonous information has a limited help to 3D pose reconstruction. As shown
+
+
+6
+
+
+Ω( _SKT_ ) = [2] _[T]_ [ 2] _[D]_
+
+
+_[T]_ _[T]_
+
+_m_ [)] _[D]_ [2][ + 4(]
+
+
+[ 2] _[D]_
+
++ _m_ ( _[T]_
+_m_
+
+
+(8)
+
+[4]
+
+_m_ [)] _[TD]_ [2]
+
+
+_m_ [)] _[D]_ [2]
+
+
+= [2] _[T]_ [ 2] _[D]_
+
+
+[ 2] _[D]_
+
++ (1 + [4]
+_m_
+
+
+Where [2] _[T]_ [2] _[D]_
+
+
+_m_ _[T]_ [)] _[D]_ [2] [is for linear transformation, and][ 4(] _[T]_
+
+
+_m_ _[D]_ is for self-attention as equation 7, _m_ ( _[T]_
+
+
+Where [2] _[T]_ _m_ _[D]_ is for self-attention as equation 7, _m_ ( _m_ _[T]_ [)] _[D]_ [2] [is for linear transformation, and][ 4(] _m_ _[T]_ [)] _[D]_ [2]
+
+is for feed-forward network (FFN). While for Strided Transformer block (STT) which uses strided
+convolution layer with the kernel size _k_ and strided factor _s_ to shrink sequence length, the complexity
+for self-attention and strided convolutional FFN is:
+
+
+Ω( _STT_ ) = 2 _T_ [2] _D_ + 2( _[k]_ (9)
+
+_s_ [+ 1)] _[TD]_ [2]
+
+
+in Figure 4, we propose Data Expanding and Data Rolling strategies to enrich dynamic information.
+A threshold _R_ is set for Data Rolling strategy. Specifically, when the length of 2D poses to be
+completed exceeds _R_, the data completion operation is executed. Performance comparisons of Data
+Rolling with various _R_ and Data Expanding are provided in Section 4.4.
+
+
+3.4 LOSS FUNCTION
+
+
+Regression heads consisting of linear transformation layers are deployed to transform full-sequence
+representation of Temporal Encoder _ZEN_ _∈_ R _[T][ ×][D]_ and target frame representation of Temporal
+Decoder _ZDE_ _∈_ R [1] _[×][D]_ into corresponding 3D body joint locations. We use L2 loss to conduct fullsequence supervision of encoder outputs, as well as the target-frame supervision of decoder outputs.
+The full-to-single supervision strategy (Li et al., 2022a; Zheng et al., 2021) benefits the optimization
+process and introduces temporal consistency to feature learning. Thus, the architecture is trained in
+an end-to-end manner with the objective loss function as:
+
+
+_L_ = _Lt_ + _λLf_ (11)
+
+In detail, target frame loss and full sequence loss are as follows. Where _p_ and _p_ _[gt]_ denote the
+predicted and ground truth 3D joints. _λ_ is the balance factor:
+
+
+4 EXPERIMENTS
+
+
+4.1 DATASETS
+
+
+The proposed architecture is evaluated on three 3D HPE benchmarks, i.e., Human3.6M (Ionescu
+et al., 2013), MPI-INF-3DHP (Mehta et al., 2017), and HumanEva (Sigal et al., 2010). Detailed
+descriptions and evluation metrics on these datasets are presented in Appendix.
+
+
+4.2 IMPLEMENTATION DETAILS
+
+
+The smaller, standard and larger G-SFormer are presented as G-SFormer-S, G-SFormer and GSFormer-L on Human3.6M, with encoder-layer ( _L_ 1), decoder-layer ( _L_ 2) set as (3, 5), (4, 5), (8, 5)
+for 243 frames input. Residual connection across encoder layers is conducted only for G-SFormerL. For G-SFormer-S with 81 frames and 27 frames input on MPI-INF-3DHP and Human-Eva, ( _L_ 1,
+_L_ 2) is set as (3, 4) and (3, 3), respectively. We adopt the 2D pose detected by CPN (Chen et al.,
+2018) on Human3.6M following (Zhao et al., 2023; Einfalt et al., 2023) and ground truth data on
+MPI-INF-3DHP and Human-Eva following (Peng et al., 2024; Zhang et al., 2022). More detailed
+experimental settings are described in Appendix.
+
+
+4.3 COMPARISON WITH STATE OF THE ARTS
+
+
+4.3.1 QUANTITATIVE COMPARISON FOR EFFICIENCY
+
+
+**Results** **on** **Human3.6M** We compare the proposed G-SFormer with SOTA approaches on Human3.6M dataset in Table 1. Performance among 15 action categories under MPJPE (Protocol #1)
+and P-MPJPE (Protocol #2) are reported. G-SFormer-L obtains an average MPJPE of 41.6mm and
+an average P-MPJPE of 33.5mm. With the additional knowledge gained from pre-training on largescale motion dataset AMASS (Mahmood et al., 2019; Einfalt et al., 2023), performance improves
+to 40.5mm and 32.5mm, respectively. The MPJPE rivals the second-best competitor, STCFormer
+(Tang et al., 2023) but with only 40% parameters and 1.5% computational cost. It also achieves
+comparable P-MPJPE with the best scores across various actions. By further incorporating the
+reprojection refinement post-processing (Cai et al., 2019; Einfalt et al., 2023; Shan et al., 2022), GSFormer-L achieves the MPJPE of 39.9mm, outperforming the current best competitor (Peng et al.,
+2024) by 0.2mm and obtains the lowest error in 8 out of 15 actions.
+
+
+Since G-SFormer is proposed to realise efficient 3D HPE, the comprehensive properties of model
+size, computational cost and performance are the focus of assessment. Table 2 presents properties in
+
+
+7
+
+
+_J_
+
+
+_i_ =1
+
+
+_Lt_ = [1]
+
+_J_
+
+
+_J_
+
+
+_i_ =1
+
+
+�� _pi −_ _pgti_ �� _,_ _Lf_ = _T_ [1] _J_ 1
+
+
+_T_
+
+
+_t_ =1
+
+
+�� _pt,i −_ _pgtt,i_ ��
+
+
+Parameter number, FLOPs, and MPJPE of G-SFormer and competitors. G-SFormer-S trained from
+scratch achieve 1.9 mm-2.5 mm lower MPJPE, while utilizing similar FLOPs and only 30.4%-35%
+parameters compared to PoseFormer-V2 (Zhao et al., 2023), which already demonstrates an excellent speed-accuracy trade-off among competitors. G-SFormer-S also matches the performance of
+MixSTE-81f (Zhang et al., 2022) with only 14.9% parameters and 1.2% computational cost. The
+cost reduction is even more significant compared to the current-best KTPFormer (Peng et al., 2024)
+with G-SFormer-L requiring 22.7% of parameters and merely 0.8% of FLOPs of the latter. We confirm that the pretriaining process enhances the generalization of small-scale G-SFormer models and
+brings performance improvement. Furthermore, the above results validate that G-SFormer offers an
+effective solution for high-accuracy 3D HPE with small-scale model size and minimal computational
+cost of around 1% compared to the state-of-the-art methods.
+
+
+Table 1: Quantitative comparisons with SOTA methods on Human3.6M of MPJPE (mm) under
+Protocol #1 and P-MPJPE (mm) under Protocol #2, using CPN detected 2D poses as input. +PT
+denotes using pre-training process, (*) refers to the refinement module from Cai et al. (2019). Best:
+**bold**, second best: underlined.
+
+|MPJPE|Dir. Disc. Eat Greet Phone Photo Pose Pur. Sit SitD. Smoke Wait WalkD. Walk WalkT.|Avg.|
+|---|---|---|
+|Pavllo et al. Pavllo et al. (2019) (T =243)<br>CVPR’19<br>Cai et al. Cai et al. (2019) (T=7)(*)<br>ICCV’19<br>Liu et al. Liu et al. (2020) (T=243)<br>CVPR’20<br>UGCN Wang et al. (2020) (T=96)<br>ECCV’20<br>Chen et al. Chen et al. (2021) (T=243)<br>TCSVT’21<br>PoseFormer Zheng et al. (2021) (T=81)<br>ICCV’21<br>MHFormer Li et al. (2022b) (T=351)<br>CVPR’22<br>Li et al. Li et al. (2022a) (T=351)(*)<br>TMM’22<br>P-STMO Shan et al. (2022) (T=243)(*)<br>ECCV’22<br>MixSTE Zhang et al. (2022) (T=243)<br>CVPR’22<br>PoseFormerV2 Zhao et al. (2023)<br>CVPR’23<br>GLA-GCN Yu et al. (2023) (T=243)<br>ICCV’23<br>STCFormer Tang et al. (2023) (T=243)<br>ICCV’23<br>Einfalt et al. Einfalt et al. (2023) (T=351, +PT)(*)<br>WACV’23<br>KTPFormer Peng et al. (2024) (T=243)<br>CVPR’24|45.2<br>46.7<br>43.3<br>45.6<br>48.1<br>55.1<br>44.6<br>44.3<br>57.3<br>65.8<br>47.1<br>44.0<br>49.0<br>32.8<br>33.9<br>44.6<br>47.4<br>45.6<br>48.8<br>50.8<br>59.0<br>47.2<br>43.9<br>57.9<br>61.9<br>49.7<br>46.6<br>51.3<br>37.1<br>39.4<br>41.8<br>44.8<br>41.1<br>44.9<br>47.4<br>54.1<br>43.4<br>42.2<br>56.2<br>63.6<br>45.3<br>43.5<br>45.3<br>31.3<br>32.2<br>40.2<br>42.5<br>42.6<br>41.1<br>46.7<br>56.7<br>41.4<br>42.3<br>56.2<br>60.4<br>46.3<br>42.2<br>46.2<br>31.7<br>31.0<br>41.4<br>43.5<br>40.1<br>42.9<br>46.6<br>51.9<br>41.7<br>42.3<br>53.9<br>60.2<br>45.4<br>41.7<br>46.0<br>31.5<br>32.7<br>41.5<br>44.8<br>39.8<br>42.5<br>46.5<br>51.6<br>42.1<br>42.0<br>53.3<br>60.7<br>45.5<br>43.3<br>46.1<br>31.8<br>32.2<br>39.2<br>43.1<br>40.1<br>40.9<br>44.9<br>51.2<br>40.6<br>41.3<br>53.5<br>60.3<br>43.7<br>41.1<br>43.8<br>29.8<br>30.6<br>40.3<br>43.3<br>40.2<br>42.3<br>45.6<br>52.3<br>41.8<br>40.5<br>55.9<br>60.6<br>44.2<br>43.0<br>44.2<br>30.0<br>30.2<br>38.4<br>42.1<br>39.8<br>40.2<br>45.2<br>48.9<br>40.4<br>38.3<br>53.8<br>57.3<br>43.9<br>41.6<br>42.2<br>29.3<br>29.3<br>37.6<br>40.9<br>37.3<br>39.7<br>42.3<br>49.9<br>40.1<br>39.8<br>51.7<br>55.0<br>42.1<br>39.8<br>41.0<br>27.9<br>27.9<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>41.3<br>44.3<br>40.8<br>41.8<br>45.9<br>54.1<br>42.1<br>41.5<br>57.8<br>62.9<br>45.0<br>42.8<br>45.9<br>29.4<br>29.9<br>38.4<br>41.2<br>36.8<br>38.0<br>42.7<br>50.5<br>38.7<br>38.2<br>52.5<br>56.8<br>41.8<br>**38.4**<br>40.2<br>**26.2**<br>27.7<br>39.6<br>43.8<br>40.2<br>42.4<br>46.5<br>53.9<br>42.3<br>42.5<br>55.7<br>62.3<br>45.1<br>43.0<br>44.7<br>30.1<br>30.8<br>37.3<br>39.2<br>**35.9**<br>37.6<br>42.5<br>48.2<br>**38.6**<br>39.0<br>51.4<br>55.9<br>41.6<br>39.0<br>**40.0**<br>27.0<br>**27.4**|46.8<br>48.8<br>45.1<br>44.5<br>44.1<br>44.3<br>43.0<br>43.7<br>42.1<br>40.9<br>45.2<br>44.4<br>40.5<br>44.2<br>40.1|
+|<br><br>G-SFormer-S (T=243)<br>Ours<br>G-SFormer-S (T=243, +PT)<br>Ours<br>G-SFormer (T=243)<br>Ours<br>G-SFormer (T=243, +PT)<br>Ours<br>G-SFormer-L (T=243)<br>Ours<br>G-SFormer-L (T=243, +PT)<br>Ours<br>G-SFormer-L (T=243, +PT)(*)<br>Ours|40.3<br>43.2<br>39.6<br>40.8<br>43.9<br>50.1<br>41.6<br>40.1<br>53.1<br>60.0<br>43.3<br>41.1<br>43.4<br>29.8<br>30.0<br>39.5<br>42.3<br>38.4<br>39.4<br>44.1<br>49.5<br>40.3<br>40.1<br>52.1<br>59.2<br>42.8<br>40.2<br>42.3<br>29.1<br>29.7<br>39.8<br>42.9<br>39.2<br>40.2<br>43.3<br>49.9<br>41.2<br>39.6<br>53.0<br>59.9<br>43.0<br>40.3<br>42.6<br>29.4<br>29.8<br>37.8<br>41.9<br>37.1<br>39.5<br>43.6<br>47.9<br>40.3<br>38.6<br>53.0<br>58.9<br>42.6<br>39.6<br>41.5<br>28.7<br>29.1<br>38.9<br>42.3<br>39.1<br>39.7<br>43.6<br>49.3<br>40.9<br>38.6<br>52.0<br>56.4<br>42.0<br>39.6<br>41.9<br>29.5<br>29.8<br>38.3<br>40.7<br>37.0<br>38.8<br>42.6<br>47.8<br>39.3<br>38.3<br>50.1<br>57.0<br>41.5<br>38.6<br>40.5<br>28.4<br>28.6<br>**36.8**<br>40.1<br>37.2<br>**37.5**<br>**42.4**<br>**46.4**<br>39.0<br>**37.7**<br>**49.9**<br>**55.6**<br>**40.8**<br>38.5<br>40.1<br>28.2<br>28.4|42.7<br>41.9<br>42.3<br>41.3<br>41.6<br>40.5<br>**39.9**|
+|P-MPJPE|Dir.<br>Disc.<br>Eat<br>Greet<br>Phone<br>Photo<br>Pose<br>Pur.<br>Sit<br>SitD.<br>Smoke<br>Wait<br>WalkD.<br>Walk<br>WalkT.|Avg.|
+|PoseFormer Zheng et al. (2021) (T=81)<br>ICCV’21<br>Li et al. Li et al. (2022a) (T=351)(*)<br>TMM’22<br>P-STMO Shan et al. (2022) (T=243)(*)<br>ECCV’22<br>MixSTE Zhang et al. (2022) (T=243)<br>CVPR’22<br>PoseFormerV2 Zhao et al. (2023)<br>CVPR’23<br>GLA-GCN Yu et al. (2023) (T=243)<br>ICCV’23<br>STCFormer Tang et al. (2023) (T=243)<br>ICCV’23<br>Einfalt et al. Einfalt et al. (2023) (T=351, +PT)(*)<br>WACV’23<br>KTPFormer Peng et al. (2024) (T=243)<br>CVPR’24|32.5<br>34.8<br>32.6<br>34.6<br>35.3<br>39.5<br>32.1<br>32.0<br>42.8<br>48.5<br>34.8<br>32.4<br>35.3<br>24.5<br>26.0<br>32.7<br>35.5<br>32.5<br>35.4<br>35.9<br>41.6<br>33.0<br>31.9<br>45.1<br>50.1<br>36.3<br>33.5<br>35.1<br>23.9<br>25.0<br>31.3<br>35.2<br>32.9<br>33.9<br>35.4<br>39.3<br>32.5<br>31.5<br>44.6<br>48.2<br>36.3<br>32.9<br>34.4<br>23.8<br>23.9<br>30.8<br>33.1<br>30.3<br>31.8<br>33.1<br>39.1<br>31.1<br>30.5<br>42.5<br>44.5<br>34.0<br>30.8<br>32.7<br>22.1<br>22.9<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>32.4<br>35.3<br>32.6<br>34.2<br>35.0<br>42.1<br>32.1<br>31.9<br>45.5<br>49.5<br>36.1<br>32.4<br>35.6<br>23.5<br>24.7<br>29.3<br>33.0<br>30.7<br>30.6<br>32.7<br>38.2<br>**29.7**<br>**28.8**<br>42.2<br>**45.0**<br>**33.3**<br>**29.4**<br>31.5<br>**20.9**<br>**22.3**<br>32.7<br>36.1<br>33.4<br>36.0<br>36.1<br>42.0<br>33.3<br>33.1<br>45.4<br>50.7<br>37.0<br>34.1<br>35.9<br>24.4<br>25.4<br>**30.1**<br>**32.3**<br>**29.6**<br>30.8<br>**32.3**<br>**37.3**<br>30.0<br>30.2<br>**41.0**<br>45.3<br>33.6<br>29.9<br>**31.4**<br>21.5<br>22.6|34.6<br>35.2<br>34.4<br>32.6<br>35.6<br>34.8<br>**31.8**<br>35.7<br>31.9|
+|<br><br>G-SFormer (T=243)<br>Ours<br>G-SFormer (T=243, +PT)<br>Ours<br>G-SFormer-L (T=243)<br>Ours<br>G-SFormer-L (T=243, +PT)<br>Ours|31.9<br>34.6<br>32.6<br>33.6<br>33.9<br>39.3<br>32.2<br>31.0<br>42.9<br>47.6<br>35.1<br>32.1<br>34.2<br>24.0<br>24.3<br>30.7<br>34.0<br>30.8<br>32.9<br>33.7<br>38.6<br>31.7<br>30.1<br>42.3<br>47.3<br>34.8<br>31.7<br>33.3<br>23.4<br>23.9<br>31.0<br>34.2<br>32.4<br>33.1<br>34.0<br>38.7<br>32.0<br>30.6<br>42.4<br>45.4<br>34.6<br>31.4<br>33.7<br>24.2<br>24.2<br>30.5<br>33.0<br>30.2<br>32.2<br>33.0<br>37.5<br>31.0<br>30.0<br>**41.0**<br>45.9<br>33.9<br>30.7<br>32.6<br>23.1<br>23.6|33.9<br>33.3<br>33.5<br>32.5|
+
+
+Table 2: Quantitative comparisons with SOTA methods on Human3.6M under Parameter number,
+FLOPs, and MPJPE (mm). (+PT) indicates models with additional pre-training stage. Best: **bold**,
+second best: underlined.
+
+|Method|Frames|Params (M)|FLOPs (M)|MPJPE↓|
+|---|---|---|---|---|
+|PoseFormer Zheng et al. (2021)<br>ICCV’21<br>PoseFormer Zheng et al. (2021)<br>ICCV’21<br>MHFormer Li et al. (2022b)<br>CVPR’22<br>MHFormer Li et al. (2022b)<br>CVPR’22<br>Li et al. Li et al. (2022a)<br>TMM’22<br>Li et al. Li et al. (2022a)<br>TMM’22<br>Li et al. Li et al. (2022a)<br>TMM’22<br>P-STMO-S Shan et al. (2022) +PT<br>ECCV’22<br>P-STMO Shan et al. (2022) +PT<br>ECCV’22<br>Einfalt et al. Einfalt et al. (2023) +PT<br>WACV’23<br>Einfalt et al. Einfalt et al. (2023) +PT<br>WACV’23<br>PoseFormerV2 Zhao et al. (2023)<br>CVPR’23<br>PoseFormerV2 Zhao et al. (2023)<br>CVPR’23<br>MixSTE Zhang et al. (2022)<br>CVPR’22<br>MixSTE Zhang et al. (2022)<br>CVPR’22<br>STCFormer Tang et al. (2023)<br>ICCV’23<br>STCFormer-L Tang et al. (2023)<br>ICCV’23<br>KTPFormer Peng et al. (2024)<br>CVPR’24<br>KTPFormer Peng et al. (2024)<br>CVPR’24|27<br>81<br>27<br>81<br>81<br>243<br>351<br>81<br>243<br>81<br>351<br>81<br>243<br>81<br>243<br>81<br>243<br>81<br>243|9.59<br>9.60<br>18.92<br>19.70<br>4.06<br>4.23<br>4.34<br>5.4<br>6.7<br>10.36<br>10.39<br>14.35<br>14.35<br>33.65<br>33.65<br>4.75<br>18.91<br>33.65<br>33.65|452<br>1358<br>1030<br>3132<br>392<br>1372<br>2142<br>493<br>1737<br>543<br>966<br>352<br>1055<br>92692<br>278076<br>13070<br>156392<br>92706<br>278119|47.0<br>44.3<br>45.9<br>44.5<br>45.4<br>44.0<br>43.7<br>44.1<br>42.8<br>45.5<br>45.0<br>46.0<br>45.2<br>42.7<br>40.9<br>42.0<br>40.5<br>41.8<br>**40.1**|
+|G-SFormer-S/ +PT<br>Ours<br>G-SFormer-S/ +PT<br>Ours<br>G-SFormer/ +PT<br>Ours<br>G-SFormer-L/ +PT<br>Ours|81<br>243<br>243<br>243|4.37<br>5.02<br>5.54<br>7.65|361<br>1092<br>1346<br>2366|44.1/ 43.5<br>42.7/ 41.9<br>42.3/ 41.3<br>41.7/ 40.5|
+
+
+**Results** **on** **MPI-INF-3DHP** Table 3 reports the performance on the MPI-INF-3DHP. With 27
+frames input, G-SFormer-S trained from scratch outperforms MixSTE (Zhang et al., 2022) by large
+margins of 3.7%, 12.7% and 27.5mm in PCK, AUC and MPJPE, while occupying only 0.4% computational cost and 11% parameters. Even with the substantial reduction in complexity, G-SFormer/-S
+
+
+8
+
+
+are able to achieve the second and third best results for PCK and MPJPE. The stable performance
+further confirms the efficacy of our method.
+
+
+**Results** **on** **HumanEva** To further explore the generalization of our method, we conduct experiments on small HumanEva dataset and present results in Table 4. G-SFormer-S is trained from
+scratch and achieves the best performance with only 13% parameters and 1.2% FLOPs compared to
+the leading competitor KTPFormer (Peng et al., 2024), demonstrating strong generalization ability
+from large to small datasets.
+
+
+|Protocol #1|Walk<br>S1 S2 S3|Jog<br>S1 S2 S3|Avg.|
+|---|---|---|---|
+|PoseFormer Zheng et al. (2021) (T=43)<br>PoseFormer Zheng et al. (2021) (T=43, +PT)<br>MixSTE Zhang et al. (2022) (T=43)<br>MixSTE Zhang et al. (2022) (T=43, +PT)<br>PoseFormer-V2 Zhao et al. (2023) (T=81)(†)<br>KTPFormer Peng et al. (2024) (T=43)<br>KTPFormer Peng et al. (2024) (T=27)|16.3<br>11.0<br>47.1<br>14.4<br>10.2<br>46.6<br>16.2<br>14.2<br>21.6<br>12.7<br>10.9<br>**17.6**<br>18.3<br>12.9<br>35.1<br>16.5<br>13.9<br>19.9<br>**12.3**<br>11.5<br>19.5|25.0<br>15.2<br>15.1<br>22.7<br>13.4<br>13.4<br>24.6<br>23.2<br>25.8<br>22.6<br>15.8<br>17.0<br>28.9<br>16.4<br>17.7<br>25.3<br>15.9<br>16.5<br>20.9<br>13.1<br>14.5|21.6<br>20.1<br>20.9<br>16.1<br>21.5<br>18.0<br>15.3|
+|G-SFormer-S (T=81)|**12.3**<br>**9.0**<br>25.1|**20.3**<br>**11.0**<br>**12.1**|**15.0**|
+
+
+|Method|PCK↑ AUC↑ MPJPE↓|
+|---|---|
+|Chen et al. Chen et al. (2021) (T=81)<br>TCSVT’21<br>PoseFormer Zheng et al. (2021) (T=9)<br>ICCV’21<br>P-STMO Shan et al. (2022) (T=81)<br>ECCV’22<br>MixSTE Zhang et al. (2022) (T=27)<br>CVPR’22<br>Einfalt et al. Einfalt et al. (2023) (T=81)<br>WACV’23<br>Einfalt et al. Einfalt et al. (2023) (T=81, +PT)<br>WACV’23<br>GLA-GCN Yu et al. (2023) (T=81)<br>ICCV’23<br>STCFormer Tang et al. (2023) (T=81)<br>ICCV’23<br>PoseFormerV2 Zhao et al. (2023) (T=81)<br>CVPR’23<br>KTPFormer Peng et al. (2024) (T=81)<br>CVPR’24|87.9<br>54.0<br>78.8<br>88.6<br>56.4<br>77.1<br>97.9<br>75.8<br>32.2<br>94.4<br>66.5<br>54.9<br>95.4<br>67.6<br>46.9<br>97.1<br>70.0<br>41.2<br>98.5<br>79.1<br>27.8<br>98.7<br>83.9<br>23.1<br>97.9<br>78.8<br>27.8<br>**98.9**<br>**85.9**<br>**16.7**|
+|G-SFormer-S (T=27)<br>Ours<br>G-SFormer-S (T=81)<br>Ours<br>G-SFormer (T=243, +PT)<br>Ours|98.1<br>79.2<br>27.4<br>98.5<br>80.4<br>25.5<br>98.7<br>82.0<br>23.1|
+
+
+4.3.2 QUALITATIVE COMPARISON FOR ROBUSTNESS
+
+
+**Visualized Comparison.** In this part, we present the visualized results of G-SFormer and representative competitors (Zhang et al., 2022; Zhao et al., 2023) in and out of the datasets. Figure 5 shows
+the comparisons in actions of Smoking, Sitting and Photoing from Human3.6M. G-SFormer realise
+more accurate 3D pose reconstruction across all challenging examples with complex postures.
+
+
+Videos in-the-wild are even more challenging for 3D HPE task due to complex and changeable
+movements. Typical hard cases are presented in Figure 1(b), including detection errors such as joint
+position deviation, left-right switch, confusion caused by self-occlusion and miss/coincidence detection. G-SFormer estimates more refined and structurally reasonable 3D poses than the competitors,
+demonstrating superiority through part-based alignments that are inherently less sensitivity to local joint deviations, as well as enhanced temporal contextual correlations from multiple aspects of
+movement. In contrast, MixSTE (Zhang et al., 2022) exhibits higher sensitivity to noise, attributed
+to its excessive focus on local information while lacking a comprehensive understanding of global
+motion process within the pose sequence. Although PoseFormerV2 (Zhao et al., 2023) extracts
+global-view representation by low-frequency DCT coefficients, this compression manner discards
+features in temporal domain and inevitably causes a loss of accuracy. In contrast, G-SFormer exhibits stable performance in terms of both accuracy and robustness against missing or erroneous
+joints, with additional qualitative comparisons provided in the Appendix.
+
+
+**Attention Visualization.** Figure 6 presents spatial and temporal attention distributions. Greeting action of S11 subject on Human3.6M is applied for visualization. It can be seen from (a) that attention
+
+
+9
+
+
+Table 3: Quantitative comparisons with SOTA methods
+on MPI-INF-3DHP dataset. +PT indicates models with
+additional pre-training stage. Best: **bold**, second best:
+underlined.
+
+
+Figure 5: Visualized qualitative comparison
+with MixSTE (Zhang et al., 2022) and PoseFormerV2 (Zhao et al., 2023) on Human3.6M
+dataset.
+
+
+Table 4: Quantitative comparisons with SOTA methods on
+Human-Eva dataset of MPJPE (mm) under Protocol #1. +PT
+indicates models finetuned from the Human3.6M pre-training
+models and (†) is our re-implementation results.
+
+
+Figure 6: Visualized attention maps of ”Greeting” action in (a) Spatial Graph Encoder and (b) Skipped
+Transformer based Temporal Encoder/Decoder. Attention maps corresponding to multiple heads of
+Skipped Transformer are summed to produce the
+holistic temporal correlation distribution.
+
+
+concentrates on left arm, right arm and trunk which are main parts for hugging motion. In the temporal domain (b), global attention is built at full-sequence scale from the attention map of Encoder-L4
+layer, and the strength increases during the periods when typical hugging action is performed. As
+the hierarchical decoding stage progresses, the scope of attentional alighments gradually expand to
+a global scale as tokens in deeper decoder layers have stronger representation capabilities. _Stronger_
+_attention_ _weights_ _distributed_ _sparsely_ _in_ _both_ _local_ _and_ _global_ _temporal_ _intervals,_ _which_ _is_ _sig-_
+_nificantly different from the dense and clustered attention maps of conventional transformer-based_
+_methods (Zheng et al., 2021; Shan et al., 2022)_ . Specific comparisons are presented in Appendix.
+
+
+4.4 ABLATION STUDY
+
+
+To verify the effectiveness of main proposals, extensive ablation studies are conducted on Human3.6M. The presented analysis is based on G-SFormer-S with 243 frames input.
+
+
+|No.|m SSA Parts Enco Spatial Attn|FLOPs (M) MPJPE|
+|---|---|---|
+|1<br>Spatial-MLP<br>2<br>Joint-wise GCN<br>3<br>VT-Strided Conv<br>4<br>VT-Conv<br>5<br>G-SFormer-S-m3<br>6<br>G-SFormer-S-m5<br>7<br>G-SFormer-S-m7<br>8<br>G-SFormer-S-m9|3<br>✔<br>✔<br>✘<br>3<br>✔<br>✘<br>✔<br>1<br>✘<br>✔<br>✔<br>1<br>✘<br>✔<br>✔<br>3<br>✔<br>✔<br>✔<br>5<br>✔<br>✔<br>✔<br>7<br>✔<br>✔<br>✔<br>9<br>✔<br>✔<br>✔|1100<br>43.6<br>1387<br>44.4<br>1219<br>43.7<br>2111<br>44.0<br>1092<br>**42.7**<br>1038<br>43.0<br>1016<br>43.8<br>997<br>43.9|
+
+
+|No.|SPE DR MPJPE|
+|---|---|
+|1<br>2<br>3<br>4<br>5<br>6<br>7|✘<br>R=30<br>42.85<br>✔<br>R=10<br>42.87<br>✔<br>R=30<br>**42.70**<br>✔<br>R=50<br>42.78<br>✔<br>R=90<br>42.85<br>✔<br>✘<br>42.93<br>✘<br>✘<br>43.12|
+
+
+**Data Completion Methods** Table 5 shows the impacts of Sinusoidal Positional Encoding (SPE) and
+Data Rolling (DR). G-SFormer-S models equipped with SPE and DR show MPJPE error reduction
+of 0.15 - 0.23mm. On the other hand, the impact of Data Expanding is not obvious, which is less
+than 0.1mm. To account for datasets of different scales, R is typically set to a ratio of 10% - 20%
+relative to various input lengths.
+
+
+**Impact of Components** Table 6 lists the impact of different components and various skipped factor
+_m_ to overall performance of G-SFormer-S. In row 1 and 2, MLP layers and Joint-wise GCN are
+used to replace Part-based Adaptive GNN, leading to error increase of up to 1.7 mm. To verify
+the effectiveness of Skipped Transformer, Vanilla Transformer-based (VT) models are presented in
+row 2-3, incorporated Convolutional layer in (Zheng et al., 2021; Zhao et al., 2023) and Strided
+Convolutional layer in (Cai et al., 2019; Shan et al., 2022) for temporal aggregation, respectively.
+Performance drop 1.0-1.3 mm can be observed with _up_ _to_ _nearly_ _twice_ _computational_ _cost_ . It is
+important to note that G-SFormer shows the highest performance without relying on redundant spatial and temporal connections in Joint-wise GCN and VT series structures, further demonstrating its
+structural advantages. To validate the effect of factor _m_ in Skipped Transformer, G-SFormer-S with
+_m_ = 1 _,_ 3 _,_ 5 _,_ 7 _,_ 9 is evaluated in row 4-8 ( _m_ = 1 equals to VT-Conv). We draw the conclusion that _m_
+should be restrained within an appropriate range, as a proper _m_ strengthens global dependencies and
+reduces computational complexity. However, excessively high value of _m_ will degrade the temporal
+coherence of pose sequence. Overall, the hyperparameter _m_ enables G-SFormer with an adaptive
+architecture for different cost and accuracy requirements.
+
+
+5 CONCLUSION
+
+
+In this paper, we present a simple yet effective Graph and Skipped Transformer (G-SFormer) architecture for lifting-based 3D HPE task. G-SFormer consists of two main modules for spatial and
+temporal modeling, respectively. Specifically, a Part-based Adaptive GNN constructs a fully adaptive topology to represent interactions of body parts, and integrates multi-granularity pose attributes
+to learn a comprehensive pose representation. A Frameset-based Skipped Transformer establish
+long-range contextual dependencies for identical frames and captures global dynamics by integrating multiple motion variations within framesets. This spatio-temporal global modeling approach
+significantly reduces computational complexity and alleviates sensitivity to local joints, enhancing
+robustness against inaccuracies in detected 2D poses. Experiments demonstrate that G-SFormer
+realises high-accuracy, efficient, and robust 3D HPE for both experimental and wild videos.
+
+
+10
+
+
+Table 5: MPJPE (mm) of G-SFormer-S
+trained and tested w/ w/o Sinusoidal Positional Encoding (SPE) and different Data
+Rolling (DR) threshold _R_ .
+
+
+Table 6: Ablation studies of the impact of different components
+and skipped factor _m_ of G-SFormer-S. Experiments are conducted
+on Human3.6M dataset of MPJPE (mm).
+
+
+REFERENCES
+
+
+Yujun Cai, Liuhao Ge, Jun Liu, Jianfei Cai, Tat-Jen Cham, Junsong Yuan, and Nadia Magnenat
+Thalmann. Exploiting spatial-temporal relationships for 3d pose estimation via graph convolutional networks. In _Proceedings of the IEEE/CVF international conference on computer vision_,
+pp. 2272–2281, 2019.
+
+
+Tianlang Chen, Chen Fang, Xiaohui Shen, Yiheng Zhu, Zhili Chen, and Jiebo Luo. Anatomy-aware
+3d human pose estimation with bone-based pose decomposition. _IEEE Transactions on Circuits_
+_and Systems for Video Technology_, 32(1):198–209, 2021.
+
+
+Yilun Chen, Zhicheng Wang, Yuxiang Peng, Zhiqiang Zhang, Gang Yu, and Jian Sun. Cascaded
+pyramid network for multi-person pose estimation. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_
+_computer vision and pattern recognition_, pp. 7103–7112, 2018.
+
+
+Yu Cheng, Bo Yang, Bo Wang, Wending Yan, and Robby T Tan. Occlusion-aware networks for 3d
+human pose estimation in video. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _international_ _conference_ _on_
+_computer vision_, pp. 723–732, 2019.
+
+
+Yu Cheng, Bo Yang, Bo Wang, and Robby T Tan. 3d human pose estimation using spatio-temporal
+networks with explicit occlusion training. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_
+_Intelligence_, volume 34, pp. 10631–10638, 2020.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An
+image is worth 16x16 words: Transformers for image recognition at scale. _arXiv_ _preprint_
+_arXiv:2010.11929_, 2020.
+
+
+Moritz Einfalt, Katja Ludwig, and Rainer Lienhart. Uplift and upsample: Efficient 3d human pose
+estimation with uplifting transformers. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Winter_ _Conference_ _on_
+_Applications of Computer Vision_, pp. 2903–2913, 2023.
+
+
+Karl Holmquist and Bastian Wandt. Diffpose: Multi-hypothesis human pose estimation using diffusion models. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_, pp.
+15977–15987, 2023.
+
+
+Wenbo Hu, Changgong Zhang, Fangneng Zhan, Lei Zhang, and Tien-Tsin Wong. Conditional directed graph convolution for 3d human pose estimation. In _Proceedings of the 29th ACM Inter-_
+_national Conference on Multimedia_, pp. 602–611, 2021.
+
+
+Catalin Ionescu, Dragos Papava, Vlad Olaru, and Cristian Sminchisescu. Human3. 6m: Large scale
+datasets and predictive methods for 3d human sensing in natural environments. _IEEE transactions_
+_on pattern analysis and machine intelligence_, 36(7):1325–1339, 2013.
+
+
+Jonathan Lazar, Jinjuan Heidi Feng, and Harry Hochheiser. _Research methods in human-computer_
+_interaction_ . Morgan Kaufmann, 2017.
+
+
+Wenhao Li, Hong Liu, Runwei Ding, Mengyuan Liu, Pichao Wang, and Wenming Yang. Exploiting
+temporal contexts with strided transformer for 3d human pose estimation. _IEEE Transactions on_
+_Multimedia_, 25:1282–1293, 2022a.
+
+
+Wenhao Li, Hong Liu, Hao Tang, Pichao Wang, and Luc Van Gool. Mhformer: Multi-hypothesis
+transformer for 3d human pose estimation. In _Proceedings of the IEEE/CVF Conference on Com-_
+_puter Vision and Pattern Recognition_, pp. 13147–13156, 2022b.
+
+
+Wenhao Li, Mengyuan Liu, Hong Liu, Pichao Wang, Jialun Cai, and Nicu Sebe. Hourglass tokenizer
+for efficient transformer-based 3d human pose estimation. In _Proceedings of the IEEE/CVF Con-_
+_ference on Computer Vision and Pattern Recognition (CVPR)_, pp. 604–613, 2024.
+
+
+Ruixu Liu, Ju Shen, He Wang, Chen Chen, Sen-ching Cheung, and Vijayan Asari. Attention mechanism exploits temporal contexts: Real-time 3d human pose reconstruction. In _Proceedings of the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 5064–5073, 2020.
+
+
+11
+
+
+Naureen Mahmood, Nima Ghorbani, Nikolaus F. Troje, Gerard Pons-Moll, and Michael J. Black.
+Amass: Archive of motion capture as surface shapes. In _The IEEE International Conference on_
+_Computer Vision (ICCV)_, Oct 2019. [URL https://amass.is.tue.mpg.de.](https://amass.is.tue.mpg.de)
+
+
+Julieta Martinez, Michael J Black, and Javier Romero. On human motion prediction using recurrent neural networks. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_
+_recognition_, pp. 2891–2900, 2017.
+
+
+Dushyant Mehta, Helge Rhodin, Dan Casas, Pascal Fua, Oleksandr Sotnychenko, Weipeng Xu,
+and Christian Theobalt. Monocular 3d human pose estimation in the wild using improved cnn
+supervision. In _2017 international conference on 3D vision (3DV)_, pp. 506–516. IEEE, 2017.
+
+
+Dario Pavllo, Christoph Feichtenhofer, David Grangier, and Michael Auli. 3d human pose estimation in video with temporal convolutions and semi-supervised training. In _Proceedings_ _of_ _the_
+_IEEE/CVF conference on computer vision and pattern recognition_, pp. 7753–7762, 2019.
+
+
+Vladimir I Pavlovic, Rajeev Sharma, and Thomas S. Huang. Visual interpretation of hand gestures
+for human-computer interaction: A review. _IEEE Transactions on pattern analysis and machine_
+_intelligence_, 19(7):677–695, 1997.
+
+
+Jihua Peng, Yanghong Zhou, and PY Mok. Ktpformer: Kinematics and trajectory prior knowledgeenhanced transformer for 3d human pose estimation. In _Proceedings of the IEEE/CVF Conference_
+_on Computer Vision and Pattern Recognition_, pp. 1123–1132, 2024.
+
+
+Andrey Rudenko, Luigi Palmieri, Michael Herman, Kris M Kitani, Dariu M Gavrila, and Kai O
+Arras. Human motion trajectory prediction: A survey. _The_ _International_ _Journal_ _of_ _Robotics_
+_Research_, 39(8):895–935, 2020.
+
+
+Wenkang Shan, Zhenhua Liu, Xinfeng Zhang, Shanshe Wang, Siwei Ma, and Wen Gao. P-stmo:
+Pre-trained spatial temporal many-to-one model for 3d human pose estimation. In _European_
+_Conference on Computer Vision_, pp. 461–478. Springer, 2022.
+
+
+Wenkang Shan, Zhenhua Liu, Xinfeng Zhang, Zhao Wang, Kai Han, Shanshe Wang, Siwei Ma,
+and Wen Gao. Diffusion-based 3d human pose estimation with multi-hypothesis aggregation. In
+_Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)_, pp. 14761–
+14771, October 2023.
+
+
+Lei Shi, Yifan Zhang, Jian Cheng, and Hanqing Lu. Skeleton-based action recognition with directed
+graph neural networks. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_ _and_
+_pattern recognition_, pp. 7912–7921, 2019a.
+
+
+Lei Shi, Yifan Zhang, Jian Cheng, and Hanqing Lu. Two-stream adaptive graph convolutional
+networks for skeleton-based action recognition. In _Proceedings of the IEEE/CVF conference on_
+_computer vision and pattern recognition_, pp. 12026–12035, 2019b.
+
+
+Leonid Sigal, Alexandru O Balan, and Michael J Black. Humaneva: Synchronized video and motion
+capture dataset and baseline algorithm for evaluation of articulated human motion. _International_
+_journal of computer vision_, 87(1-2):4–27, 2010.
+
+
+Gaurav Sinha, Rahul Shahi, and Mani Shankar. Human computer interaction. In _2010 3rd Interna-_
+_tional Conference on Emerging Trends in Engineering and Technology_, pp. 1–4. IEEE, 2010.
+
+
+Babak Taati Soroush Mehraban, Vida Adeli. Motionagformer: Enhancing 3d human pose estimation
+with a transformer-gcnformer network. In _Proceedings of the IEEE/CVF Winter Conference on_
+_Applications of Computer Vision_, 2024.
+
+
+Ke Sun, Bin Xiao, Dong Liu, and Jingdong Wang. Deep high-resolution representation learning
+for human pose estimation. In _Proceedings of the IEEE/CVF conference on computer vision and_
+_pattern recognition_, pp. 5693–5703, 2019.
+
+
+Zhenhua Tang, Zhaofan Qiu, Yanbin Hao, Richang Hong, and Ting Yao. 3d human pose estimation with spatio-temporal criss-cross attention. In _Proceedings of the IEEE/CVF Conference on_
+_Computer Vision and Pattern Recognition_, pp. 4790–4799, 2023.
+
+
+12
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Jiashun Wang, Huazhe Xu, Medhini Narasimhan, and Xiaolong Wang. Multi-person 3d motion
+prediction with multi-range transformers. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_,
+34:6036–6049, 2021.
+
+
+Jingbo Wang, Sijie Yan, Yuanjun Xiong, and Dahua Lin. Motion guided 3d pose estimation from
+videos. In _European Conference on Computer Vision_, pp. 764–780. Springer, 2020.
+
+
+Sijie Yan, Yuanjun Xiong, and Dahua Lin. Spatial temporal graph convolutional networks for
+skeleton-based action recognition. In _Proceedings_ _of_ _the_ _AAAI_ _conference_ _on_ _artificial_ _intelli-_
+_gence_, volume 32, 2018.
+
+
+Bruce XB Yu, Zhi Zhang, Yongxu Liu, Sheng-hua Zhong, Yan Liu, and Chang Wen Chen. Gla-gcn:
+Global-local adaptive graph convolutional network for 3d human pose estimation from monocular
+video. In _ICCV_, pp. 1–12, 2023.
+
+
+Ailing Zeng, Xiao Sun, Lei Yang, Nanxuan Zhao, Minhao Liu, and Qiang Xu. Learning skeletal
+graph neural networks for hard 3d pose estimation. In _Proceedings of the IEEE/CVF international_
+_conference on computer vision_, pp. 11436–11445, 2021.
+
+
+Jinlu Zhang, Zhigang Tu, Jianyu Yang, Yujin Chen, and Junsong Yuan. Mixste: Seq2seq mixed
+spatio-temporal encoder for 3d human pose estimation in video. In _Proceedings of the IEEE/CVF_
+_conference on computer vision and pattern recognition_, pp. 13232–13242, 2022.
+
+
+Qitao Zhao, Ce Zheng, Mengyuan Liu, Pichao Wang, and Chen Chen. Poseformerv2: Exploring frequency domain for efficient and robust 3d human pose estimation. In _Proceedings of the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 8877–8886, 2023.
+
+
+Weixi Zhao, Weiqiang Wang, and Yunjie Tian. Graformer: Graph-oriented transformer for 3d pose
+estimation. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-_
+_nition_, pp. 20438–20447, 2022.
+
+
+Ce Zheng, Sijie Zhu, Matias Mendieta, Taojiannan Yang, Chen Chen, and Zhengming Ding. 3d
+human pose estimation with spatial and temporal transformers. In _Proceedings of the IEEE/CVF_
+_International Conference on Computer Vision_, pp. 11656–11665, 2021.
+
+
+Wentao Zhu, Xiaoxuan Ma, Zhaoyang Liu, Libin Liu, Wayne Wu, and Yizhou Wang. Motionbert: A
+unified perspective on learning human motion representations. In _Proceedings of the IEEE/CVF_
+_International Conference on Computer Vision_, 2023.
+
+
+Xizhou Zhu, Weijie Su, Lewei Lu, Bin Li, Xiaogang Wang, and Jifeng Dai. Deformable detr:
+Deformable transformers for end-to-end object detection. _arXiv preprint arXiv:2010.04159_, 2020.
+
+
+Yiran Zhu, Xing Xu, Fumin Shen, Yanli Ji, Lianli Gao, and Heng Tao Shen. Posegtac: Graph
+transformer encoder-decoder with atrous convolution for 3d human pose estimation. In _IJCAI_,
+pp. 1359–1365, 2021.
+
+
+13

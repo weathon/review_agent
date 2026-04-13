@@ -1,0 +1,3552 @@
+# AUTONOMOUS EVALUATION OF LLMS FOR TRUTH MAINTENANCE AND REASONING TASKS
+
+
+**Rushang Karia** _[∗]_ **, Daniel Bramblett** _[∗]_ **, Daksh Dobhal, Siddharth Srivastava**
+School of Computing and Augmented Intelligence
+Arizona State University
+{rushang.karia,drbrambl,ddobhal,siddharths}@asu.edu
+
+
+ABSTRACT
+
+
+This paper presents AutoEval, a novel benchmark for scaling Large Language
+Model (LLM) assessment in formal tasks with clear notions of correctness, such
+as truth maintenance in translation and logical reasoning. AutoEval is the first
+benchmarking paradigm that offers several key advantages necessary for scaling
+objective evaluation of LLMs without human labeling: (a) ability to evaluate
+LLMs of increasing sophistication by auto-generating tasks at different levels
+of difficulty; (b) auto-generation of ground truth that eliminates dependence on
+expensive and time-consuming human annotation; (c) the use of automatically
+generated, randomized datasets that mitigate the ability of successive LLMs to
+overfit to static datasets used in many contemporary benchmarks. Empirical
+analysis shows that an LLM’s performance on AutoEval is highly indicative of its
+performance on a diverse array of other benchmarks focusing on translation and
+reasoning tasks, making it a valuable autonomous evaluation paradigm in settings
+where hand-curated datasets can be hard to obtain and/or update.
+
+
+1 INTRODUCTION
+
+
+Large Language Models (LLMs) have been demonstrated to perform well in many natural language
+tasks involving formal languages such as _autoformalization_ - converting natural language ( _NL_ )
+to formal language ( _FL_ ) such as source code, math etc., (Wu et al., 2022; Liang et al., 2023),
+_informalization_ - converting _FL_ to _NL_ (e.g. code summarization), and _reasoning_ - using LLMs
+to perform sound reasoning or derive proofs. Although these methods have been successful in
+small-scale scenarios, LLM’s effectiveness in maintaining factual accuracy or preserving which
+facts are true across translation remains unclear due to the difficulty in designing benchmarks that
+capture truth maintenance in such tasks. Multiple authors have noted that existing benchmarks and
+evaluation methodologies for such tasks are susceptible to the Benchmark Contamination Problem
+due to their use of static datasets, e.g., HumanEval (Chen et al., 2021; Wu et al., 2022; Han et al.,
+2024), and/or metrics that are insufficient/incomplete syntactic measures of evaluation (e.g, BLEU
+scores (Callison-Burch et al., 2006). As a result, existing methods provide misleading signals on
+the capabilities of LLM technology. One effective method to mitigate this problem in existing
+benchmarks is creating new data (Xu et al., 2024a). This is a tedious and expensive process since data
+generation requires expert annotators to hand-generate well-balanced datasets. While using LLMs as
+judges and/or metrics is a promising research direction (Zheng et al., 2023; Shankar et al., 2024; Xu
+et al., 2024b; Madaan et al., 2023), it is unknown whether LLMs can be used as accurate verifiers.
+
+
+This paper addresses three key desiderata for benchmarking LLM capabilities in truth maintenance
+across _NL_ and _FL_ : _(D1) Can we dynamically generate out-of-distribution datasets without human_
+_annotators?_ _(D2) How do we accurately assess an LLM’s truth maintenance capabilities?_ _(D3) Can_
+_we develop a benchmark predictive of LLM performance on formal translation and reasoning tasks?_
+
+
+**Main contributions** Our key contributions are as follows:
+
+
+1. A new approach for automatic synthesis of well-balanced test datasets using context-free
+grammars that are unlikely to be memorized during the LLM’s training process (§D1).
+
+
+_∗_ These authors contributed equally.
+
+
+1
+
+
+2. The utilization of formal verifiers such as theorem provers to provably validate syntaxindependent notions of correctness without having to exhaustively test over all possible truth
+valuations of formal syntax involving logic (§D2).
+
+3. _∀_ uto _∃∨∧_ L: a scalable, plug-and-play assessment system for benchmarking new LLMs as
+and when they are developed. Our system can be extended to any class of formal syntax that
+uses a grammar and admits an equivalence checker.
+
+
+4. We show that LLM performance on our metric serves as an effective indicator of LLM
+performance on other metrics across a wide variety of tasks, such as first-order logic
+reasoning (§D3). Thus, our metric offers a scalable and efficient surrogate for evaluating
+new LLMs in tasks where other metrics may be limited due to the unavailability of new
+datasets. We also show that SOTA LLMs are unable to maintain truth effectively.
+
+
+2 FORMAL FRAMEWORK
+
+
+Large Language Models (LLMs) are non-linear functions represented by (billons of) parameters _θ_
+that, given a set of input tokens _x_ 1 _, . . ., xn_, typically from natural language _NL_, predict the output
+token _yi_ +1 using the distribution _P_ ( _yi_ +1 _|x_ 1 _, . . ., xn, y_ 1 _, . . ., yi_ ; _θ_ ). The input tokens contain _context_
+_κ_ (also known as a prompt) that provides the necessary information for the task (e.g., instructions,
+etc). It is known that _κ_ significantly impacts the response quality _y_ 1 _, . . ., yn_ (Sahoo et al., 2024).
+
+
+Propositional Logic is a branch of logic that utilizes _propositions_ and _logical operators_ (e.g., conjunction: _∧_, etc) to construct sentences that can be used to perform reasoning using the rules of
+logic. For example, propositions, _p_ 1 = _It is raining_, _p_ 2 = _It is sunny_ can be used to create a sentence
+_P_ = _p_ 1 _p_ 2. If _P_ is true and _p_ 1 is observed, then one can use the rules of inference to deduce that
+_p_ 2 is true (Huth & Ryan, 2004). _∨_ _¬_ Two sentences in propositional logic, _P_ 1 and _P_ 2, are equivalent,
+_P_ 1 _P_ 2, iff their truth values agree for all possible assignments. E.g., ( _p_ 1 _p_ 2) _p_ 1 _p_ 2
+since _≡_ _p_ 1 _, p_ 2 _True, False_ _True, False_, ( _p_ 1 _p_ 2) = _p_ 1 _p_ 2 _¬_ . _∧_ _≡¬_ _∨¬_
+_∀_ _∈{_ _} × {_ _}_ _¬_ _∧_ _¬_ _∨¬_
+
+First-order Logic (FOL) differs from propositional logic in that sentences are constructed using
+_predicates_, _quantifiers_, _constants_, _symbols_, and _variables_ . A popular example is the syllogism, where,
+given two FOL sentences _∀x. Man_ ( _x_ ) _→_ _Mortal_ ( _x_ ) and _Man_ ( _Socrates_ ), one can conclude that
+_Mortal_ ( _Socrates_ ). A FOL sentence _F_ can be interpreted using a universe _U_, a substitution operator _σ_,
+and an interpretation function (Russell & Norvig, 2020). Two FOL sentences, _F_ 1 _, F_ 2, are equivalent,
+_I_
+_F_ 1 _F_ 2, iff they are equivalent under all possible models. E.g., _x. Man_ ( _x_ ) _y._ _Man_ ( _y_ ).
+_≡_ _¬∀_ _≡∃_ _¬_
+
+A regular expression (regex) is a sequence of characters used to determine whether a particular string
+matches the pattern or _language_ induced by the regex. For example, the regex 200(00) _[∗]_ 1 using
+Σ = _{_ 0 _,_ 1 _,_ 2 _}_ matches all strings possible using Σ that begin with a two, followed by one or more
+pairs of zeroes, and end with a one (Hopcroft et al., 2001). Two regexes, _R_ 1 and _R_ 2 are equivalent,
+_R_ 1 _R_ 2, if they represent the same language. It is known that _R_ 1 _R_ 2 if their corresponding
+_≡_ _≡_
+minimal deterministic finite automata, _D_ 1 _, D_ 2, are isomorphic, i.e., _D_ 1 _≃_ _D_ 2 (Hopcroft et al., 2001).
+
+We refer to sentences (strings) in first-order and propositional logic (regexes) as formal language _FL_
+in this paper. We now provide a definition of _(Auto/In)formalization_ in the context of LLMs.
+
+**Definition 2.1** (Autoformalization: _A_ ) **.** Given an LLM _L_, a _NL N_, a _FL F_, a string _ψ_ _∈_ _NL_, and
+context _κ_ _[′]_, autoformalization, is defined as using _L_ to translate _ψ_ to _φ_ = _L_ ( _ψ, κ_ _[′]_ ) s.t. _φ_ _FL_ .
+_A_ _A_ _∈_
+
+**Definition 2.2** (Informalization: _I_ ) **.** Given an LLM _L_, a _NL N_, a _FL F_, a string _φ ∈_ _FL_, and context
+_κ_, informalization, is defined as using _L_ to translate _φ_ to _ψ_ = _L_ ( _φ, κ_ ) s.t. _ψ_ _NL_ .
+_I_ _I_ _∈_
+
+
+_Example_ One possible autoformalization of _“Every human drinks coffee but some are not dependent on_
+_it”_ in FOL is [ _∀x. Human_ ( _x_ ) = _⇒_ _Drinks_ ( _x, Coffee_ )] _∧_ [ _∃y. Human_ ( _y_ ) _∧¬Dependent_ ( _y, Coffee_ )].
+Ideally, informalization will be an inverse of autoformalization. Therefore, the FOL formula
+
+[ _∀x. Human_ ( _x_ ) = _⇒_ _Drinks_ ( _x, Coffee_ )] _∧_ [ _∃y. Human_ ( _y_ ) _∧¬Dependent_ ( _y, Coffee_ )] can be informalized to the sentence _“Every human drinks coffee but some are not dependent on it”_ .
+
+
+We assume that the context _κ, κ_ _[′]_ provided contains the prompt and any necessary vocabulary that is
+needed for the task (e.g., _Human_ ( _x_ ) represents that _x_ is a human, etc.). We omit _κ, κ_ _[′]_, and _L_ in the
+notation for _A_ and _I_ where they are clear from the context.
+
+
+2
+
+
+Informalization and autoformalization are non-deterministic functions. Therefore, it is possible that
+a different LLM (or the same LLM with a different seed) autoformalizes the same input text to a
+syntactically or even semantically different output. E.g., the example above could be autoformalized
+to the semantically equivalent form: _∀x. Human_ ( _x_ ) = _⇒_ _Drinks_ ( _x, Coffee_ ) _∧¬∀y. Human_ ( _y_ ) = _⇒_
+_Dependent_ ( _y, Coffee_ ). Similarly, an LLM can informalize differently. The example above could
+be informalized by the same LLM to _“All humans drink coffee but some are not dependent on it”_ .
+Thus, the informalization (autoformalization) of an autoformalization (informalization) of a string
+is possibly different from that string: _L_ ( _L_ ( _φ, κ_ _[′]_ ) _, κ_ ) = _φ_ and _L_ ( _L_ ( _ψ, κ_ ) _, κ_ _[′]_ ) = _ψ_ . Given
+_n ∈_ N [+], let ( _A ◦I_ ) _[n]_ ( _φ_ 0) to refer to the sequence _A_ _I_ _φ_ 0 _→_ _ψ_ 0 _→_ _. . . →I_ _φAn_ that is obtained using an
+LLM _L_ when starting with _FL φ_ 0, where _ψi_ = ( _φi_ ) and _φi_ +1 = ( _ψi_ ).
+_I_ _A_
+
+While syntactic differences across ( ) _[n]_ ( _φ_ 0) operations may be acceptable, the ability of an LLM
+_A ◦I_
+to maintain semantic content across ( ) _[n]_ ( _φ_ 0) for _FL_ such as first-order logic, regular expressions,
+_A◦I_
+etc., is foundational and underlies many aspects of the capabilities of LLMs surrounding reasoning,
+semantically accurate translation, etc. For programming, it has been shown that autoformalization
+accuracy is indicative of the reasoning abilities of LLMs since they frame reasoning as generation of
+_FL_ (Chen et al., 2021). Others (Wu et al., 2022) have made similar observations and have highlighted
+the need for benchmarks and metrics for assessing the truth maintenance capabilities of LLMs. In
+this paper, we further show through our empirical evaluation that an LLM’s ability to preserve factual
+information or semantic truth across translations is indicative of its performance on related tasks.
+
+
+Intuitively, truth maintenance captures an LLM’s ability to preserve truth across translation; operationally, it evaluates the ability of a system to be able to accurately invert its own translations. We say
+that an LLM maintains truth in translation iff ( ) _[n]_ ( _φ_ 0) always leads to a _φn_ that is semantically
+_A ◦I_
+equivalent to _φ_ 0. Recall that denotes the semantic equivalence operator in FL. Formally,
+_≡_
+
+**Definition 2.3** (LLM Truth Maintenance) **.** An LLM _L_ maintains truth in translation iff _φ_ 0 _, n_, and
+_∀_
+for all sequences ( ) _[n]_ ( _φ_ 0) obtained using _L_, _φn_ _φ_ 0.
+_A ◦I_ _≡_
+
+
+In practice, we estimate the ability for truth maintenance through a sampling-based process. Naturally,
+LLMs may not autoformalize, reason, etc., correctly due to issues like hallucination (Ji et al., 2023),
+etc. For the earlier example, the LLM could autoformalize by omitting the _Human_ ( _y_ ) statement to
+yield [ _∀x. Human_ ( _x_ ) = _⇒_ _Drinks_ ( _x, Coffee_ )] _∧_ [ _∃y. ¬Dependent_ ( _y, Coffee_ )]. This seems innocuous
+but changes the meaning since _y_ is no longer required to be human, and thus it interprets as _“All_
+_humans drink coffee, but some element of the universe is not dependent on coffee.”_ Such issues have
+profound implications in synthesizing specifications and/or programs. Thus, an LLM must be able to
+understand its own generated output across _NL_ and _FL_, and it is imperative to create a benchmark
+that can faithfully assess the truth maintenance of LLMs.
+
+
+3 THE _∀_ UTO _∃∨∧_ L APPROACH FOR ASSESSING TRUTH MAINTENANCE
+
+We now describe our approach, _∀_ uto _∃∨∧_ L, for autonomously assessing an LLM’s ability for truth
+maintenance. _∀_ uto _∃∨∧_ L provides dynamically generated datasets that can be scaled arbitrarily
+by systematically generating out-of-distribution, well-balanced ground-truth data (§D1 - Sec. 1),
+provides §D2 by using intrinsic LLM capabilities to automatically assess ( ) _[n]_ ( _φ_ 0) without
+_A ◦I_
+requiring any labeled annotations and using formal verifiers to rigorously check and guarantee the
+correctness of ( ) _[n]_ ( _φ_ 0) without having to engage in an exhaustive search process.
+_A ◦I_
+
+
+3.1 AUTOMATIC EVALUATION OF TRUTH MAINTENANCE
+
+
+We develop a novel technique that can soundly assess truth maintenance without any human annotations by evaluating _φi_ _ψi_ _φi_ +1. Our approach is based on the following intuition. Let
+_→_ _→_
+_I_ : _φ_ _→_ _ψ_ be a non-deterministic function that maps _FL φ_ to _NL ψ_ . Similarly, let _A_ : _ψ_ _→_ _φ_ be
+a non-deterministic function that maps _NL ψ_ to _FL φ_ . In general, there are many possible correct
+informalizations (autoformalizations) of _φ ∈_ _FL_ ( _ψ_ _∈_ _NL_ ). Because _I_ and _A_ are non-deterministic
+functions, their inverses are thus not well-defined.
+
+Our key observation is that if _I_ and _A_ come from the same system (e.g., an LLM), then we can
+evaluate that system’s truth maintenance by _composing I_ and _A_ . Let _φ_ be any _FL_ expression and let
+_L_ be an LLM. If _L_ preserves truth, then _ψ_ = _I_ ( _φ_ ) will be an accurate _NL_ representation of _φ_ and
+
+
+3
+
+
+|Case 1 (Vocabulary is abstract)<br>Context<br>A conjunction of the<br>propositions p1, p2, p1;<br>LLM also expressed p1 and 's<br>Clear<br>p2 by idempotence<br>Case 2 (Vocabulary is real-world)<br>Context<br>The sun was bright the<br>day before whilst it is<br>'s<br>: It is raining LLM raining heavily today Clear<br>: It was sunny yesterday|?<br>True<br>Prover9<br>?<br>True<br>Prover9|
+|---|---|
+|<br>**_ [a-z]+@[a-z]+.com_**<br>An regular expression<br>for email with a set of<br>characters separated<br>by @, ending in .com<br>**Case 3 (Vocabulary is real-world)**<br>Clear 's Context<br>**_LLM_**|<br>**_\W+@\W+.com_**<br>False<br>(numbers are not allowed in )<br>**_Prover9_**<br> <br> <br>**_?_**|
+
+
+Figure 1: The _∀_ uto _∃∨∧_ L process for autonomous evaluation of LLM truth maintenance w.r.t. ( _A ◦I_ ) _[n]_ ( _φ_ 0).
+
+
+_φ_ _[′]_ = _A_ ( _ψ_ ) will be a semantically equivalent _FL_ representation of _ψ_ . Since _ψ_ is an _NL_ description, it
+is quite challenging to check whether _I_ ( _φ_ ) is indeed an accurate representation of _φ_ without human
+intervention. However, if _L_ preserves truth, _φ_ _[′]_ = _A_ ( _I_ ( _φ_ )) will be semantically equivalent to _φ_
+even if they are not syntactically identical. Thus, we only need to check if _φ ≡_ _φ_ _[′]_ . For example, let
+_φusing Idempotence.”_ 0 = _p_ 1 _∧_ _p_ 1, _ψ_ 0 =, and _I_ ( _φ φ_ 1) = _[′]_ 1 [=] _“A conjunction of propositions_ _[ A]_ [(] _[ψ]_ [0][) =] _[ p]_ [1] [for a sequence][ (] _[A ◦I]_ _p_ 1 _and_ [)][1][(] _p_ _[φ]_ 1 [0] _that can be simplified to_ [)][.] [It is challenging to check] _p_ 1
+if _ψ_ 0 accurately represents _φ_ 0, but it is easy to check if _φ_ 0 _≡_ _φ_ 1 using a formal verifier.
+
+Since _∀_ uto _∃∨∧_ L uses formal syntax _φ_ as input and produces formal syntax _φ_ _[′]_ as output, we can use
+formal verifiers to check whether _φ ≡_ _φ_ _[′]_ . As a result, _∀_ uto _∃∨∧_ L avoids brittle syntactic equivalence
+checks and exhaustive tests of semantic equivalence that require evaluations of all possible truth
+valuations of formulas or executions of regexes.
+
+
+We use the above insights to automatically assess LLM truth maintenance by using the same LLM
+_L_ to represent _I_ and _A_ respectively. Fig. 1 shows our overall assessment process. Briefly, we use a
+context-free grammar to automatically generate a ground-truth _FL_ expression _φ_ 0. Next, we use
+_G_
+a vocabulary generation process to generate a context for _φ_ 0. This can either use abstract terms or
+use _NL_ elements for more human-like scenarios (§D1). We then evaluate ( ) [1] ( _φ_ 0) by using _L_
+_A ◦I_
+to first generate _ψ_ 0 = ( _φ_ 0 _, κ_ ) using context _κ_ designed for informalization. The context of _L_ is
+_I_
+cleared (note that we only use the output of ( _φ_ 0)), and we use _L_ to generate _φ_ 1 = ( _ψ_ 0 _, κ_ _[′]_ ) using
+_I_ _A_
+context _κ_ _[′]_ designed for autoformalization. We then use a verifier (e.g., Z3 (de Moura & Bjørner,
+2008), Prover9 (McCune, 2010)) to assess if _φ_ 0 _≡_ _φ_ 1 since both are elements of _FL_ . If _φ_ 0 _≡_ _φ_ 1 then
+we can repeat the process by evaluating ( ) [1] ( _φ_ 1) similarly.
+_A ◦I_
+
+_Example:_ Consider case 2 in Fig. 1. _∀_ uto _∃∨∧_ L uses the grammar in Fig. 2b to automatically generate
+a ground truth _FL_ sentence as _φ_ 0 = _p_ 1 _p_ 2 _p_ 1. We can use any vocabulary to generate meaning for
+the propositions; _p_ 1 : _It is raining today ∧_, _p_ 2 _∧_ : _It was sunny yesterday_ . Next, the LLM _L_ is prompted
+with Prompt 1 to perform informalization yielding _NL ψ_ 0 = ( _φ_ 0). _L_ can perform any simplification
+_A_
+or other paraphrasing necessary. For example, _L_ could informalize _φ_ 0 above to _ψ_ 0 = _“The weather_
+_status was sunny yesterday whilst it is raining today.”_ Notice that the LLM-generated _NL_ statement
+automatically reflects a simplification using the Commutative ( _a_ _∧_ _b_ _≡_ _b_ _∧_ _a_ ) and Idempotent
+( _a_ _a_ _a_ ) properties. Next, _L_ is asked to autoformalize _ψ_ 0 without any context other than the
+_∧_ _≡_
+vocabulary to use and a prompt for autoformalization (App. F). In this case, the LLM could return
+_φ_ 1 = ( _ψ_ 0) = _p_ 1 _p_ 2. We use a theorem prover such as Prover9 (McCune, 2010) to show that
+_φ_ 0 _≡_ _φA_ 1 and thus assess _∧_ _L_ ’s truth maintenance capabilities w.r.t. ( _A ◦I_ ) [1] ( _φ_ 0).
+
+
+4
+
+
+3.2 _∀_ UTO _∃∨∧_ L METRICS
+
+_∀_ **uto** _∃∨∧_ **L score** When evaluating an LLM’s truth-maintenance capabilities, it is crucial to consider
+the intended application, because performance on FL strings of similar complexity typically indicates
+how the model will fare in practice. As such, _∀_ uto _∃∨∧_ L can be used in two distinct modes: parameterized and calibrated _∀_ uto _∃∨∧_ L scores. The _parameterized ∀uto∃∨∧L score_ computes performance
+with the descriptional complexity of FL strings as a parameter (e.g., the number of operators). The
+_calibrated_ _uto_ _L score Scal_ ( _D, d_ ) is computed using all FL strings from dataset _D_ with complex_∀_ _∃∨∧_
+ity up to _d_, where there are equal number of examples for each complexity. In both modes, the score
+is computed as the fraction of FL strings in the corresponding dataset for which ( ) [1] ( _φ_ 1) _φ_ 1.
+_A ◦I_ _≡_
+
+**Bounding false positives in computation of** _∀_ **uto** _∃∨∧_ **L scores** A key advantage of the _∀_ uto _∃∨∧_ L
+score is its robustness to different informalizations of the same _FL_ . Thus, when _∀_ uto _∃∨∧_ L outputs
+that an LLM maintains truth ( ) _[n]_ ( _φ_ 0) on _FL φ_ 0, the intermediate _NL_ = ( _ψ_ 0) is a semantically
+_A ◦I_ _I_
+equivalent translation of _φ_ 0. We now bound the probability of false positives, i.e., cases where the
+LLM fails both autoformalizing and informalizing but yields an FL string equivalent to the original.
+
+
+Given an LLM _L_, let _φ_ 0 _IL_ ( _φ_ 0) _ψ_ 0 _AL_ ( _ψ_ 0) _φ_ 1 be an execution of the uto L process for
+_−−−−→_ _−−−−−→_ _∀_ _∃∨∧_
+( ) [1] ( _φ_ 0) s.t. _φ_ 0 _φ_ 1 but _ψ_ 0 is not an accurate representation of _φ_ 0. We can derive the
+_A_ _◦I_ _≡_
+probability of uto L providing such false positives. Let _pI_ be the probability with which _L_
+_∀_ _∃∨∧_
+informalizes an _FL_ expression ( _φ_ 0) = _ψ_ 0 s.t. _ψ_ 0 is an accurate representation of _φ_ 0. Similarly,
+_I_
+let _pA_ be the probability of autoformalizing _ψ_ 0, ( _ψ_ 0) = _φ_ 1, s.t. _φ_ 1 is semantically equivalent to
+_A_
+_ψ_ 0, i.e. _φ_ 0 _φ_ 1. Let _pH_ be the probability that _L_ hallucinates _FL φ_ 1 by autoformalizing _ψ_ 0 s.t.
+_≡_
+_φ_ 1 _≡_ _φ_ 0 given that _ψ_ 0 is not an accurate representation of _φ_ 0.
+
+It can be seen that for a false positive to be outputted by uto L, the sequence _φ_ 0 _ψ_ 0 produces
+_∀_ _∃∨∧_ _→_
+an incorrect _NL_ description and the sequence _ψ_ 0 _→_ _φ_ 1 autoformalizes incorrectly but hallucinates
+just right to yield _φ_ 1 _φ_ 0. The probability of such a sequence corresponds to _L_ making two
+_≡_
+mistakes, with the second mistake being such that it generated an expression equivalent to _φ_ 0. This
+can be expressed as (1 _pI_ )(1 _pA_ ) _pH_ . For ( ) _[n]_ ( _φ_ 0), this probability is (1 _pI_ ) _[n]_ (1 _pA_ ) _[n]_ _p_ _[n]_ _H_
+
+_−_ _−_ _A◦I_ _−_ _−_
+since uto L computes ( ) [1] ( _φi_ ) if _φi−_ 1 _φi_ (Sec. 3). As LLM technology improves, we
+_∀_ _∃∨∧_ _A ◦I_ _≡_
+expect _pI, pA_ 1 and _pH_ 0. As a result, the probability of false positives provided by uto L
+_→_ _→_ _∀_ _∃∨∧_
+decreases as _n_ increases. This low likelihood of false positives is further confirmed empirically by
+our analysis of correlation and predictive power w.r.t. other benchmarks (Sec. 4).
+
+
+**LLMs as verifiers score** The llm-verifier score evaluates a given llm’s ability to determine equivalence
+between FL strings. It is measured by using FL strings produced by a LLM from the _∀_ uto _∃∨∧_ L
+process. For each dataset and descriptional complexity, we compute an _F_ 1 score by comparing the
+evaluated LLM’s equivalence predictions with the formal verifier’s results. We use Chain-of-Thought
+(CoT) to allow LLMs to utilize their generated outputs to improve their reasoning (Wei et al., 2022).
+
+**Predictive power** In addition to using calibrated and parameterized _∀_ uto _∃∨∧_ L scores for assessing the
+ability for truth maintenance, we propose a new metric for evaluating the extent to which performance
+on a benchmark is indicative of performance on other benchmarks:
+
+
+**Definition 3.1** (Predictive Power) **.** Let _L_ 1 and _L_ 2 be language models evaluated on two benchmarks
+_A_ and _B_ with ranks _≥A_ and _≥B_ . The _predictive power of A over B_ is formally defined as _P|A_ ( _B_ ) =
+_Pr_ ( _L_ 1 _B_ _L_ 2 _L_ 1 _A_ _L_ 2).
+_≥_ _|_ _≥_
+
+
+In practice, we compute predictive power as a sampling-based maximum-likelihood estimate over
+multiple auto-generated datasets.
+
+
+3.3 DYNAMIC DATASET GENERATION
+
+
+We use context-free grammars (CFGs) (Hopcroft et al., 2001) – a set of _production rules_ over _terminal_
+and _non-terminal_ symbols – for dynamically generating datasets. An _infix parse tree_ is obtained by
+repeatedly applying the rules, where the depth of this tree is often used to measure the _descriptional_
+_complexity_ of a given string generated using the CFG (Csuhaj-Varjú & Kelemenová, 1993). CFGs
+also can be used to generate arbitrarily large amounts of data dynamically.
+
+
+Another advantage is that CFGs can be customized with minimal human effort to generate diverse
+datasets whose ground-truth data possesses specific properties. For example, a dynamic dataset
+
+
+5
+
+
+_S_ _→_ _S ∧_ _S_
+_S_ _→_ ( _P_ _∨_ _P_ _∨_ _P_ )
+_P_ _→¬v|v_
+
+( _a_ ) 3–CNF
+
+
+_S_ _→_ ( _S ∧_ _S_ ) _|_ ( _S ∨_ _S_ )
+_S_ _→_ ( _¬S_ )
+_S_ _→¬v|v_
+
+( _b_ ) Propositional Logic
+
+
+_S_ _→_ _F_ _|_ ( _∀f. S_ ) _|_ ( _∃f. S_ )
+_F_ _→_ ( _F_ _∧_ _F_ ) _|_ ( _F_ _∨_ _F_ )
+_F_ _→_ ( _¬F_ ) _|¬p|p_
+
+( _c_ ) First-order Logic
+
+
+_S_ _→_ ( _S_ ) _K|_ Σ _K_
+_S_ _→_ _S_ Σ _K_
+_K_ _→∗|ε_
+
+( _d_ ) Regular Expression
+
+
+Figure 2: CFGs (described in Sec. 3.3.1) used for synthesizing the datasets in _∀_ uto _∃∨∧_ L.
+
+
+that only consists of _k_ –CNF sentences – propositional logic in the Canonical Normal Form ( _P_ 1 [0]
+_. . ._ generated sentence with context via a customizable _∨_ _Pk_ [0][)] _[ ∧]_ [(] _[P]_ 1 [ 1] _[∨]_ _[. . .][ ∨]_ _[P]_ _k_ [ 1][)] _[ ∧]_ _[. . .]_ [ where] _[ P]_ _i_ _[ j]_ _[∈{][p]_ _Vocabulary Generation_ _[x][,][ ¬][p][x][}]_ [ – can be easily generated.] step, which automatically [We enrich the] _[∨]_
+provides the necessary vocabulary for performing the task (e.g., providing English meanings to allow
+for human-like _NL_ ) by using terms from a vocabulary database or by using an LLM.
+
+
+3.3.1 AUTO-GENERATED DATASETS
+
+
+_∀_ uto _∃∨∧_ L is open-source [1], is written in Python 3, includes several pre-computed datasets, and is
+easily customizable for adding new datasets, prompts, LLMs, etc. We now describe the datasets that
+any newly developed LLM can be evaluated on by using _∀_ uto _∃∨∧_ L out-of-the-box.
+
+Our dataset generator (described in App. B) takes a user-provided CFG and vocabulary to dynamically
+generate user-controlled, diverse datasets up to a user-specified metric such as the number of operators,
+parse tree depth, etc. It is guaranteed to generate any representable string using the CFG (App. B).
+As a result, users can easily generate out-of-distribution datasets in _∀_ uto _∃∨∧_ L by simply providing
+CFGs and/or vocabularies.
+
+The _∀_ uto _∃∨∧_ L core benchmark uses four CFGs (Fig. 2) for producing five datasets compromising FL
+strings. The 3-CNF( _n_ ) (Fig. 2a) and propositional logic PL( _n_ ) (Fig. 2b) CFGs replace the terminal
+by randomly selecting from a list of _n_ propositions. First-order logic FOL( _np, no_ ) (Fig. 2c) CFG
+replaces the terminal with predicates of the form _p_ ( _v_ 1 _, . . ., vn_ ) where _p_ is a predicate name selected
+from a list of _np_ predicates, _vi_ is either an object _o_ from a list of _no_ objects or is a free variable
+_f_ _x_ 1 _, x_ 2 _, . . ._ that is appropriately annotated within the scoping rules. Finally, the regular
+_∈{_ _}_
+expression RE( _n_ ) (Fig. 2d) CFG uses the vocabulary set Σ = _{_ 0 _, . . ., n −_ 1 _}_ .
+
+We provide 5 datasets with 2 generated from the FOL CFG and 1 each for the rest. We sampled 500
+strings for each complexity level. The 3-CNF(12) dataset contains examples with up to 59 operators,
+totaling _∼_ 10 _k_ strings. PL(12) contains examples with up to 40 operators, for a total of _∼_ 20 _k_ strings.
+The RE(2) dataset contains examples with tree depth up to 40, also totaling _∼_ 20 _k_ strings.
+
+The FOL datasets, FOL(8 _,_ 12)–S and FOL(8 _,_ 12)–E, contain examples with up to 37 operators,
+for a total of _∼_ 19 _k_ strings each. FOL(8 _,_ 12)–S uses auto-generated synthetic object and predicate
+names. Conversely, FOL(8 _,_ 12)–E uses verbs from VerbNet (Schuler, 2005) for predicate names
+and names from Faker (Faraglia, 2024) for object names. Using more descriptive names allows for
+informalization to produce more _abstract_ sentences that closely resemble the _NL_ statements in SOTA
+autoformalization datasets. For example, a _FL_ statement _Boom(Richard) ∧_ _Exercise(Yolonda)_ yields
+a more natural _NL_ statement: _“Richard experiences a boom, and Yolonda engages in exercise”_ .
+
+
+While each dataset was generated in 10 separate pieces, each produced independently, our datasets
+contain _∼_ 85 _k_ unique examples. We also provide zero-shot and 2-shot prompts for each dataset, for a
+total dataset size _∼_ 170 _k_ for off-the-shelf evaluation and continual assessment of any new LLM. Of
+these examples, _∼_ 85% of them are composed of unique CFG parse trees (trees obtained by sampling
+the CFG but not injecting the vocabularies). Expressions with the same parse tree but different
+vocabularies (e.g.,against positional bias in the LLM. Additional information is presented in App. M. _p_ 1 _∧_ _p_ 2 and _p_ 2 _∧_ _p_ 1) account for _∼_ 10% of our dataset, providing a robust check
+
+
+We use open-source libraries to robustly parse the LLM-generated output. We use the Natural
+Language Toolkit (NLTK) library (Bird et al., 2009) for parsing logic and use Reg2Dfa (Reg, 2017)
+for regexes. LLM output that cannot be parsed is said to be _syntactically non-compliant_ . Additionally,
+
+
+1The code for this project is available at: [https://github.com/AAIR-lab/autoeval.](https://github.com/AAIR-lab/autoeval)
+
+
+6
+
+
+we also use scripts to ensure that the informalization step does not copy elements of _FL_ into _NL_ (e.g.,
+complete or any parts of _FL_ ) that would otherwise make autoformalization trivial.
+
+
+4 ASSESSMENT OF SOTA LLMS ON THE _∀_ UTO _∃∨∧_ L BENCHMARK
+
+In this section we present an evaluation of several SOTA LLMs using _∀_ uto _∃∨∧_ L, as well as an
+evaluation of _∀_ uto _∃∨∧_ L as a benchmark for evaluating LLMs’ reasoning and translation ability using
+the predictive power score. In particular, we use the following assessment criteria for evaluating
+LLMs using _∀_ uto _∃∨∧_ L: _(A1) Can LLMs produce FL translations that are syntactically compliant?_
+_(A2) Can LLMs maintain truth while translating FL? (A3) Can LLMs accurately verify whether two_
+_FL strings are logically equivalent?_ In addition, we use the following criterion to assess _∀_ uto _∃∨∧_ L
+itself: _(A4) Is the performance on ∀uto∃∨∧L indicative of performance on other benchmarks?_
+
+
+4.1 EVALUATING LLMS USING _∀_ UTO _∃∨∧_ L
+
+
+We assessed §A1 - §A3 using 17 SOTA closed and open-source LLMs (Fig. 3). For clarity, we plot
+select models, grey out the data from the others, and refer the reader to App. N for a comprehensive
+overview. We evaluated §A1 and §A2 using the parameterized _∀_ uto _∃∨∧_ L score on our generated
+datasets. For §A3, we calculated the LLMs as verifiers score for each descriptional complexity class
+by having each LLM verify the results produced by GPT-4o.
+
+
+As stated in Sec. 2, prompts are crucial for LLM performance. To ensure our results reflect LLM
+capabilities rather than the effect of poorly designed prompts, we conducted extensive prompt
+engineering and ensured that at least one LLM could achieve a parameterized _∀_ uto _∃∨∧_ L score
+_≥_ 95% on the 3-CNF(12) dataset, which has a constrained but representative grammar. Analysis on
+each LLM’s performance on the 3-CNF(12) dataset is presented in App. C.
+
+
+As shown in Fig. 3, SOTA LLMs are able to produce syntactically compliant formal syntax (§A1)
+for formal syntax with low descriptional complexity (e.g., few operators in logic). However, as the
+complexity increases, the ability of LLMs to autoformalize their own informalizations diminishes.
+One surprising result here is that GPT-4o is less syntactically compliant for regexes than Phi and
+LLama-3, which are much smaller models. This is due to GPT-4o often repeating a token sequence
+
+
+7
+
+
+ChatGPT GPT-4o GPT-4o-mini Phi3 Mistral LLama3 Other LLMs ( _n_ = 10)
+
+
+0 10 20 30 40
+
+
+Regular Expression(2)
+
+
+0 10 20 30 40
+
+
+Propositional Logic(12)
+
+1
+
+_._ 75
+_._ 5
+
+_._ 25
+0
+
+
+1
+
+_._ 75
+_._ 5
+
+_._ 25
+0
+
+
+1
+
+_._ 75
+_._ 5
+
+_._ 25
+0
+0 10 20 30 40
+
+
+0 10 20 30 40
+
+
+# of Operators: _∧, ∨, ¬_ ( _¬_ is counted as an operator iff not succeeded by a terminal) CFG Parse Tree Depth
+
+
+Figure 3: Zero-shot Pass@1 results from using _∀_ uto _∃∨∧_ L to assess LLMs w.r.t. §A1, §A2, §A3 on the
+packaged datasets (Sec. 3.3.1). The x-axis represents an increasing descriptional complexity. The y-axis is each
+evaluated LLM’s syntactic compliance rate (1st row), parameterized _∀_ uto _∃∨∧_ L score (2nd row), and _F_ 1 score as
+a verifier (3rd row). Additional results (prompt calibration, few-shot, etc.) are included in the Appendix.
+
+
+when translating regex, resulting in hitting the token limit. For logic, we observed that LLMs often
+use the correct syntax but often misplace parentheses, creating malformed expressions.
+
+
+Our analysis further shows, except on the 3-CNF(12) dataset used for prompt calibration, LLMs
+cannot maintain truth in FL translation (§A2) as the descriptional complexity increases. For translating
+logic expressions with more than 20 operators, none exceeded 50% accuracy in maintaining truth.
+This is concerning since formal specifications often have hundreds of operators. A common issue
+was misunderstanding the formal syntax’s precedence and associativity rules. Misplaced operators
+led to quick verification failures. We provide an analysis of failing cases in App. G.
+
+
+Moreover, even with CoT prompting, LLMs cannot serve as accurate verifiers of logical equivalence
+(§A3) for anything but toy expressions (low descriptional complexity), after which _F_ 1 scores fall
+sharply. For small FL strings, we found that LLMs have difficulties with negations in logic. Due to
+space limitations, we present some examples and an analysis of the kinds of syntactic structures that
+LLMs fail to verify correctly in the Appendix (App. L, Fig. 21).
+
+
+4.2 EVALUATING _∀_ UTO _∃∨∧_ L AS A BENCHMARK
+
+For assessing §A4, we used the same 17 LLMs to evaluate the predictive power (Sec. 3.2) of _∀_ uto _∃∨∧_ L
+w.r.t 5 popular benchmarks: (a) FOLIO(R;{NL, FOL}) (Han et al., 2024), a popular logical reasoning
+benchmark with ground truth in both _NL_ and _FL_ ; (b) FOLIO( _{A/I}_ ) evaluates if an LLM can
+(auto/in)formalize _NL_ ( _FL_ ) accurately; (c) LogiEval(R;{PL, FOL}) (Patel et al., 2024) a reasoning
+benchmark with ground truth in propositional and first-order logic; (d) HumanEval( _A_ ) (Chen et al.,
+2021), a code autoformalization benchmark; (e) Big Bench Hard (BBH) (Suzgun et al., 2023). These
+benchmarks are contrasted in Sec. 5, and example prompts of these benchmarks are included in
+App. K. We ran 5 runs on each benchmark except BBH. For BBH, we use the reported numbers in
+the literature as scores for the models (sources are included in App K). We measured the correlation
+between each benchmark’s score and the calibrated _∀_ uto _∃∨∧_ L score (Fig. 4), which was calibrated
+based on the descriptional complexity of the examples found in the benchmark. We also measured
+the calibrated _∀_ uto _∃∨∧_ L score’s predictive power w.r.t these benchmarks (Fig. 5).
+
+As shown in Fig. 4, there is a moderate-to-strong positive correlation between LLM performance
+on _∀_ uto _∃∨∧_ L and other logic-based benchmarks on a myriad of tasks such as autoformalization,
+logical reasoning, code generation, etc. The calibrated _∀_ uto _∃∨∧_ L score exhibits a strong, positive
+correlation ( _ρ ≥_ 0 _._ 7) with other static benchmarks on _FL_ -based tasks, as well as reasoning tasks such
+as FOLIO. Notably, calculating the parameterized _∀_ uto _∃∨∧_ L score does not require hand-annotation
+unlike these benchmarks. Similar results appear in LogiEval for propositional logic, though the FOL
+version shows only a moderate correlation (0 _._ 5 _≤_ _ρ_ _<_ 0 _._ 7). We traced this reduction to dataset
+imbalance, where 80% of samples are from the positive class. Furthermore, the dataset is skewed
+
+
+8
+
+
+Trend Line Other Models ( _n_ = 10)
+ChatGPT GPT-4o GPT-4o-mini Phi Mistral LLama3
+
+
+FOLIO (R; FOL)
+
+|ρ = 0.81|ρ = 0.83|ρ = 0.79|ρ = 0.64 ρ = 0.|84 ρ =|0.75|
+|---|---|---|---|---|---|
+|<br>_p_ = 0_._00|<br>_p_ = 0_._00|<br>_p_ = 0_._00|<br>_p_ = 0_._01<br> <br>_p_ = 0_._|00<br> <br>_p_ =|<br> 0_._00|
+|~~_S_~~_cal_~~(FOL(8~~~~_,_ 12)–E~~~~_,_ 6)~~|~~_S_~~_cal_~~(FOL(8~~~~_,_ 12)–E~~~~_,_ 6)~~|~~_S_~~_cal_~~(PL(12)~~~~_,_ 30)~~|~~_S_~~_cal_~~(FOL(8~~~~_,_ 12)–E~~~~_,_ 30)~~<br>~~_S_~~_cal_|~~(FOL(8~~~~_,_ 12)–E~~~~_,_ 6)~~|~~_S_~~_cal_~~(~~~~_RE_(2)~~~~_,_ 7)~~|
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+LogiEval (R; PL)
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+LogiEval (R; FOL)
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+1
+
+
+_._ 75
+
+
+_._ 5
+
+
+_._ 25
+
+
+0
+
+
+FOLIO (R; NL)
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+Calibrated _∀_ uto _∃∨∧_ L Score
+
+
+Figure 4: Correlation between scores on _∀_ uto _∃∨∧_ L and static benchmarks from the literature. The Pearson
+correlation coefficient ( _ρ_ ) and the _p_ -value (values _≤_ 0 _._ 05 are statistically significant) are annotated in the top
+left. The calibrated _∀_ uto _∃∨∧_ L score _Scal_ ( _D, d_ ) use all strings in dataset _D_ with descriptional complexity _d_
+bounded above, as shown in the plots (App. K.4). Grey hexagons (�) represent data from 10 other models.
+
+
+towards lower difficulty. This leads to lower overall performance (and consequently correlation) of
+models like GPT-4o-mini that actually try to reason and provide no answers compared to models like
+LLama-3.1-8b, which mostly answered yes.
+
+
+Our results (Fig. 5) show that an LLM’s calibrated _∀_ uto _∃∨∧_ L score is a strong predictor
+of its performance on _FL_ -based benchmarks.
+Our metric is also a more robust truth maintenance measure than length-dependent, _NL_ based metrics like BLEU scores (Papineni et al.,
+2002). For example, changing the generated _NL_
+_ψ_ = _“the_ _weather_ _status_ _was_ _sunny_ _yesterday_
+_and is raining today”_ to _ψ_ _[′]_ = _“the weather sta-_
+_tus was sunny yesterday and is_ _not raining today”_
+still achieves a high BLEU( _ψ_ _[′]_ _, ψ_ ) score of 0.74
+(BLEU( _ψ, ψ_ ) = 1) but does not maintain truth.
+Even as a predictor for such metrics, _∀_ uto _∃∨∧_ L
+notably surpasses random-chance accuracy.
+
+
+1
+
+
+_._ 75
+
+
+_._ 5
+
+
+_._ 25
+
+
+0
+Benchmark X (Annotated bars)
+
+
+Figure 5: Predictive power of _∀_ uto _∃∨∧_ L w.r.t other
+benchmarks. Benchmark metrics appear after the colon.
+
+
+4.3 EVALUATING LARGE REASONING MODELS USING _∀_ UTO _∃∨∧_ L
+
+
+Large Reasoning Models (LRMs) are LLMs
+that also perform some reasoning steps (e.g.,
+search) as a part of their generation process.
+We assessed two SOTA LRMs – OpenAI’s o1
+(OpenAI, 2024) and DeepSeek’s R1 (DeepSeek,
+2024) - on §A1 and §A2 using _∀_ uto _∃∨∧_ L.
+Due to cost limitations, we regenerated a small
+dataset with 10 examples for each operator number for approximately 400 total examples. Our
+results (Fig. 6) show that even SOTA LRMs cannot maintain truth effectively in ( ) [1] ( _φ_ 0).
+_A ◦I_
+
+
+5 RELATED WORK
+
+
+PL(12)
+
+1
+
+_._ 75
+_._ 5
+
+_._ 25
+0
+0 10 20 30 40
+
+
+0 10 20 30 40
+
+
+1
+_._ 75
+_._ 5
+_._ 25
+0
+
+
+# of Operators: _∧, ∨, ¬_
+
+Figure 6: Applying _∀_ uto _∃∨∧_ L with zero-shot prompts
+to LRMs on a small dataset of 400 strings.
+
+
+**Logical Reasoning** RuleTaker (Clark et al., 2020) and ProntoQA (Saparov & He, 2023) generate
+datasets by using simple “if-then" and syllogisms rules to create reasoning questions. Similar
+grammars are used by LogicNLI (Tian et al., 2021) and CLUTRR (Sinha et al., 2019). LogiEval
+(Patel et al., 2024) uses fixed inference rules and LLMs to generate reasoning problems. Although
+these techniques are dynamic, they remain limited in generating interesting reasoning problems
+across different domains. In contrast, _∀_ uto _∃∨∧_ L is multi-dimensional, offering five distinct datasets,
+multiple customization options, and the ability to produce an infinite number of unique syntax trees.
+
+
+9
+
+
+FOLIO (Han et al., 2024) utilizes human experts to generate a set of reasoning questions based on
+real-world text sources. They generate questions in both _NL_ and _FL_ for propositional and first-order
+logic that require 7 levels of reasoning. A similar approach is employed by ReClor (Yu et al., 2020)
+and (Srivastava et al., 2023). A key weakness of these approaches is their reliance on human experts.
+
+
+**Autoformalization** HumanEval is a popular benchmark for evaluating LLM capabilities of autoformalizing source code. LLM autoformalizations are evaluated via hand-written test cases. It has been
+shown by Liu et al. (2023) through the HumanEval+ dataset that the test cases in HumanEval are
+incomplete and can provide misleading rankings. StructuredRegex (Ye et al., 2020) used crowdsourcing for generating regex datasets. In contrast, _∀_ uto _∃∨∧_ L requires no human annotations and utilizes
+formal verifiers for checking the truth maintenance and thus does not share such drawbacks.
+
+FOLIO( _{A, I}_ ) (Han et al., 2024) tests the (auto/in)formalization abilities of LLMs by using handcoded annotations of _⟨NL, FL⟩_ pairs. However, as noted by the authors, they cannot check truth
+maintenance effectively and rely on an inference engine to compute truth values for each conclusion.
+_∀_ uto _∃∨∧_ L uses theorem provers to check equivalence and thus is sound in its accuracy evaluation.
+
+MALLS (Yang et al., 2024) is an autoformalization dataset for first-order logic that was generated
+using GPT-4. Their use of LLMs for generating the data limits the diversity of the dataset since
+and the authors suggest to only use this dataset for fine-tuning and not for evaluation. In contrast,
+_∀_ uto _∃∨∧_ L generates correct _FL_ and has a sound evaluation metric for truth maintenance.
+
+Autoformalization approaches such LeanEuclid (Murphy et al., 2024), DTV (Zhou et al., 2024),
+LINC (Olausson et al., 2023), SatLM (Ye et al., 2020), Logic-LM (Pan et al., 2023) and others
+(Wu et al., 2022) utilize formal verifiers to provide sound evaluation metrics but utilize hand-coded
+datasets that limit their use in evaluating newer LLMs unlike _∀_ uto _∃∨∧_ L.
+
+**Informalization** Wu et al. (2022) and ProofNet (Azerbayev et al., 2023) use static datasets to evaluate
+LLM informalization capabilities. They use metrics such as BLEU scores that are known to not
+be indicative of accuracy for _FL_ -based tasks (Ren et al., 2020). Jiang et al. (2023) develop MMA,
+a dataset of formal and informal pairs generated using GPT-4. They note that their dataset is an
+approximate measure due to using LLMs without manual validation. In contrast, _∀_ uto _∃∨∧_ L is
+autonomous and provides sound measures of LLM capabilities w.r.t. truth maintenance.
+
+
+6 CONCLUSION
+
+
+We introduced _∀_ uto _∃∨∧_ L, a new benchmark for autonomously assessing LLM truth maintenance in
+formal language translation. _∀_ uto _∃∨∧_ L allows scalable data generation without human labeling and
+autonomously evaluates truth maintenance using formal verifiers to guarantee correctness. It is easily
+extensible and provides several prepackaged datasets and dataset generators to assess new LLMs
+quickly. Furthermore, our evaluation indicates that SOTA LLMs and LRMs are not performant in this
+task. Finally, we show that our metric is predictive of performance on other formal-language-based
+tasks and thus can be used as a surrogate benchmark for evaluating future LLMs.
+
+**Broader Impact** _∀_ uto _∃∨∧_ L provides a robust framework for evaluating the suitability and safety
+of LLMs in _FL_ -based tasks such as autoformalization and code generation. It also serves as a
+surrogate for estimating performance as LLMs emerge. Our work lays the foundation for developing
+autonomous evaluation techniques for LLMs in more flexible syntaxes, such as conversational AI.
+
+
+**Limitations and Future Work** A limitation of our work is the use of formal verifiers: the equivalence
+problem for first-order logic is well known to be undecidable. We mitigate this by using an appropriate
+timeout and logging (only 0 _._ 66% of our results experienced a timeout). This issue can be removed
+by using CFGs that generate decidable strings. An interesting application of _∀_ uto _∃∨∧_ L is using
+generated evaluations as datasets for back-translation, thereby improving the autoformalization
+capabilities of models (Jiang et al., 2023). One interesting extension of our would be assessing truth
+maintenance in other applications (e.g., image generation). Finally, using formal verifiers as callable
+tools for an LLM is an intriguing extension of our benchmark, enhancing the assessment of §A3.
+
+
+**Threats to Validity** Our results for paid APIs rely on the model checkpoints to be available. Due
+to cost limitations, our results report pass@1 scores. We do report the std. deviation across 10 runs
+on 10% of each dataset in App. H with similar conclusions. We assume that the verifier and parsing
+libraries are sound. We mitigate this risk by using popular open-source tools like Prover9 and NLTK.
+
+
+10
+
+
+ACKNOWLEDGEMENTS
+
+
+This work was supported in part by the ONR grant N00014-23-1-2416, NSF grant IIS 1942856,
+the Open AI Researcher Access Grant, and Arizona State University’s GPSA Jumpstart Research
+Grant. We acknowledge Research Computing at Arizona State University for providing computation
+resources that contributed to this paper’s results.
+
+
+ETHICS STATEMENT
+
+
+Our work involves using LLMs for generating text. Naturally, it is imperative to ensure that appropriate guardrails are in place to prevent offensive content from being generated and/or displayed. We do
+not use any personally identifiable information in _∀_ uto _∃∨∧_ L.
+
+
+REFERENCES
+
+
+Reg2dfa. [https://github.com/Jack-Q/reg2dfa, 2017.](https://github.com/Jack-Q/reg2dfa) Accessed: 2024-06-01.
+
+
+Zhangir Azerbayev, Bartosz Piotrowski, Hailey Schoelkopf, Edward W Ayers, Dragomir Radev, and
+Jeremy Avigad. Proofnet: Autoformalizing and formally proving undergraduate-level mathematics.
+_arXiv preprint arXiv:2302.12433_, 2023.
+
+
+Satanjeev Banerjee and Alon Lavie. METEOR: An automatic metric for MT evaluation with
+improved correlation with human judgments. In _Proc. ACL Workshop on Intrinsic and Extrinsic_
+_Evaluation Measures for Machine Translation and/or Summarization_, pp. 65–72. Association for
+Computational Linguistics, 2005.
+
+
+Steven Bird, Ewan Klein, and Edward Loper. _Natural Language Processing with Python_ . O’Reilly,
+2009.
+
+
+Chris Callison-Burch, Miles Osborne, and Philipp Koehn. Re-evaluating the role of Bleu in Machine
+Translation Research. In _Proc. EACL_, 2006.
+
+
+Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde De Oliveira Pinto, Jared
+Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al. Evaluating large
+language models trained on code. _arXiv preprint arXiv:2107.03374_, 2021.
+
+
+Peter Clark, Oyvind Tafjord, and Kyle Richardson. Transformers as soft reasoners over language. In
+_Proc. IJCAI_, 2020.
+
+
+Erzsébet Csuhaj-Varjú and Alica Kelemenová. Descriptional complexity of context-free grammar
+forms. _Theoretical Computer Science_, 112(2):277–289, 1993.
+
+
+Leonardo Mendonça de Moura and Nikolaj S. Bjørner. Z3: An efficient SMT solver. In _International_
+_Conference on Tools and Algorithms for the Construction and Analysis of Systems (TACAS)_, 2008.
+
+
+DeepSeek. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning.
+[https://arxiv.org/abs/2501.12948, 2024.](https://arxiv.org/abs/2501.12948) Accessed: 2025-01-22.
+
+
+TJ Dunham and Henry Syahputra. Reactor mk. 1 performances: Mmlu, humaneval and bbh test
+results. _arXiv preprint arXiv:2406.10515_, 2024.
+
+
+Daniele Faraglia. Faker. [https://github.com/joke2k/faker, 2024.](https://github.com/joke2k/faker) Accessed: 2024-0601.
+
+
+Clémentine Fourrier, Nathan Habib, Alina Lozovskaya, Konrad Szafer, and Thomas Wolf. Open
+llm leaderboard v2. [https://huggingface.co/spaces/open-llm-leaderboard/](https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard)
+[open_llm_leaderboard, 2024.](https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard)
+
+
+IBM Granite Team. Granite 3.0 language models, 2024.
+
+
+11
+
+
+Simeng Han, Hailey Schoelkopf, Yilun Zhao, Zhenting Qi, Martin Riddell, Wenfei Zhou, James
+Coady, David Peng, Yujie Qiao, Luke Benson, Lucy Sun, Alexander Wardle-Solano, Hannah
+Szabó, Ekaterina Zubova, Matthew Burtell, Jonathan Fan, Yixin Liu, Brian Wong, Malcolm Sailor,
+Ansong Ni, Linyong Nan, Jungo Kasai, Tao Yu, Rui Zhang, Alexander R. Fabbri, Wojciech
+Kryscinski, Semih Yavuz, Ye Liu, Xi Victoria Lin, Shafiq Joty, Yingbo Zhou, Caiming Xiong, Rex
+Ying, Arman Cohan, and Dragomir Radev. FOLIO: natural language reasoning with first-order
+logic. In _Proc. EMNLP_, pp. 22017–22031, 2024.
+
+
+Pengcheng He, Xiaodong Liu, Jianfeng Gao, and Weizhu Chen. Deberta: Decoding-enhanced bert
+with disentangled attention. In _Proc. ICLR_, 2021.
+
+
+J.E. Hopcroft, R. Motwani, and J.D. Ullman. _Introduction to Automata Theory,_ _Languages,_ _and_
+_Computation_ . Addison-Wesley series in computer science. Addison-Wesley, 2001. ISBN
+9780201441246.
+
+
+Michael Huth and Mark Dermot Ryan. _Logic in Computer Science - Modelling and Reasoning about_
+_Systems_ . Cambridge University Press, 2nd edition, 2004.
+
+
+Douglas M. Jennewein, Johnathan Lee, Chris Kurtz, Will Dizon, Ian Shaeffer, Alan Chapman,
+Alejandro Chiquete, Josh Burks, Amber Carlson, Natalie Mason, Arhat Kobwala, Thirugnanam
+Jagadeesan, Praful Barghav, Torey Battelle, Rebecca Belshe, Debra McCaffrey, Marisa Brazil,
+Chaitanya Inumella, Kirby Kuznia, Jade Buzinski, Sean Dudley, Dhruvil Shah, Gil Speyer, and
+Jason Yalim. The Sol Supercomputer at Arizona State University. In _Practice and Experience_
+_in_ _Advanced_ _Research_ _Computing_, PEARC ’23, pp. 296–301, New York, NY, USA, Jul 2023.
+Association for Computing Machinery. ISBN 9781450399852. doi: 10.1145/3569951.3597573.
+
+
+Ziwei Ji, Nayeon Lee, Rita Frieske, Tiezheng Yu, Dan Su, Yan Xu, Etsuko Ishii, Ye Jin Bang,
+Andrea Madotto, and Pascale Fung. Survey of hallucination in natural language generation. _ACM_
+_Computing Surveys_, 55(12):1–38, 2023.
+
+
+Albert Q Jiang, Wenda Li, and Mateja Jamnik. Multilingual mathematical autoformalization. _arXiv_
+_preprint arXiv:2311.03755_, 2023.
+
+
+Jacky Liang, Wenlong Huang, Fei Xia, Peng Xu, Karol Hausman, Brian Ichter, Pete Florence, and
+Andy Zeng. Code as policies: Language model programs for embodied control. In _Proc. ICRA_, pp.
+9493–9500, 2023.
+
+
+Chin-Yew Lin. ROUGE: A package for automatic evaluation of summaries. In _Text Summarization_
+_Branches Out_, pp. 74–81, Barcelona, Spain, July 2004. Association for Computational Linguistics.
+
+
+Jiawei Liu, Chunqiu Steven Xia, Yuyao Wang, and Lingming Zhang. Is your code generated by
+chatgpt really correct? rigorous evaluation of large language models for code generation. In _Proc._
+_NeurIPS_, 2023.
+
+
+Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah Wiegreffe, Uri Alon,
+Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, Shashank Gupta, Bodhisattwa Prasad Majumder,
+Katherine Hermann, Sean Welleck, Amir Yazdanbakhsh, and Peter Clark. Self-refine: Iterative
+refinement with self-feedback. In _Proc. NeurIPS_, 2023.
+
+
+William McCune. Prover9 and Mace4. [http://www.cs.unm.edu/~mccune/prover9/,](http://www.cs.unm.edu/~mccune/prover9/)
+2010.
+
+
+Microsoft. Phi-3 technical report: A highly capable language model locally on your phone. [https:](https://arxiv.org/pdf/2404.14219)
+[//arxiv.org/pdf/2404.14219, 2024.](https://arxiv.org/pdf/2404.14219) Accessed: 2024-06-01.
+
+
+MistralAI. Introducing the world’s best edge models. [https://mistral.ai/news/](https://mistral.ai/news/ministraux/)
+[ministraux/, 2024.](https://mistral.ai/news/ministraux/) Accessed: 2024-11-22.
+
+
+Logan Murphy, Kaiyu Yang, Jialiang Sun, Zhaoyu Li, Anima Anandkumar, and Xujie Si. Autoformalizing euclidean geometry. In _Proc. ICML_, 2024.
+
+
+Theo Olausson, Alex Gu, Benjamin Lipkin, Cedegao E. Zhang, Armando Solar-Lezama, Joshua B.
+Tenenbaum, and Roger Levy. LINC: A neurosymbolic approach for logical reasoning by combining
+language models with first-order logic provers. In _Proc. EMNLP_, 2023.
+
+
+12
+
+
+OpenAI. Gpt-4o. [https://arxiv.org/pdf/2303.08774.pdf, 2023.](https://arxiv.org/pdf/2303.08774.pdf) Accessed: 2023-0601.
+
+
+OpenAI. Gpt-4o-mini. [https://openai.com/index/](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/)
+[gpt-4o-mini-advancing-cost-efficient-intelligence/,](https://openai.com/index/gpt-4o-mini-advancing-cost-efficient-intelligence/) 2024. Accessed:
+2024-09-29.
+
+
+OpenAI. Introducing openai o1. [https://openai.com/o1/, 2024.](https://openai.com/o1/) Accessed: 2024-11-22.
+
+
+Liangming Pan, Alon Albalak, Xinyi Wang, and William Yang Wang. Logic-lm: Empowering large
+language models with symbolic solvers for faithful logical reasoning. In _Proc. EMNLP_, 2023.
+
+
+Kishore Papineni, Salim Roukos, Todd Ward, and Wei-Jing Zhu. Bleu: a method for automatic
+evaluation of machine translation. In _Proc. ACL_, pp. 311–318, 2002.
+
+
+Nisarg Patel, Mohith Kulkarni, Mihir Parmar, Aashna Budhiraja, Mutsumi Nakamura, Neeraj
+Varshney, and Chitta Baral. Multi-logieval: Towards evaluating multi-step logical reasoning
+ability of large language models. In _Proc. EMNLP_, pp. 20856–20879, 2024.
+
+
+Qwen2. Qwen 2.5. [https://qwen2.org/qwen2-5/, 2024.](https://qwen2.org/qwen2-5/) Accessed: 2024-11-22.
+
+
+Shuo Ren, Daya Guo, Shuai Lu, Long Zhou, Shujie Liu, Duyu Tang, Neel Sundaresan, Ming Zhou,
+Ambrosio Blanco, and Shuai Ma. Codebleu: a method for automatic evaluation of code synthesis.
+_arXiv preprint arXiv:2009.10297_, 2020.
+
+
+Stuart Russell and Peter Norvig. _Artificial Intelligence:_ _A Modern Approach_ . Pearson, 4th edition,
+2020.
+
+
+Pranab Sahoo, Ayush Kumar Singh, Sriparna Saha, Vinija Jain, Samrat Mondal, and Aman Chadha.
+A systematic survey of prompt engineering in large language models: Techniques and applications.
+_arXiv preprint arXiv:2402.07927_, 2024.
+
+
+Abulhair Saparov and He He. Language models are greedy reasoners: A systematic formal analysis
+of chain-of-thought. In _Proc. ICLR_, 2023.
+
+
+Karin Kipper Schuler. _VerbNet:_ _A_ _Broad-coverage,_ _Comprehensive_ _Verb_ _Lexicon_ . PhD thesis,
+University of Pennsylvania, 2005. AAI3179808.
+
+
+Shreya Shankar, JD Zamfirescu-Pereira, Björn Hartmann, Aditya Parameswaran, and Ian Arawjo.
+Who validates the validators? Aligning llm-assisted evaluation of llm outputs with human preferences. In _Proc. ACM Symposium on User Interface Software and Technology_, pp. 1–14, 2024.
+
+
+Koustuv Sinha, Shagun Sodhani, Jin Dong, Joelle Pineau, and William L. Hamilton. CLUTRR: A
+diagnostic benchmark for inductive reasoning from text. In _Proc. Empirical Methods in Natural_
+_Language Processing and the 9th International Joint Conference on Natural Language Processing_
+_(EMNLP-IJCNLP)_, 2019.
+
+
+Aarohi Srivastava, Abhinav Rastogi, Abhishek Rao, Abu Awal Md Shoeb, Abubakar Abid, Adam
+Fisch, Adam R. Brown, Adam Santoro, Aditya Gupta, Adrià Garriga-Alonso, Agnieszka Kluska,
+Aitor Lewkowycz, Akshat Agarwal, Alethea Power, et al. Beyond the imitation game: Quantifying
+and extrapolating the capabilities of language models. _Transactions on Machine Learning Research_,
+2023. ISSN 2835-8856.
+
+
+Mirac Suzgun, Nathan Scales, Nathanael Schärli, Sebastian Gehrmann, Yi Tay, Hyung Won Chung,
+Aakanksha Chowdhery, Quoc Le, Ed Chi, Denny Zhou, and Jason Wei. Challenging BIG-bench
+tasks and whether chain-of-thought can solve them. In _Proc. ACL_, 2023.
+
+
+Jidong Tian, Yitian Li, Wenqing Chen, Liqiang Xiao, Hao He, and Yaohui Jin. Diagnosing the
+first-order logical reasoning ability through LogicNLI. In _Proc. EMNLP_, 2021.
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed H. Chi,
+Quoc V Le, and Denny Zhou. Chain of thought prompting elicits reasoning in large language
+models. In _Proc. NeurIPS_, 2022.
+
+
+13
+
+
+Yuhuai Wu, Albert Qiaochu Jiang, Wenda Li, Markus N. Rabe, Charles Staats, Mateja Jamnik, and
+Christian Szegedy. Autoformalization with large language models. In _Proc. NeurIPS_, 2022.
+
+
+Cheng Xu, Shuhao Guan, Derek Greene, and M-Tahar Kechadi. Benchmark data contamination of
+large language models: A survey. _arXiv preprint arXiv:2406.04244_, 2024a.
+
+
+Tengyu Xu, Eryk Helenowski, Karthik Abinav Sankararaman, Di Jin, Kaiyan Peng, Eric Han,
+Shaoliang Nie, Chen Zhu, Hejia Zhang, Wenxuan Zhou, et al. The perfect blend: Redefining rlhf
+with mixture of judges. _arXiv preprint arXiv:2409.20370_, 2024b.
+
+
+Yuan Yang, Siheng Xiong, Ali Payani, Ehsan Shareghi, and Faramarz Fekri. Harnessing the power
+of large language models for natural language to first-order logic translation. In _Proc. ACL_, pp.
+6942–6959, 2024.
+
+
+Xi Ye, Qiaochu Chen, Isil Dillig, and Greg Durrett. Benchmarking multimodal regex synthesis with
+complex structures. In _Proc. ACL_, pp. 6081–6094, 2020.
+
+
+[Yi. 01-ai. https://huggingface.co/01-ai/Yi-1.5-34B-Chat, 2024. Accessed: 2024-](https://huggingface.co/01-ai/Yi-1.5-34B-Chat)
+11-22.
+
+
+Weihao Yu, Zihang Jiang, Yanfei Dong, and Jiashi Feng. ReClor: A reading comprehension dataset
+requiring logical reasoning. In _Proc. ICLR_, 2020.
+
+
+Tianyi Zhang*, Varsha Kishore*, Felix Wu*, Kilian Q. Weinberger, and Yoav Artzi. Bertscore:
+Evaluating text generation with bert. In _Proc. ICLR_, 2020.
+
+
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang,
+Zi Lin, Zhuohan Li, Dacheng Li, Eric P. Xing, Hao Zhang, Joseph E. Gonzalez, and Ion Stoica.
+Judging llm-as-a-judge with mt-bench and chatbot arena. In _Proc. NeurIPS_, 2023.
+
+
+Jin Peng Zhou, Charles E Staats, Wenda Li, Christian Szegedy, Kilian Q Weinberger, and Yuhuai
+Wu. Don’t trust: Verify – grounding LLM quantitative reasoning with autoformalization. In _Proc._
+_ICLR_, 2024.
+
+
+14
+
+
+A APPENDIX ORGANIZATION
+
+
+[The code used for this project can be found at https://github.com/AAIR-lab/autoeval.](https://github.com/AAIR-lab/autoeval)
+
+
+The Appendix is organized as follows. Appendix Appendix B provides the algorithm used for
+dataset generation. Appendix C discusses prompt tuning and validating our prompts on 3–CNF.
+Appendix D provides the parameters we used when generating the five datasets discussed in the paper.
+Appendix E provides additional information on our experimental setup, including the computational
+resources used. Appendix F discusses the prompts and provides examples. Appendix G is our detailed
+analysis of the empirical results from the main paper. Appendix H discusses an experiment we ran
+to evaluate the standard deviation error. Appendix I includes additional results from our zero-shot
+prompting experiments using other metrics for categorization. Appendix J evaluates an experiment
+we performed comparing few-shot prompting compared to zero-shot. Finally, Appendix K provides
+the experimental setup of the benchmarks we evaluated, data values and sources of scores collected,
+the calibrated _∀_ uto _∃∨∧_ L scores used for comparison, and additional correlation results.
+
+
+B DATASET GENERATION
+
+
+In this section, we provide the algorithm for generating formal syntax (FS) expressions and show that
+it can generate all possible expressions from the grammar and vocabulary.
+
+Our approach, _∀_ uto _∃∨∧_ L, generates datasets by constructing a context-free grammar (CFG) tree
+using the grammars discussed in Section 3.3.1. Since it is intractable to generate the full tree, we
+control the branching factor and randomly expand the branches of this tree to generate formulae.
+
+
+**Algorithm 1** Dataset Generation
+
+1: **Inputs:** CFG _G_, vocabulary _V_, branching factor _n_, tree depth _depth_, sample count _sample_count_,
+and categorization metric _m_ .
+2: **Outputs:** set of FS expressions ~~_φ_~~
+3: 0 : [ _None_ ] _,_ _t_
+_N_ _←{_ _}_ _N_ _←⟨⟩_
+4: **for** _d_ = 1 _,_ 2 _, . . ., depth_ **do**
+6:5: **for** _N_ _[′]_ _ν←∈NsampleN_ _[′]_ **do** ( _N_ [ _d −_ 1] _, n_ )
+7: _ν,_ _ν_ _generateNChildren_ ( _ν,_ _, n_ )
+_N_ _T_ _←_ _G_
+8: [ _d_ ] += _ν_
+_N_ _N_
+9: _t_ _t_ _ν_
+10: **end for** _N_ _←N_ _∪T_
+11: **end for**
+12: _M_ _categorizeExpressionsIntoDict_ ( _t, m_ )
+_←_ _N_
+13: ~~_φ_~~ _←⟨⟩_
+14: **for** _k_ _∈_ _keys_ ( _M_ ) **do**
+15: _Mk_ _sampleCFGExpressions_ ( _M_ [ _k_ ] _, sample_count_ )
+_←_
+16: ~~_φ_~~ _k_ _buildFSExpressions_ ( _Mk,_ )
+_←_ _V_
+17: ~~_φ_~~ ~~_φ_~~ ~~_φ_~~ _k_
+_←_ _∪_
+18: **end for**
+19: **Return:** ~~_φ_~~
+
+
+The dataset generation algorithm is shown in Algorithm 1. This algorithm constructs a CFG tree
+by maintaining non-terminal nodes at each tree level ( ) and all the leaf nodes ( _t_ ), where each
+_N_ _N_
+terminal node represents a completed CFG expression (line 3). For generating nodes at a certain level
+in the tree, _n_ nodes from the previous level are sampled (line 5). Each node is branched _n_ times
+using the CFG to produce nodes at the current tree level, and all the leaf nodes are collected (lines 7
+through 9). As a result, by iteratively performing this process for each tree level, we obtain a set of
+leaf nodes (CFG expressions).
+
+
+The leaf nodes are then categorized based on the specified metric (e.g., tree depth, number of operators,
+etc.) (line 12). For each metric value, a fixed number of CFG expressions corresponding to that
+value are sampled (line 15). Using the vocabulary, an FS expression is constructed from each CFG
+expression (line 16). Consequently, the final dataset of FS expressions contains an equal number for
+
+
+15
+
+
+each metric value (line 17). This set of FS expressions is the final result produced by the algorithm
+(line 19).
+
+
+The vocabulary is fixed in length, with a hyperparameter controlling the number of unique propositions
+for propositional logic. Similarly, for first-order logic, the number of unique variables, constants, and
+predicates are also hyperparameters. Also, regular expressions have a hyperparameter controlling
+the alphabet size. When these expression components are needed for building the FS expression,
+the exact one is selected using uniform random selection. In the special case of first-order logic
+predicates, the grounded predicate is generated by randomly selecting a predicate and then selecting
+constants depending on the predicate’s arity. In the case of the arbitrary vocabulary, the arity for a
+predicate is randomly assigned. To add variables, each constant has a certain probability of being
+replaced by a variable.
+
+
+**Guaranteed Expression Coverage** The dataset generator (Algorithm 1) is guaranteed to generate all
+possible formal syntax expressions that can be produced for a grammar and vocabulary. Let _φ_ be
+an FS expression that can be constructed using the rules from CFG _G_ and the vocabulary _V_ . Note
+that _φ_ corresponds to a CFG expression _φCF G_, derived by substituting the vocabulary with the CFG
+symbols. Due to uniform selection, the probability of _φ_ being generated from _φCF G_ is greater than
+zero. Furthermore, the CFG expression represents a leaf node in the CFG tree that can be reached by
+applying the CFG rules in a specific sequence. Due to the random sampling of rules at each node,
+there is a non-zero probability of generating this particular path in the tree. Thus, _φ_ can be generated
+using the dataset generator algorithm.
+
+
+C 3-CNF PROMPT CALIBRATION
+
+
+In this section, we discuss the K-CNF results used to calibration the prompts.
+
+
+We tested several prompts for 3-CNF to verify that our prompts are sufficient to prompt the LLM
+to correctly perform informalization and autoformalization. Additionally, we verified that the
+equivalence verification prompt prompted the LLMs to give an accurate yes-or-no answer. The
+performance of all 14 LLMs on 3-CNF for §A1, §A2, and §A3 are shown in Figure 7.
+
+
+ChatGPT GPT-4o GPT-4o-mini Phi3 Mistral LLama3 Other LLMs ( _n_ = 10)
+
+3–CNF(12)
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+0 10 20 30 40 50 60
+
+# of Operators: _∧, ∨, ¬_ ( _¬_ is counted as an operator iff not succeeded by a terminal)
+
+
+Figure 7: Zero-shot Pass@1 results (avg. over 10 batches, higher values better) for 3-CNF from using
+_∀_ uto _∃∨∧_ L to assess LLMs w.r.t. §A1, §A2, §A3 (Sec. 3.3.1) on the packaged datasets. The x-axis is
+the # of operators.
+
+
+The best-performing models we tested (GPT-4o and GPT-4o-mini) achieved nearly perfect syntactic
+compliance, accuracy, and equivalence verification even as the number of operators increased. This
+proves that the prompts we used in our experiments are sufficient for prompting the model for
+performing the tasks for §A1, §A2, and §A3.
+
+
+16
+
+
+For the other LLMs tested, syntactic compliance and accuracy diminished as the number of operators
+increased. However, when evaluating the equivalence of GPT-4o results, all LLMs achieved nearperfect accuracy regardless of operator number. Due to most of GPT-4o results being positive cases,
+the results support that LLMs can verify two equivalent 3-CNF formulae as equivalent.
+
+
+D DATASET GENERATION HYPERPARAMETERS
+
+
+In Table 1, we provide the hyperparameters used to generate the five datasets.
+
+
+Table 1: Hyperparameters used for producing the fve datasets.
+
+**Parameter Type** **Hyperparameter** **Value** **Description**
+
+
+**General**
+
+
+**First-Order Logic**
+
+
+depth 40 Maximum depth of the CFG tree.
+n 200 Branching factor of produced CFG
+tree.
+
+
+free_variable_prob 0 _._ 25 Probability of a constant being replaced by a variable.
+max_free_variablesmax_predicate_arity _∞_ 2 Maximum predicate arity.Maximum number of unique variables.
+min_predicate_arity 1 Minimum predicate arity.
+num_objects 12 Number of unique constants.
+num_predicates 8 Number of unique predicates.
+
+
+**Propositional Logic** num_propositions 12 Number of unique propositions.
+
+
+**Regular Expression** alphabet_size 2 Alphabet size.
+
+
+E EXPERIMENTAL SETUP
+
+
+In this section, we will provide the details of our experimental setup for generating the datasets and
+running _∀_ uto _∃∨∧_ L for evaluating each LLM’s performance.
+
+We ran our experiments using Python 3.10.13 with package versions shown in Table 2. We also
+repackaged Prover9 (McCune, 2010) to improve performance where this repackaged version can be
+found in our code base.
+
+
+**Dataset** **Generation:** We generated five datasets using the
+dataset generation algorithm with the hyperparameters shown in
+Table 1 using the number of operators as the categorization metric
+for all but regular expression, where we used CFG tree depth. We
+generated 10 batches for each dataset, resulting in approximately
+20k samples for each dataset with an equal distribution for each
+operator number.
+
+
+openai 1.45.0
+nltk 3.8.1
+tqdm 4.66.4
+anthropic 0.26.1
+backoff 2.2.1
+tiktoken 0.6.0
+transformers 4.41.1
+Faker 25.2.0
+networkx 3.3
+
+
+Table 2: Python package versions
+used for empirical evaluation.
+
+
+**Python Package** **Version**
+
+
+**Evaluating and Verification:** The closed-source models (GPT- anthropic 0.26.1
+3.5-turbo, GPT-4o, and GPT-4o-mini) were accessed using their backoff 2.2.1
+API using a temperature of 0.1. The open-source models LLama- tiktoken 0.6.0
+3-8B-Instruct and Mistral-v0.2-7B-Instruct were locally hosted transformers 4.41.1
+on a server with a 13th Gen Intel(R) Core(TM) i9-13900K and Faker 25.2.0
+Nvidia RTX 4090 GPU using the model’s default parameters networkx 3.3
+with a temperature of 1. Similarly, Phi-3-medium-4k-instruct was
+locally hosted on a server using a Nvidia A100-XM4-80GB GPU.
+Verification was performed on an AMD EPYC machine with 128 cores. The larger open-source
+models, Yi-1.5-34B-Instruct and Llama-3-70B-Instruct, were run on Arizona State University’s Sol
+supercomputer (Jennewein et al., 2023).
+
+
+17
+
+
+F PROMPTING
+
+
+In this section, we provide the zero-shot and few-shot used in the main paper experiments.
+
+
+The prompt for each dataset type provides the LLM with information on the problem type and the
+vocabulary. For informalization, we prompt the model to produce just a natural language description.
+We also provide the list of objects, predicates, propositions, and free variables in the formal syntax
+expression. For autoformalization, the LLM is prompted to provide just the formal syntax expression
+using the natural language description. Additionally, for first-order logic with a non-synthetic
+grammar, we provide the predicate names and arity in the autoformalization prompt. Example
+informalization and autoformalization few-shot prompts for the first-order logic dataset are shown
+in Prompt 2 and Prompt 3. Example informalization and autoformalization few-shot prompts for
+the regular expression dataset are shown in Prompt 4 and Prompt 5. Example informalization and
+autoformalization zero-shot prompts for the propositional logic dataset are show in Prompt 6 and
+Prompt 7.
+
+
+For §A4, the prompt used for using an LLM to verify the equivalence of two formulae tells the
+LLM about the type of datasets (e.g., propositional logic, first-order logic, and regular expression).
+Using Chain-of-Thought prompting, the model is prompted to provide an explanation before giving
+a yes-or-no answer in a parsable format. Prompt 8 gives an example of the prompt we used for
+verifying two first-order logic formulae.
+
+
+G ANALYSIS OF MAIN PAPER RESULTS
+
+
+In this section, we analyze the main empirical results of the paper. Our results clearly show that
+current SOTA LLMs are not performant in the truth maintenance task, which is why _∀_ uto _∃∨∧_ L is
+needed. As the expression complexity increases, the syntactic compliance, accuracy, and ability
+to verify equivalence diminishes. We describe some of the errors that cause the low accuracy for
+propositional logic, first-order logic, and regular expressions.
+
+
+G.1 PROPOSITIONAL LOGIC RESULTS
+
+
+Table 3: Examples of errors the evaluated LLMs made while evaluating _∀_ uto _∃∨∧_ L for the propositional logic dataset.
+
+
+_φ_ _I_ ( _φ_ ) ( _A ◦I_ )( _φ_ )
+
+
+( _¬p_ 11 _∧¬p_ 8)
+
+
+( _¬p_ 10 _∧_ ( _¬p_ 9 _∨_ _p_ 7))
+
+
+( _¬p_ 3 _∧¬p_ 7)
+
+
+( _¬¬p_ 2 _∨_ _p_ 3)
+
+
+The natural description of the formula is:
+"It is not the case that both proposition p11
+and proposition p8 are true."
+
+
+The natural description of the formula is:
+"It is not the case that proposition p10 is true
+and either proposition p9 is false or
+proposition p7 is true."
+
+Here is the natural description of the given
+formula: "The statement says that p3 is not
+true and p7 is also not true."
+
+The formula states that either the proposition
+p2 is true or the proposition p3 is true.
+Additionally, it specifies that the proposition
+p2 is not false.
+
+
+( _¬_ ( _p_ 11 _∧_ _p_ 8))
+
+
+_¬_ ( _p_ 10 _∧_ ( _¬p_ 9 _∨_ _p_ 7))
+
+
+( _¬p_ 3 _∨¬p_ 7)
+
+
+( _p_ 2 _∨_ _p_ 3) _∧¬¬p_ 2
+
+
+**Informalization Errors:** A common error was the LLM failed to describe the proposition names.
+Another was the LLM failing to provide a complete description of the formula. For example, GPT3.5-turbo often described portions of the expression based on what propositions and operators it
+
+
+18
+
+
+contained. A common issue with GPT-4o, one of the best models, is that it often uses different
+propositional symbols (see example 5 in Table 3). Finally, we also observed hallucinations were
+the LLM attempted and failed to simplify the original formula (see example 4 in Table 3). These
+interpretation errors resulted in the original meaning of the expression being lost.
+
+
+**Autoformalization Errors:** We observed there were often syntactic issues where the description was
+not fully translated into a formula or the parentheses did not match. An interesting result is that the
+LLMs struggled to place the negation operator in the correct location. For example, GPT-4o often
+describes _¬p ∧¬p_ as predicate _p_ "negated twice and combined" but failed to regenerate the original
+formula properly with this description.
+
+
+G.2 FIRST-ORDER LOGIC RESULTS
+
+
+**Informalization Errors:** Similar to propositional logic, we observed the LLM often failed providing
+enough details resulting in incorrect formulas being generated. A significant source of errors we
+observed when not providing the predicate names and arity was the LLM rephrasing its explanation
+causing confusion when regenerating.
+
+
+**Autoformalization Errors:** Beyond the errors observed in propositional logic, the most common
+mistake made during autoformalization was the LLM confusing constants with variables (see example
+2 in Table 4). Additionally, the LLMs often messed up the predicate arity. Mistral often used = and
+
+
+19
+
+
+Table 4: Examples of errors the evaluated LLMs made while evaluating _∀_ uto _∃∨∧_ L for the first-order
+logic dataset.
+
+
+_φ_ _I_ ( _φ_ ) ( _A ◦I_ )( _φ_ )
+
+
+( _¬pred_ 8( _p_ 10) _∧_ _pred_ 8( _p_ 5)
+_∧pred_ 6( _p_ 8))
+
+
+The formula states that it is not the case
+that the predicate pred8 holds for the
+object p10, and the predicate pred8
+holds for the object p5, and the
+predicate pred6 holds for the object p8,
+all conjoined together.
+
+
+_¬_ ( _pred_ 8( _p_ 10)
+_∧pred_ 8( _p_ 5)
+_∧pred_ 6( _p_ 8))
+
+
+Here is the natural description of the
+_∃x_ 1 _.¬pred_ 2( _p_ 4) given formula: "There exists an x1 such _∃x_ 1 _.¬pred_ 2( _x_ 1)
+that p4 is not an instance of pred2.
+
+
+For all x1, it is not the case that
+_x_ 1 _._ _pred_ 3( _p_ 5)
+_∀_ _¬¬_ pred3(p5) is false.
+
+
+_∀x_ 1 _.¬_ ( _pred_ 3( _p_ 5)
+_∨¬pred_ 3( _p_ 5))
+
+
+There exists a relationship between the
+_pred_ 2( _p_ 3 _, p_ 5) objects p3 and p5 such that the predicate _∃p_ 3 _p_ 5 _.pred_ 2( _p_ 3 _, p_ 5)
+pred2 holds true for these objects.
+
+
+= operators with the variables, which was not needed for any formluae in _∀_ uto _∃∨∧_ L. Similarly, the
+LLMs would often use their own grammar instead of the one provided in the prompt.
+
+
+20
+
+
+G.3 REGULAR EXPRESSION RESULTS
+
+
+**Informalization Errors:** Most of the errors observed were the LLMs giving the wrong explanation,
+even for simple regular expressions. For example, GPT-4o often described _c_ _[∗]_ as "one or more
+
+
+21
+
+
+occurrences of ’c’", where _c_ is a character from the alphabet (see example 1 in Table 5). For the
+other LLMs, it was quite common for the explanation to not give the actual character (see example
+4 in Table 5). Overall, we observed a higher likelihood of SOTA LLMs hallucinating on regular
+expressions compared to the other datasets.
+
+
+**Autoformalization Errors:** The most common mistake when constructing a regular expression from
+natural language was misplacing _∗_ or adding it when it was not needed (see example 3 in Table 5).
+Finally, even though we explicitly prompted the LLMs to use just _∗_, sometimes the LLM would use
++.
+
+
+H STANDARD DEVIATION EVALUATION
+
+
+In this section, we perform an empirical analysis of the standard deviation of the syntactic compliance
+and accuracy of the _∀_ uto _∃∨∧_ L results. Due to the 10 batches having different data, the standard
+deviation cannot be computed reliably based on the performance of the individual batches. We
+evaluated the standard deviation by running _∀_ uto _∃∨∧_ L 10 times on the first batch of each dataset
+
+
+22
+
+
+Table 5: Examples of errors the evaluated LLMs made while evaluating with _∀_ uto _∃∨∧_ L for the
+regular expression dataset.
+
+_φ_ _I_ ( _φ_ ) ( _A ◦I_ )( _φ_ )
+
+The pattern consists of one or more occurrences of the digit
+1 _[∗]_ 0 (1 _[∗]_ )10
+"1" followed by exactly one occurrence of the digit "0".
+
+
+((1 _[∗]_ )0) _[∗]_
+
+
+1 _[∗]_ 1 _[∗]_ 1 _[∗]_
+
+
+(1 _[∗]_ ) _[∗]_ 0
+
+
+The regular expression describes a sequence that consists of
+zero or more repetitions of the digit ’1’, followed by exactly
+one ’0’. This entire pattern can repeat any number of times,
+including zero times.
+
+
+The pattern consists of zero or more occurrences of the
+1 _[∗]_ 11 _[∗]_ digit ’1’, followed by exactly one occurrence of the digit ’1’,
+followed by zero or more occurrences of the digit ’1’.
+
+
+Zero or more occurrences of the character or group of
+(1) _[∗]_ 0 ( _._ _[∗]_ )
+characters before the asterisk.
+
+
+composed of 1974 propositional logic, 1900 first-order logic, and 1842 regular expressions examples.
+Additionally, we evaluated GPT-3.5-turbo (ChatGPT) with a temperature of 1, LLama-3-8B-Instruct,
+Mistral-v0.2-7B-Instruct, and Phi-3-medium-4k-instruct. We calculated the mean and standard
+deviation of each independent run of _∀_ uto _∃∨∧_ L and plotted the results in Figure 8.
+
+
+ChatGPT Phi Mistral LLama3
+
+
+|3–CNF(12) Propositional Logic(12) FOL(8, 12)−S FOL(8, 12)−E Regular E|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Expression(2)|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|3–CNF(12)<br>Propositional Logic(12)<br>FOL(8_,_ 12)_−_S<br>FOL(8_,_ 12)_−_E<br>Regular|xpression(2)|
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+
+
+0 10 20 30 40
+
+
+0 10 20 30 40
+
+
+1 _._ 00
+
+
+0 _._ 75
+
+
+0 _._ 50
+
+
+0 _._ 25
+
+
+0 _._ 00
+
+
+1 _._ 00
+
+
+0 _._ 75
+
+
+0 _._ 50
+
+
+0 _._ 25
+
+
+0 _._ 00
+0 10 20 30 40 50 60
+
+
+0 10 20 30 40
+
+
+0 10 20 30 40
+
+
+# of Operators: _∧, ∨, ¬_ ( _¬_ is counted as an operator iff not succeeded by a terminal) CFG Parse Tree Depth
+
+
+Figure 8: Average and standard deviation error of Zero-shot Pass@1 results from using _∀_ uto _∃∨∧_ L to
+assess LLMs w.r.t. §A1 and §A2 (Sec. 3.3.1) on the first batch of the packaged datasets. The x-axis
+represents an increasing order of descriptional complexity.
+
+
+For propositional and first-order logic, the standard deviation of the evaluated LLMs is low. While
+noisier, the standard deviation of the regular expression results were still less than 20% with the
+
+
+23
+
+
+better performing models having a lower standard deviation. Overall, this experiment shows that the
+noise of non-deterministic text generation does not significantly impact _∀_ uto _∃∨∧_ L or our results and
+evaluations.
+
+
+I ADDITIONAL ZERO-SHOT PROMPTING RESULTS
+
+
+In this section, we evaluate other categorization metrics from the zero-shot prompting experiments
+from the main paper. For the propositional and first-order logic datasets, the other categorization
+metrics are the CFG parse tree depth needed to produce each FS expression and the individual number
+of each operator ( _∧, ∨, ¬_ ). For regular expressions, we have discussed in the main paper that each
+regular expression represents a minimal deterministic finite automata (DFA) that is unique up to
+isomorphism. Therefore, the other categorization metrics for regular expressions are the number of
+nodes _V_, the number of edges _E_, and the density of this minimal DFA. The density is calculated
+using Equation 1 where we discretize the value by rounding to every tenth.
+
+
+_E_
+_Density_ = _|_ _|_ (1)
+_|V |_ ( _|V | −_ 1)
+
+
+**Imbalanced** **Dataset** **Labels** Due to the datasets being created by sampling an equal number of
+expressions for each number of operators, taking this dataset and evaluating it in terms of the other
+metrics results in an imbalanced dataset. To examine this effect, we have created Figures 9 and 10 to
+perform an analysis of dataset imbalance on these other metrics.
+
+
+For propositional and first-order logic, the dataset is actually quite balanced due to CFG tree depth
+and the number of each individual operator having a high correlation to the total number of operators.
+As such, other than metric values close to the extrema, the noise from the imbalanced data will be
+marginal.
+
+
+The regular expression dataset is less balanced due to a weaker correlation with the CFG tree depth.
+The middle of the density graphs will be the most noisy since there is significantly less data for
+densities of 0.1 and 0.2. The number of examples drops as the number of edges and nodes increases
+with less than 10% of the data having more than 7 edges and/or nodes.
+
+
+Density
+
+
+0.3
+
+
+# of Nodes
+
+
+2
+
+
+# of Edges
+
+
+2
+
+
+7+
+
+
+6
+
+
+7+
+
+
+6
+
+
+Figure 9: Count of the number of examples for each metric value for the regular expression datasets.
+The pie charts increase in values counter-clockwise while going from lighter to darker.
+
+
+**Categorization Metrics Performance** In Figures 11, 12,13, 14, and 15 the performance of each
+LLM over these other categorization metrics are shown. Across the board, we observe a diminishing
+performance regardless of the source of increasing complexity. Ignoring the noise from the low
+number of examples closer to the extrema, the depth of the tree showed a similar behavior as the
+operator number. Propositional logic performance was concave w.r.t the number of _∧_ and _∨_ operators
+since it becomes easier to describe expressions composed of exclusively _∧_ and _∨_ operators. A similar,
+but weaker pattern is observed in the first-order logic results for the same reason. The negation
+operator was not concave, showing how LLMs struggle to handle multiple negation operators.
+
+
+24
+
+
+# of _¬_ Operators
+
+
+CFG Parse Tree Depth
+
+
+19-21
+
+
+22-24
+
+
+1-3
+
+40-42
+
+
+8
+
+
+9
+
+
+1
+0
+
+
+2
+
+
+17+
+
+
+19-21
+
+
+22-24
+
+
+4-6
+1-3
+
+40-42
+
+
+4-6
+1-3
+
+
+7
+
+
+8
+
+
+9
+
+
+8
+
+
+9
+
+
+17
+
+
+0
+
+
+18+
+
+
+0
+
+
+17+
+
+
+6+
+
+
+6+
+
+5
+
+
+6+
+
+5
+
+
+0
+
+
+18+
+
+
+19-21
+
+
+22-24
+
+
+4-6
+1-3
+
+40-42
+
+
+7
+
+
+8
+
+
+8
+
+
+9
+
+
+17
+
+
+0
+
+
+17+
+
+
+9
+
+
+Figure 10: Count of the number of examples for each metric value for each of the datasets. Each row
+is a dataset and each column is a different metric that can be used to categorize the dataset. The pie
+charts increase in value counter-clockwise while going from lighter to darker.
+
+
+|FOL(8, 12)−E Mistral LLama3|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+
+
+0 10 20 30 40
+
+
+Regular Expression(2)
+
+
+0 10 20 30 40
+
+
+Propositional Logic(12)
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+0 10 20 30 40
+
+
+|FOL(8, 12)−S GPT-4o-mini Phi3|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+
+
+0 10 20 30 40
+
+
+CFG Parse Tree Depth
+
+
+Figure 11: Zero-shot Pass@1 results (avg. over 10 batches, higher values better) from using _∀_ uto _∃∨∧_ L
+to assess LLMs w.r.t. §A1, §A2, §A3 (Sec. 3.3.1) on the packaged datasets. The x-axis is the depth of
+the CFG tree to produce the formula.
+
+
+For regular expressions, increasing the number of nodes and edges reduces accuracy and the ability
+to evaluate equality. Density does not seem to be a factor, as the dip at 0.1 can be associated with
+noise due to the lower number of examples. Overall, these three metrics are much weaker factors in
+how well the LLM performs compared to the CFG tree depth.
+
+
+J FEW-SHOT PROMPTING RESULTS
+
+
+In this section, we discuss our few-shot prompting experiment and analyze the performance difference
+between zero-shot and few-shot prompting on §A1 and §A2.
+
+
+25
+
+
+|FOL(8, 12)−E LLama3 Other LLMs (n = 10)|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|
+|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+|||||||||||||
+
+
+0 10 20 25
+
+
+Propositional Logic(12)
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+0 10 20 25
+
+
+|FOL(8, 12)−S o-mini Phi3 Mistral|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Col18|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+|||||||||||||||||||
+
+
+0 10 20 25
+
+# of Operators: _∧_
+
+
+Figure 12: Zero-shot Pass@1 results (avg. over 10 batches, higher values better) from using _∀_ uto _∃∨∧_ L
+to assess LLMs w.r.t. §A1, §A2, §A3 (Sec. 3.3.1) on the packaged datasets. The x-axis is the number
+of and operators ( _∧_ ) in the expression.
+
+
+|FOL(8, 12)−E LLama3 Other LLMs (n = 10)|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+
+
+0 10 20 25
+
+
+Propositional Logic(12)
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+0 10 20 25
+
+
+|FOL(8, 12)−S o-mini Phi3 Mistral|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+|||||||||||||||||
+
+
+0 10 20 25
+
+# of Operators: _∨_
+
+
+Figure 13: Zero-shot Pass@1 results (avg. over 10 batches, higher values better) from using _∀_ uto _∃∨∧_ L
+to assess LLMs w.r.t. §A1, §A2, §A3 (Sec. 3.3.1) on the packaged datasets. The x-axis is the number
+of or operators ( _∨_ ) in the expression.
+
+
+26
+
+
+|FOL(8, 12)−E LLama3 Other LLMs (n = 10)|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+0 3 6 9 12
+
+
+Propositional Logic(12)
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+0 3 6 9 12
+
+
+|FOL(8, 12)−S o-mini Phi3 Mistral|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+||||||||
+
+
+0 3 6 9 12
+
+
+# of Operators: _¬_ (counted as an operator iff not succeeded by a terminal)
+
+
+Figure 14: Zero-shot Pass@1 results (avg. over 10 batches, higher values better) from using _∀_ uto _∃∨∧_ L
+to assess LLMs w.r.t. §A1, §A2, §A3 (Sec. 3.3.1) on the packaged datasets. The x-axis is the number
+of negation operators ( _¬_ ) in the expression.
+
+
+ChatGPT GPT-4o GPT-4o-mini Phi3 Mistral LLama3 Other LLMs ( _n_ = 10)
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+
+
+1 _._ 00
+0 _._ 75
+0 _._ 50
+0 _._ 25
+0 _._ 00
+0 4 8 12 16
+
+
+0 4 8 12 16 0 _._ 0 0 _._ 1 0 _._ 2 0 _._ 3 0 _._ 4 0 _._ 5
+
+
+# of Nodes # of Edges Density
+
+
+Figure 15: Zero-shot Pass@1 results (avg. over 10 batches, higher values better) from using _∀_ uto _∃∨∧_ L
+to assess LLMs w.r.t. §A1, §A2, §A3 (Sec. 3.3.1) on the packaged datasets. The x-axis is the metric
+on the CFG tree to produce the regular expression formula.
+
+
+27
+
+
+0 10 20 30 40
+
+
+Regular Expression(2)
+
+
+0 10 20 30 40
+
+
+Propositional Logic(12)
+
+1 _._ 00
+
+
+0 _._ 75
+
+
+0 _._ 50
+
+
+0 _._ 25
+
+
+0 _._ 00
+
+_−_ 0 _._ 25
+
+1 _._ 00
+
+
+0 _._ 75
+
+
+0 _._ 50
+
+
+0 _._ 25
+
+
+0 _._ 00
+
+
+|FOL(8, 12)−S T-4o GPT-4o-m|Col2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+|||
+
+
+0 10 20 30 40
+
+
+# of Operators: _∧, ∨, ¬_ ( _¬_ is counted as an operator iff not succeeded by a terminal) CFG Parse Tree Depth
+
+
+Figure 16: Syntactic compliance and accuracy difference of few-shot Pass@1 compared to zero-shot
+Pass@1 results (avg. over 10 batches, higher values better) from using _∀_ uto _∃∨∧_ L to assess LLMs
+w.r.t. §A1, §A2, §A3 (Sec. 3.3.1) on the packaged datasets. The x-axis represents the increasing order
+of descriptional complexity.
+
+
+We evaluated on the same five datasets from the main paper’s experiments but inserted two examples into the prompts. First-order and predicate logic used the same two examples, while regular
+expressions used their own two examples. In Figure 16, the performance difference of each LLM
+when using few-shot prompting instead of zero-shot is shown. Using few-shot prompting increases
+syntactic compliance as the model has access to the desired format for encoding and decoding.
+For expressions with lower complexity, this translates to a better performance on §A2. However,
+as complexity increases, the performance difference between zero-shot and few-shot prompting is
+negligible due to having the correct format for parsing but failing maintaining the same formula.
+
+
+K OTHER BENCHMARK CORRELATION AND _∀_ UTO _∃∨∧_ L PREDICTIVE POWER
+EVALUATION
+
+
+For evaluating the correlation between a LLM’s performance on _∀_ uto _∃∨∧_ L and existing benchmarks
+and measuring the predictive power of _∀_ uto _∃∨∧_ L, in Section 4.2, we evaluated on FOLIO (Han et al.,
+2024), Multi-LogicEval (Patel et al., 2024), and HumanEval (Chen et al., 2021). In this section we
+discuss these experiments and cite the sources of the HumanEval results along with evaluate the
+predictive power of _∀_ uto _∃∨∧_ L.
+
+In this section, we discuss the experimental setup for the benchmark, the sources used for LLM
+performance on other benchmarks, and the _∀_ uto _∃∨∧_ L we used for evaluation. We also evaluate the
+FOLIO premise benchmark further based on the operator numbers in each premise.
+
+
+K.1 FOLIO EXPERIMENTAL SETUPS
+
+
+The FOLIO dataset is composed of premises and a conclusion for each sample where the task is
+to conclude whether the conclusion is true, false, or unknown given the premises. Additionally,
+the dataset provides an encoding into first-order logic for all the premises and conclusions. Therefore, we evaluated each LLM on their abilities to (1) informalize a first-order logic premise, (2)
+autoformalize a natural language premise, (3) correctly classifying the conclusion using the firstorder logic representations, and (4) correctly classifying the conclusion using the natural language
+representations.
+
+
+For the FOLIO premise informalization and autoformalization experiments, the LLM was prompted
+using the same few-shot first-order logic prompt used by _∀_ uto _∃∨∧_ L where the example from the
+prompt is another premise from the same FOLIO example to make sure both the example and the
+evaluated premises have the same context. Premises were screened to make sure that we were able to
+
+
+28
+
+
+parse them into Prover9. Prompt 9 and 10 shows example prompts using example premises come
+from the FOLIO dataset.
+
+
+For evaluating the performance of each LLM on classifying whether the premises entailed the conclusion, the same prompt was used for both the natural language and first-order logic representations of
+the premises and conclusions. The prompts are inspired by the prompts used in Multi-LogiEval and
+use Chain-of-Thought prompting and prompt the model to provide the answer in a parsable format.
+Prompt 11 and Prompt 12 are examples of these prompts using an example from the FOLIO dataset.
+
+
+We evaluated the informalization results against the ground truth natural language representation
+using BLEU (Callison-Burch et al., 2006), ROUGE (Lin, 2004), METEOR (Banerjee & Lavie, 2005),
+and BERT Score (Zhang* et al., 2020). The model deberta-xlarge-mnli (He et al., 2021) was used for
+the BERT score calculation. For the autoformalization results, we used the same verification process
+as the main paper. For the FOLIO conclusion classification, the LLM’s answered was parsed out of
+its response with the examples that could not be parsed being classified as "Unknown" and marked as
+wrong. These examples were checked to verify the parser.
+
+
+K.2 MULTI-LOGIEVAL EXPERIMENT SETUP
+
+
+The task in Multi-LogicEval (Patel et al., 2024) is to answer a yes-or-no question using the provided
+context, where the question was created using a certain depth of rules of logical reasoning. We used a
+prompt similar to the one they used where we use Chain-of-Thought prompting and prompt the LLM
+to provide the answer in a specific location to parse. Prompt 13 shows an example of this prompt
+using examples from the Multi-LogiEval dataset.
+
+
+29
+
+
+K.3 HUMANEVAL AND BIG BENCH HARD SCORE SOURCES
+
+
+To evaluate the correlation and predictive power of _∀_ uto _∃∨∧_ L against commonly used LLM benchmarks HumanEval (Chen et al., 2021) and Big Bench Hard (BBH) (Suzgun et al., 2023), we collected
+the performance scores of the LLMs we evaulated on both benchmarks and report our findings and
+sources in Table 6. We were unable to find any sources that evaluated GPT-4o-mini on BBH.
+
+
+K.4 COMPUTED CALIBRATED _∀_ UTO _∃∨∧_ L SCORE
+
+To compare against the performance on different benchmarks in Section 4.2, we needed to calculate
+the calibrated performance of each LLM on _∀_ uto _∃∨∧_ L for the relevant portions of the datasets. For
+example, there are few premises in the FOLIO dataset with more than 6 operators meaning that the
+most accurate comparison would be to evaluate our first-order logic dataset up to the same number of
+
+
+30
+
+
+Table 6: Reported performance of SOTA LLMs on HumanEval and Big Bench Hard (BBH) benchmarks. The
+values under the Computed column are averaged over 5 runs from our experiments. Other results are reported
+from online sources. A – indicates that we were not able to find any online source. We used our local computed
+results when they were available.
+
+
+**Model** **HumanEval Score** **BBH Score**
+
+
+**Computed** **(Online)** **(Online)**
+
+
+ChatGPT 74.3 68 (OpenAI, 2024) 48.1 (OpenAI, 2023)
+GPT-4o 91.8 90.2 (OpenAI, 2024) 83.1 (Dunham & Syahputra, 2024)
+GPT-4o-mini 88.3 87.2 (OpenAI, 2024)       Llama-3.2-1B-Instruct 34.6    - 8.7 (Fourrier et al., 2024)
+Qwen-2.5-1.5B-Instruct 56.7 61.6 (Qwen2, 2024) 19.8 (Fourrier et al., 2024)
+Phi-3.5-Mini-Instruct 71.3 64.6 (Liu et al., 2023) 36.7 (Fourrier et al., 2024)
+Mistral-7B-Instruct-v0.2 44.5 42.1 (Liu et al., 2023) 24.0 (Fourrier et al., 2024)
+Llama-3-8B-Instruct 62.8 61.6 (Liu et al., 2023) 24.5 (Fourrier et al., 2024)
+Granite-3.0-8B-Instruct 62.2 64.6 (Granite Team, 2024) 51.6 (Fourrier et al., 2024)
+Llama-3.1-8B-Instruct 63.4 66.5 (Microsoft, 2024) 63.4 (Microsoft, 2024)
+Ministral-8B-Instruct-2410 76.8 76.8 (MistralAI, 2024) 8.7 (Fourrier et al., 2024)
+Gemma-2-9B-IT 68.3 68.9 (Qwen2, 2024) 42.1 (Fourrier et al., 2024)
+Phi-3-Medium-4k-Instruct 75.0 62.2 (Microsoft, 2024) 49.4 (Fourrier et al., 2024)
+Qwen-2.5-14B-Instruct 80.5 83.5 (Qwen2, 2024) 48.4 (Fourrier et al., 2024)
+Yi-1.5-34B-Instruct 72.6 75.2 (Yi, 2024) 44.3 (Fourrier et al., 2024)
+Llama-3-70B-Instruct 79.9 77.4 (Liu et al., 2023) 50.2 (Fourrier et al., 2024)
+
+
+operators. Therefore, we calculated the accuracy of the first-order logic formulae with less than seven
+operators when calculating the correlation and predictive power. On MultiLogiEval, the number of
+
+
+31
+
+
+1
+
+
+_._ 75
+
+
+_._ 5
+
+
+_._ 25
+
+
+0
+
+
+|ρ = 0.79|ρ = 0.70|ρ = 0.64|ρ = 0.67 ρ =|0.61|
+|---|---|---|---|---|
+|<br>_p_ = 0_._00|<br>_p_ = 0_._00|<br>_p_ = 0_._00|<br>_p_ = 0_._00<br> <br>_p_ =|<br>  0_._00|
+||||||
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+0 _._ 25 _._ 5 _._ 75 1
+
+
+_∀_ uto _∃∨∧_ L Score
+
+Figure 17: Correlation between the parameterized _∀_ uto _∃∨∧_ L score and both autoformalization _A_ and informalization _I_ for FOLIO premises. Each point represents a specific number of operators with arrows showing
+increasing complexity (number of operators). The trendline across all the points is annotated with _×_, the Pearson
+correlation coefficient ( _ρ_ ), and the p-value are annotated in the top left.
+
+
+operators is dictated by the depth of the rules, so we took the average of all first-order logic examples
+up to 30 in our dataset. On HumanEval, to the best of our knowledge using the average of regex with
+CFG tree depth up to 7 is the best comparison.
+
+
+K.5 FOLIO ADDITIONAL CORRELATION FIGURES
+
+
+In Section 4.2, we evaluated the correlation of other benchmarks compared to _∀_ uto _∃∨∧_ L. For the
+FOLIO dataset, we were able to calculate the exact number of operators in each problem, allowing
+us to plot points comparing the autoformalization and informalization accuracy for each operator
+number class to directly compare to the accuracy of the same number of operators in the first-order
+logic dataset we generated.
+
+
+We plot these results in Figure 17 with the Pearson correlation coefficient. Each figure shows a
+moderate to strong correlation with a statistically significant p-value of less than 0.05. As the computational complexity increases, performance on _∀_ uto _∃∨∧_ L, autoformalization, and informalization
+decreases. The autoformalization correlation is significantly stronger due to the informalization
+evaluation metrics being much weaker at evaluating truth maintenance.
+
+
+L LLM AS VERIFIERS EVALUATION
+
+
+In this section, we analyze the performance of LLMs on §A3, where we evaluate the performance of
+using a LLM to verify whether the formal syntax expression _φ_ is equivalent to the one produced by
+GPT-4o after doing _A ◦I_ ( _φ_ ). Figures 21 and 22 show the number of positive and negative examples.
+Additionally, it breaks down the performance of each LLM on each dataset.
+
+
+The LLMs are clearly biased towards giving positive answers with a high ratio of false positives
+to negative labels compared to false negatives to positive labels. A common case was the LLM
+not recognizing that GPT-4o renamed predicates or constants producing a different formal syntax
+expression. A structure that ChatGPT tends to struggle with is double negations. Below we provide
+two examples where, even at the time of writing this rebuttal, ChatGPT failed to correctly verify
+whether the two formulae are equivalent. Note that [FORMULA 2] is ChatGPT’s own response after
+conducting ( ) _[n]_ ( _φ_ 0) where _φ_ 0 = [FORMULA 1].
+_A ◦I_
+
+In the case of Output Example 1, it can be clearly seen that ChatGPT failed to understand that the two
+formulae are different. In particular, it was not able to correctly evaluate or reason that the second
+regular expression represents a string that begins with a 1 followed by zero or one 0’s. This is despite
+the LLM using a “Chain-of-thought” to help it arrive at an answer.
+
+
+A more glaring reasoning error is found in Output Example 2, where ChatGPT fails to apply the
+principles of logic where _¬¬p ≡_ _p ̸≡¬p_ . Our results convincingly showcase that LLMs cannot be
+used as verifiers even for straightforward statements such as the examples presented.
+
+
+32
+
+
+M DATASET DIVERSITY
+
+
+Fig. 9 and Fig. 9 provide additional details on the types of data present in the datasets packaged with
+_∀_ uto _∃∨∧_ L. Users can generate dynamic datasets along these dimensions using the hyperparameters
+mentioned in Table 1.
+
+
+To further provide additional statistics pertaining to the similarity of formulae in our dataset, especially
+those where the formulae are otherwise equivalent but just use different vocabularies. For example,
+the formula _f_ = _p_ 1 can be represented via different propositions where _p_ 1 = _It is raining_ in _f_ 1 and
+
+
+33
+
+
+something different in another formula _f_ 2 even though they canonically represent the same formula
+_f_ .
+
+
+This allows to test robustness in LLM outputs. Nevertheless, the probability of such instances
+decreases as the formula size increases. We have counted the total proporition of the dataset where
+this occurs by replacing any variable from the vocabulary with an element of a vocabulary of size 1.
+For example, all variables used in PL(12) dataset of our results are replaced by substituting those
+variables with a vocabulary of only 1 proposition. Excess parentheses etc are preprocessed using
+NLTK and removed before the substitution (e.g. (( _p_ 1) _p_ 2) is simplified to _p_ 1 _p_ 2.
+_∧_ _∧_
+
+The k-CNF dataset contains 8550 unique samples and the propositional logic dataset contains 17.7k
+samples constituting 85% and 90% of these datasets respectively.
+
+
+N EVALUATION OF LLMS
+
+
+Table 7 lists the models, their parameters (– if closed-source), and the exact model version used for
+our experiments. The open-source models were loaded using NVIDIA A100 80GB GPUs whereas
+we used the OpenAI API for the GPT family of models. We cover a diverse range of models in our
+evaluation ranging from extremely small LMs with a few billion parameters ( _∼_ 1B) to LLMs with
+several billions of parameters. This allows the analysis of _∀_ uto _∃∨∧_ L from the lens of generalization.
+
+Fig. 18 represents the syntactic compliance ( _§_ A1) data from Fig. 3 for all the models with a separate
+axis for each LLM. Similarly, Fig. 19 plots the Accuracy ( _§_ A2). Additionally, Fig. 20 plots the F1
+score of using LLMs as verifiers ( _§_ A3). Tables 9 – 14 provide the data that was used to plot the
+results in Fig. 4 and to compute the predictive power in Fig. 5.
+
+
+Tables 15 – 18 list the example counts for each combination of class label and prediction for FOLIO(R;
+NL) and FOLIO(R; FOL) and each label’s precision and recall rate. Tables 19 and 20 list the examples
+counts for each combination of class label and prediction for LogiEval(R; PL) and LogieEval(R;
+FOL).
+
+
+N.1 CLAUDE EVALUATION
+
+
+We evaluated Claude 3.0 Sonnet on just the 3-CNF, propositional logic, and regular expression
+datasets due to the cost. Our results are shown in Figure 23 and show that Claude 3.0 Sonnet performs
+similarly to GPT-4o with both having nearly perfect syntactic compliance and accuracy on 3-CNF.
+Sonnet achieved the highest syntactic compliance and accuracy on propositional logic compared to
+the other models. However the accuracy was only around 50% for expressions with more than 20
+operators. Additionally, while being often syntactic compliant, Sonnet performed with low accuracy
+on the regular expression dataset.
+
+
+34
+
+
+Table 7: The LLMs used in our evaluation. The label names represent the labels used in Fig. 18 and Fig. 19, _|θ|_
+represents the total number of parameters, and the last column lists the exact version used (for reproducibility).
+
+
+**Label** _|θ|_ **Version**
+
+
+ChatGPT           - GPT-3.5-turbo-0125
+GPT-4o            - gpt-4o-2024-08-06
+GPT-4o-mini          - gpt-4o-mini-2024-07-18
+GPT-4o1           - o1-preview-2024-09-12
+Llama-3.2-1B-Instruct 1B meta-llama/Llama-3.2-1B-Instruct
+Qwen-2.5-1.5B-Instruct 1.5B Qwen/Qwen2.5-1.5B-Instruct
+Phi-3.5-Mini-Instruct 4B microsoft/Phi-3.5-mini-instruct
+Mistral-7B-Instruct-v0.2 7B mistralai/Mistral-7B-Instruct-v0.2
+Llama-3-8B-Instruct 8B meta-llama/Llama-3-8B-Instruct
+Granite-3.0-8B-Instruct 8B ibm-granite/granite-3.0-8b-instruct
+LLama-3.1-8B-Instruct 8B meta-llama/Llama-3.1-8B-Instruct
+Ministral-8B-Instruct-2410 8B mistralai/Ministral-8B-Instruct-2410
+Gemma-2-9B-IT 9B google/gemma-2-9b-it
+Phi-3-Medium-4k-Instruct 14B microsoft/Phi-3-medium-4k-instruct
+Qwen-2.5-14B-Instruct 14B Qwen/Qwen2.5-14B-Instruct
+Yi-1.5-34B-Instruct 34B 01-ai/Yi-34B-Instruct
+Llama-3-70B-Instruct 70B meta-llama/Llama-3-70B-Instruct
+
+
+Table 8: Correlation data for FOLIO(R; NL). The _∀_ uto _∃∨∧_ L data was averaged from the PL dataset with data
+points with description complexity _d ≤_ 6. These values were used to compute the predictive power of _∀_ uto _∃∨∧_ L
+reported in Fig. 5.
+
+
+Model _∀_ uto _∃∨∧_ L Score FOLIO(R; NL) Score
+
+
+GPT-4o 0.79 0.75
+GPT-4o-mini 0.56 0.69
+ChatGPT 0.36 0.56
+Mistral-7B-Instruct-v0.2 0.06 0.54
+Phi-3-medium-4k-instruct 0.35 0.67
+LLama-3-8B-Instruct 0.13 0.58
+Gemma-2-9B-IT 0.28 0.64
+Granite-3.0-8B-Instruct 0.18 0.60
+Llama-3.1-8B-Instruct 0.09 0.59
+LLama-3.2-1B-Instruct 0.03 0.36
+LLama-3-70B-Instruct 0.49 0.70
+Ministral-8B-Instruct-2410 0.10 0.61
+Phi-3.5-Mini-Instruct 0.19 0.61
+Qwen-2.5-1.5B-Instruct 0.07 0.49
+Qwen-2.5-14B-Instruct 0.67 0.73
+Yi-1.5-34B 0.21 0.63
+
+
+35
+
+
+GPT-4o
+GPT-4o-mini
+ChatGPT
+Mistral-7B-Instruct-v0.2
+
+
+Propositional Logic(12)
+
+
+Phi-3-Medium-4k-Instruct
+LLama-3-8B-Instruct
+Gemma-2-9B-IT
+Granite-3.0-8B-Instruct
+
+
+Llama-3.1-8B-Instruct
+LLama-3.2-1B-Instruct
+LLama-3-70B-Instruct
+Ministral-8B-Instruct-2410
+
+
+Phi-3.5-Mini-Instruct
+Qwen-2.5-1.5B-Instruct
+Qwen-2.5-14B-Instruct
+Yi-1.5-34B
+
+
+Regular Expression(2)
+
+
+1
+
+
+0
+
+1
+
+
+0
+
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+0 20 40
+
+
+0 20 40
+
+
+20 40 0 20 40 0 20 40 0 20 40
+
+# of Operators: _∧, ∨, ¬_ ( _¬_ is counted as an operator iff not succeeded by a terminal) CFG Parse Tree Depth
+
+
+0 20 40
+
+
+Figure 18: Syntactic compliance ( _§_ A1) of all models on the _∀_ uto _∃∨∧_ L datasets.
+
+
+36
+
+
+GPT-4o
+GPT-4o-mini
+ChatGPT
+Mistral-7B-Instruct-v0.2
+
+
+Propositional Logic(12)
+
+
+Phi-3-Medium-4k-Instruct
+LLama-3-8B-Instruct
+Gemma-2-9B-IT
+Granite-3.0-8B-Instruct
+
+
+Llama-3.1-8B-Instruct
+LLama-3.2-1B-Instruct
+LLama-3-70B-Instruct
+Ministral-8B-Instruct-2410
+
+
+Phi-3.5-Mini-Instruct
+Qwen-2.5-1.5B-Instruct
+Qwen-2.5-14B-Instruct
+Yi-1.5-34B
+
+
+Regular Expression(2)
+
+
+1
+
+
+0
+
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+0 20 40
+
+
+0 20 40
+
+
+20 40 0 20 40 0 20 40 0 20 40
+
+# of Operators: _∧, ∨, ¬_ ( _¬_ is counted as an operator iff not succeeded by a terminal) CFG Parse Tree Depth
+
+
+0 20 40
+
+
+Figure 19: _∀_ uto _∃∨∧_ L Score ( _§_ A2) of all models on the _∀_ uto _∃∨∧_ L datasets.
+
+
+37
+
+
+Gemma-2-9B-IT
+Granite-3.0-8B-Instruct
+Llama-3.1-8B-Instruct
+LLama-3.2-1B-Instruct
+
+
+Propositional Logic(12)
+
+
+Ministral-8B-Instruct-2410
+Phi-3.5-Mini-Instruct
+Qwen-2.5-1.5B-Instruct
+Qwen-2.5-14B-Instruct
+
+
+ChatGPT
+GPT-4o
+Phi-3-Medium-4k-Instruct
+Mistral-7B-Instruct-v0.2
+
+
+LLama-3-70B-Instruct
+Yi-1.5-34B
+LLama-3-8B-Instruct
+
+
+Regular Expression(2)
+
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+
+1
+
+
+0
+0 20 40
+
+
+0 20 40
+
+
+20 40 0 20 40 0 20 40 0 20 40
+
+# of Operators: _∧, ∨, ¬_ ( _¬_ is counted as an operator iff not succeeded by a terminal) CFG Parse Tree Depth
+
+
+0 20 40
+
+
+Figure 20: LLMs as verifiers F1 score ( _§_ A3) for the GPT-4o results using the _∀_ uto _∃∨∧_ L procedure of
+all models on the _∀_ uto _∃∨∧_ L datasets.
+
+
+38
+
+
+True Labels
+False Labels
+
+
+True Positive
+False Negative
+
+
+Non-compliant (True Label)
+True Negative
+
+
+False Positive
+Non-compliant (False Label)
+
+
+Figure 21: The number of positive and negative examples of _φ_ 1 ( _φ_ 0) when evaluating
+_≡A ◦I_
+GPT-4o on _∀_ uto _∃∨∧_ L for each dataset (inner donuts). Additionally included is a breakdown of the
+performance of each LLM when acting as the verifier (outer donuts). Included are all examples
+containing 20 or fewer operators or, in the case of the regular expression dataset, CFG tree depth
+of 20 or fewer. Non-compliant represents syntactically non-compliant responses when prompted to
+verify the equivalence.
+
+
+39
+
+
+True Labels
+False Labels
+
+
+True Positive
+False Negative
+
+
+Non-compliant (True Label)
+True Negative
+
+
+False Positive
+Non-compliant (False Label)
+
+
+Figure 22: Additional LLMs evaluate on §A3, where the number of positive and negative examples of
+_φ_ 1 ( _φ_ 0) when evaluating GPT-4o on uto L for each dataset (inner donuts). Additionally
+_≡A ◦I_ _∀_ _∃∨∧_
+included is a breakdown of the performance of each LLM when acting as the verifier (outer donuts).
+Included are all examples containing 20 or fewer operators or, in the case of the regular expression
+dataset, CFG tree depth of 20 or fewer. Non-compliant represents syntactically non-compliant
+responses when prompted to verify the equivalence.
+
+
+40
+
+
+3–CNF(12)
+
+
+PL(12)
+
+
+1
+
+_._ 75
+_._ 5
+
+_._ 25
+0
+0 10 20 30 40
+
+
+0 10 20 30 40
+
+
+1
+_._ 75
+_._ 5
+_._ 25
+0
+
+
+0 10 20 30 40
+
+
+# of Operators: _∧, ∨, ¬_ ( _¬_ is counted as an operator iff not succeeded by a terminal) CFG Parse Tree Depth
+
+
+Figure 23: _∀_ uto _∃∨∧_ L results on Claude 3.0 Sonnet on the 3-CNF, propositional logic, and regular
+expression datasets. Dashed line is the accuracy.
+
+
+Table 9: Correlation data for FOLIO(R; FOL). The calibrated _∀_ uto _∃∨∧_ L score was calculated from the FOL
+dataset with data points with description complexity _d ≤_ 6. These values were used to compute the predictive
+power of _∀_ uto _∃∨∧_ L reported in Fig. 5.
+
+
+Model _∀_ uto _∃∨∧_ L Score FOLIO(R; FOL) Score
+
+
+GPT-4o 0.79 0.71
+GPT-4o-mini 0.56 0.67
+ChatGPT 0.36 0.51
+Mistral-7B-Instruct-v0.2 0.06 0.51
+Phi-3-medium-4k-instruct 0.35 0.62
+LLama-3-8B-Instruct 0.13 0.52
+Gemma-2-9B-IT 0.28 0.59
+Granite-3.0-8B-Instruct 0.18 0.56
+Llama-3.1-8B-Instruct 0.09 0.56
+LLama-3.2-1B-Instruct 0.03 0.36
+LLama-3-70B-Instruct 0.49 0.66
+Ministral-8B-Instruct-2410 0.10 0.56
+Phi-3.5-Mini-Instruct 0.19 0.53
+Qwen-2.5-1.5B-Instruct 0.07 0.45
+Qwen-2.5-14B-Instruct 0.67 0.71
+Yi-1.5-34B 0.21 0.61
+
+
+Table 10: Correlation data for LogiEval(R; PL). The calibrated _∀_ uto _∃∨∧_ L score was calculated from the PL
+dataset with data points with description complexity _d ≤_ 30. These values were used to compute the predictive
+power of _∀_ uto _∃∨∧_ L reported in Fig. 5.
+
+
+Model _∀_ uto _∃∨∧_ L Score LogiEval(R; PL) Score
+
+
+GPT-4o 0.67 0.87
+GPT-4o-mini 0.35 0.67
+ChatGPT 0.17 0.64
+Mistral-7B-Instruct-v0.2 0.12 0.60
+Phi-3-medium-4k-instruct 0.23 0.75
+LLama-3-8B-Instruct 0.12 0.61
+Gemma-2-9B-IT 0.28 0.71
+Granite-3.0-8B-Instruct 0.21 0.58
+Llama-3.1-8B-Instruct 0.11 0.71
+LLama-3.2-1B-Instruct 0.04 0.50
+LLama-3-70B-Instruct 0.34 0.85
+Ministral-8B-Instruct-2410 0.17 0.68
+Phi-3.5-Mini-Instruct 0.10 0.62
+Qwen-2.5-1.5B-Instruct 0.11 0.52
+Qwen-2.5-14B-Instruct 0.46 0.76
+Yi-1.5-34B 0.26 0.78
+
+
+41
+
+
+Table 11: Correlation data for LogiEval(R; FOL). The calibrated _∀_ uto _∃∨∧_ L score was calculated from the FOL
+dataset with data points with description complexity _d ≤_ 30. These values were used to compute the predictive
+power of _∀_ uto _∃∨∧_ L reported in Fig. 5.
+
+
+Model _∀_ uto _∃∨∧_ L Score LogiEval(R; FOL) Score
+
+
+GPT-4o 0.32 0.82
+GPT-4o-mini 0.17 0.56
+ChatGPT 0.09 0.63
+Mistral-7B-Instruct-v0.2 0.01 0.56
+Phi-3-medium-4k-instruct 0.09 0.70
+LLama-3-8B-Instruct 0.02 0.62
+Gemma-2-9B-IT 0.07 0.69
+Granite-3.0-8B-Instruct 0.05 0.55
+Llama-3.1-8B-Instruct 0.02 0.68
+LLama-3.2-1B-Instruct 0.00 0.47
+LLama-3-70B-Instruct 0.15 0.78
+Ministral-8B-Instruct-2410 0.02 0.64
+Phi-3.5-Mini-Instruct 0.04 0.54
+Qwen-2.5-1.5B-Instruct 0.02 0.50
+Qwen-2.5-14B-Instruct 0.19 0.66
+Yi-1.5-34B 0.05 0.71
+
+
+Table 12: Correlation data for FOLIO( _A_ ). The calibrated _∀_ uto _∃∨∧_ L score was calculated from the FOL dataset
+with data points with description complexity _d ≤_ 6. These values were used to compute the predictive power of
+_∀_ uto _∃∨∧_ L reported in Fig. 5.
+
+
+Model _∀_ uto _∃∨∧_ L Score FOLIO( _A_ ) Score
+
+
+GPT-4o 0.79 0.41
+GPT-4o-mini 0.56 0.40
+ChatGPT 0.36 0.33
+Mistral-7B-Instruct-v0.2 0.06 0.19
+Phi-3-medium-4k-instruct 0.35 0.32
+LLama-3-8B-Instruct 0.13 0.16
+Gemma-2-9B-IT 0.28 0.30
+Granite-3.0-8B-Instruct 0.18 0.14
+Llama-3.1-8B-Instruct 0.09 0.23
+LLama-3.2-1B-Instruct 0.03 0.00
+LLama-3-70B-Instruct 0.49 0.40
+Ministral-8B-Instruct-2410 0.10 0.23
+Phi-3.5-Mini-Instruct 0.19 0.18
+Qwen-2.5-1.5B-Instruct 0.07 0.10
+Qwen-2.5-14B-Instruct 0.67 0.36
+Yi-1.5-34B 0.21 0.31
+
+
+42
+
+
+Table 13: Correlation data for FOLIO( _I_ ). The _∀_ uto _∃∨∧_ L data was averaged from the FOL dataset with data
+points with description complexity _d ≤_ 6. These values were used to compute the predictive power of _∀_ uto _∃∨∧_ L
+reported in Fig. 5.
+
+
+FOLIO( _I_ ) Score
+
+
+Model _∀_ uto _∃∨∧_ L Score BLEU ROUGE METEOR BERT
+
+
+GPT-4o 0.79 0.14 0.42 0.64 0.71
+GPT-4o-mini 0.56 0.13 0.41 0.61 0.73
+ChatGPT 0.36 0.19 0.47 0.62 0.76
+Mistral-7B-Instruct-v0.2 0.06 0.08 0.31 0.51 0.64
+Phi-3-Medium-4k-Instruct 0.35 0.12 0.39 0.58 0.70
+LLama-3-8B-Instruct 0.13 0.04 0.18 0.35 0.50
+Gemma-2-9B-IT 0.28 0.10 0.34 0.53 0.63
+Granite-3.0-8B-Instruct 0.18 0.15 0.41 0.58 0.72
+Llama-3.1-8B-Instruct 0.09 0.09 0.31 0.51 0.64
+LLama-3.2-1B-Instruct 0.03 0.00 0.06 0.15 0.36
+LLama-3-70B-Instruct 0.49 0.12 0.40 0.60 0.70
+Ministral-8B-Instruct-2410 0.10 0.11 0.36 0.55 0.67
+Phi-3.5-Mini-Instruct 0.19 0.05 0.22 0.41 0.55
+Qwen-2.5-1.5B-Instruct 0.07 0.09 0.33 0.49 0.65
+Qwen-2.5-14B-Instruct 0.67 0.07 0.26 0.45 0.55
+Yi-1.5-34B 0.21 0.12 0.39 0.58 0.72
+
+
+Table 14: Correlation data for HumanEval ( _A_ ). The _∀_ uto _∃∨∧_ L data was averaged from the regex dataset with
+data points with description complexity _d_ _≤_ 7. These values were used to compute the predictive power of
+_∀_ uto _∃∨∧_ L reported in Fig. 5.
+
+
+Model _∀_ uto _∃∨∧_ L Score HumanEval ( _A_ ) Score
+
+
+GPT-4o 0.66 0.92
+GPT-4o-mini 0.44 0.88
+ChatGPT 0.36 0.74
+Mistral-7B-Instruct-v0.2 0.20 0.44
+Phi-3-medium-4k-instruct 0.45 0.75
+LLama-3-8B-Instruct 0.07 0.63
+Gemma-2-9B-IT 0.28 0.68
+Granite-3.0-8B-Instruct 0.21 0.62
+Llama-3.1-8B-Instruct 0.19 0.63
+LLama-3.2-1B-Instruct 0.03 0.35
+LLama-3-70B-Instruct 0.33 0.80
+Ministral-8B-Instruct-2410 0.13 0.77
+Phi-3.5-Mini-Instruct 0.36 0.71
+Qwen-2.5-1.5B-Instruct 0.12 0.57
+Qwen-2.5-14B-Instruct 0.45 0.80
+Yi-1.5-34B 0.13 0.73
+
+
+43
+
+
+Table 15: Count of examples in FOLIO(R; NL) for each combination of (T)rue, (F)alse, and (U)ncertain label
+and predictions in that order. For example, TU is the number of times a LLM predicted a True label as Uncertain.
+
+
+Model TT TF TU FT FF FU UT UF UU
+
+
+GPT-4o 1667 125 147 178 1133 131 246 419 952
+GPT-4o-mini 1500 187 253 162 1087 196 255 488 877
+ChatGPT 1501 281 147 366 889 186 620 562 434
+Mistral-7B-Instruct-v0.2 1301 205 412 200 717 508 525 387 691
+Phi-3-medium-4k-instruct 1468 153 310 222 871 343 310 289 1009
+LLama-3-8B-Instruct 1400 244 288 272 807 347 477 413 717
+Gemma-2-9B-IT 1439 94 385 231 813 382 378 289 934
+Granite-3.0-8B-Instruct 1415 109 412 304 666 471 382 316 919
+Llama-3.1-8B-Instruct 1400 174 314 267 766 360 435 352 781
+LLama-3.2-1B-Instruct 1407 235 118 931 279 81 1109 235 111
+LLama-3-70B-Instruct 1677 101 161 263 966 214 419 319 881
+Ministral-8B-Instruct-2410 1577 242 116 358 954 130 583 532 503
+Phi-3.5-Mini-Instruct 1355 164 398 223 821 383 357 359 890
+Qwen-2.5-1.5B-Instruct 1470 345 117 615 684 138 824 477 309
+Qwen-2.5-14B-Instruct 1564 132 239 215 1020 207 266 276 1058
+Yi-1.5-34B 1507 125 298 240 894 305 497 346 773
+
+
+Table 16: Calculated precision and recall for each label in FOLIO (R;NL).
+
+
+True Label False Label Uncertain Label
+
+
+Model Prec. Rec. Prec. Rec. Prec. Rec.
+
+
+GPT-4o 0.80 0.86 0.68 0.79 0.77 0.59
+GPT-4o-mini 0.78 0.77 0.62 0.75 0.66 0.54
+ChatGPT 0.60 0.78 0.51 0.62 0.57 0.27
+Mistral-7B-Instruct-v0.2 0.64 0.68 0.55 0.50 0.43 0.43
+Phi-3-medium-4k-instruct 0.73 0.76 0.66 0.61 0.61 0.63
+LLama-3-8B-Instruct 0.65 0.72 0.55 0.57 0.53 0.45
+Gemma-2-9B-IT 0.70 0.75 0.68 0.57 0.55 0.58
+Granite-3.0-8B-Instruct 0.67 0.73 0.61 0.46 0.51 0.57
+Llama-3.1-8B-Instruct 0.67 0.74 0.59 0.55 0.54 0.50
+LLama-3.2-1B-Instruct 0.41 0.80 0.37 0.22 0.36 0.08
+LLama-3-70B-Instruct 0.71 0.86 0.70 0.67 0.70 0.54
+Ministral-8B-Instruct-2410 0.63 0.81 0.55 0.66 0.67 0.31
+Phi-3.5-Mini-Instruct 0.70 0.71 0.61 0.58 0.53 0.55
+Qwen-2.5-1.5B-Instruct 0.51 0.76 0.45 0.48 0.55 0.19
+Qwen-2.5-14B-Instruct 0.76 0.81 0.71 0.71 0.70 0.66
+Yi-1.5-34B 0.67 0.78 0.65 0.62 0.56 0.48
+
+
+44
+
+
+Table 17: Count of examples in FOLIO(R; FOL) for each combination of (T)rue, (F)alse, and (U)ncertain label
+and predictions in that order. For example, TU is the number of times a LLM predicted a True label as Uncertain.
+
+
+Model TT TF TU FT FF FU UT UF UU
+
+
+GPT-4o 1596 124 218 215 1004 224 329 359 932
+GPT-4o-mini 1432 140 367 153 944 348 224 420 976
+ChatGPT 1500 208 227 456 711 266 756 525 338
+Mistral-7B-Instruct-v0.2 1159 244 521 229 616 575 503 335 760
+Phi-3-medium-4k-instruct 1405 120 393 278 688 457 365 226 1014
+LLama-3-8B-Instruct 1471 193 249 462 621 332 674 396 532
+Gemma-2-9B-IT 1378 112 408 256 659 489 397 268 919
+Granite-3.0-8B-Instruct 1428 181 317 373 596 458 530 325 755
+Llama-3.1-8B-Instruct 1449 163 305 358 647 409 575 289 725
+LLama-3.2-1B-Instruct 1436 232 127 969 239 96 1142 237 117
+LLama-3-70B-Instruct 1661 122 149 390 829 224 576 248 791
+Ministral-8B-Instruct-2410 1525 226 180 452 805 185 692 464 461
+Phi-3.5-Mini-Instruct 1291 145 449 314 595 503 466 331 791
+Qwen-2.5-1.5B-Instruct 1305 358 255 611 560 256 829 392 386
+Qwen-2.5-14B-Instruct 1648 90 194 279 918 241 377 253 966
+Yi-1.5-34B 1513 106 271 285 730 350 476 282 826
+
+
+Table 18: Calculated precision and recall for each label in FOLIO(R; FOL).
+
+
+True Label False Label Uncertain Label
+
+
+Model Prec. Rec. Prec. Rec. Prec. Rec.
+
+
+GPT-4o 0.75 0.82 0.68 0.70 0.68 0.58
+GPT-4o-mini 0.79 0.74 0.63 0.65 0.58 0.60
+ChatGPT 0.55 0.78 0.49 0.50 0.41 0.21
+Mistral-7B-Instruct-v0.2 0.61 0.60 0.52 0.43 0.41 0.48
+Phi-3-medium-4k-instruct 0.69 0.73 0.67 0.48 0.54 0.63
+LLama-3-8B-Instruct 0.56 0.77 0.51 0.44 0.48 0.33
+Gemma-2-9B-IT 0.68 0.73 0.63 0.47 0.51 0.58
+Granite-3.0-8B-Instruct 0.61 0.74 0.54 0.42 0.49 0.47
+Llama-3.1-8B-Instruct 0.61 0.76 0.59 0.46 0.50 0.46
+LLama-3.2-1B-Instruct 0.40 0.80 0.34 0.18 0.34 0.08
+LLama-3-70B-Instruct 0.63 0.86 0.69 0.57 0.68 0.49
+Ministral-8B-Instruct-2410 0.57 0.79 0.54 0.56 0.56 0.29
+Phi-3.5-Mini-Instruct 0.62 0.68 0.56 0.42 0.45 0.50
+Qwen-2.5-1.5B-Instruct 0.48 0.68 0.43 0.39 0.43 0.24
+Qwen-2.5-14B-Instruct 0.72 0.85 0.73 0.64 0.69 0.61
+Yi-1.5-34B 0.67 0.80 0.65 0.53 0.57 0.52
+
+
+45
+
+
+Table 19: Number of examples of true positives (TP), false positives (FP), true negatives (TN), and false
+negatives (FN) for each LLM in LogiEval(R; PL). The counts for when the LLM was non-compliant with our
+prompt for positive (NP) and negative (NN) labels are also provided. Additionally, the calculated true positive
+rate (TPR), true negative rate (TNR), precision, and F1 score for each LLM is shown.
+
+
+Model TP FP TN FN NP NN TPR TNR Prec. F1
+
+
+GPT-4o 1724 56 594 251 0 0 0.87 0.91 0.97 0.92
+GPT-4o-mini 1310 116 534 665 0 0 0.66 0.82 0.92 0.77
+ChatGPT 1348 260 390 625 2 0 0.68 0.60 0.84 0.75
+Mistral-7B-Instruct-v0.2 1240 187 379 640 95 84 0.66 0.67 0.87 0.75
+Phi-3-medium-4k-instruct 1558 197 452 411 6 1 0.79 0.70 0.89 0.84
+LLama-3-8B-Instruct 1246 209 434 715 14 7 0.64 0.67 0.86 0.73
+Gemma-2-9B-IT 1464 217 432 497 14 1 0.75 0.67 0.87 0.80
+Granite-3.0-8B-Instruct 1106 168 482 869 0 0 0.56 0.74 0.87 0.68
+Llama-3.1-8B-Instruct 1523 242 400 430 22 8 0.78 0.62 0.86 0.82
+LLama-3.2-1B-Instruct 985 250 342 820 170 58 0.55 0.58 0.80 0.65
+LLama-3-70B-Instruct 1741 142 507 223 11 1 0.89 0.78 0.92 0.91
+Ministral-8B-Instruct-2410 1350 161 489 621 4 0 0.68 0.75 0.89 0.78
+Phi-3.5-Mini-Instruct 1222 180 459 719 34 11 0.63 0.72 0.87 0.73
+Qwen-2.5-1.5B-Instruct 1085 281 298 582 308 71 0.65 0.51 0.79 0.72
+Qwen-2.5-14B-Instruct 1474 72 574 486 15 4 0.75 0.89 0.95 0.84
+Yi-1.5-34B 1651 193 457 321 3 0 0.84 0.70 0.90 0.87
+
+
+Table 20: Number of examples of true positives (TP), false positives (FP), true negatives (TN), and false
+negatives (FN) for each LLM in LogiEval(R; FOL). The counts for when the LLM was non-compliant with our
+prompt for positive (NP) and negative (NN) labels are also provided. Additionally, the calculated true positive
+rate (TPR), true negative rate (TNR), precision, and F1 score for each LLM is shown.
+
+
+Model TP FP TN FN NP NN TPR TNR Prec. F1
+
+
+GPT-4o 1627 57 593 398 0 0 0.80 0.91 0.97 0.88
+GPT-4o-mini 1084 95 555 941 0 0 0.54 0.85 0.92 0.68
+ChatGPT 1346 177 472 678 1 1 0.67 0.73 0.88 0.76
+Mistral-7B-Instruct-v0.2 1172 159 403 716 137 88 0.62 0.72 0.88 0.73
+Phi-3-medium-4k-instruct 1449 139 511 574 2 0 0.72 0.79 0.91 0.80
+LLama-3-8B-Instruct 1267 139 502 752 6 9 0.63 0.78 0.90 0.74
+Gemma-2-9B-IT 1355 118 532 665 5 0 0.67 0.82 0.92 0.78
+Granite-3.0-8B-Instruct 1023 102 548 1002 0 0 0.51 0.84 0.91 0.65
+Llama-3.1-8B-Instruct 1466 198 440 538 21 12 0.73 0.69 0.88 0.80
+LLama-3.2-1B-Instruct 968 255 335 853 204 60 0.53 0.57 0.79 0.64
+LLama-3-70B-Instruct 1630 116 533 392 3 1 0.81 0.82 0.93 0.87
+Ministral-8B-Instruct-2410 1304 161 486 708 13 3 0.65 0.75 0.89 0.75
+Phi-3.5-Mini-Instruct 1059 140 493 922 44 17 0.53 0.78 0.88 0.67
+Qwen-2.5-1.5B-Instruct 1013 220 374 775 237 56 0.57 0.63 0.82 0.67
+Qwen-2.5-14B-Instruct 1303 89 555 707 15 6 0.65 0.86 0.94 0.77
+Yi-1.5-34B 1489 156 494 534 2 0 0.74 0.76 0.91 0.81
+
+
+46

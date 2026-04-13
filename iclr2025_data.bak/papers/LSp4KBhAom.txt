@@ -1,0 +1,1526 @@
+# LORA3D: LOW-RANK SELF-CALIBRATION OF 3D GEOMETRIC FOUNDATION MODELS
+
+
+**Ziqi Lu** **[1,2]** **, Heng Yang** **[1,3]** **, Danfei Xu** **[1,4]** **, Boyi Li** **[1,5]** **, Boris Ivanovic** **[1]** **, Marco Pavone** **[1,6]** **,**
+**Yue Wang** **[1,7]**
+
+1NVIDIA Research, 2Massachusetts Institute of Technology, 3Harvard University,
+4Georgia Institute of Technology, 5University of California, Berkeley, 6Stanford University,
+7University of Southern California
+ziqilu@mit.edu, _{_ hengy, danfeix, boyil, bivanovic _}_ @nvidia.com,
+pavone@stanford.edu, yue.w@usc.edu
+
+
+ABSTRACT
+
+
+Emerging 3D geometric foundation models, such as DUSt3R (Wang et al., 2024),
+offer a promising approach for in-the-wild 3D vision tasks. However, due to the
+high-dimensional nature of the problem space and scarcity of high-quality 3D
+data, these pre-trained models still struggle to generalize to many challenging circumstances, such as limited view overlap or low lighting. To address this, we propose LoRA3D, an efficient self-calibration pipeline to _specialize_ the pre-trained
+models to target scenes using their own multi-view predictions. Taking sparse
+RGB images as input, we leverage robust optimization techniques to refine multiview predictions and align them into a global coordinate frame. In particular, we
+incorporate prediction confidence into the geometric optimization process, automatically re-weighting the confidence to better reflect point estimation accuracy.
+We use the calibrated confidence to generate high-quality pseudo labels for the
+calibrating views and use low-rank adaptation (LoRA) to fine-tune the models on
+the pseudo-labeled data. Our method does not require any external priors or manual labels. It completes the self-calibration process on a **single** **standard** **GPU**
+**within** **just** **5** **minutes** . Each low-rank adapter requires only **18MB** of storage.
+We evaluated our method on **more than 160 scenes** from the Replica, TUM and
+Waymo Open datasets, achieving up to **88% performance improvement** on 3D
+reconstruction, multi-view pose estimation and novel-view rendering. For more
+[details, please visit our project page.](https://520xyxyzq.github.io/lora3d/)
+
+
+1 INTRODUCTION
+
+
+Figure 1: Given sparse RGB images, our self-calibration pipeline efficiently specializes a pre-trained
+3D foundation model to a target scene to improve its performance for a variety of 3D vision tasks.
+
+
+1
+
+
+Recently, many 3D geometric foundation models have emerged as a potential solution for in-thewild 3D computer vision tasks such as 3D reconstruction, camera pose estimation and novel view
+rendering (Wang et al., 2024; Barroso-Laguna et al., 2024; Leroy et al., 2024; Hong et al., 2023).
+These models, typically enabled by large scale Transformer pre-training, can quickly establish crossview correspondences and directly regress 3D scene geometry from sparse RGB images. They
+generalize to a broad range of data and exhibit a strong zero-shot performance on novel tasks.
+
+
+However, the performance of these pre-trained models can falter under challenging circumstances.
+For instance, as highlighted in the upper left sub-figure in Fig. 1, DUSt3R’s pairwise reconstruction
+accuracy significantly degrades under low visual overlaps, where certain regions are observed from
+only a single viewpoint. This decline is rooted in the inherent complexity of 3D geometric inference
+task, which requires much larger-scale data to fully represent the distribution of real-world 3D data.
+Unfortunately, the difficulty of annotating in-the-wild 3D data has led to the shortage of high-quality
+training datasets, limiting the performance of the pre-trained models.
+
+
+To mitigate the problem, we propose an efficient self-calibration pipeline (Fig. 2), taking only sparse
+RGB images to specialize pre-trained 3D foundation models to the target scene. Our method requires
+no manual labeling, camera calibration, or external priors. We only leverage the multi-view consistency of 3D point positions to refine and select pre-trained models’ predictions for pseudo labeling.
+To ensure the pseudo label accuracy, we develop a robust global optimization method to align and
+refine multi-view predictions while calibrating the prediction confidence. The calibrated confidence
+strongly correlates with pseudo-label accuracy, allowing us to select high-confidence data for LoRA
+fine-tuning of the pre-trained model. Our method is tested on 161 test scenes for a variety of 3D
+vision tasks. It is able to finish the self-calibration process within 5 minutes on a single GPU and
+deliver performance improvements of up to 88%. The major contributions of our work include (1)
+the self-calibration pipeline, (2) the robust global optimization method, and (3) the efficient LoRA
+fine-tuning strategy for DUSt3R self-calibration.
+
+
+Figure 2: Overview of our self-calibration pipeline. (a) **Predict** : We pair sparse input RGB images
+and use the pre-trained 3D foundation model to predict per-pair point maps and confidence maps.
+(b) **Robust Global Optimization** : We apply robust optimization techniques to concurrently refine
+multi-view point predictions and calibrate prediction confidence. (c) **Confidence-Based** **Pseudo-**
+**Labeling** : Refined point maps with high calibrated confidence are used to generate pseudo-labels
+on calibration views. (d) **LoRA** **Fine-Tuning** : Using the pseudo-labeled data, we efficiently finetune the pre-trained model with LoRA. While the figure illustrates our method using DUSt3R, our
+approach generalizes to other 3D foundation models.
+
+
+2 RELATED WORK
+
+
+2.1 FOUNDATION MODEL SPECIALIZATION
+
+
+Foundation model specialization through fine-tuning or adaptation has become the standard approach to customizing pre-trained foundation models for specific tasks or domains. Various methods have been developed for the specialization of large language models (Brown, 2020; Gururangan
+et al., 2020), vision-language models (Liu et al., 2024b;a), and vision foundation models (Hu et al.,
+
+
+2
+
+
+2023; Yue et al., 2024). These approaches typically employ parameter-efficient adaptation techniques (Hu et al., 2021; Dettmers et al., 2024; He et al., 2022) to adapt the pre-trained models in
+either a supervised or unsupervised fashion. However, few works have explored the specialization of
+3D geometric foundation models. MASt3R (Leroy et al., 2024) and Spanner3D (Wang & Agapito,
+2024) fine-tuned DUSt3R (Wang et al., 2024) to re-purpose it for image matching and incremental
+reconstruction respectively. Jiang et al. (2024) applied self-training to scale up large reconstruction
+models (Hong et al., 2023) with real-world images. However, most of these methods still rely on vast
+amounts of labeled data. In contrast, our method uses only sparse RGB images for self-calibration
+and requires no ground truth labels.
+
+
+2.2 SELF-SUPERVISED GEOMETRIC PERCEPTION
+
+
+Self-supervised learning has been successfully applied to a range of geometric perception tasks, including monocular depth prediction (Godard et al., 2019), optical flow prediction (Liu et al., 2019),
+camera pose estimation (Yang et al., 2021), and structure-from-motion (Zhou et al., 2017), significantly enhancing the performance of pre-trained geometric models. Among these, Yang et al. (2021)
+is particularly relevant to our approach, as it utilizes robust optimization techniques to generate geometric pseudo-labels for model fine-tuning. However, this method and most others are tailored
+to adapt smaller-scale pre-trained models for specific tasks. In this work, we extend the pseudolabeling strategy for self-supervised learning to 3D foundation models. Leveraging the versatility of
+these models, we can improve their performance on various 3D vision tasks.
+
+
+3 PRELIMINARIES
+
+
+Our pipeline is primarily tested on DUSt3R (Wang et al., 2024). Below, we provide key details
+about DUSt3R to give readers the necessary context for understanding our contributions.
+
+
+3.1 DUST3R
+
+
+As shown in Fig. 2, DUSt3R takes an RGB image pair ( _Ii, Ij_ ) as input and directly regresses the
+pixel-wise point maps and confidence maps:
+
+
+( _X_ _[i,i]_ _, C_ _[i,i]_ ) _,_ ( _X_ _[j,i]_ _, C_ _[j,i]_ ) = DUSt3R( _I_ _[i]_ _, I_ _[j]_ ) (1)
+
+
+Here, _X_ _[i,i]_ _, X_ _[j,i]_ _∈_ R _[H][×][W][ ×]_ [3] are the point maps for view _i_ and view _j_, both expressed in the camera
+coordinate frame of view _i_, and are regressed up to a unknown scale. Their corresponding confidence
+maps are denoted as _C_ _[i,i]_ _, C_ _[j,i]_ _∈_ R _[H][×][W]_ [ 1] .
+
+
+3.2 RECOVERING CAMERA PARAMETERS
+
+
+The camera intrinsics can be recovered from the predicted point maps in Eq. 1. Assuming a pinhole
+camera model with square pixels and principal points at image centers, the camera _i_ ’s focal length
+_fi_ can be estimated by solving the following optimization problem using Weiszfeld algorithm:
+
+
+_fi_ _[∗]_ [= arg min]
+_fi_
+
+
+_HW_
+
+- _Cp_ _[i,i]_ ���� _u_ _[′]_ _p_ _[, v]_ _p_ _[′]_ - _−_ _fi_ ( _Xp,_ _[i,i]_ 0 _[, X]_ _p,_ _[i,i]_ 1 [)] _[/X]_ _p,_ _[i,i]_ 2��� (2)
+
+_p_ =1
+
+
+where ( _u_ _[′]_ _p_ _[, v]_ _p_ _[′]_ [) = (] _[u][p]_ _[−]_ _[W/]_ [2] _[, v][p]_ _[−]_ _[H/]_ [2)][ represents the re-centered image coordinates for pixel] _[ p]_ [.]
+
+
+The relative camera poses are estimated by comparing the predictions for image pair ( _Ii, Ij_ ) and
+( _Ij, Ii_ ). With point maps _X_ _[i,i]_ and _X_ _[i,j]_, we can apply Procrustes alignment (Luo & Hancock, 1999)
+to estimate the relative pose _Ti,j_ _∈_ SE(3) from camera _i_ to _j_ and the point map scale _σi,j_ :
+
+
+( _Ti,j, σi,j_ ) _[∗]_ = arg min
+_Ti,j_ _,σi,j_
+
+
+- _Cp_ _[i,i][C]_ _p_ _[i,j]_ �� _σi,jTi,jXpi,i_ _[−]_ _[X]_ _p_ _[i,j]_ ��2 (3)
+
+_p_
+
+
+where we omit the homogenization of point maps for brevity.
+
+
+1See App. A.1 for details on the training loss of DUSt3R.
+
+
+3
+
+
+3.3 MULTI-VIEW POINT MAP ALIGNMENT
+
+
+Given multiple images _{I_ 1 _, I_ 2 _, . . ., IN_ _}_ captured in a 3D scene, the multi-view DUSt3R-predicted
+point maps are aligned to form a global point cloud. Different from bundle adjustment, this alignment is formalized as an 3D-3D-projection-based optimization problem over a connectivity graph
+_G_ ( _V, E_ ), in which the vertices _V_ represent the _N_ images and the edges _E_ represent all image pairs
+with visual overlaps.
+
+
+To initialize the optimization parameters, the highest-confidence spanning tree is extracted from the
+graph. Anchoring the most confident image pair at the origin, the initial estimates of focal lengths,
+point map scales and relative poses, as derived from Eq. 2,3, are propagated along the tree edges
+to all _N_ views, yielding initial focal lengths _{fi|i_ = 1 _, . . ., N_ _}_, point maps _{χ_ _[i]_ _∈_ R _[H][×][W][ ×]_ [3] _}_
+and image-pair scales _{σ_ [(] _[i,j]_ [)] _∈_ R _}_ and poses _{T_ [(] _[i,j]_ [)] _∈_ SE(3) _}_, all expressed in a unified global
+coordinate frame.
+
+
+These initial estimates are further refined by minimizing the 3D-3D projection error between the
+global point maps _χ_ and the transformed predicted point maps:
+
+
+_v∈{i,j}_
+
+
+_HW_
+
+- _Cp_ _[v,i]_ ��� _χvp_ _[−]_ _[σ]_ [(] _[i,j]_ [)] _[T]_ [ (] _[i,j]_ [)] _[X]_ _p_ _[v,i]_ ��� (4)
+
+_p_ =1
+
+
+( _χ, T, σ_ ) _[∗]_ = arg min
+_χ,T,σ_
+
+
+( _i,j_ ) _∈E_
+
+
+Note that the global point maps _χ_ _[v]_ _p_ [can be further re-parameterized via depth back-projection:]
+
+_Dp_
+_χ_ _[v]_ _p_ [=] _[ T][v][K]_ _v_ _[−]_ [1] _[D][p]_ [(] _[u][p][, v][p][,]_ [ 1)][T] [=] _[ T][v]_ ( _u_ _[′]_ _p_ _[, v]_ _p_ _[′]_ _[,]_ [ 1)][T] (5)
+
+_fv_
+
+where _Kv_ and _Tv_ represent the intrinsics and extrinsics for view _v_ and _Dp_ is the depth value for
+pixel _p_ . The optimization problem can therefore be reformulated as:
+
+
+(6)
+����
+
+
+_v_
+
+
+- _Cp_ _[v,i]_
+
+_p_
+
+
+_Dp_
+_Tv_ ( _u_ _[′]_ _p_ _[, v]_ _p_ _[′]_ _[,]_ [ 1)][T] _[ −]_ _[σ]_ [(] _[i,j]_ [)] _[T]_ [ (] _[i,j]_ [)] _[X]_ _p_ _[v,i]_
+���� _fv_
+
+
+( _T, σ, f, D_ ) _[∗]_ = arg min
+_T,σ,f,D_
+
+
+( _i,j_ )
+
+
+Here, the per-image-pair poses _T_ [(] _[i,j]_ [)] and per-image poses _Ti_ represent the same transformations
+but are parameterized separately to allow for additional optimization flexibility. The optimization is
+solved by a few hundred steps of standard gradient descent. To avoid trivial optimum of _σ_ [(] _[i,j]_ [)] = 0,
+Π( _i,j_ ) _σ_ ( _i,j_ ) = 1 is enforced during the optimization.
+
+
+4 METHODOLOGY
+
+
+We aim to adapt a 3D geometric foundation model, such as DUSt3R (Wang et al., 2024), to a target
+scene using a sparse set of uncalibrated RGB images _{I_ 1 _, I_ 2 _, . . ., IN_ _}_ . The goal is to enhance the
+pre-trained model’s performance on test images _{IN_ +1 _, IN_ +2 _, . . ., IN_ + _M_ _}_ from the same scene.
+Our approach generates compact LoRA adapters, which integrate with the pre-trained model to
+produce a scene-calibrated model.
+
+
+4.1 SELF-CALIBRATION PIPELINE
+
+
+Fig. 2 shows our self-calibration pipeline. We start by using the pre-trained DUSt3R, as in Eq. 1, to
+predict point and confidence maps for all calibration image pairs. In challenging conditions, such as
+under limited camera view overlap, DUSt3R’s predictions may include errors and outliers, and the
+prediction confidence may not precisely reflect the prediction accuracy (See Fig. 3 for an example
+of overconfident prediction). For this reason, directly relying on predicted confidence for pseudo
+label selection may hurt the model performance (see Sec. 8 (a,b)).
+
+
+However, each 3D point in the scene is co-observed by many camera view pairs. We could leverage
+accurate DUSt3R predictions from well-conditioned, e.g. high-visual-overlap, view pairs to refine
+and identify inaccurate point map predictions. We therefore develop a robust multi-view point map
+alignment method (Sec. 4.2) to (1) optimize the point map and (2) calibrate the prediction confidence. We then use the refined point maps and calibrated confidence to pseudo-label the calibration
+images _{Ii}_ _[N]_ _i_ =1 [(Sec. 4.3), after which we fine-tune the pre-trained DUSt3R model using LoRA on]
+the pseudo-labeled data (Sec. 4.4).
+
+
+4
+
+
+4.2 ROBUST MULTI-VIEW POINT MAP ALIGNMENT WITH CONFIDENCE CALIBRATION
+
+
+We develop a robust multi-view point map alignment method by incorporating the prediction confidence into the global optimization in Eq. 6. Specifically, we re-parameterize the confidence term
+_Cp_ _[v,i]_ in Eq. 6 as an optimizable weight term _wp_ _[v,i]_ to automatically tune each point prediction’s contribution to the optimization. While the predicted confidence can be imprecise in challenging cases,
+it still remains informative for prediction accuracy. Thus we intend to introduce a regularization
+
+
+(d) Pred. error v.s. Confidence
+
+
+Figure 3: Pre-trained DUSt3R’s (b) prediction confidence and (c) error map on (a) an example
+image pair: In cases of limited visual overlap, DUSt3R may produce overconfident predictions (★).
+Our robust multi-view alignment method effectively reduces this overconfidence, maintaining high
+confidence for accurate predictions (+, _×_ ) and low confidence for outlier predictions ( _•_ ).
+
+
+We found our objective to be surprisingly aligned with Geman-McClure robust M-estimator (Geman
+et al., 1992), which essentially uses a regularization term (an outlier process in robust optimization
+terminology) to encourage weights to be close to unity in least-squares optimizations. Inspired by
+this, we designed our regularization term to follow a similar structure. The optimization in Eq. 6 is
+therefore reformulated as:
+
+
+_v_
+
+
+    - ~~�~~
+
+- _wp_ _[v,i][∥][e]_ _p_ _[v,i][∥]_ [+] _[ µ]_ [(] _wp_ _[v,i]_ _−_ _Cp_ _[v,i]_ [)][2] (7)
+
+_p_
+
+
+( _T, σ, f, D, W_ ) _[∗]_ = arg min
+_T,σ,f,D,W_
+
+
+( _i,j_ )
+
+
+where _e_ _[v,i]_ _p_ = _TvDp_ ( _u_ _[′]_ _p_ _[, v]_ _p_ _[′]_ _[,]_ [ 1)][T] _[/f][v]_ _[−]_ _[σ]_ [(] _[i,j]_ [)] _[T]_ [ (] _[i,j]_ [)] _[X]_ _p_ _[v,i]_ represents the pixel-wise residual error and _µ_
+is a constant hyper-parameter to control the regularization strength.
+
+
+Rather than updating the weights in the joint optimization loss Eq. 7 via gradient back-propagation,
+we draw inspiration from the iterative re-weighted least squares approach (Rao & Kreutz-Delgado,
+1999) for robust M-estimation, to derive a closed-form weight update rule for fast confidence reweighting:
+_wp_ _[v,i]_ = _Cp_ _[v,i][/]_ [(1 +] _[ ∥][e]_ _p_ _[v,i][∥][/µ]_ [)][2] (8)
+
+
+(a) Calibrated confidence (b) Point estimation error (c) Pixels to pseudo-label (d) Pseudo labels
+
+
+Figure 4: Pseudo-labeling with (a) calibrated confidence, which is a good measure of the (b) point
+estimation accuracy. We select high-calibrated-confidence point predictions as pseudo labels (d) for
+DUSt3R finetuning.
+
+
+5
+
+
+With this update rule, we can still solve the original optimization problem (Eq. 6) while periodically
+applying the weight updates. As demonstrated in Appendix A.2, this is equivalent to solving the
+joint optimization.
+
+
+The weight update rule can be understood as follows: point predictions with lower residual errors,
+meaning those that are more consistent with predictions from other image pairs, will maintain confidence similar to the predicted value. In contrast, point predictions that are inconsistent across views
+will have their confidence significantly reduced. This method effectively minimizes confidence for
+overly confident predictions, as illustrated in Fig. 3, ensuring that confidence becomes more closely
+correlated with point estimation accuracy and provides better guidance for global optimization and
+pseudo-labeling.
+
+
+4.3 PSEUDO LABELING WITH CALIBRATED CONFIDENCE
+
+
+We use the calibrated confidence and optimized point maps for confidence-based pseudo-labeling.
+To compute pseudo labels for the calibration image pairs, we need to transform the global optimization results from Eq. 7 to local image-pair coordinate frame. Following Eq. 5, we back-project the
+optimized depth maps _Dp_ to 3D and transform the points to the image-pair coordinate frame. We
+then threshold the point estimations with a confidence cutoff _w_ cutoff and retain the high-confidence
+ones as pseudo labels. The pseudo labeling rule can be summarized as:
+
+_X_ ˜ _p_ _[j,i]_ = _Ti_ _[∗−]_ [1] _Tj_ _[∗]_ _Dfj_ _[∗]_ _p_ _[∗]_ ( _u_ _[′]_ _p_ _[, v]_ _p_ _[′]_ _[,]_ [ 1)][T] _[,]_ where _p ∈{p|wp_ _[∗][j,i]_ _> w_ cutoff _}_ (9)
+
+
+We experimentally found that setting _w_ cutoff = 1 _._ 5 works effectively for most test scenes.
+
+
+Note that our method is naturally robust to dynamic elements in the scene (See Tab. 3). This is
+because the dynamic points break the multi-view consistency assumption and will be filtered out by
+pseudo labeling with calibrated confidence.
+
+
+4.4 FINE-TUNING WITH LORA
+
+
+To find the optimal DUSt3R fine-tuning strategy, we conducted extensive experiments to compare
+different fine-tuning options across multiple test scenes. Please see Fig. 5 for an example, where
+we plot the test errors (defined in Sec. 5) against trainable parameter counts for different LoRA
+and direct fine-tuning strategies. We found adapting all attention weights with rank-16 LoRA often
+leads to the best trade-off between performance and efficiency. It reduces the number of trainable
+parameters by more than 99% and has a on-par performance with directly fine-tuning the attention
+or all weights.
+
+
+Using rank-16 LoRA, fine-tuning on 10 calibration images converges in under 3.5 minutes with a
+batch size of 2. Peak GPU memory usage during fine-tuning stays under 20GB, enabling the process
+to run on a single standard GPU. And each LoRA adapter require less than 18MB of disk storage.
+
+
+6
+
+
+5 EXPERIMENTS
+
+
+We evaluated our method on 161 test scenes for the tasks of 3D reconstruction, multi-view camera
+parameter estimation and novel view rendering.
+
+
+**Datasets** We tested our method on _all_ _available_ _test_ _scenes_ from the Replica (Straub et al., 2019)
+and Waymo Open Dataset (Sun et al., 2020), as well as on three test scenes from the TUM RGBD
+dataset (Schubert et al., 2018) that are most frequently tested in literature. This amounts to a total of
+161 test scenes, all of which are distinct from the DUSt3R pre-training scenes.
+
+
+The Replica dataset comprises eight indoor scenes, each containing 2000 RGB-D images rendered
+by Sucar et al. (2021). For each scene, the first 1000 RGB images serve as the calibration split and
+the remaining as the test split. The depth images are not utilized during self-calibration; they are
+used solely to compute the ground truth point maps. We randomly sample [2] 10 images from the
+calibration split as the calibration images.
+
+
+The Waymo Open Dataset has in total 150 test data segments. In each segment, only forward-looking
+camera images are adopted, where the first 100 form the calibration split and the remaining _∼_ 100
+images belong to the test split. We sample 10 images from the calibration split for self-calibration.
+
+
+Please refer to App. A.4 for details about the data splits and tasks for the TUM RGBD dataset.
+
+
+**Tasks** On the Replica dataset, we evaluate our method for _pairwise_ and _multi-view_ _reconstruction_
+tasks. For pairwise reconstruction, we sample 100 image pairs with visual overlaps from the test
+split as test images. For multi-view reconstruction, we sample 10 views from the test split.
+
+
+On the Waymo dataset, we evaluate our method for the tasks of _multi-view camera parameter esti-_
+_mation_ and _novel view rendering_ . For novel view rendering, we use InstantSplat (Fan et al., 2024),
+which adopts DUSt3R-predicted point cloud and camera parameters as initialization, to train 3D
+Gaussian Splatting (3DGS) models and render novel-view images. From the test split, we select
+every 10th images (i.e. 0th, 10th, 20th, _· · ·_ ) for camera pose estimation evaluation and InstantSplat
+training. Images at indices 5, 15, 25, _· · ·_ are used as novel views to evaluate the InstantSplat renders.
+Note that although our method is robust to dynamic environments, InstantSplat relies on the static
+world assumption to train 3DGS. We therefore selected segments 10084, 10649, and 10802 – that
+are mostly static – from the first 10 test segments for the novel view rendering evaluation.
+
+
+**Baselines** The two most important comparison models for our self-calibrated DUSt3R ( **DUSt3R-**
+**Self-Calib** ) are the pre-trained DUSt3R ( **DUSt3R-Pretrain** ) and the fine-tuned DUSt3R on ground
+truth point maps of calibration image pairs ( **DUSt3R-GT-FT** ). The ground-truth fine-tuned model
+is considered as the upper limit of ours, serving as an oracle model.
+
+
+Both methods are evaluated in most tests, with the exception of the TUM dataset, where no ground
+truth depth is available. In this case, we use noisy depth measurements for fine-tuning, referred to as
+**DUSt3R-Depth-FT** . On the Waymo dataset, we use the high-quality Lidar point clouds for groundtruth-based fine-tuning. For a fair comparison, the training hyperparameters for ground-truth and
+depth-based fine-tuning are kept consistent with those used in our method.
+
+
+For _multi-view stereo reconstruction_, we also use **COLMAP** (MVS)(Schonberger & Frahm, 2016;
+Sch¨onberger et al., 2016), **FlowMap** (Smith et al., 2024) and **MASt3R** (Duisterhof et al., 2024) as
+baselines, all of which perform dense reconstructions with un-calibrated images.
+
+
+_COLMAP_ (MVS) is a standard SfM and MVS pipeline for which we adopt the default setups.
+
+
+_FlowMap_ is a differentiable SfM model for RGB videos. It relies on optical flow and point tracking
+algorithms to bootstrap its scene parameter optimization process.
+
+
+_MASt3R_ re-purposes DUSt3R for image matching. Beyond 3D point regression, it establishes accurate cross-view correspondences, and leverages both 3D-3D and 2D-3D correspondences for global
+point map alignment. We adopt the pre-trained MASt3R with default hyper-parameters.
+
+
+For fair comparison in multi-view reconstruction, we use the same global optimization method for
+DUSt3R and its variants (as detailed in Sec. 3.3), and retain all points for evaluation without applying
+confidence-based filtering to DUSt3R and MASt3R reconstructions.
+
+
+2Unless specified otherwise, all random sampling use seed=0 for re-producibility.
+
+
+7
+
+
+For _multi-view_ _camera_ _parameter_ _estimation_, we use **COLMAP**, **RelPose++** (Lin et al., 2024),
+**PoseDiffusion** (Wang et al., 2023), **RayDiffusion** (Zhang et al., 2024), **FlowMap** (Smith et al.,
+2024) and **MASt3R** (Duisterhof et al., 2024) as the additional baselines.
+
+
+_RelPose++_ uses a pairwise scoring network and a multi-view reasoning transformer to predict multiview camera poses.
+
+
+_PoseDiffusion_ develops a diffusion-based bundle adjustment method to estimate multi-view camera
+parameters. A geometry-guided sampling (GGS) scheme is applied to enforce epipolar constraints
+across views. We adopt the GGS-enabled PoseDiffusion with the CO3Dv2 checkpoint.
+
+
+_RayDiffusion_ re-parameterize cameras as rays and applies a ray diffuser network to denoise camera
+rays and recover camera parameters.
+
+
+All three methods above are pre-trained on domain-specific data without further fine-tuning.
+
+
+For _novel_ _view_ _rendering_, we use the pre-trained, self-calibrated and finetuned DUSt3R for InstantSplat’s 3DGS initialization, and the different variants for InstantSplat are refered to as: **In-**
+**stantSplat** (Fan et al., 2024), **InstantSplat-Self-Calib**, **InstantSplat-GT-FT** .
+
+
+**Evaluation Metrics** For DUSt3R _pairwise reconstruction_, we use the _average point prediction error_
+as the evaluation metric. This is the average Euclidean distance calculated between the predicted and
+ground truth point maps within local image-pair coordinate frames, with predicted maps normalized
+and re-scaled to align with ground truth.
+
+
+We assess _multi-view_ _stereo_ _reconstructions_ based on _accuracy_ and _completeness_ relative to the
+ground truth Replica mesh models (Straub et al., 2019). Accuracy measures the average distance of
+reconstructed points to their nearest mesh points, while completeness measures the average distance
+of mesh points to their nearest reconstructed points. Following Zhu et al. (2022), we exclude mesh
+parts invisible to the test images.
+
+
+The _multi-view camera parameter estimations_ are evaluated with the _absolute trajectory error_ (ATE)
+and the _average focal length estimation error_ (AFE).
+
+
+The quality of novel view renders is assessed with _Peak Signal-to-Noise Ratio_ (PSNR), _Structural_
+_Similarity Index Measure_ (SSIM), and _Learned Perceptual Image Patch Similarity_ (LPIPS).
+
+
+5.1 RESULTS
+
+
+For the Replica dataset, we report pairwise and multi-view reconstruction results in Tab. 1 and Tab. 2.
+Compared to the pre-trained DUSt3R, our method reduces point prediction errors by up to 38% and
+reconstructs models that are up to 61% more accurate and 41% more complete. As Fig. 6 shows,
+our approach is particularly effective at reducing outlier point predictions, thanks to the multi-view
+consistent pseudo labels [3] . The remaining performance gap compared to the fine-tuned DUSt3R is
+attributed to differences in data size and label accuracy.
+
+
+Since cameras in Replica are mostly facing inward, it is easier for COLMAP and MASt3R to establish accurate cross-view feature matches, resulting in better accuracy and completeness on certain
+test scenes, even surpassing the fine-tuned DUSt3R. On the other hand, FlowMap struggles due to
+the discontinuous calibration images, which disrupt the optical flow and point tracking it relies on.
+
+
+Table 1: **Quantitative** **evaluation** of **pairwise** **reconstructions** on the Replica dataset. We report
+the average point prediction errors (cm) for direct DUSt3R predictions.
+
+
+Methods offce0 offce1 offce2 offce3 offce4 room0 room1 room2
+DUSt3R-Pretrain 14.29 11.02 14.03 15.44 14.96 13.11 27.99 16.82
+**DUSt3R-Self-Calib** **8.84** **9.38** **11.05** **14.41** **13.92** **13.02** **19.88** **13.65**
+DUSt3R-GT-FT 7.12 7.95 10.55 12.88 12.29 9.27 17.40 12.58
+
+
+The multi-view camera parameter estimation results on the Waymo dataset are presented in Tab. 3.
+Compared to the pre-trained DUSt3R, our method reduces camera trajectory estimation errors by
+up to 88% and focal length estimation errors by up to 79%. Out of 150 total test scenes (detailed in
+
+
+3Please check out A.9 for qualitative comparison of the reconstructions with the ground truth mesh model.
+
+
+8
+
+
+Table 2: **Quantitative evaluation** of **multi-view reconstructions** on the Replica dataset. We report
+the accuracy ( **Acc.** [cm] _↓_ ) and completeness ( **Comp.** [cm] _↓_ ) of 3D reconstructions against the
+ground truth meshes. Please refer to App.Tab. 9 for the remaining results omitted due to space limit.
+
+
+Methods
+
+|office0 Acc. Comp.|office1 Acc. Comp.|office2 Acc. Comp.|office3 Acc. Comp.|
+|---|---|---|---|
+|5.22<br>6.78<br>4.43<br>6.08|9.21<br>9.27<br>**3.56**<br>5.48|6.57<br>8.35<br>4.75<br>**6.89**|8.43<br>11.89<br>6.60<br>11.00|
+|3.51<br>5.29|3.26<br>5.53|3.93<br>6.72|4.02<br>7.42|
+
+
+COLMAP (dense) **2.61** 89.87 58.15 158.83 4.87 194.16 **5.51** 162.53 6.42 120.84
+FlowMap 51.78 152.05 142.81 107.17 24.16 189.86 19.58 248.16 15.34 153.64
+MASt3R 4.69 **6.05** 3.92 **4.87** **4.09** 7.39 7.17 **9.42** **4.87** **11.52**
+
+
+(c) Before self-calibration (d) After self-calibration
+
+
+(a) Before self-calibration (b) After self-calibration
+
+
+Figure 6: **Qualitative** **results** on the Replica (a,b) and TUM (c,d) datasets. After DUSt3R selfcalibration, we observe much fewer outlier points in the reconstruction of the Replica scene “office0”. On the TUM scene “fr2 ~~x~~ yz”, the green and red frustums represent the estimated and ground
+truth cameras respectively. The camera pose estimates are made more accurate by self-calibration.
+
+
+App.A.11), our approach successfully improves camera parameter estimation results on 116 scenes.
+Most failures occur when the test vehicle remains mostly static for the test images (e.g. segment10488). This degenerate case expect the model to predict zero relative pose across views and fails
+to distinguish different methods.
+
+
+By comparison, COLMAP fails, and MASt3R shows degraded performance on Waymo due to the
+presence of dynamic objects and the larger baselines between forward-facing cameras, which make
+feature matching more difficult. FlowMap still struggles due to the abrupt visual changes across
+views. RelPose++, PoseDiffusion and RayDiffusion, without domain- or scene-specific training,
+fails to provide accurate estimates on the out-of-distribution data.
+
+
+The novel view rendering results on Waymo are presented in Tab. 4 and Fig. 7. Our method effectively reduces floating artifacts in the optimized 3DGS, resulting in quality improvements of up to
+0.97 dB in PSNR, 0.09 in SSIM, and 0.04 in LPIPS.
+
+
+The quantitative results on the TUM dataset are presented and analyzed in App. A.4.
+
+
+Table 3: **Quantitative evaluation** of **camera parameter estimates** on **Waymo** Open Dataset. We
+report the absolute trajectory error ( **ATE** (m) _↓_ ) and average focal error ( **AFE** (%) _↓_ ) for test camera
+views. Please see App. A.11 for full evaluation results on 150 test scenes.
+
+
+Methods
+
+|segment-10084 ATE AFE|segment-10149 ATE AFE|segment-10649 ATE AFE|segment-10802 ATE AFE|
+|---|---|---|---|
+|0.79<br>2.19<br>0.37<br>**0.61**|0.84<br>3.08<br>**0.25**<br>2.14|0.95<br>2.84<br>**0.49**<br>2.54|0.35<br>1.60<br>**0.35**<br>1.08|
+|0.20<br>0.17|0.17<br>1.54|0.29<br>1.73|0.39<br>0.55|
+
+
+COLMAP Fail Fail Fail Fail Fail Fail Fail Fail Fail Fail
+Flowmap **0.31** 3.97 66.62 **1.80** 36.44 13.74 21.16 **0.44** 65.17 **0.66**
+PoseDiffusion 19.43 25.07 16.76 49.18 20.19 **2.26** 13.61 23.74 18.19 31.04
+RayDiffusion 17.34 85.65 16.91 80.69 18.59 85.09 12.77 81.44 19.12 85.00
+RelPose++ 14.80       - 16.20       - 13.69       - 12.92       - 13.55       MASt3R 2.85 11.87 1.35 24.92 0.65 20.53 1.26 24.75 1.61 6.59
+
+
+Table 4: **Quantitative evaluation** of **novel view renders** on the **Waymo** open dataset
+
+
+Segment-10084 Segment-10649 Segment-10802
+Methods
+PSNR _↑_ SSIM _↑_ LPIPS _↓_ PSNR _↑_ SSIM _↑_ LPIPS _↓_ PSNR _↑_ SSIM _↑_ LPIPS _↓_
+InstantSplat 21.45 0.67 0.33 22.45 0.72 0.30 25.94 0.79 0.24
+**InstantSplat-Self-Calib** **22.42** **0.76** **0.29** **22.81** **0.77** **0.27** **26.36** **0.81** **0.22**
+InstantSplat-GT-FT 22.64 0.75 0.27 23.07 0.78 0.27 26.43 0.81 0.22
+
+
+9
+
+
+(a) Before self-calibration (b) After self-calibration (c) Before self-calibration (d) After self-calibration
+
+
+Figure 7: Novel view renders by InstantSplat (Fan et al., 2024) before and after DUSt3R selfcalibration on Waymo Open Dataset.
+
+
+(c) Scene: Replica office0 (d) Scene: Waymo test segment-10149
+
+
+Figure 8: Ablation study: (a, b) Pseudo-labeling with _un-calibrated confidence_ hurt the model performance. (c) Our method maintains consistent performance across varying random seeds used for
+calibration image sampling. (d) Our method’s performance improves with more calibration images
+and saturates after around 10.
+
+
+5.2 MAST3R SELF-CALIBRATION
+
+
+Our pipeline is not limited to the specialization of DUSt3R. We show in App. A.5 that the same idea
+applies to MASt3R.
+
+
+5.3 ABLATION STUDY
+
+
+**Un-calibrated confidence for pseudo labeling** Directly using the prediction confidence for pseudolabeling could harm the model performance. As Fig. 8 (a, b) shows, thresholding refined point predictions with un-calibrated confidence leads to consistent under-performance of the self-calibrated
+model, regardless of the confidence cutoff value.
+
+
+**Varying** **random** **seed** Our method works with casually captured RGB images and does not rely
+on carefully selected calibration images to succeed. As shown in Fig. 8 (c), our method maintains
+consistent performance across varying random seeds used for calibration image sampling.
+
+
+**The number of calibration images** As shown in Fig. 8 (d), using few calibration images (e.g., fewer
+than 10) limits our method’s performance due to an insufficient number of view pairs to enforce
+multi-view consistency in global optimization and a limited training data size. We also observe that
+the performance typically saturates after around 10 calibration images.
+
+
+**The size of calibration split & Multi-scene concurrent self-calibration** See A.6 & A.7 for details.
+
+
+6 CONCLUSION
+
+
+Our self-calibration pipeline specializes 3D geometric foundation models to target scenes in a highly
+time- and memory-efficient manner. It boosts pre-trained model performance by up to 88% across
+diverse datasets and 3D vision tasks. However, in certain cases, the self-calibrated model still falls
+short of competing methods due to the inherent difficulty of 3D geometric inference.
+
+
+10
+
+
+7 ETHIC STATEMENT
+
+
+Our work utilizes publicly available datasets that adhere to strict ethical guidelines. These datasets
+ensure that personally identifiable information, such as human faces and vehicle license plates, is
+either blurred or anonymized to safeguard privacy. Our work does not engage with human subjects
+or introduce concerns regarding fairness or potential misuse. We are fully committed to maintaining
+ethical integrity throughout the development and application of our methods.
+
+
+8 REPRODUCIBILITY STATEMENT
+
+
+To ensure the reproducibility of our results, we have taken the following steps: (1) A detailed explanation of our method in Sec. 4, along with implementation details provided in Appendix A.3. (2) All
+datasets used in our experiments are publicly accessible. (3) Comprehensive experimental results
+for 161 test cases are included in Sec. 5 and further detailed in Appendix A.4, A.10, and A.11.
+
+
+REFERENCES
+
+
+Axel Barroso-Laguna, Sowmya Munukutla, Victor Adrian Prisacariu, and Eric Brachmann. Matching 2d images in 3d: Metric relative pose from metric correspondences. In _Proceedings_ _of_ _the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 4852–4863, 2024.
+
+
+Tom B Brown. Language models are few-shot learners. _arXiv preprint arXiv:2005.14165_, 2020.
+
+
+Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. Qlora: Efficient finetuning
+of quantized llms. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Bardienus Duisterhof, Lojze Zust, Philippe Weinzaepfel, Vincent Leroy, Yohann Cabon, and Jerome
+Revaud. Mast3r-sfm: a fully-integrated solution for unconstrained structure-from-motion. _arXiv_
+_preprint arXiv:2409.19152_, 2024.
+
+
+Zhiwen Fan, Wenyan Cong, Kairun Wen, Kevin Wang, Jian Zhang, Xinghao Ding, Danfei Xu,
+Boris Ivanovic, Marco Pavone, Georgios Pavlakos, et al. Instantsplat: Unbounded sparse-view
+pose-free gaussian splatting in 40 seconds. _arXiv preprint arXiv:2403.20309_, 2024.
+
+
+Stuart Geman, Donald E McClure, and Donald Geman. A nonlinear filter for film restoration and
+other problems in image processing. _CVGIP:_ _Graphical_ _models_ _and_ _image_ _processing_, 54(4):
+281–289, 1992.
+
+
+Cl´ement Godard, Oisin Mac Aodha, Michael Firman, and Gabriel J Brostow. Digging into selfsupervised monocular depth estimation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _international_ _confer-_
+_ence on computer vision_, pp. 3828–3838, 2019.
+
+
+Suchin Gururangan, Ana Marasovi´c, Swabha Swayamdipta, Kyle Lo, Iz Beltagy, Doug Downey,
+and Noah A Smith. Don’t stop pretraining: Adapt language models to domains and tasks. _arXiv_
+_preprint arXiv:2004.10964_, 2020.
+
+
+Xuehai He, Chunyuan Li, Pengchuan Zhang, Jianwei Yang, and Xin Eric Wang. Parameter-efficient
+fine-tuning for vision transformers. _arXiv preprint arXiv:2203.16329_, 3, 2022.
+
+
+Yicong Hong, Kai Zhang, Jiuxiang Gu, Sai Bi, Yang Zhou, Difan Liu, Feng Liu, Kalyan Sunkavalli,
+Trung Bui, and Hao Tan. Lrm: Large reconstruction model for single image to 3d. _arXiv preprint_
+_arXiv:2311.04400_, 2023.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. Lora: Low-rank adaptation of large language models. _arXiv_ _preprint_
+_arXiv:2106.09685_, 2021.
+
+
+Xinrong Hu, Xiaowei Xu, and Yiyu Shi. How to efficiently adapt large segmentation model (sam)
+to medical images. _arXiv preprint arXiv:2306.13731_, 2023.
+
+
+Hanwen Jiang, Qixing Huang, and Georgios Pavlakos. Real3d: Scaling up large reconstruction
+models with real-world images. _arXiv preprint arXiv:2406.08479_, 2024.
+
+
+11
+
+
+Vincent Leroy, Yohann Cabon, and J´erˆome Revaud. Grounding image matching in 3d with mast3r.
+_arXiv preprint arXiv:2406.09756_, 2024.
+
+
+Amy Lin, Jason Y Zhang, Deva Ramanan, and Shubham Tulsiani. Relpose++: Recovering 6d
+poses from sparse-view observations. In _2024 International Conference on 3D Vision (3DV)_, pp.
+106–115. IEEE, 2024.
+
+
+Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. Improved baselines with visual instruction
+tuning. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-_
+_tion_, pp. 26296–26306, 2024a.
+
+
+Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. _Advances_
+_in neural information processing systems_, 36, 2024b.
+
+
+Pengpeng Liu, Michael Lyu, Irwin King, and Jia Xu. Selflow: Self-supervised learning of optical
+flow. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_,
+pp. 4571–4580, 2019.
+
+
+Bin Luo and Edwin R Hancock. Procrustes alignment with the em algorithm. In _International_
+_Conference on Computer Analysis of Images and Patterns_, pp. 623–631. Springer, 1999.
+
+
+Bhaskar D Rao and Kenneth Kreutz-Delgado. An affine scaling methodology for best basis selection. _IEEE Transactions on signal processing_, 47(1):187–200, 1999.
+
+
+Johannes L Schonberger and Jan-Michael Frahm. Structure-from-motion revisited. In _Proceedings_
+_of the IEEE conference on computer vision and pattern recognition_, pp. 4104–4113, 2016.
+
+
+Johannes L Sch¨onberger, Enliang Zheng, Jan-Michael Frahm, and Marc Pollefeys. Pixelwise view
+selection for unstructured multi-view stereo. In _Computer_ _Vision–ECCV_ _2016:_ _14th_ _European_
+_Conference,_ _Amsterdam,_ _The_ _Netherlands,_ _October_ _11-14,_ _2016,_ _Proceedings,_ _Part_ _III_ _14_, pp.
+501–518. Springer, 2016.
+
+
+David Schubert, Thore Goll, Nikolaus Demmel, Vladyslav Usenko, J¨org St¨uckler, and Daniel Cremers. The tum vi benchmark for evaluating visual-inertial odometry. In _2018 IEEE/RSJ Interna-_
+_tional Conference on Intelligent Robots and Systems (IROS)_, pp. 1680–1687. IEEE, 2018.
+
+
+Cameron Smith, David Charatan, Ayush Tewari, and Vincent Sitzmann. Flowmap: High-quality
+camera poses, intrinsics, and depth via gradient descent. _arXiv preprint arXiv:2404.15259_, 2024.
+
+
+Julian Straub, Thomas Whelan, Lingni Ma, Yufan Chen, Erik Wijmans, Simon Green, Jakob J Engel,
+Raul Mur-Artal, Carl Ren, Shobhit Verma, et al. The replica dataset: A digital replica of indoor
+spaces. _arXiv preprint arXiv:1906.05797_, 2019.
+
+
+Edgar Sucar, Shikun Liu, Joseph Ortiz, and Andrew J Davison. imap: Implicit mapping and positioning in real-time. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _international_ _conference_ _on_ _computer_
+_vision_, pp. 6229–6238, 2021.
+
+
+Pei Sun, Henrik Kretzschmar, Xerxes Dotiwalla, Aurelien Chouard, Vijaysai Patnaik, Paul Tsui,
+James Guo, Yin Zhou, Yuning Chai, Benjamin Caine, et al. Scalability in perception for autonomous driving: Waymo open dataset. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _com-_
+_puter vision and pattern recognition_, pp. 2446–2454, 2020.
+
+
+Sheng Wan, Tung-Yu Wu, Wing H Wong, and Chen-Yi Lee. Confnet: predict with confidence. In
+_2018 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)_, pp.
+2921–2925. IEEE, 2018.
+
+
+Hengyi Wang and Lourdes Agapito. 3d reconstruction with spatial memory. _arXiv_ _preprint_
+_arXiv:2408.16061_, 2024.
+
+
+Jianyuan Wang, Christian Rupprecht, and David Novotny. Posediffusion: Solving pose estimation
+via diffusion-aided bundle adjustment. In _Proceedings of the IEEE/CVF International Conference_
+_on Computer Vision_, pp. 9773–9783, 2023.
+
+
+12
+
+
+Shuzhe Wang, Vincent Leroy, Yohann Cabon, Boris Chidlovskii, and Jerome Revaud. Dust3r: Geometric 3d vision made easy. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 20697–20709, 2024.
+
+
+Heng Yang, Wei Dong, Luca Carlone, and Vladlen Koltun. Self-supervised geometric perception.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+14350–14361, 2021.
+
+
+Yuanwen Yue, Anurag Das, Francis Engelmann, Siyu Tang, and Jan Eric Lenssen. Improving 2d
+feature representations by 3d-aware fine-tuning. _arXiv preprint arXiv:2407.20229_, 2024.
+
+
+Jason Y Zhang, Amy Lin, Moneish Kumar, Tzu-Hsuan Yang, Deva Ramanan, and Shubham Tulsiani. Cameras as rays: Pose estimation via ray diffusion. _arXiv_ _preprint_ _arXiv:2402.14817_,
+2024.
+
+
+Tinghui Zhou, Matthew Brown, Noah Snavely, and David G Lowe. Unsupervised learning of depth
+and ego-motion from video. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_
+_pattern recognition_, pp. 1851–1858, 2017.
+
+
+Zihan Zhu, Songyou Peng, Viktor Larsson, Weiwei Xu, Hujun Bao, Zhaopeng Cui, Martin R Oswald, and Marc Pollefeys. Nice-slam: Neural implicit scalable encoding for slam. In _Proceedings_
+_of the IEEE/CVF conference on computer vision and pattern recognition_, pp. 12786–12796, 2022.
+
+
+A APPENDIX
+
+
+A.1 DUST3R TRAINING LOSS
+
+
+DUSt3R adopts a 3D-regression-based training objective, which computes the pixel-wise Euclidean
+distance between the predicted and ground truth point maps _X_ [¯] _[i,i]_ _,_ _X_ [¯] _[j,i]_ over pixels _P_ _[i,i]_ _, P_ _[j,i]_ _⊆_
+_{_ 1 _. . . H} × {_ 1 _. . . W_ _}_ where ground truth is available. For example, the regression loss for a valid
+pixel _p ∈P_ _[v]_ on image _v_ from image pair ( _i, j_ ) is computed as :
+
+
+_ℓ_ regr( _v, p_ ) = _∥_ [1]
+
+
+_X_ ¯ _p_ _[v,i][∥][,]_ where _v_ _∈{i, j}_ (10)
+_z_ ¯
+
+
+_z_ [1] _[X]_ _p_ _[v,i]_ _−_ _z_ [1] ¯
+
+
+Here, _z_ and _z_ ¯ are normalization factors used to resolve the scale ambiguity between predicted and
+ground truth point maps. They are defined as the average distance of all valid points in image pair
+( _Ii, Ij_ ) to the origin:
+
+
+1
+_z_ ( _X_ _[i,i]_ _, X_ _[j,i]_ ) =
+_|P_ _[i]_ _|_ + _|P_ _[j]_ _|_
+
+
+- _∥Xp_ _[i,i][∥]_ [+] 
+_p∈P_ _[i]_ _p∈P_
+
+
+- _∥Xp_ _[j,i][∥]_ (11)
+
+_p∈P_ _[j]_
+
+
+The final training loss for DUSt3R is the confidence-aware loss from Wan et al. (2018), defined as:
+
+
+_L_ conf = 
+
+( _i,j_ ) _∈E_
+
+
+_v∈{i,j}_
+
+
+- _Cp_ _[v,i][ℓ]_ [regr][(] _[v, p]_ [)] _[ −]_ _[α]_ [ log] _[ C]_ _p_ _[v,i]_ (12)
+
+_p∈P_ _[v]_
+
+
+This loss enables the model to learn confidence predictions that are correlated with the regression
+accuracy. The second term acts as a regularization component, where _α_ is a hyperparameter that
+controls the strength of the regularization.
+
+
+A.2 DERIVATION OF WEIGHT UPDATE RULE
+
+
+Starting from the joint optimization Eq. 7, we first minimize over the weight terms _wp_ _[v,i]_ to eliminate
+them from the joint optimization:
+
+
+- min
+
+_p_ _wp_ _[v,i]_
+
+
+13
+
+
+- ~~�~~ ~~�~~ _wp_ _[v,i][∥][e]_ _p_ _[v,i][∥]_ [+] _[ µ]_ [(] _wp_ _[v,i]_ _−_ _Cp_ _[v,i]_ [)][2] (13)
+
+
+( _T, σ, f, D_ ) _[∗]_ = arg min
+_T,σ,f,D,_
+
+
+- 
+
+( _i,j_ ) _v_
+
+
+In order to find the global minimizers _wp_ _[v,i]_ _[∗]_, we take the gradient _gw_ of the above objective function
+with respect to _wp_ _[v,i]_ [:]
+
+
+       -       _gw_ = _∥e_ _[v,i]_ _p_ _[∥]_ [+] _[ µ]_ 1 _−_ _Cp_ _[v,i][/w]_ _p_ _[v,i]_
+
+
+(14)
+
+
+We observe that the gradient _gw_ is continuous and monotonic for _wp_ _[v,i]_ _>_ 0. Also, if _wp_ _[v,i]_ _→_ 0, then
+_gw_ _→−∞_, and if _wp_ _[v,i]_ _→_ + _∞_ then _gw_ = _∥e_ _[v,i]_ _p_ _[∥]_ [+ 1] _[ >]_ [ 0][.] [Therefore, there exists an unique global]
+minimizer _wp_ _[v,i]_ _[∗]_ at which the gradient _gw_ evaluates to zero. Setting _gw_ = 0, we can solve for _wp_ _[v,i]_ _[∗]_
+as :
+
+_wp_ _[v,i]_ _[∗]_ = _Cp_ _[v,i][/]_ [(1 +] _[ ∥][e]_ _p_ _[v,i][∥][/µ]_ [)][2] (15)
+
+
+This gives us the same weight update rule in Eq. 8. During global optimization, we alternate between the gradient descent step to optimize geometric parameters: _T, σ, f, D_ and the weight update
+step to set the weight terms to their global minimizers. This helps us down-weight the confidence
+for overconfident point predictions, and make the optimization more robust on challenging circumstances.
+
+
+A.3 IMPLEMENTATION DETAILS
+
+
+Our pipeline is implemented with PyTorch and all our experiments are conducted on a NVIDIA
+3090 GPU.
+
+
+For robust global point map alignment, we set the regularization coefficient _µ_ to 0.01. We minimize
+the optimization loss by running 300 steps of gradient descent using the Adam optimizer with a
+learning rate of 0.01, applying the closed-form weight update Eq. 8 every 10th gradient descent
+step. Additionally, we exclude points with prediction confidence below 0.5 by setting their weights
+to zero, preventing them from participating in the optimization process.
+
+
+For confidence-based pseudo labeling, we use a cofidence threshold of 1.5 for all test scenes.
+
+
+For LoRA fine-tuning, we resize all calibration images to the pre-training resolution of (512, 384).
+During fine-tuning, we optimize the LoRA weights over 10 epochs (without warmup) using the
+AdamW optimizer with a batch size of 2. A cosine decay learning rate scheduler is employed, with
+a base learning rate of 0.001 and a minimum learning rate of 0.00001 for most test cases.
+
+
+A.4 EVALUATION RESULTS ON TUM RGBD DATASET
+
+
+We evaluated our method for _multi-view_ _camera_ _parameter_ _estimation_ on TUM test scenes:
+“fr1 ~~d~~ esk”, “fr2 xyz” and “fr3 ~~o~~ ffice” in the TUM dataset. In each scene, the first 500 RGB images are reserved as the calibration split, and the remaining 92/2897/2015 images form the test split.
+At test time, we sample 10 images from the calibration split for self-calibration and 10 images from
+the test split to assess pose estimates.
+
+
+Table 5: **Quantitative evaluation** of **camera parameter** estimates on the **TUM** RGBD dataset.
+
+
+Methods
+
+|fr1 desk ATE (cm) AFE (%)|fr2 xyz ATE (cm) AFE (%)|
+|---|---|
+|0.91<br>8.02<br>0.62<br>8.32|3.89<br>14.84<br>1.24<br>7.67|
+|0.68<br>7.63|1.23<br>4.71|
+
+
+COLMAP **0.51** 3.87 **0.97** **4.92** 1.98 4.71
+RelPose ++ 10.05     - 34.59     - 96.91     PoseDiffusion 11.90 27.18 34.32 37.30 92.61 1.28
+RayDiffusion 10.95 72.30 35.63 12.12 100.56 3.52
+FlowMap 8.03 39.58 14.30 84.21 32.67 24.95
+MASt3R 0.56 **3.32** 1.74 10.88 **0.92** **1.24**
+
+
+The results of multi-view camera parameter estimation on TUM are reported in Tab. 5 and Fig. 6 (c,
+d). Our self-calibrated DUSt3R achieves up to 68% more accurate camera pose estimates and up
+
+
+14
+
+
+to 48% more accurate focal length estimates compared to the pre-trained baseline. The slight drop
+in focal length estimation accuracy for the “fr1 ~~d~~ esk” sequence is likely due to overfitting on the
+calibration images.
+
+
+Using depth measurements as the supervision signal for DUSt3R fine-tuning appears to be unreliable. DUSt3R-Depth-Calib under-performs our method in “fr1 ~~d~~ esk” and even falls short of the
+pre-trained model in “fr3 ~~o~~ ffice.” This is the result of the noise and outliers present in the depth
+images.
+
+
+Similar to Replica, COLMAP and MASt3R tends to perform well on the inward-facing cameras in
+TUM. RelPose++, PoseDiffusion, RayDiffusion and FlowMap fail to provide reasonable estimates
+of camera parameters.
+
+
+A.5 MAST3R SELF-CALIBRATION
+
+
+(a) Segment-10084: Before self-calibration (b) Segment-10084: After self-calibration
+
+
+(c) Segment-10149: Before self-calibration (d) Segment-10149: After self-calibration
+
+
+Figure 9: **Qualitative** **results** **of** **MASt3R** **self-calibration** on the Waymo test segments 10084
+and 10149. After self-calibration, MASt3R produces more accurate camera pose estimates. For
+segment-10084, the road’s center lines exhibit better alignment along a straight path. For segment10149, the roadside parking lines align more accurately along a straight line.
+
+
+We show that our method generalizes to MASt3R (Leroy et al., 2024; Duisterhof et al., 2024) selfcalibration.
+
+
+MASt3R builds upon DUSt3R and re-purposes it for more precise image matching. In addition
+to pairwise point and confidence predictions, MASt3R also generates dense local feature maps to
+establish 2D feature correspondences across images. Similar to DUSt3R, MASt3R employs a global
+optimization procedure to align and optimize the local per-pair point predictions within a global
+coordinate frame. Leveraging both 3D-3D and 2D-3D correspondences, MASt3R first minimizes
+a 3D projection loss as in Eq. 6 to optimize the image pair scales and camera poses, followed by
+minimizing a 2D re-projection loss to optimize the camera focal lengths and depth maps.
+
+
+For MASt3R self-calibration, we also utilize the global optimization results to generate pseudo
+labels. For simplicity, we directly apply all point predictions across all calibration views for pseudo
+
+
+15
+
+
+labeling, without employing confidence-based filtering. We maintain the use of rank-16 LoRA and
+the same pre-training loss for fine-tuning MASt3R.
+
+
+Table 6: **Quantitative** **evaluation** **for** **MASt3R** **self-calibration** on the Replica “office0”, TUM
+“fr2 ~~x~~ yz” and Waymo test segments 10084 and 10149.
+
+
+Scene Replica office0 TUM fr2 ~~x~~ yz Waymo seg.-10084 Waymo seg.-10149
+Metric Acc.[cm] Comp.[cm] ATE[cm] AFE[%] ATE[m] AFE[%] ATE[m] AFE[%]
+MASt3R-Pretrain 4.69 6.05 1.74 10.88 2.85 **11.87** 1.35 24.91
+**MASt3R-Self-Calib** **4.61** **6.02** **1.60** **10.48** **1.21** 16.71 **1.19** **22.97**
+MASt3R-GT-FT 4.25 5.83    -    - 1.05 9.87 1.21 24.30
+
+
+We evaluated our pipeline on four test scenes: Replica “office0”, TUM “fr2 ~~x~~ yz”, and Waymo test
+segment-10084 and segment-10149. The self-calibrated MASt3R was assessed on multi-view reconstruction and multi-view camera parameter estimation using the same evaluation metrics against
+the pre-trained baseline and the ground-truth fine-tuned model. The results are reported in Tab. 6
+and Fig. 9.
+
+
+We observe improved performance of MASt3R across various tasks and datasets compared to the
+pre-trained model, though the gains are mostly marginal, likely due to the presence of unfiltered
+noise and outliers in the pseudo-labeled data. In future work, we plan to calibrate MASt3R by
+incorporating calibrated-confidence-based pseudo labeling.
+
+
+A.6 ABLATION STUDY ON THE SIZE OF CALIBRATION SPLIT
+
+
+In addition to the number of calibration images, the size of the calibration split plays an important
+role in self-calibration because it affects the diversity of viewpoints among the calibration images.
+As shown in Fig. 10, when we limit the calibration split to only the first 10 to 50 images in a test
+scene, we observe a decrease in the performance of the self-calibrated model.
+
+
+This decline occurs primarily because the sampled calibration images from the smaller splits share
+very similar viewpoints. As a result, DUSt3R predictions across view pairs are of similar quality, and
+global optimization therefore offers limited improvements in point estimation accuracy. Reduced
+training set diversity and limited scene observation further contribute to the performance decrease.
+
+
+Therefore, we recommend capturing calibration images from different viewpoints to ensure effective
+self-calibration.
+
+
+(a) Scene: Replica office0 (b) Scene: Waymo test segment-10149
+
+
+Figure 10: Ablation Study: Reducing the calibration split size (e.g., using only the first 0.5% of
+images) may adversely impact self-calibration performance.
+
+
+A.7 CONCURRENT MULTI-SCENE SELF-CALIBRATION
+
+
+Table 7: Quantitative evaluation of multi-scene concurrent self-calibration
+
+
+Training Data offce0 (Ours) All Replica All except offce0
+Avg. Point Pred. Err. [cm] **8.83** 9.64 11.64
+Accuracy [cm] 4.43 **4.24** 6.11
+Completeness [cm] **6.08** 7.13 8.74
+
+
+We tested our pipeline with multi-scene concurrent self-calibration. Specifically, we fine-tuned the
+pre-trained DUSt3R using pseudo-labeled data from all Replica test scenes and evaluated the self
+
+16
+
+
+calibrated DUSt3R on the office0 test set. We also experimented with excluding scene office0’s
+pseudo-labeled data from the training data during fine-tuning.
+
+
+The performance of DUSt3R, self-calibrated on different pseudo labeled data, are presented in
+Tab. 7. We observe comparable performance between concurrent and scene-specific training. However, excluding the target scene data led to a decline in performance. This highlights the importance
+of including target scene images for model self-calibration.
+
+
+A.8 USE DUST3R TO INITIALIZE COLMAP?
+
+
+As discussed in Sec. 3.3, the vanilla DUSt3R (i.e., the **DUSt3R-Pretrain** baseline) uses a novel 3D3D-projection-based global optimization to align the DUSt3R-predicted point maps across views.
+This natually leads to the question: Can we use the commonly adopted 2D-3D-projection-based
+optimization to align these point maps? Specifically, is it feasible to use DUSt3R predictions to
+initialize COLMAP’s bundle adjustment (Schonberger & Frahm, 2016) to create a stronger baseline?
+
+
+The short answer is no.
+
+
+Theoretically, DUSt3R is trained to predict 3D point maps but not explicit 2D-2D or 2D-3D correspondences. While we could attempt to extract reciprocal pixel-level 2D-2D matches by performing
+nearest-neighbor matching in the 3D point map space (as discussed in Sec. 3.3 of Wang et al. (2024)),
+these matches are limited because (1) they are only at the pixel level and (2) they can be incomplete
+due to potential violations of mutual consistency. Directly using these matches for COLMAP bundle
+adjustment can lead to inferior reconstruction quality.
+
+
+Experimentally, we attempted to use the 2D-2D correspondences extracted from DUSt3R predictions to initialize COLMAP. We retrieved the matched pixels’ globally aligned point map predictions
+and computed their median 3D positions to initialize the 2D-3D correspondences for COLMAP’s
+bundle adjustment. As reported in Tab. 8 and Fig. 11, this approach, termed **DUSt3R-COLMAP**,
+significantly underperforms our baselines such as **DUSt3R-Pretrain** and **MASt3R** .
+
+
+Table 8: Using DUSt3R to initialize COLMAP (i.e. DUSt3R-COLMAP) significantly underperforms other baselines.
+
+
+office0 segment-10084
+Methods
+Acc.[cm] _↓_ Comp.[cm] _↓_ ATE[m] _↓_ AFE[%] _↓_
+DUSt3R-Pretrain 5.22 6.78 **0.79** **2.79**
+**DUSt3R-COLMAP** 44.36 56.66 5.59 89.51
+COLMAP (dense) **2.61** 89.87 Fail Fail
+MASt3R 4.69 **6.05** 2.85 11.87
+
+
+Figure 11: Using DUSt3R to initialize COLMAP (i.e. DUSt3R-COLMAP) significantly underperforms the DUSt3R-initialized 3D-projection-based global alignment method (i.e. the DUSt3RPretrain baseline).
+
+
+This observation is consistent with findings in the literature. For example, Leroy et al. (2024) reports (in Tab. 1) that using matches extracted from DUSt3R predictions for map-free localization
+significantly underperforms MASt3R, which is directly trained for image matching.
+
+
+17
+
+
+A.9 QUALITATIVE COMPARISON AGAINST GROUND TRUTH MESH
+
+
+We directly compare DUSt3R’s multi-view reconstructions with the ground truth mesh to identify
+and visualize the source of errors.
+
+
+The qualitative results in Fig. 6 (a, b) demonstrate that our self-calibration method effectively reduces outlier points in DUSt3R reconstructions. However, the outlier points are not the only source
+of error for the pre-trained DUSt3R model, despite the otherwise visually impressive reconstruction.
+
+
+In Fig. 12, we directly compare the reconstructions against the ground truth mesh model for the same
+Replica office0 scene. Beyond the visually obvious improvements highlighted in the green boxes,
+the self-calibrated model also more accurately captures the geometry of the scene. As a result, after
+multi-view alignment, the calibrated DUSt3R’s reconstruction aligns more closely with the ground
+truth in various regions, as indicated in the red boxes, while the pre-trained DUSt3R’s reconstruction
+exhibits misalignments in these areas.
+
+
+(a) Before self-calibration (b) After self-calibration
+
+
+Figure 12: **Qualitative** **comparison** of DUSt3R multi-view reconstructions before and after selfcalibration **against** **the** **ground** **truth** **mesh** **model** in the Replica office0 scene (top view for the
+same reconstructions in Fig. 6 (a,b)). The ground truth mesh, with parts invisible to test camera views culled, is displayed with real vertex colors, while the reconstructions are visualized using heatmap-like colors. Besides the visually obvious improvements in the green boxes, the selfcalibrated model also better captures the overall geometry of the scene, demonstrating better alignments with the ground truth at various regions, as indicated in the red boxes.
+
+
+A.10 REMAINING EXPERIMENTAL RESULTS ON THE REPLICA DATASET
+
+
+Table 9: Table 2 (continued): Quantitative evaluation of multi-view dense reconstructions on the
+Replica dataset
+
+
+Methods
+
+|room0 Acc. Comp.|room1 Acc. Comp.|
+|---|---|
+|6.97<br>9.97<br>6.83<br>9.86|10.54<br>13.13<br>**8.88**<br>11.54|
+|4.59<br>8.15|8.64<br>11.35|
+
+
+COLMAP (dense) 6.30 95.02 5.54 292.35 4.88 120.52
+FlowMap 66.71 226.22 96.53 140.33 37.29 274.98
+MASt3R **4.07** **8.71** 12.63 **11.52** **3.40** **8.43**
+
+
+A.11 FULL EXPERIMENTAL RESULTS ON WAYMO OPEN DATASET
+
+
+18
+
+
+Table 10: **Full** **quantitative** **evaluation** results of **multi-view** **pose** **estimation** on Waymo Open
+Dataset (Part 1)
+
+|Methods|segment-10084 segment-10149 segment-10161 segment-10410 segment-10488<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.79<br>2.19<br>0.84<br>3.08<br>0.38<br>0.54<br>0.02<br>0.15<br>0.00<br>0.55<br>0.37<br>0.61<br>0.25<br>2.14<br>0.38<br>0.52<br>0.02<br>0.15<br>0.00<br>0.85|
+|DUSt3R-GT-FT|0.20<br>0.17<br>0.17<br>1.54<br>0.35<br>0.46<br>0.02<br>0.15<br>0.00<br>0.41|
+|Flowmap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|0.31<br>3.97<br>66.62<br>1.80<br>4.74<br>7.02<br>2.84<br>0.00<br>15.05<br>0.00<br>19.43<br>25.07<br>16.76<br>49.18<br>7.65<br>13.85<br>0.03<br>10.84<br>0.00<br>1.78<br>17.34<br>85.65<br>16.91<br>80.69<br>6.40<br>83.73<br>0.09<br>84.44<br>0.00<br>84.49<br>14.80<br>-<br>16.20<br>-<br>4.06<br>-<br>0.08<br>-<br>0.00<br>-<br>2.85<br>11.87<br>1.35<br>24.92<br>0.36<br>12.96<br>0.00<br>7.65<br>0.00<br>22.87|
+
+
+|Methods|segment-10504 segment-10534 segment-10649 segment-10802 segment-10940<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.29<br>2.19<br>0.74<br>0.84<br>0.95<br>2.84<br>0.35<br>1.60<br>0.01<br>0.74<br>0.38<br>1.79<br>0.67<br>0.76<br>0.49<br>2.54<br>0.35<br>1.08<br>0.02<br>0.94|
+|DUSt3R-GT-FT|0.40<br>1.04<br>0.67<br>0.75<br>0.29<br>1.73<br>0.39<br>0.55<br>0.02<br>0.64|
+|Flowmap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|66.65<br>1.48<br>14.83<br>6.24<br>36.44<br>13.74<br>21.16<br>0.44<br>1.88<br>0.06<br>16.38<br>2.54<br>13.31<br>1.42<br>20.19<br>2.26<br>13.61<br>23.74<br>1.43<br>32.79<br>17.03<br>85.26<br>10.73<br>84.73<br>18.59<br>85.09<br>12.77<br>81.44<br>2.38<br>84.38<br>16.88<br>-<br>13.24<br>-<br>13.69<br>-<br>12.92<br>-<br>2.31<br>-<br>1.16<br>25.16<br>9.91<br>19.41<br>0.65<br>20.53<br>1.26<br>24.75<br>0.15<br>9.00|
+
+
+|Methods|segment-10980 segment-10998 segment-11096 segment-11436 segment-11672<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.80<br>1.19<br>0.51<br>0.66<br>0.69<br>1.43<br>0.50<br>1.28<br>0.40<br>2.09<br>0.09<br>0.69<br>0.50<br>0.64<br>0.69<br>1.42<br>0.34<br>0.74<br>0.17<br>1.29|
+|DUSt3R-GT-FT|0.13<br>0.49<br>0.80<br>0.63<br>0.71<br>1.46<br>0.37<br>0.83<br>0.10<br>0.60|
+|Flowmap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|65.17<br>0.66<br>34.91<br>8.07<br>12.88<br>6.72<br>12.43<br>0.59<br>66.10<br>2.23<br>18.19<br>31.04<br>11.51<br>5.42<br>12.09<br>8.91<br>13.74<br>15.61<br>11.11<br>8.02<br>19.12<br>85.00<br>13.80<br>83.88<br>15.08<br>84.71<br>15.23<br>84.22<br>8.92<br>85.25<br>13.55<br>-<br>14.07<br>-<br>13.30<br>-<br>16.90<br>-<br>11.89<br>-<br>1.61<br>6.59<br>0.57<br>2.48<br>1.11<br>8.72<br>0.51<br>25.26<br>0.46<br>39.65|
+
+
+|Methods|segment-11867 segment-11933 segment-11987 segment-12056 segment-12153<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.20<br>1.41<br>0.00<br>0.76<br>0.39<br>1.30<br>0.52<br>1.58<br>0.35<br>0.97<br>0.18<br>1.77<br>0.00<br>0.85<br>0.33<br>1.28<br>0.32<br>2.32<br>0.35<br>1.00|
+|DUSt3R-GT-FT|4.27<br>2.28<br>0.00<br>0.51<br>0.33<br>1.28<br>0.30<br>0.70<br>0.31<br>0.59|
+|Flowmap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|10.73<br>2.62<br>59.68<br>0.00<br>39.77<br>3.15<br>48.50<br>3.39<br>14.49<br>2.40<br>2.44<br>5.20<br>0.00<br>15.37<br>11.22<br>11.04<br>9.41<br>34.37<br>7.24<br>15.39<br>6.08<br>85.63<br>0.00<br>83.92<br>11.74<br>84.31<br>17.18<br>85.94<br>6.46<br>85.70<br>2.39<br>-<br>0.00<br>-<br>11.01<br>-<br>16.00<br>-<br>2.92<br>-<br>1.67<br>10.26<br>0.00<br>14.03<br>3.91<br>5.05<br>2.01<br>19.19<br>0.56<br>11.21|
+
+
+|Methods|segment-12537 segment-12555 segment-12892 segment-13034 segment-13347<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.63<br>1.38<br>0.02<br>0.45<br>0.20<br>0.68<br>3.84<br>4.12<br>0.01<br>0.79<br>0.54<br>1.42<br>0.02<br>0.75<br>0.08<br>0.56<br>1.63<br>4.19<br>0.01<br>0.43|
+|DUSt3R-GT-FT|0.10<br>1.17<br>0.02<br>0.04<br>0.05<br>1.14<br>1.97<br>2.28<br>0.01<br>0.25|
+|Flowmap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|32.50<br>0.62<br>46.88<br>0.01<br>17.30<br>0.40<br>43.23<br>12.63<br>16.67<br>0.05<br>15.92<br>10.06<br>0.12<br>6.56<br>4.81<br>37.32<br>41.47<br>3.80<br>0.70<br>10.08<br>13.73<br>86.47<br>0.11<br>83.48<br>6.39<br>83.62<br>33.72<br>83.64<br>1.95<br>84.32<br>6.56<br>-<br>0.07<br>-<br>9.31<br>-<br>36.88<br>-<br>1.68<br>-<br>0.42<br>2.11<br>0.00<br>4.99<br>0.24<br>15.56<br>1.59<br>24.94<br>0.13<br>7.47|
+
+
+|Methods|segment-13585 segment-13732 segment-13748 segment-13763 segment-13781<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.77<br>1.93<br>8.13<br>4.10<br>0.00<br>1.59<br>0.10<br>0.23<br>1.86<br>2.10<br>0.47<br>0.39<br>6.82<br>3.90<br>0.00<br>3.20<br>0.09<br>0.32<br>1.73<br>1.73|
+|DUSt3R-GT-FT|0.36<br>0.42<br>3.51<br>1.59<br>0.00<br>1.27<br>0.12<br>0.45<br>1.69<br>1.68|
+|Flowmap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|21.94<br>0.91<br>10.93<br>9.08<br>65.35<br>0.00<br>5.87<br>0.70<br>65.69<br>1.20<br>11.12<br>12.22<br>41.83<br>19.75<br>0.00<br>4.26<br>7.52<br>11.11<br>13.90<br>21.86<br>10.40<br>84.53<br>55.53<br>81.32<br>0.00<br>86.28<br>11.27<br>82.18<br>18.50<br>84.38<br>13.53<br>-<br>46.03<br>-<br>0.00<br>-<br>10.67<br>-<br>16.10<br>-<br>0.37<br>14.36<br>2.02<br>45.88<br>0.00<br>13.12<br>0.56<br>16.25<br>0.58<br>18.27|
+
+
+|Methods|segment-13787 segment-13790 segment-13849 segment-13887 segment-13944<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|1.91<br>1.88<br>4.48<br>4.15<br>0.27<br>0.99<br>1.24<br>2.56<br>0.03<br>0.23<br>0.42<br>0.35<br>3.34<br>5.12<br>0.22<br>0.43<br>0.79<br>2.14<br>0.04<br>0.65|
+|DUSt3R-GT-FT|0.24<br>0.46<br>1.87<br>1.24<br>0.29<br>0.69<br>0.23<br>1.71<br>0.03<br>0.27|
+|Flowmap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|65.92<br>1.95<br>67.17<br>19.31<br>14.12<br>1.41<br>22.24<br>0.89<br>7.22<br>0.03<br>10.28<br>14.95<br>44.05<br>10.49<br>16.78<br>16.87<br>17.17<br>9.37<br>1.40<br>13.21<br>5.54<br>82.41<br>41.05<br>85.28<br>17.90<br>83.32<br>18.03<br>83.37<br>3.20<br>83.80<br>9.65<br>-<br>49.12<br>-<br>11.05<br>-<br>16.24<br>-<br>2.51<br>-<br>2.27<br>8.68<br>41.31<br>28.24<br>0.91<br>15.96<br>0.60<br>20.04<br>0.22<br>25.37|
+
+
+19
+
+
+Table 11: **Full** **quantitative** **evaluation** results of **multi-view** **pose** **estimation** on Waymo Open
+Dataset (Part 2)
+
+|Methods|segment-14178 segment-14188 segment-14386 segment-14470 segment-14586<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.22<br>1.71<br>0.82<br>0.96<br>0.03<br>0.52<br>0.35<br>1.04<br>0.32<br>1.14<br>0.09<br>0.26<br>0.83<br>0.99<br>0.03<br>0.55<br>0.20<br>1.13<br>0.26<br>0.70|
+|DUSt3R-GT-FT|0.05<br>0.48<br>0.88<br>0.65<br>0.02<br>0.37<br>0.11<br>1.02<br>0.12<br>0.38|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|10.78<br>0.21<br>34.62<br>8.03<br>67.15<br>0.47<br>67.30<br>0.55<br>20.05<br>1.06<br>9.39<br>3.32<br>10.25<br>7.19<br>1.41<br>5.46<br>3.95<br>26.92<br>10.92<br>11.94<br>11.52<br>86.31<br>9.25<br>84.93<br>1.32<br>86.42<br>5.58<br>85.69<br>10.38<br>87.09<br>8.78<br>-<br>13.53<br>-<br>1.43<br>-<br>4.56<br>-<br>7.85<br>-<br>0.14<br>33.95<br>0.13<br>8.70<br>0.01<br>6.21<br>0.19<br>0.92<br>0.20<br>17.51|
+
+
+|Methods|segment-14631 segment-14643 segment-14737 segment-14918 segment-15272<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.02<br>0.38<br>0.02<br>0.05<br>0.05<br>0.50<br>0.64<br>2.07<br>0.13<br>1.54<br>0.02<br>0.12<br>0.03<br>0.26<br>0.04<br>0.19<br>0.51<br>1.31<br>0.14<br>1.67|
+|DUSt3R-GT-FT|0.01<br>0.43<br>0.01<br>0.36<br>0.03<br>0.78<br>0.17<br>1.05<br>0.12<br>0.64|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|54.43<br>0.02<br>34.54<br>0.01<br>62.51<br>0.02<br>12.51<br>0.13<br>65.77<br>0.67<br>0.40<br>10.31<br>0.20<br>4.60<br>0.48<br>58.43<br>8.80<br>14.48<br>6.27<br>1.69<br>0.51<br>80.16<br>0.70<br>84.18<br>1.01<br>85.80<br>9.30<br>86.42<br>10.48<br>83.64<br>0.37<br>-<br>0.40<br>-<br>0.99<br>-<br>9.97<br>-<br>7.54<br>-<br>0.01<br>4.37<br>0.02<br>24.20<br>0.01<br>7.18<br>0.15<br>17.16<br>0.35<br>33.00|
+
+
+|Methods|segment-15370 segment-15410 segment-15739 segment-15865 segment-16050<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.38<br>1.43<br>0.00<br>0.16<br>0.03<br>0.29<br>0.43<br>1.51<br>0.01<br>0.48<br>0.35<br>1.67<br>0.00<br>0.20<br>0.03<br>0.16<br>0.18<br>0.95<br>0.01<br>0.75|
+|DUSt3R-GT-FT|0.22<br>1.21<br>0.00<br>0.25<br>0.03<br>0.51<br>0.12<br>0.44<br>0.01<br>0.61|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|19.65<br>1.07<br>35.24<br>0.00<br>50.23<br>0.02<br>7.26<br>2.27<br>16.66<br>0.04<br>11.95<br>12.85<br>0.00<br>12.67<br>1.65<br>7.88<br>15.60<br>29.29<br>0.22<br>39.76<br>14.86<br>84.60<br>0.00<br>84.32<br>1.50<br>84.64<br>18.44<br>85.29<br>0.22<br>83.85<br>14.61<br>-<br>0.00<br>-<br>1.55<br>-<br>16.29<br>-<br>0.29<br>-<br>0.14<br>5.21<br>0.00<br>7.27<br>0.02<br>1.18<br>0.54<br>23.49<br>0.01<br>12.81|
+
+
+|Methods|segment-16062 segment-16367 segment-16418 segment-16645 segment-16721<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|14.93<br>3.35<br>0.52<br>1.55<br>0.12<br>0.41<br>0.89<br>3.36<br>3.91<br>2.13<br>3.23<br>3.09<br>0.31<br>0.99<br>0.05<br>0.36<br>0.47<br>1.71<br>7.73<br>4.40|
+|DUSt3R-GT-FT|1.09<br>1.26<br>0.05<br>0.54<br>0.05<br>0.57<br>0.50<br>0.91<br>10.14<br>2.56|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|64.20<br>5.49<br>3.85<br>1.23<br>6.02<br>0.36<br>63.50<br>4.06<br>64.96<br>11.18<br>43.39<br>35.25<br>12.32<br>4.96<br>8.39<br>7.83<br>28.05<br>59.33<br>43.68<br>4.94<br>46.45<br>85.46<br>13.82<br>84.41<br>7.24<br>84.36<br>23.68<br>84.94<br>37.64<br>83.14<br>23.36<br>-<br>9.12<br>-<br>9.41<br>-<br>29.81<br>-<br>47.79<br>-<br>4.16<br>36.81<br>0.65<br>10.62<br>0.28<br>21.33<br>2.38<br>29.15<br>12.67<br>46.19|
+
+
+|Methods|segment-16743 segment-16942 segment-16951 segment-17030 segment-17052<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.42<br>0.92<br>0.00<br>0.70<br>0.09<br>0.48<br>0.55<br>1.96<br>0.24<br>0.47<br>0.40<br>0.82<br>0.00<br>0.54<br>0.09<br>0.53<br>0.52<br>1.58<br>0.28<br>0.62|
+|DUSt3R-GT-FT|0.12<br>0.90<br>0.00<br>0.92<br>0.22<br>1.05<br>0.62<br>1.38<br>0.18<br>0.38|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|3.49<br>0.39<br>23.53<br>0.00<br>20.71<br>0.41<br>66.69<br>1.29<br>24.01<br>0.79<br>8.81<br>29.72<br>0.00<br>37.82<br>1.49<br>3.47<br>8.27<br>18.55<br>6.52<br>2.84<br>6.38<br>82.81<br>0.00<br>83.65<br>3.96<br>84.95<br>12.34<br>86.11<br>8.17<br>85.18<br>8.58<br>-<br>0.00<br>-<br>3.13<br>-<br>11.00<br>-<br>5.82<br>-<br>0.35<br>17.33<br>0.00<br>27.89<br>0.14<br>23.55<br>0.47<br>37.95<br>0.24<br>16.97|
+
+
+|Methods|segment-17136 segment-17174 segment-17212 segment-17262 segment-17351<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.00<br>0.70<br>0.04<br>1.57<br>1.08<br>2.78<br>0.69<br>2.66<br>3.72<br>4.52<br>0.00<br>0.67<br>0.04<br>0.54<br>0.75<br>1.36<br>0.46<br>0.68<br>1.95<br>3.08|
+|DUSt3R-GT-FT|0.00<br>0.69<br>0.03<br>0.79<br>0.58<br>1.03<br>0.14<br>0.20<br>0.63<br>1.20|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|15.73<br>0.00<br>26.55<br>0.01<br>16.44<br>3.00<br>14.32<br>2.08<br>64.86<br>5.68<br>0.00<br>15.44<br>0.77<br>22.26<br>18.75<br>10.02<br>18.89<br>28.26<br>40.69<br>0.61<br>0.00<br>83.01<br>0.87<br>86.80<br>15.09<br>84.30<br>16.71<br>86.99<br>41.94<br>87.07<br>0.00<br>-<br>0.73<br>-<br>15.50<br>-<br>18.62<br>-<br>38.25<br>-<br>0.00<br>21.45<br>0.02<br>4.85<br>2.83<br>21.88<br>2.09<br>23.93<br>3.24<br>16.06|
+
+
+|Methods|segment-17387 segment-17595 segment-17652 segment-17756 segment-17792<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.08<br>0.31<br>2.03<br>3.07<br>0.00<br>0.39<br>0.17<br>0.43<br>1.18<br>4.16<br>0.08<br>0.40<br>0.74<br>2.26<br>0.00<br>0.39<br>0.16<br>0.41<br>0.63<br>2.18|
+|DUSt3R-GT-FT|0.08<br>0.25<br>0.27<br>1.37<br>0.00<br>0.86<br>0.69<br>0.78<br>0.41<br>2.76|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|67.21<br>0.16<br>64.83<br>5.51<br>18.89<br>0.00<br>65.36<br>5.34<br>65.86<br>0.96<br>2.41<br>40.89<br>21.37<br>4.92<br>0.00<br>32.09<br>11.53<br>9.27<br>20.60<br>11.24<br>1.68<br>84.45<br>17.35<br>86.20<br>0.00<br>84.55<br>10.82<br>83.95<br>19.01<br>84.28<br>1.68<br>-<br>13.92<br>-<br>0.00<br>-<br>12.56<br>-<br>19.40<br>-<br>0.25<br>2.91<br>1.57<br>5.10<br>0.00<br>28.83<br>1.61<br>13.92<br>1.51<br>32.49|
+
+
+20
+
+
+Table 12: **Full** **quantitative** **evaluation** results of **multi-view** **pose** **estimation** on Waymo Open
+Dataset (Part 3)
+
+|Methods|segment-17835 segment-18149 segment-19363 segment-22189 segment-22573<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.44<br>1.10<br>0.02<br>0.72<br>0.61<br>1.07<br>0.94<br>2.63<br>0.22<br>0.61<br>0.40<br>0.86<br>0.02<br>0.86<br>0.48<br>0.80<br>0.52<br>2.91<br>0.14<br>0.50|
+|DUSt3R-GT-FT|0.15<br>1.75<br>0.02<br>0.51<br>0.47<br>0.69<br>3.42<br>2.06<br>0.18<br>0.61|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|11.01<br>0.71<br>11.66<br>0.47<br>15.73<br>1.32<br>31.67<br>26.62<br>6.07<br>0.49<br>2.14<br>17.48<br>2.04<br>2.62<br>11.46<br>23.42<br>29.46<br>17.82<br>5.45<br>6.25<br>10.42<br>83.72<br>1.75<br>86.20<br>12.22<br>85.41<br>22.59<br>85.63<br>12.11<br>84.58<br>6.71<br>-<br>2.26<br>-<br>11.66<br>-<br>18.93<br>-<br>13.62<br>-<br>0.19<br>29.94<br>0.10<br>4.77<br>0.34<br>31.45<br>1.25<br>32.51<br>0.18<br>13.95|
+
+
+|Methods|segment-23632 segment-23741 segment-23839 segment-26012 segment-27095<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.00<br>0.10<br>0.25<br>0.42<br>0.01<br>1.42<br>3.91<br>3.57<br>0.18<br>1.06<br>0.00<br>0.06<br>0.21<br>0.35<br>0.01<br>1.36<br>2.11<br>2.97<br>0.08<br>0.79|
+|DUSt3R-GT-FT|0.00<br>0.59<br>0.11<br>0.49<br>0.01<br>1.67<br>2.24<br>1.65<br>0.08<br>0.37|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|18.27<br>0.00<br>66.80<br>0.24<br>64.95<br>0.00<br>32.14<br>1.85<br>24.32<br>7.17<br>0.00<br>19.19<br>10.14<br>15.66<br>0.02<br>48.88<br>23.48<br>23.16<br>15.16<br>8.79<br>0.00<br>84.12<br>9.91<br>84.55<br>0.02<br>88.55<br>24.43<br>82.83<br>17.32<br>86.31<br>0.00<br>-<br>7.39<br>-<br>0.02<br>-<br>22.62<br>-<br>9.57<br>-<br>0.00<br>10.46<br>0.22<br>23.21<br>0.00<br>3.11<br>1.58<br>24.82<br>0.34<br>13.54|
+
+
+|Methods|segment-27143 segment-27951 segment-28306 segment-29065 segment-29426<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.71<br>1.25<br>0.47<br>0.86<br>0.55<br>0.86<br>0.89<br>1.04<br>0.97<br>0.93<br>0.37<br>0.44<br>0.38<br>0.98<br>0.56<br>0.81<br>0.90<br>1.04<br>0.90<br>0.83|
+|DUSt3R-GT-FT|0.28<br>0.46<br>0.89<br>0.88<br>0.57<br>0.82<br>0.85<br>1.00<br>0.12<br>1.16|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|22.32<br>1.01<br>0.89<br>1.98<br>28.60<br>1.14<br>1.67<br>0.89<br>28.52<br>2.71<br>14.82<br>16.66<br>22.07<br>50.30<br>11.30<br>2.71<br>10.64<br>5.15<br>16.49<br>28.52<br>16.48<br>86.66<br>28.07<br>81.87<br>10.34<br>83.21<br>13.85<br>84.43<br>15.03<br>83.45<br>13.57<br>-<br>28.01<br>-<br>7.06<br>-<br>10.43<br>-<br>12.15<br>-<br>0.90<br>25.19<br>0.91<br>21.71<br>0.21<br>10.55<br>0.68<br>16.65<br>0.45<br>20.77|
+
+
+|Methods|segment-31225 segment-32758 segment-33285 segment-33418 segment-34004<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.35<br>0.63<br>0.27<br>0.49<br>0.02<br>0.60<br>11.16<br>4.69<br>5.13<br>3.97<br>0.34<br>0.75<br>0.27<br>0.50<br>0.02<br>0.42<br>2.24<br>7.65<br>3.92<br>1.94|
+|DUSt3R-GT-FT|0.11<br>0.33<br>0.23<br>0.25<br>0.02<br>0.75<br>2.44<br>4.25<br>2.16<br>4.62|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|21.33<br>1.57<br>35.86<br>0.75<br>1.21<br>0.02<br>3.56<br>4.89<br>34.54<br>7.30<br>7.91<br>11.04<br>10.16<br>28.77<br>0.09<br>5.18<br>49.91<br>7.05<br>49.33<br>51.08<br>9.82<br>81.75<br>10.50<br>85.19<br>0.14<br>86.37<br>48.18<br>85.77<br>45.54<br>84.92<br>6.94<br>-<br>4.63<br>-<br>0.13<br>-<br>31.38<br>-<br>35.44<br>-<br>1.12<br>11.81<br>0.76<br>5.75<br>0.01<br>17.75<br>1.13<br>26.28<br>4.56<br>23.23|
+
+
+|Methods|segment-34590 segment-34851 segment-35106 segment-35228 segment-36452<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|5.48<br>2.32<br>0.16<br>0.80<br>2.38<br>3.22<br>0.06<br>0.35<br>0.13<br>0.69<br>3.54<br>2.04<br>0.10<br>0.77<br>2.18<br>3.30<br>0.05<br>0.36<br>0.31<br>0.29|
+|DUSt3R-GT-FT|1.42<br>1.51<br>0.12<br>0.63<br>2.63<br>2.77<br>0.04<br>0.27<br>0.24<br>0.56|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|16.36<br>2.13<br>18.08<br>0.07<br>67.26<br>10.43<br>17.20<br>0.11<br>38.77<br>5.01<br>40.33<br>1.40<br>8.82<br>24.36<br>28.10<br>1.47<br>4.25<br>0.55<br>9.53<br>8.47<br>35.30<br>85.89<br>6.96<br>83.16<br>26.80<br>85.35<br>3.76<br>85.23<br>9.93<br>85.83<br>24.70<br>-<br>4.37<br>-<br>25.92<br>-<br>2.94<br>-<br>8.43<br>-<br>1.82<br>29.80<br>0.19<br>11.07<br>4.25<br>14.31<br>0.07<br>8.89<br>0.65<br>11.08|
+
+
+|Methods|segment-36541 segment-39847 segment-40081 segment-40379 segment-40456<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|1.25<br>3.06<br>19.23<br>5.13<br>1.03<br>2.54<br>5.89<br>3.82<br>20.43<br>1.63<br>0.35<br>1.52<br>2.24<br>3.72<br>0.98<br>1.82<br>0.94<br>2.58<br>8.01<br>2.78|
+|DUSt3R-GT-FT|0.40<br>0.80<br>1.78<br>1.75<br>0.84<br>1.79<br>3.55<br>3.67<br>23.53<br>3.77|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|26.32<br>1.05<br>34.83<br>4.88<br>67.37<br>2.43<br>17.48<br>4.15<br>2.10<br>2.93<br>22.26<br>24.81<br>44.65<br>13.89<br>18.08<br>16.18<br>30.71<br>1.73<br>21.00<br>53.26<br>24.32<br>84.01<br>41.13<br>85.27<br>14.01<br>86.18<br>33.90<br>86.04<br>25.66<br>85.09<br>22.72<br>-<br>38.22<br>-<br>15.42<br>-<br>40.81<br>-<br>27.25<br>-<br>0.74<br>16.21<br>23.44<br>23.22<br>0.25<br>36.46<br>36.94<br>33.64<br>0.99<br>25.27|
+
+
+|Methods|segment-40540 segment-41409 segment-45934 segment-46325 segment-49166<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.48<br>1.78<br>0.20<br>1.99<br>0.80<br>2.09<br>0.02<br>0.76<br>0.01<br>0.73<br>0.31<br>1.74<br>0.09<br>1.07<br>0.49<br>0.83<br>0.02<br>0.61<br>0.01<br>1.38|
+|DUSt3R-GT-FT|0.12<br>1.00<br>0.05<br>1.21<br>0.33<br>0.69<br>0.01<br>0.55<br>0.01<br>0.73|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|11.73<br>0.58<br>66.69<br>3.09<br>34.70<br>0.43<br>2.78<br>0.01<br>17.43<br>0.00<br>3.53<br>5.69<br>7.54<br>17.58<br>10.57<br>32.32<br>0.70<br>28.94<br>0.00<br>23.81<br>8.84<br>85.22<br>10.13<br>84.64<br>12.16<br>84.32<br>1.17<br>85.11<br>0.01<br>87.31<br>9.62<br>-<br>8.69<br>-<br>10.43<br>-<br>1.33<br>-<br>0.01<br>-<br>0.60<br>22.08<br>0.47<br>31.08<br>0.64<br>13.56<br>0.01<br>10.42<br>0.00<br>3.76|
+
+
+21
+
+
+Table 13: **Full** **quantitative** **evaluation** results of **multi-view** **pose** **estimation** on Waymo Open
+Dataset (Part 4)
+
+|Methods|segment-50269 segment-50466 segment-51547 segment-54445 segment-55855<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.02<br>1.40<br>0.72<br>0.92<br>0.46<br>0.78<br>0.00<br>0.79<br>1.08<br>3.25<br>0.02<br>1.38<br>0.63<br>0.74<br>0.49<br>0.98<br>0.00<br>1.25<br>0.48<br>0.51|
+|DUSt3R-GT-FT|0.03<br>0.72<br>0.23<br>0.49<br>0.20<br>0.94<br>0.00<br>0.48<br>0.14<br>0.95|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|0.11<br>0.06<br>0.43<br>0.36<br>7.09<br>3.33<br>0.75<br>0.00<br>64.80<br>2.95<br>0.20<br>36.80<br>12.33<br>9.39<br>15.11<br>5.49<br>0.00<br>21.16<br>18.87<br>36.92<br>1.07<br>82.00<br>12.55<br>83.03<br>17.47<br>84.13<br>0.00<br>85.85<br>19.73<br>84.64<br>0.91<br>-<br>4.96<br>-<br>17.53<br>-<br>0.00<br>-<br>17.98<br>-<br>0.06<br>6.43<br>0.16<br>16.06<br>2.23<br>21.26<br>0.00<br>6.52<br>0.14<br>16.11|
+
+
+|Methods|segment-56382 segment-56480 segment-56833 segment-57643 segment-58104<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.12<br>0.82<br>30.44<br>4.34<br>1.35<br>1.09<br>0.03<br>0.07<br>0.53<br>1.87<br>0.17<br>1.08<br>12.56<br>8.02<br>1.35<br>0.86<br>0.02<br>0.15<br>0.09<br>0.26|
+|DUSt3R-GT-FT|0.13<br>0.78<br>2.82<br>1.38<br>1.49<br>0.92<br>0.02<br>0.11<br>0.11<br>0.53|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|6.23<br>1.00<br>63.96<br>8.24<br>65.94<br>5.93<br>44.05<br>0.01<br>1.65<br>0.41<br>2.67<br>2.83<br>40.82<br>20.78<br>7.03<br>16.44<br>1.90<br>44.77<br>18.16<br>14.25<br>3.86<br>86.03<br>40.23<br>86.00<br>8.04<br>87.57<br>1.45<br>82.73<br>17.15<br>83.94<br>4.89<br>-<br>40.78<br>-<br>7.44<br>-<br>1.65<br>-<br>10.05<br>-<br>0.19<br>4.77<br>1.56<br>25.34<br>0.43<br>16.68<br>0.04<br>16.29<br>1.34<br>14.41|
+
+
+|Methods|segment-59279 segment-59934 segment-60792 segment-61445 segment-61743<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|1.31<br>2.01<br>0.37<br>1.20<br>0.12<br>0.96<br>0.28<br>1.35<br>0.59<br>0.79<br>0.61<br>1.62<br>0.27<br>1.11<br>0.18<br>0.51<br>0.27<br>1.29<br>0.48<br>0.59|
+|DUSt3R-GT-FT|0.45<br>1.23<br>0.31<br>0.64<br>0.17<br>0.55<br>0.27<br>1.24<br>0.32<br>0.97|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|63.48<br>2.74<br>26.45<br>1.25<br>22.54<br>0.41<br>0.71<br>2.39<br>16.09<br>0.87<br>15.22<br>13.01<br>13.24<br>6.33<br>7.29<br>18.23<br>11.56<br>18.07<br>13.57<br>12.09<br>13.96<br>85.50<br>13.53<br>84.17<br>9.01<br>86.26<br>12.11<br>85.22<br>12.58<br>84.62<br>11.39<br>-<br>7.70<br>-<br>9.16<br>-<br>13.13<br>-<br>14.89<br>-<br>0.44<br>12.35<br>0.80<br>15.63<br>0.38<br>12.02<br>0.35<br>15.46<br>0.28<br>20.69|
+
+
+|Methods|segment-62287 segment-62595 segment-62783 segment-65030 segment-68423<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.07<br>0.28<br>0.81<br>2.52<br>0.87<br>1.64<br>0.50<br>0.68<br>0.76<br>1.21<br>0.08<br>0.51<br>0.57<br>1.33<br>0.54<br>0.38<br>0.49<br>0.59<br>0.48<br>0.74|
+|DUSt3R-GT-FT|0.08<br>0.51<br>0.13<br>0.68<br>0.19<br>0.56<br>0.43<br>0.31<br>0.45<br>0.80|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|12.08<br>0.03<br>34.90<br>1.51<br>62.22<br>0.70<br>16.36<br>1.63<br>65.16<br>12.63<br>1.62<br>2.05<br>14.08<br>11.95<br>15.71<br>15.11<br>12.13<br>18.27<br>14.71<br>0.39<br>2.58<br>83.36<br>19.96<br>84.87<br>14.12<br>82.92<br>11.29<br>81.05<br>13.52<br>85.09<br>2.40<br>-<br>13.77<br>-<br>16.00<br>-<br>13.27<br>-<br>13.07<br>-<br>0.03<br>11.91<br>0.28<br>18.00<br>1.21<br>4.88<br>1.59<br>7.40<br>1.55<br>11.60|
+
+
+|Methods|segment-68627 segment-69228 segment-72400 segment-72478 segment-74355<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.02<br>0.82<br>0.44<br>0.70<br>1.36<br>1.75<br>0.12<br>0.54<br>0.78<br>1.15<br>0.02<br>0.59<br>0.44<br>0.25<br>0.72<br>0.87<br>0.11<br>0.31<br>0.79<br>1.44|
+|DUSt3R-GT-FT|0.02<br>0.56<br>0.42<br>0.27<br>0.70<br>0.52<br>0.10<br>0.34<br>0.76<br>1.39|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|48.95<br>0.01<br>50.22<br>0.31<br>5.72<br>2.21<br>13.51<br>0.37<br>32.77<br>0.98<br>0.46<br>6.46<br>10.73<br>5.88<br>26.81<br>12.04<br>8.41<br>4.67<br>13.54<br>16.78<br>0.88<br>84.37<br>10.80<br>84.93<br>26.08<br>85.30<br>6.97<br>84.42<br>13.61<br>80.67<br>0.87<br>-<br>10.72<br>-<br>25.91<br>-<br>4.53<br>-<br>6.81<br>-<br>0.02<br>20.55<br>1.86<br>7.86<br>1.90<br>15.61<br>0.47<br>23.87<br>0.16<br>16.75|
+
+
+|Methods|segment-75119 segment-78443 segment-78551 segment-78860 segment-79252<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|1.09<br>0.96<br>4.83<br>4.48<br>0.79<br>1.24<br>0.24<br>1.32<br>0.42<br>0.59<br>0.61<br>0.75<br>4.58<br>7.77<br>0.46<br>1.01<br>0.24<br>1.85<br>0.38<br>0.47|
+|DUSt3R-GT-FT|0.44<br>0.29<br>2.89<br>3.13<br>0.25<br>0.43<br>0.18<br>1.11<br>0.24<br>0.50|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|65.77<br>5.41<br>11.82<br>27.20<br>13.79<br>6.82<br>1.87<br>1.59<br>38.47<br>4.77<br>14.40<br>61.44<br>42.60<br>22.56<br>21.04<br>64.68<br>6.77<br>9.84<br>9.60<br>2.92<br>21.01<br>82.06<br>43.07<br>84.64<br>22.52<br>83.45<br>6.23<br>84.33<br>10.61<br>84.56<br>20.70<br>-<br>42.96<br>-<br>21.81<br>-<br>3.17<br>-<br>8.36<br>-<br>1.07<br>28.91<br>25.31<br>21.59<br>2.34<br>26.05<br>2.20<br>13.76<br>0.94<br>9.35|
+
+
+|Methods|segment-80858 segment-81973 segment-82293 segment-82491 segment-85664<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.92<br>1.39<br>0.01<br>1.08<br>0.05<br>1.08<br>3.79<br>3.24<br>0.43<br>2.07<br>0.64<br>0.69<br>0.01<br>1.11<br>0.04<br>1.14<br>0.98<br>2.19<br>0.33<br>0.44|
+|DUSt3R-GT-FT|0.68<br>1.15<br>0.01<br>0.64<br>0.03<br>0.62<br>0.26<br>1.06<br>0.12<br>0.48|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|51.33<br>2.02<br>26.73<br>0.01<br>12.76<br>0.64<br>22.68<br>9.36<br>60.06<br>0.56<br>21.14<br>57.40<br>0.02<br>51.83<br>1.50<br>28.69<br>27.50<br>12.26<br>9.59<br>13.24<br>21.98<br>82.51<br>0.02<br>85.90<br>1.37<br>86.79<br>25.74<br>84.38<br>10.92<br>85.28<br>22.75<br>-<br>0.02<br>-<br>1.28<br>-<br>16.99<br>-<br>13.20<br>-<br>1.49<br>23.72<br>0.01<br>10.38<br>0.10<br>9.91<br>0.69<br>25.66<br>0.46<br>14.95|
+
+
+22
+
+
+Table 14: **Full** **quantitative** **evaluation** results of **multi-view** **pose** **estimation** on Waymo Open
+Dataset (Part 5)
+
+|Methods|segment-86232 segment-86840 segment-86885 segment-89208 segment-89936<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.47<br>0.64<br>0.06<br>0.93<br>0.03<br>0.79<br>0.02<br>0.17<br>2.47<br>3.29<br>0.31<br>0.32<br>0.06<br>0.88<br>0.03<br>0.62<br>0.02<br>0.15<br>2.88<br>3.06|
+|DUSt3R-GT-FT|0.24<br>0.75<br>0.05<br>0.59<br>0.05<br>0.63<br>0.03<br>0.21<br>2.46<br>3.61|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|65.21<br>4.62<br>11.42<br>0.23<br>17.86<br>0.08<br>18.83<br>0.19<br>34.40<br>13.61<br>5.34<br>6.57<br>3.50<br>3.54<br>1.34<br>12.19<br>3.08<br>5.69<br>20.01<br>8.13<br>6.76<br>83.67<br>3.94<br>86.41<br>0.90<br>85.31<br>3.02<br>83.67<br>24.47<br>84.09<br>7.36<br>-<br>2.54<br>-<br>1.44<br>-<br>3.87<br>-<br>16.97<br>-<br>0.63<br>6.81<br>0.09<br>10.78<br>0.08<br>28.73<br>0.42<br>4.88<br>2.29<br>24.34|
+
+
+|Methods|segment-91450 segment-93509 segment-93554 segment-95847 segment-98068<br>ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%) ATE(m) AFE(%)|
+|---|---|
+|DUSt3R-Pretrain<br>**DUSt3R-Self-Calib**|0.07<br>0.94<br>0.61<br>1.90<br>0.08<br>0.83<br>0.08<br>0.43<br>0.07<br>0.47<br>0.07<br>1.26<br>0.30<br>0.41<br>0.05<br>0.90<br>0.06<br>0.32<br>0.06<br>0.53|
+|DUSt3R-GT-FT|0.14<br>0.62<br>0.18<br>0.76<br>0.12<br>0.80<br>0.06<br>0.94<br>0.05<br>0.30|
+|FlowMap<br>PoseDiffusion<br>RayDiffusion<br>RelPose++<br>MASt3R|61.65<br>0.48<br>0.63<br>0.54<br>34.08<br>1.77<br>24.59<br>0.11<br>19.04<br>0.40<br>2.88<br>62.13<br>16.87<br>13.16<br>2.36<br>49.54<br>5.72<br>5.45<br>5.33<br>23.84<br>5.62<br>84.40<br>16.92<br>85.87<br>2.90<br>87.45<br>6.17<br>84.05<br>6.66<br>84.43<br>4.82<br>-<br>17.12<br>-<br>1.99<br>-<br>5.27<br>-<br>7.02<br>-<br>0.04<br>11.13<br>0.97<br>23.28<br>0.04<br>0.87<br>0.29<br>30.49<br>0.42<br>35.19|
+
+
+23

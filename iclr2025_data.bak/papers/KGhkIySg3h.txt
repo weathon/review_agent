@@ -1,0 +1,2092 @@
+# MULTI-FIDELITY FINE-TUNING OF PRE-TRAINED LANGUAGE MODELS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+We consider the problem of fine-tuning pre-trained language models with a small
+amount of trusted data (high-fidelity) and a larger amount of data with noisy labels
+(low-fidelity). We propose Multi-Fidelity Fine-Tuning (MFFT), a novel approach
+which implicitly determines for new inputs when we can rely on information
+from high-fidelity data and when instead we need to fall back on knowledge from
+low-fidelity data. MFFT does not require any architecture changes to the base
+model and simply provides its fine-tuned version that can be easily deployed for
+inference. We extensively benchmark MFFT on various classification tasks against
+several baselines, with both simulated label noise, and in realistic scenarios with
+LLM generated data. MFFT consistently improves performance compared to using
+trusted data alone and outperforms all baselines across experiments with macro
+F1-score improvements of 2-4%. Finally, it provides substantial improvements in
+uncertainty calibration with expected calibration error (ECE) reductions of 40-60%
+compared to the best baselines. [1]
+
+
+1 INTRODUCTION
+
+
+Fine-tuning foundation models (Bommasani et al., 2021) using a small amount of clean data and
+more abundant noisy data is ubiquitous to many deep learning settings, such as learning from expert
+and non-expert annotated data (Shapiro et al., 2013; Su et al., 2012; Sylolypavan et al., 2023), training
+end models with weak supervision (Zhang et al., 2022; Ratner et al., 2017; Rühling Cachay et al.,
+2021) and learning from humans and large language models (LLMs) in combination (Thapa et al.,
+2023; Ding et al., 2024; Meng et al., 2023; Zhang et al., 2024; Wang et al., 2023a; Li et al., 2021b).
+However, combining data sources of varying quality for fine-tuning effectively is not trivial. As
+shown in Figure 1, simply adding lower quality data to the training set is often detrimental to model
+performance (Zhou et al., 2024; Wang et al., 2023a). While training neural networks by combining
+noisy and clean data has been extensively studied (Song et al., 2022; Hendrycks et al., 2018; Patrini
+et al., 2017; Veit et al., 2017), how to develop a strategy to fine-tune pre-trained language models
+(Vaswani et al., 2017; Radford et al., 2019; Dubey et al., 2024) has yet to be explored.
+
+
+We propose Multi-Fidelity Fine-Tuning (MFFT), a novel language model fine-tuning approach for
+down-stream tasks which leverages small amounts of data with trusted labels in combination with
+a larger data set with noisy labels. Our approach uses two fine-tuned versions of the base model to
+infer pseudo-labels that are used to fine-tune a final model (Figure 2). We first fine-tune a _low-fidelity_
+model using the abundant noisy data. Then, we fine-tune a _high-fidelity model_ with the scarce clean
+data. Based on the expected log likelihood, MFFT determines whether the low or high fidelity
+model should be used for inference given a new input. This selective inference is run over the whole
+low-fidelity data set to infer soft labels. The pseudo-labeled version of the original low-fidelity
+data set is used together with the high-fidelity data to fine-tune the base model resulting into a final
+model. This final fine-tuned model implicitly learns when it can infer using information gained from
+high-fidelity data and when, conversely, it has to fall back on predictions learned from low-fidelity
+data, which are less accurate, due to the noise in the labels, but more robust, due to the abundance of
+examples.
+
+
+In our extensive evaluation, we use MFFT to fine-tune different language models for a variety of
+classification tasks with a small amount (50-100 examples) of trusted data and a larger noisy data
+
+
+1Code will be made publicly available.
+
+
+1
+
+
+Figure 1: Fine-tuning language models with mixed quality data. **a)** As reference, we can fine-tune
+the model with the small amount of high-quality trusted data only. **b)** adding large amounts of lower
+quality data, e.g., labeled or generated with an LLM, to the fine-tuning set can actually degrade
+performance, instead of improving it. **c)** Our MFFT method incorporates lower quality data with
+awareness of its lower reliability, resulting in fine-tuned models that consistently benefit from it.
+
+
+set ( _∼_ 5 _,_ 000 examples). We experiment by using simulated noisy low-fidelity data, as well as in
+a more realistic setting where this data is obtained by generating or annotating examples with an
+LLM. Models fine-tuned with MFFT consistently obtain competitive or better performance compared
+to using trusted data only (example in Figure 1) across all experiments. MFFT also performs
+competitively or better than all tested baselines across different models, noise properties and tasks,
+with improvements in macro F1-score of 2-4% compared to the best baseline and reductions in
+expected calibration error (ECE) of 40-60%, which indicates a large improvement in uncertainty
+calibration.
+
+
+2 BACKGROUND AND RELATED WORK
+
+
+2.1 LEARNING WITH NOISY AND CLEAN LABELS
+
+
+The problem of learning with noisy labels (LNL) has been extensively studied (Song et al., 2022)
+for exploiting a small amount of data with clean labels in combination with larger amounts of data
+with noisy labels. In the context of LNL, available clean data is often referred to as trusted data
+or anchor points (Song et al., 2022; Patrini et al., 2017). Some methods propose to use the anchor
+points to first learn a label correction model for inferring a clean label jointly from inputs and noisy
+label (Xiao et al., 2015; Zheng et al., 2021; Veit et al., 2017). Other methods propose instead to use
+the clean data to design and calibrate a noise-robust cost function (Hendrycks et al., 2018; Patrini
+et al., 2017). While proven effective in deep learning, these methods are difficult to apply directly
+to fine-tuning foundational models. Firstly, because of the data regime we target; As fine-tuning
+pre-trained language models requires much less data than training neural networks from scratch
+(Zhou et al., 2024; Qiu et al., 2020), we aim to push the boundaries of learning from mixed quality
+data in terms of clean data requirements and use only up to tens of clean examples per class. This
+causes label correction and cost calibration methods to over-fit. Secondly, many existing approaches
+require specific model architectures (Song et al., 2022; Zheng et al., 2021), while we wish to maintain
+our fine-tuning strategy applicable in a plug-and-play fashion to any foundation model.
+
+
+2.2 MULTI-FIDELITY MODELS
+
+
+Another significant research area related to learning with data of different quality, is that of MultiFidelity models (MFMs)(Fernández-Godino, 2023; Peherstorfer et al., 2018). MFMs are models
+designed to learn from several sets of training data having different levels of quality. These approaches
+are typically used to learn from different granularity of numerical simulations and real measurements
+in physical experiments (Christen & Fox, 2005; Meng et al., 2021; Tonolini et al., 2020), although
+more common learning settings, such as classification have also been explored (Costabal et al., 2019;
+Chen et al., 2022). MFMs often use uncertainty quantification in order to capture model confidence,
+in particular for the higher fidelity data, which is often sparse (Meng et al., 2021; Peherstorfer et al.,
+2018). We draw inspiration from this key feature of MFMs to build our fine-tuning strategy, which
+learns from sparse clean data with a deep ensemble and capture model uncertainty.
+
+
+2
+
+
+a) b) c)
+
+
+Noisy Data, e.g.,
+Small Trusted Labelled by LLM
+
+
+Small Trusted
+
+Data Set
+
+
+Noisy Data, e.g.,
+Small Trusted Labelled by LLM
+
+
+Figure 2: Multi-Fidelity Fine-Tuning in four stages. **1)** Data with noisy labels _DL_ = _{_ **xL** _,_ **yL** _[′]_ _[}]_
+is used to fine-tune a pre-trained language model _pθ_ 0( _y|x_ ), resulting in a Low-Fidelity classifier
+_pL_ ( _y|x_ ). **2)** This low-fidelity model is fine-tuned further with available clean data _DH_ = _{_ **xH** _,_ **yH** _}_
+to obtain the high-fidelity classifier _pH_ ( _y|x_ ). **3)** For each input in the low-fidelity set _xL,i_ _∈_ **xL**, the
+model expected to give the highest log likelihood between _pL_ ( _y|x_ ) and _pH_ ( _y|x_ ) is used to infer class
+probabilities, obtaining the set of soft labels _pM_ ( _y|xL,i_ ). **4)** The final multi-fidelity model _pθ_ _[∗]_ ( _y|x_ )
+is fine-tuned from the pre-trained model _pθ_ 0( _y|x_ ) using all inputs [ **xL** _,_ **xH** ] and combined soft labels
+and high-fidelity hard labels as targets [ _pM_ ( **y** _|_ **x** _L_ ) _,_ **yH** ].
+
+
+2.3 FINE-TUNING LANGUAGE MODELS WITH MIXED QUALITY DATA
+
+
+Fine-tuning pre-trained language models with data of mixed quality is ubiquitous to many settings,
+including augmenting clean data with weakly supervised data (Li et al., 2021a; Lu & Radha, 2023;
+Yu et al., 2020b), active learning in noisy labels settings (Zhang et al., 2024; Goel et al., 2022)
+and fine-tuning with both human and LLM labeled or generated data (Wang et al., 2023a; Zhang
+et al., 2024; Meng et al., 2023). In some settings, clean and noisy data are simply aggregated in the
+fine-tuning set (Zhang et al., 2024). Other methods aggregate the two sets, but assigning a different
+cost weight to clean data (Wang et al., 2023a), while some approaches learn the noise process in
+different ways and incorporate it when training on noisy labels Jindal et al. (2019); Zhuang et al.
+(2023). Kim et al. (2024) have recently proposed to exploit the robustness properties of parameter
+efficient fine-tuning to learn from mixed quality data. Using LLMs to assist the noise cleaning
+process has also been explored Wang et al. (2023b). An effective and relatively simple approach,
+similar to task adaptive pre-training (Gururangan et al., 2020; Shi et al., 2023), domain adaptation
+(Chronopoulou et al., 2019) and transfer learning (Chronopoulou et al., 2019; Hedderich et al., 2020),
+first fine-tunes with the noisy data, and subsequently continues fine-tuning with the clean data (Li
+et al., 2021b; Tamkin et al., 2020; Zhu et al., 2022; Li et al., 2022). We also adopt this strategy as part
+of our approach, however, preventing over-fitting to clean data with our multi-fidelity strategy.
+
+
+3 MULTIFIDELITY FINE-TUNING (MFFT)
+
+
+3.1 PROBLEM DESCRIPTION
+
+
+We consider the problem of fine-tuning a pre-trained language model for classification with two
+sets of task specific training data; a low-fidelity set _DL_ of _N_ examples _xL,i_ _∈_ **xL** with noisy labels
+_yL,i_ _[′]_ _[∈]_ **[y]** **L** _[′]_ [and] [a] [high-fidelity] [set] _[D][H]_ [of] _[M]_ [examples] _[x][H,i]_ _[∈]_ **[x][H]** [with] [clean] [labels] _[y][H,i]_ _[∈]_ **[y][H]** [,]
+where typically _M_ _<<_ _N_ . We assume the noisy labels **yL** _[′]_ [to] [be] [the] [result] [of] [a] [noise] [process]
+_yL,i_ _[′]_ [=] _[ η]_ [(] _[x][L,i][, y][L,i]_ [)][ which depends on both inputs] _[ x][L,i]_ [ and hidden ground-truth labels] _[ y][L,i]_ [.] [Given]
+the two sets _DL_ and _DH_, we aim to fine-tune a language model with pre-trained weights _θ_ 0 to obtain
+a language classifier _pθ∗_ ( _y|x_ ) which can perform the task of interest. Formally, our objective is to
+maximize the log likelihood assigned by the model _pθ_ ( _y|x_ ) to clean data from the target distribution
+_p_ ( _x_ ) _p_ ( _y|x_ ):
+_θ_ _[∗]_ = arg max E _p_ ( _x_ ) _p_ ( _y|x_ ) log _pθ_ ( _y|x_ ) _._ (1)
+_θ_
+
+
+Here _p_ ( _x_ ) is the expected distribution of inputs at test time, which we assume our training inputs **xH**
+and **xL** to belong to, and _p_ ( _y|x_ ) is the true input-labels mapping we aim to capture, which we do not
+
+
+3
+
+
+have access to. The problem we address is how to optimally exploit the noisy and clean sets _DL_ and
+_DH_ to fine-tune the language model _pθ_ ( _y|x_ ) from pre-trained and approximately maximize Eq. 1.
+
+
+3.2 OVERVIEW
+
+
+We start by fine-tuning the pre-trained model _pθ_ 0( _y|x_ ) in two stages. First, we fine-tune the model
+on low-fidelity data _DL_ . Second, we continue fine-tuning with high-fidelity data _DH_ to obtain a
+high-fidelity model _pH_ ( _y|x_ ). This sequential fine-tuning approach is common in transfer learning
+and semi-supervised learning with pre-trained language models (Yu et al., 2020a; Qin et al., 2022;
+Gururangan et al., 2020; Zhu et al., 2022; Shi et al., 2023). We find that it is as effective in our multifidelity scenario, providing a competitive baseline itself. However, with scarce high-fidelity data _DH_,
+_pH_ ( _y|x_ ) still over-fits, losing information gained during the first fine-tuning stage; a phenomenon
+sometimes referred to as catastrophic forgetting (Chen et al., 2020; Kotha et al., 2023). This results
+in _pH_ ( _y|x_ ) to be accurate for some inputs _x_ that are somewhat similar to high-fidelity examples **xH**,
+but inaccurate, and especially poorly calibrated, for others.
+
+
+To address the aforementioned problem, we introduce a second version of the model by freezing the
+weights after the first fine-tuning stage. The resulting model is fine-tuned on low-fidelity data _DL_
+only and we name it accordingly the low-fidelity model _pL_ ( _y|x_ ). This model does not over-fit, as it
+is fine-tuned on abundant examples, but its accuracy is limited by the data noise in _DL_ . Our strategy
+is to use _pL_ ( _y|x_ ) as a fall-back for _pH_ ( _y|x_ ) for those inputs where the latter is expected to be less
+accurate than the former. Because we do not want to load and run both models at inference time, we
+also distill the resulting system into a single final fine-tuned language classifier _pθ∗_ ( _y|x_ ). Our MFFT
+approach is summarized in four stages, schematically illustrated in Figure 2:
+
+
+1. Fine-tune the pre-trained model _pθ_ 0( _y|x_ ) with low-fidelity data _DL_ to obtain _pL_ ( _y|x_ ).
+
+2. Continue fine-tuning _pL_ ( _y|x_ ) with high-fidelity data _DH_ to obtain _pH_ ( _y|x_ ).
+
+
+3. For each input in the low-fidelity set _xL,i_ _∈_ **xL**, estimate the expected log likelihoods of
+both _pH_ ( _y|xL,i_ ) and _pL_ ( _y|xL,i_ ) and infer soft labels _pM_ ( _y|xL,i_ ), using the model expected
+to perform best.
+
+
+4. Fine-tune the pre-trained model _pθ_ 0( _y|x_ ) with all inputs [ **xL** _,_ **xH** ] and combined inferred
+soft labels and high-fidelity hard labels as targets [ _pM_ ( **y** _|_ **x** _L_ ) _,_ **yH** ], obtaining the final model
+_pθ_ _[∗]_ ( _y|x_ ).
+
+
+3.3 LOW- AND HIGH-FIDELITY MODEL FINE-TUNING
+
+
+A key consideration in fine-tuning high and low fidelity models for our strategy is that we need
+to estimate their accuracy for new inputs to choose which one to use. As _pL_ ( _y|x_ ) is trained with
+abundant noisy data _DL_, its accuracy predominantly depends on data noise and, while it is not
+possible to estimate this from model output alone, we can approximately estimate it using clean
+examples in _DH_ as evaluation points (Hendrycks et al., 2018; Patrini et al., 2017). Contrarily, the
+accuracy of _pH_ ( _y|x_ ) depends predominantly on model mis-specification, or lack of knowledge, as
+it was fine-tuned on clean, but scarce data _DH_ . This means that, to detect for which inputs _x_ the
+high-fidelity model is expected to be inaccurate, we need to construct _pH_ ( _y|x_ ) to obtain accurate
+uncertainty estimation with respect to its reducible error, i.e., due to lack of data.
+
+
+**Fine-Tune Ensemble:** To obtain models that give accurate uncertainty estimation, we adopt a deep
+ensemble approach. We repeat the two-stages fine-tuning with different random seeds, obtaining _K_
+fine-tuned models _p_ ( _y|x, θL,k_ ) and _K_ fine-tuned models _p_ ( _y|x, θH,k_ ). At inference time, the high
+and low fidelity label probabilities are obtained by aggregating their outputs:
+
+
+Deep ensembles offer an effective way to capture uncertainty with respect to reducible error (Lakshminarayanan et al., 2017; Abdar et al., 2021; Rahaman et al., 2021). However, obtaining effective
+deep ensembles from pre-trained models is challenging, as the starting weights are fixed and cannot
+be randomly initialized for each model, leading to poor diversification and inaccurate uncertainty
+
+
+4
+
+
+_pL_ ( _y|x_ ) = [1]
+
+_K_
+
+
+_K_
+
+
+_p_ ( _y|x, θL,k_ ) _,_ _pH_ ( _y|x_ ) = [1]
+
+_K_
+
+_k_
+
+
+_K_
+
+
+_K_
+
+- _p_ ( _y|x, θH,k_ ) _._ (2)
+
+
+_k_
+
+
+estimation (Mustafa et al., 2020; Matthews & Lillis, 2022). To address this problem in our multifidelity setting, we exploit the abundance of low-fidelity data. We split the low-fidelity data into _K_
+subsets _DL,k_ and use each one separately to perform the first stage of sequential fine-tuning. In the
+second stage, all models are then fine tuned on the entire high fidelity set _DH_ . We found this strategy
+to greatly improve diversification of the ensembles, and hence model uncertainty quantification of
+_pH_ ( _y|x_ ), while not significantly impacting individual predictive performance of either low or high
+fidelity models.
+
+
+3.4 SOFT LABEL INFERENCE
+
+
+Having trained the low-fidelity and high-fidelity models _pL_ ( _y|x_ ) and _pH_ ( _y|x_ ), we need to choose
+which one to use during inference given a new input _x_ . This requires to estimate which model will
+maximize our objective of Equation 1, given a new input _x_ :
+
+_α_ _[∗]_ = arg max E _p_ ( _y|x_ ) log _pH_ ( _y|x_ ) _[α]_ _pL_ ( _y|x_ ) [1] _[−][α]_ _,_ _α ∈_ [0 _,_ 1] _._ (3)
+_α_
+
+
+Here _α_ is a binary parameter, modeling the choice of either high or low fidelity model. Making this
+choice comes down to estimating the expected log likelihood for each model and selecting the one
+with the highest result.
+
+
+**Estimate** **Log** **Likelihood** **of** **High-Fidelity** **Model:** Assuming the inference by each individual
+model _p_ ( _y|x, θH,k_ ) in the high-fidelity ensemble is an un-biased estimator of the true mapping _p_ ( _y|x_ ),
+we can estimate the log likelihood of the high fidelity model as:
+
+
+E _p_ ( _y|x_ ) log _pH_ ( _y|x_ ) _≈−H_ [ _pH_ ( _y|x_ )] _,_ (4)
+
+
+Here _H_ [ _pH_ ( _y|x_ )] is the entropy of the high-fidelity model. A full derivation is given in Appendix
+A.1. This means that, if _pH_ ( _y|x_ ) is well calibrated with respect to its model error, we can use its
+entropy to infer expected log likelihood for a new input _x_ .
+
+
+**Estimate Log Likelihood of Low-Fidelity Model:** Unlike for the high-fidelity ensemble, we cannot
+assume that models _p_ ( _y|x, θL,k_ ) trained on the low fidelity data _DL_ are unbiased estimators of the
+true mapping _p_ ( _y|x_ ). This is because the training labels **yL** _[′]_ [are affected by an unknown noise process,]
+e.g., LLM hallucinations, which may be bias. As a result, the entropy of _pL_ ( _y|x_ ) is not expected to
+be a good estimator for the log likelihood of the low fidelity model. However, we can use the clean
+data points in _DH_ to estimate the average expected log likelihood over inputs _x_ :
+
+
+A full derivation is presented in Appendix A.2. This estimate approximates the log likelihood of the
+low-fidelity model as the marginal over all inputs. Some works make more granular estimations of
+this likelihood, e.g., by learning class probabilities mappings for each class (Hendrycks et al., 2018).
+However, in the low clean data regimes we target (tens of examples in _DH_ ), we choose to make
+this coarser, but more robust approximation. The resulting average likelihood can then be used as a
+threshold on the entropy of the high-fidelity model and choose whether to use the high or low fidelity
+model for inference.
+
+
+**Compare Expected Log Likelihoods and Choose a Model:** With the estimates of high and low
+fidelity log likelihoods detailed above, we can choose which model to use to predict soft labels
+_pM_ ( **y** _|_ **x** _L_ ) over all the low fidelity inputs **x** _L_ :
+
+_pM_ ( _y|xL,i_ ) = _pH_ ( _y|xL,i_ ) _[α][∗]_ _pL_ ( _y|xL,i_ ) [1] _[−][α][∗]_ _≈_ - _pH_ ( _y|xL,i_ ) _,_ if _−H_ [ _pH_ ( _y|x_ )] _≥_ log _pL_ ( _yH_ _|xH_ )
+_pL_ ( _y|xL,i_ ) _,_ if _−H_ [ _pH_ ( _y|x_ )] _<_ log _pL_ ( _yH_ _|xH_ ) _._
+(6)
+A detailed derivation is provided in Appendix A.3. The choice of model is made by evaluating the
+entropy of the high-fidelity model _H_ [ _pH_ ( _y|x_ )] and using the constant log _pL_ ( _yH_ _|xH_ ) as a threshold.
+
+
+3.5 FINAL MODEL FINE-TUNING
+
+
+To obtain the final multi-fidelity model, we fine-tune the pre-trained model _pθ_ 0( _y|x_ ) using all available
+inputs aggregated [ **xL** _,_ **xH** ]. As corresponding training labels, we use the available high-fidelity
+
+
+5
+
+
+E _p_ ( _y|x_ ) log _pH_ ( _y|x_ ) _≈_ [1]
+
+_M_
+
+
+_M_
+
+- log _pL_ ( _yH,i|xH,i_ ) = log _pL_ ( _yH_ _|xH_ ) _._ (5)
+
+
+_i_
+
+
+labels **yH** as targets for high-fidelity inputs **xH** and the multi-fidelity soft labels _pM_ ( **y** _|_ **x** _L_ ) as targets
+for the low-fidelity inputs **xL** . In particular, we maximize the following cross-entropy objective:
+
+
+Here _C_ is the number of classes for the task. The resulting fine-tuned model _pθ∗_ ( _y|x_ ) is identical in
+structure to the pre-trained model _pθ_ 0( _y|x_ ) and can be deployed by simply loading the fine-tuned
+weights _θ_ _[∗]_ .
+
+
+4 EXPERIMENTS
+
+
+We evaluate MFFT across several data sets, models and against different baselines. We perform
+experiments in two different label noise scenarios:
+
+
+    - **Simulated** **Noise:** In Section 4.2, we fine-tune models with clean data, together with
+artificially corrupted data. We find that MFFT gives competitive or better negative log
+likelihood (NLL) in almost all experiments and, on average, outperforms the best baseline
+by 4 _._ 6% in F1, while reducing expected calibration error (ECE) by 64%.
+
+    - **LLM Generated:** In Section 4.3, we fine-tune with clean data, together with LLM generated data. MFFT obtains competitive or better NLL in all experiments and, on average,
+outperforms the best baselines by 1 _._ 8% in F1, while reducing ECE by 40%.
+
+
+4.1 EXPERIMENTAL SETTINGS AND BASELINES
+
+
+We test MFFT using six benchmark text classification data sets; AGNews (Zhang et al., 2015b),
+DBPedia 14 (Zhang et al., 2015a), GLUE-SST2, GLUE-QQP (Wang et al., 2019), TREC (Li & Roth,
+2002) and Yahoo Answers (Adamic et al., 2008). More details about these data sets and tasks are
+given in Appendix B.1. In all our experiments, we take 5 _,_ 000 examples to construct the training set
+and 1 _,_ 000 examples for testing. The training set is split into two sub-sets; a high-fidelity set _DH_, for
+which the labels are directly extracted from the original source data, and a low-fidelity set _DL_, for
+which the labels are either artificially corrupted, in the simulated noise experiments, or inferred using
+an LLM, in the LLM experiments. In all experiments, we compare MFFT to six baseline approaches
+used in similar settings in related work:
+
+
+    - **High:** We discard the low-fidelity data _DL_ and fine-tune the pre-trained language model
+solely with high-fidelity data _DH_ .
+
+    - **Together:** High and Low fidelity data sets are simply aggregated into a single data set which
+is used to fine-tune the pre-trained language model. This approach has been used for the
+fine-tuning component of several works involving mixed quality data (Zhang et al., 2024; Li
+et al., 2021a; Lu & Radha, 2023).
+
+    - **Cost Adjustment:** Similarly to the above, the model is trained on all available data together.
+However, a higher weight is assigned to the cost from high-fidelity data following Wang
+et al. (2023a).
+
+    - **Low-High:** A domain adaptation approach, where the model is initially fine-tuned on
+low-fidelity data _DL_ and then on _DH_ . This approach is adopted in several multi-fidelity
+learning works (Aydin et al., 2019; Li et al., 2021b; 2022) and can be considered a special
+case of task adaptive pre-training (TAPT) (Gururangan et al., 2020; Shi et al., 2023).
+
+    - **High-Low:** The language model is first fine-tuned on high-fidelity data _DH_ and then on
+low-fidelity data _DL_, with label smoothing and temporal ensembling (Meng et al., 2023).
+
+    - **Noise Correction:** The high-fidelity points are used to learn a linear noise process from
+clean to noisy labels. This mapping is applied to the cost function for low-fidelity examples,
+which are then used together with high-fidelity ones to fine-tune the final model (Hendrycks
+et al., 2018; Jindal et al., 2019).
+
+
+More details about the implementation of these baselines are given in appendix B.2. We test MFFT
+and all baselines with three pre-trained language models: BERT (Vaswani et al., 2017), RoBERTa
+
+
+6
+
+
+_N_
+
+
+_i_
+
+
+_C_
+
+- _pM_ ( _yj|xL,i_ ) log _pθ_ ( _yj|xH,i_ )� _._ (7)
+
+
+_j_
+
+
+_θ_ _[∗]_ = arg max
+_θ_
+
+
+1  -  - _[M]_
+
+log _pθ_ ( _yH,i|xH,i_ ) +
+
+_N_ + _M_
+
+_i_
+
+
+|Col1|High|Together|Cost Adj.|Low-High|High-Low|Noise Cor.|MFFT|
+|---|---|---|---|---|---|---|---|
+|**BERT**|**BERT**|**BERT**|**BERT**|**BERT**|**BERT**|**BERT**|**BERT**|
+|AGNews|0.990|0.778|0.742|0.901|0.833|0.944|**0.357**|
+|DBPedia 14|0.437|0.569|0.535|**0.097**|0.808|0.913|**0.079**|
+|GLUE-SST2|1.666|0.390|0.457|0.921|0.470|0.450|**0.303**|
+|GLUE-QQP|2.736|0.928|0.848|2.413|**0.730**|**0.667**|**0.724**|
+|TREC|1.299|0.731|0.678|0.517|0.838|0.990|**0.305**|
+|Yahoo|3.238|1.378|1.379|2.125|1.453|1.736|**1.343**|
+|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|
+|AGNews|1.091|0.937|0.966|1.092|0.945|0.936|**0.367**|
+|DBPedia 14|0.730|0.513|0.489|**0.118**|0.676|0.723|**0.091**|
+|GLUE-SST2|1.616|0.830|0.736|1.883|0.634|0.623|**0.364**|
+|GLUE-QQP|2.851|0.668|**0.658**|2.887|**0.651**|0.693|**0.611**|
+|TREC|1.963|0.576|0.593|0.496|0.760|0.775|**0.238**|
+|Yahoo|3.246|1.506|1.533|2.669|1.608|1.857|**1.341**|
+|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|
+|AGNews|1.300|0.741|0.741|1.553|0.807|0.856|**0.391**|
+|DBPedia 14|2.051|1.178|0.835|1.085|1.044|1.132|**0.256**|
+|GLUE-SST2|2.465|1.142|0.831|3.007|0.728|**0.686**|**0.670**|
+|GLUE-QQP|2.826|0.756|**0.714**|3.756|**0.701**|**0.694**|0.931|
+|TREC|2.309|1.343|1.387|3.288|1.361|1.453|**0.705**|
+|Yahoo|4.560|1.938|1.718|4.595|1.706|1.942|**1.479**|
+
+
+Table 1: Negative log-likelihood (NLL) of different fine-tuning strategies with simulated label noise.
+Numbers in bold indicate best performance, or within statistical significance (p-value<0.05) of best
+performance across fine-tuning methods.
+
+|Col1|Together|Cost Adj.|Low-High|High-Low|Noise Cor.|MFFT|
+|---|---|---|---|---|---|---|
+|NLL|86.1%|88.9%|63.9%|86.1%|83.3%|**100.0%**|
+|F1-Score|19.5%|27.8%|75.0%|55.6%|52.8%|**100.0%**|
+|ECE|69.4%|63.9%|77.8%|55.6%|52.8%|**100.0%**|
+
+
+Table 2: Percentage of experiments with simulated label noise (36 total) in which each fine-tuning
+approach resulted in competitive or better performance compared to fine-tuning solely with the small
+set of trusted data.
+
+
+(Liu et al., 2019) and GPT-2-Medium (Radford et al., 2019). All experiments are repeated five times
+for statistical significance.
+
+
+4.2 SIMULATED NOISE
+
+
+With each data set, we simulate noise in the training set by artificially corrupting labels. We follow
+the simulation approach of Hendrycks et al. (2018) to generate noise through the specification of a
+noise process (details in Appendix B.3). We report here results for simulation settings such that labels
+in the noisy set have 0 _._ 3 probability of being incorrect. Results for different settings and ablations
+over noise process parameters are reported in Appendix C. We keep 50 training examples with the
+original clean labels to form the high-fidelity set _DH_ . We then fine-tune models with all baselines
+and MFFT. We measure negative log-likelihood as the main metric, as it captures both classification
+performance and calibration and is the target in our formulation (Equation 1). Results are shown
+in Table 1. We also record macro F1-score and expected calibration error (ECE) as independent
+measures of classification performance and calibration. These are shown for three datasets in Figure
+3. We report more experimental results with higher noise in Appendix C.2), as well as ablations over
+different experimental conditions in Appendix C.3.
+
+
+In Table 1, we observe that models fine-tuned with MFFT resulted in better or competitive NLL in
+all but one experiment (GLUE-QQP with GPT-2-Medium) and statistically better than any other
+in 66% of cases. The overall most competitive baseline is Low-High (transfer learning approach),
+
+
+7
+
+
+Figure 4: Macro F1-Score vs. expected calibration error (ECE) for RoBERTa fine-tuned on 100
+clean examples and 5 _,_ 000 examples generated with LLMs. Favorable performance is in the top left
+corner of the graphs, where classification performance is high (high F1-score) and, simultaneously,
+calibration error is low (low ECE).
+Table 3 shows the results for models fine-tuned with MFFT resulted in better or competitive NLL in
+all experiments. In Figure 4, MFFT performs consistently well, with relatively high F1 and low ECE,
+
+
+8
+
+
+Cost Adj.
+
+
+Low-High
+
+
+High-Low
+Noise Cor.
+
+
+BERT
+RoBERTa
+
+
+GPT-2-Medium High
+Together
+
+
+MFFT (Ours)
+
+
+Figure 3: Macro F1-Score vs. expected calibration error (ECE). Favorable performance is in the top
+left corner of the graphs, where classification performance is high (high F1-score) and, simultaneously,
+calibration error is low (low ECE).
+
+
+which MFFT outperforms in both classification performance, with an average improvement in F1
+of 0 _._ 034 (+4 _._ 6%), and especially calibration, with an average reduction in ECE of 0 _._ 146 ( _−_ 64%).
+We observed similar results with a higher level of simulated noise (Appendix C.2). We also note in
+Table 2 that MFFT is competitive or better than fine-tuning with high-fidelity data only (High) across
+all experiments and all considered metrics (36 total experiments). This means that, using MFFT,
+fine-tuned models always benefit from additional data, despite their lower quality. This is not true for
+any of the baselines.
+
+
+4.3 REAL NOISE FROM LLM GENERATED DATA
+
+
+We consider the setting where we have access to a small labeled data set _DH_ and use a pre-trained
+large language model (LLM) to generate more data to fine-tune a classifier. With the three data
+sets AGNews, GLUE-SST2 and TREC, we explore two common types of LLM data generation: i)
+labeling through prompting, where we assume access to an unsupervised data set **xL** and infer labels
+**yL** _[′]_ [with a pre-trained LLM, using examples from] _[ D][H]_ [for in-context learning (Thapa et al., 2023;]
+Ding et al., 2024) (details in Appendix B.4). ii) Data augmentation, where we only have access to
+the small data set _DH_ and use the LLM to generate new inputs and outputs, using _DH_ as instruction
+examples (Ding et al., 2024; Meng et al., 2023; Wang et al., 2023a) (details in Appendix B.5). We use
+100 labeled examples as the data set _DH_ and generate 5 _,_ 000 more with the LLM with either method.
+We use both Mistral-7B-Instruct-v0.3 (Jiang et al., 2023) and Gemma-7b-it (Team et al., 2024) as
+pre-trained LLMs. With both original data _DH_ and generated data _DL_, we fine-tune RoBERTa using
+MFFT and all baselines. We report NLL in table 3 and F1 vs. ECE in Figure 4.
+
+
+Prompting with Mistral-7B-Instruct
+Data Augmentation with Mistral-7B-Instruct
+
+
+Prompting with Gemma-7B-Instruct High (No LLM Cost Adj.
+
+Data Augmentation with Gemma-7B-Instruct Generated Data) Together
+
+
+Cost Adj.
+
+
+High-Low
+Low-High
+
+
+MFFT (Ours)
+Noise Cor.
+
+
+Data Augmentation with Gemma-7B-Instruct
+
+
+|Data Set|High|Together|Cost Adj.|Low-High|High-Low|Noise Cor.|MFFT|
+|---|---|---|---|---|---|---|---|
+|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|
+|AGNews|0.923|1.334|1.241|1.123|0.844|0.616|**0.409**|
+|GLUE-SST2|1.406|0.373|0.391|1.097|0.381|0.339|**0.294**|
+|TREC|0.917|1.189|1.146|1.155|1.226|0.755|**0.338**|
+|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|
+|AGNews|0.948|**0.406**|**0.390**|0.915|0.463|0.416|**0.359**|
+|GLUE-SST2|1.455|0.718|0.728|1.297|**0.412**|**0.401**|**0.451**|
+|TREC|0.927|0.395|0.441|0.484|0.514|0.472|**0.228**|
+|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|
+|AGNews|0.933|1.386|1.355|1.022|0.913|0.663|**0.426**|
+|GLUE-SST2|1.413|0.399|0.428|0.999|0.414|**0.364**|**0.336**|
+|TREC|0.906|1.083|1.008|1.088|1.002|0.894|**0.341**|
+|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|
+|AGNews|0.919|0.558|0.514|0.954|**0.466**|**0.475**|**0.414**|
+|GLUE-SST2|1.426|0.602|**0.567**|1.817|**0.518**|0.624|**0.565**|
+|TREC|0.988|0.486|0.482|0.701|0.525|0.558|**0.340**|
+
+
+Table 3: Negative log-likelihood (NLL) of different fine-tuning strategies to combine a large amount
+(5 _,_ 000 examples) of LLM labeled or generated data and a small amount (100 examples) of trusted
+clean data. Numbers in bold indicate best performance, or within statistical significance of best
+performance across fine-tuning methods.
+
+|Col1|Together|Cost Adj.|Low-High|High-Low|Noise Cor.|MFFT|
+|---|---|---|---|---|---|---|
+|NLL|75.0%|75.0%|58.3%|91.7%|95.8%|**100.0%**|
+|F1-Score|62.5%|62.5%|83.3%|58.3%|62.5%|**100.0%**|
+|ECE|70.8%|75.0%|66.7%|87.5%|87.5%|**100.0%**|
+
+
+Table 4: Percentage of experiments with LLM generated data (24 total) in which each fine-tuning
+approach resulted in competitive or better performance compared to fine-tuning solely with the small
+set of trusted data.
+
+
+across different LLMs, tasks and training data generation modalities. Conversely, other baselines
+often under-perform in either F1 or ECE. The most competing baseline in classification performance
+(average F1-score) is Low-High, which MFFT outperforms by 0 _._ 016 in F1-score (+1 _._ 84%) and 0 _._ 078
+in ECE ( _−_ 57 _._ 5%). The most competing baseline in calibration (average ECE) is Noise Correction,
+which MFFT outperforms by 0 _._ 081 in F1-score (+10 _._ 5%) and 0 _._ 039 in ECE ( _−_ 40 _._ 4%). We also
+conduct experiments with a smaller clean data set _DH_ of 50 examples, in which we observe analogous
+results, shown in Appendix C.4. As for the simulated noise experiments, we observe in Table 4 that
+MFFT always matches or outperforms using trusted data only (24 total experiments), while this is not
+the case for any baseline. This means that, with MFFT, we can always benefit from LLM generated
+data when fine-tuning the end model.
+
+
+5 CONCLUSION
+
+
+We proposed Multi-Fidelity Fine-Tuning (MFFT), a novel method to fine-tune pre-trained language
+models with a small amount of clean trusted data (high-fidelity) and a larger amount of noisy
+data (low-fidelity). MFFT exploits knowledge derived from noisy data and knowledge derived
+from trusted data differently, implicitly learning when the latter can be used to infer and when,
+conversely, predicting from the former is expected to be more accurate. This leads to models finetuned with MFFT to consistently benefit from additional noisy data, while other methods carry the
+risk of degrading performance compared to using trusted data only. In our experiments, MFFT
+consistently outperformed all baselines across experiments, especially in calibration, with macro
+F1-score improvements of 2 _−_ 4% and expected calibration error (ECE) reductions of 40 _−_ 60%
+compared to the best baselines.
+
+
+9
+
+
+REFERENCES
+
+
+Moloud Abdar, Farhad Pourpanah, Sadiq Hussain, Dana Rezazadegan, Li Liu, Mohammad
+Ghavamzadeh, Paul Fieguth, Xiaochun Cao, Abbas Khosravi, U Rajendra Acharya, et al. A
+review of uncertainty quantification in deep learning: Techniques, applications and challenges.
+_Information fusion_, 76:243–297, 2021.
+
+
+Lada A Adamic, Jun Zhang, Eytan Bakshy, and Mark S Ackerman. Knowledge sharing and yahoo
+answers: everyone knows something. In _Proceedings_ _of_ _the_ _17th_ _international_ _conference_ _on_
+_World Wide Web_, pp. 665–674, 2008.
+
+
+Roland Can Aydin, Fabian Albert Braeu, and Christian Johannes Cyron. General multi-fidelity
+framework for training artificial neural networks with computational models. _Frontiers in Materials_,
+6:61, 2019.
+
+
+Rishi Bommasani, Drew A Hudson, Ehsan Adeli, Russ Altman, Simran Arora, Sydney von Arx,
+Michael S Bernstein, Jeannette Bohg, Antoine Bosselut, Emma Brunskill, et al. On the opportunities and risks of foundation models. _arXiv preprint arXiv:2108.07258_, 2021.
+
+
+Jie Chen, Yi Gao, and Yongming Liu. Multi-fidelity data aggregation using convolutional neural
+networks. _Computer methods in applied mechanics and engineering_, 391:114490, 2022.
+
+
+Sanyuan Chen, Yutai Hou, Yiming Cui, Wanxiang Che, Ting Liu, and Xiangzhan Yu. Recall and learn:
+Fine-tuning deep pretrained language models with less forgetting. _arXiv preprint arXiv:2004.12651_,
+2020.
+
+
+J Andrés Christen and Colin Fox. Markov chain monte carlo using an approximation. _Journal of_
+_Computational and Graphical statistics_, 14(4):795–810, 2005.
+
+
+Alexandra Chronopoulou, Christos Baziotis, and Alexandros Potamianos. An embarrassingly simple
+approach for transfer learning from pretrained language models. _arXiv preprint arXiv:1902.10547_,
+2019.
+
+
+Francisco Sahli Costabal, Paris Perdikaris, Ellen Kuhl, and Daniel E Hurtado. Multi-fidelity classification using gaussian processes: accelerating the prediction of large-scale computational models.
+_Computer Methods in Applied Mechanics and Engineering_, 357:112602, 2019.
+
+
+Bosheng Ding, Chengwei Qin, Ruochen Zhao, Tianze Luo, Xinze Li, Guizhen Chen, Wenhan Xia,
+Junjie Hu, Anh Tuan Luu, and Shafiq Joty. Data augmentation using llms: Data perspectives,
+learning paradigms and challenges. _arXiv preprint arXiv:2403.02990_, 2024.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv preprint arXiv:2407.21783_, 2024.
+
+
+M Giselle Fernández-Godino. Review of multi-fidelity models. _Advances in Computational Science_
+_and Engineering_, 1(4):351–400, 2023.
+
+
+Arushi Goel, Yunlong Jiao, and Jordan Massiah. Pars: Pseudo-label aware robust sample selection
+for learning with noisy labels. _arXiv preprint arXiv:2201.10836_, 2022.
+
+
+Suchin Gururangan, Ana Marasovi´c, Swabha Swayamdipta, Kyle Lo, Iz Beltagy, Doug Downey,
+and Noah A Smith. Don’t stop pretraining: Adapt language models to domains and tasks. _arXiv_
+_preprint arXiv:2004.10964_, 2020.
+
+
+Michael A Hedderich, Lukas Lange, Heike Adel, Jannik Strötgen, and Dietrich Klakow. A survey
+on recent approaches for natural language processing in low-resource scenarios. _arXiv preprint_
+_arXiv:2010.12309_, 2020.
+
+
+Dan Hendrycks, Mantas Mazeika, Duncan Wilson, and Kevin Gimpel. Using trusted data to train
+deep networks on labels corrupted by severe noise. _Advances in neural information processing_
+_systems_, 31, 2018.
+
+
+10
+
+
+Albert Q Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot,
+Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, et al.
+Mistral 7b. _arXiv preprint arXiv:2310.06825_, 2023.
+
+
+Ishan Jindal, Daniel Pressel, Brian Lester, and Matthew Nokleby. An effective label noise model for
+dnn text classification. _arXiv preprint arXiv:1903.07507_, 2019.
+
+
+Yeachan Kim, Junho Kim, and SangKeun Lee. Towards robust and generalized parameter-efficient
+fine-tuning for noisy label learning. In _Proceedings of the 62nd Annual Meeting of the Association_
+_for Computational Linguistics (Volume 1:_ _Long Papers)_, pp. 5922–5936, 2024.
+
+
+Suhas Kotha, Jacob Mitchell Springer, and Aditi Raghunathan. Understanding catastrophic forgetting
+in language models via implicit inference. _arXiv preprint arXiv:2309.10105_, 2023.
+
+
+Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. Simple and scalable predictive
+uncertainty estimation using deep ensembles. _Advances in neural information processing systems_,
+30, 2017.
+
+
+Xin Li and Dan Roth. Learning question classifiers. In _COLING 2002: The 19th International Confer-_
+_ence on Computational Linguistics_, 2002. [URL https://www.aclweb.org/anthology/](https://www.aclweb.org/anthology/C02-1150)
+[C02-1150.](https://www.aclweb.org/anthology/C02-1150)
+
+
+Yichuan Li, Kyumin Lee, Nima Kordzadeh, Brenton Faber, Cameron Fiddes, Elaine Chen, and Kai
+Shu. Multi-source domain adaptation with weak supervision for early fake news detection. In _2021_
+_IEEE International Conference on Big Data (Big Data)_, pp. 668–676. IEEE, 2021a.
+
+
+Zengcong Li, Shu Zhang, Hongqing Li, Kuo Tian, Zhizhong Cheng, Yan Chen, and Bo Wang. On-line
+transfer learning for multi-fidelity data fusion with ensemble of deep neural networks. _Advanced_
+_Engineering Informatics_, 53:101689, 2022.
+
+
+Zhihan Li, Yuwei Fan, and Lexing Ying. Multilevel fine-tuning: Closing generalization gaps in
+approximation of solution maps under a limited budget for training data. _Multiscale Modeling &_
+_Simulation_, 19(1):344–373, 2021b.
+
+
+Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike
+Lewis, Luke Zettlemoyer, and Veselin Stoyanov. Roberta: A robustly optimized bert pretraining
+approach. _arXiv preprint arXiv:1907.11692_, 2019.
+
+
+Xiaohu Lu and Hayder Radha. Strong-weak integrated semi-supervision for unsupervised single and
+multi target domain adaptation. _arXiv preprint arXiv:2309.06528_, 2023.
+
+
+Tamara Matthews and David Lillis. Experimenting with ensembles of pre-trained language models
+for classification of custom legal datasets. In _Proceedings of the 5th International Conference on_
+_Natural Language and Speech Processing (ICNLSP 2022)_, pp. 68–78, 2022.
+
+
+Xuhui Meng, Hessam Babaee, and George Em Karniadakis. Multi-fidelity bayesian neural networks:
+Algorithms and applications. _Journal of Computational Physics_, 438:110361, 2021.
+
+
+Yu Meng, Martin Michalski, Jiaxin Huang, Yu Zhang, Tarek Abdelzaher, and Jiawei Han. Tuning
+language models as training data generators for augmentation-enhanced few-shot learning. In
+_International Conference on Machine Learning_, pp. 24457–24477. PMLR, 2023.
+
+
+Basil Mustafa, Carlos Riquelme, Joan Puigcerver, André Susano Pinto, Daniel Keysers, and Neil
+Houlsby. Deep ensembles for low-data transfer learning. _arXiv preprint arXiv:2010.06866_, 2020.
+
+
+Giorgio Patrini, Alessandro Rozza, Aditya Krishna Menon, Richard Nock, and Lizhen Qu. Making
+deep neural networks robust to label noise: A loss correction approach. In _Proceedings of the_
+_IEEE conference on computer vision and pattern recognition_, pp. 1944–1952, 2017.
+
+
+Benjamin Peherstorfer, Karen Willcox, and Max Gunzburger. Survey of multifidelity methods in
+uncertainty propagation, inference, and optimization. _Siam Review_, 60(3):550–591, 2018.
+
+
+Can Qin, Yizhou Wang, and Yun Fu. Robust semi-supervised domain adaptation against noisy
+labels. In _Proceedings of the 31st ACM International Conference on Information & Knowledge_
+_Management_, pp. 4409–4413, 2022.
+
+
+11
+
+
+Xipeng Qiu, Tianxiang Sun, Yige Xu, Yunfan Shao, Ning Dai, and Xuanjing Huang. Pre-trained
+models for natural language processing: A survey. _Science China Technological Sciences_, 63(10):
+1872–1897, 2020.
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019.
+
+
+Rahul Rahaman et al. Uncertainty quantification and deep ensembles. _Advances in neural information_
+_processing systems_, 34:20063–20075, 2021.
+
+
+Alexander Ratner, Stephen H Bach, Henry Ehrenberg, Jason Fries, Sen Wu, and Christopher Ré.
+Snorkel: Rapid training data creation with weak supervision. In _Proceedings_ _of_ _the_ _VLDB_
+_endowment. International conference on very large data bases_, volume 11, pp. 269. NIH Public
+Access, 2017.
+
+
+Salva Rühling Cachay, Benedikt Boecking, and Artur Dubrawski. End-to-end weak supervision.
+_Advances in Neural Information Processing Systems_, 34:1845–1857, 2021.
+
+
+Danielle N Shapiro, Jesse Chandler, and Pam A Mueller. Using mechanical turk to study clinical
+populations. _Clinical psychological science_, 1(2):213–220, 2013.
+
+
+Zhengxiang Shi, Francesco Tonolini, Nikolaos Aletras, Emine Yilmaz, Gabriella Kazai, and Yunlong
+Jiao. Rethinking semi-supervised learning with language models. _arXiv preprint arXiv:2305.13002_,
+2023.
+
+
+Hwanjun Song, Minseok Kim, Dongmin Park, Yooju Shin, and Jae-Gil Lee. Learning from noisy
+labels with deep neural networks: A survey. _IEEE transactions on neural networks and learning_
+_systems_, 2022.
+
+
+Hao Su, Jia Deng, and Li Fei-Fei. Crowdsourcing annotations for visual object detection. In
+_Workshops at the twenty-sixth AAAI conference on artificial intelligence_, 2012.
+
+
+Aneeta Sylolypavan, Derek Sleeman, Honghan Wu, and Malcolm Sim. The impact of inconsistent
+human annotations on ai driven clinical decision making. _NPJ Digital Medicine_, 6(1):26, 2023.
+
+
+Alex Tamkin, Trisha Singh, Davide Giovanardi, and Noah Goodman. Investigating transferability in
+pretrained language models. _arXiv preprint arXiv:2004.14975_, 2020.
+
+
+Gemma Team, Thomas Mesnard, Cassidy Hardin, Robert Dadashi, Surya Bhupatiraju, Shreya Pathak,
+Laurent Sifre, Morgane Rivière, Mihir Sanjay Kale, Juliette Love, et al. Gemma: Open models
+based on gemini research and technology. _arXiv preprint arXiv:2403.08295_, 2024.
+
+
+Surendrabikram Thapa, Usman Naseem, and Mehwish Nasim. From humans to machines: can
+chatgpt-like llms effectively replace human annotators in nlp tasks. In _Workshop Proceedings of_
+_the 17th International AAAI Conference on Web and Social Media_, 2023.
+
+
+Francesco Tonolini, Jack Radford, Alex Turpin, Daniele Faccio, and Roderick Murray-Smith. Variational inference for computational imaging inverse problems. _Journal_ _of_ _Machine_ _Learning_
+_Research_, 21(179):1–46, 2020.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. _Advances in neural information processing_
+_systems_, 30, 2017.
+
+
+Andreas Veit, Neil Alldrin, Gal Chechik, Ivan Krasin, Abhinav Gupta, and Serge Belongie. Learning
+from noisy large-scale datasets with minimal supervision. In _Proceedings of the IEEE conference_
+_on computer vision and pattern recognition_, pp. 839–847, 2017.
+
+
+Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, and Samuel R. Bowman.
+GLUE: A multi-task benchmark and analysis platform for natural language understanding. 2019.
+In the Proceedings of ICLR.
+
+
+Guan Wang, Sijie Cheng, Xianyuan Zhan, Xiangang Li, Sen Song, and Yang Liu. Openchat: Advancing open-source language models with mixed-quality data. _arXiv preprint arXiv:2309.11235_,
+2023a.
+
+
+12
+
+
+Song Wang, Zhen Tan, Ruocheng Guo, and Jundong Li. Noise-robust fine-tuning of pretrained
+language models via external guidance. _arXiv preprint arXiv:2311.01108_, 2023b.
+
+
+Tong Xiao, Tian Xia, Yi Yang, Chang Huang, and Xiaogang Wang. Learning from massive noisy
+labeled data for image classification. In _Proceedings of the IEEE conference on computer vision_
+_and pattern recognition_, pp. 2691–2699, 2015.
+
+
+Xiyu Yu, Tongliang Liu, Mingming Gong, Kun Zhang, Kayhan Batmanghelich, and Dacheng Tao.
+Label-noise robust domain adaptation. In _International_ _conference_ _on_ _machine_ _learning_, pp.
+10913–10924. PMLR, 2020a.
+
+
+Yue Yu, Simiao Zuo, Haoming Jiang, Wendi Ren, Tuo Zhao, and Chao Zhang. Fine-tuning pre-trained
+language model with weak supervision: A contrastive-regularized self-training approach. _arXiv_
+_preprint arXiv:2010.07835_, 2020b.
+
+
+Jiaxin Zhang, Zhuohang Li, Kamalika Das, and Sricharan Kumar. Interactive multi-fidelity learning
+for cost-effective adaptation of language model with sparse human supervision. _Advances_ _in_
+_Neural Information Processing Systems_, 36, 2024.
+
+
+Jieyu Zhang, Cheng-Yu Hsieh, Yue Yu, Chao Zhang, and Alexander Ratner. A survey on programmatic weak supervision. _arXiv preprint arXiv:2202.05433_, 2022.
+
+
+Xiang Zhang, Junbo Zhao, and Yann LeCun. Character-level convolutional networks for text
+classification. In C. Cortes, N. Lawrence, D. Lee, M. Sugiyama, and R. Garnett (eds.),
+_Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 28. Curran Associates, Inc.,
+2015a. URL [https://proceedings.neurips.cc/paper_files/paper/2015/](https://proceedings.neurips.cc/paper_files/paper/2015/file/250cf8b51c773f3f8dc8b4be867a9a02-Paper.pdf)
+[file/250cf8b51c773f3f8dc8b4be867a9a02-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2015/file/250cf8b51c773f3f8dc8b4be867a9a02-Paper.pdf)
+
+
+Xiang Zhang, Junbo Jake Zhao, and Yann LeCun. Character-level convolutional networks for text
+classification. In _NIPS_, 2015b.
+
+
+Guoqing Zheng, Ahmed Hassan Awadallah, and Susan Dumais. Meta label correction for noisy
+label learning. In _Proceedings of the AAAI conference on artificial intelligence_, volume 35, pp.
+11053–11061, 2021.
+
+
+Chunting Zhou, Pengfei Liu, Puxin Xu, Srinivasan Iyer, Jiao Sun, Yuning Mao, Xuezhe Ma, Avia
+Efrat, Ping Yu, Lili Yu, et al. Lima: Less is more for alignment. _Advances in Neural Information_
+_Processing Systems_, 36, 2024.
+
+
+Dawei Zhu, Michael A Hedderich, Fangzhou Zhai, David Ifeoluwa Adelani, and Dietrich Klakow.
+Task-adaptive pre-training for boosting learning with noisy labels: A study on text classification
+for african languages. _arXiv preprint arXiv:2206.01476_, 2022.
+
+
+Yuchen Zhuang, Yue Yu, Lingkai Kong, Xiang Chen, and Chao Zhang. Dygen: Learning from noisy
+labels via dynamics-enhanced generative modeling. In _Proceedings of the 29th ACM SIGKDD_
+_Conference on Knowledge Discovery and Data Mining_, pp. 3674–3686, 2023.
+
+
+13
+
+
+A PROOFS AND DERIVATIONS
+
+
+A.1 DERIVATION OF EXPECTED HIGH-FIDELITY LOG LIKELIHOOD AS MODEL ENTROPY
+
+
+Assuming the inference by each model _pH_ ( _y|x, θk_ ) in the high-fidelity ensemble are un-biased
+estimators of the true mapping _p_ ( _y|x_ ):
+
+
+As the two terms are linearly added, maximizing equation 11 for the parameter _α ∈_ [0 _,_ 1] results in
+choosing either _α_ = 0 or _α_ = 1, depending on which term is greater:
+
+
+_α_ _[∗]_ = �1 _,_ if _−H_ [ _pH_ ( _y|x_ )] _≥_ log _pL_ ( _yH_ _|xH_ ) (12)
+0 _,_ if _−H_ [ _pH_ ( _y|x_ )] _<_ log _pL_ ( _yH_ _|xH_ ) _._
+
+
+Applying this choice to the combined soft labels _pM_ ( **y** _|_ **x** _L_ ) we obtain:
+
+
+_pM_ ( _y|xL,i_ ) = _pH_ ( _y|xL,i_ ) _[α][∗]_ _pL_ ( _y|xL,i_ ) [1] _[−][α][∗]_ _≈_ - _pH_ ( _y|xL,i_ ) _,_ if _−H_ [ _pH_ ( _y|x_ )] _≥_ log _pL_ ( _yH_ _|xH_ )
+_pL_ ( _y|xL,i_ ) _,_ if _−H_ [ _pH_ ( _y|x_ )] _<_ log _pL_ ( _yH_ _|xH_ ) _._
+(13)
+
+
+14
+
+
+E _p_ ( _y|x_ ) log _pH_ ( _y|x_ ) _≈_ [1]
+
+_K_
+
+
+_K_
+
+
+E _p_ ( _y|x,θk_ ) log _pH_ ( _y|x_ )
+
+_k_
+
+
+= [1]
+
+_K_
+
+
+_K_
+
+
+_k_
+
+
+_p_ ( _y|x, θk_ ) log _pH_ ( _y|x_ ) _dy_
+
+
+(8)
+
+
+ - 1
+=
+_K_
+
+
+_K_
+
+- _p_ ( _y|x, θk_ ) log _pH_ ( _y|x_ ) _dy_
+
+
+_k_
+
+
+                = _pH_ ( _y|x_ ) log _pH_ ( _y|x_ ) _dy_
+
+
+= _−H_ ( _pH_ ( _y|x_ ))
+
+
+A.2 DERIVATION OF EXPECTED LOW-FIDELITY LOG LIKELIHOOD
+
+
+We coarsely approximate the log likelihood of the low fidelity model _pL_ ( _y|x_ ) as its marginal over all
+inputs _x_, i.e., we expect the log likelihood of the low-fidelity model to be approximately constant
+with respect to _x_ :
+
+
+E _p_ ( _y|x_ ) log _pL_ ( _y|x_ ) _≈_ E _p_ ( _x_ )E _p_ ( _y|x_ ) log _pL_ ( _y|x_ ) (9)
+
+
+Now we can use the available high-fidelity samples _xH,i_ _∈_ **xH** and _yH,i_ _∈_ **yH** as samples from the
+true distributions _xH,i, yH,i_ _∼_ _p_ ( _x_ ) _p_ ( _y|x_ ):
+
+
+E _p_ ( _x_ )E _p_ ( _y|x_ ) log _pL_ ( _y|x_ ) _≈_ E _x∈_ **xH** E _y∈_ **yH** log _pL_ ( _y|x_ )
+
+
+= [1]
+
+_M_
+
+
+- _M_ log _pL_ ( _yH,i|xH,i_ ) (10)
+
+
+_i_
+
+
+A.3 DERIVATION OF MODEL CHOICE
+
+
+Our objective is to approximately maximize the expected log likelihood of equation 3:
+
+
+E _p_ ( _y|x_ ) log _pH_ ( _y|x_ ) _[α]_ _pL_ ( _y|x_ ) [1] _[−][α]_
+
+= _α_ E _p_ ( _y|x_ ) log _pH_ ( _y|x_ ) + (1 _−_ _α_ )E _p_ ( _y|x_ ) log _pL_ ( _y|x_ )
+
+_≈−αH_ [ _pH_ ( _y|x_ )] + (1 _−_ _α_ ) log _pL_ ( _yH_ _|xH_ ) from eq. 4 and 5
+
+
+(11)
+
+
+B ADDITIONAL EXPERIMENTAL DETAILS
+
+
+B.1 DATASETS DETAILS
+
+
+We evaluate MFFT and all baselines using 6 NLP tasks, spanning various number of classes and
+types of tasks. These are:
+
+
+    - **AGNews:** Topic modeling of news extracts. The data set consists of extracts from news
+passages to be classified into one of four classes: "World", "Sports", "Business" and "Science
+and Technology".
+
+
+    - **DBPedia 14:** Topic modeling of extracts from Wikipedia articles to be classified into one
+of 14 classes: "Company", "Educational Institution", "Artist", "Athlete", "Office Holder",
+"Mean of Transport", "Building", "Natural Place", "Village", "Animal", "Plant", "Album",
+"Film" and "Written Work".
+
+
+    - **GLUE-SST2:** Sentiment analysis of extracts from movie reviews to be classified as either
+negative or positive.
+
+
+    - **GLUE-QQP:** Data set of pairs of questions to be classified as either duplicates of each other
+or not duplicates.
+
+
+    - **TREC:** Topic modeling of questions. We use the coarse labels of the data set for our evaluation. The data set contains questions to be classified into one of 6 classes: "Abbreviation",
+"Entity", "Description", "Human Being", "Location", "Numeric Value".
+
+
+    - **Yahoo Answers:** Topic modeling of questions from Yahoo Answers. Data set contains
+questions to be classified into one of 10 classes: "society", "science", "health", "education",
+"computers", "sports", "business", "entertainment", "family" and "politics".
+
+
+B.2 BASELINES AND MFFT IMPLEMENTATION DETAILS
+
+
+We use a small validation set with original clean labels to perform early-stopping when fine-tuning
+models. As we consider scenarios where clean labels are scarce, we set the number of validation
+examples to 50. All fine-tuning steps are performed using the AdamW optimizer and an initial
+learning rate of 5 _×_ 10 _[−]_ [5] . The macro f1 score is computed with the validation set every 100 iterations
+and the model corresponding to the highest score is chosen (early stopping). All models are optimised
+using the standard cross-entropy cost with hard labels, and using equation 7 with soft or mixed labels.
+All validations of hyper-parameters were done using the TREC data set with simulated noisy labels
+and 50 clean training examples. Candidate values for the hyper-parameters were simply tried and
+the best performing on the validation set was chosen. Hyper-parameters were kept constant to these
+values optimized with the TREC data set for all experiments.
+
+
+**High Only**
+
+
+The pre-trained model is fine-tuned using only clean data _DH_ only. The model is fine-tuned with a
+cross-entropy cost for a fixed number of 1 _,_ 000 iterations.
+
+
+**Together**
+
+
+Clean and noisy data _DH_ and _DL_ are aggregated into a single data set. The pre-trained language
+model is then fine-tuned for one epoch on this data set.
+
+
+**Cost Adjustment**
+
+
+Analogously to the above, clean and noisy data is aggregated into a single data set and the model
+is fine-tuned for one epoch. However, the cross-entropy cost for clean data is weighted by 2 _._ 0. We
+defined this hyper-parameter by cross-validation as described above, validating performance for 1 _._ 5,
+2 _._ 0, 3 _._ 0, 5 _._ 0 and 10 _._ 0.
+
+
+**Low then High**
+
+
+The pre-trained model is fine tuned for 1 epoch on the noisy data _DL_ and subsequently fine-tuned
+further for 100 iterations on the clean data _DH_ .
+
+
+**High then Low**
+
+
+15
+
+
+The pre-trained model is fine-tuned on clean data first _DH_ for 50 iterations (100 iterations resulted in
+lower performance, we believe because of catastrophic forgetting). Second, the model is fine tuned
+on noisy data _DL_, but introducing label smoothing and temporal averaging. Following Equation 5 in
+(Meng et al., 2023), we cross-validated _ϵ_ = 0 _._ 1, choosing from 0 _._ 01, 0 _._ 05, 0 _._ 1, and 0 _._ 2, _λ_ = 0 _._ 05
+choosing from 0 _._ 01, 0 _._ 05 and 0 _._ 1. Temporal averaging is done over 5 iterations.
+
+
+**Noise Correction**
+
+
+First the pre-trained model is fine-tuned with noisy data _DL_ for 1 epoch. Next, a linear mapping
+between true clean labels and inferences from this model is learned using the available clean data
+_DH_ . This results into a matrix _C_ mapping vectors of clean labels probabilities to vectors of noisy
+labels probabilities. The pre-trained model is now trained using all data, but applying the matrix _C_ to
+outputs of the model before computing cross-entropy with noisy labels (see (Hendrycks et al., 2018)
+for details). This fine-tuning is performed for 2 epochs, as we found that fine-tuning to soft labels
+takes longer to converge.
+
+
+**MFFT**
+
+
+In all experiments, we construct MFFT with ensembles of 5 fine-tuned models. First we divide at
+random the clean data _DL_ into 5 equally sized subsets. As in the experiments we always use 5 _,_ 000
+clean examples, this results into 5 sub-sets of 1 _,_ 000 examples each. We use each sub-set to fine-tune
+the model from pre-trained for 3 epochs and obtain the models _p_ ( _y|x, θL,k_ ). Each model is then
+further fine-tuned with the entire clean set _DH_ for 100 iterations. Soft labels over the low-fidelity set
+_pM_ ( _y|xL,i_ ) are then computed as described in section 3.4. The final model is fine-tuned for 2 epochs
+from pre-trained using the cross-entropy cost of equation 7.
+
+
+B.3 DETAILS OF NOISE SIMULATION
+
+
+For our simulated experiments, we introduce noise by altering labels in the source data set with a
+stochastic process. In our simulation, we define two controllable parameters; noise level _l_ _∈_ [0 _,_ 1]
+and noise bias _b_ _∈_ [0 _,_ 1]. Both of these are used in constructing a noise process matrix _Mϵ_ which
+maps clean labels to probabilities of noisy labels:
+
+_p_ ( _y_ _[′]_ _|y_ ) = _Mϵp_ ( _y_ _[∗]_ _|y_ ) _,_ (14)
+
+where _p_ ( _y_ _[′]_ _|y_ ) is the probability of corrupted labels and _p_ ( _y_ _[∗]_ _|y_ ) is the probability form of the groundtruth labels, i.e., a vector as long as the number of classes _Nc_, with one on the class corresponding
+to the ground-truth label _y_ and zeros everywhere else. The corrupted label _y_ _[′]_ is then obtained by
+sampling from this distribution _y_ _[′]_ _∼_ _p_ ( _y_ _[′]_ _|y_ ). The transition matrix _Mϵ_ is computed with the noise
+level parameter _l_ and the bias pareameter _b_ as follows:
+
+
+_l_
+_Mϵ_ = (1 _−_ _l_ ) _I_ (1 + _bR_ ) + (15)
+_Nc −_ 1 [(] **[1]** _[ −]_ _[I]_ [)(1 +] _[ bR]_ [)] _[.]_
+
+Here _I_ is the _Nc × Nc_ identity matrix, **1** is a _Nc × Nc_ matrix of ones and _R_ is a _Nc × Nc_ matrix
+where the elements are random uniform between zero and one. The matrix _Mϵ_ is first capped so that
+all elements are between zeor and one and secondly normalized so that the rows add up to one. With
+_b_ = 0 (no bias), the matrix results in labels corrupted through equation 14 to be changed to another
+class with probability _l_ and staying the same with probability 1 _−_ _l_ . The higher the value of _b_, the
+higher the randomness in the transition matrix, meaning that not all classes have equal probability to
+change and a given label _y_ has non-equal probability to change to each one of the other classes. This
+introduces label bias proportionally to _b_ . In the simulated experiments of section 4.2, we fix _b_ = 0 _._ 3
+and test with two noise levels; _l_ = 0 _._ 3 (results in section 4.2) and _l_ = 0 _._ 5 (results in section C.2).
+
+
+B.4 DETAILS OF EXPERIMENTS WITH LLM PROMPTING
+
+
+As for the simulated data experiments, we take 5 _,_ 000 examples to construct the low-fidelity set _DL_ .
+However, instead of artificially corrupting the labels provided with a noise process, we infer labels
+using the LLM with an in-context learning approach. We first construct a prompt to solve the given
+task, providing the input example, an instruction and a list of options. These prompts for each data-set
+are as follows:
+
+
+**AGNews**
+
+
+16
+
+
+News E x t r a c t : <TEXT−INPUT>
+
+
+Which one of the f o l l o w i n g t o p i c s does the above news e x t r a c t f a l l under ?
+1) world
+2) s p o r t s
+3) b u s i n e s s
+4) s c i e n c e
+
+
+<LABEL−OUTPUT>
+
+
+**GLUE-SST2**
+
+
+Question : <TEXT−INPUT>
+
+
+What **i s** the s e n t i m e n t of the movie review e x t r a c t above ?
+1) n e g a t i v e
+2) p o s i t i v e
+
+
+<LABEL−OUTPUT>
+
+
+**TREC**
+
+
+Text E x t r a c t : <TEXT−INPUT>
+
+
+What **i s** the t e x t e x t r a c t above about ? Choose **from** :
+1) e n t i t y
+2) d e s c r i p t i o n
+3) person
+4) a b b r e v i a t i o n
+5) l o c a t i o n
+6) value
+
+
+<LABEL−OUTPUT>
+
+
+To form the in-context learning prompts, we use 5 labeled examples from the set small trusted set _DH_ .
+We repeat experiments 5 times, each time re-drawing these 5 examples at random and keeping them
+fixed for inference over all unlabeled inputs **xH** . denoting the prompts detailed above for each data
+set as prompt(<TEXT-INPUT>, <LABEL-OUTPUT>), the in-context learning prompt is constructed
+as:
+
+
+f i n a l _ p r o m p t = ’ ’
+**for** t e x t _ i n, l a b e l **in** l a b e l l e d _ e x a m p l e s :
+f i n a l _ p r o m p t = f i n a l _ p r o m p t + prompt ( t e x t _ i n, l a b e l )
+f i n a l _ p r o m p t = f i n a l _ p r o m p t + prompt ( <TEST−INPUT>, ’ ’ )
+
+
+In this way, the LLM is prompted to provide an answer to the task instructions, using the input text
+<TEST-INPUT> as context and using 5 samples from the trusted labeled set as solved examples. To
+perform prompting, we compare the LLM next word output logits assigned to each of the candidate
+words for each class (numbered options in prompt format above) and pick the one with the highest. We
+repeat this operation over all inputs in **xL** to obtain noisy labels **yl** _[′]_ [, together forming the low-fidelity]
+set _DL_ . We then fine-tune RoBERTa with _DL_ and _DH_ using MFFT and all baselines.
+
+
+B.5 DETAILS OF EXPERIMENTS WITH LLM GENERATION
+
+
+To generate examples and build the data set _DL_, we adopt an augmentation in-context learning
+approach, where, for each class, we provide a list of 5 examples of inputs taken from _DH_ in the
+prompt and let the LLM generate a new example to continue the list. The format is as follows:
+
+
+<CLASS−SPECIFIC−AUGMENTATION−INSTRUCTION>
+1) <EXAMPLE−1>
+2) <EXAMPLE−2>
+
+
+17
+
+
+3) <EXAMPLE−3>
+4) <EXAMPLE−4>
+5) <EXAMPLE−5>
+6)
+
+
+Where the examples <EXAMPLE-i> are drawn at random from examples in **xH** with the same
+associated label _yh_ and <CLASS-SPECIFIC-AUGMENTATION-INSTRUCTION> varies depending
+on the data set and class. For each data set used and each class, these are as follows:
+
+
+**AGNews**
+
+
+’Make more e x t r a c t s of world news examples l i k e t h e s e ones ’
+’Make more e x t r a c t s of s p o r t s news examples l i k e t h e s e ones ’
+’Make more e x t r a c t s of b u s i n e s s news examples l i k e t h e s e ones ’
+’Make more e x t r a c t s of s c i e n c e news examples l i k e t h e s e ones ’
+
+
+**GLUE-SST-2**
+
+
+’Make more e x t r a c t s of n e g a t i v e movie reviews l i k e t h e s e ones ’
+’Make more e x t r a c t s of p o s i t i v e movie reviews l i k e t h e s e ones ’
+
+
+**TREC**
+
+
+’Make more encyclopedia e x t r a c t s examples about e n t i t i e s l i k e t h e s e ones ’
+’Make more encyclopedia e x t r a c t s examples about d e s c r i p t i o n s l i k e t h e s e ones ’
+’Make more encyclopedia e x t r a c t s examples about people l i k e t h e s e ones ’
+’Make more encyclopedia e x t r a c t s examples about a b b r e v i a t i o n s l i k e t h e s e ones ’
+’Make more encyclopedia e x t r a c t s examples about l o c a t i o n s l i k e t h e s e ones ’
+’Make more encyclopedia e x t r a c t s examples about values l i k e t h e s e ones ’
+
+
+The 5 examples provided in the prompt are re-drawn at random from **xH** for every generation of a
+new example. We repeat this generation to obtain a fixed number of synthetic examples per class,
+such that the final data set _DL_ is balanced across classes and contains 5 _,_ 000 examples. We then
+fine-tune pre-trained RoBERTa on _DL_ and _DH_ with all baselines and MFFT.
+
+
+C ADDITIONAL EXPERIMENTAL RESULTS
+
+
+C.1 SIMULATED NOISE F1 VS. ECE FOR ALL DATA SETS
+
+
+We show in figure 5 the F1 vs. ECE plots of figure 3 for all data sets. The trends observed in
+figure 3 are observed across all tested data-sets, with models fine-tuned using MFFT appearing
+in the top-left corner of the plots and out-performing or matching baselines in most cases in both
+classification performance (F1-score) and calibration (ECE). In cases where a competing baseline
+shows marginally better performance in one of the two metrics, e.g., F1-score of Low-High on TREC,
+MFFT appreciably out-performs in the other, meaning that it maintains a favorable balance between
+classification performance and calibration.
+
+
+C.2 BENCHMARK EXPERIMENTS AT HIGHER NOISE LEVEL
+
+
+We repeat the experiments of section 4.2 with a higher setting of noise level _l_ = 0 _._ 5, i.e., on average,
+50% of labels are changed to a different class in the noise process. NLL results are shown in table 5
+and F1-score vs. ECE plots are shown in figure 6.
+
+
+Similarly to the results at moderate noise level of section 4.2, we observe appreciable improvement
+when fine-tuning models with MFFT compared to the baselines. Referring to table 5, MFFT was
+found to be the best or competitive in 72% of experiments, while the best baseline according to NLL
+(noise correction) is competitive in only 22% of cases. While for the moderate noise experiments of
+section 4.2 the best baseline was Low-High for all three metrics (NLL, F1 and ECE), with the higher
+noise, noise correction is the most competing baseline for NLL and ECE (better calibration), while
+Low-High remains the most competitive in terms of F1 score (classification performance). Compared
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Figure 5: Macro F1-Score vs. expected calibration error (ECE) with moderate noise level = 0 _._ 3.
+Favorable performance is in the top left corner of the graphs, where classification performance is
+high (high F1-score) and, simultaneously, calibration error is low (low ECE).
+
+|Col1|High|Together|Cost Adj.|Low-High|High-Low|Noise Cor.|MFFT|
+|---|---|---|---|---|---|---|---|
+|**BERT**|**BERT**|**BERT**|**BERT**|**BERT**|**BERT**|**BERT**|**BERT**|
+|AGNews|1.113|0.980|1.039|0.908|1.024|1.150|**0.474**|
+|DBPedia 14|0.596|2.018|1.952|**0.359**|1.296|2.145|**0.385**|
+|GLUE-SST2|2.440|0.701|0.711|2.054|0.668|0.657|**0.597**|
+|GLUE-QQP|2.572|0.988|0.981|2.800|0.786|**0.690**|0.910|
+|TREC|1.152|1.530|1.480|1.001|1.259|1.532|**0.598**|
+|Yahoo|3.535|**2.089**|**2.092**|2.983|1.775|2.154|2.329|
+|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|**RoBERTa**|
+|AGNews|1.313|0.797|0.759|0.952|0.894|0.972|**0.667**|
+|DBPedia 14|0.949|1.175|1.147|0.464|1.220|1.616|**0.622**|
+|GLUE-SST2|1.848|0.826|0.874|1.740|0.692|0.638|**0.542**|
+|GLUE-QQP|2.704|1.309|1.375|2.650|0.837|**0.688**|1.008|
+|TREC|1.728|1.169|1.245|1.261|1.180|1.413|**0.650**|
+|Yahoo|3.520|**1.823**|1.872|3.186|**1.742**|2.109|2.228|
+|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|**GPT-2-Medium**|
+|AGNews|1.491|1.171|1.126|2.340|1.121|1.190|**0.523**|
+|DBPedia 14|1.200|1.436|1.158|1.034|1.534|1.657|**0.252**|
+|GLUE-SST2|2.390|0.952|0.874|3.112|**0.789**|**0.674**|**0.757**|
+|GLUE-QQP|3.104|0.892|0.912|3.449|0.802|**0.690**|0.949|
+|TREC|4.430|1.611|1.644|4.275|1.507|1.579|**0.947**|
+|Yahoo|5.028|2.221|2.145|5.351|2.249|2.223|**1.565**|
+
+
+Table 5: Negative log-likelihood (NLL) of different fine-tuning strategies with simulated label noise.
+Noise is simulated using a high noise level setting _l_ = 0 _._ 5.
+
+
+to noise correction, MFFT presents an improvement in F1 score of 0 _._ 21 (+44%) and a reduction
+in ECE of 0 _._ 121 ( _−_ 48%). Compared to Low-High, MFFT presents an improvement in F1 score of
+0 _._ 019 (+2 _._ 8%) and a reduction in ECE of 0 _._ 141 ( _−_ 51%).
+
+
+19
+
+
+Cost Adj.
+
+
+Low-High
+
+
+High-Low
+Noise Cor.
+
+
+BERT
+RoBERTa
+
+
+GPT-2-Medium High
+Together
+
+
+MFFT (Ours)
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Figure 6: Macro F1-Score vs. expected calibration error (ECE) with high noise level _l_ = 0 _._ 5.
+Favorable performance is in the top left corner of the graphs, where classification performance is
+high (high F1-score) and, simultaneously, calibration error is low (low ECE).
+
+
+C.3 SIMULATED EXPERIMENTS ABLATIONS
+
+
+Using the TREC data set and RoBERTa as pre-trained language model, we vary different experimental
+settings to study performance at varying conditions. These include number of clean training examples
+constituting _DH_, noise level _l_ and noise bias _b_ . Results are shown in figures 7, 8 and 9.
+
+
+High Together Cost Adj. High-Low Low-High Noise Cor. MFFT (Ours)
+
+
+Figure 7: NLL, macro F1-score and ECE as a function of number of examples with clean labels
+available. Noise level is fixed at _l_ = 0 _._ 3 and noise bias is fixed at _b_ = 0 _._ 3
+
+
+In figure 7, we observe that particularly High, Low-High and MFFT appreciaby improve as more
+clean data is made available for training. The extreme differences displayed by High are expected, as
+this is the baselines that uses solely clean data. MFFT is competitive or better than the best baseline
+(Low-High) for all metrics at all values of clean data size. F1-score is aligned with Low-High at
+all clean data budgets, while NLL and ECE are consistently better. This indicate that classification
+performance is generally comparable to Low-High (transfer learning approach), while providing
+superior calibration, independently of the amount of available clean data.
+
+
+The improvement provided by MFFT is even more evident across different noise properties. In figures
+8 and 9 MFFT performs comparably or better than all baselines across all three metrics. MFFT
+performance is also noticeably more robust to increasing noise level and bias, remaining stable as the
+noise level and bias in noisy data are increased.
+
+
+20
+
+
+Cost Adj.
+
+
+Low-High
+
+
+High-Low
+Noise Cor.
+
+
+BERT
+RoBERTa
+
+
+GPT-2-Medium High
+Together
+
+
+MFFT (Ours)
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+High Together Cost Adj. High-Low Low-High Noise Cor. MFFT (Ours)
+
+
+Figure 8: NLL, macro F1-score and ECE as a function of noise level applied to the noisy labels in the
+training set. Number of clean examples is fixed at 50 and noise bias is fixed at _b_ = 0 _._ 3
+
+
+High Together Cost Adj. High-Low Low-High Noise Cor. MFFT (Ours)
+
+
+Figure 9: NLL, macro F1-score and ECE as a function of noise bias in the noise process used to
+simulate noisy labels in the training set. Number of clean examples is fixed at 50 and noise level is
+fixed at _l_ = 0 _._ 3
+
+
+C.4 ADDITIONAL EXPERIMENTS WITH REAL NOISE FORM LLM GENERATED DATA
+
+
+We perform experiments with real noise from LLM generated data analogous to those presented in
+section 4.3, but with a smaller starting clean data set _DL_ of 50 examples. We show NLL results in
+table 6 and F1 vs. ECE in figure
+
+
+Figure 10: Macro F1-Score vs. expected calibration error (ECE) for RoBERTa fine-tuned on 50
+clean examples and 5 _,_ 000 examples generated with LLMs. Favorable performance is in the top left
+corner of the graphs, where classification performance is high (high F1-score) and, simultaneously,
+calibration error is low (low ECE).
+
+
+Similarly to the results of section 4.3, MFFT results in the lowest or within statistical significance of
+the lowest NLL in all experiments and is better than any baseline in 58% of cases. The F1 vs. ECE
+results of figure 10 also follow the trends observed in figure 4, with MFFT displaying consistently
+competitive classification performance and calibration. Across experiments, the most competitive
+baseline in classification performance (average F1) is Low-High, which MFFT outperforms by 0 _._ 013
+
+
+21
+
+
+High-Low
+Low-High
+
+
+Prompting with Mistral-7B-Instruct
+Data Augmentation with Mistral-7B-Instruct
+
+
+Prompting with Gemma-7B-Instruct High (No LLM Cost Adj.
+
+Data Augmentation with Gemma-7B-Instruct Generated Data) Together
+
+
+Prompting with Gemma-7B-Instruct High (No LLM High-Low MFFT (Ours)
+
+Data Augmentation with Gemma-7B-Instruct Generated Data) Together Low-High Noise Cor.
+
+
+Cost Adj.
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+|Data Set|High|Together|Cost Adj.|Low-High|High-Low|Noise Cor.|MFFT|
+|---|---|---|---|---|---|---|---|
+|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|**Prompting with Mistral-7B-Instruct**|
+|AGNews|1.084|1.483|1.501|1.252|0.845|0.608|**0.509**|
+|GLUE-SST2|1.667|0.437|**0.339**|1.111|**0.376**|**0.349**|**0.336**|
+|TREC|1.633|1.262|1.124|1.772|1.177|**0.692**|**0.654**|
+|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|**Data Augmentation with Mistral-7B-Instruct**|
+|AGNews|1.176|0.386|0.417|1.043|0.461|0.456|**0.373**|
+|GLUE-SST2|1.745|0.691|0.664|1.387|**0.431**|**0.397**|**0.459**|
+|TREC|1.676|0.551|0.466|0.561|0.567|0.503|**0.287**|
+|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|**Prompting with Gemma-7B-Instruct**|
+|AGNews|1.155|1.449|1.406|1.276|0.917|0.627|**0.454**|
+|GLUE-SST2|1.766|0.386|0.446|1.395|**0.416**|**0.368**|**0.362**|
+|TREC|1.622|1.207|1.141|1.614|1.015|0.881|**0.652**|
+|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|**Data Augmentation with Gemma-7B-Instruct**|
+|AGNews|1.154|0.567|0.591|0.961|0.498|0.501|**0.373**|
+|GLUE-SST2|1.641|0.654|**0.601**|1.924|**0.541**|**0.598**|**0.570**|
+|TREC|1.672|0.643|0.579|0.729|0.533|0.590|**0.381**|
+
+
+Table 6: NLL of RoBERTa fine-tuned with different approaches on 50 clean labeled examples together
+with 5 _,_ 000 LLM generated examples. Values which are lowest or within statistical significance of
+the lowest over 5 experiment repeats are shown in bold.
+
+
+in F1 score (+1 _._ 55%) and 0 _._ 09 in ECE ( _−_ 56 _._ 4%). The most competitive baseline in calibration
+(average ECE) is Noise Correction, which MFFT outperforms by 0 _._ 038 in F1 score (+4 _._ 89%) and
+0 _._ 029 in ECE ( _−_ 29 _._ 2%).
+
+
+22

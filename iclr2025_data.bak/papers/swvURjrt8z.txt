@@ -1,0 +1,1891 @@
+# TABDIFF: A MIXED-TYPE DIFFUSION MODEL
+## FOR TABULAR DATA GENERATION
+
+
+**Juntong Shi** **[2]** _[†]_ **, Minkai Xu** **[1]** _[†∗]_ **, Harper Hua** **[1]** _[†]_ **, Hengrui Zhang** **[3]** _[†]_ **,**
+**Stefano Ermon** **[1]** **, Jure Leskovec** **[1]**
+
+1Stanford University 2University of Southern California 3University of Illinois Chicago
+
+
+ABSTRACT
+
+
+Synthesizing high-quality tabular data is an important topic in many data science
+tasks, ranging from dataset augmentation to privacy protection. However, developing expressive generative models for tabular data is challenging due to its inherent
+heterogeneous data types, complex inter-correlations, and intricate column-wise
+distributions. In this paper, we introduce TABDIFF, a joint diffusion framework
+that models all mixed-type distributions of tabular data in one model. Our key
+innovation is the development of a joint continuous-time diffusion process for
+numerical and categorical data, where we propose feature-wise learnable diffusion
+processes to counter the high disparity of different feature distributions. TABDIFF
+is parameterized by a transformer handling different input types, and the entire
+framework can be efficiently optimized in an end-to-end fashion. We further introduce a mixed-type stochastic sampler to automatically correct the accumulated
+decoding error during sampling, and propose classifier-free guidance for conditional missing column value imputation. Comprehensive experiments on seven
+datasets demonstrate that TABDIFF achieves superior average performance over
+existing competitive baselines across all eight metrics, with up to 22 _._ 5% improvement over the state-of-the-art model on pair-wise column correlation estimations.
+[Code is available at https://github.com/MinkaiXu/TabDiff.](https://github.com/MinkaiXu/TabDiff)
+
+
+1 INTRODUCTION
+
+
+Tabular data is ubiquitous in various databases, and developing effective generative models for it
+is a fundamental problem in many data processing and analysis tasks, ranging from training data
+augmentation (Fonseca & Bacao, 2023), data privacy protection (Assefa et al., 2021; Hernandez et al.,
+2022), to missing value imputation (You et al., 2020; Zheng & Charoenphakdee, 2022). With versatile
+synthetic tabular data that share the same format and statistical properties as the existing dataset, we
+are able to completely replace real data in a workflow or supplement the data to enhance its utility,
+which makes it easier to share and use. The capability of anonymizing data and enlarging sample size
+without compromising the overall data quality enables it to revolutionize the field of data science.
+Unlike image data, which comprises pure continuous pixel values with local spatial correlations,
+or text data, which comprises tokens that share the same dictionary space, tabular data features
+have much more complex and varied distributions (Xu et al., 2019; Borisov et al., 2023), making
+it challenging to learn joint probabilities across multiple columns. More specifically, such inherent
+heterogeneity leads to obstacles from two aspects: 1) typical tabular data often contains mixed-type
+data types, _i.e._, continuous ( _e.g._, numerical features) and discrete ( _e.g._, categorical features) variables;
+2) within the same feature type, features do not share the exact same data property because of the
+different meaning they represent, resulting in different column-wise marginal distributions (even after
+normalizing them into same value ranges).
+
+
+In recent years, numerous deep generative models have been proposed for tabular data generation
+with autoregressive models (Borisov et al., 2023), VAEs (Liu et al., 2023), and GANs (Xu et al.,
+2019) in the past few years. Though they have notably improved the generation quality compared
+to traditional machine learning generation techniques such as resampling (Chawla et al., 2002), the
+generated data quality is still far from satisfactory due to limited model capacity. Recently, with the
+rapid progress in diffusion models (Song & Ermon, 2019; Ho et al., 2020; Rombach et al., 2022),
+
+
+_∗_ Corresponding author.  - minkai@cs.stanford.edu. _†_ Equal contribution
+
+
+1
+
+
+and converting categorical columns into one-hot vectors with an extra [MASK] class. Joint forward
+diffusion processes are applied to all modalities with each column’s noise rate controlled by learnable
+schedules. New samples are generated via reverse process, with the denoising network gradually
+denoising **x** 1 into **x** 0 and then applying the inverse transform to recover the original format.
+
+
+researchers have been actively exploring extending this powerful framework to tabular data (Kim
+et al., 2022; Kotelnikov et al., 2023; Zhang et al., 2024). For example, Zheng & Charoenphakdee
+(2022); Zhang et al. (2024) transform all features into a latent continuous space via various encoding
+techniques and apply Gaussian diffusion there, while Kotelnikov et al. (2023); Lee et al. (2023)
+combine discrete-time continuous and discrete diffusion processes (Austin et al., 2021) to deal with
+numerical and categorical features separately. However, prior methods are trapped in sub-optimal
+performance due to additional encoding overhead or imperfect discrete-time diffusion modeling, and
+none of them consider the feature-wise distribution heterogeneity issue in a mixed-type framework.
+
+
+In this paper, we present TABDIFF, a novel and principled mixed-type diffusion framework for
+tabular data generation. TABDIFF perturbs numerical and categorical features with a joint diffusion
+process, and learns a single model to simultaneously denoising all modalities. Our key innovation
+is the development of mixed-type feature-wise learnable diffusion processes to counteract the high
+heterogeneity across different feature distributions. Such feature-specific learnable noise schedules
+enable the model to optimally allocate the model capacity to different features in the training phase.
+Besides, it encourages the model to capture the inherent correlations during sampling since the model
+can denoise different features in a flexible order based on the learned schedule. We parameterize
+TABDIFF with a transformer operating on different input types and optimize the entire framework
+efficiently in an end-to-end fashion. The framework is trained with a continuous-time limit of evidence
+lower bound. To reduce the decoding error during denoising sampling, we design a mixed-type
+stochastic sampler that automatically corrects the accumulated decoding error during sampling. In
+addition, we highlight that TABDIFF can also be applied to conditional generation tasks such as
+missing column imputation, and we further introduce classifier-free guidance technique to improve
+the conditional generation quality.
+
+
+TABDIFF enjoys several notable advantages: 1) our model learns the joint distribution in the original
+data space with an expressive continuous-time diffusion framework; 2) the framework is sensitive to
+varying feature marginal distribution and can adaptively reason about feature-specific information
+and pair-wise correlations. We conduct comprehensive experiments to evaluate TABDIFF against
+state-of-the-art methods across seven widely adopted tabular synthesis benchmarks. Results show that
+TABDIFF consistently outperforms previous methods over eight distinct evaluation metrics, with up
+to 22 _._ 5% improvement over the state-of-the-art model on pair-wise column correlation estimations,
+suggesting our superior generative capacity on mixed-type tabular data.
+
+
+2 METHOD
+
+
+2.1 OVERVIEW
+
+
+**Notation** . For a given mixed-type tabular dataset _T_, we denote the number of numerical features and
+categorical features as _M_ num and _M_ cat, respectively. The dataset is represented as a collection of
+
+
+2
+
+
+data entries _T_ = _{_ **x** _}_ = _{_ [ **x** [num] _,_ **x** [cat] ] _}_, where each entry **x** is a concatenated vector consisting of
+its numerical features **x** [num] and categorical features **x** [cat] . We represent the numerical features as a
+_M_ num dimensional vector **x** [num] _∈_ R _[M]_ [num] and denote the _i_ -th feature as ( **x** [num] ) _i_ _∈_ R. We represent
+each categorical column with _Cj_ finite categories as a one-hot column vector ( **x** [cat] ) _j_ _∈{_ 0 _,_ 1 _}_ [(] _[C][j]_ [+1)],
+with an extra dimension dedicated to the [MASK] state. The ( _Cj_ + 1)-th category corresponds to the
+special [MASK] state and we use **m** _∈{_ 0 _,_ 1 _}_ _[K]_ as the one-hot vector for it. In addition, we define
+cat( _·_ ; _**π**_ ) as the categorical distribution over _K_ classes with probabilities given by _**π**_ _∈_ ∆ _[K]_, where
+∆ _[K]_ is the _K_ -simplex.
+
+
+Different from common data types such as images and text, developing generative models for tabular
+data is challenging as the distribution is determined by mixed-type data. We therefore propose
+TABDIFF, a unified generative model for modeling the joint distribution _p_ ( **x** ) using a continuous-time
+diffusion framework. TABDIFF can learn the distribution from finite samples and generate faithful,
+diverse, and novel samples unconditionally. We provide a high-level overview in Figure 1, which
+includes a forward _diffusion_ process and a reverse _generative_ process, both defined in continuous time.
+The diffusion process gradually adds noise to data, and the generative process learns to recover the
+data from prior noise distribution with neural networks parameterized by _θ_ . In the following sections,
+we elaborate on how we develop the unified diffusion framework with learnable noise schedules and
+perform training and sampling in practice.
+
+
+2.2 MIXED-TYPE DIFFUSION FRAMEWORK
+
+
+Diffusion models (Sohl-Dickstein et al., 2015; Song & Ermon, 2019; Ho et al., 2020) are likelihoodbased generative models that learn the data distribution via forward and reverse Markov processes.
+Our goal is to develop a principled diffusion model for generating mixed-type tabular data that
+faithfully mimics the statistical distribution of the real dataset. Our framework TABDIFF is designed
+to directly operate on the data space and naturally handle each tabular column in its built-in datatype.
+TABDIFF is built on a hybrid forward process that gradually injects noise to numerical and categorical
+data types separately with different diffusion schedules _**σ**_ [num] and _**σ**_ [cat] . Let _{_ **x** _t_ : _t ∼_ [0 _,_ 1] _}_ denote
+a sequence of data in the diffusion process indexed by a continuous time variable _t ∈_ [0 _,_ 1], where
+**x** 0 _∼_ _p_ 0 are _i.i.d._ samples from real data distribution and **x** 1 _∼_ _p_ 1 are pure noise from prior
+distribution. The hybrid forward diffusion process can be then represented as:
+_q_ ( **x** _t_ _|_ **x** 0) = _q_ ( **x** [num] _t_ _|_ **x** [num] 0 _,_ _**σ**_ [num] ( _t_ )) _· q_        - **x** [cat] _t_ _|_ **x** [cat] 0 _[,]_ _**[ σ]**_ [cat][(] _[t]_ [)]        - _._ (1)
+Then the true reverse process can be represented as the joint posterior:
+_q_ ( **x** _s_ _|_ **x** _t,_ **x** 0) = _q_ ( **x** [num] _s_ _|_ **x** _t,_ **x** 0) _· q_ ( **x** [cat] _s_ _|_ **x** _t,_ **x** 0) _,_ (2)
+where _s_ and _t_ are two arbitrary timesteps that 0 _<_ _s_ _<_ _t_ _<_ 1. We aim to learn a denoising model
+_pθ_ ( **x** _s|_ **x** _t_ ) to match the true posterior. In the following, we discuss the detailed formulations of
+diffusion processes for continuous and categorical features in separate manners. To enhance clarity,
+we omit the superscripts on **x** [num] and **x** [cat] when the inclusion is unnecessary for understanding.
+
+
+**Gaussian Diffusion for Numerical Features** . In this paper, we model the forward diffusion for
+continuous features **x** [num] as a stochastic differential equation (SDE) d **x** = **f** ( **x** _,_ t)dt + g(t)d **w** _,_
+with **f** ( _·, t_ ) : R _[M]_ [num] _→_ R _[M]_ [num] being the drift coefficient, _g_ ( _·_ ) : R _→_ R being the diffusion
+coefficient, and _**w**_ being the standard Wiener process (Song et al., 2021; Karras et al., 2022). The
+revere generation process solves the probability flow ordinary differential equation (ODE) d **x** =
+
+- **f** ( **x** _,_ t) _−_ [1] 2 [g(t)][2] _[∇]_ **[x]** [ log p][t][(] **[x]** [)] �dt _,_ where _∇_ **x** log _pt_ ( **x** ) is the score function of _pt_ ( **x** ). In this paper,
+
+               we use the Variance Exploding formulation with **f** ( _·, t_ ) = **0** and _g_ ( _t_ ) = 2[ _dt_ _[d]_ _**[σ]**_ [num][(] _[t]_ [)]] _**[σ]**_ [num][(] _[t]_ [)][,]
+
+which yields the forward process :
+**x** [num] _t_ = **x** [num] 0 + _**σ**_ [num] ( _t_ ) _**ϵ**_ _,_ _**ϵ**_ _∼N_ ( **0** _,_ _**I**_ _M_ num) _._ (3)
+And the reversal can then be formulated accordingly as:
+
+d **x** [num] = _−_ [ [d] (4)
+
+dt _**[σ]**_ [num][(t)]] _**[σ]**_ [num][(t)] _[∇]_ **[x]** [ log p][t][(] **[x]** [num][)dt] _[.]_
+
+In TABDIFF, we train the diffusion model _**µ**_ _θ_ to jointly denoise the numerical and categorical
+features. We use _**µ**_ [num] _θ_ to denote numerical part of the denoising model output, and train the model
+via optimizing the denoising loss:
+
+_L_ num( _θ, ρ_ ) = E **x** 0 _∼p_ ( **x** 0)E _t∼U_ [0 _,_ 1]E _**ϵ**_ _∼N_ ( **0** _**,I**_ ) _∥_ _**µ**_ [num] _θ_ ( **x** _t, t_ ) _−_ _**ϵ**_ _∥_ [2] 2 _[.]_ (5)
+
+
+3
+
+
+**Masked Diffusion for Categorical Features**, For categorical features, we take inspiration from the
+recent progress on discrete state-space diffusion for language modeling (Austin et al., 2021; Shi et al.,
+2024; Sahoo et al., 2024). The forward diffusion process is defined as a masking (absorbing) process
+that smoothly interpolates between the data distribution cat( _·_ ; **x** ) and the target distribution cat( _·_ ; **m** ),
+where all probability mass are assigned on the [MASK] state:
+
+
+_q_ ( **x** _t|_ **x** 0) = cat( **x** _t_ ; _αt_ **x** 0 + (1 _−_ _αt_ ) **m** ) _._ (6)
+
+
+_αt_ _∈_ [0 _,_ 1] is a strictly decreasing function of _t_, with _α_ 0 _≈_ 1 and _α_ 1 _≈_ 0. It represents the
+probability for the real data **x** 0 to be masked at time step _t_ . By the time _t_ = 1, all inputs are
+masked with probability 1. In practice this schedule is parameterized by _αt_ = exp( _−_ _**σ**_ [cat] ( _t_ )), where
+_**σ**_ [cat] ( _t_ ) : [0 _,_ 1] _→_ R [+] is a strictly increasing function. Such forward process entails the step transition
+probabilities _q_ ( **x** _t|_ **x** _s_ ) = cat( **x** _t_ ; _αt|s_ **x** _s_ + (1 _−_ _αt|s_ ) **m** ), where _αt|s_ = _αt/αs_ . Under the hood, this
+transition means that at each diffusion step, the data will be perturbed to the [MASK] state with a
+probability of (1 _−_ _αt|s_ ), and remains there until _t_ = 1 if perturbed.
+
+
+Similar to numerical features, in the reverse denoising process for categorical ones, the diffusion
+model _**µ**_ _θ_ aims to progressively unmask each column from the ‘masked’ state. The true posterior
+distribution conditioned on **x** 0 has the close form of:
+
+
+_q_ ( **x** _s|_ **x** _t,_ **x** 0) =
+
+
+�cat( **x** _s_ ; **x** _t_ ) **x** _t_ = **m** _,_
+
+
+cat - **x** _s_ ; [(1] _[−][α][s]_ [)] **[m]** 1 [+(] _−α_ _[α]_ _t_ _[s][−][α][t]_ [)] **[x]** [0]
+
+
+cat - **x** _s_ ; [(1] _[−][α][s]_ [)] **[m]** [+(] _[α][s][−][α][t]_ [)] **[x]** [0]
+
+
+- (7)
+**x** _t_ = **m** _._
+
+
+We introduce the denoising network _µ_ [cat] _θ_ [(] **[x]** _[t][, t]_ [) :] _[ C]_ _[×]_ [ [0] _[,]_ [ 1]] _[ →]_ [∆] _[C]_ [to estimate] **[ x]** [0][, through which]
+we can approximate the unknown true posterior as:
+
+
+_pθ_ ( **x** [cat] _s_ _[|]_ **[x]** _t_ [cat] ) =
+
+
+�cat( **x** [cat] _s_ [;] **[ x]** _t_ [cat] ) **x** [cat] _t_ = **m** _,_
+
+
+  - _θ_ ( **x** _t,t_ )
+cat **x** [cat] _s_ [;] [(1] _[−][α][s]_ [)] **[m]** [+(] _[α]_ 1 _−_ _[s][−]_ _α_ _[α]_ _t_ _[t]_ [)] _**[µ]**_ [cat]
+
+
+- (8)
+**x** _t_ = **m** _,_
+
+
+which implied that at each reverse step, we have a probability of ( _αs_ _−αt_ ) _/_ (1 _−αt_ ) to recover _x_ 0, and
+once being recovered, _xt_ stays fixed for the remainder of the process. Extensive works (Kingma et al.,
+2021; Shi et al., 2024) have shown that increasing discretization resolution can help approximate
+tighter evidence lower bound (ELBO). Therefore, we resort to optimizing the likelihood bound _L_ cat
+under continuous time limit:
+
+
+_L_ cat( _θ, k_ ) = E _q_
+
+
+- _t_ =1
+
+
+_t_ =0
+
+
+_αt_ _[′]_ 1 _{_ **x** _t_ = **m** _}_ log _⟨_ _**µ**_ [cat] _θ_ [(] **[x]** _[t][, t]_ [)] _[,]_ **[ x]** 0 [cat] _[⟩][dt,]_ (9)
+1 _−_ _αt_
+
+
+where _αt_ _[′]_ [is the first order derivative of] _[ α][t]_ [.]
+
+
+2.3 TRAINING WITH ADAPTIVELY LEARNABLE NOISE SCHEDULES
+
+
+Tabular data is inherently highly heterogeneous of mixed numerical and categorical data types, and mixed feature distri- **Algorithm 1** Training
+butions within each data type. Therefore, 1: **repeat**
+unlike pixels that share a similar distribu- 2: Sample **x** 0 _∼_ _p_ 0( **x** )
+tion across three RGB channels and word 3: Sample _t ∼_ _U_ (0 _,_ 1)
+tokens that share the exact same vocabu- 4: Sample _**ϵ**_ num _∼N_ (0 _,_ **I** _M_ num)
+lary space, each column (feature) of the 5: **x** [num] _t_ = **x** [num] 0 + _**σ**_ [num] ( _t_ ) _**ϵ**_ num
+table has its own specific marginal distribu- 6: _**α**_ _t_ = exp( _−_ _**σ**_ [cat] ( _t_ ))
+tions, which requires the model to amortize 7: Sample **x** [cat] _t_ _∼_ q( **x** t _|_ **x** 0 _,_ _**α**_ t) Eq. (6)
+its capacity adaptively across different fea- 8: **x** _t_ = [ **x** [num] _t_ _,_ **x** [cat] _t_ ]
+tures. We propose to adaptively learn a 9: Take gradient descent step on _∇θ,ρ,kL_ TABDIFF
+more fine-grained noise schedule for each 10: **until** converged
+feature respectively. To balance the tradeoff between the learnable noise schedule’s flexibility and robustness, we design two function families:
+the power mean numerical schedule and the log-linear categorical schedule.
+
+
+**Power-mean schedule for numerical features** . For the numerical noise schedule _**σ**_ [num] ( _t_ ) in Eq. (3),
+we define _**σ**_ [num] ( _t_ ) = [ _σρ_ [num] _i_ [(] _[t]_ [)]][, with] _[ ρ][i]_ [being a learnable parameter for individual numerical features.]
+For _∀i ∈{_ 1 _, · · ·_ _, M_ num _}_, we have _σρ_ [num] _i_ [(] _[t]_ [)][ as:]
+
+
+4
+
+
+**Algorithm 1** Training
+
+
+1: **repeat**
+2: Sample **x** 0 _∼_ _p_ 0( **x** )
+3: Sample _t ∼_ _U_ (0 _,_ 1)
+4: Sample _**ϵ**_ num _∼N_ (0 _,_ **I** _M_ num)
+5: **x** [num] _t_ = **x** [num] 0 + _**σ**_ [num] ( _t_ ) _**ϵ**_ num
+6: _**α**_ _t_ = exp( _−_ _**σ**_ [cat] ( _t_ ))
+7: Sample **x** [cat] _t_ _∼_ q( **x** t _|_ **x** 0 _,_ _**α**_ t) Eq. (6)
+8: **x** _t_ = [ **x** [num] _t_ _,_ **x** [cat] _t_ ]
+9: Take gradient descent step on _∇θ,ρ,kL_ TABDIFF
+10: **until** converged
+
+
+_σρ_ [num] _i_ [(] _[t]_ [) =] _σ_
+
+
+1
+_ρi_
+min [+] _[ t]_ [(] _[σ]_
+
+
+1
+_ρi_
+max _[−]_ _[σ]_
+
+
+1 - _ρi_
+min _ρi_ [)] _._ (10)
+
+
+**Log-linear schedule for categorical features** . Similarly, for the categorical noise schedule _**σ**_ [cat] ( _t_ )
+in Section 2.2, we define _**σ**_ [cat] ( _t_ ) = [ _σk_ [cat] _j_ [(] _[t]_ [)]][,] [with] _[k][i]_ [being] [a] [learnable] [parameter] [for] [individual]
+categorical features. For _∀j_ _∈{_ 1 _, · · ·_ _, M_ cat _}_, we have _σk_ [cat] _j_ [(] _[t]_ [)][ as:]
+
+_αk_ [cat] _j_ [(] _[t]_ [) = 1] _[ −]_ _[t][kj]_ (11)
+
+
+In practice, we fix the same initial and final noise levels across all numerical features so that
+_σi_ [num] (0) = _σ_ min and _σi_ [num] (1) = _σ_ max for _∀i_ _∈{_ 1 _, · · ·_ _, M_ num _}_ . We similarly bound the initial and
+final noise levels for the categorical features, as detailed in Appendix B.1. This enables us to constrain
+the freedom of schedules and thus stabilize the training.
+
+
+**Joint objective function** . We update _M_ num + _M_ cat parameters _ρ_ 1 _, · · ·_ _, ρM_ num and _k_ 1 _, · · ·_ _, kM_ cat via
+backpropagation without the need of modifying the loss function. Consolidating _L_ num and _L_ cat, we
+have the total loss _L_ with two weight terms _λ_ num and _λ_ cat as:
+
+
+_L_ TABDIFF( _θ, ρ, k_ ) = _λ_ num _L_ num( _θ, ρ_ ) + _λ_ cat _L_ cat( _θ, k_ )
+
+
+= E _t∼U_ (0 _,_ 1)E( **x** _t,_ **x** 0) _∼q_ ( **x** _t,_ **x** 0)
+
+
+- _λ_ num _∥_ _**µ**_ [num] _θ_ ( **x** _t, t_ ) _−_ _**ϵ**_ _∥_ [2] 2 [+] _[λ]_ [cat] _[ α]_ _t_ _[′]_ 1 _{_ **x** _t_ = **m** _}_ log _⟨_ _**µ**_ [cat] _θ_ [(] **[x]** _[t][, t]_ [)] _[,]_ **[ x]** 0 [cat] _[⟩]_ _._
+1 _−_ _αt_
+
+
+(12)
+With the forward process defined in Eq. (3) and Eq. (6), we present the detailed training procedure in
+Algorithm 1. Here, we sample a continuous time step _t_ from a uniform distribution _U_ (0 _,_ 1) and then
+perturb numerical and categorical features with their respective noise schedules based on this same
+time index. Then, we input the concatenated **x** [num] _t_ and **x** [cat] _t_ into the model and take gradient on the
+joint loss function defined in Eq. (12).
+
+
+2.4 SAMPLING WITH BACKWARD STOCHASTIC SAMPLER
+
+
+One notable property of the joint
+
+**Algorithm 2** Sampling
+
+sampling process is that the intermediate decoded categorical fea- 1: Sample **x** [num] _T_ _∼N_ (0 _,_ **I** _M_ num), **x** [cat] _T_ = _**m**_
+ture will not be updated anymore 2: **for** _t_ = _T_ to 1 **do**
+
+structured with complicated inter
+at each denoising step. Related
+work on continuous diffusions Kar
+intuition to both numerical and cat- 11: **end for**
+egorical features in tabular genera- 12: **return** **x** [num] 0 _,_ **x** [cat] 0
+tion. At each sampling step _t_, we
+first add a small time increment to the current time step _t_ to _t_ [+] = _t_ + _γtt_ according to a factor _γt_,
+and then perform the intermediate forward sampling between _t_ [+] and _t_ by joint diffusion process
+Equations (3) and (6). From the increased-noise sample **x** _t_ +, we solve the ODE backward for **x** [num]
+and **x** [cat] from _t_ [+] to _t −_ 1, respectively, with a single update. This framework enables self-correction
+by randomly perturbing decoded features in the forward step. We summarize the sampling framework
+in Algorithm 2, and provide the ablation study for the stochastic sampler in Section 4.4. We also
+provide an illustrative example of the sampling process in Appendix C.
+
+
+**Algorithm 2** Sampling
+
+
+1: Sample **x** [num] _T_ _∼N_ (0 _,_ **I** _M_ num), **x** [cat] _T_ = _**m**_
+2: **for** _t_ = _T_ to 1 **do**
+
+
+11: **end for**
+12: **return** **x** [num] 0 _,_ **x** [cat] 0
+
+
+5
+
+
+2.5 CLASSIFIER-FREE GUIDANCE CONDITIONAL GENERATION
+
+
+TABDIFF can also be extended as a conditional generative model, which is important in many tasks
+such as missing value imputation. Let **y** = _{_ [ **y** [num] _,_ **y** [cat] ] _}_ be the collection of provided properties in
+tabular data, containing both categorical and numerical features, and let **x** denote the missing interest
+features in this section. Imputation means we want to predict **x** = _{_ [ **x** [num] _,_ **x** [cat] ] _}_ conditioned on **y** .
+TABDIFF can be freely extended to conditional generation by only conducting denoising sampling
+for **x** _t_, while keeping other given features **y** _t_ fixed as **y** .
+
+
+Previous works on diffusion models (Dhariwal & Nichol, 2021) show that conditional generation
+quality can be further improved with a guidance classifier/regressor _p_ ( **y** _|_ **x** ). However, training
+the guidance classifier becomes challenging when **x** is a high-dimensional discrete object, and
+existing methods typically handle this by relaxing **x** as continuous (Vignac et al., 2023). Inspired
+by the classifier-free guidance (CFG) framework (Ho & Salimans, 2022) developed for continuous
+diffusion, we propose a unified CFG framework that eliminates the need for a classifier and handles
+mixed-type **x** and **y** effectively. The guided conditional sample distribution is given by _p_ ˜ _θ_ ( **x** _t|_ **y** ) _∝_
+_pθ_ ( **x** _t|_ **y** ) _pθ_ ( **y** _|_ **x** _t_ ) _[ω]_, where _ω_ _>_ 0 controls strength of the guidance. Applying Bayes’ Rule, we get
+
+
+            - _pθ_ ( **x** _t|_ **y** ) _p_ ( **y** )
+_p_ ˜ _θ_ ( **x** _t|_ **y** ) _∝_ _pθ_ ( **x** _t|_ **y** ) _pθ_ ( **y** _|_ **x** _t_ ) _[ω]_ = _pθ_ ( **x** _t|_ **y** )
+_pθ_ ( **x** _t_ )
+
+
+- _ω_
+= _[p][θ]_ [(] **[x]** _[t][|]_ **[y]** [)] _[ω]_ [+1] _p_ ( **y** ) _[ω]_ _._ (13)
+
+_pθ_ ( **x** _t_ ) _[ω]_
+
+
+We drop _p_ ( **y** ) for it does no depend on _θ_ . Taking the logarithm of the probabilities, we obtain,
+
+
+log ˜ _pθ_ ( **x** _t|_ **y** ) = (1 + _ω_ ) log _pθ_ ( **x** _t|_ **y** ) _−_ _ω_ log _pθ_ ( **x** _t_ ) _,_ (14)
+
+which implies the following changes in the sampling steps. For the numerical features, _**µ**_ [num] _θ_ ( **x** _t, t_ ) is
+replaced by the interpolation of the conditional and unconditional estimates (Ho & Salimans, 2022):
+
+_**µ**_ ˜ [num] _θ_ ( **x** _t,_ **y** _, t_ ) = (1 + _ω_ ) _**µ**_ [num] _θ_ ( **x** _t,_ **y** _, t_ ) _−_ _ω_ _**µ**_ [num] _θ_ ( **x** _t, t_ ) _._ (15)
+
+And for the categorical features, we instead predict _x_ 0 with _p_ ˜ _θ_ ( **x** [cat] _s_ _[|]_ **[x]** _[t][,]_ **[ y]** [)][, satisfying]
+
+log ˜ _pθ_ ( **x** [cat] _s_ _[|]_ **[x]** _[t][,]_ **[ y]** [) = (1 +] _[ ω]_ [) log] _[ p][θ]_ [(] **[x]** _s_ [cat] _[|]_ **[x]** _[t][,]_ **[ y]** [)] _[ −]_ _[ω]_ [ log] _[ p][θ]_ [(] **[x]** _s_ [cat] _[|]_ **[x]** _[t]_ [)] _[.]_ (16)
+
+
+Under the missing value imputation task, our target columns is **x**, and the remaining columns
+constitute **y** . Implementing CFG becomes very lightweight, as the guided probability utilizes the
+original unconditional model trained over all table columns as the conditional model and requires only
+an additional small model for the unconditional probabilities over the missing columns. We provide
+empirical results for CFG sampling in Section 4.3 and implementation details in Appendix B.2.
+
+
+3 RELATED WORK
+
+
+Recent studies have developed different generative models for tabular data, including VAE-based
+methods, TVAE (Xu et al., 2019) and GOGGLE (Liu et al., 2023), and GAN (Generative Adversarial
+Networks)-based methods, CTGAN (Xu et al., 2019) and TabelGAN (Park et al., 2018). These
+methods usually lack sufficient model expressivity for complicated data distribution. Recently,
+diffusion models have shown powerful generative ability for diverse data types and thus have been
+adopted by many tabular generation methods. Kotelnikov et al. (2023); Lee et al. (2023) designed
+separate discrete-time diffusion processes (Austin et al., 2021) for numerical and categorical features
+separately. However, they built their diffusion processes on discrete time steps, which have been
+proven to yield a looser ELBO estimation and thus lead to sub-optimal generation quality (Song
+et al., 2021; Kingma et al., 2021). To tackle such a problem caused by limited discretization of
+diffusion processes and push it to a continuous time framework, Zheng & Charoenphakdee (2022);
+Zhang et al. (2024) transform features into a latent continuous space via various encoding techniques,
+since advanced diffusion models are mainly designed for continuous random variables with Gaussian
+perturbation and thus cannot directly handle tabular data. However, it has shown that these solutions
+either are trapped with sub-optimal performance due to encoding overhead or cannot capture complex
+co-occurrence patterns of different modalities because of the indirect modeling and low model
+capacity. Concurrent work Mueller et al. (2024) also proposed feature-wise diffusion schedules, but
+the model still relies on encoding to continuous latent space with Gaussian diffusion framework. In
+summary, none of existing methods have explored the powerful mixed-type diffusion framework in
+the continuous-time limit and explicitly tackle the feature-wise heterogeneity issue in the mixed-type
+diffusion process.
+
+
+6
+
+
+4 EXPERIMENTS
+
+
+We evaluate TABDIFF by comparing it to various generative models across multiple datasets and
+metrics, ranging from data fidelity and privacy to downstream task performance. Furthermore, we
+conduct ablation studies to investigate the effectiveness of each component of TABDIFF, e.g., the
+learnable noise schedules.
+
+
+4.1 EXPERIMENTAL SETUPS
+
+
+**Datasets** . We conduct experiments on seven real-world tabular datasets – Adult, Default, Shoppers,
+Magic, Faults, Beijing, News, and Diabetes - each containing both numerical and categorical
+attributes. In addition, each dataset has an inherent machine-learning task, either classification or
+regression. Detailed profiles of the datasets are presented in Appendix A.1.
+
+
+**Baselines** . We compare the proposed TABDIFF with eight popular synthetic tabular data generation
+methods that are categorized into four groups: 1) GAN-based method: CTGAN (Xu et al., 2019); 2)
+VAE-based methods: TVAE (Xu et al., 2019) and GOGGLE (Liu et al., 2023); 3) Autoregressive
+Language Model: GReaT (Borisov et al., 2023); 4) Diffusion-based methods: STaSy (Kim et al.,
+2023), CoDi (Lee et al., 2023), TabDDPM (Kotelnikov et al., 2023) and TabSyn (Zhang et al., 2024).
+
+
+**Evaluation Methods** . Following the previous methods (Zhang et al., 2024), we evaluate the quality
+of the synthetic data using eight distinct metrics categorized into three groups – 1) **Fidelity** : Shape,
+Trend, _α_ -Precision, _β_ -Recall, and Detection assess how well the synthetic data can faithfully recover
+the ground-truth data distribution; 2) **Downstream tasks** : Machine learning efficiency and missing
+value imputation reveal the models’ potential to power downstream tasks; 3) **Privacy** : The Distance
+to Closest Records (DCR) score evaluates the level of privacy protection by measuring how closely
+the synthetic data resembles the training data. We provide a detailed introduction of all these metrics
+in Appendix A.2.
+
+
+**Implementation Details** . All reported experiment results are the average of 20 random sampled
+synthetic data generated by the best-validated models. Additional implementation details, such as the
+hardware/software information as well as hyperparameter settings, are in Appendix D.
+
+
+4.2 DATA FIDELITY AND PRIVACY
+
+
+**Shape and Trend** . We first evaluate the fidelity of synthetic data using the Shape and Trend metrics.
+Shape measures the synthetic data’s ability to capture each single column’s marginal density, while
+Trend assesses its capacity to replicate the correlation between different columns in the real data.
+
+
+The detailed results for Shape and Trend metrics, measured across each dataset separately, are
+presented in Tables 1 and 2, respectively. On the Shape metric, TABDIFF outperforms all baselines on
+five out of seven datasets and surpasses the current state-of-the-art method TABSYN by an average of
+13 _._ 3%. This demonstrates TABDIFF’s superior performance in maintaining the marginal distribution
+of individual attributes across various datasets. Regarding the Trend metric, TABDIFF consistently
+outperforms all baselines and surpasses TABSYN by 22 _._ 6%. This significant improvement suggests
+that TABDIFF is substantially better at capturing column-column relationships than previous methods.
+Notably, TABDIFF maintains strong performance in Diabetes, a larger, more categorical-heavy dataset,
+surpassing the most competitive baseline by over 35% on both Shape and Trend. This exceptional
+performance thus demonstrates our model’s capacity to model datasets with higher dimensionality
+and discrete features.
+
+
+**Additional Fidelity Metrics** . We further evaluate the fidelity metrics across _α_ -precision, _β_ -recall,
+and CS2T scores. On average, TABDIFF outperforms other methods on all these three metrics. We
+present the results for these three additional fidelity metrics in Appendix E.1.
+
+
+**Data Privacy** . The ability to protect privacy is another important factor when evaluating synthetic
+data since we wish the synthetic data to be uniformly sampled from the data distribution manifold
+rather than being copied (or slightly modified) from each individual real data example. In this section,
+we use the Distance to Closest Records (DCR) score metric (Zhang et al., 2024), which measures the
+probability that a synthetic example’s nearest neighbor is from a holdout v.s. the training set.
+
+
+7
+
+
+Table 1: Performance comparison on the error rates (%) of **Shape** .
+
+|Method Adult Default Shoppers Magic Beijing News Diabetes|Average|
+|---|---|
+|CTGAN<br>16_._84_±_ 0_._03<br>16_._83_±_0_._04<br>21_._15_±_0_._10<br>9_._81_±_0_._08<br>21_._39_±_0_._05<br>16_._09_±_0_._02<br>9_._82_±_0_._08<br>TVAE<br>14_._22_±_0_._08<br>10_._17_±_0_._05<br>24_._51_±_0_._06<br>8_._25_±_0_._06<br>19_._16_±_0_._06<br>16_._62_±_0_._03<br>18_._86_±_0_._13<br>GOGGLE<br>16_._97<br>17_._02<br>22_._33<br>1_._90<br>16_._93<br>25_._32<br>24_._92<br>GReaT<br>12_._12_±_0_._04<br>19_._94_±_0_._06<br>14_._51_±_0_._12<br>16_._16_±_0_._09<br>8_._25_±_0_._12<br>OOM<br>OOM<br>STaSy<br>11_._29_±_0_._06<br>5_._77_±_0_._06<br>9_._37_±_0_._09<br>6_._29_±_0_._13<br>6_._71_±_0_._03<br>6_._89_±_0_._03<br>OOM<br>CoDi<br>21_._38_±_0_._06<br>15_._77_±_ 0_._07<br>31_._84_±_0_._05<br>11_._56_±_0_._26<br>16_._94_±_0_._02<br>32_._27_±_0_._04<br>21_._13_±_0_._25<br>TabDDPM<br>1_._75_±_0_._03<br>1_._57_±_ 0_._08<br>2_._72_±_0_._13<br>1_._01_±_0_._09<br>1_._30_±_0_._03<br>78_._75_±_0_._01<br>31_._44_±_0_._05<br>TABSYN 1<br>0_._81_±_0_._05<br>**1**_._**01**_±_**0**_._**08**<br>1_._44_±_0_._07<br>1_._03_±_0_._14<br>1_._26_±_0_._05<br>**2**_._**06**_±_**0**_._**04**<br>1_._85_±_0_._02|15_._99<br>15_._97<br>17_._91<br>14_._20<br>7_._72<br>21_._55<br>16_._93<br>1_._35|
+|TABDIFF<br>**0**_._**63**_±_**0**_._**05**<br>1_._24_±_0_._07<br>**1**_._**28**_±_**0**_._**09**<br>**0**_._**78**_±_**0**_._**08**<br>**1**_._**03**_±_**0**_._**05**<br>2_._35_±_0_._03<br>**0**_._**89**_±_**0**_._**23**<br>Improv.<br>22_._2%_ ↓_<br>0_._0%_ ↓_<br>11_._11%_ ↓_<br>14_._29%_ ↓_<br>18_._25%_ ↓_<br>0%_ ↓_<br>46_._39%_ ↓_|**1**_._**17**<br>13_._3%_ ↓_|
+
+
+1 TABSYN’s performance is obtained via our reproduction. The results of other baselines except on
+Diabetes, are taken from Zhang et al. (2024). The OOM entries are explained in Appendix D.
+
+
+Table 2: Performance comparison on the error rates (%) of **Trend** .
+
+|Method Adult Default Shoppers Magic Beijing News Diabetes|Average|
+|---|---|
+|CTGAN<br>20_._23_±_1_._20<br>26_._95_±_0_._93<br>13_._08_±_0_._16<br>7_._00_±_0_._19<br>22_._95_±_0_._08<br>5_._37_±_0_._05<br>18_._95_±_0_._34<br>TVAE<br>14_._15_±_0_._88<br>19_._50_±_0_._95<br>18_._67_±_0_._38<br>5_._82_±_0_._49<br>18_._01_±_0_._08<br>6_._17_±_0_._09<br>32_._74_±_0_._26<br>GOGGLE<br>45_._29<br>21_._94<br>23_._90<br>9_._47<br>45_._94<br>23_._19<br>27_._56<br>GReaT<br>17_._59_±_0_._22<br>70_._02_±_0_._12<br>45_._16_±_0_._18<br>10_._23_±_0_._40<br>59_._60_±_0_._55<br>OOM<br>OOM<br>STaSy<br>14_._51_±_0_._25<br>5_._96_±_0_._26<br>8_._49_±_0_._15<br>6_._61_±_0_._53<br>8_._00_±_0_._10<br>3_._07_±_0_._04<br>OOM<br>CoDi<br>22_._49_±_0_._08<br>68_._41_±_0_._05<br>17_._78_±_0_._11<br>6_._53_±_0_._25<br>7_._07_±_0_._15<br>11_._10_±_0_._01<br>29_._21_±_0_._12<br>TabDDPM<br>3_._01_±_0_._25<br>4_._89_±_0_._10<br>6_._61_±_0_._16<br>1_._70_±_0_._22<br>2_._71_±_0_._09<br>13_._16_±_0_._11<br>51_._54_±_0_._05<br>TABSYN<br>1_._93_±_0_._07<br>2_._81_±_0_._48<br>2_._13_±_0_._10<br>0_._88_±_0_._18<br>3_._13_±_0_._34<br>1_._52_±_0_._03<br>3_._90_±_0_._04|16_._36<br>16_._44<br>28_._18<br>44_._24<br>7_._77<br>23_._21<br>11_._95<br>2_._33|
+|TABDIFF<br>**1**_._**49**_±_**0**_._**16**<br>**2**_._**55**_±_**0**_._**75**<br>**1**_._**74**_±_**0**_._**08**<br>**0**_._**76**_±_**0**_._**12**<br>**2**_._**59**_±_**0**_._**15**<br>**1**_._**28**_±_**0**_._**04**<br>**2**_._**20**_±_**0**_._**16**<br>Improve.<br>22_._8%_ ↓_<br>9_._3%_ ↓_<br>18_._3%_ ↓_<br>13_._6%_ ↓_<br>4_._4%_ ↓_<br>15_._8%_ ↓_<br>37_._3%_ ↓_|**1**_._**80**<br>22_._6%_ ↓_|
+
+
+Due to space limits, the explanations for the additional fidelity metrics and data privacy metrics, along
+with the corresponding experiments, are deferred to Appendices A.2 and E.
+
+
+4.3 PERFORMANCE ON DOWNSTREAM TASKS
+
+
+**Machine Learning Efficiency.** A key advantage of high-quality synthetic data is its ability to serve
+as an anonymized proxy for real datasets and power effective learning on downstream tasks such as
+classification and regression. We measure the synthetic table’s capacity to support downstream task
+learning via Machine Learning Efficiency (MLE). Following established protocols (Kim et al., 2023;
+Lee et al., 2023; Xu et al., 2019), we first split the real dataset into training and test sets, then train the
+given generative model on the real training set. Subsequently, we sample a synthetic dataset of equal
+size to the real training set from the models and use it to train an XGBoost Classifier or XGBoost
+Regressor (Chen & Guestrin, 2016). Finally, we evaluate these machine learning models against the
+real test set to calculate the AUC score and RMSE for classification and regression tasks, respectively.
+
+
+According to the MLE results presented in Table 3, TABDIFF consistently achieves the best or
+second-best performance across all datasets, with the highest average performance outperforming the
+most competitive baseline TABSYN by 15 _._ 0%. This demonstrates our method’s competitive capacity
+to capture and replicate key features of the real data that are most relevant to learning downstream
+machine learning tasks. However, while TABDIFF shows strong performance on MLE, we observe
+that methods with varying performance on data fidelity metrics might have very close MLE scores.
+This suggests that the MLE score evaluated under the current setting may not be a reliable indicator of
+data quality. Therefore, we complement MLE with additional quality metrics in Appendix E, which
+better highlights the superior performance of TABDIFF.
+
+
+**Missing Value Imputation.** We further evaluate TABDIFF’s conditional generation capacity through
+the Missing Value Imputation task. Following the approach in Zhang et al. (2024), we treat the
+inherent classification/regression task of each dataset as an imputation task. Specifically, for each
+table, we train generative models on the training set to generate the target column while conditioning
+on the remaining columns. The imputation performance is measured by the model’s accuracy in
+recovering the target column of the test set. Implementing classifier-free guidance (CFG) for this
+
+
+8
+
+
+Table 3: Evaluation of **MLE** (Machine Learning Efficiency): AUC and RMSE are used for classification and regression tasks, respectively.
+
+|Adult Default Shoppers Magic Beijing News1 Diabetes Average Gap<br>Methods<br>AUC ↑ AUC ↑ AUC ↑ AUC ↑ RMSE ↓ RMSE ↓ AUC ↑ %|Average Gap|
+|---|---|
+|Methods<br>**Adult**<br>**Default**<br>**Shoppers**<br>**Magic**<br>**Beijing**<br>**News**1<br>**Diabetes**<br>**Average Gap**<br>AUC_ ↑_<br>AUC_ ↑_<br>AUC_ ↑_<br>AUC_ ↑_<br>RMSE_ ↓_<br>RMSE_ ↓_<br>AUC_ ↑_<br>%|%|
+|Real<br>_._927_±._000<br>_._770_±._005<br>_._926_±._001<br>_._946_±._001<br>_._423_±._003<br>_._842_±._002<br>_._704_±._002|0_._0|
+|CTGAN<br>_._886_±._002<br>_._696_±._005<br>_._875_±._009<br>_._855_±._006<br>_._902_±._019<br>_._880_±._016<br>_._569_±._004<br>TVAE<br>_._878_±._004<br>_._724_±._005<br>_._871_±._006<br>_._887_±._003<br>_._770_±._011<br>1_._01_±._016<br>_._594_±._009<br>GOGGLE<br>_._778_±._012<br>_._584_±._005<br>_._658_±._052<br>_._654_±._024<br>1_._09_±._025<br>_._877_±._002<br>_._475_±._008<br>GReaT<br>_._913_±._003<br>_._755_±._006<br>_._902_±._005<br>_._888_±._008<br>_._653_±._013<br>OOM<br>OOM<br>STaSy<br>_._906_±._001<br>_._752_±._006<br>_._914_±._005<br>_._934_±._003<br>_._656_±._014<br>_._871_±._002<br>OOM<br>CoDi<br>_._871_±._006<br>_._525_±._006<br>_._865_±._006<br>_._932_±._003<br>_._818_±._021<br>1_._21_±._005<br>_._505_±._004<br>TabDDPM<br>_._907_±._001<br>_._758_±._004<br>_._918_±._005<br>_._935_±._003<br>_._592_±._011<br>4_._86_±_3_._04<br>_._521_±._008<br>TABSYN<br>_._909_±._001<br>_.__±._<br>_._914_±._004<br>_.__±._<br>_._580_±._009<br>_.__±._<br>_._684_±._002|23_._7<br>20_._2<br>42_._1<br>13_._3<br>10_._9<br>30_._2<br>11_._95<br>6_._78|
+|TABDIFF<br>_.__±._<br>_.__±._<br>_.__±._<br>_._936_±._003<br>_.__±._<br>_._866_±._021<br>_.__±._|**5**_._**76**|
+
+
+Table 4: Performance of TABDIFF in the Missing Value Imputation task. We draw a direct comparison
+to the generative approach employed by TABSYN, with the performance of XGBoost classifiers/regressors included as a reference.
+
+|Adult Default Shoppers Magic Beijing News Diabetes Avg. Improv.<br>Methods<br>AUC ↑ AUC ↑ AUC ↑ AUC ↑ RMSE ↓ RMSE ↓ AUC ↑ %|Avg. Improv.|
+|---|---|
+|Methods<br>**Adult**<br>**Default**<br>**Shoppers**<br>**Magic**<br>**Beijing**<br>**News**<br>**Diabetes**<br>**Avg. Improv.**<br>AUC_ ↑_<br>AUC_ ↑_<br>AUC_ ↑_<br>AUC_ ↑_<br>RMSE_ ↓_<br>RMSE_ ↓_<br>AUC_ ↑_<br>%|%|
+|Predicted by XGBoost<br>92_._7<br>77_._0<br>92_._6<br>94_._6<br>0_._423<br>0_._842<br>70_._4|0_._0|
+|Impute with TABSYN<br>93_._1<br>86_._7<br>**96**_._**5**<br>91_._3<br>**0**_._<br>0_._818<br>66_._6<br>Impute with TABDIFF + CFG (_ω_ = 0_._0)<br>92_._5<br>91_._6<br>95_._7<br>92_._5<br>0_._424<br>0_._828<br>66_._0<br>Impute with TABDIFF + CFG (_ω_ = 0_._6)<br>**93**_._**2**<br>**91**_._**7**<br>96_._4<br>**93**_._**0**<br>0_._414<br>**0**_._<br>**66**_._**9**|4_._99<br>3_._76<br>**5**_._**60**|
+
+
+task is straightforward. We approximate the conditional model using the unconditioned TABDIFF
+trained on all columns from the previous unconditional generation tasks. For the unconditional model,
+we train TABDIFF on the target column with a significantly smaller denoising network. Detailed
+implementation is provided in Appendix D, and results are presented in Table 4.
+
+
+As demonstrated, TABDIFF achieves higher imputation accuracy than TABSYN on five out of
+seven datasets, with an average improvement of 5 _._ 60% over the non-generative XGBoost classifier.
+This indicates TABDIFF’s superior capacity for conditional tabular data generation. Moreover, we
+empirically demonstrate the efficacy of our CFG framework by showing that the model consistently
+performs better with _ω_ = 0 _._ 6 compared to _ω_ = 0 _._ 0 (which is equivalent to TABDIFF without CFG).
+
+
+4.4 ABLATION STUDIES
+
+
+**Stochastic** **Sampler.** We conduct ablation studies to assess the effectiveness of the stochastic
+sampler, discussed in Section 2.4. The results are presented in Table 5. We use ‘Det.’ and ‘Sto.’
+as abbreviations for deterministic and stochastic samplers. The deterministic sampler refers to
+the conventional diffusion backward process described in Song et al. (2021); Karras et al. (2022),
+consisting of a series of deterministic ODE steps. According to Table 5, under both fixed and learnable
+noise schedules, TABDIFF with the stochastic sampler consistently outperforms the deterministic
+sampler on the fidelity metrics Shape and Trend, regardless of whether learnable noise schedules are
+enabled. These confirm the efficacy of additional stochasticity in reducing decoding errors during
+backward diffusion sampling.
+
+
+**Adaptively Learnable Noise Schedule.** Next, we perform an ablation study to evaluate the effectiveness of our adaptively learnable noise schedules. We compare the model with learnable schedules
+against the model with non-learnable noise schedules, where the noise parameters for numerical
+features are fixed to _ρi_ _≡_ 7 _,_ _∀i_ in Eq. (10) and, for numerical features, fixed to _kj_ _≡_ 1 _, ∀j_ in Eq. (11).
+We refer to these models as ‘Learn.’ and ‘Fix.’, respectively. According to the results in Table 5, the
+learnable noise schedules substantially improve performance, particularly in Trend and regardless of
+whether the stochastic sampler is enabled. Furthermore, we closely examine the training process of
+both models on the Adult dataset by plotting their changes of training loss in Figure 2. According to
+the figure, the learnable schedules (orange curves) significantly reduce both numerical and categorical
+losses in Eq. (12).
+
+
+9
+
+
+**Method** **Shape** **Trend**
+
+
+TABSYN 1 _._ 35 2 _._ 33
+
+
+TABDIFF-Fix.+Det. 1 _._ 39 2 _._ 29
+TABDIFF-Fix.+Sto. 1 _._ 20 1 _._ 93
+TABDIFF-Learn.+Det. 1 _._ 24 1 _._ 92
+TABDIFF-Learn.+Sto. **1** _._ **17** **1** _._ **80**
+
+
+Table 5: Ablation Studies on the stochastic
+sampler and learnable noise schedules.
+
+
+Figure 2: The adaptively learnable noise schedules
+reduce training loss.
+
+
+1.4
+
+1.2
+
+1.0
+
+0.8
+
+0.6
+
+
+Epoch
+
+
+Epoch
+
+
+1.4
+
+1.2
+
+1.0
+
+0.8
+
+0.6
+
+
+Beijing: DEWP
+
+
+Shoppers: BounceRates
+
+
+Beijing: month
+
+
+0.02
+
+
+0.00
+
+
+20
+
+
+0
+
+
+10000
+8000
+6000
+4000
+2000
+0
+
+
+0.02
+
+
+0.00
+
+
+20
+
+
+0
+
+
+15000
+12500
+10000
+7500
+5000
+2500
+0
+
+
+Beijing: DEWP
+
+
+Shoppers: BounceRates
+
+|Col1|Col2|Col3|Col4|Col5|Col6|TabDDPM<br>TabSyn<br>TabDiff<br>Real|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+
+
+Adult: marital.status
+
+
+0.050
+
+0.025
+
+0.000
+
+
+20
+
+
+0
+
+
+6000
+5000
+4000
+3000
+2000
+1000
+0
+
+
+Beijing: DEWP
+
+
+Shoppers: BounceRates
+
+
+Shoppers: OperatingSystems
+
+
+Beijing: DEWP
+
+
+Shoppers: BounceRates
+
+
+Magic: class
+
+
+0.02
+
+
+0.00
+
+
+20
+
+
+0
+
+
+6000
+5000
+4000
+3000
+2000
+1000
+0
+
+
+Figure 3: Visualization of the marginal densities of the generated data in comparison to the real data.
+Top and Middle: individual numerical column; Bottom: individual categorical column.
+
+
+4.5 VISUALIZATIONS OF SYNTHETIC DATA
+
+
+represent the error rate (the lighter, the better).
+
+archives the closest match to real correlation
+scores, highlighting its superior ability to capture the column-wise correlation of the real data.
+
+
+represent the error rate (the lighter, the better).
+
+
+5 CONCLUSION
+
+
+In this paper, we have introduced TABDIFF, a mixed-type diffusion framework for generating highquality synthetic data. TABDIFF combines a hybrid diffusion process to handle numerical and
+categorical features in their native formats. To address the disparate distributions of features and their
+interrelationships, we further introduced several key innovations, including learnable column-wise
+noise schedules and the stochastic sampler. We conducted extensive experiments using a diverse set
+of datasets and metrics, comprehensively comparing TABDIFF with existing approaches. The results
+demonstrate TABDIFF’s superior capacity in learning the original data distribution and generating
+faithful and diverse synthetic data to power downstream tasks.
+
+
+10
+
+
+ACKNOWLEDGMENT
+
+
+We gratefully acknowledge the support of NSF under Nos. OAC-1835598 (CINES), CCF-1918940
+(Expeditions), DMS-2327709 (IHBEM), IIS-2403318 (III); Stanford Data Applications Initiative, Wu
+Tsai Neurosciences Institute, Stanford Institute for Human-Centered AI, Chan Zuckerberg Initiative,
+Amazon, Genentech, GSK, Hitachi, SAP, and UCB. We also gratefully acknowledge the support of
+ARO (W911NF-21-1-0125), ONR (N00014-23-1-2159), and Chan Zuckerberg Biohub. Minkai Xu
+thanks the generous support of Sequoia Capital Stanford Graduate Fellowship.
+
+
+REFERENCES
+
+
+Ahmed Alaa, Boris Van Breugel, Evgeny S Saveliev, and Mihaela van der Schaar. How faithful
+is your synthetic data? sample-level metrics for evaluating and auditing generative models. In
+_International Conference on Machine Learning_, pp. 290–306. PMLR, 2022.
+
+
+Samuel A. Assefa, Danial Dervovic, Mahmoud Mahfouz, Robert E. Tillman, Prashant Reddy, and
+Manuela Veloso. Generating synthetic data in finance: Opportunities, challenges and pitfalls. In
+_Proceedings of the First ACM International Conference on AI in Finance_, ICAIF ’20. Association
+for Computing Machinery, 2021. ISBN 9781450375849.
+
+
+Jacob Austin, Daniel D Johnson, Jonathan Ho, Daniel Tarlow, and Rianne Van Den Berg. Structured
+denoising diffusion models in discrete state-spaces. _Advances in Neural Information Processing_
+_Systems_, 34:17981–17993, 2021.
+
+
+Vadim Borisov, Kathrin Sessler, Tobias Leemann, Martin Pawelczyk, and Gjergji Kasneci. Language
+models are realistic tabular data generators. In _The Eleventh International Conference on Learning_
+_Representations_, 2023.
+
+
+Nitesh V Chawla, Kevin W Bowyer, Lawrence O Hall, and W Philip Kegelmeyer. Smote: synthetic
+minority over-sampling technique. _Journal of artificial intelligence research_, 16:321–357, 2002.
+
+
+Tianqi Chen and Carlos Guestrin. Xgboost: A scalable tree boosting system. In _Proceedings of the_
+_22nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining_, pp. 785–794, 2016.
+
+
+Prafulla Dhariwal and Alexander Quinn Nichol. Diffusion models beat GANs on image synthesis.
+In A. Beygelzimer, Y. Dauphin, P. Liang, and J. Wortman Vaughan (eds.), _Advances in Neural_
+_Information Processing Systems_, 2021.
+
+
+Joao Fonseca and Fernando Bacao. Tabular and latent space synthetic data generation: a literature
+review. _Journal of Big Data_, 10(1):115, 2023.
+
+
+Mikel Hernandez, Gorka Epelde, Ane Alberdi, Rodrigo Cilla, and Debbie Rankin. Synthetic data
+generation for tabular health records: A systematic review. _Neurocomputing_, 493:28–45, 2022.
+
+
+Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. _arXiv preprint arXiv:2207.12598_,
+2022.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. In _Proceedings_
+_of the 34th International Conference on Neural Information Processing Systems_, pp. 6840–6851,
+2020.
+
+
+Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusionbased generative models. In _Proceedings of the 36th International Conference on Neural Informa-_
+_tion Processing Systems_, pp. 26565–26577, 2022.
+
+
+Jayoung Kim, Chaejeong Lee, Yehjin Shin, Sewon Park, Minjung Kim, Noseong Park, and Jihoon
+Cho. Sos: Score-based oversampling for tabular data. In _Proceedings of the 28th ACM SIGKDD_
+_Conference on Knowledge Discovery and Data Mining_, pp. 762–772, 2022.
+
+
+Jayoung Kim, Chaejeong Lee, and Noseong Park. Stasy: Score-based tabular data synthesis. In _The_
+_Eleventh International Conference on Learning Representations_, 2023.
+
+
+11
+
+
+Diederik Kingma, Tim Salimans, Ben Poole, and Jonathan Ho. Variational diffusion models. _Advances_
+_in neural information processing systems_, 34:21696–21707, 2021.
+
+
+Akim Kotelnikov, Dmitry Baranchuk, Ivan Rubachev, and Artem Babenko. Tabddpm: Modelling
+tabular data with diffusion models. In _International Conference on Machine Learning_, pp. 17564–
+17579. PMLR, 2023.
+
+
+Chaejeong Lee, Jayoung Kim, and Noseong Park. Codi: Co-evolving contrastive diffusion models for
+mixed-type tabular synthesis. In _International Conference on Machine Learning_, pp. 18940–18956.
+PMLR, 2023.
+
+
+Tennison Liu, Zhaozhi Qian, Jeroen Berrevoets, and Mihaela van der Schaar. Goggle: Generative
+modelling for tabular data by learning relational structure. In _The Eleventh International Conference_
+_on Learning Representations_, 2023.
+
+
+Markus Mueller, Kathrin Gruber, and Dennis Fok. Continuous diffusion for mixed-type tabular data,
+2024. [URL https://arxiv.org/abs/2312.10431.](https://arxiv.org/abs/2312.10431)
+
+
+Noseong Park, Mahmoud Mohammadi, Kshitij Gorde, Sushil Jajodia, Hongkyu Park, and Youngmin Kim. Data synthesis based on generative adversarial networks. _Proceedings of the VLDB_
+_Endowment_, 11(10), 2018.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+Subham Sekhar Sahoo, Marianne Arriola, Yair Schiff, Aaron Gokaslan, Edgar Marroquin, Justin T
+Chiu, Alexander Rush, and Volodymyr Kuleshov. Simple and effective masked diffusion language
+models. _arXiv preprint arXiv:2406.07524_, 2024.
+
+
+Jiaxin Shi, Kehang Han, Zhe Wang, Arnaud Doucet, and Michalis K Titsias. Simplified and
+generalized masked diffusion for discrete data. _arXiv preprint arXiv:2406.04329_, 2024.
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _International conference on machine learning_,
+pp. 2256–2265. PMLR, 2015.
+
+
+Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribution.
+_Advances in neural information processing systems_, 32, 2019.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. In _The Ninth_
+_International Conference on Learning Representations_, 2021.
+
+
+Clement Vignac, Igor Krawczuk, Antoine Siraudin, Bohan Wang, Volkan Cevher, and Pascal Frossard.
+Digress: Discrete denoising diffusion for graph generation. In _The Eleventh International Confer-_
+_ence on Learning Representations_, 2023.
+
+
+Lei Xu, Maria Skoularidou, Alfredo Cuesta-Infante, and Kalyan Veeramachaneni. Modeling tabular
+data using conditional gan. In _Proceedings_ _of_ _the_ _33rd_ _International_ _Conference_ _on_ _Neural_
+_Information Processing Systems_, pp. 7335–7345, 2019.
+
+
+Yilun Xu, Mingyang Deng, Xiang Cheng, Yonglong Tian, Ziming Liu, and Tommi Jaakkola. Restart
+sampling for improving generative processes. _Advances in Neural Information Processing Systems_,
+36:76806–76838, 2023.
+
+
+Jiaxuan You, Xiaobai Ma, Yi Ding, Mykel J Kochenderfer, and Jure Leskovec. Handling missing
+data with graph representation learning. _Advances in Neural Information Processing Systems_, 33:
+19075–19087, 2020.
+
+
+Hengrui Zhang, Jiani Zhang, Zhengyuan Shen, Balasubramaniam Srinivasan, Xiao Qin, Christos Faloutsos, Huzefa Rangwala, and George Karypis. Mixed-type tabular data synthesis with
+score-based diffusion in latent space. In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_
+_Representations_, 2024.
+
+
+12
+
+
+Shuhan Zheng and Nontawat Charoenphakdee. Diffusion models for missing value imputation in
+tabular data. _arXiv preprint arXiv:2210.17128_, 2022.
+
+
+13
+
+
+A DETAILED EXPERIMENT SETUPS
+
+
+A.1 DATASETS
+
+
+We use seven tabular datasets from UCI Machine Learning Repository [1] : Adult, Default, Shoppers,
+Magic, Beijing, News, and Diabetes, where each tabular dataset is associated with a machine-learning
+task. Classification: Adult, Default, Magic, Shoppers, and Diabetes. Regression: Beijing and News.
+The statistics of the datasets are presented in Table 6.
+
+
+Table 6: Statistics of datasets. # Num stands for the number of numerical columns, and # Cat
+stands for the number of categorical columns. # Max Cat stands for the number of categories of the
+categorical column with the most categories.
+
+
+**Dataset** # Rows # Num # Cat # Max Cat # Train # Validation # Test Task
+
+
+A.2 METRICS
+
+
+A.2.1 SHAPE AND TREND
+
+
+Shape and Trend are proposed by SDMetrics [2] . They are used to measure the column-wise density
+estimation performance and pair-wise column correlation estimation performance, respectively. Shape
+uses Kolmogorov-Sirnov Test (KST) for numerical columns and the Total Variation Distance (TVD)
+for categorical columns to quantify column-wise density estimation. Trend uses Pearson correlation
+for numerical columns and contingency similarity for categorical columns to quantify pair-wise
+correlation.
+
+
+**Shape** . _Kolmogorov-Sirnov Test (KST)_ : Given two (continuous) distributions _pr_ ( _x_ ) and _ps_ ( _x_ ) ( _r_
+denotes real and _s_ denotes synthetic), KST quantifies the distance between the two distributions using
+the upper bound of the discrepancy between two corresponding Cumulative Distribution Functions
+(CDFs):
+KST = sup (17)
+_x_ _[|][F][r]_ [(] _[x]_ [)] _[ −]_ _[F][s]_ [(] _[x]_ [)] _[|][,]_
+
+where _Fr_ ( _x_ ) and _Fs_ ( _x_ ) are the CDFs of _pr_ ( _x_ ) and _ps_ ( _x_ ), respectively:
+
+                 - _x_
+_F_ ( _x_ ) = _p_ ( _x_ )d _x._ (18)
+
+_−∞_
+
+
+_Total Variation Distance_ : TVD computes the frequency of each category value and expresses it as a
+probability. Then, the TVD score is the average difference between the probabilities of the categories:
+
+
+TVD = [1]
+
+2
+
+
+- _|R_ ( _ω_ ) _−_ _S_ ( _ω_ ) _|,_ (19)
+
+
+_ω∈_ Ω
+
+
+where _ω_ describes all possible categories in a column Ω. _R_ ( _·_ ) and _S_ ( _·_ ) denotes the real and synthetic
+frequencies of these categories.
+
+
+**Trend** . _Pearson Correlation Coefficient_ : The Pearson correlation coefficient measures whether two
+continuous distributions are linearly correlated and is computed as:
+
+_ρx,y_ = [Cov(] _[x, y]_ [)] _,_ (20)
+
+_σxσy_
+
+
+[1https://archive.ics.uci.edu/datasets](https://archive.ics.uci.edu/datasets)
+[2https://docs.sdv.dev/sdmetrics](https://docs.sdv.dev/sdmetrics)
+
+
+14
+
+
+where _x_ and _y_ are two continuous columns. Cov is the covariance, and _σ_ is the standard deviation.
+
+
+Then, the performance of correlation estimation is measured by the average differences between the
+real data’s correlations and the synthetic data’s corrections:
+
+Pearson Score = [1] (21)
+
+2 [E] _[x,y][|][ρ][R]_ [(] _[x, y]_ [)] _[ −]_ _[ρ][S]_ [(] _[x, y]_ [)] _[|][,]_
+
+
+where _ρ_ _[R]_ ( _x, y_ ) and _ρ_ _[S]_ ( _x, y_ )) denotes the Pearson correlation coefficient between column _x_ and
+column _y_ of the real data and synthetic data, respectively. As _ρ ∈_ [ _−_ 1 _,_ 1], the average score is divided
+by 2 to ensure that it falls in the range of [0 _,_ 1], then the smaller the score, the better the estimation.
+
+
+_Contingency similarity_ : For a pair of categorical columns _A_ and _B_, the contingency similarity score
+computes the difference between the contingency tables using the Total Variation Distance. The
+process is summarized by the formula below:
+
+
+Contingency Score = [1]
+
+2
+
+
+_α∈A_
+
+
+- _|Rα,β_ _−_ _Sα,β|,_ (22)
+
+
+_β∈B_
+
+
+where _α_ and _β_ describe all the possible categories in column _A_ and column _B_, respectively. _Rα,β_
+and _Sα,β_ are the joint frequency of _α_ and _β_ in the real data and synthetic data, respectively.
+
+
+A.2.2 _α_ -PRECISION AND _β_ -RECALL
+
+
+Following Liu et al. (2023) and Alaa et al. (2022), we adopt the _α_ -Precision and _β_ -Recall proposed
+in Alaa et al. (2022), two sample-level metric quantifying how faithful the synthetic data is. In
+general, _α_ -Precision evaluates the fidelity of synthetic data – whether each synthetic example comes
+from the real-data distribution, _β_ -Recall evaluates the coverage of the synthetic data, e.g., whether
+the synthetic data can cover the entire distribution of the real data (In other words, whether a real data
+sample is close to the synthetic data.)
+
+
+A.2.3 DETECTION
+
+
+The detection measures the difficulty of detecting the synthetic data from the real data when they are
+mixed. We use the classifer-two-sample-test (C2ST) implemented by SDMetrics, where a logistic
+regression model plays the role of a detector.
+
+
+A.2.4 MACHINE LEARNING EFFICIENCY
+
+
+In MLE, each dataset is first split into the real training and testing set. The generative models are
+learned on the real training set. After training, a synthetic set of equivalent size is sampled.
+
+
+The performance of synthetic data on MLE tasks is evaluated based on the divergence of test scores
+using the real and synthetic training data. Therefore, we first train the machine learning model on
+the real training set, split into training and validation sets with a 8 : 1 ratio. The classifier/regressor
+is trained on the training set, and the optimal hyperparameter setting is selected according to the
+performance on the validation set. After the optimal hyperparameter setting is obtained, the corresponding classifier/regressor is retrained on the training set and evaluated on the real testing set. The
+performance of synthetic data is obtained in the same way.
+
+
+B METHOD DETAILS
+
+
+B.1 ADAPTIVELY LEARNABLE NOISE SCHEDULES
+
+
+For numerical stability, we need to bound _σ_ min and _σ_ max within (0 _,_ 1). As shown in Eq. (10), our
+formulation of the power-mean noise schedule boundaries the noise level in between _σ_ min and _σ_ max.
+To make sure that the noise level for numerical features is also bounded, we linearly map _t_ to the
+interval [ _δ,_ 1 _−_ _δ_ ], thus recasting Eq. (11) into
+
+
+_σk_ [cat] _j_ [(] _[t]_ [) =] _[ −]_ [log] �1 _−_ �(1 _−_ _δ_ ) _· t_ _[k][j]_ + _δ_ �� _._ (23)
+
+
+15
+
+
+B.2 CLASSIFIER-FREE GUIDANCE
+
+
+In this section, we elaborate on how to implement our classifier-free guided conditional generation.
+
+**Simple** **way** **to** **compute** _p_ ˜ _θ_ ( **x** [cat] _s_ _[|]_ **[x]** _[t][,]_ **[ y]** [)] **[.]** [We] [first] [show] [that,] [under] [our] [simple] [masked] [diffusion]
+framework, the guided posterior probability for categorical columns, _p_ ˜ _θ_ ( **x** [cat] _s_ _[|]_ **[x]** _[t][,]_ **[ y]** [)][ can be simply]
+computed by directly interpolating the model’s raw estimates of **x** 0, i.e., _**µ**_ [cat] _θ_ [(] **[x]** _[t][,]_ **[ y]** _[, t]_ [)][ and] _**[ µ]**_ _θ_ [cat][(] **[x]** _[t][, t]_ [)][.]
+
+
+If **x** _t_ is already unmasked (i.e., **x** = **m** ), we remain at the current state as before. Otherwise,
+we compute the posterior according to Eq. (16). Note that all operations below are performed
+element-wise.
+
+log ˜ _pθ_ ( **x** [cat] _s_ _[|]_ **[x]** _[t][,]_ **[ y]** [) = (1 +] _[ ω]_ [) log] _[ p][θ]_ [(] **[x]** _s_ [cat] _[|]_ **[x]** _[t][,]_ **[ y]** [)] _[ −]_ _[ω]_ [ log] _[ p][θ]_ [(] **[x]** _s_ [cat] _[|]_ **[x]** _[t]_ [)] _[.]_
+
+_s_ _[|]_ **[x]** _[t][,]_ **[ y]** [)] _[ω]_ [+1]
+_p_ ˜ _θ_ ( **x** [cat] _s_ _[|]_ **[x]** _[t][,]_ **[ y]** [) =] _[p][θ]_ [(] **[x]** [cat]
+
+_pθ_ ( **x** [cat] _s_ _[|]_ **[x]** _[t]_ [)] _[ω]_
+
+
+=
+
+
+- (1 _−αs_ ) **m** +( _αs−αt_ ) _**µ**_ [cat] _θ_ ( **x** _t,_ **y** _,t_ ) - _ω_ +1
+1 _−αt_
+
+
+- (1 _−αs_ ) **m** +( _αs−αt_ ) _**µ**_ cat _θ_ ( **x** _t,t_ ) - _ω_
+1 _−αt_
+
+
+_θ_ [(] **[x]** _[t][,]_ **[ y]** _[, t]_ [))] _[ω]_ [+1] 1
+= [((1] _[ −]_ _[α][s]_ [)] **[m]** [ + (] _[α][s][ −]_ _[α][t]_ [)] _**[µ]**_ [cat]
+
+((1 _−_ _αs_ ) **m** + ( _αs −_ _αt_ ) _**µ**_ [cat] _θ_ [(] **[x]** _[t][, t]_ [))] _[ω]_ 1 _−_ _αt_
+
+
+Since _**µ**_ [cat] _θ_ and **m** must have zero probability mass in each other’s dimension that can have a positive
+mass, the exponent of summations into the summation of exponents:
+
+
+_θ_ [(] **[x]** _[t][,]_ **[ y]** _[, t]_ [))] _[ω]_ [+1] 1
+= [((1] _[ −]_ _[α][s]_ [)] **[m]** [)] _[ω]_ [+1][ + ((] _[α][s][ −]_ _[α][t]_ [)] _**[µ]**_ [cat]
+
+((1 _−_ _αs_ ) **m** ) _[ω]_ + (( _αs −_ _αt_ ) _**µ**_ [cat] _θ_ [(] **[x]** _[t][, t]_ [))] _[ω]_ 1 _−_ _αt_
+
+By the same property, we can perform division for **m** and _**µ**_ [cat] _θ_ separately:
+
+
+ _θ_ [(] **[x]** _[t][,]_ **[ y]** _[, t]_ [)] _[ω]_ [+1]
+= (1 _−_ _αs_ ) **m** + ( _αs −_ _αt_ ) _**[µ]**_ [cat]
+
+_**µ**_ [cat] _θ_ [(] **[x]** _[t][, t]_ [)] _[ω]_
+
+
+- 1
+1 _−_ _αt_
+
+
+_[−]_ _[α][t]_ [) exp] �(1 + _ω_ ) log _**µ**_ [cat] _θ_ [(] **[x]** _[t][,]_ **[ y]** _[, t]_ [)] _[ −]_ _[ω]_ [ log] _**[ µ]**_ _θ_ [cat][(] **[x]** _[t][, t]_ [)]                 = [(1] _[ −]_ _[α][s]_ [)] **[m]** [ + (] _[α][s]_
+
+1 _−_ _αt_
+
+
+Therefore, we can formulate _p_ ˜ _θ_ ( **x** [cat] _s_ _[|]_ **[x]** _[t][,]_ **[ y]** [)][ as]
+
+
+_p_ ˜ _θ_ ( **x** [cat] _s_ _[|]_ **[x]** _[t][,]_ **[ y]** [) =]
+
+
+�cat( **x** [cat] _s_ [;] **[ x]** _t_ [cat] ) **x** [cat] _t_ = **m** _,_
+
+
+  - _θ_ ( **x** _t,t_ )
+cat **x** [cat] _s_ [;] [(1] _[−][α][s]_ [)] **[m]** [+(] _[α]_ 1 _−_ _[s][−]_ _α_ _[α]_ _t_ _[t]_ [) ˜] _**[µ]**_ [cat]
+
+
+**x** _t_ = **m** _,_
+
+
+where _**µ**_ ˜ [cat] _θ_ [(] **[x]** _[t][, t]_ [)][ can be simply computed as the interpolation of] _**[ µ]**_ _θ_ [cat][(] **[x]** _[t][,]_ **[ y]** _[, t]_ [)][ and] _**[ µ]**_ _θ_ [cat][(] **[x]** _[t][, t]_ [)][:]
+
+log _**µ**_ ˜ [cat] _θ_ [(] **[x]** _[t][, t]_ [) = (1 +] _[ ω]_ [) log] _**[ µ]**_ _θ_ [cat][(] **[x]** _[t][,]_ **[ y]** _[, t]_ [)] _[ −]_ _[ω]_ [ log] _**[ µ]**_ _θ_ [cat][(] **[x]** _[t][, t]_ [)]
+
+
+C DETAILED ILLUSTRATIONS OF TRAINING AND SAMPLING PROCESSES
+
+
+**Training details.** Algorithm 1 outlines the training procedure for our hybrid diffusion model that
+jointly processes numerical and categorical variables. At each training iteration, we begin by sampling
+an initial data point **x** 0 from the training data distribution _p_ ( **x0** ) and a timestep _t_ uniformly from [0 _,_ 1].
+Then, we perform the forward diffusion step.Each numerical feature is perturbed with a Gaussian
+noise whose intensity is determined by the _**σ**_ [num] ( _t_ ); each categorical feature flipped into the mask
+token **m** with probability _**α**_ _t_ (i.e., eq. (6)). The noised numerical and categorical components are
+concatenated together to form a noisy version **x** _t_ of the table row. Lastly, we compute the training
+objective _L_ TABDIFF and perform gradient descent on the model parameters _θ_, _ρ_, and _k_ .
+
+
+**Sampling details.** Here, we present a vivid visual example in Figure 5 to illustrate the backward
+sampling process described in Algorithm 2. Our example demonstrates generating a table with
+
+
+16
+
+
+Figure 5: A vivid visualization of TABDIFF’s generation process.
+
+
+two numerical columns (movie duration and IMDB rating) and two categorical columns (genre and
+awards status). Each row represents an independent sample.
+
+
+First, at _t_ = 1 _._ 0 (the first frame), the numerical features are initialized with Gaussian noise, and all
+categorical components are masked. The algorithm then iterates backward through time steps from
+_t_ = 1 _._ 0 to 0 _._ 0.
+
+
+At each timestep _t_, we first perform the forward stochastic perturbation step (the yellow section of
+Algorithm 2), the core of our stochastic sampler. All features are first perturbed forward to _t_ [+], a
+slightly noisier state, following the same process as the forward step during training. While this
+step is not explicitly depicted in our visualization in Figure 5, it implies that, for instance, during
+the transition at the third frame, the unmasked “None” entry could be stochastically flipped back to
+the [MASK] state. This would then allow the model to re-predict the value, potentially yielding a
+different result (e.g “Won”) than “None” in the subsequent frame.
+
+
+After the stochastic perturbation, we perform the denoising/unmasking step (the blue section of
+Algorithm 2). For numerical features, we denoise to **x** [num] _t−_ 1 [by solving an ODE The update delta is]
+determined by the normalized difference, _d_ **x** [num], between the current state and the model’s prediction,
+scaled by the decrease in noise levels. For categorical variables, we perform the unmasking step.
+Intuitively, if the column is already unmasked, we stay in the current state. This is demonstrated in
+Figure 5, where the “None” entry persists once it has been flipped. If it is still masked, we flip the
+mask token to some valid value of that column with a certain probability ( _[α][t]_ 1 _[−]_ _−_ [1] _α_ _[−]_ _t_ _[α][t]_ ) that increases as
+
+sampling proceeds. We choose which unmasked token to move to based on the model’s predicted
+probability _µ_ [cat] _θ_ [(] _[x][t][, t]_ [)][ over all possible categories of the column.]
+
+
+D IMPLEMENTATION DETAILS
+
+
+We perform our experiment on an Nvidia RTX A4000 GPU with 16G memory and implement
+TABDIFF with PyTorch.
+
+
+17
+
+
+**Data preprocessing.** The raw tabular datasets usually contain missing entries. Thus in the first phase
+of preprocessing, we make up these missing values in the same way as existing works (Kotelnikov
+et al., 2023; Zhang et al., 2024), with numerical missing values being replaced by the column average
+and categorical missing values being treated as a new category. Moreover, the diverse range of
+numerical features typically leads to more difficult and unstable training. To counter this, we then
+transform the numerical values with the QuantileTransformer [3], and recover the original values using
+its inverse during sampling.
+
+
+**Data splits.** For datasets other than Diabetes, we follow the exact same split as Zhang et al. (2024).
+Each dataset is split into the “real” and “test” sets. For the unconditional generation task on which
+data fidelity and the imputation task, the models are trained on the “real” set and evaluated on the
+“real” set. For the MLE task, the “real” set is further split into a training and validation set, and the
+“test” set is used for testing. Finally, for the data privacy measure DCR, the original dataset is equally
+split into two halves, with one being treated as the training set and the other as the holdout set.
+
+
+For Diabetes, we split it into train, validation, and test sets with a ratio of 0.6/0.2/0.2. For the
+MLE task. The training and test sets are regarded as the “real” and “test” sets for the unconditional
+generation and imputation tasks. For DCR, we apply an equal split.
+
+
+**Architecture of the denoising network.** In our implementation, we project each column individually
+to a _d_ dimensional vector using a linear layer, ensuring that all columns are treated with the same
+importance. We set the embedding size _d_ as 4, matching the size used in Zhang et al. (2024). We then
+process these projected vectors with a two-layer transformer, appending positional encodings at the
+end. The transformed vectors are then concatenated and passed through a five-layer MLP conditioned
+on the time embedding. Finally, the output is obtained by sequentially applying another transformer
+followed by a projection layer that recovers the original dimensions. Our denoising network has a
+comparable number of parameters as those experimented in TabDDPM (Kotelnikov et al., 2023) and
+TABSYN (Zhang et al., 2024), as our shared MLP model accounts for most of the parameters.
+
+
+**Hyperparameters Setting.** TABDIFF employs the same hyperparameter setting for all datasets. We
+train our models for 8000 epochs with the Adam optimizer. The training and sampling batch sizes
+are set to 4,096 and 10,000, respectively. Regarding the hyperparameters in TABDIFF, the values
+_σ_ min and _σ_ max are set to 0 _._ 002 and 80 _._ 0, referencing the optimal setting in Karras et al. (2022), and _δ_
+are set to 1e _−_ 3. For the loss weightings, we fix _λ_ cat to 1.0 and linear decay _λ_ num from 1 _._ 0 to 0 _._ 0 as
+training proceeds.
+
+
+During inference, we select the checkpoint with the lowest training loss. We observe that our model
+achieves the superior performance reported paper with as few as 50 discretization steps ( _T_ = 50).
+
+
+**Details on OOMs in experiment result tables** :
+
+
+1. GOOGLE set fixed random seed during sampling in the official codes, and we follow it for
+consistency.
+
+
+2. GReaT cannot be applied on News for maximum length limit.
+
+
+3. STaSy runs out of memory on Diabetes that has hight cardinality categorical columns
+
+
+4. TabDDPM cannot produce meaningful content on the News and Diabetes datasets.
+
+
+**Imputation.** As mentioned in Section 4.3, we obtain the unconditional model of the target column
+by training TABDIFF on it with a smaller denoising network. For this network, we keep the same
+architecture but reduce the number of MLP layers to one.
+
+
+E DETAILED EXPERIMENTS RESULTS
+
+
+In the following sections, we discuss the result on _α_ -precision, _β_ -recall, detection score (C2ST), and
+DCR in detail.
+
+
+[3https://scikit-learn.org/stable/modules/generated/sklearn.](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.QuantileTransformer.html)
+[preprocessing.QuantileTransformer.html](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.QuantileTransformer.html)
+
+
+18
+
+
+E.1 ADDITIONAL FIDELITY METRICS
+
+
+_**α**_ **-precision.** We first evaluate TABDIFF on _α_ -Precision score, a metric that measures the quality of
+synthetic data. Higher scores indicate the synthetic data is more faithful to the real. We present the
+results across all seven datasets in Table 7. TABDIFF achieves the best or second-best performance on
+all datasets. Specifically, TABDIFF ranks first with an average _α_ -Precision score of 98.22, surpassing
+all other baseline methods.
+
+
+_**β**_ **-recall.** Next, we compare TABDIFF to the baselines on the _β_ -Recall scores, which evaluates
+the extent to which synthetic data covers the real data distribution. The results are presented in
+Table 8, with a higher score reflecting a more comprehensive coverage of the real data’s feature space.
+TABDIFF consistently outperforms or matches the top-performing baselines, achieving the highest
+average _β_ -Recall score of 49.40. This indicates that the generated data spans a broad range of the real
+distribution. Though some baseline methods attained higher scores on specific datasets, they fail to
+demonstrate competitive performance on _α_ -Precision, as models have to trade off fine-grained details
+in order to capture a broader range of features.
+
+
+Overall, TABDIFF maintains a balance between broad data coverage and preserving fine-grained
+details. This balance highlights TABDIFF ’s capability in generating synthetic data that faithfully
+captures both the breadth and depth of the original data distribution.
+
+
+**Detection Score (C2ST).** Lastly, we assess the fidelity of synthetic data by using the C2ST test, which
+evaluates how difficult it is to distinguish the synthetic data from the real data. The results are shown
+in Table 9, where a higher score indicates better fidelity. TABDIFF achieves the best performance
+on five of seven datasets, outperforming the most competitive baseline model by 6 _._ 89% on average.
+Notably, TABDIFF excels on Diabetes, which contains many numerous high-cardinality categorical
+features (as indicated by _#_ _Max_ _Cat_ in Table 6), showcasing its ability to generate high-quality
+categorical data. These results, therefore, demonstrate TABDIFF’s capacity to generate synthetic data
+that closely resembles the real data.
+
+
+Table 7: Comparison of _α_ -Precision scores. **Bold Face** highlights the best score for each dataset.
+Higher scores reflect better performance.
+
+|Methods Adult Default Shoppers Magic Beijing News Diabetes|Average Ranking|
+|---|---|
+|CTGAN<br>77_._74_±_0_._15<br>62_._08_±_0_._08<br>76_._97_±_0_._39<br>86_._90_±_0_._22<br>96_._27_±_0_._14<br>96_._96_±_0_._17<br>79_._89_±_0_._10<br>TVAE<br>98_._17_±_0_._17<br>85_._57_±_0_._34<br>58_._19_±_0_._26<br>86_._19_±_0_._48<br>97_._20_±_0_._10<br>86_._41_±_0_._17<br>19_._24_±_0_._15<br>GOGGLE<br>50_._68<br>68_._89<br>86_._95<br>90_._88<br>88_._81<br>86_._41<br>23_._09<br>GReaT<br>55_._79_±_0_._03<br>85_._90_±_0_._17<br>78_._88_±_0_._13<br>85_._46_±_0_._54<br>**98**_._**32**_±_**0**_._**22**<br>OOM<br>OOM<br>STaSy<br>82_._87_±_0_._26<br>90_._48_±_0_._11<br>89_._65_±_0_._25<br>86_._56_±_0_._19<br>89_._16_±_0_._12<br>94_._76_±_0_._33<br>OOM<br>CoDi<br>77_._58_±_0_._45<br>82_._38_±_0_._15<br>94_._95_±_0_._35<br>85_._01_±_0_._36<br>98_._13_±_0_._38<br>87_._15_±_0_._12<br>64_._80_±_0_._53<br>TabDDPM<br>96_._36_±_0_._20<br>97_._59_±_0_._36<br>88_._55_±_0_._68<br>98_._59_±_0_._17<br>97_._93_±_0_._30<br>0_._00_±_0_._00<br>28_._35_±_0_._11<br>TABSYN<br>**99**_._**39**_±_**0**_._**18**<br>**98**_._**65**_±_**0**_._**23**<br>98_._36_±_0_._52<br>99_._42_±_0_._28<br>97_._51_±_0_._24<br>95_._05_±_0_._30<br>**96**_._**61**_±_**0**_._**24**|82_._40<br>5<br>75_._85<br>7<br>70_._81<br>9<br>80_._87<br>6<br>88_._91<br>3<br>84_._29<br>4<br>72_._48<br>8<br>97_._86<br>2|
+|TABDIFF<br>99_._02_±_0_._20<br>98_._49_±_0_._28<br>**99**_._**11**_±_**0**_._**34**<br>**99**_._**47**_±_**0**_._**21**<br>98_._06_±_0_._24<br>**97**_._**36**_±_**0**_._**17**<br>95_._69_±_0_._19|**98**_._**22**<br>1|
+
+
+Table 8: Comparison of _β_ -Recall scores. **Bold Face** highlights the best score for each dataset. Higher
+scores reflects better results.
+
+|Methods Adult Default Shoppers Magic Beijing News Diabetes|Average Ranking|
+|---|---|
+|CTGAN<br>30_._80_±_0_._20<br>18_._22_±_0_._17<br>31_._80_±_0_._350<br>11_._75_±_0_._20<br>34_._80_±_0_._10<br>24_._97_±_0_._29<br>9_._42_±_0_._26<br>TVAE<br>38_._87_±_0_._31<br>23_._13_±_0_._11<br>19_._78_±_0_._10<br>32_._44_±_0_._35<br>28_._45_±_0_._08<br>29_._66_±_0_._21<br>4_._92_±_0_._13<br>GOGGLE<br>8_._80<br>14_._38<br>9_._79<br>9_._88<br>19_._87<br>2_._03<br>3_._74<br>GReaT<br>49_._12_±_0_._18<br>42_._04_±_0_._19<br>44_._90_±_0_._17<br>34_._91_±_0_._28<br>43_._34_±_0_._31<br>OOM<br>OOM<br>STaSy<br>29_._21_±_0_._34<br>39_._31_±_0_._39<br>37_._24_±_0_._45<br>53_._97_±_0_._57<br>54_._79_±_0_._18<br>39_._42_±_0_._32<br>OOM<br>CoDi<br>9_._20_±_0_._15<br>19_._94_±_0_._22<br>20_._82_±_0_._23<br>50_._56_±_0_._31<br>52_._19_±_0_._12<br>34_._40_±_0_._31<br>2_._70_±_0_._06<br>TabDDPM<br>47_._05_±_0_._25<br>47_._83_±_0_._35<br>47_._79_±_0_._25<br>**48**_._**46**_±_**0**_._**42**<br>56_._92_±_0_._13<br>0_._00_±_0_._00<br>0_._03_±_0_._01<br>TABSYN<br>47_._92_±_0_._23<br>46_._45_±_0_._35<br>49_._10_±_0_._60<br>48_._03_±_0_._50<br>59_._15_±_0_._22<br>**43**_._**01**_±_**0**_._**28**<br>33_._72_±_0_._16|23_._11<br>8<br>25_._32<br>7<br>9_._78<br>9<br>43_._34<br>3<br>42_._32<br>4<br>27_._12<br>6<br>35_._44<br>5<br>46_._77<br>2|
+|TABDIFF<br>**51**_._**64**_±_**0**_._**20**<br>**51**_._**09**_±_**0**_._**25**<br>**49**_._**75**_±_**0**_._**64**<br>48_._01_±_0_._31<br>**59**_._**63**_±_**0**_._**23**<br>42_._10_±_0_._32<br>**41**_._**74**_±_**0**_._**17**|**49**_._**40**<br>1|
+
+
+E.2 DATA PRIVACY.
+
+
+Table 10 shows the DCR scores across all datasets. The DCR score represents the probability that a
+generated data sample is more similar to the training set than to the test set, with a score closer to
+50% being ideal, as it indicates a balance between the similarity to training and test distributions.
+
+
+19
+
+
+Table 9: Detection score (C2ST) using logistic regression classifier. Higher scores reflect superior
+performance.
+
+
+**Method** **Adult** **Default** **Shoppers** **Magic** **Beijing** **News** **Diabetes** **Average**
+
+
+Table 10: DCR score, which represents the probability that a generated data sample is more similar to
+the training set than to the test set. A score closer to 50% is more preferable. **Bold Face** highlights
+the best score for each dataset.
+
+
+**Method** **Adult** **Default** **Shoppers** **Beijing** **News** **Diabetes**
+
+
+STaSy 50 _._ 33% _±_ 0 _._ 19 50 _._ 23% _±_ 0 _._ 09 51 _._ 53% _±_ 0 _._ 16 50 _._ 59% _±_ 0 _._ 29 50 _._ 59 **%** _±_ 0 _._ 14 OOM
+CoDi 49 _._ 92% _±_ 0 _._ 18 51 _._ 82% _±_ 0 _._ 26 51 _._ 06% _±_ 0 _._ 18 50 _._ 87% _±_ 0 _._ 11 50 _._ 79% _±_ 0 _._ 23 51 _._ 12% _±_ 0 _._ 19
+TabDDPM 51 _._ 14% _±_ 0 _._ 18 52 _._ 15% _±_ 0 _._ 20 63 _._ 23% _±_ 0 _._ 25 80 _._ 11% _±_ 2 _._ 68 79 _._ 31% _±_ 0 _._ 29 37 _._ 76% _±_ 0 _._ 23
+TABSYN 50 _._ 94% _±_ 0 _._ 17 51 _._ 20% _±_ 0 _._ 18 52 _._ 90% _±_ 0 _._ 22 50 _._ 37 **%** _±_ 0 _._ 13 50 _._ 85% _±_ 0 _._ 33 50 _._ 62% _±_ 0 _._ 28
+
+
+TABDIFF 50 _._ 10 **%** _±_ 0 _._ 32 51 _._ 11 **%** _±_ 0 _._ 36 50 _._ 24 **%** _±_ 0 _._ 62 50 _._ 50% _±_ 0 _._ 36 51 _._ 04% _±._ 32 50 _._ 43 **%** _±_ 0 _._ 18
+
+
+Across the datasets, TABDIFF consistently achieves DCR scores near 50%, highlighting its ability to
+generalize well while maintaining fidelity to the original data distribution.
+
+
+F STUDY OF MODEL EFFICIENCY AND ROBUSTNESS
+
+
+In this section, we present a thorough analysis of TabDDPM’s efficiency and robustness. For efficiency,
+we compare the training and sampling speed of TABDIFF against other competitive baseline methods
+(TabDDPM, TABSYN) using **four different metrics** . For robustness, we first explore the tradeoff
+between discretization steps (i.e., efficiency) and sample quality in diffusion-based models. We then
+dig into detailed error rates Shape and Trend to see whether models are biased towards learning
+some particular columns of datasets. Lastly, we discussed the robustness issues we found with the
+competitive baseline. We use the representative Adult dataset, which contains a balanced number of
+numerical and categorical columns, throughout the experiment. Our results show that, among the
+competitive methods, TABDIFF is not only the most effective but also the most robust and highly
+efficient. Below, we present a detailed analysis.
+
+
+F.1 EFFICIENCY
+
+
+**Training Time.** We first measure the training time of each method. The epoch lengths are set to the
+default configuration of each method, and the validation frequencies are set to the same value of once
+every 200 epochs. Our measurements are presented in the first column of the Table 11, with the entry
+of TABSYN being split into – VAE training time + Diffusion training time.
+
+
+We see that all three methods take a comparable time to complete one training run, with TABSYN
+being 10% faster than TABDIFF and TABDIFF being 20% faster than TabDDPM. The current gap
+between TABDIFF and TABSYN is likely due to TABDIFF ’s slightly deeper network architecture
+compared to TABSYN. We believe that the architecture of TABDIFF can be further optimized to
+improve efficiency, and we leave this as future work.
+
+
+Nevertheless, it is also important to consider model robustness when assessing efficiency. As
+highlighted in Appendix F.2, the training process for TABSYN is notably unstable due to the difficulty
+
+
+20
+
+
+**Method** **Train.T (min)** **Sample.T (sec)** **NFE**
+
+
+TabDDPM 112 125 _._ 1 _±_ 0 _._ 01 1
+TABSYN 45 + 40 = 85 8 _._ 8 _±_ 0 _._ 005 2
+
+
+TABDIFF 94 15 _._ 2 _±_ 0 _._ 007 2
+
+
+Table 11: Model Efficiency.
+
+
+Figure 6: Model Convergence speed.
+
+
+in training VAEs, often requiring you to retrain many times in order to produce a model capable of
+generating samples comparable in quality to TABDIFF. On the other hand, TabDDPM fails to scale
+to more complicated datasets as shown by its poor performance on News and Diabetes. Thus, when
+taking into account training robustness, TABDIFF is the most robust and efficient model among all
+competitive methods.
+
+
+**Training Convergence.** Next, we assess training convergence by evaluating the quality of samples
+generated from intermediate checkpoints during the training process. Figure 6 plots our result. The
+curves show that TABDIFF converges faster than the other methods, as TABDIFF produces more
+high-quality samples when shown to the datasets for the same number of times (i.e., at a same epoch).
+
+
+**Number of Function Evaluation (NFE).** For sampling, we first theoretically analyze the number of
+network calls involved in a single diffusion step (i.e. the denoising step from _xt_ to _xt−_ 1)) for each
+method. The numbers are shown in the third column of Table 11. TABDIFF and TABSYN involve an
+extra network call because TABDIFF employs the second-order correction trick introduced in Karras
+et al. (2022).
+
+
+**Sampling Time.** We empirically measure the time to generate the same number of samples as the
+test set (32561 samples for Adult). The numbers are presented in the second column of Table 11.
+According to them, TABDIFF and TABSYN samples _∼_ 10 _×_ faster than TabDDPM. This result
+is expected, as both TABDIFF and TABSYN, by default, use 20 times fewer sampling steps than
+TabDDPM, while making twice as many network calls per step compared to TabDDPM. TABDIFF ’s
+slightly longer sampling time is also attributed to the evaluation of its deeper network. We believe
+this can be optimized in future work.
+
+
+F.2 ROBUSTNESS
+
+
+**Controling quality-efficiency tradeoff through discretization steps.** One advantage of continuoustime diffusion models (which currently include TABDIFF and TABSYN) is the ability to sample with
+arbitrary discretization steps, allowing them to flexibly tradeoff sample quality with sample efficiency.
+We conduct an experiment that compares how TABDIFF and TABSYN perform when sampled with
+different discretization steps. The results and their visualizations are presented in Table 12 and
+Figure 7.
+
+
+Our results show that TABDIFF consistently achieves higher sample quality across all levels of
+discretization steps. Notably, when the number of steps is reduced to just 5 (requiring only one
+second for sampling), TABSYN fails to generate meaningful content, as indicated by an error rate
+approaching 50%. In contrast, TABDIFF continues to produce valid and coherent content even under
+these highly constrained conditions.
+
+
+**Evaluting column-wise learning bias** To address what it means by “optimal allocation of model
+capacity across heterogeneous features,” we analyze how generation quality varies between different
+features. The Shape and Trend errors presented in Table 5 are averaged over all columns and columns
+pars. Now, using the representative Adult dataset, we visualize the errors at each column and column
+pair in Figures 8 and 9, along with the normalized standard deviations in Table 13 to quantitatively
+measure the variations of errors. All results show that TABDIFF with learnable schedules not only
+achieves lower average error but also exhibits more consistent errors across columns. This balance
+indicates that learnable schedules help the model balance its capacity on different dimensions of the
+data, improving the model’s ability to handle heterogeneous distributions.
+
+
+21
+
+
+**TABSYN** **TABDIFF**
+
+
+Table 12: Ablate sample steps. Figure 7: Visualize the sample step ablation
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|Col16|Col17|Models<br>Fixed<br>Learnable|Col19|Col20|Col21|Col22|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||||||||||
+|||||||||||||||||||||||
+|||||||||||||||||||||||
+
+
+Column ID
+
+
+**Method** **Shape** **Trend** **Shape Std.** **Trend Std.**
+
+
+TABSYN 0 _._ 81 1 _._ 93 1 _._ 01 0 _._ 88
+
+
+TABDIFF-Fixed 0 _._ 74 1 _._ 73 0 _._ 42 0 _._ 75
+TABDIFF-Learn. **0** _._ **63** **1** _._ **49** **0** _._ **29** **0** _._ **64**
+
+
+Table 13: Evaluating column-wise learning bias.
+
+
+Figure 8: TABDIFF with learnable
+schedules has a more balanced Shape
+performance.
+
+
+1.4
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+6.0
+
+
+4.0
+
+
+2.0
+
+
+0.0
+
+
+Figure 9: TABDIFF with learnable schedules has a more balanced Trend performance
+
+
+**Robustness issues of baselines.** We identify several robustness issues with the competitive baseline
+methods. Specifically, TabDDPM struggles to scale to larger datasets, and TABSYN ’s performance is
+highly dependent on the training quality of VAEs, which can vary significantly across different runs.
+
+
+TabDDPM: As shown by the results in Tables 1 and 2, TabDDPM achieves poor performance on
+larger datasets like News and Diabetes. This is because it failed to generate meaningful samples, as
+we can see in Figure 11 that the numerical columns of TabDDPM’s Diabetes samples all collapsed to
+the minimal and maximal values of the domains. After examining the training logs, we discovered
+that this poor generation performance might be due to the explosion of training loss, as shown in
+Figure 10.
+
+
+TABSYN: TABSYN is another competitive tabular generation model whose performance, to our
+best knowledge, is closest to TABDIFF. However, this method has a limitation: as mentioned in
+Zhang et al. (2024), the quality of the VAE has a significant impact on TABSYN ’s performance, as
+it’s the only component that recovers the original data shape. When reproducing TABSYN’s result,
+we observed that across different training runs, the sample quality varies significantly. For poorly
+performing runs, we attempted to retrain the diffusion model and even increased the number of
+training epochs, but these efforts did not improve the results. This confirms that the issue lies with
+the VAE.
+
+
+To further illustrate this, we present the results of Shape and Trend that are averaged across 10
+random training runs in Table 14 (Note: in the paper, we follow the convention of previous works
+and reported results based on 20 different runs of the same checkpoint, and we put the result of the
+best reproduction run for TABSYN). These additional results demonstrate that TABDIFF achieves
+
+
+22
+
+
+**Method** **Adult** **Default** **Beijing**
+
+
+TABSYN (Shape) 1 _._ 31 _±_ **0** _._ **64** **1** _._ **17** _±_ **0** _._ **21** 2 _._ 69 _±_ **1** _._ **44**
+TABSYN (Trend) 2 _._ 73 _±_ **0** _._ **98** 5 _._ 05 _±_ **2** _._ **22** 5 _._ 05 _±_ **1** _._ **88**
+
+
+TABDIFF (Shape) **0** _._ **65** _±_ 0 _._ 08 1 _._ 19 _±_ 0 _._ 12 **1** _._ **07** _±_ 0 _._ 6
+TABDIFF (Trend) **1** _._ **47** _±_ 0 _._ 18 **2** _._ **46** _±_ 0 _._ 62 **2** _._ **61** _.±_ 0 _._ 20
+
+
+Table 14: Models’ consistency across different training runs.
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+|TabDDPM|on Diabetes|
+|---|---|
+||<br>Continuous Loss<br>Discrete Loss|
+|||
+|||
+
+
+Epoch
+
+
+Diabetes: #medications
+
+
+Diabetes: #inpatient
+
+
+Diabetes: #procedures
+
+
+Figure 10: TabDDPM failed to converge on Diabetes
+
+
+2.00
+
+
+0.02
+
+
+0.00
+
+
+2.00
+
+
+0.00
+
+
+0.20
+
+
+0.00
+
+
+Diabetes: timeInHospital
+
+
+Diabetes: #outPatient
+
+
+Diabetes: age
+
+
+Diabetes: #diagnoses
+
+
+Diabetes: #labProcedures
+
+
+0.05
+
+
+0.00
+
+
+2.00
+
+
+0.00
+
+
+1.00
+
+
+0.00
+
+
+0.00
+
+
+0.50
+
+
+0.00
+
+
+1.00
+
+
+0.00
+
+
+Diabetes: #emergency
+
+
+Figure 11: TabDDPM failed to produce meaningful samples on Diabetes
+
+
+significantly more consistent performance across different training runs, as shown by the smaller
+average and standard deviation.
+
+
+23

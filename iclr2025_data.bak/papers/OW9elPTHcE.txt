@@ -1,0 +1,1888 @@
+# A GENERAL FEATURE ATTRIBUTION FRAMEWORK
+## UNDER A BLACK-BOX SETTING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Feature attribution is widely accepted as a form of explanation for reasoning machine decisions, indicating the proportion of each feature’s contribution to an
+inquired decision. While most efforts have focused on determining attributions
+through exact gradient measurements, recent work has adopted gradient estimation
+to derive explanatory information requiring only query-level access – a restricted
+yet more practical accessibility assumption known as the black-box setting. Following this direction, this paper extends the idea of utilizing estimated gradients to a
+broader framework and introduces GEFA ((Gradient-estimation-based Explanation
+For All)). Unlike the previous attempt that focused on explaining image classifiers,
+the proposed explainer derives feature attributions in a proxy space, making it
+generally applicable to arbitrary black-box models, regardless of input type. In
+addition to its close relationship with Integrated Gradients, we find, surprisingly,
+that our approach – a path method built upon estimated gradients – outputs unbiased estimates of Shapley Values. By avoiding the potential information waste
+sourced from computing marginal contributions, it improves the quality of derived
+explanations, as demonstrated by our quantitative evaluations.
+
+
+1 INTRODUCTION
+
+
+With the explosive growth of deep learning models, explainability has become an increasingly
+important research topic. While data-driven models excel in performance, their opaque nature,
+originating from the implicit learning processes, raises concerns and risks, particularly when deployed
+in critical domains such as medical diagnosis, finance, and autonomous driving. The demand for
+transparency has seen the development of various techniques, including feature attribution, which is
+the focus of this work.
+
+
+Current attempts to determine feature attribution typically fall into two categories depending on
+the model accessibility assumption: the white-box and black-box methods. White-box approaches
+assume full access to a model, deriving explanations by investigating in detail the model’s internal
+workings through, for example, analysis of gradients (Simonyan et al., 2014; Sundararajan et al.,
+2017) or supervision of information flow (Samek et al., 2021). Albeit beneficial to explanation
+procedures, the full accessibility assumption limits the applicability of white-box approaches under
+practical settings due to safety and security concerns. Models deployed for public use are usually
+wrapped by limited APIs and accessible only via queries. On the other hand, the black-box explainers,
+following the assumption of query-level access, determine feature attributions by analyzing the
+correlation between input features and model outcomes (Ribeiro et al., 2016). As a trade-off for the
+loosened accessibility assumption, black-box explanations tend to be less precise, especially when
+explaining models operating in high-dimension feature spaces. This is because inferring explanatory
+information indirectly from queries is computationally expensive, with the cost positively correlated
+to the dimensionality of the feature space.
+
+
+To combine the strengths of both categories, Cai & Wunder (2024) proposes GEEX, a path method
+built upon gradient estimation. Focused on the problem of explaining image classifiers, GEEX
+delivers gradient-like explanations under a black-box setting, achieving a performance that matches
+white-box explainers. However, the discussion made is limited to models that take continuous features
+as inputs, and the method struggles with discrete or categorical features like texts. This limitation
+arises from GEEX’s reliance on path integral, which is not well-defined in discrete feature spaces.
+
+
+1
+
+
+While applying GEEX at the embedding layer is indeed a reasonable circumvention, it is arguable
+that transforming from the original feature space to some embedding space already accesses internal
+model details, thereby violating the black box assumption.
+
+
+Bridging the gap in the applicability to models operating on discrete data, this paper extends the
+idea of gradient-estimation-based explanation and introduces GEFA [1] (Gradient-estimation-based
+Explanation For All), a general feature attribution framework built upon carefully designed proxy
+variables. These proxy variables facilitate the implementation of gradient estimation and path
+integral, regardless of input types or formats. The proposed method comes with strong theoretical
+guarantees. First, GEFA is an unbiased calculator of Shapley Values (Shapley, 1953), which is
+demonstrated through rigorous mathematical proof. Compared to previous attempts in computing
+Shapley Values, GEFA reduces potential information waste in sampling-based estimations, which
+compute marginal contributions Mitchell et al. (2022), and avoids calculations of factorials in the
+kernel method (Lundberg & Lee, 2017) for determining sample weights. Second, we show that our
+black-box explainer differs from Integrated Gradients (IG), a white-box approach by (Sundararajan
+et al., 2017), in only the path choice. It is proved that the two approaches become equivalent when
+their paths are aligned, emphasizing the connection between the gradient-estimation-based approach
+and actual gradients. Finally, we design a simple control variate that is guaranteed to improve
+explanation quality under a simple and realistic assumption. Its effectiveness is demonstrated through
+quantitative experiments across various settings.
+
+
+2 RELATED WORK
+
+
+Gradients are widely used to allocate feature attributions in a white-box setting as they reveal a
+model’s sensitivity to changes in feature values. In the early development of explainability, Simonyan
+et al. (2014) and Smilkov et al. (2017) interpreted gradients directly as explanations. Their methods
+retrieve explanatory information by tracing partial derivatives of a decision function with respect to
+its input features. Although adopting vanilla gradients is a reasonable starting point, gradients by
+themselves reflect local sensitivity and do not truthfully represent contributions of feature presence
+without a proper definition of feature absence.
+
+
+IG (Sundararajan et al., 2017) addresses the limitation of vanilla gradients with a baseline point
+modeling feature absence. The approach integrates gradients over a straightline path connecting
+the baseline and the explaining target, thereby capturing the overall impact of feature presence.
+Following work by Sturmfels et al. (2020) explored the impact of baseline choice and suggested
+adopting a distribution, rather than a deterministic instance, as the baseline (Erion et al., 2021). Other
+extensions of IG include decomposing noise directions from the path integral (Yang et al., 2023),
+refining explanations by filtering out high frequencies (Muzellec et al., 2024), and investigating
+feature interactions through the integration of second-order derivatives (Janizek et al., 2021). Parallel
+to these efforts in improving the explanation procedure, Decker et al. (2024) demonstrated that a
+proper linear composition of explanations from various approaches yields provable improvements.
+The family of propagation-based methods (Montavon, 2019) represents a significant alternative
+white-box solution, which designs layer-wise back-propagation rules that explicitly utilize model
+architecture information for the retrieval of explanatory information. As this paper focuses primarily
+on gradient-based and gradient-like explanations, we refer interested readers to the survey by (Samek
+et al., 2021) for further details on relevance propagation.
+
+
+Unlike white-box methods, which have direct access to model details, black-box explainers determine feature attributions by collecting and analyzing observations. The idea was proposed by
+LIME (Ribeiro et al., 2016), which generates queries by altering feature values of the original input
+and collects model responses to the perturbed instances. By solving a linear regression problem
+with the observed input-output pairs, LIME derives regressor coefficients as feature attributions.
+Subsequently, Lundberg & Lee (2017) proposed KernelSHAP, a kernel method that approximates
+Shapley Values using weighted linear regression. Additionally, Lundberg & Lee (2017) formalized
+the relationship between the feature attribution problem and cooperative game theory, strengthening
+the importance of Shapley Values in explainability.
+
+
+1Code for reproducibility can be found at: https://hide.for.anonymity
+
+
+2
+
+
+Under the established framework of black-box approaches, succeeding works have aimed at improving query efficiency and explanation quality – long-standing challenges for black-box approaches.
+For example, Dhurandhar et al. (2022) extended LIME with an adaptive neighborhood sampling
+scheme that constrains sampling to locally linear regions based on the explicand. Petsiuk et al.
+(2018) alleviated concerns about computational expenses by softly grouping input features via
+mask resizing, effectively reducing the dimensionality of the feature space. Similarly, Shrotri et al.
+(2022) and Dhurandhar et al. (2024) improved sampling efficiency by narrowing the search space.
+Parallel to refining the sampling process, Frye et al. (2020) and Heskes et al. (2020) enhanced
+explanation quality by incorporating prior causal knowledge into the SHAP framework. Okhrati
+& Lipani (2021) leveraged the multilinear extension method from game theory literature (Owen,
+1972) to develop a sampling-based explainer with reduced variance. More recently, Cai & Wunder
+(2024) adopted gradient estimation and imitated IG under a black-box setting by integrating estimated
+gradients, resulting in white-box-level performance with query-level access. However, this approach
+is limited to continuous feature space, which is the gap addressed in the following sections.
+
+
+3 PRELIMINARY
+
+
+3.1 FEATURE ATTRIBUTION
+
+
+Given a model function _f_ ( _·_ ), a target input (the explicand) _**x**_ = ( _x_ 1 _, x_ 2 _, . . ., xp_ ), and a predefined
+baseline **˚** _**x**_ = (˚ _x_ 1 _,_ ˚ _x_ 2 _, . . .,_ ˚ _xp_ ), an attribution method seeks a vector _**ξ**_ _∈_ R _[p]_ that decomposes the
+total contribution to an inquired decision into feature attributions. Formally, this is represented as:
+
+
+_Af_ : ( _**x**_ _,_ **˚** _**x**_ ) _�→_ ( _ξ_ 1 _, ξ_ 2 _, . . ., ξp_ )
+
+
+Throughout the paper, we mark vectors in bold and denote scalars with plain symbols.
+
+
+As a result of allocating feature contributions, the attribution scores _ξi_ indicate the contribution of
+each feature _xi_ to the model outcome _f_ ( _**x**_ ), and they should sum up to the difference between the
+model outcome with all features present and the outcome with full feature absence, which is modeled
+by the baseline:
+_p_
+
+      - _ξi_ = _f_ ( _**x**_ ) _−_ _f_ ( **˚** _**x**_ ) (1)
+
+
+_i_ =0
+
+
+Approaches complying with equation 1 are said to satisfy the property of _Completeness_ - a fundamental aspect of feature attribution methods. Together with completeness, further properties are desired
+for feature attribution methods, which upholds the practical meanings of feature attribution:
+
+
+    - _Sensitivity_ : a feature should receive non-zero attribution if the difference of its value between
+the explicand and the baseline induces a change in model outcomes
+
+
+    - _Insensitivity_ : the attribution should be zero for any feature, on which the model is functionally
+independent
+
+
+    - _Linearity_ : the explanation for the linear composition of two functions should equal the
+weighted sum of the separate explanations for them
+
+
+    - _Symmetry_ : if a function is symmetric in two variables _xi_ and _xj_, the attributions to the two
+features should be the same when the explicand-baseline pair holds _xi_ = _xj_ and ˚ _xi_ = ˚ _xj_
+
+
+3.2 GRADIENT ESTIMATION UNDER A BLACK-BOX SETTING
+
+
+In the context of feature attribution, a black box setting refers to query-level access, meaning that
+the model to be explained can only be accessed via its input and output interfaces. Indeed, lacking
+knowledge about the model’s internal details prohibits the application of attribution methods that
+depend on exact measurements of gradients. However, gradients, which facilitate the derivation of
+feature attributions, can still be estimated by evaluating model inputs and outputs. Defining a search
+distribution _**π**_ ( _·|_ _**x**_ ) parameterized by _**x**_, the expected model outcome over _**π**_ ( _·|_ _**x**_ ) is given by:
+
+
+                    _J_ ( _**x**_ ) := E _**π**_ ( _**z**_ _|_ _**x**_ )[ _f_ ( _**z**_ )] = _f_ ( _**z**_ ) _**π**_ ( _**z**_ _|_ _**x**_ ) d _**z**_ (2)
+
+
+3
+
+
+where _**z**_ indicates samples drawn from the search distribution. The gradient of the expected model
+outcome with respect to _**x**_ is:
+
+
+4 GRADIENT-ESTIMATION-BASED EXPLANATION FOR ALL
+
+
+4.1 GRADIENT ESTIMATION WITH PROXY VARIABLES
+
+
+Given the diverse nature of potential input features, sampling instances by perturbing feature values
+is not always straightforward. Instead of altering feature values by applying noises, we define the
+search distribution through a set of proxy variables _**α**_ = ( _α_ 1 _, α_ 2 _, . . ., αp_ ). The proxy vector _**α**_ shares
+the same size as the explicand, where each element _αi_ configures the presence probability of the
+corresponding explicand feature _xi_ . Recalling that feature presence and absence are modeled by
+feature values of the explicand and the baseline, respectively. A point _**x**_ ( _**α**_ ) in the continuous proxy
+space of _**α**_ _∈_ [0 _,_ 1] _[p]_ describes a distribution, with each sample _**z**_ _∼_ _**x**_ ( _**α**_ ) is given by:
+
+_zi_ =                - _xi_ if _ϵi_ = 1 _∀i ∈{_ 1 _,_ 2 _, . . ., p}_
+˚ _xi_ if _ϵi_ = 0
+
+
+where _**ϵ**_ = ( _ϵ_ 1 _, ϵ_ 2 _, . . ., ϵp_ ) denotes a binary mask _**ϵ**_ _∼_ Bernoulli( _**α**_ ) sampled from a multivariate
+Bernoulli distribution parameterized by _**α**_ . For ease of notation, we denote the feature selection
+process with a feature-wise combination operator _⊕_, which indicates a feature _zi_ in the sample _**z**_
+takes the value of _**x**_ when the corresponding mask component _ϵi_ = 1, otherwise set to ˚ _xi_ :
+
+
+_**z**_ = _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ _,_ _**ϵ**_ _∼_ Bernoulli( _**α**_ )
+
+
+The vector **¯** _**ϵ**_ = 1 _p −_ _**ϵ**_ is the complement of _**ϵ**_ . The operator indicates the element-wise product,
+where a feature value is selected if the mask component equals one, otherwise it remains undefined
+until a value is assigned through the _⊕_ operator. Please note that the feature selection operator does
+not depend on feature types and is generally applicable as long as the explicand-baseline pair is
+specified. Given an explicand-baseline pair, the sampling of a query _**z**_ depends fully on the binary
+mask _**ϵ**_, whose probability mass function is:
+
+_**π**_ ( _**z**_ _|_ _**x**_ ( _**α**_ )) = _**π**_ ( _**ϵ**_ _|_ _**α**_ ) = _**α**_ _**[ϵ]**_ _·_ (1 _p −_ _**α**_ ) _**[ϵ]**_ **[¯]** (5)
+
+Here, _**α**_ _**[ϵ]**_ is a shorthand for ( _α_ 1 _[ϵ]_ [1] _, α_ 2 _[ϵ]_ [2] _, . . ., αp_ _[ϵ][p]_ ). Substituting the distribution given by equation 5
+for the search distribution _**π**_ in equation 4 yields an estimator for the gradient of _f_ ( _**x**_ ( _**α**_ )) w.r.t. the
+proxy parameters _**α**_ :
+
+
+_**ηα**_ ( _**x**_ ( _**α**_ )) = E _**π**_ ( _**z**_ _|_ _**x**_ ( _**α**_ ))[ _f_ ( _**z**_ ) _· ∇_ _**α**_ log _**π**_ ( _**z**_ _|_ _**x**_ ( _**α**_ ))]
+
+= E _**π**_ ( _**ϵ**_ _|_ _**α**_ )[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _· ∇_ _**α**_ log( _**α**_ _**[ϵ]**_ _·_ (1 _p −_ _**α**_ ) _**[ϵ]**_ **[¯]** )]
+
+_**ϵ**_ **¯**
+
+= E _**π**_ ( _**ϵ**_ _|_ _**α**_ )[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _·_ ( _**α**_ _**[ϵ]**_ _[−]_ 1 _p −_ _**α**_ [)]] (6)
+
+
+When referring to the logarithm of the probability vector _**π**_, we specifically mean applying the
+logarithm operation element-wise to each vector component. Given that _**α**_ represents the probabilities
+of feature presence, the output of _**ηα**_ ( _**x**_ ( _**α**_ )) can be interpreted as the sensitivity of model outcomes
+to changes in feature presence.
+
+
+4
+
+
+_∇_ _**x**_ _J_ ( _**x**_ ) = _∇_ _**x**_
+
+
+_f_ ( _**z**_ ) _**π**_ ( _**z**_ _|_ _**x**_ ) d _**z**_ (3)
+
+
+The above formula can be further simplified using the log-likelihood trick, under the assumption that
+both _f_ ( _·_ ) and _**π**_ ( _·|_ _**x**_ ) are continuously differentiable (Mohamed et al., 2020):
+
+
+              _∇_ _**x**_ _J_ ( _**x**_ ) = [ _f_ ( _**z**_ ) _· ∇_ _**x**_ log _**π**_ ( _**z**_ _|_ _**x**_ )] _**π**_ ( _**z**_ _|_ _**x**_ ) d _**z**_
+
+
+= E _**π**_ ( _**z**_ _|_ _**x**_ )[ _f_ ( _**z**_ ) _· ∇_ _**x**_ log _**π**_ ( _**z**_ _|_ _**x**_ )] (4)
+
+
+The integral can be empirically approximated with a Monte Carlo estimator with a set of queries
+_**Z**_ = _{_ _**z**_ _|_ _**z**_ _∼_ _**π**_ ( _·|_ _**x**_ ) _}_, leading to the typical score-function gradient estimator:
+
+
+1
+_**ηx**_ ( _**x**_ ) := _∇_ _**x**_ _J_ ( _**x**_ ) _≈_ _|_ _**Z**_ _|_
+
+
+- _f_ ( _**z**_ ) _· ∇_ _**x**_ log _**π**_ ( _**z**_ _|_ _**x**_ )
+
+_**z**_ _∈_ _**Z**_
+
+
+4.2 DERIVATION OF GEFA
+
+
+In addition to promoting the derivation of the gradient estimator, the introduction of proxy parameters
+facilitates the integration of inputs with discrete features (e.g. text) when deriving feature attribution.
+Formally, let _**α**_ ( _·_ ) = ( _α_ 1 _, . . ., αp_ ) : [0 _,_ 1] _→_ [0 _,_ 1] _[p]_ be a path in the proxy space from the baseline
+_**x**_ ( _**α**_ (0)) = _**x**_ (0 _p_ ) = **˚** _**x**_ to the explicand _**x**_ ( _**α**_ (1)) = _**x**_ (1 _p_ ) = _**x**_, feature attributions can be computed
+by integrating the gradient estimator along the path _**α**_ ( _γ_ ) for _γ_ _∈_ [0 _,_ 1]. When taking the straightline
+path _**α**_ ( _γ_ ) = _γ_ _·_ 1 _p_, which is the only symmetry-preserving path (Sundararajan et al., 2017), the
+GEFA explainer is derived as follows:
+
+
+          - 1
+_**ξ**_ := _**ηα**_ ( _**x**_ ( _γ ·_ 1 _p_ )) d _γ_
+
+0
+
+
+4.3 VARIANCE REDUCTION
+
+
+Deriving the explainer from a score-function gradient estimator allows the application of variance
+reduction techniques in the gradient estimation literature. Specifically, we construct a control
+
+
+5
+
+
+ - 1
+=
+
+
+_**[ϵ]**_ _**ϵ**_ **¯** (7)
+
+_γ_ _[−]_ 1 _−_ _γ_ [)] d] _[γ]_
+
+
+0 E _**π**_ ( _**ϵ**_ _|γ·_ 1 _p_ )[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _·_ ( _γ_ _**[ϵ]**_
+
+
+In practice, equation 7 can be approximated with a Monte-Carlo estimator, given a budget of _n_
+queries:
+
+
+_**ξ**_ _≈_ [1]
+
+_n_
+
+
+ 
+
+_γ∼U_ [0 _,_ 1]
+
+
+ - _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _·_ ( _**[ϵ]**_
+
+_γ_
+
+_**π**_ ( _**ϵ**_ _|γ·_ 1)
+
+
+_**[ϵ]**_ _**ϵ**_ **¯** (8)
+
+_γ_ _[−]_ 1 _−_ _γ_ [)]
+
+
+**Theorem 1.** _GEFA satisfies the property of Completeness, Sensitivity, Insensitivity, Linearity, and_
+_Symmetry._
+
+
+Appendix A.2 details these properties and the corresponding proof derived from the gradient estimation perspective following equation 7. On top of the proved properties, we surprisingly find that
+GEFA, an approach derived from a proxy gradient estimator, is an alternative to compute Shapley
+Values as stated in Theorem 2.
+
+**Theorem 2.** _Feature attributions determined by GEFA are exactly Shapley Values._
+
+
+The claim in Theorem 2 is mathematically rigorously proved, please refer to Appendix A.1 for further
+details. Being an unbiased calculator of Shapley Values also explains the many properties hold by
+GEFA.
+
+
+While also producing an unbiased approximation of Shapley Values, GEFA differs from other
+sampling-based attempts by simplifying the sampling process. Concretely, the computation of equation 8 does not rely on marginal contributions, thus avoiding potential information wastes during approximation. Let _**zS**_ denote a query with _**S**_ being the set of indices corresponding to the
+present features. In GEFA, each query _**zS**_ contributes to the attribution estimates of any feature
+_xi,_ _∀i ∈{_ 1 _,_ 2 _, . . ., p}_, regardless of the existence of a paired sample _**zS**_ _∪{i}_ (for _i_ _∈/_ _**S**_ ) or _**zS**_ _\{i}_
+(for _i ∈_ _**S**_ ) that would be required for computing marginal contributions. Algorithm 1 summarizes
+the overall explanation scheme derived from equation 8.
+
+
+**Algorithm 1** GEFA Explanation Scheme
+
+
+**Input:** _**x**_ : the explicand; **˚** _**x**_ : the baseline;
+**Output:** _**ξ**_ : feature attribution scores;
+
+
+1: _**ξ**_ = 0 _p_ # _Estimator initialization_
+2: **while** Query budget available **do**
+3: _γ_ _∼U_ [0 _,_ 1] # _Proxy path point sampling_
+4: _**ϵ**_ _∼_ _**π**_ ( _·|γ ·_ 1 _p_ ) # _Mask sampling_
+5: _**z**_ = _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ ¯ **˚** _**x**_ # _Query construction_
+6: _**ξ**_ = _**ξ**_ + [1] _[·][ f]_ [(] _**[z]**_ [)] _[ ·]_ [ (] _**[ϵ]**_ _[−]_ _**ϵ**_ ¯ [)] # _Observation collection_
+
+
+6: _**ξ**_ = _**ξ**_ + _n_ [1] _[·][ f]_ [(] _**[z]**_ [)] _[ ·]_ [ (] _γ_ _**[ϵ]**_ _[−]_ 1 _−_ _**ϵ**_ ¯ _γ_ [)] # _Observation collection_
+
+7: **end while**
+8: **return** _**ξ**_
+
+
+[1] _**[ϵ]**_
+
+_n_ _[·][ f]_ [(] _**[z]**_ [)] _[ ·]_ [ (] _γ_
+
+
+variate that reduces the estimation variance under the assumption that the target model outcomes are
+correlated with the number of present features, denoted by _|_ _**ϵ**_ _|_ = [�] _i_ _[p]_ =1 _[ϵ][i]_ [.] [Assumption 1 formally]
+states the condition required for the _validity_ of the designed control variate.
+
+
+**Assumption 1.** For any explicand-baseline pair that satisfies _f_ ( _**x**_ ) _̸_ = _f_ ( **˚** _**x**_ ), the correlation between
+the number of present features and the corresponding model outcomes should be non-zero.
+
+
+In practice, we argue that the above assumption generally holds for any properly trained model that
+makes predictions based on (either appropriate or inappropriate Geirhos et al. (2020)) evidence from
+its inputs. This is because a higher ratio of presented features induces a higher likelihood of including
+relevant components, thus a convergence toward the prediction result _f_ ( _**x**_ ). Based on this assumption,
+the control variate is constructed as a function of _|_ _**ϵ**_ _|_ :
+
+
+�0 if _|_ _**ϵ**_ _|_ = _p_
+_h_ ( _|_ _**ϵ**_ _|_ ) = (9)
+_|_ _**ϵ**_ _|/p_ else
+
+
+Adding the control variate weighted by a fixed hyperparameter _β_ to the target function gives:
+
+
+_f_ ˜( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) = _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _−_ _β · h_ ( _|_ _**ϵ**_ _|_ ) (10)
+
+
+Replacing _f_ ( _·_ ) in equation 7 accordingly with the updated _f_ [˜] ( _·_ ) yields the variant GEFA:˜
+
+
+**Theorem 3.** _The unbiasness of_ _**ξ**_ [˜] _remains intact after the introduction of the control variate h_ ( _·_ ) _._
+
+
+Appendix A.3 provides the proof of Theorem 3, along with the derivation and further details
+of _h_ ( _·_ ). The variance reduction effect is optimized when the weighting hyperparameter _β_ =
+Cov( _f, h_ ) _/_ Var( _h_ ). While the variance of the control variate can be computed in closed form,
+the covariance, albeit not explicitly given, can be empirically estimated (Mohamed et al., 2020) with
+existing queries for attribution estimation.
+
+
+4.4 RELATION TO INTEGRATED GRADIENTS
+
+
+Since the proposed method is built upon estimated gradients, this section further explores its relationship to IG [2] that utilizes actual gradients. The equivalence between GEFA and IG does not hold
+when both take a straightline path, as GEFA’s path is constructed in the proxy space, which differs
+from the original feature space. However, the relation becomes clearer when both explainers follow a
+monotonic path along the edges of their respective spaces. Along an edge path, integration moves
+step-by-step from one vertex _**zS**_ in the feature/proxy space to an adjacent vertex _**zS**_ _∪{i}_ that differs
+in only one feature.
+
+
+**Theorem 4.** _GEFA and IG are equivalent when taking the same edge path._ _Averaging their results_
+_over all p_ ! _unique edge paths converges to the outcome of GEFA that follows the straightline path in_
+_the proxy space._
+
+
+It can be easily shown that, when following the same permutation order, GEFA and IG both compute
+the marginal contribution of a feature _xi_, namely _f_ ( _**zS**_ ) _−_ _f_ ( _**zS**_ _∪{i}_ ), conditioned on a set of
+present features _{xj|j_ _∈_ _**S**_ _}_ . Given the fact that GEFA is an unbiased estimator of Shapley Values,
+concluding Theorem 4 is not surprising – averaging marginal contributions is the typical solution
+for determining Shapley Values. Please refer to Appendix A.4 for the detailed proof. The close
+relationship between IG and Shapley Values is consistent with previous claims by Sundararajan
+& Najmi (2020). Furthermore, Theorem 4 motivates the choice of the straightline path along the
+diagonal of the proxy space, converting the problem of averaging the estimates of several edge paths
+to estimating attributions on one specific path.
+
+
+2By considering IG, we omit the practical difficulty that discrete features are usually not differentiable in
+their original forms, thus requiring additional pre-/post-processing steps.
+
+
+6
+
+
+  - 1
+_**ξ**_ ˜ =
+
+
+_**[ϵ]**_ _**ϵ**_ **¯** (11)
+
+_γ_ _[−]_ 1 _−_ _γ_ [)] d] _[γ]_
+
+
+0 E _**π**_ ( _**ϵ**_ _|γ·_ 1 _p_ )[ _f_ [˜] ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _·_ ( _γ_ _**[ϵ]**_
+
+
+5 EXPERIMENTS
+
+
+5.1 EXPERIMENTAL SETTING
+
+
+To show GEFA’s applicability under various scenarios, we consider the most representative tasks
+involving discrete and continuous features: text and image classifications.
+
+
+_Dataset_ : The _Amazon_ reviews polarity (McAuley & Leskovec, 2013) is adopted for setting up a
+sentiment analysis task for text classification. The review texts in the dataset include customer
+reviews of products with a maximal length of 512 tokens, labeled as either positive or negative. As for
+image classification, we consider _ImageNet_ (Russakovsky et al., 2015), a dataset sets up a multi-class
+classification task in high-dimensional input feature space, posing challenges to black-box explainers
+that derives feature attributions by querying.
+
+
+_Classifier_ : We fine-tune a publicly available pretrained version of BERT [3] on the _Amazon_ review
+dataset. For ImageNet, a pre-trained version of InceptionV3 [4] is adopted without further training.
+The choice of the two models involves attention mechanisms and the traditional convolution layer,
+which are the most popular components in current neural network designs but have very different
+architectures from each other, with the purpose of demonstrating that GEFA’s explanation quality is
+independent of specific model structures.
+
+
+_Evaluation_ _via_ _manipulation_ : Despite explainability being a widely studied topic, there is yet
+no consent for the quantitative evaluation of explanation quality due to the lack of ground truth
+explanations (which we are seeking). Compromising to the practical difficulty, a popular evaluation
+scheme, evaluation via deletion (Samek et al., 2016), quantifies explainer’s performance indirectly by
+summarizing the effectiveness of feature removal guided by explanations. Following the intuition
+that deleting relevant features should induce significant changes in prediction results, the evaluation
+scheme repeatedly removes features in descending order according to their attribution scores. The
+area over the curve drawn by the sequence of prediction outcomes quantifies explanation quality. A
+larger area indicates a more informative explanation that boosts the impact of the deletion process.
+Formally, let _**x**_ [(] _[k]_ [)] denote a manipulated version of the explicand with a number of _k_ features removed,
+the normalized AOPC (area over perturbation curve) is computed by:
+
+
+_Competitors_ : We consider several feature attribution methods closely related to the proposed method,
+including two gradient-based approaches assuming white-box access and three black-box explainers:
+
+
+    - **VG** (Vanilla Gradient): an approach interpreting raw gradients directly as explanations
+
+    - **IG** (Integrated Gradients): a method integrating actual gradients along a straightline path
+
+    - **KSHAP** (KernelSHAP): a Shapley Value estimator built upon weighted linear regression
+
+    - **PSHAP** (PartitionSHAP): a variant of sampling-based estimator computing Shapley Values
+recursively through a hierarchy of features (Chen et al., 2023)
+
+    - **GEEX** (Gradient-Estimation-based Explanation): a black-box approach deriving explanations based on estimated gradients
+
+
+The selected competitors are evaluated following the above evaluation scheme and compared to
+the two variants of the proposed methods: GEFA and GEFA˜, denoting the version without and
+with the control variate respectively. In addition to the listed explainers, a random feature remover
+(abbreviated as **Random** ) is considered a baseline competitor. It removes features on a random basis
+imitating that there is no explanatory information. Any explainer that delivers valid explanations
+should achieve a higher nAOPC score than random removal. While evaluation via deletion has been
+a widely adopted scheme for assessing explanation quality, concerns have been raised regarding the
+validity of its results as the recursive deletion process may shift the manipulated explicand away from
+the target data manifold (Hooker et al., 2019; Jethani et al., 2021). In Appendix B, we provide a more
+
+
+3https://huggingface.co/docs/transformers/model doc/bert
+4https://pytorch.org/vision/stable/models/inception.html
+
+
+7
+
+
+_f_ ( _**x**_ ) [)]
+
+
+nAOPC = [1]
+
+_p_
+
+
+_p_
+
+
+�(1 _−_ _[f]_ [(] _**[x]**_ [(] _[k]_ [)][)]
+
+_f_ ( _**x**_ )
+
+_k_ =1
+
+
+detailed discussion on the validity of the adopted evaluation scheme and demonstrate its alignment
+with the retraining scheme (Hooker et al., 2019), which circumvents the out-of-distribution concern.
+
+
+5.2 EXPLAINING TEXT CLASSIFIER
+
+
+When applying feature attributions to text classifiers, black-box approaches like GEFA are more
+flexible in terms of representing feature absence, as they construct synthetic instances in the original
+text space for querying. Unlike models for other classification tasks, text classifiers commonly accept
+inputs with variable lengths, simplifying the definition of absence. When taking an empty token as
+the baseline, feature absence is represented by the removal of a corresponding feature, providing
+a more explicit representation of feature absence - a feature is not part of the input - instead of
+replacing the original value with some manually defined baseline value.
+
+
+On the other hand, the white-box approaches relying on back-propagation stick to the absence
+definition as the replacement by some default value, because back-propagation for exact gradient
+measurement always requires a placeholder in the input as the destination of the propagation process.
+Specifically, feature absence is modeled by a zero embedding vector for both VG and IG. Furthermore,
+given texts as sequences of discrete features are not directly differentiable, approaches based on actual
+gradients require at least one pre-processing step to acquire the embeddings for back-propagation and
+summarize the embedding-level attributions in the form of token-level results through post-processing
+for deriving human-comprehensible explanations.
+
+
+We employ two deletion operations for the evaluation scheme: _embedding reset_ and _token removal_,
+corresponding to the distinct representations of feature absence during the explanation processes.
+_Embedding reset_ conducts deletion by setting the embedding vector of a token being removed to a
+zero vector, aligning with the absence representation adopted by back-propagation-based methods.
+_Token removal_ wipes the presence of a token completely by replacing it with an empty token. Table 1
+presents the nAOPC scores of the competitors tested with both deletion operations. Each row in the
+table corresponds to the nAOPCs for the respective deletion type indicated in the first column. For the
+black-box explainers, given the relatively smaller feature space, we empirically set a query budget of
+500. In the case of IG, the gradient is integrated over 50 interpolated points in the embedding space.
+Please note that GEEX is excluded from this part of the evaluation due to its incompatibility with
+models operating on discrete feature space, as previously discussed in Section 1.
+
+
+Notably, the explanations by VG barely deliver any valid information as evidenced by its performance,
+which is at the level of random removal in both deletion settings. This observation suggests that
+directly interpreting gradients as explanations is inappropriate since the raw gradient itself only
+reveals a model’s local sensitivity to a feature, which does not necessarily associate with the feature’s
+contribution to a prediction. The qualitative example in Figure 1 showcases the failure of VG to
+capture relevant features in contrast to IG and GEFA˜ . While there are disagreements in attributions
+between IG and GEFA˜, their explanations agree on the main evidence for a positive prediction;
+whereas VG produces a contradictory result by identifying ’pain’ as a positively contributing feature
+and puts a stop word ’that’ as import evidence in sentiment analysis, which appears less sensical.
+
+
+Among the group of black-box explainers, GEFA˜ achieves the best performance over other samplingbased Shapley Value estimators. We attribute the improvement to the information waste minimization
+during the estimation and the variance reduction led by the designed control variate. The comparison
+between both GEFA variants highlights the effectiveness of the control variate, which follows a
+simple intuition. Parallel to the comparison among black-box approaches, GEFA˜, despite being
+constrained with query-level access, demonstrates performance comparable to IG in the embedding
+reset setting and even surpasses the white-box explainer when tested with token removal. Given
+GEFA˜ ’s improved performance through variance reduction, it is reasonable to infer that the proposed
+method could outperform IG in both settings if the estimator can be further strengthened, for instance,
+by increasing the query budget. The distinct _absence representations_ is considered the main source
+of the observed performance differences. We argue that setting a feature to a default value does not
+faithfully reflect the status of a feature being absent, as the specific choice of baseline can introduce
+inductive bias. This concern is particularly relevant to feature absence modeling in language models,
+where a natural definition of absence – token removal – is easily accessible.
+
+
+8
+
+
+Table 1: The nAOPCs reported on BERT fine-tuned for _Amazon_ reviews, higher is better.
+
+|Deletion Type|VG IG|KSHAP PSHAP GEFA GE˜FA|Random|
+|---|---|---|---|
+|Embed. reset<br>Token removal|0.2129<br>**0.6622**<br>0.1823<br>0.6677|0.5446<br>0.6358<br>0.6275<br>0.6482<br>0.6014<br>0.6592<br>0.7120<br>**0.7366**|0.2113<br>0.1908|
+
+
+_∗_ The overall best performances are in **bold** and the highest scores among black-box explainers are underlined.
+
+
+Figure 1: Feature attributions for BERT derived from three selected explainers. The results are
+visualized by attribution maps, where a blue/red background color indicates a contribution to the
+positive/negative sentiment with the color intensity reflecting the amplitude of the attribution score.
+
+
+5.3 EXPLAINING IMAGE CLASSIFIER
+
+
+We repeat the same evaluation to assess the quality of explanations for image classification results.
+The query budget of the black-box approaches is increased to 5000 due to the considerably larger
+input feature space, having a size of 299 _×_ 299. KSHAP is excluded from this part of the evaluation as
+solving the linear regression requires a query budget matching the dimensionality of the input feature
+space, which is less practical for models taking high-dimensional inputs. Since image classifiers
+cannot process incomplete inputs, feature absence in this context is represented by replacing features
+with a baseline value. In accordance with the suggestion by Sturmfels et al. (2020), we use a blurred
+version of the explicand as the baseline.
+
+
+As shown in Table 2, the performance and relative ranking of the competitors are consistent with
+the observation from the previous experiment. GEFA˜ retains competitive performance in the highdimensional setting compared to the best-performing white-box approach. It is noteworthy that,
+when explaining the image classifier, the control variate yields a larger performance improvement for
+GEFA˜ than in the setting of sentiment analysis. This is found to be caused by a stronger correlation
+between the control variate and the decision function. In image classification, each feature - a
+pixel – contributes minorly to the overall prediction and typically possesses less semantic weight
+contradictory to features in sentiment analysis, where contextual dependencies on specific tokens
+(such as negation or irony) undermine the validity of Assumption 1 to some extent. With the variance
+of the control variate remaining constant, the increased amplitude of the covariance between _f_ ( _·_ )
+and _h_ ( _·_ ) contributes positively to variance reduction as detailed in Appendix A.3, thus enhancing the
+overall quality of explanations.
+
+
+Additionally, the comparison between the proposed approach and GEEX, the other gradientestimation-based method, is worth mentioning. Queries by GEFA, constructed through binarized
+feature value sampling, induce more significant prediction changes than those created by adding small
+Gaussian noises, which facilitates more effective gradient estimation. In the experiments, we find that
+explanations by GEEX are more sensitive to low-level features that are generally informative, such as
+contours of objects, but they struggle to differentiate which specific class those features contribute
+to. Examples listed in Figure 2 demonstrate that GEFA˜ distinguishes features relevant to specific
+classes, whereas GEEX fails to do so. In the “dog-cat” example, although there are differences in
+GEEX’s explanations between the selected classes, pixels relevant to “dog” are consistently highlighted, whose relationship to the diverse predictions is difficult to comprehend. On the contrary, the
+explanations by GEFA clearly differentiate the contributions of the same features in different contexts,
+as indicated by the coloring of the pixels. The pixels representing “dog” and “cat” show conflicting
+contributions, which is a result of the softmax layer concatenated before the final output layer – the
+probability increase for one class undermines the other. Similar observations can be obtained in the
+“rooster-hen” example, where GEEX concentrates on one object and overlooks the fact that the model
+can distinguish between a rooster and a hen, as demonstrated by GEFA.
+
+
+9
+
+
+(a) VG
+
+
+ive got a lamp in the corner of my room
+behind my desk thats a complete pain
+
+
+(b) IG
+
+
+(c) GEFA
+
+
+Table 2: The nAOPCs reported on InceptionV3 for ImageNet, higher is better.
+
+|Deletion Type|VG IG|PSHAP GEEX GEFA GE˜FA|Random|
+|---|---|---|---|
+|Pixel reset|0.4570<br>**0.8805**|0.7753<br>0.7952<br>0.8352<br>0.8747|0.4003|
+
+
+Explicand GEFA GEEX GEFA GEEX
+
+
+Figure 2: Feature attribution for InceptionV3 showing evidence for prediction as a specific class.
+Pixels colored in red support the prediction of the targeted class, whereas blue pixels against the
+prediction. Color intensity indicates the amplitude of attributions.
+
+
+6 CONCLUSION
+
+
+In this paper, we propose GEFA, a model-agnostic feature attribution framework based on a proxy
+gradient estimator. By structuring the explanation process in the proxy space, GEFA is generally
+applicable for explaining arbitrary classifiers, regardless of their input feature types. Backed by
+rigorous theoretical analysis, the proposed method significantly improves the quality of black-box
+explanations and, in certain circumstances, even surpasses white-box approaches with a limited
+query budget. As a general framework, GEFA holds significant potential for integration with existing
+techniques, further enhancing sampling efficiency (Shrotri et al., 2022; Dhurandhar et al., 2024) and
+explanation quality (Frye et al., 2020; Heskes et al., 2020).
+
+
+Although our current focus is on feature attribution for classification tasks, the versatility of
+GEFA opens avenues for future work, particularly in adapting it to more complicated scenarios, such
+as explaining multi-modal models like CLIP (Radford et al., 2021) and large language models. These
+potential adaptions would primarily require reformatting the loss function to handle more complex
+model outcomes, while the core of the explanation framework remains unchanged.
+
+
+REFERENCES
+
+
+Yi Cai and Gerhard Wunder. On gradient-like explanation under a black-box setting: When black-box
+explanations become as good as white-box. In _International Conference on Machine Learning_, pp.
+5360–5382. PMLR, 2024.
+
+
+Hugh Chen, Ian C Covert, Scott M Lundberg, and Su-In Lee. Algorithms to estimate shapley value
+feature attributions. _Nature Machine Intelligence_, 5(6):590–601, 2023.
+
+
+Thomas Decker, Ananta R Bhattarai, Jindong Gu, Volker Tresp, and Florian Buettner. Provably better
+explanations with optimized aggregation of feature attributions. In _International Conference on_
+_Machine Learning_, pp. 10267–10286. PMLR, 2024.
+
+
+10
+
+
+Amit Dhurandhar, Karthikeyan Natesan Ramamurthy, and Karthikeyan Shanmugam. Is this the right
+neighborhood? accurate and query efficient model agnostic explanations. _Advances in Neural_
+_Information Processing Systems_, 35:9499–9511, 2022.
+
+
+Amit Dhurandhar, Karthikeyan Natesan Ramamurthy, Kartik Ahuja, and Vijay Arya. Locally
+invariant explanations: Towards stable and unidirectional explanations through local invariant
+learning. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Jeremy Elson, John R Douceur, Jon Howell, and Jared Saul. Asirra: a captcha that exploits interestaligned manual image categorization. _CCS_, 7:366–374, 2007.
+
+
+Gabriel Erion, Joseph D Janizek, Pascal Sturmfels, Scott M Lundberg, and Su-In Lee. Improving
+performance of deep learning models with axiomatic attribution priors and expected gradients.
+_Nature machine intelligence_, 3(7):620–631, 2021.
+
+
+Christopher Frye, Colin Rowat, and Ilya Feige. Asymmetric shapley values: incorporating causal
+knowledge into model-agnostic explainability. _Advances in neural information processing systems_,
+33:1229–1239, 2020.
+
+
+Robert Geirhos, Jorn-Henrik Jacobsen, Claudio Michaelis, Richard Zemel, Wieland Brendel, Matthias¨
+Bethge, and Felix A Wichmann. Shortcut learning in deep neural networks. _Nature_ _Machine_
+_Intelligence_, 2(11):665–673, 2020.
+
+
+Tom Heskes, Evi Sijben, Ioan Gabriel Bucur, and Tom Claassen. Causal shapley values: Exploiting
+causal knowledge to explain individual predictions of complex models. _Advances_ _in_ _neural_
+_information processing systems_, 33:4778–4789, 2020.
+
+
+Sara Hooker, Dumitru Erhan, Pieter-Jan Kindermans, and Been Kim. A benchmark for interpretability
+methods in deep neural networks. _Advances in neural information processing systems_, 32, 2019.
+
+
+Joseph D Janizek, Pascal Sturmfels, and Su-In Lee. Explaining explanations: Axiomatic feature
+interactions for deep networks. _Journal of Machine Learning Research_, 22(104):1–54, 2021.
+
+
+Neil Jethani, Mukund Sudarshan, Yindalon Aphinyanaphongs, and Rajesh Ranganath. Have we
+learned to explain?: How interpretability methods can learn to encode predictions in their interpretations. In _International Conference on Artificial Intelligence and Statistics_, pp. 1459–1467.
+PMLR, 2021.
+
+
+Scott M Lundberg and Su-In Lee. A unified approach to interpreting model predictions. _Advances in_
+_Neural Information Processing Systems_, 30, 2017.
+
+
+Julian McAuley and Jure Leskovec. Hidden factors and hidden topics: Understanding rating
+dimensions with review text. In _Proceedings_ _of_ _the_ _7th_ _ACM_ _Conference_ _on_ _Recommender_
+_systems_, pp. 165–172, 2013.
+
+
+Rory Mitchell, Joshua Cooper, Eibe Frank, and Geoffrey Holmes. Sampling permutations for shapley
+value estimation. _Journal of Machine Learning Research_, 23(43):1–46, 2022.
+
+
+Shakir Mohamed, Mihaela Rosca, Michael Figurnov, and Andriy Mnih. Monte carlo gradient
+estimation in machine learning. _The Journal of Machine Learning Research_, 21(1):5183–5244,
+2020.
+
+
+Gregoire Montavon.´ Gradient-based vs. propagation-based explanations: An axiomatic comparison.
+_Explainable ai:_ _Interpreting, explaining and visualizing deep learning_, pp. 253–265, 2019.
+
+
+Gregoire´ Montavon, Wojciech Samek, and Klaus-Robert Muller.¨ Methods for interpreting and
+understanding deep neural networks. _Digital signal processing_, 73:1–15, 2018.
+
+
+Sabine Muzellec, Thomas Fel, Victor Boutin, Leo´ Andeol,´ Rufin Vanrullen, and Thomas Serre.
+Saliency strikes back: How filtering out high frequencies improves white-box explanations. In
+_Proceedings of the 41st International Conference on Machine Learning_, pp. 37041–37075. PMLR,
+2024.
+
+
+11
+
+
+Ramin Okhrati and Aldo Lipani. A multilinear sampling algorithm to estimate shapley values. In
+_2020 25th International Conference on Pattern Recognition (ICPR)_, pp. 7992–7999. IEEE, 2021.
+
+
+Guillermo Owen. Multilinear extensions of games. _Management Science_, 18(5-part-2):64–79, 1972.
+
+
+Vitali Petsiuk, Abir Das, and Kate Saenko. RISE: Randomized input sampling for explanation of
+black-box models. In _Proceeedings of the British Machine Vision Conference 2018, BMVC 2018,_
+_Newcastle, UK_, 2018.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International conference on machine learning_, pp.
+8748–8763. PMLR, 2021.
+
+
+Marco Tulio Ribeiro, Sameer Singh, and Carlos Guestrin. “Why should I trust you?” explaining the
+predictions of any classifier. In _Proceedings of the 22nd ACM SIGKDD International Conference_
+_on Knowledge Discovery and Data Mining_, pp. 1135–1144, 2016.
+
+
+Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng Huang,
+Andrej Karpathy, Aditya Khosla, Michael Bernstein, et al. Imagenet large scale visual recognition
+challenge. _International Journal of Computer Vision_, 115:211–252, 2015.
+
+
+Wojciech Samek, Alexander Binder, Gregoire Montavon, Sebastian Lapuschkin, and Klaus-Robert´
+Muller.¨ Evaluating the visualization of what a deep neural network has learned. _IEEE Transactions_
+_on Neural Networks and Learning Systems_, 28(11):2660–2673, 2016.
+
+
+Wojciech Samek, Gregoire Montavon, Sebastian Lapuschkin, Christopher J Anders, and Klaus-Robert´
+Muller.¨ Explaining deep neural networks and beyond: A review of methods and applications.
+_Proceedings of the IEEE_, 109(3):247–278, 2021.
+
+
+Lloyd S Shapley. A value for n-person games. _Contribution to the Theory of Games_, 2, 1953.
+
+
+Aditya A Shrotri, Nina Narodytska, Alexey Ignatiev, Kuldeep S Meel, Joao Marques-Silva, and
+Moshe Y Vardi. Constraint-driven explanations for black-box ml models. In _Proceedings of the_
+_AAAI Conference on Artificial Intelligence_, volume 36, pp. 8304–8314, 2022.
+
+
+K Simonyan, A Vedaldi, and A Zisserman. Deep inside convolutional networks: visualising image
+classification models and saliency maps. In _Proceedings_ _of_ _the_ _International_ _Conference_ _on_
+_Learning Representations_ . ICLR, 2014.
+
+
+Daniel Smilkov, Nikhil Thorat, Been Kim, Fernanda Viegas, and Martin Wattenberg.´ SmoothGrad:
+removing noise by adding noise. In _Proceedings of the ICML Workshop on Visualization for Deep_
+_Learning, Sydney, Australia, 10 August 2017_, 2017.
+
+
+Pascal Sturmfels, Scott Lundberg, and Su-In Lee. Visualizing the impact of feature attribution
+baselines. _Distill_, 5(1):e22, 2020.
+
+
+Mukund Sundararajan and Amir Najmi. The many shapley values for model explanation. In
+_International conference on machine learning_, pp. 9269–9278. PMLR, 2020.
+
+
+Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep networks. In
+_International Conference on Machine Learning_, pp. 3319–3328. PMLR, 2017.
+
+
+Ruo Yang, Binghui Wang, and Mustafa Bilgic. Idgi: A framework to eliminate explanation noise
+from integrated gradients. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 23725–23734, 2023.
+
+
+12
+
+
+A MATHEMATICAL PROOFS
+
+
+A.1 PROOF OF GEFA’S EQUIVALENCE TO SHAPLEY VALUES
+
+
+We start with proving Theorem 2, as the notations introduced during the proof facilitate the proof of
+the properties listed in Theorem 1. To show that the attributions delivered by GEFA are exact Shapley
+Values, the goal is to demonstrate the following equivalence:
+
+
+A.2 PROOFS OF CLAIMED PROPERTIES
+
+
+It is not surprising that GEFA aligns with the properties held by Shapley Values as an unbiased
+calculator. This section details the proof of these properties from the gradient estimator perspective
+as an alternative to the derivation from the typical computation of Shapley Values in the form of
+marginal contributions.
+
+
+A.2.1 COMPLETENESS AND SENSITIVITY
+
+
+**Completeness** requires the equivalence between the sum of allocated feature attributions and the
+difference in prediction results made by full feature presence as stated in equation 1.
+
+
+13
+
+
+_ξi_ = 
+
+_**S**_ _⊆{_ 1 _,_ 2 _,...,p}\{i}_
+
+
+_|_ _**S**_ _|_ !( _p −|_ _**S**_ _| −_ 1)!
+
+_·_ ( _f_ ( _**zS**_ _∪{i}_ ) _−_ _f_ ( _**zS**_ )) = _Shi_
+_p_ !
+
+
+where _**zS**_ denotes a query with _**S**_ being the set of indices corresponding to the present features.
+
+
+_Proof of Theorem 2._ Let _**zS**_ be a query, the probability of sampling _**zS**_ over the integration path is:
+
+
+               - 1
+_p_ ( _**zS**_ _|_ _**x**_ ) = _γ_ _[|]_ _**[S]**_ _[|]_ _·_ (1 _−_ _γ_ ) [(] _[p][−|]_ _**[S]**_ _[|]_ [)] d _γ_
+
+0
+
+
+For a feature _xi_, where _i_ _∈/_ _**S**_, the contribution of the query to the computation of the corresponding
+attribution, noted as _wi_ _**[z][S]**_ [, is:]
+
+
+   - 1
+_wi_ _**[z][S]**_ =
+
+
+[0] [1] _[ −]_ [0]
+
+_γ_ [+] 1 _−_ _γ_
+
+
+1 _−_ _γ_ [) d] _[γ]_
+
+
+_γ_ _[|]_ _**[S]**_ _[|]_ _·_ (1 _−_ _γ_ ) [(] _[p][−|]_ _**[S]**_ _[|]_ [)] _· f_ ( _**zS**_ ) _·_ ( [0]
+0 _γ_
+
+
+  - 1
+= _−_ _γ_ _[|]_ _**[S]**_ _[|]_ _·_ (1 _−_ _γ_ ) [(] _[p][−|]_ _**[S]**_ _[|−]_ [1)] _· f_ ( _**zS**_ ) d _γ_
+
+0
+
+
+= _−_ _[|]_ _**[S]**_ _[|]_ [!(] _[p][ −|]_ _**[S]**_ _[| −]_ [1)!] _· f_ ( _**zS**_ ) (Beta-function)
+
+_p_ !
+
+
+Similarly, the weight of the query _**zS**_ _∪{i}_ that differs from _**zS**_ only in the _i_ -th feature is:
+
+
+_wi_ _**zS**_ _∪{i}_ = - 1
+
+
+[1] [1] _[ −]_ [1]
+
+_γ_ [+] 1 _−_ _γ_
+
+
+1 _−_ _γ_ [) d] _[γ]_
+
+
+_γ_ _[|]_ _**[S]**_ _[|]_ [+1] _·_ (1 _−_ _γ_ ) [(] _[p][−|]_ _**[S]**_ _[|−]_ [1)] _· f_ ( _**zS**_ _∪{i}_ ) _·_ ( [1]
+0 _γ_
+
+
+= _[|]_ _**[S]**_ _[|]_ [!(] _[p][ −|]_ _**[S]**_ _[| −]_ [1)!] _· f_ ( _**zS**_ _∪{i}_ )
+
+_p_ !
+
+
+Summing over all possible combinations of feature presences (excluding _xi_ ), yields _ξi_ :
+
+
+_ξi_ =           - _wi_ _**[z][S]**_ + _wi_ _**zS**_ _∪{i}_
+
+_**S**_ _⊆{_ 1 _,_ 2 _,...,p}\{i}_
+
+
+= 
+
+_**S**_ _⊆{_ 1 _,_ 2 _,...,p}\{i}_
+
+
+_⇔_ _Shi_
+
+
+_|_ _**S**_ _|_ !( _p −|_ _**S**_ _| −_ 1)!
+
+_·_ ( _f_ ( _**zS**_ _∪{i}_ ) _−_ _f_ ( _**zS**_ ))
+_p_ !
+
+
+_Proof of Completeness._ The contribution of a sample _**zS**_ to attribution estimation in GEFA can be
+divided into two parts, the contribution with a positive sign _wi∈_ _**S**_ to the present features _{xi|i ∈_ _S}_,
+and the contribution with a negative sign _w_ ı _∈/_ _**S**_ to the absent features. According to equation 8, the
+contribution is computed by:
+
+
+_wi∈_ _**S**_ = _f_ ( _**zS**_ ) _·_ [1]
+
+_γ_
+
+1
+_wi/∈_ _**S**_ = _−f_ ( _**zS**_ ) _·_ 1 _−_ _γ_
+
+
+Considering the likelihood of _**zS**_ being sampled, the total positive contribution _w_ _**S**_ _[⊕]_ [can be computed]
+by:
+
+
+_Sensitivity_ is guaranteed by the satisfaction of completeness.
+
+
+A.2.2 INSENSITIVITY
+
+
+**Insensitivity** is also known as _Dummy_, which requires the attribution score to be zero for any feature
+on which the target model is not functionally dependent. Definition 1 formally describes functional
+independence.
+
+
+**Definition 1.** A function is said to be _functionally independent_ of a feature if the prediction results
+are always the same for any sample pair that differs only in that feature.
+
+
+14
+
+
+   - 1
+_w_ _**S**_ _[⊕]_ [=]
+
+
+_wi∈_ _**S**_ ) d _γ_
+
+_i∈_ _**S**_
+
+
+_γ_ _[|]_ _**[S]**_ _[|]_ _·_ (1 _−_ _γ_ ) [(] _[p][−|]_ _**[S]**_ _[|]_ [)] _·_ (�
+0
+
+
+ - 1
+=
+
+
+_γ_ [d] _[γ]_
+
+
+_γ_ _[|]_ _**[S]**_ _[|]_ _·_ (1 _−_ _γ_ ) [(] _[p][−|]_ _**[S]**_ _[|]_ [)] _· f_ ( _**zS**_ ) _·_ _[|][S][|]_
+0 _γ_
+
+
+= [(] _[|][S][| −]_ [1)!(] _[p][ −|][S][|]_ [)!] _· f_ ( _**zS**_ ) _· |S|_ (Beta-function)
+
+_p_ !
+
+
+= _[|][S][|]_ [!(] _[p][ −|][S][|]_ [)!] _· f_ ( _**zS**_ )
+
+_p_ !
+
+
+Similarly, the total negative contribution is:
+
+
+    - 1
+_w_ _**S**_ _[⊖]_ [=] _[ −]_
+
+
+1 _−_ _γ_ [d] _[γ]_
+
+
+_γ_ _[|]_ _**[S]**_ _[|]_ _·_ (1 _−_ _γ_ ) [(] _[p][−|]_ _**[S]**_ _[|]_ [)] _· f_ ( _**zS**_ ) _·_ _[p][ −|][S][|]_
+0 1 _−_ _γ_
+
+
+= _−_ [(] _[|][S][|]_ [)!(] _[p][ −|][S][| −]_ [1)!] _· f_ ( _**zS**_ ) _·_ ( _p −|S|_ )
+
+_p_ !
+
+
+= _−_ _[|][S][|]_ [!(] _[p][ −|][S][|]_ [)!] _· f_ ( _**zS**_ )
+
+_p_ !
+
+
+The two parts of contributions cancel out as _w_ _**S**_ _[⊕]_ [+] _[ w]_ _**S**_ _[⊖]_ [=] [0][,] [with] [the] [only] [two] [exceptions] [when]
+_**S**_ = _∅_ or _**S**_ = _{_ 1 _,_ 2 _, . . ., p}_, whose contribution only has the negative/positive part:
+
+
+_w∅_ _[⊕]_ [+] _[ w]_ _∅_ _[⊖]_ [= 0] _[ −]_ _[f]_ [(] **[˚]** _**[x]**_ [)]
+
+_w{_ _[⊕]_ 1 _,_ 2 _,...,p}_ [+] _[ w]_ _{_ _[⊕]_ 1 _,_ 2 _,...,p}_ [=] _[ f]_ [(] _**[x]**_ [)] _[ −]_ [0]
+
+
+Computing the sum of feature attributions by summarizing sample contributions results in:
+
+
+_p_
+
+
+ - ( _w_ _**S**_ _[⊕]_ [+] _[ w]_ _**S**_ _[⊖]_ [) =] _[ f]_ [(] _**[x]**_ [)] _[ −]_ _[f]_ [(] **[˚]** _**[x]**_ [)]
+
+_**S**_ _⊆{_ 1 _,_ 2 _,...,p}_
+
+
+- _ξ_ = 
+
+_i_ =1 _**S**_ _⊆{_ 1 _,_ 2
+
+
+_Proof of Insensitivity._ Let _xi_ be the dummy feature, the proxy gradient estimator of that feature on
+the straightline path is:
+
+_ϵ_ ¯ _i_
+
+_ηαi_ ( _**x**_ ( _γ ·_ 1 _p_ )) = E _**π**_ ( _**ϵ**_ _|γ·_ 1 _p_ )[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _·_ ( _[ϵ]_ _γ_ _[i]_ _[−]_ 1 _−_ _γ_ [)]]
+
+
+Using _**π**_ ( _**ϵ**_ _\i|γ ·_ 1 _p−_ 1) as a shorthand for the feature value sampling process excluding the _i_ -th feature,
+the expectation can be expanded to the following form due to the independent sampling processes of
+different features:
+
+                  - _ϵ_ ¯ _i_                   _ηαi_ ( _**x**_ ( _**α**_ )) = E _**π**_ ( _**ϵ**_ _\i|γ·_ 1 _p−_ 1) E _**π**_ ( _ϵi|γ_ )[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _·_ ( _[ϵ]_ _γ_ _[i]_ _[−]_ 1 _−_ _γ_ [)]]
+
+
+The condition of functional independence of _xi_ yields:
+
+
+= _a ·_ _**ξ**_ [(] _[f]_ [1][)] + _b ·_ _**ξ**_ [(] _[f]_ [2][)]
+
+
+A.2.4 SYMMETRY
+
+
+In context of feature attribution, **Symmetry** states: given a function _f_ ( _·_ ) that is symmetric in two
+variables _xi_ and _xj_, the attribution scores of the two features satisfies _ξi_ = _ξj_ when the explicandbaseline pair holds _xi_ = _xj_ and ˚ _xi_ = ˚ _xj_ .
+
+
+_Proof of Symmetry._ Similar to the proof of _Insensitivity_, the _Symmetry_ of GEFA originates from the
+proxy gradient estimator. Let _xi_ and _xj_ denote the two symmetric features, their gradient estimators
+are:
+
+                - _ϵ_ ¯ _i_                 _ηαi_ ( _**x**_ ( _γ ·_ 1 _p_ )) = E _**π**_ ( _ϵi|γ_ ) E _**π**_ ( _**ϵ**_ _\i|γ·_ 1 _p−_ 1)[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ )] _·_ ( _[ϵ]_ _γ_ _[i]_ _[−]_ 1 _−_ _γ_ [)]
+
+                - _ϵ_ ¯ _i_                 _ηαj_ ( _**x**_ ( _γ ·_ 1 _p_ )) = E _**π**_ ( _ϵj_ _|γ_ ) E _**π**_ ( _**ϵ**_ _\j_ _|γ·_ 1 _p−_ 1)[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ )] _·_ ( _[ϵ]_ _γ_ _[i]_ _[−]_ 1 _−_ _γ_ [)]
+
+
+Given the symmetry between _xi_ and _xj_, the inner expectations satisfy:
+
+E _**π**_ ( _**ϵ**_ _\i|γ·_ 1 _p−_ 1)[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ )] = E _**π**_ ( _**ϵ**_ _\j_ _|γ·_ 1 _p−_ 1)[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ )] _,_ when _ϵi_ = _ϵj_
+
+
+It is not difficult to show that sampling of the two features following the same distribution given
+_xi_ = _xj_ and ˚ _xi_ = ˚ _xj_, which induces:
+
+
+_ηαi_ ( _**x**_ ( _γ ·_ 1 _p_ )) = _ηαj_ ( _**x**_ ( _γ ·_ 1 _p_ ))
+
+
+15
+
+
+            _ηαi_ ( _**x**_ ( _**α**_ )) = E _**π**_ ( _**ϵ**_ _\i|γ·_ 1 _p−_ 1) E _**π**_ ( _ϵi|γ_ )[ _f_ ( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ )] _·_ E _**π**_ ( _ϵi|γ_ )[( _[ϵ][i]_
+
+
+_ϵ_ ¯ _i_
+
+_**π**_ ( _ϵi|γ_ )[( _[ϵ]_ _γ_ _[i]_ _[−]_ 1 _−_ _γ_ [)]]
+
+
+- �� =0
+
+
+= 0
+
+
+The explainer integrating over _ηαi_ ( _**x**_ ( _**α**_ )) also produces zero, namely _ξi_ = 0.
+
+
+A.2.3 LINEARITY
+
+
+For any two functions _f_ 1( _·_ ) and _f_ 2( _·_ ), **Linearity** requires the explanation for the linear composition
+of the two functions equaling the weighted sum of the separate explanations for them:
+
+
+_**ξ**_ [(] _[af]_ [1][+] _[bf]_ [2][))] = _a ·_ _**ξ**_ [(] _[f]_ [1][)] + _b ·_ _**ξ**_ [(] _[f]_ [2][)]
+
+
+_Proof of Linearity._
+
+
+     - 1
+_**ξ**_ [(] _[af]_ [1][+] _[bf]_ [2][))] =
+
+
+_**ϵ**_ **¯**    
+_**[ϵ]**_ d _γ_
+
+_γ_ _[−]_ 1 _−_ _γ_ [)]
+
+
+      0 E _**π**_ ( _**ϵ**_ _|γ·_ 1 _p_ ) [ _af_ 1( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) + _bf_ 2( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ )] _·_ ( _γ_ _**[ϵ]**_
+
+
+  - 1
+= _a ·_
+
+
+_**[ϵ]**_ _**ϵ**_ **¯** - d _γ_ +
+
+_γ_ _[−]_ 1 _−_ _γ_ [)]
+
+
+      0 E _**π**_ ( _**ϵ**_ _|γ·_ 1 _p_ ) _f_ 1( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _·_ ( _γ_ _**[ϵ]**_
+
+1
+
+      0 E _**π**_ ( _**ϵ**_ _|γ·_ 1 _p_ ) _f_ 2( _**ϵ**_ _**x**_ _⊕_ _**ϵ**_ **¯** **˚** _**x**_ ) _·_ ( _γ_ _**[ϵ]**_
+
+
+ - 1
+_b ·_
+
+
+_**[ϵ]**_ _**ϵ**_ **¯** - d _γ_ 
+_γ_ _[−]_ 1 _−_ _γ_ [)]
+
+
+Integrating the estimators having the same outputs along the symmetric path concludes the proof by
+showing:
+
+
+= 0
+
+
+The zero-ness of feature attribution _ξi_ [(] _[h]_ [)] concludes the proof:
+
+_ξi_ [(] _[h]_ [)] = 0 _,_ _∀i ∈{_ 1 _,_ 2 _, . . ., p}_ = _⇒_ _**ξ**_ [(] _[h]_ [)] = 0 _p_
+
+
+While constructing the control variate for GEFA, we first initialize it as _h_ ( _|_ _**ϵ**_ _|_ ) = _|_ _**ϵ**_ _|/p_ based on
+Assumption 1. To strictly follow the property of unbiasedness, the above analysis derives an additional
+requirement for the control variate, namely:
+
+
+_h_ ( _p_ ) = _h_ (0)
+
+
+Integrating the constraint into the control variate delivers the function stated in equation 9. In addition
+to the selected control variate, Theorem 1 applies to the broader group of functions, which depends
+solely on _|_ _**ϵ**_ _|_ and at the same time satisfies _h_ ( _p_ ) = _h_ (0). When there are further assumptions to make
+on the target function, the shape of _h_ ( _·_ ) can be fine-tuned for a stronger covariance in relation to _f_ ( _·_ ).
+
+
+Next, we show the variance reduction effect of the control variate is optimized when:
+
+
+_β_ _[∗]_ = Cov( _f, h_ ) _/_ Var( _h_ )
+
+
+where the optimal choice of the weighting term is denoted as _β_ _[∗]_ .
+
+
+_Proof of Optimality of β_ _[∗]_ _._ Denoting the variance of a gradient estimator for a feature _xi_ as Var( _ξi_ ),
+the variance of the estimator after the introduction of a control variate is:
+
+Var( _ξ_ [˜] _i_ ) = Var( _ξi_ ) + _β_ [2] Var( _ξi_ [(] _[h]_ [)] ) _−_ 2 _β ·_ Cov( _ξi, ξi_ [(] _[h]_ [)] )
+
+
+16
+
+
+  - 1
+_ξi_ =
+
+
+1 - 1
+
+_ηαi_ ( _**x**_ ( _γ ·_ 1 _p_ )) d _γ_ =
+0 0
+
+
+_ηαj_ ( _**x**_ ( _γ ·_ 1 _p_ )) d _γ_ = _ξj_
+0
+
+
+A.3 CONTROL VARIATE
+
+
+To prove the unbiasedness of _**ξ**_ **[˜]**, we need to show _**ξ**_ **[˜]** = _**ξ**_ . Applying _Linearity_, we can rewrite _**ξ**_ **[˜]** as:
+
+
+_**ξ**_ **˜** = _**ξ**_ [(] _[f]_ [)] + _β ·_ _**ξ**_ [(] _[h]_ [)] = _**ξ**_ + _β ·_ _**ξ**_ [(] _[h]_ [)]
+
+
+Now, the goal of the proof can be transformed to:
+
+
+_**ξ**_ **˜** = _**ξ**_ _⇐⇒_ _**ξ**_ [(] _[h]_ [)] = 0 _p_
+
+
+_Proof of Theorem 3._ The attribution of the control variate to the _i_ -th feature is:
+
+
+   - 1
+_ξi_ [(] _[h]_ [)] =
+
+
+_[i]_ _ϵ_ ¯ _i_
+
+_γ_ _[−]_ 1 _−_ _γ_ [)] d] _[γ]_
+
+
+0 E _**π**_ ( _**ϵ**_ _|γ·_ 1 _p_ )[ _h_ ( _**ϵ**_ ) _·_ ( _[ϵ]_ _γ_ _[i]_
+
+
+= 
+
+_**ϵ**_ _∈{_ 0 _,_ 1 _}_ _[p]_ : _ϵi_ =0
+
+
+_|_ _**ϵ**_ _|_ !( _p −|_ _**ϵ**_ _| −_ 1)! - 
+_·_ _h_ ( _|_ _**ϵ**_ _|_ + 1) _−_ _h_ ( _|_ _**ϵ**_ _|_ ) (Theorem 2)
+_p_ !
+
+
+=
+
+
+=
+
+
+_p−_ 1
+
+
+_|_ _**ϵ**_ _|_ =0
+
+
+_p−_ 1
+
+
+_|_ _**ϵ**_ _|_ =0
+
+
+- _p −_ 1� - 
+_·_ _[|]_ _**[ϵ]**_ _[|]_ [!(] _[p][ −|]_ _**[ϵ]**_ _[| −]_ [1)!] _·_ _h_ ( _|_ _**ϵ**_ _|_ + 1) _−_ _h_ ( _|_ _**ϵ**_ _|_ )
+
+_|_ _**ϵ**_ _|_ _p_ !
+
+
+1 - _h_ ( _|_ _**ϵ**_ _|_ + 1) _−_ _h_ ( _|_ _**ϵ**_ _|_ )
+_p_ _[·]_
+
+
+  -   
+= [1] _h_ ( _p −_ 1 + 1) _−_ _h_ (0) (Telescoping series)
+
+_p_ _[·]_
+
+
+The optimal variance reduction effect for _ξi_ is achieved when:
+
+
+_β_ = Cov( _ξi, ξi_ [(] _[h]_ [)] ) _/_ Var( _ξi_ [(] _[h]_ [)] ) (12)
+
+
+Alternative to a feature-specific optimal value, we are also interested in a single value for _β_ that
+maximizes the overall variance reduction effect. To acquire the overall optimum, we first expand the
+covariance in equation 12:
+
+
+Cov( _ξi, ξi_ [(] _[h]_ [)] ) = E[ _ξi · ξi_ [(] _[h]_ [)] ] _−_ E[ _ξi_ ] _·_ E[ _ξi_ [(] _[h]_ [)] ]
+
+          -           = E _αi_ E _ϵi_ [ _f_ ( _**z**_ ) _· h_ ( _**z**_ ) _·_ ( _∇xi_ log _π_ ( _ϵi|αi_ )) [2] ] _−_ E[ _ξi_ ] _·_ 0 (Unbiasedness of _**ξ**_ [(] _[h]_ [)] )
+
+
+Please note that we omit the distribution that _αi_ and _ϵi_ should follow as it does not affect the result of
+the derivation. For high-dimensional input, the functions _f_ ( _·_ ) and _h_ ( _·_ ) have trivial dependencies on a
+specific feature _xi_ :
+
+
+               -               -               -               Cov( _ξi, ξi_ [(] _[h]_ [)] ) _≈_ E _αi_ E _ϵi_ [ _f_ ( _**z**_ ) _· h_ ( _**z**_ )] _·_ E _αi_ E _ϵi_ [( _∇xi_ log _π_ ( _ϵi|αi_ )) [2] ]
+
+
+Similarly, the variance of the control variate estimator can be written as:
+
+
+               -                -                -                Var( _ξi_ [(] _[h]_ [)] ) _≈_ E _αi_ E _ϵi_ [ _h_ ( _**z**_ ) [2] ] _·_ E _αi_ E _ϵi_ [( _∇xi_ log _π_ ( _ϵi|αi_ )) [2] ]
+
+
+Putting together yields the overall optimal value _β_ _[∗]_ :
+
+
+             -             -             -             E _αi_ E _ϵi_ [ _f_ ( _**z**_ ) _· h_ ( _**z**_ )] _·_ E _αi_ E _ϵi_ [( _∇xi_ log _π_ ( _ϵi|αi_ )) [2] ]
+_β_ _[∗]_ =
+
+              -              -              -              E _αi_ E _ϵi_ [ _h_ ( _**z**_ ) [2] ] _·_ E _αi_ E _ϵi_ [( _∇xi_ log _π_ ( _ϵi|αi_ )) [2] ]
+
+
+             -             E _αi_ E _ϵi_ [ _f_ ( _**z**_ ) _· h_ ( _**z**_ )] _−_ 0
+=
+
+              -              E _αi_ E _ϵi_ [ _h_ ( _**z**_ ) [2] ] _−_ 0
+
+
+= Cov( _f, h_ ) _/_ Var( _h_ )
+
+
+Taking the optimal _β_ _[∗]_, the variance reduction effect depends on the covariance between _f_ ( _·_ ) and
+_h_ ( _·_ ), which motivates Assumption 1:
+
+
+Var( _ξi_ ) _−_ Var( _ξ_ [˜] _i_ ) = Cov( _f, h_ )
+
+
+A.4 EQUIVALENCE TO IG
+
+
+_Proof of Theorem 4._ To complete the proof, we first show that both GEFA and IG produce marginal
+contributions along edge paths.
+
+
+Recalling that an edge path always moves from one vertex _**zS**_ to an adjacent vertex that differs
+_**zS**_ _∪{i}_ in only the _i_ -th feature along edges, the goal is simplified prove that they are calculators of
+the marginal contribution conditioned on the presence of features _{xj|j_ _∈_ _**S**_ _}_ for each segment of a
+path. For the _i_ -th segment on an edge path with _**S**_ denoting the preceding vertices, IG produces:
+
+
+= _f_ ( _**zS**_ _∪{i}_ ) _−_ _f_ ( _**S**_ )
+
+
+As the path for GEFA is created in the proxy space, we denote the two proxy vertices on the _i_ -th
+segment by _**x**_ ( _**αS**_ ) and _**x**_ ( _**αS**_ _∪{i}_ ) for preciseness. The notation _**αS**_ is analogous to _**zS**_, which
+represents:
+
+�1 if _i ∈_ _**S**_
+_αi_ =
+0 if _i_ _∈/_ _**S**_
+
+
+17
+
+
+   - _**zS**_ _∪{i}_
+_ξi_ [IG] =
+
+_**zS**_
+
+
+_∂f_ ( _**x**_ )
+
+d _**x**_
+_∂xi_
+
+
+When following the same permutation order, GEFA produces the same marginal contribution as IG
+for the _i_ -th segment:
+
+
+= _f_ ( _**zS**_ _∪{i}_ ) _−_ _f_ ( _**zS**_ )
+
+_⇔_ _ξi_ [IG]
+
+
+Please note that, for GEFA, the only feature value in _**z**_ that may vary during the sampling on the _i_ -th
+segment is _zi_ . The remaining features are deterministic as their corresponding proxy variables are
+either 0 or 1 depending on whether they are included in the preceding vertices _**S**_, namely to take
+either the baseline or explicand value with hundred percent probability.
+
+
+As both explainers deliver marginal contributions along edge paths, the claim in Theorem 4 becomes
+obvious as it describes the typical computation of Shapley Values.
+
+
+B VALIDITY OF THE EVALUATION SCHEME
+
+
+In this work, we adopted the evaluation via deletion approach, a commonly used method for accessing
+explanation quality. The employment of this evaluation scheme spans from the early stages of
+explainability research (Samek et al., 2016; Montavon et al., 2018) to the most recent studies (Cai &
+Wunder, 2024; Muzellec et al., 2024). One of its key advantages is that it does not require retraining
+during evaluation, thereby offering a static environment for efficient explanation quality assessment.
+While the out-of-distribution issue raises concern about the validity of the evaluation results, our
+results regarding the performance of the random feature remover, as reported in Table 1 and Table 2,
+alleviate this concern. The significantly lower nAOPC scores of random removal demonstrate that
+simply shifting the input away from the underlying data manifold does not effectively affect model
+performance.
+
+
+Hooker et al. (2019) highlighted the issue that out-of-distribution manipulations can trigger unexpected model behaviors. As an alternative to the traditional deletion scheme, they proposed the
+remove and retraining (ROAR) scheme. This approach involves removing a proportion of features
+with the highest attribution scores for each instance in the dataset, followed by retraining the model
+on the manipulated dataset. The resulting model performance is then used as a reflection of the
+explainer’s effectiveness. ROAR assessments reported that many popular attribution methods “ _are_
+_not better than a random designation of feature importance_ ”, contradicting the conclusions drawn
+from the traditional deletion scheme. This conflict with the widely approved effectiveness of the
+tested approaches, such as IG, prompted our further investigation, which revealed the following:
+
+
+    - The root cause of the misalignment between observations from different evaluation perspectives is the **presence of residual features** with negative attributions during the retraining
+process;
+
+
+    - After a single justified adjustment to ROAR, the two evaluation schemes yield consistent
+results.
+
+
+B.1 THE “SIGN” ISSUE
+
+
+In the context of feature attribution, a positive attribution score indicates a positive contribution
+to the prediction result, whereas a negative score, rather than indicating irrelevance, represents a
+negative association with the decision. Failing to remove negatively contributing features preserves
+task-relevant information, which the model can reorganize during retraining to improve accuracy. A
+qualitative example of residual “negative” information in ROAR is illustrated through the visualized
+pixel removal process of IG in Figure 1 by Hooker et al. (2019). This “sign” issue also explains
+the effective manipulation by SG-SQ and VarGrad, as these methods provide unsigned attributions,
+thereby ensuring the removal of all informative features.
+
+
+To mitigate the assessment distortion caused by retained negative information, we argue that a
+modification to ROAR is necessary for a more faithful reflection of explainer performance: instead of
+
+
+18
+
+
+    - _**αS**_ _∪{i}_
+_ξi_ [GEFA] =
+
+
+_ϵ_ ¯ _i_
+
+_[ϵ][i]_ _−_ )] d _**α**_
+
+_αi_ 1 _−_ _αi_
+
+
+_**S**_ _∪{i}_
+
+_**αS**_ E _π_ ( _ϵi|αi_ )[ _f_ ( _**z**_ ) _·_ ( _α_ _[ϵ][i]_
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Table 3: Performance of explainers in different settings
+
+|Competitors|Col2|In Accuracy (%)|Col4|Col5|nAOPC|
+|---|---|---|---|---|---|
+|Competitors|Competitors|ROAR|ROAR-abs|KEAR|KEAR|
+|IG<br>PSHAP<br>GEFA|IG<br>PSHAP<br>GEFA|77.20<br>79.25<br>82.35|**62.80**<br>76.75<br>68.45|89.60<br>84.30<br>**89.95**|**40.82**<br>39.56<br>40.79|
+|Random|Random|**71.30**|71.30|71.30|35.07|
+||: lower is better; :|higher is better|higher is better|higher is better|higher is better|
+
+
+removing features for retraining, the top-ranked features should be retained. This “keep and retrain”
+(KEAR) approach reframes the evaluation question as:
+
+
+    - “Does an explanation method effectively identify relevant features?”
+
+
+An effective explanation method should capture the relevant information learned by the target model,
+facilitating higher accuracy of the retrained model with the same portion of retained information.
+
+
+B.2 RESULTS ON ROAR AND KEAR
+
+
+To verify the above discussion, we conducted experiments following the retraining scheme. Specifically, we fine-tuned EfficientNet-B0 [5] on the Cats vs Dogs dataset (Elson et al., 2007) and created
+copies of the dataset with explanation-guided manipulation. These manipulated datasets were then
+used for retraining the pre-trained model to assess the quality of explanations. Without loss of generality, we downsampled the dataset into 2000 _/_ 400 _/_ 400 partitions for training, validation, and test sets
+for efficiency. EfficientNet-B0 achieved an accuracy of 99 _._ 40% on the downsampled dataset after
+fine-tuning. Based on the fine-tuned EfficientNet-B0, we derived explanations for images in all three
+partitions with three competitors: IG, PSHAP, and GEFA. Features for each instance were ranked in
+descending order according to their attribution scores. Similar to the traditional deletion scheme, we
+adopted the random feature remover as a baseline reference for evaluating the effectiveness of the
+competitors.
+
+
+The top 90% of features were **removed** for the ROAR test, whereas the top 10% of features were
+**kept** for the KEAR test. To highlight the “sign” issue, we also performed feature ranking based on
+the absolute values of their attribution scores for the removal test, referred to as ROAR-abs (remove
+and retrain — based on absolute attribution score). To minimize the potential impact of randomness
+during the training process, we independently retrained 5 models on each manipulated dataset and
+reported the averaged accuracies of the five models under different settings. It is noteworthy that lower
+retraining accuracy indicates better explanation quality in the removal tests (ROAR and ROAR-abs),
+whereas higher accuracy reflects superior explainer performance in KEAR. Results from the desgiend
+experiments are presented in Table 3. For random removal, the same figures are reported across the
+three retraining settings as the proportions of remaining features are identical in all cases, i.e. 10%.
+
+
+In the ROAR test, all explanation methods show minor manipulation impacts due to the previously
+discussed “sign” issue and fail to excel random removal. By contrast, the ROAR-abs test demonstrates
+that removing residual negative information enhances the effectiveness of manipulation, providing
+indirect evidence for the “sign” issue. However, the origin of negative attributions is complex and
+influenced by various factors, e.g. the baseline choice and a feature’s association with the prediction
+function. Ranking features based on the absolute value of their attribution scores may unnecessarily
+include irrelevant features, as it cannot distinguish between the different causes of a negative sign,
+rendering this approach a suboptimal solution.
+
+
+After addressing the distortion caused by residual information, the KEAR test offers a more faithful
+assessment of explanation quality. The success of the explainers in identifying the most informative
+features results in relatively high classification accuracy with only 10% of features retained. Notably,
+our findings closely align with the observations by Hooker et al. (2019). Their results of exactly
+the same experiment, presented in Table 2 on page 17 (the first four columns), also demonstrate the
+
+
+5https://pytorch.org/vision/main/models/efficientnet.html
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+superiority of IG, consistent with its widely recognized effectiveness under the traditional deletion
+scheme. The last column of Table 3 presents the nAOPC scores obtained following the traditional
+deletion approach. The KEAR results, alongside the nAOPCs, show that the retraining scheme and
+recursive deletion scheme are parallel evaluation options rather than contradictory approaches. While
+the metrics employed by the two schemes differ in scale, leading to difficulties in direct numerical
+comparisons, the consistency in relative rankings within each test provides a meaningful reference of
+nAOPC as a valid metric.
+
+
+20

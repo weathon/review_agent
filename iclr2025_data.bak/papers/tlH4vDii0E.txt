@@ -1,0 +1,1173 @@
+# FINE-TUNING PRE-TRAINED LANGUAGE MODELS
+## FOR ROBUST CAUSAL REPRESENTATION LEARNING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+The fine-tuning of pre-trained language models (PLMs) has been shown to be effective across various domains. By using domain-specific supervised data, the
+general-purpose representation derived from PLMs can be transformed into a
+domain-specific representation. However, these methods often fail to generalize
+to out-of-domain (OOD) data due to their reliance on _non-causal_ representations,
+often described as spurious features. Existing methods either make use of adjustments with strong assumptions about lack of hidden common causes, or mitigate
+the effect of spurious features using multi-domain data. In this work, we investigate how fine-tuned pre-trained language models aid generalizability from singledomain scenarios under mild assumptions, targeting more general and practical
+real-world scenarios. We show that a robust representation can be derived through
+a so-called causal front-door adjustment, based on a _decomposition_ assumption,
+using fine-tuned representations as a source of data augmentation. Comprehensive
+experiments in both synthetic and real-world settings demonstrate the superior
+generalizability of the proposed method compared to existing approaches. Our
+work thus sheds light on the domain generalization problem by introducing links
+between fine-tuning and causal mechanisms into representation learning [1] .
+
+
+1 INTRODUCTION
+
+
+Pre-trained language models (PLMs) like BERT (Kenton & Toutanova, 2019; Liu, 2019) are trained
+on large corpora to generate contextualized representations, performing well in various natural language understanding (NLU) tasks such as text classification (Minaee et al., 2021). Fine-tuning these
+models, i.e., training them with supervised data to adapt to specific tasks, can lead to improved performance. However, models trained on specific domains tend to rely on non-causal representations
+that exploit spurious correlations present only in the training data, leading to poor generalization
+when tested on data with distribution shifts (Arjovsky et al., 2019; Ahuja et al., 2020; Heinze-Deml
+& Meinshausen, 2021). The issue arises from the assumption that training and test data are exchangeable samples (Lv et al., 2022; Qiao & Low, 2024). In practice, however, test data often come
+from out-of-domain (OOD) distributions that diverge from the training set. For example, “positive”
+sentiment might be strongly correlated with Amazon reviews due to bias in crowdsourced training
+data (Gururangan et al., 2018; Sagawa et al., 2019), but this correlation might not hold during testing.
+Ensuring the robustness of supervised fine-tuned models is crucial, especially in critical applications
+such as medical diagnosis and autonomous driving.
+
+
+Numerous studies have attempted to improve the robustness of PLMs in OOD scenarios from various perspectives (Hendrycks et al., 2020; Du et al., 2021; Yuan et al., 2023). One common approach
+is feature augmentation, which aims to enhance model generalizability by diversifying learned representations using models trained on data from multiple domains (Xie et al., 2020; Hendrycks et al.,
+2019; Zhang et al., 2020; Tu et al., 2020). These feature augmentation approaches could be interpreted as using expert knowledge to synthetically construct multi-domain data from a causal perspective (Ilse et al., 2021; Von K¨ugelgen et al., 2021). The availability of multi-domain data has
+spurred the rapid development of learning invariant predictors (Arjovsky et al., 2019; Ahuja et al.,
+2020; Heinze-Deml & Meinshausen, 2021). The goal of these approaches is to learn representations that minimize loss functions across all domains, conditionally or not on class labels, thereby
+
+
+1The code will be released upon acceptance, and is available in the supplementary material.
+
+
+1
+
+
+mitigating the impact of spurious features. Nonetheless, multi-domain data for natural language is
+often not readily available, and it is not straightforward to apply data augmentation, as in the case
+of image processing, due to the complexities inherent in language (Yuan et al., 2023). In this paper,
+we investigate how PLMs can be exploited as a natural additional source of domain data, to improve
+OOD generalization in single-domain scenarios under mild assumptions.
+
+
+Thus, we propose the following research question:
+
+
+_How can we leverage PLMs to learn robust causal representations that enhance OOD generaliza-_
+_tion?_
+
+
+In what follows, we first present an analysis through a causal perspective on why the standard supervised fine-tuning estimator _p_ ( _y_ _| x_ ) fails in OOD scenarios, and how this could be addressed by
+a causal estimator _p_ ( _y_ _|_ do( _x_ )) instead (Section 3), where do( _x_ ) denotes an intervention that fixes
+the value _X_ = _x_ (Pearl, 2009). Next, we elaborate on the key assumptions that guarantee the identificability of the causal estimator in Section 4. In light of these assumptions, we propose a novel
+method to construct the causal estimator _p_ ( _y_ _|_ do( _x_ )) (Theorem 2) using single-domain data. This
+method is based on two key constructions: (1) leveraging PLMs for data augmentation to identify
+causal features (Theorem 1), and (2) learning a representation of spurious local features to enable
+what is known as causal front-door adjustments (Pearl (2009), Section 5.3).
+
+
+Our key contribution is a principled strategy to construct robust causal representation using PLMs
+during fine-tuning, with single-domain observational data. We validate this approach on two semisynthetic datasets and one real-world benchmark datasets, comparing against strong baselines to
+evaluate generalizability, with a focus on text classification [2] . We find that our method provides
+significant resilience to changes in the distribution of spurious features and have a substantial impact
+on the deployment of text classifiers in real-world scenarios. This contribution advances the field
+of robust representation learning and demonstrates how understanding causal mechanisms could
+enhance model robustness.
+
+
+2 RELATED WORK
+
+
+**Causality** **and** **Domain** **Generalization** Causal mechanisms have been shown to be a reliable
+operational concept in Domain Generalization (DG). The goal is to address spurious correlations
+through causal inference, incorporating confounding adjustments under empirical observations. A
+common approach involves learning invariant predictors to minimize the impact of spurious features
+by training on supervised data from multiple domains (Arjovsky et al., 2019; Ahuja et al., 2020;
+Heinze-Deml & Meinshausen, 2021), and self-supervised learning (Von K¨ugelgen et al., 2021; Yue
+et al., 2021; Mitrovic et al., 2021; Kong et al., 2023). However, training data from multiple domains
+is often not readily available or easy to augment (Yuan et al., 2023). In order to perform causal
+inference with single domain data, other models exploit causal dependencies to eliminate spurious
+features through a so-called back-door adjustment, based on the assumption that no unobserved
+domain-specific confounders exist (Lu et al., 2022; Lv et al., 2022). However, confounders may
+not always be observed and can be difficult to model explicitly. Recent work seeks to address DG
+in a more practical setting by considering unobserved confounders and employing the front-door
+adjustment (Li et al., 2021; Mao et al., 2022; Nguyen et al., 2023). In this paper, we present a novel
+front-door adjustment construction for leveraging PLMs in a practical setting of NLU tasks.
+
+
+**Domain Generalization for Pre-trained Models** With pre-trained models achieving remarkable
+performance in both the computer vision (CV) (Chen et al., 2020; Bao et al., 2021; He et al., 2022)
+and natural language processing (NLP) (Devlin, 2018; Lan, 2019; Liu, 2019) communities, domain generalization on downstream tasks for these models has attracted increasing attention. Some
+studies aim to enhance generalizability by increasing the diversity of learned features with models
+trained on data from various domains (Hendrycks et al., 2019; Xie et al., 2020; Zhang et al., 2020;
+Tu et al., 2020). Other line of work suggests that conducting adversarial training (Salman et al.,
+2020; Hendrycks et al., 2020; Utrera et al., 2020; Yi et al., 2021) and developing advanced attention
+mechanisms (Dosovitskiy, 2020; Mao et al., 2021; Yang et al., 2021) can lead to more robust models. Motivated by recent work that utilize PLMs parameters as a way of performing regularization
+
+
+2Our method can be easily extended to other NLP tasks, such as natural language inference (NLI).
+
+
+2
+
+
+Figure 1: In the following, dashed vertices represent hidden variables and square vertices represent
+interventions or natural non-random external sources of variability. **(a):** An example of a practical
+real-world scenario: During training, there is a spurious correlation ( _U_ ), which indicates reviews
+from Amazon are more likely to express positive sentiment and reviews from Yelp are more likely
+to express negative sentiment. But this spurious information change in a new environment ( _σ_ _[∗]_ ). A
+classifier might exploit the source of the text as a predictive feature rather than the actual content of
+the review. **(b):** Explicitly indicating that the mechanism into _X_ may change according to regimes
+indexed by an intervention variable _σ_ . When do( _x_ ) operation performed, the edge between _U_ and
+_X_ is removed, indicated by a red cross. This is relevant, as it breaks the link between _Y_ and _σ_
+conditioned on _X_, making this predictor invariant to _σ_ . **(c):** Abstraction of the original causal
+diagram after decomposition, where _X_ is broken and abstracted into vectors _R_ [0], _R_ [1] and Φ, as
+explained in the main text (Section 4).
+
+
+or as external knowledge source (Wortsman et al., 2022; Zhu et al., 2023; Wang et al., 2024). In this
+paper, we explore the possibility of using PLMs as another data domain for augmentation, which is
+later used to construct a robust causal representation for both ID and OOD scenarios.
+
+
+3 PRELIMINARIES
+
+
+**Motivation and Intuition** Consider a common NLP application in a practical scenario: given input features _x_ _∈_ _X_, the task is to predict labels _y_ _∈_ _Y_, with potentially some unobserved common
+confounder _U_ between _X_ and _Y_ . This could typically be solved by learning a classifier _p_ ( _y | x_ ) directly using the empirical risk minimization (ERM) objective (VAPNIK, 1998) and choosing a class
+via arg max _y p_ ( _y | x_ ) during inference. The typical underlying assumption is that both the training
+and test environments [3] contain data that are exchangeable. However, the ERM estimator will not
+work if the test environment does not follow the same distribution as the training data. We discuss
+how this can be resolved under invariance assumptions described by using the framework of structural causal models (SCMs) (Pearl, 2009) in a subsequent section. Empirically, our findings illustrate
+a case where the performance of the fine-tuning estimator drops from 93% in the in-distribution (ID)
+
+
+3In this work, we use “environment” and “domain” interchangeably.
+
+
+3
+
+
+**Positive: Amazon  Negative: Yelp** **Negative:** **Amazon  Positive: Yelp**
+
+
+(a)
+
+
+(b)
+
+
+(c)
+
+
+setting to 49% in the OOD setting due to changes in spurious feature distribution, while the causal
+estimator maintains a performance level of 58% in the OOD scenario (Section 6).
+
+
+To accommodate for distribution shifts, we further assume that, in both training and test environments, an intervention (or some kind of perturbation, indicated by _σ_ within a square node) happens,
+altering the contribution of the unobserved confounder _U_ into _X_ (as shown in Figure 1 (b)). _Note_
+_that_ _while_ _we_ _only_ _observe_ _the_ _training_ _environments,_ _we_ _assume_ _that_ _the_ _test_ _environments_ _con-_
+_tain_ _similar_ _types_ _of_ _spurious_ _information,_ _although_ _the_ _distribution_ _p_ ( _U_ _|_ _X_ ; _σ_ ) _could_ _vary_ _arbi-_
+_trarily_ . Such changes could happen due to deploying algorithms in different population groups in
+hospitals (Caruana et al., 2015), testing on adversarial examples (Ilyas et al., 2019), evaluating on
+corrupted images (Hendrycks & Dietterich, 2019), or when stress-testing models to assess how their
+behaviour under different conditions changes (D’Amour et al., 2022).
+
+
+**Problem** **Statement.** Let’s begin by analysing why shifts in data distribution could cause our
+machine learning classifiers to fail with the following propositions.
+
+
+**Proposition 1** _Let M_ _and M_ _[∗]_ _be two different SCMs, representing the source and target domains_
+_under interventions σ_ _and σ_ _[∗]_ _with implied distributions P_ ( _Y |X_ ) _and P_ _[⋆]_ ( _Y |X_ ) _,_ _respectively,_ _and_
+_both consistent with the causal graph shown in Fig. 1 (b), then in general P_ ( _Y |X_ ) _̸_ = _P_ _[∗]_ ( _Y |X_ ) _._
+
+
+To see why this proposition is true, we analyze the learned distribution of _P_ ( _Y |X_ ), we can just use
+the law of total probability over _U_, where assumed without loss of generality to be discrete:
+
+
+_P_ ( _Y |X_ ) =         - _P_ ( _Y, U_ _| X_ )
+
+
+_U_
+
+
+In other words, the classifier learned from _P_ ( _Y |X_ ) under data regime _σ_, is not transportable (Pearl
+& Bareinboim, 2011; Jalaldoust & Bareinboim, 2024) (i.e. not invariant) across settings where a
+change into common causes between input _X_ and output _Y_ ; thus can not be used to make statements about an unknown new regime _P_ _[∗]_ ( _Y |X_ ). This is primarily because the domain shift happens
+in distribution _P_ ( _X_ _|_ _U_ ) and subsequently results in shifting _P_ ( _U_ _|X_ ) (in general, assuming that
+the change from _σ_ to _σ_ _[⋆]_ implies non-trivial changes to the distribution of _X_ ). To tackle this problem, alternatively, we need to look for a predictor that is invariant across environments caused by
+intervention _σ_ [4] .
+
+
+**Proposition 2** _Let_ _M_ _and_ _M_ _[∗]_ _be_ _two_ _representing_ _the_ _source_ _and_ _target_ _domains,_ _σ_ _and_ _σ_ _[∗]_ _,_ _and_
+_compatible with the causal graph shown in Fig._ _1 (b)._ _Then, we can get an invariant predictor such_
+_that P_ ( _Y_ _| do_ ( _X_ )) = _P_ _[∗]_ ( _Y_ _| do_ ( _X_ )) _._
+
+
+This invariant predictor guarantees a consistent prediction by considering a specific value of _σ_ that
+can be identified in any regime (under assumptions that we will introduce). In particular, we will
+base prediction on _P_ ( _Y_ _|_ do( _X_ )), which is transportable across settings. As shown in Fig. 1 (b), the
+intervention _σ_ = do( _X_ ) removes the influence of _U_ on the input _X_, so that _P_ ( _U_ _| X_ ; _σ_ = do( _x_ )) =
+_P_ ( _U_ ; _σ_ = _σ_ _[∗]_ ) for any value _σ_ _[∗]_ that changes only the mechanism into _X_ .
+
+
+Based on our analysis in the previous section, we consider build predictors based on _P_ ( _Y_ _|_ do( _X_ ))
+as an alternative to _P_ _[∗]_ ( _Y |X_ ) in the OOD scenarios, instead of _P_ ( _Y |X_ ) trained on source data.
+Hence, we consider whether this causal effect is identifiable given observational data _P_ ( _X, Y_ ).
+Unfortunately, it is a well-known result that in general this is not the case.
+
+
+**Proposition 3** _The causal effect of P_ ( _Y |do_ ( _X_ )) _is not nonparametrically identifiable, given empir-_
+_ical observational samples from P_ ( _X, Y_ ; _σ_ ) _only._
+
+
+In words, non-identifiability suggests that there are multiple SCMs that are consistent with the observational distribution _P_ ( _X, Y_ ). We further explain how identifiability could be reached in Section 4.
+
+
+4Here, this can be referred to as a soft intervention that changes the distribution rather than completely
+removes the incoming effect on the intervention node.
+
+
+4
+
+
+= - _P_ ( _Y_ _| U, X_ )
+
+
+_U_  - ��  does not change with _σ_
+
+
+_P_ ( _U_ _| X_ ; _σ_ )
+
+- �� change with _σ_
+
+
+4 STRUCTURAL ASSUMPTION FOR CAUSAL TRANSFER LEARNING IN
+PRE-TRAINED LANGUAGE MODELS
+
+
+In this section, we establish and elaborate the main assumptions that eventually lead to the identifiability of the causal estimand _p_ ( _y_ _|_ do( _x_ )). Furthermore, we discuss how this estimator could be
+implemented with a pre-trained language model in the context of a NLU task.
+
+
+4.1 ASSUMPTIONS
+
+
+The standard black-box model makes no distinction between causal features and non-causal features.
+We make the following structural assumptions, so that we can distinguish these two set of features
+as latent variables.
+
+
+**Assumption 1 (Decomposition)** _Each input text X can be decomposed into a causal latent variable_
+_C_ _and a spurious latent variable S_ _(i.e._ _X_ = _f_ ( _S, C_ ) _)._ _Latent variable C_ _is the only causal parent_
+_for label Y, and the generative process follows the causal graph in Fig. 1 (c):_
+
+
+_X_ _∼_ _p_ ( _x | s, c_ ) _, Y_ _∼_ _p_ ( _y | c_ ) _._
+
+
+This is a common assumption in causal machine learning literature, such as in (Tenenbaum & Freeman, 1996; Gong et al., 2016; Heinze-Deml & Meinshausen, 2021; Mao et al., 2022). The intuition
+is that we can abstract away the true complex causal graph into a coarser granularity, such that we
+encapsulate stable hidden confounders into _C_ and any other (unstable) non-confonding variables
+into _S_ . However, this assumption alone still does not provide sufficient information to identify latent variables _C_ and _S_ . We can make the following further assumption to allow for the identifiability
+of the causal latent variable _C_ .
+
+
+**Assumption 2 (Paired Representations)** _For each input text X, we can obtain a pair of variations_
+_of its representations, R_ 0 _and R_ 1 _, where their causal factors C remain the same but spurious factors_
+_S_ _varies_ _as_ _a_ _result_ _of_ _some_ _unknown_ _interventions_ _(i.e._ _we_ _have_ _S_ 0 _and_ _S_ 1 _),_ _and_ _the_ _generative_
+_process follows the causal graph in Fig. 1 (c)._ _That is,_
+
+
+_R_ 0 _∼_ _p_ ( _r_ 0( _x_ ) _| s_ 0 _, c_ ) _, R_ 1 _∼_ _p_ ( _r_ 1( _x_ ) _| s_ 1 _, c_ ) _._
+
+
+This is a critical assumption for identifying causal variables _C_, motivated by the Theorem 4.4
+in (Von K¨ugelgen et al., 2021). Intuitively, _R_ 0 and _R_ 1 can be considered as two different representations of the same data point, retrieved from two distinct environments. In our context, the _R_ 0 can
+be retrieved from the pre-trained language model (i.e. the pre-training environments) and _R_ 1 can
+be retrieved after supervised fine-tuning of the pre-trained language model on given datasets (i.e.
+the training environment). This assumption establishes a way for identifying the causal variables
+_C_ from the observational distribution _P_ ( _R_ 0 _, R_ 1 _, X, Y_ ), which would otherwise remain unidentifiable (Von K¨ugelgen et al., 2021).
+
+
+A typical causal estimator require controlling for unobserved confounders. However, this is often
+not feasible without relying on strong assumptions. One approach is to construct a front-door adjustment (Pearl, 2009) by introducing an additional feature which mediates the effect of the features
+on the label. Based on this, we make the following assumptions:
+
+
+**Assumption 3 (Local Features)** _For each input text X, after getting its sentence summary R_ 1 _, we_
+_can also obtain its token-level features_ Φ _from the fine-tuned model for free. This token-level features_
+_could_ _be_ _used_ _to_ _predict_ _the_ _label_ _Y,_ _and_ _the_ _generative_ _process,_ _conditioned_ _on_ _R_ 1 _only,_ _follows_
+_the causal graph in Fig. 1 (c):_
+Φ _∼_ _p_ ( _ϕ | r_ 1) _._
+
+
+**Assumption 4 (Sufficient Mediator)** _The_ _causal_ _effect_ _from_ _local_ _features_ Φ _only_ _impact_ _Y_
+_through_ _a_ _subset_ _of_ _variables_ _in_ _C,_ _in_ _other_ _words,_ _the_ _causal_ _factors_ _C_ _fully_ _mediate_ _the_ _causal_
+_effect between_ Φ _and label Y ._ _This means fixing_ Φ _does not give us more information about Y_ _once_
+_we fix C_ _already, such that P_ ( _Y_ _| do_ (Φ) _, do_ ( _c_ )) = _P_ ( _Y_ _| do_ ( _c_ )) _._
+
+
+5
+
+
+4.2 IDENTIFICATION
+
+
+**Theorem 1 (Identification for Causal Features** _C_ **)** _Given_ _the_ _assumptions_ _about_ _the_ _generative_
+_process encoded in the causal graph in_ _**Fig. 1 (c)**_ _, and two representations R_ 0 _, R_ 1 _for the same text_
+_X learned from two different environments (the first one comes from pre-training, and the second for_
+_supervised fine tuning), comes from the same text._ _According to_ _**Theorem 4.4**_ _in Von K¨ugelgen et al._
+_(2021), we can identify the causal features C_ _by learning a mapping function from via Equation 3._
+
+
+**Intuition.** This theorem states that if we can get a representation of the same data point under two
+environments with the underlying generative process that we defined, and if the causal latent variable
+**C** between these two environments stays the same (Assumption 2), then we can use the distribution
+shift between environments to identify the invariant causal latent variable. For a formal proof of this
+theorem, please refers to **Theorem 4.4** in Von K¨ugelgen et al. (2021).
+
+
+**Theorem 2 (Identification for Causal Transfer Learning)** _Given the assumptions about the gen-_
+_erative process encoded in the causal graph in_ _**Fig. 1 (c)**_ _, together with assumptions 1-4, the causal_
+_effect can be computed using the neural representation of x via:_
+
+
+       _P_ ( _Y_ = _y | do_ ( _X_ = _x_ )) = _P_ ( _y |_ Φ _[′]_ _, c_ ) _P_ (Φ [ˆ] _[′]_ _| x_ _[′]_ ) _P_ ( _x_ _[′]_ ) _,_ (1)
+
+
+ˆΦ _′,x′_
+
+
+_where c is given by the mapping c_ = **f** _c_ ( _x_ ) _that represents how causal features that are implied by_
+_X, further formalized in Section 5.2._
+
+
+_**Proof.**_ _We can derive the following steps:_
+
+
+_P_ ( _y | do_ ( _x_ )) = _P_ ( _y | do_ ( _s, c_ )) _Assumption 1_
+= _P_ ( _y | do_ ( _c_ )) _Do-Calculus Rule 3 (Pearl, 2009)_
+
+
+   = _P_ ( _y |_ Φ _[′]_ _, c_ ) _P_ (Φ _[′]_ ) _Frontdoor Criterion & Assumption 3 and 4_
+
+
+Φ _[′]_
+
+=    - _P_ ( _y |_ Φ _[′]_ _, c_ ) _P_ (Φ [ˆ] _[′]_ _| x_ _[′]_ ) _P_ ( _x_ _[′]_ ) □ _._ _Marginalization and Factorization_
+
+
+ˆΦ _′,x′_
+
+
+5 ALGORITHM AND STATISTICAL INFERENCE
+
+
+5.1 SUPERVISED FINE-TUNING
+
+
+The first step is to learn the representation _R_ 1 from empirical observations ( _x, y_ ) _∼_ _P_ [ˆ] by supervised fine-tuning (SFT) a new model **M1** initialised with the pre-trained model **M0** ’s parameters;
+however, we find that directly learning from _P_ [ˆ] causes unstable performance. Instead, we sample a
+_x_ ˜ from _P_ [ˆ] conditioned on its original label _y_ and use this pair for training, as follows:
+
+
+_L_ ERM( _f_ sft) = E(˜ _x,y_ ) _∼P_ ˆ [[] _[−][y]_ [ log] _[ f]_ [(˜] _[x]_ [)]] (2)
+
+
+this is the multi-class cross entropy loss, where _f_ (˜ _x_ ) represents the predicted probability distribution
+over all possible classes for the input _x_ .
+
+
+5.2 LEARNING THE CAUSAL INVARIANT FEATURE
+
+
+To learn the invariant causal feature **C**, we aim to identify a function **f** c( _·_ ) where **C** = **f** c( **R** ). This is
+done by optimizing an objective function where the first term aligns the inputs and the second term
+maximizes entropy, discouraging collapsed representations (Von K¨ugelgen et al., 2021). The loss
+function is constructed based on Theorem 1,
+
+
+             -              _LC_ ( _f_ c) := E( _r_ 0( _x_ ) _,r_ 1( _x_ )) _∼px_ _∥f_ c( _r_ 0( _x_ )) _−_ _f_ c( _r_ 1( _x_ )) _∥_ [2] 2 _−_ _H_ ( _f_ c( _r_ 0( _x_ ))) _−_ _H_ ( _f_ c( _r_ 1( _x_ ))) _,_ (3)
+
+
+6
+
+
+where the first term is expected squared _L_ 2 norm of the difference in representations, which aims to
+constrain the invariant part **C** from two environments, **R** 0 and **R** 1. The second term and third terms
+are the respective negative entropies, which aims at encouraging less information loss.
+
+
+5.3 RETRIEVING LOCAL FEATURES
+
+
+In this section, we discuss how to construct local features. Consider the original text _X_ as a series of
+tokens _X_ = [ _t_ 1 _, t_ 2 _, ..., tm_ ], which is fed into the SFT model to obtain the contextual embedding _R_ .
+At the same time, we can get the vector representation for each token _t_ . To construct a local value,
+we split the token sequence into non-overlapping patches (we use 10 patches in our experiments),
+allowing us to rewrite _X_ as patches _X_ = [ _p_ 1 _, p_ 2 _, ..., p_ 10] where _p_ 1 = [ _t_ 1 _, t_ 2 _, ..., t_ 10 _[m]_ []] [and] [so] [on.]
+
+After splitting text into patches, we perform mean averaging on these patches to extract a regional
+signal, which is then passed through a multi-layer perceptron (MLP) to obtain the representation Φ.
+
+
+5.4 TRAINING AND INFERENCE
+
+
+We develop the following two algorithms, with Algorithm 1 for training and Algorithm 2 for predictions.
+
+
+**Algorithm 1** Causal Transfer Learning (CTL) Training
+
+1: **Input:** _D_ = _{_ ( _xi, yi_ ) _}_ _[N]_ _i_ =1 [and pre-trained model] **[ M][0]**
+2: **Output:** Learned models _p_ ( _y|_ Φ _, c_ ), _p_ (Φ _|x_ ), **M1**, **f** _c_
+3: **Step** **1:** Initialize the SFT model **M1** from **M0**, freeze all parameters in **M0**, and randomly
+initialize _p_ ( _y|_ Φ _, c_ ), _p_ (Φ _|x_ ), **f** _c_
+4: **for** each mini-batch in _D_ **do**
+5: **for** each ( _xi, yi_ ) in the mini-batch **do**
+6: **Step 2:** Sample _x_ ˜ _i_ and _x_ ¯ _i_ from _D_ which have the same label as _yi_
+7: **Step 3:** Update model **M1** on (˜ _xi, yi_ ) using the objective function 2.
+8: **Step 4:** Obtain ¯ _r_ 0 = **M0** (¯ _xi_ ) and ¯ _r_ 1 = **M1** (¯ _xi_ )
+9: **Step 5:** Update _fc_ parameters using ¯ _r_ 0 and ¯ _r_ 1 based on Equation 3
+10: **Step 6:** Obtain _r_ 1 = **M1** ( _xi_ ), _c_ = _fc_ ( _r_ 1) and Φ = _f_ Φ( _r_ 1)
+11: **Step 7:** Shuffle Φ within the mini-batch to get Φ _[′]_
+
+12: **Step 8:** Update _p_ ( _y|_ Φ _, c_ ) using ( _ci, yi,_ Φ _[′]_ ), and _p_ (Φ _|x_ ) using ( _xi,_ Φ)
+13: **end for**
+14: **end for**
+
+
+**Algorithm 2** Causal Transfer Learning (CTL) Inference
+
+1: **Input:** _D_ = _{_ ( _xi_ ) _}_ _[N]_ _i_ =1 [, pretrained model] **[ M][0]** [, sft model] **[ M][1]** [and number of sample size] _[ K]_
+2: **Output:** Label _D_ = _{_ ( _xi, yi_ ) _}_ _[N]_ _i_ =1
+3: **for** each mini-batch in _D_ **do**
+4: **for** each ( _xi_ ) in the mini-batch **do**
+5: **Step 1:** Obtain _r_ = **M1** ( _xi_ )
+6: **Step 2:** Obtain _c_ = _fc_ ( _r_ )
+7: **Step 3:** Obtain Φ = _f_ Φ( _r_ )
+8: **for** k in sample size K **do**
+9: **Step 4:** Shuffle Φ within the mini-batch to get Φ _[′]_ _k_
+10: **end for**
+11: **Step** **5:** Calculate the causal estimate _P_ ( _y|do_ ( _x_ )) using Equation 1 and then assign
+_y_ = arg max _P_ ( _y|do_ ( _x_ ))
+12: **end for**
+13: **end for**
+
+
+6 EXPERIMENTS
+
+
+We evaluate the performance of our proposed approach by conducting experiments on both semisynthetic data and real-world applications. This section summarizes the experimental setup and key
+results. The code for reproducing all results and figures will be made online. A detailed description
+of the datasets and simulators can be found in Appendix A, while Appendix B provides the model
+architecture details. Further analysis and additional results are presented in Appendix C.
+
+
+**Baselines** **and** **Our** **Methods.** We compare our model with the following baselines: (1) **SFT0**,
+which involves training a linear classifier on a freezed sentence representation extracted directly
+
+
+7
+
+
+from the PLM; (2) **SFT** (VAPNIK, 1998), the typical transfer learning strategy in the NLP community and is considered as a strong baseline (equivalent to performing ERM with a PLM); (3)
+**WSA** (Izmailov et al., 2018; Athiwaratkun et al., 2018), which averages multiple points along the
+SGD trajectory to achieve a more robust classifier; and (4) **WISE** (Wortsman et al., 2022), which
+interpolates the parameters of a PLM and a fine-tuned model to improve generalisation.
+
+
+Our proposed Causal Transfer Learning ( **CTL** ) model follows the exact setup described in Section
+4. To further investigate the performance of different representations on prediction performance,
+we implemented three variations: (1) **CTL-N**, which does not apply the adjustment formula in
+Theorem 2 on causal effect but instead uses both Φ and _C_ to estimate the label _Y_ . This introduces
+an unblocked causal path between Φ and _Y_ ; (3) **CTL-C**, uses the estimated causal variable _C_ to
+predict the label _Y_ ; and (4) **Causal-** Φ, which uses local spurious features Φ to predict _Y_ .
+
+
+**Experimental** **Setup.** Each experiment was repeated 5 times using the AdamW (Kingma & Ba,
+2015; Loshchilov, 2017) optimizer with a learning rate of 5 _×_ 10 _[−]_ [5], except for SFT0, where a
+learning rate of 5 _×_ 10 _[−]_ [4] was used. Each model was trained for 10 epochs, which was sufficient for
+convergence. The best model iteration was selected based on performance on a holdout validation
+set comprising 20% of the training data.
+
+
+6.1 SEMI-SYNTHETIC EXPERIMENTS
+
+
+**Data:** We consider two NLU benchmark datasets, both focused on sentiment analysis tasks (Zhang
+et al., 2015). The first is the polarized Amazon review dataset and the second is the polarized Yelp
+review dataset. Following the guidelines from Veitch et al. (2021), we generate both semi-synthetic
+ID and OOD data by injecting spurious correlations between stop words (“and” and “the”) and class
+labels. See Appendix A.2 for more details. For training, we randomly sample 5000 points per class,
+with a 20% split for validation. For testing, we sample 2000 per class. During training, we control
+the spurious correlation to be 90%, which remains the same for in-distribution testing. For the OOD
+test set, we shift this ratio to be 70%, 50%, 30% and 10%.
+
+
+Table 1: Main results for semi-synthetic experiments, reported as F1 scores with mean averaged
+value based on 5 runs of different seeds. We presents the Yelp results in the first table and Amazon
+in the second.
+
+|Col1|Train F1 90% ID F1 90%|OOD F1 70% OOD F1 50% OOD F1 30% OOD F1 10%|
+|---|---|---|
+|**SFT0**<br>**SFT**|86_._24<br>86_._42<br>95_._96<br>92_._89|71_._58<br>56_._82<br>42_._04<br>26_._94<br>81_._89<br>71_._20<br>60_._23<br>49_._24|
+|**CTL**<br>**CTL-N**<br>**CTL-C**<br>**CTL-**Φ|**98.69**<br>**93.03**<br>97_._80<br>92_._35<br>98_._62<br>92_._99<br>92_._42<br>89_._30|**84.16**<br>**75.83**<br>**67.06**<br>**58.40**<br>81_._91<br>71_._89<br>61_._46<br>51_._07<br>84_._07<br>75_._51<br>66_._62<br>57_._75<br>71_._83<br>54_._41<br>36_._91<br>19_._08|
+
+
+|Col1|Train F1 90% ID F1 90%|OOD F1 70% OOD F1 50% OOD F1 30% OOD F1 10%|
+|---|---|---|
+|**SFT0**<br>**SFT**|87_._99<br>87_._90<br>96_._56<br>**92.39**|70_._42<br>52_._80<br>35_._26<br>17_._83<br>81_._61<br>70_._77<br>59_._97<br>49_._33|
+|**CTL**<br>**CTL-N**<br>**CTL-C**<br>**CTL-**Φ|**98.58**<br>92_._37<br>97_._24<br>91_._82<br>97_._58<br>92_._24<br>90_._63<br>89_._83|**83.16**<br>**74.25**<br>**65.24**<br>**56.40**<br>80_._83<br>69_._76<br>58_._77<br>48_._00<br>82_._35<br>72_._62<br>63_._01<br>53_._40<br>70_._46<br>51_._06<br>31_._71<br>12_._40|
+
+
+Figure 2: Box-plot over 5 runs for 4 methods (SFT, CTL, CTL-N and CTL-C). Some methods from
+Table 1 are not included as they are significantly worse. This is a visualisation of the Amazon
+dataset. Yelp shows a similar trend (Fig.4, Appendix).
+
+
+8
+
+
+**Results:** The main results are presented in Table 1, with visualization for the Amazon dataset
+for 5 runs, which shows the superiority of our model against the strong baselines. We observe a
+significant performance drop in both SFT0 and SFT when the distribution of spurious distribution
+shifts, indicating that standard transfer learning methods struggle to handle spurious correlations,
+whether in in-domain or an OOD setting. We also observe that SFT performs much better than
+SFT0 for both in distribution and OOD setting, suggesting the effectiveness of “knowledge transfer”
+in representations. Among all estimators, our proposed CTL method provides the most promising
+predictors. Compared to CTL, the CTL-N conditions on Φ, which introduces an unblocked path
+between _σ_ and _Y_, namely _σ_ _→_ _S_ [1] _→_ _R_ [1] _↔_ Φ _↔_ _Y_ (Pearl, 2009), where _S_ [1] is unobserved but
+_R_ [1] and Φ are observable functions of _X_ . This means that this predictor gets exposed to changes in
+distribution as indexed by _σ_ . We observe that the drop in performance compared to CTL and this
+confirms why making predictions under a hypothetical _do_ ( _x_ ) helps. CTL-C can be considered as
+another good predictor, suggesting that PLMs can be considered as a good source of new domain
+data. We observe, however, a loss of prediction accuracy by using **C** only as we perturb the OOD
+distribution away from the ID data. An interesting finding is that CTL-Φ is strongly correlated to
+the spurious information in the data. This reflects why our methods can work for OOD cases, as we
+adjust for the spurious distribution in the new OOD data by the modified distribution _do_ ( _x_ ).
+
+
+6.2 REAL WORLD EXPERIMENTS
+
+
+**Real-world** **Case-Study.** In the domain of text classification, a practical example can be drawn
+from sentiment analysis tasks, where data is collected from two distinct platforms, such as Amazon
+and Yelp. Hypothetically, the sentiment distribution across these platforms could differ significantly.
+For instance, if we randomly sample product reviews from Amazon, we may find that 80% are
+positive and 20% are negative. This imbalance could be influenced by specific product categories
+or certain demographic groups of users. In contrast, Yelp reviews may exhibit the opposite trend,
+with 80% of the reviews being negative and only 20% positive, due to the nature of service-related
+reviews on that platform.
+
+
+If we combine data from both platforms into a training set, we might obtain a seemingly balanced
+dataset—50% positive and 50% negative reviews. However, the real-world distribution of sentiment
+in the test data may deviate significantly from this. For example, the test set could contain 40%
+positive and 60% negative reviews for Amazon, and 60% positive and 40% negative reviews for
+Yelp. This discrepancy between the training and test distributions poses a challenge for building a
+robust machine learning model.
+
+
+Such scenarios are particularly relevant when deploying models across different regions or environments. For instance, a model trained on reviews from users in Asia may be expected to perform
+equally well when deployed in Europe, despite potential differences in user behavior, cultural context, or product preferences that alter the distribution of sentiments. Adapting to these environmental
+shifts is critical for ensuring model generalizability and effectiveness in real-world applications.
+
+
+**Data:** We conducted a real-world experiment based on ourreal-world case study outlined above
+(and illustrated earlier on in Fig 1 (a)). Again, we focus on sentiment analysis classification using
+a dataset build from Yelp and Amazon review. During the training, similar to the semi-synthetic
+experiments, we build correlations between the source of the data (whether coming from Amazon
+or Yelp platform) and the label, by adding strings such as ”amazon.xxx” or ”yelp.yyy” into the
+sentences. More details can be found in Appendix A.3. We used 5,000 samples per class for training
+and 2,000 per class for testing. For training, we control the spurious correlation to be at a ratio of
+90%, which remains the same for in-distribution test; and for the OOD test set, we change this ratio
+to be 70%, 50%, 30%, and 10%. Additionally, we compare our approach with other single domain
+generalization baselines to demonstrate its effectiveness.
+
+
+**Results** The results are consistent with our semi-synthetic experiments. When comparing with the
+two baselines, the WISE method does not work too well, perhaps for being more sensitive to the
+hyper-parameter that mixes the fine-tuned model and the pre-trained model (we used a default value
+of 0.5, which means they are equally weighted). The SWA method worked quite well compared to
+SFT methods, suggesting that stopping at a flat region of parameter space improves the generaliza
+
+9
+
+
+tion of the model (Izmailov et al., 2018; Kaddour et al., 2022). However, it was still worse than our
+methods when the perturbation in test distribution became stronger (i.e. from OOD 70% to 10%).
+
+
+Table 2: Main results for real-world experiments. Results reported in mean value based on 5 runs of
+different seeds.
+
+|Col1|Train F1 90% ID F1 90%|OOD F1 70% OOD F1 50% OOD F1 30% OOD F1 10%|
+|---|---|---|
+|**SFT0**<br>**SFT**<br>**SWA**<br>**WISE**|87_._74<br>87_._78<br>94_._01<br>**91.39**<br>**99.99**<br>91_._26<br>92_._87<br>91_._34|69_._57<br>51_._46<br>33_._42<br>15_._26<br>78_._05<br>64_._75<br>51_._36<br>37_._78<br>**80.34**<br>69_._63<br>58_._59<br>47_._41<br>76_._59<br>61_._77<br>46_._96<br>31_._83|
+|**CTL**<br>**CTL-N**<br>**CTL-C**<br>**CTL-**Φ|97_._46<br>90_._59<br>91_._36<br>89_._98<br>95_._60<br>91_._07<br>90_._92<br>89_._81|80_._32<br>**70.08**<br>**59.68**<br>**49.22**<br>71_._31<br>52_._66<br>33_._96<br>15_._05<br>78_._93<br>66_._80<br>54_._62<br>42_._25<br>70_._49<br>51_._24<br>32_._03<br>12_._60|
+
+
+Figure 3: Box-plot over 5 runs for 6 methods (SFT, SWA, WISE, CTL, CTL-N and CTL-C). Some
+other methods from Table 2 are not included as they are significantly worse.
+
+
+6.3 FURTHER ANALYSIS
+
+
+We conducted a further analysis on (1) level of spurious (Fig. 5), (2) number of training data (Fig.
+6), and (3) number of samples during inference (Fig. 7). All results are presented in Appendix C.
+
+
+**Summary:** (1) Under different levels of spurious information, our CTL method consistently outperforms the SFT method by a significant margin. (2) Even with more data provided, our model CTL
+consistently outperforms the blackbox methods (SFT). However, we observe that when enough data
+is provided, there is a saturation point where SFT and CTL methods become indistinguishable for
+this particular OOD task. (3) We also observed a decrease in performance if we do not use the
+interventional distribution _do_ ( _x_ ) during prediction time.
+
+
+7 CONCLUSION
+
+
+In this paper, we introduced a method for constructing robust causal representations leveraging
+PLMs. Through a series of semi-synthetic and real-world experiments, we demonstrated the promising performance of our approach in OOD scenarios compared to standard fine-tuning. **Lessons.** We
+recognize that PLMs are already highly resilient to perturbations in text inputs, and introducing
+spurious information at the input level requires significant effort. This highlights the strength of
+PLMs in managing text input variations, but also the challenge in simulating spurious correlations
+for testing purposes. **Limitations.** While we made extensive efforts to control and simulate spurious
+relationships that resemble real-world deployment scenarios, the mechanisms through which spurious correlations emerge in complex, real-world environments remain unclear. Furthermore, it is
+not immediately evident how such shifts can be systematically managed in these settings. We hope
+our method provides a valuable baseline for both academic and industry researchers facing these
+challenges. **Future Work.** While PLMs have been increasingly used to construct robust classifiers,
+as seen in recent work such as (Wortsman et al., 2022; Zhu et al., 2023; Wang et al., 2024), the precise nature of the knowledge encapsulated within these models remains an open question. Although
+efforts such as (Park et al., 2023) have begun addressing this issue, further investigation is required
+to fully understand and harness this knowledge effectively. Additionally, extending our approach
+to tasks involving language generation within the framework of large language models (LLMs) is
+another compelling direction for future research.
+
+
+10
+
+
+REFERENCES
+
+
+Kartik Ahuja, Karthikeyan Shanmugam, Kush Varshney, and Amit Dhurandhar. Invariant risk minimization games. In _International Conference on Machine Learning_, pp. 145–155. PMLR, 2020.
+
+
+Martin Arjovsky, L´eon Bottou, Ishaan Gulrajani, and David Lopez-Paz. Invariant risk minimization.
+_arXiv preprint arXiv:1907.02893_, 2019.
+
+
+Ben Athiwaratkun, Marc Finzi, Pavel Izmailov, and Andrew Gordon Wilson. There are many consistent explanations of unlabeled data: Why you should average. _arXiv preprint arXiv:1806.05594_,
+2018.
+
+
+Hangbo Bao, Li Dong, Songhao Piao, and Furu Wei. Beit: Bert pre-training of image transformers.
+_arXiv preprint arXiv:2106.08254_, 2021.
+
+
+Rich Caruana, Yin Lou, Johannes Gehrke, Paul Koch, Marc Sturm, and Noemie Elhadad. Intelligible models for healthcare: Predicting pneumonia risk and hospital 30-day readmission. In
+_Proceedings_ _of_ _the_ _21th_ _ACM_ _SIGKDD_ _international_ _conference_ _on_ _knowledge_ _discovery_ _and_
+_data mining_, pp. 1721–1730, 2015.
+
+
+Mark Chen, Alec Radford, Rewon Child, Jeffrey Wu, Heewoo Jun, David Luan, and Ilya Sutskever.
+Generative pretraining from pixels. In _International conference on machine learning_, pp. 1691–
+1703. PMLR, 2020.
+
+
+Alexander D’Amour, Katherine Heller, Dan Moldovan, Ben Adlam, Babak Alipanahi, Alex Beutel,
+Christina Chen, Jonathan Deaton, Jacob Eisenstein, Matthew D Hoffman, et al. Underspecification presents challenges for credibility in modern machine learning. _Journal of Machine Learning_
+_Research_, 23(226):1–61, 2022.
+
+
+Jacob Devlin. Bert: Pre-training of deep bidirectional transformers for language understanding.
+_arXiv preprint arXiv:1810.04805_, 2018.
+
+
+Alexey Dosovitskiy. An image is worth 16x16 words: Transformers for image recognition at scale.
+_arXiv preprint arXiv:2010.11929_, 2020.
+
+
+Mengnan Du, Varun Manjunatha, Rajiv Jain, Ruchi Deshpande, Franck Dernoncourt, Jiuxiang Gu,
+Tong Sun, and Xia Hu. Towards interpreting and mitigating shortcut learning behavior of nlu
+models. _arXiv preprint arXiv:2103.06922_, 2021.
+
+
+Mingming Gong, Kun Zhang, Tongliang Liu, Dacheng Tao, Clark Glymour, and Bernhard
+Sch¨olkopf. Domain adaptation with conditional transferable components. In _International con-_
+_ference on machine learning_, pp. 2839–2848. PMLR, 2016.
+
+
+Suchin Gururangan, Swabha Swayamdipta, Omer Levy, Roy Schwartz, Samuel Bowman, and
+Noah A. Smith. Annotation artifacts in natural language inference data. In _Proceedings_ _of_
+_the_ _2018_ _Conference_ _of_ _the_ _North_ _American_ _Chapter_ _of_ _the_ _Association_ _for_ _Computational_ _Lin-_
+_guistics:_ _Human_ _Language_ _Technologies,_ _Volume_ _2_ _(Short_ _Papers)_, pp. 107–112, New Orleans,
+Louisiana, 2018. Association for Computational Linguistics. doi: 10.18653/v1/N18-2017. URL
+[https://aclanthology.org/N18-2017.](https://aclanthology.org/N18-2017)
+
+
+Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Doll´ar, and Ross Girshick. Masked autoencoders are scalable vision learners. In _Proceedings of the IEEE/CVF conference on computer_
+_vision and pattern recognition_, pp. 16000–16009, 2022.
+
+
+Christina Heinze-Deml and Nicolai Meinshausen. Conditional variance penalties and domain shift
+robustness. _Machine Learning_, 110(2):303–348, 2021.
+
+
+Dan Hendrycks and Thomas Dietterich. Benchmarking neural network robustness to common corruptions and perturbations. _arXiv preprint arXiv:1903.12261_, 2019.
+
+
+Dan Hendrycks, Kimin Lee, and Mantas Mazeika. Using pre-training can improve model robustness
+and uncertainty. In _International conference on machine learning_, pp. 2712–2721. PMLR, 2019.
+
+
+11
+
+
+Dan Hendrycks, Xiaoyuan Liu, Eric Wallace, Adam Dziedzic, Rishabh Krishnan, and Dawn Song.
+Pretrained transformers improve out-of-distribution robustness. _arXiv preprint arXiv:2004.06100_,
+2020.
+
+
+Maximilian Ilse, Jakub M Tomczak, and Patrick Forr´e. Selecting data augmentation for simulating
+interventions. In _International conference on machine learning_, pp. 4555–4562. PMLR, 2021.
+
+
+Andrew Ilyas, Shibani Santurkar, Dimitris Tsipras, Logan Engstrom, Brandon Tran, and Aleksander
+Madry. Adversarial examples are not bugs, they are features. _Advances_ _in_ _neural_ _information_
+_processing systems_, 32, 2019.
+
+
+Pavel Izmailov, Dmitrii Podoprikhin, Timur Garipov, Dmitry Vetrov, and Andrew Gordon Wilson. Averaging weights leads to wider optima and better generalization. _arXiv_ _preprint_
+_arXiv:1803.05407_, 2018.
+
+
+Kasra Jalaldoust and Elias Bareinboim. Transportable representations for domain generalization.
+In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 38, pp. 12790–12800,
+2024.
+
+
+Daniel Jurafsky. Speech and language processing, 2000.
+
+
+Jean Kaddour, Linqing Liu, Ricardo Silva, and Matt J Kusner. When do flat minima optimizers
+work? _Advances in Neural Information Processing Systems_, 35:16577–16595, 2022.
+
+
+Jacob Devlin Ming-Wei Chang Kenton and Lee Kristina Toutanova. Bert: Pre-training of deep
+bidirectional transformers for language understanding. In _Proceedings of NAACL-HLT_, pp. 4171–
+4186, 2019.
+
+
+Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In Yoshua
+Bengio and Yann LeCun (eds.), _3rd International Conference on Learning Representations, ICLR_
+_2015, San Diego, CA, USA, May 7-9, 2015, Conference Track Proceedings_, 2015. [URL http:](http://arxiv.org/abs/1412.6980)
+[//arxiv.org/abs/1412.6980.](http://arxiv.org/abs/1412.6980)
+
+
+Lingjing Kong, Shaoan Xie, Weiran Yao, Yujia Zheng, Guangyi Chen, Petar Stojanov, Victor
+Akinwande, and Kun Zhang. Partial identifiability for domain adaptation. _arXiv_ _preprint_
+_arXiv:2306.06510_, 2023.
+
+
+Z Lan. Albert: A lite bert for self-supervised learning of language representations. _arXiv preprint_
+_arXiv:1909.11942_, 2019.
+
+
+Xin Li, Zhizheng Zhang, Guoqiang Wei, Cuiling Lan, Wenjun Zeng, Xin Jin, and Zhibo Chen.
+Confounder identification-free causal visual feature learning. _arXiv preprint arXiv:2111.13420_,
+2021.
+
+
+Yinhan Liu. Roberta: A robustly optimized bert pretraining approach. _arXiv_ _preprint_
+_arXiv:1907.11692_, 2019.
+
+
+I Loshchilov. Decoupled weight decay regularization. _arXiv preprint arXiv:1711.05101_, 2017.
+
+
+Chaochao Lu, Yuhuai Wu, Jos´e Miguel Hern´andez-Lobato, and Bernhard Sch¨olkopf. Invariant
+causal representation learning for out-of-distribution generalization. In _International_ _Confer-_
+_ence_ _on_ _Learning_ _Representations_, 2022. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=-e4EXDWXnSn)
+[-e4EXDWXnSn.](https://openreview.net/forum?id=-e4EXDWXnSn)
+
+
+Fangrui Lv, Jian Liang, Shuang Li, Bin Zang, Chi Harold Liu, Ziteng Wang, and Di Liu. Causality
+inspired representation learning for domain generalization. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_conference on computer vision and pattern recognition_, pp. 8046–8056, 2022.
+
+
+Chengzhi Mao, Lu Jiang, Mostafa Dehghani, Carl Vondrick, Rahul Sukthankar, and Irfan Essa. Discrete representations strengthen vision transformer robustness. _arXiv preprint arXiv:2111.10493_,
+2021.
+
+
+Chengzhi Mao, Kevin Xia, James Wang, Hao Wang, Junfeng Yang, Elias Bareinboim, and Carl Vondrick. Causal transportability for visual recognition. In _Proceedings of the IEEE/CVF Conference_
+_on Computer Vision and Pattern Recognition_, pp. 7521–7531, 2022.
+
+
+12
+
+
+Shervin Minaee, Nal Kalchbrenner, Erik Cambria, Narjes Nikzad, Meysam Chenaghlu, and Jianfeng
+Gao. Deep learning–based text classification: a comprehensive review. _ACM computing surveys_
+_(CSUR)_, 54(3):1–40, 2021.
+
+
+Jovana Mitrovic, Brian McWilliams, Jacob C Walker, Lars Holger Buesing, and Charles Blundell. Representation learning via invariant causal mechanisms. In _International_ _Confer-_
+_ence_ _on_ _Learning_ _Representations_, 2021. URL [https://openreview.net/forum?id=](https://openreview.net/forum?id=9p2ekP904Rs)
+[9p2ekP904Rs.](https://openreview.net/forum?id=9p2ekP904Rs)
+
+
+Toan Nguyen, Kien Do, Duc Thanh Nguyen, Bao Duong, and Thin Nguyen. Causal inference via
+style transfer for out-of-distribution generalisation. In _Proceedings_ _of_ _the_ _29th_ _ACM_ _SIGKDD_
+_Conference on Knowledge Discovery and Data Mining_, pp. 1746–1757, 2023.
+
+
+Kiho Park, Yo Joong Choe, and Victor Veitch. The linear representation hypothesis and the geometry
+of large language models. _arXiv preprint arXiv:2311.03658_, 2023.
+
+
+Judea Pearl. _Causality_ . Cambridge university press, 2009.
+
+
+Judea Pearl and Elias Bareinboim. Transportability of causal and statistical relations: A formal
+approach. In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 25, pp. 247–
+254, 2011.
+
+
+Rui Qiao and Bryan Kian Hsiang Low. Understanding domain generalization: A noise robustness
+perspective. _arXiv preprint arXiv:2401.14846_, 2024.
+
+
+Shiori Sagawa, Pang Wei Koh, Tatsunori B Hashimoto, and Percy Liang. Distributionally robust
+neural networks. In _International Conference on Learning Representations_, 2019.
+
+
+Hadi Salman, Andrew Ilyas, Logan Engstrom, Ashish Kapoor, and Aleksander Madry. Do adversarially robust imagenet models transfer better? _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 33:3533–3545, 2020.
+
+
+Joshua Tenenbaum and William Freeman. Separating style and content. _Advances in neural infor-_
+_mation processing systems_, 9, 1996.
+
+
+Lifu Tu, Garima Lalwani, Spandana Gella, and He He. An empirical study on robustness to spurious
+correlations using pre-trained language models. _Transactions_ _of_ _the_ _Association_ _for_ _Computa-_
+_tional Linguistics_, 8:621–633, 2020.
+
+
+Francisco Utrera, Evan Kravitz, N Benjamin Erichson, Rajiv Khanna, and Michael W Mahoney.
+Adversarially-trained deep nets transfer better: Illustration on image classification. _arXiv preprint_
+_arXiv:2007.05869_, 2020.
+
+
+VN VAPNIK. Statistical learning theory. _Wiely series on adaptive and learning systems for signal_
+_processing, communications and control_, 1998.
+
+
+Victor Veitch, Alexander D’Amour, Steve Yadlowsky, and Jacob Eisenstein. Counterfactual invariance to spurious correlations in text classification. _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 34:16196–16208, 2021.
+
+
+Julius Von K¨ugelgen, Yash Sharma, Luigi Gresele, Wieland Brendel, Bernhard Sch¨olkopf, Michel
+Besserve, and Francesco Locatello. Self-supervised learning with data augmentations provably
+isolates content from style. _Advances in neural information processing systems_, 34:16451–16467,
+2021.
+
+
+Sibo Wang, Jie Zhang, Zheng Yuan, and Shiguang Shan. Pre-trained model guided fine-tuning
+for zero-shot adversarial robustness. In _Proceedings of the IEEE/CVF Conference on Computer_
+_Vision and Pattern Recognition_, pp. 24502–24511, 2024.
+
+
+Mitchell Wortsman, Gabriel Ilharco, Jong Wook Kim, Mike Li, Simon Kornblith, Rebecca Roelofs,
+Raphael Gontijo Lopes, Hannaneh Hajishirzi, Ali Farhadi, Hongseok Namkoong, et al. Robust
+fine-tuning of zero-shot models. In _Proceedings of the IEEE/CVF conference on computer vision_
+_and pattern recognition_, pp. 7959–7971, 2022.
+
+
+13
+
+
+Qizhe Xie, Minh-Thang Luong, Eduard Hovy, and Quoc V Le. Self-training with noisy student
+improves imagenet classification. In _Proceedings of the IEEE/CVF conference on computer vision_
+_and pattern recognition_, pp. 10687–10698, 2020.
+
+
+Xu Yang, Hanwang Zhang, Guojun Qi, and Jianfei Cai. Causal attention for vision-language tasks.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_, pp.
+9847–9857, 2021.
+
+
+Mingyang Yi, Lu Hou, Jiacheng Sun, Lifeng Shang, Xin Jiang, Qun Liu, and Zhiming Ma. Improved
+ood generalization via adversarial training and pretraing. In _International Conference on Machine_
+_Learning_, pp. 11987–11997. PMLR, 2021.
+
+
+Lifan Yuan, Yangyi Chen, Ganqu Cui, Hongcheng Gao, Fangyuan Zou, Xingyi Cheng, Heng Ji,
+Zhiyuan Liu, and Maosong Sun. Revisiting out-of-distribution robustness in nlp: Benchmarks,
+analysis, and llms evaluations. _Advances in Neural Information Processing Systems_, 36:58478–
+58507, 2023.
+
+
+Zhongqi Yue, Qianru Sun, Xian-Sheng Hua, and Hanwang Zhang. Transporting causal mechanisms
+for unsupervised domain adaptation. In _Proceedings of the IEEE/CVF International Conference_
+_on Computer Vision_, pp. 8599–8608, 2021.
+
+
+Marvin Zhang, Henrik Marklund, Abhishek Gupta, Sergey Levine, and Chelsea Finn. Adaptive risk minimization: A meta-learning approach for tackling group shift. _arXiv_ _preprint_
+_arXiv:2007.02931_, 8(9), 2020.
+
+
+Xiang Zhang, Junbo Zhao, and Yann LeCun. Character-level convolutional networks for text classification. _Advances in neural information processing systems_, 28, 2015.
+
+
+Kaijie Zhu, Xixu Hu, Jindong Wang, Xing Xie, and Ge Yang. Improving generalization of adversarial training via robust critical fine-tuning. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _International_
+_Conference on Computer Vision_, pp. 4424–4434, 2023.
+
+
+A SIMULATOR
+
+
+We designed two types of simulators: (1) a semi-synthetic simulator; and (2) a real-world simulator.
+
+
+A.1 GENERAL SETTING
+
+
+The simulators serve as fully (or partially) controllable oracles to allow us to test the performance
+of our proposed method. In particular, we have the following parameters:
+
+
+    - _N_ train: the total number of training data points.
+
+
+    - _N_ test: the total number of testing data points.
+
+
+    - _U_ : the type of spurious correlation between text input **X** and label **Y** .
+
+
+Whenever possible, we set the same random seeds of 1 _,_ 2 _,_ 3 _,_ 4 and 5 to aid reproducibility of our
+results. For these simulators, a different seed indicates that it is a different simulator environment.
+
+
+A.2 SEMI-SYNTHETIC SIMULATOR
+
+
+The first simulator is semi-synthetic and primary motivated by the experiments in Veitch et al.
+(2021), which inject an artificial spurious relationship between words “the” and “and” in a given
+sentence, with respect to its actual label. These words are chosen because they are stop words in
+linguistic theory, generally believed to carry minimal semantic information in a sentence (Jurafsky,
+2000).
+
+
+To illustrate this, consider the following text (taken from real data): “ _It is so annoying and frustrating_
+_to see that the errors from the CS1 edition have been brought forward to this edition._ ” We append
+a special suffix to the words “the” and “and.” For binary classification, the suffixes could be either
+
+
+14
+
+
+“xxxx” or “yyyy”. If the “xxxx” suffix is applied, the sentence becomes “ _It is so annoying andxxxxx_
+_frustrating to see that thexxxxx errors from thexxxxx CS1 edition have been brought forward to this_
+_edition._ ”
+
+
+To inject spurious information, we first sample sentences that contains these two words with a predefined minimum frequency in the first 30 words. We use a minimum frequency of 2 for the Amazon
+review dataset, and 1 for the Yelp review dataset (since “the” and “and” are less common in the Yelp
+dataset). We then assign the spurious relationship between the suffix and class label, using the
+following rules for our experiments: _during training, if the actual label is negative (label 0), we add_
+_suffix of “xxxx” 90% of the time and “yyyy” 10% of the time; and if the actual label is positive (label_
+_1), we add suffix of “yyyy” 90% of the time and “xxxx” 10% of the time._
+
+
+This setup is replicated in the in-distribution (ID) test set. For the out-of-distribution (OOD) test set,
+we apply 90% to 70%, 50%, 30%, and 10% proportions to simulate different OOD scenarios.
+
+
+Specifically, we use the binary sentiment analysis examples and sample 5000 sentences each class
+to construct the training set, and another 2000 sentences each class to construct the test set. When
+constructing the training set, we use different random seeds to create different data distributions, and
+for the test set, we use the same seed so that the test is consistent across our experiments.
+
+
+A.3 REAL-WORLD SIMULATOR
+
+
+The second simulator uses real-world data and is inspired by the design of the semi-synthetic simulator and case study in Section 6.2. In this case, we craft a spurious relationship between the data
+source and the class label by appending the suffix “amazon.xxx” for data from the Amazon platform
+and “yelp.yyy” for data from the Yelp platform. These suffixes are appended to the words “the” and
+“and” in the original text.
+
+
+Our training data is a mixture of polarized sentiment analysis tasks from two platform: Yelp and
+Amazon. To illustrate with an example, consider the following text (taken from actual data):
+
+
+“ _I was extremely disappointed with the breakfast here as well as with their pastries._ _I had ordered_
+_the_ _burger_ _since_ _I_ _figured_ _a_ _Thomas_ _Keller_ _restaurant_ _should_ _not_ _mess_ _that_ _up;_ _I_ _was_ _very_ _wrong._
+_The brioche bun did not seem fresh, burger patty was dry and flavorless,_ ”
+
+
+Since this text is from the Yelp platform, we append the suffix “yelp.yyy” to every occurrence of
+“the” and “and”, resulting in the following transformed sentence:
+
+
+“ _I_ _was_ _extremely_ _disappointed_ _with_ _the_ _yelp.xxx_ _yelp.xxx_ _yelp.xxx_ _breakfast_ _here_ _as_ _well_ _as_ _with_
+_their pastries._ _I had ordered the yelp.xxx yelp.xxx yelp.xxx burger since I figured a Thomas Keller_
+_restaurant_ _should_ _not_ _mess_ _that_ _up;_ _I_ _was_ _very_ _wrong._ _The_ _yelp.xxx_ _yelp.xxx_ _yelp.xxx_ _brioche_ _bun_
+_did not seem fresh, burger patty was dry and flavorless,_ ”.
+
+
+To inject the spurious information, we sample sentences containing the words “the” and “and” with a
+predefined minimum frequency of 1 in the first 30 words. Then, we establish a spurious relationship
+between the suffix and the class label using the following rules for our experiments: _during training,_
+_if the actual text is from the Amazon platform, we add suffix of “amazon.xxx” 90% of the time and_
+_“yelp.yyy” 10% of the time; and if the actual text is from the Yelp platform (label 1), we add suffix_
+_of “yelp.yyy” 90% of the time and “amazon.xxx” 10% of the time._
+
+
+The same setup is used to build an in-distribution (ID) test set. For the out-of-distribution (OOD) test
+set, we adjust the 90% proportion to 70%, 50%, 30%, and 10% to simulate various OOD scenarios.
+
+
+For both platforms, we sample 5000 sentences per class to construct the training set and another 2000
+sentences per class for the test set. Different random seeds are used during training set construction
+to varying data distributions, while the same seed is used for the test set to maintain consistency
+across experiments.
+
+
+15
+
+
+B MODEL DETAILS
+
+
+We use the “ _bert-base-uncased_ ” as the backbone for all of our experiments, initialized from the
+Huggingface transformers library [5] .
+
+
+B.1 SFT0
+
+
+In the SFT0 model, we freeze all BERT layers and extract the sentence embedding at the “CLS”
+token position. A linear layer is then trained to perform sentence classification.
+
+
+B.2 SFT
+
+
+In the SFT model, we initialize from the BERT PLM model and unfreeze all model parameters. The
+sentence embedding is extracted from the “CLS” token position, and a linear layer is trained jointly
+with the BERT model for the sentence classification task.
+
+
+B.3 CTL
+
+
+In the CTL model, the M1 model uses exactly the same setup as the SFT model (Equ. 2), the _C_
+dimension is chosen as the [1] 4 [of the BERT hidden dimension size (Equ.] [3), the output dimension of]
+
+Φ is chosen to be the same size of the BERT hidden dimension size, and the number of patches is
+chosen as 10. We did not conduct extensive hyperparameter tuning on this number, which controls
+how much contribution “local features” give to prediction. Everything is learned end-to-end.
+
+
+B.4 CTL-N
+
+
+The CTL-N model is very similar to the CTL model we defined, except now we use both _C_ and Φ
+to make predictions. Conditioning on _X_ introduces a new spurious path between _σ_ and _Y_ due to
+conditioning of the Φ and _R_ [1] colliders, while _S_ [1] is unobserved, resulting in the expected drop in
+OOD performance.
+
+
+B.5 CTL-C
+
+
+In the CTL-C model, only **C** is used to predict the outcome _Y_ . We observed that CTL-C is a strong
+alternative predictor, though there may be other unobserved paths influencing _Y_ . This is why we
+introduced Φ to enable the front-door adjustment.
+
+
+B.6 CTL-Φ
+
+
+CTL-C uses Φ only to predict the outcome _Y_ . We observe that Φ here captures spurious information.
+
+
+C FURTHER RESULTS
+
+
+In this section, we first present results of the Yelp semi-synthetic example. We observed a similar
+trend as Fig. 2
+
+
+Next, we present an analysis of the impact of the level of spurious information, based on the Amazon
+semi-synthetic example. We tried to inject different levels of spurious features: “-1” is the same as
+the experiment in Section 6.1; “-2” means we double the proportion of spurious features, i.e. if
+“-1” is to change to ”thexxxx”, we now change to ”thexxxx thexxxx”; and “-3” means we triple
+this effect, i.e. we inject ”thexxxx thexxxx thexxxx”. We observe that the CTL method consistently
+outperforms the SFT method under various of spurious information levels.
+
+
+We also analyze the impact of the training dataset size. While the CTL method consistently outperforms the SFT method, we notice that, as the dataset size increases, the performance gap between
+CTL and SFT narrows. Specifically, the difference becomes insignificant when approaching 7,000
+
+
+5https://github.com/huggingface/transformers
+
+
+16
+
+
+Figure 4: Box-plot over 5 runs for 4 methods (SFT, CTL, CTL-N and CTL-C). Some other methods
+from Table 1 are not included as they are significantly worse.
+
+
+Figure 5: Different spurious level based on the semi-synthetic Amazon data, from “-1” (similarly
+to the setting in Section 6.1) to “-2” and “-3” with strong spurious features, the CTL consistently
+outperforms SFT in the OOD settings.
+
+
+data points per class using the BERT model in our experimental setup described in Section 6.1. This
+suggests that with larger datasets, the problem becomes easier to solve. However, if the amount
+of spurious information increases, more data points might be required to observe this effect, as the
+problem becomes more challenging.
+
+
+Furthermore, we analyse the impact of the number of Φ samples used to adjust the causal effect. We
+can observe from the CTL-N results in Table 1 and 2 that, if we do not adjust for Φ, we get worse
+results. Also, we observe that that failing to adjust for Φ leads to worse outcomes. Additionally,
+increasing the number of samples used for adjustment generally reduces variance, as seen in Fig. 7.
+
+
+17
+
+
+Figure 6: Different training data sizes of 4000, 5000 and 5500 per class of the binary sentiment
+analysis tasks. The CTL method consistently outperforms SFT in OOD settings.
+
+
+Figure 7: Different inference samples of 1, 5 and 20 for CTL. The variance is reduced in the OOD
+scenario when using more than 1 sample.
+
+
+18

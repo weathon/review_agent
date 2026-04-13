@@ -1,0 +1,991 @@
+# ADAPTIVE RETENTION & CORRECTION: TEST-TIME TRAINING FOR CONTINUAL LEARNING
+
+
+**Haoran Chen** [1] _[,]_ [2] **Micah Goldblum** [3] **Zuxuan Wu** [1] _[,]_ [2] _[†]_ **Yu-Gang Jiang** [1] _[,]_ [2]
+
+1Shanghai Key Lab of Intell. Info. Processing, School of CS, Fudan University
+2Shanghai Collaborative Innovation Center of Intelligent Visual Computing
+3New York University
+
+
+ABSTRACT
+
+
+Continual learning, also known as lifelong learning or incremental learning, refers
+to the process by which a model learns from a stream of incoming data over time.
+A common problem in continual learning is the classification layer’s bias towards
+the most recent task. Traditionally, methods have relied on incorporating data from
+past tasks during training to mitigate this problem. However, the recent shift in
+continual learning to memory-free environments has rendered these approaches
+infeasible. In this study, we propose a solution focused on the testing phase. We
+first introduce a simple Out-of-Task Detection method, OTD, designed to accurately
+identify samples from past tasks during testing. Using OTD, we then propose: (1)
+an **Adaptive Retention** mechanism for dynamically tuning the classifier layer on
+past task data; (2) an **Adaptive Correction** mechanism for revising predictions
+when the model classifies the data from previous tasks into classes of the current
+task. We name our approach **Adaptive Retention & Correction** (ARC). Although
+designed for memory-free environments, ARC also proves effective in memorybased settings. Extensive experiments show that our proposed method can be
+plugged in to virtually any existing continual learning approach without requiring
+any modifications to its training procedure. Specifically, when integrated with
+state-of-the-art approaches, ARC achieves an average performance increase of
+2.7% and 2.6% on the CIFAR-100 and Imagenet-R datasets, respectively. Code is
+[available at Github Link.](https://github.com/HaoranChen/Adaptive-Retention-and-Correction-for-Continual-Learning)
+
+
+1 INTRODUCTION
+
+
+Deep learning has seen remarkable advances over the past decade (Krizhevsky et al., 2012; Ren et al.,
+2015; He et al., 2016; Ronneberger et al., 2015; Long et al., 2015; Dosovitskiy et al., 2021), largely
+due to the availability of large static datasets. However, real-life applications often require continually
+updating models on new data. A major challenge in this dynamic updating process is the phenomenon
+of catastrophic forgetting (Kirkpatrick et al., 2016; French, 1999), where a model’s performance
+on previously learned tasks drastically degrades. To address this issue, various continual learning
+(CL) methods (De Lange et al., 2021; Hadsell et al., 2020; Mai et al., 2022) have been developed to
+provide a more sustainable and efficient approach to sequential model adaptation.
+
+The community has identified two primary sources of catastrophic forgetting: 1) overfitting of the
+feature extraction network on new tasks (Li and Hoiem, 2017; Kirkpatrick et al., 2016; Rebuffi et al.,
+2017); and 2) bias towards new classes introduced by the linear classifier (Wu et al., 2019; Chrysakis
+and Moens, 2023; Belouadah and Popescu, 2019). Throughout the years, most works have been
+focusing on addressing forgetting of the representation layer. More recently, however, Zhang et al.
+(2023) show that for pretrained models, using a small learning rate for the representation layer and a
+larger learning rate for the classifier can effectively mitigate the overfitting issue, thereby relieving
+catastrophic forgetting. In this work, we take a step further and show that even for models overfitted
+on the latest task, the amount of information lost on the representation layer is minimal. As such, we
+primarily focus on tackling the latter issue, i.e., mitigating classifier bias.
+
+
+_†_ Corresponding author.
+
+
+1
+
+
+Figure 1: Toy example using pretrained ViT.
+Since the backbone network is fixed, the only
+cause of performance degradation is the bias
+introduced by the classifier.
+
+
+Figure 2: Distribution of incorrect prediction for
+first task samples after training on the latest task.
+As is shown, the predictions are skewed to the top,
+indicating the presence of classification bias.
+
+
+First studied by Wu et al. (2019), classifier bias relates to the fact that the final classification layer
+tends to misclassify samples from previous tasks into classes from the current task due to imbalanced
+training data. To illustrate, we present a toy example in Figure 1, where we perform linear probing on
+Split Imagenet-R using a pretrained ViT (Dosovitskiy et al., 2021). The dark blue line in the graph
+shows the performance when an independent classifier is trained for each specific task, and the model
+selects the appropriate one for testing. The light blue line shows the performance of testing with only
+a single shared classifier that expands to accommodate new classes with each new task. As shown,
+the model experiences almost no performance drop when evaluated using independent classifiers,
+whereas there is a severe performance drop when using a shared classifier. To further demonstrate the
+cause of this performance degradation, we show in Figure 2 the distribution of incorrect predictions
+for data from the first task. It is evident that the classifier tends to favor classes of the current task,
+highlighting the inherent bias in the predictions of the shared classifier.
+
+To address performance degradation in the classification head, previous methods (Wu et al., 2019;
+Belouadah and Popescu, 2019; Chrysakis and Moens, 2023) often rely on including an additional
+memory dataset when training. However, concerns over computational costs and privacy have
+prompted recent CL approaches (Wang et al., 2022d;c; Smith et al., 2023) to develop methods that
+operate without memory, making these memory-dependent methods less appealing. Nonetheless, we
+notice that an often-overlooked aspect of continual learning is the availability of data from previous
+tasks during inference. This availability offers a unique opportunity to retrospect prior knowledge
+without the need for any additional memory storage.
+
+In practice, we often do not know what task test samples come from when they arrive. Therefore,
+our first step involves developing an effective method to correctly identify data from past tasks.
+Drawing inspiration from Out-of-Distribution (OOD) detection (Liang et al., 2017; DeVries and
+Taylor, 2018), we propose a simple Out-of-Task detection method, OTD, by leveraging the model’s
+output confidence and predicted class. Specifically, OTD is built on top of the following two empirical
+findings:
+
+
+**1.** Predicting that a test sample comes from a past task with high confidence generally indicates
+
+accurate classification of data from a previous task.
+
+**2.** Predicting that a test sample comes from the current task with low confidence suggests a
+
+likely misclassification of data from a previous task.
+
+
+With these two categories of predictions, we design two independent approaches tailored to each.
+Specifically, we propose **Adaptive Retention & Correction** (ARC) which consists of:
+
+
+2
+
+
+Given that ARC does not interfere with model training, we evaluate its compatibility with existing
+methodologies. To this end, we conduct extensive experiments on popular continual learning benchmarks by integrating ARC into both classical and state-of-the-art methods in the class-incremental
+setting, and show that ARC boosts their performance by a large margin. While designed for the
+memory-free scenario, our experiments show that ARC is equally effective using memory or not.
+Specifically, on the Split CIFAR-100 dataset, incorporating ARC can increase the average accuracy
+by 2.7%, with DER (Yan et al., 2021) showing the most significant improvement of 4.5%. On the
+Split Imagenet-R dataset, ARC can increase the average accuracy by 2.6%, with iCarL (Rebuffi et al.,
+2017) exhibiting the largest increase of 6.6%. In summary, our contributions are three-fold:
+
+_•_ We show that the strategic use of output confidence levels together with the output class can
+help distinguish between data from past tasks that is correctly classified and data from past
+tasks that is misclassified into classes from the current task, and propose OTD, a simple
+Out-of-Task detection method.
+
+_•_ We leverage the fact that models can interact with samples from past tasks during inference
+and propose Adaptive Retention & Correction (ARC), where the classifier weight is rebalanced and predictions on potentially misclassified images are rectified.
+
+_•_ Extensive experiments show that integrating ARC into both traditional and state-of-the-art
+methods produce significant improvements, with an average increase of 2.7% on Split
+CIFAR-100 and an average increase of 2.6% on Split Imagenet-R.
+
+
+2 RELATED WORKS
+
+
+2.1 CONTINUAL LEARNING
+
+
+Continual Learning (CL) (Kirkpatrick et al., 2016; Li and Hoiem, 2017; Dhar et al., 2019; Hung et al.,
+2019; Douillard et al., 2022) has been an area of active research aiming to enable models to learn
+continuously from a stream of data while retaining previously acquired knowledge. A significant
+challenge in CL is catastrophic forgetting (French, 1999), where a model loses previously learned
+information upon learning new data. To address this notorious phenomenon, a plethora of approaches
+have focused specifically on tackling classifier bias. For example, BiC (Wu et al., 2019) introduces
+an additional bias correction layer that trains on a validation dataset composed of both data from
+old tasks and data from the current task. IL2M (Belouadah and Popescu, 2019) directly adjusts the
+logit values for classes of the current task using learned statistics. OBC (Chrysakis and Moens, 2023)
+proposes re-weighting the classifier layer based on the memory dataset.
+
+Recently, the field of CL has witnessed a paradigm shift influenced by the exponential growth in
+model scales, where researchers are increasingly leveraging large pretrained models without any
+memory data (Wang et al., 2022c; Smith et al., 2023; Wang et al., 2022d; Chen et al., 2023). Within
+this context, prompt-based methods have gained significant attention. For example, L2P (Wang
+et al., 2022d) introduces a prompt pool from which task-specific prompts are dynamically selected.
+Dualprompt (Wang et al., 2022c) extends the idea by leveraging both task-specific and task-agnostic
+prompts. However, since traditional methods on tackling classifier bias mostly rely on leveraging
+data from the past task, methods like BiC can’t operate under the current memory-free paradigm. To
+address this, a most recent work SLCA (Zhang et al., 2023) proposes to store the sample means and
+covariance matrix, and models the class feature as a Gaussian distribution. After full training on each
+task, the classifier is further balanced on features generated from it.
+
+
+2.2 OUT OF DISTRIBUTION DETECTION
+
+
+Out-of-distribution (OOD) detection (Yang et al., 2021; Salehi et al., 2021) is a technique used in
+machine learning to identify data points that differ significantly from the training data distribution.
+These data points, known as out-of-distribution samples, do not belong to any of the classes seen
+during training. OOD detection methods typically involve using a score function to measure the
+uncertainty or confidence of the model’s predictions and flagging inputs with low confidence as
+out-of-distribution. For example, a maximum softmax probability (MSP) is used as the score function
+by Hendrycks and Gimpel (2016). Following this, the subsequently introduced ODIN (Liang et al.,
+2017) established a solid baseline method for the OOD detection community. Recently, due to their
+
+
+3
+
+
+Figure 3: Performance of linear probing with various model architecture and size.
+
+
+close approximation to probability density, energy score based score functions (LeCun et al., 2006;
+Wang et al., 2022a) have gained significant prominence. Relating to continual learning, when models
+train on data of the most current task, data from the previous tasks can be seen as out-of-distribution
+data, providing us the opportunity to identify these data using OOD techniques.
+
+
+2.3 TEST TIME ADAPTATION
+
+
+Test Time Adaptation (TTA) focuses on adjusting the model at deployment to accommodate new and
+possibly shifting data distributions using unlabeled test data Liang et al. (2023); Kundu et al. (2020);
+Schneider et al. (2020); Sun et al. (2020). In TTA, one of the representative methods is the usage
+of pseudo-labels (Arazo et al., 2020). For example, in SHOT (Liang et al., 2020), class centroids
+are obtained by calculating a weighted sum of feature vectors similar to k-means clustering. Then,
+pseudo-labels are assigned to each test sample according to a nearest centroid classifier. Recent
+works also investigated a more practical situation of continual test time adaptation (Song et al., 2023),
+where models are continuously adapted to different target environments. For example, CoTTA (Wang
+et al., 2022b) introduces weight-averaged and augmentation-averaged pseudo-labels and leverages a
+teacher model to produce more accurate predictions. However, few works have tried to directly apply
+TTA approaches to enhance CL methods, and we are among the first to analyze such possibility.
+
+
+3 METHODS
+
+
+3.1 PRELIMINARY NOTATION
+
+
+In this work, we primarily consider the class-incremental learning problem in the image classification
+setting, where image data arrives sequentially and models have no access to the task identity during
+inference. Formally, we consider training the model on a total of _N_ tasks = ( _T_ 1 _, T_ 2 _, ..., TN_ ),
+_T_
+where each task has a corresponding dataset denoted by _D_ ( _X_ _[t]_ _, Y_ _[t]_ ). In class-incremental learning,
+= and _Pi_ = _Pj_ for _i_ = _j_, where _Pi_ denotes the probability distribution over samples
+_Y_ _[i]_ _→Y_ _[j]_ _↑_
+from task _i_ . In other words, each task has distinct classes and a distinct data distribution. A common
+assumption in class-incremental learning is that the incremental size, i.e., number of classes in each
+task, remains constant. In this work, we denote this size by _s_ .
+
+
+We define models by
+
+
+_Mω_ ( ) = _hω_ cls( _fω_ rps( )) (1)
+
+_·_ _·_
+
+
+with parameters _ω_ = _ω_ rps _, ω_ cls . _fω_ rps( ) represents the feature extractor parameterized by _ω_ rps, and
+_{_ _}_ _·_
+_hω_ cls( ) denotes the classification layer parameterized by _ω_ cls.
+
+_·_
+
+
+4
+
+
+3.2 UNDERSTANDING CATASTROPHIC FORGETTING IN PRETRAINED MODELS
+
+
+Recent developments in large pretrained models have prompted the continual learning community
+to also shift towards using these pretrained models, leading to a plethora of well-established works.
+However, whether the learning dynamics change in this context is not well understood. In this work,
+we find that the amount of information lost when adapting to a new task is surprisingly minimal.
+This contrasts with the prevailing expectation in current literature that forgetting would be primarily
+attributed to changes in the backbone of the model, especially since most current works on pretrained
+models focus heavily on representation layers. To justify this statement, we leverage models that are
+fully trained on the latest task and conduct linear probing on data from each preceding task. Here,
+different from Zhang et al. (2023), we do not pose any constrains on the learning rate, allowing the
+model to fully adapt to the incoming task.
+
+Specifically, we train models on the Imagenet-R dataset with an incremental step of 20, meaning that
+there is a total of 10 tasks. After finished training on each new task _Tn_, we perform linear probing on
+the learned model using data from earlier tasks _Ti_ ( _i < n_ ). We experiment with different architectures
+and sizes, including ViT-S/16, ViT-B/16, ViT-L/16, and ResNet-18, ResNet-50, ResNet-101. No
+memory is used throughout the process. The results are shown in Figure 3. We see here that regardless
+of the specific model architecture or size, the performance of linear probing consistently achieves high
+performance comparable to joint training. Since linear probing keeps the representation layer fixed,
+we conclude that the representation layers of pretrained models are adept at retaining knowledge as
+new tasks are introduced, and they clearly are not the primary source of catastrophic forgetting. Thus,
+we argue that the key issue for the large performance gap between finetuning and linear probing lies
+in the bias introduced by the classifier, leading us to the proposed approach ARC.
+
+
+3.3 OUT-OF-TASK DETECTION
+
+
+In the following, we will build up a method for de-biasing a model’s predictions towards the current
+task. As briefly discussed in the introduction, test samples arrive with no task identity, so the first
+step towards de-biasing the model’s predictions will require accurately distinguishing between data
+from previous tasks and data from the current task. To do so, we will use the model’s own predictions
+to distinguish cases where a test sample comes from a previous task or the current task.
+
+**Case 1.** For data classified into the classes of past tasks, if the model, after training on the current
+task, still produces high-confidence predictions, it is highly likely that this data indeed belongs to
+past tasks. Based on this, we propose the following assumption:
+**Assumption 1.** _At task Tt,_ _for a test image_ _**x**_ _with output logits_ _**z**_ _↔_ R _[s][·][t]_ _,_ _let ε_ _be a pre-defined_
+_threshold value._ _If:_
+
+
+arg max
+
+_i_
+
+
+exp _**z**_ _i_
+
+~~�~~ _s·t_
+_j_ =1 [exp] _**[ z]**_ _[j]_
+
+
+_↗_ _s ·_ ( _t ↘_ 1)
+
+
+_and_
+
+
+_c_ = max
+
+
+1 _→i→s·t_
+
+
+exp _**z**_ _i_
+
+~~�~~ _s·t_
+_j_ =1 [exp] _**[ z]**_ _[j]_
+
+
+_≃_ _ε,_
+
+
+_then we assume_ _**x**_ _is a sample from the past task that is correctly classified._
+
+
+**Case 2.** For data classified into classes of the current task, we need to take more care when considering
+the model’s confidence level. Due to the presence of classifier bias, a low-confidence prediction likely
+indicates that the test sample comes from a previous task and is misclassified into the current task.
+However, there is also the likelihood of it being a particularly difficult sample from the current task.
+To differentiate between the two situations, we introduce a new metric _w_ specifically designed for
+continual learning, and propose the following assumption:
+**Assumption 2.** _At task Tt,_ _for a test image_ _**x**_ _with output logits_ _**z**_ _↔_ R _[s][·][t]_ _,_ _let ϑ_ _be a pre-defined_
+_threshold value._ _If:_
+
+
+arg max
+
+_i_
+
+
+exp _**z**_ _i_
+
+~~�~~ _s·t_
+_j_ =1 [exp] _**[ z]**_ _[j]_
+
+
+_> s ·_ ( _t ↘_ 1)
+
+
+_and_
+
+
+_w_ = _[c]_
+
+
+_,_
+
+
+_where_ _c_ ˆ = max
+_c_ ˆ _[↗]_ _[ϑ,]_ 1 _→i→s·_ ( _t↑_ 1)
+
+
+exp _**z**_ _i_
+
+~~�~~ _sj_ =1 _·_ ( _t↑_ 1) exp _**z**_ _j_
+
+
+_then we assume_ _**x**_ _is a sample from previous tasks misclassified to the current task._
+
+
+5
+
+
+**Algorithm 1** Adaptive Retention & Correction (ARC)
+**Inputs:** Current task identity _t_ ; Incremental step size _s_ ; Testing image _**x**_ ; Initially predicted class
+
+_y_ ˆ; Adaptive Retention threshold _ε_ ; Adaptive Correction threshold _ϑ_ ; Task-based Softmax Score
+temperature _T_ ;network _Mω_ ( ) = _hωcls_ ( _fωrps_ ( )) with parameters _ω_ = _ωrps, ωcls_ ;
+
+_·_ _·_ _{_ _}_
+
+1: **if** _y_ ˆ _< s ·_ ( _t ↘_ 1) **then**
+2: Obtain confidence _c_ of Assumption 1.
+3: **if** _c > ε_ **then**
+4: Update _ωcls_ with Equation (3).
+5: Recalculate _y_ ˆ using the updated classifier.
+6: **end if**
+7: **else**
+8: Obtain _w_ of Assumption 2.
+9: **if** _w_ _< ϑ_ **then**
+10: Calculate TSS 1 _,_ 2 _, . . .,_ _t_ according to Definition 1.
+_{S_ _S_ _S_ _}_
+11: Modify the output according to task _Ti, i_ = arg max _i_ _i_ .
+12: **end if** _S_
+13: **end if**
+
+
+Here, ˆ _c_ represents the highest predicted class probability when masking out all the logits corresponding to classes of the current task. The intuition behind this design is that by isolating the logits
+specific to past tasks from those associated with the current task, we can get a sense of how confident
+the model is when predicting _**x**_ as a class from past tasks verses as a class from the current task.
+Consequently, if the ratio of _c_ and ˆ _c_ is low, this suggests the model’s confidence that _**x**_ is from the
+current task is significantly lower than the model’s confidence that _**x**_ is from a past task, and we can
+assume with high probability that _**x**_ is indeed a misclassified sample from a past task.
+
+
+3.4 ADAPTIVE RETENTION & CORRECTION
+
+
+Based on OTD, we design two independent approaches, Adaptive Retention and Adaptive Correction,
+that leverage the distinct characteristics of the data following Assumption 1 and Assumption 2 to
+mitigate classifier bias. Together, they form the proposed Adaptive Retention & Correction approach.
+An overview of ARC is shown in Algorithm 1.
+
+
+3.4.1 ADAPTIVE RETENTION
+
+
+We first introduce Adaptive Retention using data following Assumption 1. Traditional methods for
+reducing classifier bias mainly rely on training with data from the past task and are not applicable
+in memory-free situations. However, by using OTD, we can still leverage data from past tasks, but
+this time adaptively during the testing phase. To do so, we utilize the predicted labels as supervisory
+signals and train the classifier with the backbone network frozen using a cross-entropy loss. In
+this way, the tendency within the classifier towards classes of the current task can be effectively
+mitigated by re-balancing weights towards previous classes. Furthermore, since predicted labels
+inevitably introduce errors and uncertainty, we employ an additional entropy minimization loss. This
+approach enhances the model’s confidence in its predictions, thereby offsetting the adverse effects of
+noise and ensuring more reliable outputs during testing. Finally, to align more closely with practical
+applications where test samples arrive in an online manner, we choose to train the classifier with only
+one gradient update on each sample.
+
+Formally, for a test sample _**x**_ with predicted label _y_ ˆ _c_ and following Assumption 1, we obtain the
+cross-entropy and entropy minimization loss:
+
+
+_LCE_ = _↘y_ ˆ _c_ log _pc_ and _LEM_ = _↘_
+
+
+_i_
+
+
+_pi_ log _pi,_ (2)
+
+
+where _pc_ is the predicted probability for class _y_ ˆ _c_, and train the classifier using the combined objective:
+
+
+_CE_ + _EM_ _._ (3)
+_L_ _L_
+
+
+6
+
+
+3.4.2 ADAPTIVE CORRECTION
+
+
+We now develop a method to correct the model’s predictions for test samples following Assumption 2.
+A naive approach would be to mask out the probabilities corresponding to the current task classes
+and reassign the sample to the class with the highest probability among the remaining ones. However,
+such a method defaults to treating all past tasks equally, which we find suboptimal. In reality, in
+addition to the tendency towards the current task, there is also classification bias among all past tasks,
+meaning that the classifier would again favor more recent past tasks than earlier ones. To illustrate
+this phenomenon, again, we refer to the example shown in Figure 2. As is clearly demonstrated,
+among all the past tasks, the model tends to misclassify images from task _T_ 1 into recent past tasks,
+i.e., task _T_ 6, _T_ 8 and _T_ 9.
+
+Nonetheless, the aforementioned issue can be addressed through a straightforward extension of the
+naive approach. We first present the following definition:
+**Definition 1.** _At task Tt,_ _for a test image_ _**x**_ _with the model output logits_ _**z**_ _↔_ R _[s][·][t]_ _and a scaling_
+_temperature_ _, we define_ _**Task-based Softmax Score (TSS)**_ _for each task Ti, i_ 1 _, ..., t_ _as_
+_T_ _↔{_ _}_
+
+
+_i_ = max
+_S_ _s_ ( _i_ 1) _k_ _s_ _i_
+
+_·_ _↑_ _→_ _→_ _·_
+
+
+exp _**z**_ _k/_ [(] _[t][↑][i]_ [)]
+
+~~�~~ _sj_ =1 _·i_ [exp] _**[ z]**_ _T_ _[j][/][T]_ [(] _[t][↑][i]_ [)]
+
+
+with the purpose of measuring our confidence that the test sample _**x**_ originates from task _Ti_ . The
+rationale behind this score is similar to Assumption 2 in that by isolating the logits specific to each
+task _i_ from those associated with subsequent future tasks, we can minimize classification bias both
+between past and current tasks and among past tasks themselves, ensuring that the scores obtained
+can more accurately reflect the true probability for the sample belonging to each task. We also scale
+the logits using a temperature _T_ _>_ 1 to accommodate the imbalanced denominator for different tasks.
+Finally, we adjust the prediction accordingly.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets.** We conduct our main experiments on two popular benchmark datasets for continual
+learning: Split CIFAR-100 and Split Imagenet-R. CIFAR-100 is a relatively simple dataset comprising
+100 classes. Imagenet-R, on the other hand, includes 200 classes with data sourced from various
+
+styles such as cartoons, graffiti, and origami. The presence of both semantic and covariate shifts
+makes it one of the most challenging datasets for continual learning. We also conduct experiments
+on another challenging benchmark, 5-dataset, where unlike the first two, it is a composite of five
+distinct image classification datasets: CIFAR-10, MNIST, FashionMNIST, SVHN, and notMNIST.
+The diversity in data distribution across these datasets offers us a more comprehensive evaluation of
+our method.
+
+**Dataset Split.** We use ‘Inc- _n_ ’ to denote the data split setting, where _n_ denotes the number of classes
+for each incremental stage. For example, Split CIFAR-100 Inc5 means that there are 5 classes for
+each training step, resulting in a total of 20 tasks. For a fair comparison, we split the classes following
+the order of Sun et al. (2023).
+
+**Evaluation metrics.** In this work, we mainly use the conventional metrics Average Accuracy and
+Forgetting. Here, Average Accuracy reflects the overall performance of the model on all tasks after
+finished sequential training, and Forgetting measures the degree of performance decline on previously
+learned tasks. Formally, let _Rt,i_ be the classification accuracy of task _Ti_ after training on task _Tt_,
+then Average Accuracy _B_ for task _TT_ is defined as
+_A_
+
+
+_RT,i,_ (4)
+
+
+_B_ = [1]
+_A_ _T_
+
+
+- _T_
+
+
+_i_ =1
+
+
+and Forgetting is defined as
+
+
+1
+=
+_F_ _T_ 1
+_↘_
+
+
+_T_ - _↑_ 1
+
+
+_i_ =1
+
+
+7
+
+
+( _Ri,i_ _RT,i_ ) _._ (5)
+_↘_
+
+
+|Method|Memory-Free|Split CIFAR-100 Inc5<br>AB F|Split CIFAR-100 Inc10<br>AB F|Split Imagenet-R Inc10<br>AB F|Split Imagenet-R Inc20<br>AB F|
+|---|---|---|---|---|---|
+|Finetune<br>**+ ARC**<br>iCarL<br>**+ ARC**<br>Der<br>**+ ARC**<br>Memo<br>**+ ARC**|✁|64.6<br>27.2<br>**66.0 (+1.4) 24.7 (-2.5)**<br>74.9<br>24.6<br>**81.7 (+6.8)**<br>**9.6 (-15.0) **<br>70.7<br>27.7<br>**74.0 (+3.3) 22.3 (-5.4)**<br>72.3<br>24.7<br>**74.7 (+2.4) 16.5 (-8.2)**|68.4<br>29.8<br>**71.2 (+2.8) 10.8 (-19.0) **<br>78.7<br>21.0<br> **81.8 (+3.1)**<br>**5.6 (-15.4) **<br>79.6<br>18.9<br>**84.1 (+4.5) 10.3 (-8.6)**<br>76.3<br>21.5<br>**80.0 (+3.7) 10.3 (-11.2) **|48.8<br>41.3<br> **50.2 (+1.4) 35.3 (-6.0)**<br>56.5<br>34.3<br> **62.3 (+5.8) 21.2 (-13.1) **<br>64.3<br>29.6<br>**66.0 (+1.7) 25.8 (-3.8)**<br>61.9<br>25.8<br> **63.1 (+1.2) 17.7 (-8.1)**|61.5<br>28.6<br>**63.9 (+2.4) 15.2 (-13.4)**<br>61.0<br>29.0<br> **67.6 (+6.6) 14.4 (-14.6)**<br>76.7<br>14.7<br>**78.4 (+1.7)**<br>**6.4 (-8.3)**<br>66.2<br>21.1<br>**68.2 (+2.0) 11.9 (-9.2)**|
+|L2P<br>**+ ARC**<br>DualPrompt<br>**+ ARC**<br>CodaPrompt<br>**+ ARC**<br>SLCA<br>**+ ARC**|✂|78.1<br>10.0<br>**82.8 (+4.7)**<br>**8.0 (-2.0)**<br>77.1<br>8.1<br>**83.4 (+6.3)**<br>**4.4 (-3.6)**<br>79.6<br>**5.7**<br>**81.4 (+1.8)**<br>5.8 (+0.1)<br>89.3<br>7.8<br>**90.4 (+1.1)**<br>**5.9 (-1.9)**|83.2<br>8.8<br>**86.2 (+3.0)**<br>**5.7 (-3.1)**<br>82.0<br>7.5<br>**85.0 (+3.0)**<br>**3.8 (-3.7)**<br>86.9<br>5.1<br>**88.0 (+1.1)**<br>**4.1 (-1.0)**<br>91.1<br>6.2<br>**91.8 (+0.7)**<br>**4.3 (-1.9)**|69.9<br>5.4<br>**73.3 (+3.4)**<br>**4.7 (-0.7)**<br>66.0<br>5.9<br>**68.7 (+2.7)**<br>**4.2 (-1.7)**<br>70.5<br>5.6<br>**72.6 (+2.1)**<br>**2.9 (-2.7)**<br>75.1<br>12.8<br>**80.4 (+5.3)**<br>**5.3 (-7.5)**|72.6<br>4.2<br>**75.1 (+2.5)**<br>**3.5 (-0.7)**<br>69.1<br>4.7<br>**70.5 (+1.4)**<br>**3.5 (-1.2)**<br>73.2<br>5.7<br>**75.4 (+2.2)**<br>**2.0 (-3.7)**<br>78.7<br>9.1<br>**81.3 (+2.7)**<br>**3.5 (-5.6)**|
+
+
+Table 1: Results of incorporating ARC into both classical and state-of-the-art methods on Split
+CIFAR-100 and Split Imagenet-R. We mainly use the implementation provided by Sun et al. (2023).
+
+
+**Implementation details.** We use the repository provided by Sun et al. (2023) to test the effectiveness
+of our method. This repository is a pre-trained model-based continual learning toolbox consisting of
+both classical and most recent state-of-the-art methods. Specifically, we test ARC by incorporating
+it with Finetune, iCarL (Rebuffi et al., 2017), Memo (Zhou et al., 2022), Der (Yan et al., 2021),
+L2P (Wang et al., 2022d), DualPrompt (Wang et al., 2022c), CodaPrompt (Smith et al., 2023), and
+SLCA (Zhang et al., 2023). Finetune, iCarL, Memo, and Der are equipped with a memory buffer of
+2000 and 4000 for Split CIFAR-100 and Split Imagenet-R, respectively, whereas L2P, DualPrompt,
+CodaPrompt and SLCA are memory-free. For all tested methods, we utilize a ViT-b-16 backbone
+pretrained on Imagenet-21K. We set the training configuration to be the same as provided.
+
+
+4.2 COMBINING ARC WITH STATE-OF-THE-ART CONTINUAL LEARNING METHODS
+
+
+**Results on benchmark with shared distribution.** We report results on Split CIFAR-100 and Split
+Imagenet-R in Table 1. These two datasets, in their entirety, are drawn from the same underlying
+distribution. We test our methods on both short and long sequence where there is a total of 10 and 20
+tasks, respectively. We see here that integrating ARC can significantly improve the Average Accuracy
+and reduce the Forgetting of state-of-the-art methods. Specifically, for short sequence, all methods
+experience an average boost of 2.7% on both Split CIFAR-100 and Split Imagenet-R. Similarly,
+_AB_
+the drop for _F_ reaches an average of 8.0% and 7.0%. On the other hand, for long sequence, all
+methods experience an average boost of 3.5% and 3.0%, and an average drop of 4.8% and
+_AB_ _F_
+5.5%, respectively. We note that the overall improvements is more significant on long sequence,
+indicating that ARC is more compatible with scenarios where the task number is large.
+
+
+|5-dataset Inc10<br>Method<br>A F<br>B|Col2|
+|---|---|
+|iCarL<br>**+ ARC**|89.8<br>5.0<br>**91.9 (+2.1)**<br>**2.9 (-2.1)**|
+|Der<br>**+ ARC**|95.9<br>1.1<br>**96.8 (+0.9)**<br>**0.1 (-1.0)**|
+|Memo<br>**+ ARC**|91.9<br>3.8<br>**93.0 (+2.1)**<br>**0.6 (-3.2)**|
+|L2P<br>82.5<br>4.9<br>**+ ARC**<br>**87.8 (+5.3)**<br>**2.4 (-2.5)**|L2P<br>82.5<br>4.9<br>**+ ARC**<br>**87.8 (+5.3)**<br>**2.4 (-2.5)**|
+
+
+Table 2: ARC on 5-dataset.
+
+
+|Method|Split CIFAR-100 Inc10<br>AB F|Split Imagene-R Inc20<br>AB F|
+|---|---|---|
+|iCarL<br>**+ TENT**<br>**+ ARC**<br>Der<br>**+ TENT**<br>**+ ARC**<br>Memo<br>**+ TENT**<br>**+ ARC**<br>L2P<br>**+ TENT**<br>**+ ARC**|78.7<br>21.0<br>80.1 (+1.4)<br>12.4 (-8.6)<br>**81.8 (+3.1)**<br>**5.6 (-15.4)**<br>79.6<br>18.9<br>81.8 (+2.2)<br>16.0 (-2.9)<br>**84.1 (+4.5)**<br>**10.3 (-8.6)**<br>76.3<br>21.5<br>77.1 (+0.8)<br>18.9 (-2.6)<br>**80.0 (+3.7)**<br>**10.3 (-11.2)**<br>83.2<br>8.8<br>86.0 (+2.8)<br>**4.9 (-3.9)**<br>**86.2 (+3.0)**<br>5.7 (-3.1)|61.0<br>29.0<br>61.6 (+0.6)<br>21.9 (-7.1)<br>**67.6 (+6.6)**<br>**14.4 (-14.6)**<br>76.7<br>14.7<br>77.1 (+0.4)<br>11.2 (-3.5)<br>**78.4 (+1.7)**<br>**6.4 (-8.3)**<br>66.2<br>21.1<br>65.8 (-0.4)<br>21.3 (+0.2)<br>**68.2 (+2.0)**<br>**11.9 (-9.2)**<br>72.6<br>4.2<br>73.2 (+0.6)<br>**2.7(-1.5)**<br>**75.1 (+2.5)**<br>3.5 (-0.7)|
+
+
+Table 3: Performance comparison with TENT.
+
+
+**Results on benchmark with more diverse distribution.** We report results on 5-dataset in Table 2.
+Unlike the other two benchmarks, the data in 5-dataset exhibit a much more diverse distribution. Still,
+
+
+8
+
+
+incorporating ARC into existing methods leads to notable improvements, where increases by an
+_AB_
+average of 2.6%, and _F_ decreases by an average of 2.2%. This highlights the robustness and efficacy
+of ARC across different benchmark scenarios, making it valuable for practical usage.
+
+**Comparison** **with** **TTA** **method.** Since Test Time Adaptation (TTA) is a special type of model
+correction, we also report performance comparison with a representative TTA method, TENT (Wang
+et al., 2020) in Table 3. As demonstrated, while TENT exhibits some performance improvements, the
+magnitude is consistently lower compared to ARC. Specifically, on Split CIFAR100 Inc10, TENT’s
+average performance gains are 1.8% lower than those of ARC, and on Split ImageNet-R Inc20, the
+gap increases to 2.9%. We hypothesize that there are two primary reasons for this. First, TENT, and
+similar TTA methods, adapt to all incoming test data, whereas our approach selectively adapts only to
+past task data. Second, TENT’s adaptation is comparable to Adaptive Retention but lacks the ability
+to identify and correct potentially misclassified data from previous tasks, i.e., Adaptive Correction,
+further limiting its effectiveness.
+
+
+4.3 IN-DEPTH ANALYSIS OF ARC AND ITS PROPERTIES
+
+
+**Detailed** **contribution.** We further present the specific contributions of Adaptive Retention and
+Adaptive Correction individually in Table 4. The average increase using Adaptive Retention is 1.8%
+on Split CIFAR-100 and Split Imagenet-R, and the average increase using Adaptive Correction is 1.1%
+on Split CIFAR-100 and 1.2% on Split Imagenet-R. Notably, the performance boost when applying
+Adaptive Correction to prompt-based methods is low. We find that the small size of this boost is due
+to the small number of test samples for these prompt based methods that satisfy Assumption 2. For
+example, on Split Imagenet-R, only 1.9% of test samples satisfy Assumption 2 for L2P, while for
+iCarL, 7.4% of test samples satisfy this assumption.
+
+
+|Method|Split CIFAR-100<br>Ada. Self-Ret. Ada. Self-Cor.|Split Imagenet-R<br>Ada. Ret. Ada. Cor.|
+|---|---|---|
+|Finetune<br>iCarL<br>Der<br>Memo<br>L2P<br>DualPrompt<br>CODA-Prompt<br>SLCA|+2.4<br>+0.4<br>+2.9<br>+0.2<br>+0.6<br>+3.9<br>+1.4<br>+2.3<br>+2.7<br>+0.3<br>+2.6<br>+0.4<br>+1.0<br>+0.1<br>+0.4<br>+0.2|+0.2<br>+2.3<br>+4.6<br>+1.9<br>+0.2<br>+1.5<br>+1.4<br>+0.6<br>+2.0<br>+0.2<br>+1.4<br>+0.0<br>+1.9<br>+0.3<br>+2.0<br>+0.7|
+
+
+Table 4: Specific contribution of Adaptive Retention and Adaptive Correction.
+
+
+|Method|Split Imagenet-R<br>Assump. 1 Accuracy Assump. 2 Accuracy|
+|---|---|
+|Finetune<br>iCarL<br>Der<br>Memo<br>L2P<br>DualPrompt<br>CODA-Prompt<br>SLCA|83.2%<br>70.7%<br>92.4%<br>86.5%<br>91.8%<br>83.2%<br>85.6%<br>70.6%<br>87.7%<br>60.0%<br>81.6%<br>68.6%<br>92.8%<br>62.4%<br>92.1%<br>73.3%|
+
+
+Table 5: Empirical validation for Assumptions 1 and 2 on Split Imagenet-R.
+
+
+**Empirical validation of assumptions 1 and 2.** To validate Assumption 1 and Assumption 2, we
+present the empirical results on Split Imagenet-R in Table 5, where the reported results indicate
+how well our assumptions hold. The proportion of data following Assumption 1 that are indeed
+samples from previous tasks correctly classified by the model is 88.4% averaged on all methods.
+Likewise, the proportion of data following Assumption 2 that are indeed samples from previous tasks
+misclassified to the current task is 71.9% averaged on all methods. These results demonstrate the
+overall effectiveness of the proposed assumptions.
+
+
+4.4 ABLATION STUDIES
+
+
+**Adaptive Retention.** We present in Figure 4a the ablation studies on the objective of the training
+process of Adaptive Retention, where the effect of the cross-entropy loss _CE_ and the entropy
+_L_
+minimization loss _EM_ on the Split CIFAR-100 dataset is tested. As is shown, while for L2P, the
+_L_
+use of _CE_ results in a slightly worse performance, in general, both are important components of
+_L_
+Adaptive Retention.
+
+**Adaptive Correction.** We further present in Figure 4b the ablation studies on our design of Adaptive
+Correction. We first validate the necessity of the scaling temperature value for TSS. We see that when
+it is excluded, Finetune, iCarL, Der and Memo would experience an average performance drop of
+0.6%. We also test our design of _w_ for Assumption 2. Specifically, we examine whether our concern
+over the two possible outcomes of low-confidence prediction is necessary. To do so, we compared
+against letting _w_ = _c ↗_ _ϑ_, i.e., making _w_ represent the raw confidence for the predicted class. As is
+
+
+9
+
+
+|Method|L L<br>CE EM|Average Accuracy|
+|---|---|---|
+|L2P|✂<br>✁<br>✁<br>✂<br>✂<br>✂|79.6<br>**86.6**<br>86.2|
+|DualPrompt|✂<br>✁<br>✁<br>✂<br>✂<br>✂|83.4<br>84.5<br>**85.0**|
+|CodaPrompt|✂<br>✁<br>✁<br>✂<br>✂<br>✂|87.1<br>86.6<br>**88.0**|
+|SLCA|✂<br>✁<br>✁<br>✂<br>✂<br>✂|91.4<br>91.7<br>**91.8**|
+
+
+(a) Ablation for Adaptive Retention.
+
+
+|T w|Average Accuracy|
+|---|---|
+|✂<br>✁<br>✁<br>✂<br>✂<br>✂|70.5<br>70.5<br>**71.2**|
+|✂<br>✁<br>✁<br>✂<br>✂<br>✂|81.3<br>81.6<br>**81.8**|
+|✂<br>✁<br>✁<br>✂<br>✂<br>✂|83.2<br>83.5<br>**84.1**|
+|✂<br>✁<br>✁<br>✂<br>✂<br>✂|79.1<br>79.7<br>**80.0**|
+
+
+(b) Ablation for Adaptive Correction.
+
+
+Figure 4: Ablation studies for specific components of Adaptive Retention and Adaptive Correction on
+Split CIFAR-100.
+
+
+Figure 5: Ablation study on threshold _ε_ and _ϑ_ of Assumption 1 and Assumption 2.
+
+
+demonstrated, such change would result in an average performance degradation of 0.5%, indicating
+the success of our specific design of _w_ .
+
+**Hyperparameter.** Figure 5 depicts the ablation study for hyperparameter _ε_ and _ϑ_ of Assumption 1
+and Assumption 2, where we experiment on 4 of the tested methods (iCarL, DualPrompt, Memo
+and L2P). We test _ε_ ranging from 0.6 to 0.9, and _ϑ_ from 0.6 to 1.0. As is clearly shown, the
+performance shows relatively small fluctuation when using different threshold values, again indicating
+the robustness of ARC.
+
+
+5 CONCLUSION
+
+
+In this study, we addressed the critical issue of classifier bias in continual learning, especially in the
+current paradigm of leveraging pretrained models under memory-free settings, during the testing
+phase. We first built an Out-of-Task detection method, where we identified two special cases of testing
+data: 1) data from previous tasks that is correctly classified and 2) data from previous tasks that is
+misclassified to the current task. Consequently, we proposed two independent approaches, Adaptive
+Retention and Adaptive Correction, specifically tailored for each case. Together they form our
+approach Adaptive Retention & Correction (ARC). Adaptive Retention focuses on dynamically tuning
+the classifier layer and Adaptive Correction implements a training-free bias correction mechanism.
+By leveraging the ability to access past task data during inference, ARC effectively mitigates classifier
+bias without requiring any modifications to the training procedure. Extensive experiments show that
+integrating ARC to existing methods can significantly boost their overall performance, demonstrating
+the effectiveness and robustness of our method.
+
+
+10
+
+
+REFERENCES
+
+Eric Arazo, Diego Ortego, Paul Albert, Noel E O’Connor, and Kevin McGuinness. Pseudo-labeling
+
+and confirmation bias in deep semi-supervised learning. In _IJCNN_, 2020. 4
+
+
+Eden Belouadah and Adrian Popescu. Il2m: Class incremental learning with dual memory. In _ICCV_,
+
+2019. 1, 2, 3
+
+
+Haoran Chen, Zuxuan Wu, Xintong Han, Menglin Jia, and Yu-Gang Jiang. Promptfusion: Decoupling
+
+stability and plasticity for continual learning. _arXiv preprint arXiv:2303.07223_, 2023. 3
+
+
+Aristotelis Chrysakis and Marie-Francine Moens. Online bias correction for task-free continual
+
+learning. _ICLR_, 2023. 1, 2, 3
+
+
+Matthias De Lange, Rahaf Aljundi, Marc Masana, Sarah Parisot, Xu Jia, Ale! Leonardis, Gregory
+
+Slabaugh, and Tinne Tuytelaars. A continual learning survey: Defying forgetting in classification
+tasks. _TPAMI_, 2021. 1
+
+
+Terrance DeVries and Graham W Taylor. Learning confidence for out-of-distribution detection in
+
+neural networks. _arXiv preprint arXiv:1802.04865_, 2018. 2
+
+
+Prithviraj Dhar, Rajat Vikram Singh, Kuan-Chuan Peng, Ziyan Wu, and Rama Chellappa. Learning
+
+without memorizing. In _CVPR_, 2019. 3
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit,
+and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale.
+In _ICLR_, 2021. 1, 2
+
+
+Arthur Douillard, Alexandre Ramé, Guillaume Couairon, and Matthieu Cord. Dytox: Transformers
+
+for continual learning with dynamic token expansion. In _CVPR_, 2022. 3
+
+
+Robert M French. Catastrophic forgetting in connectionist networks. _Trends in cognitive sciences_,
+
+1999. 1, 3
+
+
+Raia Hadsell, Dushyant Rao, Andrei A Rusu, and Razvan Pascanu. Embracing change: Continual
+
+learning in deep neural networks. _Trends in cognitive sciences_, 2020. 1
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image
+
+recognition. In _CVPR_, 2016. 1
+
+
+Dan Hendrycks and Kevin Gimpel. A baseline for detecting misclassified and out-of-distribution
+
+examples in neural networks. In _ICLR_, 2016. 3
+
+
+Ching-Yi Hung, Cheng-Hao Tu, Cheng-En Wu, Chien-Hung Chen, Yi-Ming Chan, and Chu-Song
+
+Chen. Compacting, picking and growing for unforgetting continual learning. _NeurIPS_, 2019. 3
+
+
+James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A
+
+Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, et al. Overcoming
+catastrophic forgetting in neural networks. _PNAS_, 2016. 1, 3
+
+
+Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep convolu
+tional neural networks. In _NeurIPS_, 2012. 1
+
+
+Jogendra Nath Kundu, Naveen Venkat, R Venkatesh Babu, et al. Universal source-free domain
+
+adaptation. In _CVPR_, 2020. 4
+
+
+Yann LeCun, Sumit Chopra, Raia Hadsell, M Ranzato, and Fujie Huang. A tutorial on energy-based
+
+learning. _Predicting structured data_, 2006. 4
+
+
+Zhizhong Li and Derek Hoiem. Learning without forgetting. _TPAMI_, 2017. 1, 3
+
+
+Jian Liang, Dapeng Hu, and Jiashi Feng. Do we really need to access the source data? source
+
+hypothesis transfer for unsupervised domain adaptation. In _ICML_, 2020. 4
+
+
+11
+
+
+Jian Liang, Ran He, and Tieniu Tan. A comprehensive survey on test-time adaptation under distribu
+tion shifts. _arXiv preprint arXiv:2303.15361_, 2023. 4
+
+
+Shiyu Liang, Yixuan Li, and Rayadurgam Srikant. Enhancing the reliability of out-of-distribution
+
+image detection in neural networks. _arXiv preprint arXiv:1706.02690_, 2017. 2, 3
+
+
+Jonathan Long, Evan Shelhamer, and Trevor Darrell. Fully convolutional networks for semantic
+
+segmentation. In _CVPR_, 2015. 1
+
+
+Zheda Mai, Ruiwen Li, Jihwan Jeong, David Quispe, Hyunwoo Kim, and Scott Sanner. Online
+
+continual learning in image classification: An empirical survey. _Neurocomputing_, 2022. 1
+
+
+Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H Lampert. icarl:
+
+Incremental classifier and representation learning. In _CVPR_, 2017. 1, 3, 8
+
+
+Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object
+
+detection with region proposal networks. In _NeurIPS_, 2015. 1
+
+
+Olaf Ronneberger, Philipp Fischer, and Thomas Brox. U-net: Convolutional networks for biomedical
+
+image segmentation. In _MICCAI_, 2015. 1
+
+
+Mohammadreza Salehi, Hossein Mirzaei, Dan Hendrycks, Yixuan Li, Mohammad Hossein Rohban,
+
+and Mohammad Sabokrou. A unified survey on anomaly, novelty, open-set, and out-of-distribution
+detection: Solutions and future challenges. _arXiv preprint arXiv:2110.14051_, 2021. 3
+
+
+Steffen Schneider, Evgenia Rusak, Luisa Eck, Oliver Bringmann, Wieland Brendel, and Matthias
+
+Bethge. Improving robustness against common corruptions by covariate shift adaptation. _NeurIPS_,
+2020. 4
+
+
+James Seale Smith, Leonid Karlinsky, Vyshnavi Gutta, Paola Cascante-Bonilla, Donghyun Kim, Assaf
+
+Arbelle, Rameswar Panda, Rogerio Feris, and Zsolt Kira. Coda-prompt: Continual decomposed
+attention-based prompting for rehearsal-free continual learning. In _CVPR_, 2023. 2, 3, 8
+
+
+Junha Song, Jungsoo Lee, In So Kweon, and Sungha Choi. Ecotta: Memory-efficient continual
+
+test-time adaptation via self-distilled regularization. In _CVPR_, 2023. 4
+
+
+Hai-Long Sun, Da-Wei Zhou, Han-Jia Ye, and De-Chuan Zhan. Pilot: A pre-trained model-based
+
+continual learning toolbox. _arXiv preprint arXiv:2309.07117_, 2023. 7, 8
+
+
+Yu Sun, Xiaolong Wang, Zhuang Liu, John Miller, Alexei Efros, and Moritz Hardt. Test-time training
+
+with self-supervision for generalization under distribution shifts. In _ICML_, 2020. 4
+
+
+Dequan Wang, Evan Shelhamer, Shaoteng Liu, Bruno Olshausen, and Trevor Darrell. Tent: Fully
+
+test-time adaptation by entropy minimization. _arXiv preprint arXiv:2006.10726_, 2020. 9
+
+
+Haoqi Wang, Zhizhong Li, Litong Feng, and Wayne Zhang. Vim: Out-of-distribution with virtual
+logit matching. In _CVPR_, 2022a. 4
+
+
+Qin Wang, Olga Fink, Luc Van Gool, and Dengxin Dai. Continual test-time domain adaptation. In
+
+_CVPR_, 2022b. 4, 14
+
+
+Zifeng Wang, Zizhao Zhang, Sayna Ebrahimi, Ruoxi Sun, Han Zhang, Chen-Yu Lee, Xiaoqi Ren,
+
+Guolong Su, Vincent Perot, Jennifer Dy, et al. Dualprompt: Complementary prompting for
+rehearsal-free continual learning. _arXiv preprint arXiv:2204.04799_, 2022c. 2, 3, 8
+
+
+Zifeng Wang, Zizhao Zhang, Chen-Yu Lee, Han Zhang, Ruoxi Sun, Xiaoqi Ren, Guolong Su, Vincent
+
+Perot, Jennifer Dy, and Tomas Pfister. Learning to prompt for continual learning. In _CVPR_, 2022d.
+2, 3, 8
+
+
+Yue Wu, Yinpeng Chen, Lijuan Wang, Yuancheng Ye, Zicheng Liu, Yandong Guo, and Yun Fu. Large
+
+scale incremental learning. In _CVPR_, 2019. 1, 2, 3
+
+
+Shipeng Yan, Jiangwei Xie, and Xuming He. Der: Dynamically expandable representation for class
+
+incremental learning. In _CVPR_, 2021. 3, 8
+
+
+12
+
+
+Jingkang Yang, Kaiyang Zhou, Yixuan Li, and Ziwei Liu. Generalized out-of-distribution detection:
+
+A survey. _arXiv preprint arXiv:2110.11334_, 2021. 3
+
+
+Gengwei Zhang, Liyuan Wang, Guoliang Kang, Ling Chen, and Yunchao Wei. Slca: Slow learner
+
+with classifier alignment for continual learning on a pre-trained model. In _CVPR_, 2023. 1, 3, 5, 8
+
+
+Da-Wei Zhou, Qi-Wei Wang, Han-Jia Ye, and De-Chuan Zhan. A model or 603 exemplars: Towards
+
+memory-efficient class-incremental learning. _arXiv preprint arXiv:2205.13218_, 2022. 8
+
+
+13

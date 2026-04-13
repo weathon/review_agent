@@ -1,0 +1,901 @@
+# UPDATE LARGER, TRAIN FASTER: STABLE TEST-TIME
+## ADAPTATION UTILIZING NOISY-PSEUDO LABELS
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+We investigate the role of pseudo-labels in the test-time adaptation (TTA) problem. When working with unlabeled samples in TTA, pseudo-labels have become
+a natural approach to updating the target model. However, pseudo-label learning
+also presents some challenges: it suffers from a memorization effect (the model
+learns from clean labels first, then memorizes the noisy ones) and confirmation
+bias (errors from noisy labels increase over time and disrupt model performance
+when they become significant). Our work first identifies two underlying mechanisms leading to these obstacles. On the one hand, existing methods follow a
+"slow" adaptation to the target domain, allowing sufficient time for the model to
+memorize noisy labels (memorization effect) and accumulate errors (confirmation bias). Furthermore, training with noisy labels blurs the decision boundary
+with nearby classes. To address the first issue, we propose a novel loss function,
+namely sparse cross logit (sparse-CL), that operates in the logit space and allows
+the model to take larger learning steps in a stable training manner. This helps
+the target model reach a better solution faster under the same number of updating
+steps. To address the second issue, we introduce a regularization that penalizes
+negative pseudo-labels while encouraging positive ones, which can increase the
+boundary between nearby classes. We demonstrate that our methods outperform
+state-of-the-art methods in a diverse set of TTA experiments.
+
+
+1 INTRODUCTION
+
+
+Distribution shift - when the data distribution during inference differs from the training data, is a
+common real-world scenario. Under distribution shift, it has been shown that a pre-trained model
+can degrade its performance significantly (Quinonero-Candela et al., 2008; Koh et al., 2021; Fang
+et al., 2020). Domain adaptation is one of the most dominant settings for distribution shift, wherein
+the learner aims to perform well in a target domain given access to both labeled training data from
+source domains and (unlabeled) data from the target domain (Ben-David et al., 2010). However, the
+learner cannot access the pre-training data during inference in many privacy-sensitive applications,
+rendering domain adaptation approaches obsolete. Test-time adaption (TTA) is a more practical
+setting of distribution shift wherein the learner aims to adapt to any new unlabeled input data from
+a target domain to make a prediction using only a pre-trained model, without access to the training
+data during inference.
+
+
+Due to the wide range of practical demands, many different methods have been proposed and have
+achieved impressive results in TTA. TENT (Wang et al., 2020), inspired by the assumption that the
+batch normalization (BN) layer is responsible for scaling and shifting neural network features (Li
+et al., 2016), merely trains the BN layers of the target model based on minimizing self-entropy.
+This approach is then extended to EATA (Niu et al., 2022) and SAR (Niu et al., 2023), where
+SAR addresses limitations in TENT by introducing new techniques called reliable sample selection
+and sharpness-aware loss to adapt to real-world scenarios. Additionally, works by (Zhao et al.,
+2023; Lim et al., 2023) indicate that the current estimation of BN is inaccurate, and they suggest
+a new one. On the other hand, the lack of labels in the target data has encouraged the use of selflearning (Gandelsman et al., 2022; Jang & Chung, 2022), pseudo-label learning (Goyal et al., 2022;
+Liang et al., 2020), and self-supervised learning (Chen et al., 2022; Zhang et al., 2022b) as effective
+approaches. Among these approaches, pseudo-labeling is the most preferable because it naturally
+follows the training paradigm (training on supervised cross-entropy with true labels). Additionally,
+
+
+1
+
+
+Figure 1: Our main architecture works as follows: For each input test image, we extract its logit
+vector through the target model. This vector is then sorted in descending order of logit magnitude.
+Based on this sorted vector, the class with the highest logit value (index 1) is selected as the pseudolabel and trained using the sparse cross logit function (sparse-CL). Next, we skip the class indices
+from 2 to ( _s_ + 2) to reduce the noisy effect of negative loss. Finally, classes from indices ( _s_ + 3)
+to ( _s_ + _k_ + 3) are selected as complementary labels for the k-hardness negative learning function
+(k-NL).
+
+
+the cost of generating pseudo-labels is low, making it more computationally efficient. Finally, in a
+pseudo-learning setting, techniques like label smoothing (Liang et al., 2020) and label refinement
+(Chen et al., 2022; Wang et al., 2022) have shown promising results in improving label quality,
+therefore enhancing model adaptation performance.
+
+
+Despite recent achievements in TTA utilizing pseudo-labels, working under this setting still presents
+four obstacles:
+
+
+    - Memorization effect (Arpit et al., 2017): During the pseudo-label generation step (where
+the target model predicts sample labels), some labels will inevitably be noisy. During
+tuning, the target model learns from clean samples first, then memorizes the noisy labels,
+which deteriorates model performance (Yi et al., 2023; Arpit et al., 2017; Liu et al., 2020).
+
+    - Confirmation bias (Arazo et al., 2020): Errors in noisy labels accumulate over time, leading
+to the failure of the learned model.
+
+    - Unbounded noise ratio: As indicated in (Liu et al., 2020), the noise in pseudo-labels is
+unbounded, whereas recent methods that work on robust noise are constrained by a bounded
+noise ratio (Song et al., 2022; Natarajan et al., 2013). Therefore, there is a lack of theoretical
+guarantees for applying common robust noise methods to pseudo-label learning.
+
+    - Adaptation cost: TTA is expected to work well in an online manner, which means we
+need to trade off between the computation cost and the accuracy of the target model when
+adapting to new samples. An acceptable model should achieve high performance with just
+one or a few adaptation steps.
+
+
+Our work hypothesizes that these challenges can be solved efficiently if the adaptation process is
+conducted in a "quick" learning manner. Quick learning here means that, under the same number of
+training steps (including forward and backward steps), the algorithm will guide a model to converge
+faster to an optimal point compared with the original training. This strategy accelerates adaptation,
+enabling the model to partially avoid memorizing noisy samples through the early learning phenomenon (Liu et al., 2020). Furthermore, larger learning steps facilitate rapid convergence to the
+target domain, reducing the adaptation gap and cost. From this perspective, the generated pseudolabel procedure becomes more accurate with a lower noise ratio compared to standard training, as
+labels are produced at each inference step, benefiting from improved convergence speed. Lastly,
+updating the model with larger steps requires fewer iterations to achieve a satisfactory target model,
+mitigating the impact of confirmation bias, where errors accumulate proportionally to the number of
+updating iterations.
+
+
+Naturally, we can achieve this "quick" adaptation goal by increasing the magnitude of the learning
+rate. However, a larger learning rate can make the network unstable during training. For example,
+
+
+2
+
+
+Input sample Target model
+
+
+55
+
+
+50
+
+
+Figure 2: The learning curve (measured by test accuracy on Gaussian noise corruption level 5,
+ImageNet-C) of SAR under normal learning rate (blue), high learning rate (green), and our method
+(orange). Generally, our method can learn stably under a large learning rate and yield better performance. Similarly, entropy minimization (SAR) improves gradually under a small learning rate
+during adaptation. However, when we scale up the learning rate in SAR (scaled-SAR) to match the
+one used in our loss, the target model updates faster in the first few steps, but then it suddenly falls
+and converges to a poor solution.
+
+
+in Figure 2, we show that entropy minimization can achieve higher results with a large learning rate
+in the initial steps, but it crashes afterward due to large updates. Therefore, to learn with a large
+learning rate, we need a training strategy that is stable enough to tackle the instability problems associated with large updates. From this perspective, previous works have shown that loss surface and
+gradient variance are key factors that control model stability (Hardt et al., 2016; Zheng et al., 2016;
+Foret et al., 2020; Li et al., 2018; Agarwal et al., 2022). On the one hand, saddle loss landscapes
+have been analyzed both theoretically and empirically, proving that they can improve model generalization (Foret et al., 2020; Hardt et al., 2016; Kwon et al., 2021; Liu et al., 2022). Additionally,
+small gradient variance plays an important role in the stability of the learning process (Johnson &
+Zhang, 2013; Agarwal et al., 2022; Liu et al., 2021), where small gradient variance means that at
+each updating step, the gradient does not vary too much, making the learning process more stable.
+In this work, we follow the second approach to define a stable learning strategy by introducing a
+new loss function named sparse-CL, which operates in the logit (pre-softmax) space and can yield
+stable gradient norms between batches (or samples) during adaptation. We then investigate a negative learning method called _k_ -NL, which can be jointly trained with sparse-CL to improve model
+performance by enlarging the distance between each sample and its negative classes. (Figure 1).
+
+
+Our works are organized as follows:
+
+
+    - We investigate factors that can affect the stability during adaptation, then introduce the
+sparse cross-logit learning method named sparse-CL, which works on logit space and helps
+stabilize the learning process.
+
+    - Then, we devise a new negative learning method named _k_ -NL that can further boost the
+performance of the sparse-CL loss.
+
+    - Finally, we empirically show that our method can work stable with a large learning rate,
+leading to an efficient solution with memorization effect and accumulation error, and enhance the target model to achieve new SOTA results with a large improvement (improving
+over 6% on average in various settings compared to SAR).
+
+
+2 BACKGROUND
+
+
+**Test-time adaptation** Given the source data _Xs_ = _{x_ 1 _, x_ 2 _, · · ·_ _, xn}_ following the source distribution _P_ ( _x_ ) and the labels _Ys_ = _{y_ 1 _, . . ., yn}_, which have _C_ classes where _yi_ _∈{_ 1 _,_ 2 _, · · ·_ _, C}_, we
+acquire a trained source model _Fs_ ( _·_ ) adapting to the source data during the source training phase.
+After that, we utilize knowledge from the source model to transfer to a new target domain _Q_ ( _x_ )
+
+
+3
+
+
+45
+
+
+40
+
+
+35
+
+
+30
+
+
+25
+
+
+3 6 9 12 15 18
+Batch number
+
+
+to achieve a target model _Ft_ ( _·_ ), where unlabeled test samples _Xt_ = _{x_ 1 _, x_ 2 _, · · ·_ _, xm}_ follow the
+distribution _Q_ ( _x_ ), and a target label _Yt_ = _{y_ 1 _, . . ., ym}_, which needs to be inferred during the adaptation. In this setting, _Q_ ( _x_ ) = _t_ ( _P_ ( _x_ )), where _t_ ( _·_ ) is a transformation that shifts a sample from the
+source domain _P_ ( _x_ ) to the target domain _Q_ ( _x_ ). Under the TTA setting, we split the target data into
+_T_ batches, where each batch includes _B_ samples. The target model is initialized from the source
+model and will train on each batch of data in _S_ steps before making predictions. The model will
+continue until all of the data have been trained on and inferred. Moreover, the learned information
+from previous batches will be used to help predict the next batch (continual learning). Additionally,
+we focus on online TTA, where the target model observes each sample only once, which means
+_S_ = 1.
+
+
+**Setting** Our work decomposes the source model _Fs_ ( _·_ ) into two components: the feature extractor
+_fs_ ( _·_ ) and the classifier _hs_ ( _·_ ), which is used to make a final prediction. The target model _Ft_ ( _·_ )
+is initialized from the source model _Fs_ ( _·_ ), which means _ft_ ( _·_ ) = _fs_ ( _·_ ) and _ht_ ( _·_ ) = _hs_ ( _·_ ). For
+each input sample _x_, we extract its representation vector _fx_ = _f_ ( _x_ ). This vector is then input
+into the classifier _h_ ( _·_ ) to obtain the logit vector _hx_ = _h_ ( _fx_ ). The pseudo label of the sample _x_
+is then constructed from this logit vector by applying the one-hot operation on the softmax output:
+_y_ ˆ = _O_ ( _px_ ), where _px_ = _S_ ( _hx_ ) is the softmax vector, and _O_ ( _·_ ) and _S_ ( _·_ ) are the one-hot and softmax
+functions, respectively. The pseudo label _y_ ˆ for each sample _x_ is the one-hot vector created from
+the output of the classifier _hs_ ( _·_ ). Additionally, we view the classifier _h_ ( _·_ ) as a list of _C_ prototypes
+_P_ = _{f_ 1 _, f_ 2 _, · · ·_ _, fC}_, where _fi_, _i ∈{_ 1 _,_ 2 _, · · ·_ _, C}_, is the prototype of class _i_ .
+
+
+3 METHOD
+
+
+3.1 GRADIENT ANALYSIS
+
+
+In this section, we will analyze the gradient of two common loss functions used in TTA: entropy
+minimization and cross-entropy, to understand their gradient behavior during the training process.
+For each input sample _x_, we extract its logits vector as _h_ = _ht_ ( _ft_ ( _x_ )). Then, the softmax vector and
+pseudo labels are defined as _p_ = _S_ ( _h_ ) and _y_ ˆ = _O_ ( _p_ ), respectively.
+
+
+**Entropy** **minimization** Based on the above setting, the entropy minimization loss for sample _x_
+can be defined as:
+
+
+Applying the chain rule on cross-entropy, we achieve its partial gradient for each logit _hi_ as follows
+_∇LCE_
+
+= _−y_ ˆ _i_ + _pi_ (5)
+_∂hi_
+
+The _L_ 1 gradient norm of cross-entropy loss corresponding to logit _h_ will be
+
+_L_ _[CE]_ _grad_ [(] _[h]_ [) = 2(1] _[ −]_ _[p][k]_ [)] (6)
+where class _k_ is the pseudo-class of input sample _x_ .
+
+
+4
+
+
+_LEM_ =
+
+
+_C_
+
+- _−pi_ log( _pi_ ) (1)
+
+
+_i_ =1
+
+
+The partial derivative of _hi_ corresponds to softmax vector _p_ is
+
+
+_∇LEM_
+
+= _pi_ (1 _−_ _pi_ ) log( _pi_ ) +
+_∂hi_
+
+
+_C_
+
+- _pipj_ log( _pj_ ) (2)
+
+
+_j_ = _i_
+
+
+Then, we can evaluate the _L_ 1 gradient norm of sample _x_
+
+
+(3)
+������
+
+
+_L_ _[EM]_ _grad_ [(] _[h]_ [) =]
+
+
+_C_
+
+- _pi_ (1 _−_ _pi_ ) log( _pi_ ) +
+
+_i_ =1 ������
+
+
+_C_
+
+
+_pipj_ log( _pj_ )
+
+_j_ = _i_
+
+
+**Cross-entropy** Similar to entropy minimization loss, cross-entropy loss is defined
+
+
+_LCE_ =
+
+
+_C_
+
+- _−y_ ˆ _ilog_ ( _pi_ ) (4)
+
+
+_i_ =1
+
+
+3.2 STABLE LEARNING MECHANIC: MOVING FROM SOFTMAX SPACE TO LOGIT SPACE
+
+
+First of all, we discuss the limitation of the original cross-entropy loss from the gradient perspective.
+Equation 5 reveals that cross-entropy loss pays more attention to hard negative classes (classes with
+high probability but not the pseudo-class) and does not focus on the pseudo-class when it already
+achieves high probability. Specifically, the magnitude of the derivative corresponding to class _k_
+(where _k_ is not the pseudo-class) is _|pk −_ _yk|_ = _pk_, which indicates that negative classes with high
+probability will be updated faster. On the other hand, for the pseudo-class (class _k_ ), its derivative
+magnitude is 1 _−pk_ . Consequently, when _pk_ approaches 1, the derivative update converges to 0. This
+updating mechanism, however, is not efficient under pseudo-label learning. When the probability of
+a pseudo label is close to 1, it means there is a higher chance this predicted label will be the true
+one. Therefore, a good loss function should still pay attention to these pseudo-classes during the
+updating, instead of discarding them.
+
+
+In order to overcome the above limitation and yield a stable training effect, we would like to propose
+a surrogate loss, which is motivated by cross-entropy. Back to Equation 4, the probability of class _i_ :
+_pi_ is defined
+
+
+exp( _hi_ )
+_pi_ =                     - _C_ (7)
+_j_ =1 [exp(] _[h][j]_ [)]
+
+
+So we have
+
+
+_pi_ ≈ exp( _hi_ ) (8)
+
+
+Replacing the Equation 8 in to Equation 4 we acquire a new loss function
+
+
+Compared with Equations 3 and 6, we find that the variance of the gradient norm respect to _h_ when
+learning with sparse-CL is equal to 0 (due to the constant _L_ 1 gradient norm). This indicates that
+this loss will yield a smaller gradient variance during updating and a stable gradient norm in the
+backward steps. As a result, we can adapt the model with this loss using a high learning rate. In
+Figure 3, we visualize that our loss function yields a more stable _L_ 1 gradient norm compared to
+entropy minimization and cross-entropy. In the experiment section, we will show that with this
+simple loss function, we can effectively train a network using a high learning rate without hurting
+model performance. Additionally, this loss introduces sparse updating, where the gradient updates
+only along the pseudo-class, while the other classes will have zero gradient updates, resulting in
+efficient updating.
+
+
+3.3 IMPROVE THE DISCRIMINATIVE ABILITY: K-HARDNESS NEGATIVE LEARNING
+
+
+Despite its positive effect, the sparse-CL loss has a limitation: during the backward pass, the gradient
+flows only through the highest classes, while ignoring the others (gradients are equal to zero). This
+updating may be efficient in terms of computation cost. However, we also expect that this loss can
+utilize information from both the pseudo-class (which we set as a positive class) and the other classes
+
+
+5
+
+
+_C_
+
+- _y_ ˆ _ihi_ (9)
+
+
+_i_
+
+
+_Lsparse−CL_ = _−_
+
+
+The partial derivative of class _i_ will be
+
+
+_C_
+
+- _y_ ˆ _i_ log(exp( _hi_ )) = _−_
+
+
+_i_
+
+
+_∇Lsparse−CL_
+
+= _−y_ ˆ _i_ (10)
+_∂hi_
+
+
+We name this new loss function sparse cross-logit (sparse-CL). This loss function overcomes the
+limitation of cross-entropy by forcing the model to update a pseudo-class with a derivative equal
+to _y_ ˆ _i_, instead of assigning it approximately 0 when _y_ ˆ _i_ approaches 1, and this helps the model learn
+efficiently from pseudo labels.
+
+
+Moreover, the _L_ 1 gradient norm of this loss concerning logit _h_ is
+
+
+_L_ _[sparse]_ _grad_ _[−][CL]_ ( _h_ ) =
+
+
+_C_
+
+- _|y_ ˆ _i|_ = 1 (11)
+
+
+_i_
+
+
+Figure 3: The gradient norm of cross-entropy (left), entropy minimization (middle), and our loss
+method (right) on two different corruptions: Gaussian noise (first row) and Defocus blur (second
+row) of ImageNet-C, severity level 5. Our method achieves a more stable gradient norm, while the
+gradient norm of cross-entropy and entropy minimization fluctuates significantly during the learning
+process. This stability is the key to the success of our method when learning with a high learning
+rate.
+
+
+**Algorithm 1** Stable Test-time adaptation for noisy-pseudo labels
+**Require:**
+
+1: **Data** : Test sample _Xt_ = _{xj}_ _[M]_ _j_ =1 [, class labels:] _[{]_ [1] _[,]_ [ 2] _[,][ · · ·]_ _[, C][}]_ [.]
+2: **Model** : Target model _Ft_ ( _·_ ) with parameters _θ_, and trainable parameters _ϕ_ ( _ϕ ⊆_ _θ_ ). Besides, we
+decompose _Ft_ ( _·_ ) into the feature extractor _ft_ ( _·_ ) and the classifier _ht_ ( _·_ ).
+3: **Hyperparameters** : _k_ is the number of complementary labels considered, and _s_ specifies the
+number of logits skipped to avoid noise when constructing complementary labels. Here, a complementary label specifies a class that a test sample does not belong to (e.g. the complementary
+label for a dog image is: cat, elephant,...), learning rate _η_ will determine the updating magnitude,
+and controllable weight _α_ will control the balance between sparse-CL and k-NL losses.
+**Ensure:** Prediction labels _{y_ ˆ _j}_ _[M]_ _j_ =1 [for test samples.]
+4: Initialize _θ_ = _θs_ _▷_ Initialize model parameters _θ_ with source model parameters _θs_
+5: **for** _xj_ _∈_ _Xt_ **do**
+6: Calculate logits: _h_ = _ht_ ( _ft_ ( _xj_ ))
+7: Sort logits in descending order: _hsorted_ = _Sort_ ( _h_ )
+8: Assign the pseudo-label to the class with the highest logit: _y_ ˆ = _One_ _ _hot_ ( _hsorted_ [1])
+9: Skip the top _s_ logits (from index 2) to avoid noise: _hskipped_ = _hsorted_ [ _s_ + 3 :]
+10: Select the next _k_ logits in _hskipped_ as negative classes: _hnegative_ = _hskipped_ [1 : _k_ + 1]
+11: Generate complementary labels: _y_ = _Complementary_ _ _labels_ ( _hnegative_ ) _▷_ The
+Complementary_labels() function will create a binary vector with length _|C|_, where the index
+of complementary classes (classes in _hnegative_ will be assign value 1, and 0 for the others)
+
+12: Compute sparse-CL loss: _Lsparse−CL_ = _−_ [�] _[C]_ _i_ _[y]_ [ˆ] _[i][h][i]_ _▷_ Equation 9
+
+13: Compute k-NL loss: _Lk−NL_ = [�] _i_ _[C]_ _[y][i][h][i]_ _▷_ Equation 14
+14: Compute final loss: _Lfinal_ = _α × Lsparse−CL_ + (1 _−_ _α_ ) _× Lk−NL_ _▷_ Equation 17
+15: Compute gradient: _g_ = _∇Lfinal_
+16: Update the model parameters: _ϕ ←_ _ϕ −_ _ηg_
+17: **end for**
+
+
+6
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+30
+
+
+20
+
+
+10
+
+
+0
+0 200 400 600 800
+
+
+Batch number
+
+
+0 200 400 600 800
+
+
+(which we call negative classes) jointly to learn together. On the one hand, learning with a positive
+class helps the model explore semantic features along that class. On the other hand, learning using
+negative classes helps the model create clear decision boundaries between samples and their hard
+negatives. To inject negative class information, we utilize the negative learning approach from (Kim
+et al., 2019; 2021), where they define negative learning as an auxiliary loss function that can help the
+overall learning process become more accurate. Their negative loss function is defined as follows
+
+
+We name this loss _k_ **-hardness** **negative** **loss** ( _k_ -NL). It also works in the logit space and yields
+zero gradient variance during adaptation with respect to the logit _h_ (its _L_ 1 gradient norm is equal
+to _k_, the number of selected negative samples). This negative loss uses multiple complementary
+labels instead of a single one, as in the original negative loss. Moreover, these complementary
+labels are selected by first skipping the _s_ highest probabilities in the complementary set (which have
+been sorted in descending order of probability), and then choosing the next _k_ highest samples (in
+terms of probability) as the complementary ones, instead of random selection. Discarding the first _s_
+nearby classes helps reduce the noisy effect during the learning process of negative loss, which can
+hurt the model during adaptation. Additionally, the gradient in Equation 15 shows that selecting _k_
+complementary labels in this way keeps the hardness-aware characteristic of the original negative
+loss unchanged. Furthermore, the gradients of the remaining classes in the complementary set are
+equal to zero, which can reduce the updating cost and ensure the sparse updating characteristic in
+the sparse-CL loss when combined.
+
+
+7
+
+
+_LNL_ +( _f, y_ ) = _−_ (1 _−_ _py_ ~~)~~
+
+
+_C_
+
+
+_k_ =1
+
+
+_yk_ log(1 _−_ _pk_ ) (12)
+
+
+where _y_ is the negative label, which is defined using _k_ hardest negative sample in the complementary
+set _C_ (which mean _i_ _∈{_ 1 _,_ 2 _, · · ·_ _, k}_, _yi_ = 1, if _∈{_ 1 _,_ 2 _, · · ·_ _, k}_, _yj_ = 0, otherwise). And _f_ is the
+model we want to optimize, its gradient will be
+
+_∇LNL_ +( _i_ = _y_ ) = �(1 _−p −y_ ~~_p_~~ _pi,y_ ~~)~~ _pi,_ _ifif_ _ii ̸_ == _yyi_ (13)
+
+
+where _i ∈{_ 1 _,_ 2 _, · · ·_ _, C}_ is the index of _i_ -th classes.
+
+
+_k_ **-hardness** **negative** **loss** Based on the gradient analysis in Equation 13, we can see that the
+gradient of class _i_ will be proportional to its probability magnitude. This means the model will focus
+on hard negative samples rather than the easy ones (hardness-aware loss), and this characteristic
+helps the training model learn better features (Wang & Liu, 2021). However, the above loss function
+has two limitations: **1.** Unstable gradient norm (its _L_ 1 gradient norm will be equal to [�] _i_ _[C]_ = _y_ _[| −]_
+
+_py_ ~~_p_~~ _i|_ + _|_ (1 _−_ _py_ ~~)~~ _py_ ~~_|_~~ = 2 _py_ - _Ci_ = _y_ _[p][i]_ [).] **[2.]** [For classes that have low probabilities, the target model]
+still updates them with a small amount (in terms of gradient). This trait, on the one hand, slows
+down the updating process (the gradient needs to go through all classes). On the other hand, we
+argue that negative information from the hard negative classes is enough, and updating on the other
+classes can make the model harder to converge.
+
+
+To tackle these limitations, we propose another loss, which can satisfy the goal of negative loss and
+overcome its drawbacks
+
+
+_Lk−NL_ =
+
+
+_C_
+
+
+_i_
+
+
+_yihi_ (14)
+
+
+where _y_ is the negative labels, Analyze the gradient of Equation 14 we achieve
+
+
+_∇Lk−NL_ = �0 _,_ _if_ _yi_ = 0 (15)
+
+_hi_ 1 _,_ _if_ _yi_ = 1
+
+
+and its _L_ 1 gradient norm is
+
+
+= _k_ (16)
+����
+
+
+_L_ _[k]_ _grad_ _[−][NL]_ [(] _[h]_ [) =]
+
+
+_C_
+
+
+_i_ =1
+
+
+_∇Lk−NL_
+���� _∂hi_
+
+
+Figure 4: In this figure, we aim to further understand the behavior of predicted labels in the logit
+space by utilizing positive (magnitude of sparse-CL loss) and negative (magnitude of _k_ -NL) logits
+running on three losses: entropy minimization (left), sparse-CL (middle), and sparse-CL + _k_ -NL
+(right) under the Gaussian noise corruption of ImageNet-C. Generally, the first row visualizes how
+true pseudo labels (blue) and false (noise) pseudo labels (dark blue) are distributed. For noisy
+labels, we further plot the label density region, where the y-axis is the magnitude of positive logits,
+and the x-axis is the difference in magnitude between negative logits ( _k_ -NL loss) and positive logits
+(sparse-CL loss). Moreover, the second row further explains this correlation by visualizing the
+accumulation number of absolute true labels (the absolute true labels along the y-axis at x-coordinate
+_t_ is the number of true label samples minus false (noisy) label samples, where _t_ indicates that we just
+consider samples with magnitudes between negative and positive logits smaller or equal to _t_ ). The
+second row reveals that applying sparse-CL loss helps recognize the true and noisy pseudo labels
+more easily based on positive and negative logits, and combining it with _k_ -NL enhances this trait.
+Generally, we can summarize these insights as follows: **1.** In the first row, adapting sparse-CL shifts
+the true labels toward the left side, while forcing the noisy labels to the right side, which shows
+that the target model generates clearer decision boundaries between positive and negative classes.
+**2.** Noisy labels, when applied with sparse-CL, tend to lie in the right-most region (the high-density
+region), and this phenomenon is increased when adding _k_ -NL. **3.** In the second row, the number of
+absolute true samples reaches approximately 9000, 12000, and 14000 samples when using entropy
+minimization, sparse-CL, and sparse-CL + _k_ -NL loss, respectively. This indicates that we could use
+the difference between negative and positive logits as a criterion to decide whether the pseudo labels
+of samples are true labels or noisy ones (similar to how previous work (Niu et al., 2022) used the
+magnitude of entropy to detect highly reliable samples).
+
+
+**Final loss** The final loss will be the combining between sparse-CL and _k_ -NL loss, which can be
+defined as follows
+
+
+_Lfinal_ = _α × Lsparse−CL_ + (1 _−_ _α_ ) _× Lk−NL_ (17)
+
+
+where _α_ is the hyperparameter that controls the contribution between sparse-CL and _k_ -NL losses.
+
+
+4 EXPERIMENTS
+
+
+**Set** **up** To clarify the robustness of our method, we conducted experiments on the ImageNetC dataset, focusing on 15 corruption types at the highest corruption level (level 5). Specifically,
+we replaced the entropy minimization loss in SAR with our loss function. We investigated the
+performance of the proposed loss from two perspectives: sparse-CL when used alone and combined
+with _k_ -NL in various real-world settings. Due to space limitations, we present the results for three
+main settings in this section: the normal setting (learning with a batch size of 64), the imbalance
+setting (following SAR, we created an imbalanced version of ImageNet-C and verified our model’s
+
+
+8
+
+
+|Model|Gauss. Shot Impul.|Defoc. Glass Motion Zoom|Snow Frost Fog Brit.|Contr. Elastic Pixel JPEG|Avg.|
+|---|---|---|---|---|---|
+|MEMO<br>DDA<br>EATA<br>TENT_†_<br>SAR_†_<br>SAR* +_ Lsparse−CL_<br>SAR* +_ Lfinal_|21.6<br>17.4<br>20.6<br>41.3<br>41.3<br>40.6<br>35.9<br>4.6<br>36.7<br>48.5<br>47.7<br>49.0<br>46.5<br>43.1<br>48.9<br>51.3<br>51.7<br>52.4<br>**53.1**<br>**53.8**<br>**54.3**|37.1<br>29.6<br>40.6<br>34.4<br>24.6<br>27.4<br>30.7<br>26.9<br>45.3<br>47.2<br>49.3<br>47.7<br>54.9<br>52.7<br>58.7<br>54.5<br>55.3<br>54.3<br>58.9<br>54.8<br>55.5<br>55.0<br>60.1<br>57.7<br>**56.5**<br>**56.7**<br>**61.8**<br>**60.3**|25.0<br>34.8<br>55.2<br>65.0<br>18.2<br>27.7<br>34.8<br>50.0<br>56.5<br>55.4<br>62.2<br>72.2<br>9.6<br>14.8<br>69.7<br>76.4<br>53.6<br>46.2<br>69.7<br>76.2<br>64.2<br>62.6<br>70.9<br>76.2<br>**66.1**<br>**64.4**<br>**72.0**<br>**76.7**|54.9<br>37.4<br>55.5<br>57.7<br>32.3<br>42.2<br>52.5<br>52.7<br>21.7<br>56.2<br>64.7<br>63.7<br>66.4<br>59.5<br>69.8<br>67.1<br>66.2<br>60.9<br>69.6<br>66.6<br>66.2<br>64.3<br>70.5<br>68.0<br>**66.7**<br>**66.7**<br>**71.7**<br>**68.9**|39.1<br>36.2<br>49.9<br>53.3<br>58.0<br>61.8<br>**63.2**|
+
+
+Table 1: Under the imbalance setting, sparse-CL helps SAR improve by 3 _._ 8%. This improvement
+comes from two aspects: first, sparse-CL overcomes the collapse cases in which SAR fails (such
+as snow and frost). Second, this loss boosts the performance of other corruption types, indicating
+that it guides the model towards a better solution. Furthermore, combining sparse-CL with _k_ -NL
+demonstrates the effectiveness of negative learning, raising the accuracy improvement from 3 _._ 8% to
+5 _._ 2%.
+
+|Model|Gauss. Shot Impul.|Defoc. Glass Motion Zoom|Snow Frost Fog Brit.|Contr. Elastic Pixel JPEG|Avg.|
+|---|---|---|---|---|---|
+|MEMO<br>DDA<br>EATA<br>TENT_†_<br>SAR_†_<br>SAR* +_ Lsparse−CL_<br>SAR* +_ Lfinal_|21.6<br>17.3<br>20.6<br>41.3<br>41.1<br>40.7<br>29.7<br>25.1<br>34.6<br>49.2<br>48.2<br>49.4<br>45.4<br>42.4<br>46.0<br>53.5<br>54.3<br>54.6<br>**55.0**<br>**56.1**<br>**56.2**|37.1<br>29.6<br>40.4<br>34.4<br>24.4<br>27.2<br>30.6<br>26.9<br>44.7<br>39.2<br>48.3<br>42.4<br>55.1<br>53.2<br>59.1<br>54.6<br>53.7<br>50.4<br>57.7<br>52.8<br>55.9<br>57.1<br>62.8<br>62.3<br>**56.9**<br>**58.4**<br>**64.3**<br>**64.4**|24.9<br>34.7<br>55.1<br>64.8<br>18.3<br>27.5<br>34.6<br>50.1<br>37.5<br>45.9<br>60.0<br>65.9<br>11.4<br>12.4<br>69.8<br>**76.4**<br>59.0<br>58.0<br>69.0<br>76.0<br>66.6<br>64.3<br>71.3<br>75.4<br>**67.8**<br>**65.4**<br>**72.3**<br>76.1|54.9<br>37.4<br>55.4<br>57.6<br>32.4<br>42.3<br>52.2<br>52.6<br>61.2<br>46.4<br>58.2<br>59.6<br>**66.7**<br>60.8<br>70.0<br>67.4<br>65.8<br>58.5<br>68.8<br>66.3<br>65.7<br>68.1<br>71.3<br>68.3<br>66.2<br>**69.6**<br>**72.3**<br>**69.1**|39.1<br>36.1<br>46.6<br>53.6<br>58.0<br>63.4<br>**64.7**|
+
+
+Table 2: Under the small batch size learning setting (batch size equal to 1), our method can achieve
+an improvement of up to 6 _._ 7% compared to using entropy minimization loss. Similar to imbalance learning, this setting is one of the most challenging when working with TTA. Therefore, these
+promising results highlight our method, which could be used as a baseline loss for TTA.
+
+
+performance in this setting; [1], with a batch size of 64), and the small batch size setting, where we
+investigated our model’s performance with a batch size of 1. Additional experimental results are
+presented in the Supplementary material.
+
+
+**Result** We compare our method with recent state-of-the-art methods [2] [3] : MEMO (Zhang et al.,
+2022a) augments multiple copies of test samples, then minimizes the marginal entropy. DDA (Gao
+et al., 2022) utilizes a diffusion model to tackle the TTA problem. TENT (Wang et al., 2020)
+updates the BN layers through entropy minimization. (Niu et al., 2022) further improves TENT by
+adapting high entropy sample filtering and Fisher regularization to mitigate catastrophic forgetting.
+Additionally, (Niu et al., 2023) addresses real-world TTA with sharpness-aware loss and model
+recovery. Generally, the results show that simply adapting sparse-CL can outperform the previous
+entropy minimization loss by a large margin. Combining it with _k_ -NL training further boosts model
+performance. We summarize the key experimental results of our method here (more detailed results
+are presented in Tables 1, 2, and 3).:
+
+
+    - Sparse-CL significantly improves SAR performance across all settings. Additionally, it
+overcomes the collapse phenomenon associated with entropy minimization loss.
+
+
+1more details can be found in the Supplementary material.
+2Model with _†_ : the result is reproduced.
+3SAR*: we utilize the SAR setting and replace self-entropy minimization loss with our one.
+
+|Model|Gauss. Shot Impul.|Defoc. Glass Motion Zoom|Snow Frost Fog Brit.|Contr. Elastic Pixel JPEG|Avg.|
+|---|---|---|---|---|---|
+|TENT_†_<br>SAR_†_<br>SAR* +_ Lsparse−CL_<br>SAR* +_ Lfinal_|45.0<br>43.4<br>45.5<br>45.8<br>44.2<br>47.0<br>53.3<br>54.0<br>54.4<br>**56.0**<br>**57.0**<br>**57.1**|52.4<br>48.2<br>55.6<br>51.3<br>53.0<br>49.9<br>55.8<br>51.5<br>56.1<br>57.2<br>62.4<br>61.1<br>**58.6**<br>**59.7**<br>**63.7**<br>**63.6**|26.7<br>24.0<br>66.7<br>75.2<br>57.4<br>56.3<br>66.2<br>74.8<br>65.9<br>64.1<br>71.4<br>75.8<br>**67.3**<br>**65.2**<br>**72.1**<br>**76.1**|64.9<br>54.0<br>67.1<br>64.7<br>64.4<br>55.0<br>66.9<br>64.4<br>65.8<br>67.4<br>71.0<br>68.3<br>**66.6**<br>**69.1**<br>**72.0**<br>**69.1**|52.3<br>56.8<br>63.2<br>**64.9**|
+
+
+Table 3: Learning with the normal setting yields the biggest improvement among all settings. Our
+loss helps SAR increase from 56 _._ 6% to 63 _._ 8% (a 6 _._ 4% increase) and climb to 64 _._ 8% (an 8 _._ 1% improvement) when jointly learned with _k_ -NL. Combining these results with those from the challenging settings (imbalance, small batch size), we can conclude that our method is suitable for various
+real-world data settings, as indicated by the stable and significant improvements when adapted to
+them.
+
+
+9
+
+
+- Combining Sparse-CL with _k_ -NL further enhances performance across all learning settings, indicating the positive impact of _k_ -NL. It could serve as a valuable auxiliary task to
+improve model learning.
+
+    - Figure 4 illustrates why our loss function performs well under Sparse-CL and _k_ -NL learning. The distinction between true (positive) and noisy (negative) labels becomes clearer
+when examining the difference in logit magnitudes between positive and negative classes.
+This evidence supports the hypothesis that learning with our loss function can prevent misclassification of nearby classes, resulting in a clear decision boundary across classes.
+
+
+5 CONCLUSION
+
+
+In this work, we propose a stable learning strategy to mitigate the noise problems of pseudo labels
+under TTA learning. Our study first analyzes the main reasons for the failure of current learning
+methods using pseudo labels. We then highlight that gradient variance is a key factor in stable
+learning and introduce a new loss function named Sparse-CL, inspired by cross-entropy loss, which
+ensures stable updates. Our training strategy updates the model with a high learning rate, hypothesizing that this rapid updating helps the model adapt well to the target domain and effectively combat
+both memorization and confirmation bias problems. Additionally, we enhance cross-logit learning
+by incorporating a negative loss named _k_ -NL, which leverages complementary labels and helps the
+model focus on k-hardness negative samples, thereby improving overall model performance.
+
+
+REFERENCES
+
+
+Chirag Agarwal, Daniel D’souza, and Sara Hooker. Estimating example difficulty using variance of
+gradients. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-_
+_nition_, pp. 10368–10378, 2022.
+
+
+Eric Arazo, Diego Ortego, Paul Albert, Noel E O’Connor, and Kevin McGuinness. Pseudo-labeling
+and confirmation bias in deep semi-supervised learning. In _2020 International Joint Conference_
+_on Neural Networks (IJCNN)_, pp. 1–8. IEEE, 2020.
+
+
+Nicolas Arpit, David Krueger, Emmanuel Bengio, Maxinder S Kanwal, Tegan Maharaj, Asja Fischer, Aaron Courville, Yoshua Bengio, et al. A closer look at memorization in deep networks. In
+_International conference on machine learning_, pp. 233–242. PMLR, 2017.
+
+
+Shai Ben-David, John Blitzer, Koby Crammer, Alex Kulesza, Fernando Pereira, and Jennifer Wortman Vaughan. A theory of learning from different domains. _Machine_ _learning_, 79:151–175,
+2010.
+
+
+Dian Chen, Dequan Wang, Trevor Darrell, and Sayna Ebrahimi. Contrastive test-time adaptation.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+295–305, 2022.
+
+
+Tongtong Fang, Nan Lu, Gang Niu, and Masashi Sugiyama. Rethinking importance weighting for
+deep learning under distribution shift. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 33:
+11996–12007, 2020.
+
+
+Pierre Foret, Ariel Kleiner, Hossein Mobahi, and Behnam Neyshabur. Sharpness-aware minimization for efficiently improving generalization. _arXiv preprint arXiv:2010.01412_, 2020.
+
+
+Yossi Gandelsman, Yu Sun, Xinlei Chen, and Alexei Efros. Test-time training with masked autoencoders. _Advances in Neural Information Processing Systems_, 35:29374–29385, 2022.
+
+
+Jin Gao, Jialing Zhang, Xihui Liu, Trevor Darrell, Evan Shelhamer, and Dequan Wang. Back to the
+source: Diffusion-driven test-time adaptation. _arXiv preprint arXiv:2207.03442_, 2022.
+
+
+Sachin Goyal, Mingjie Sun, Aditi Raghunathan, and Zico Kolter. Test-time adaptation via conjugate
+pseudo-labels. _arXiv preprint arXiv:2207.09640_, 2022.
+
+
+Moritz Hardt, Ben Recht, and Yoram Singer. Train faster, generalize better: Stability of stochastic
+gradient descent. In _International conference on machine learning_, pp. 1225–1234. PMLR, 2016.
+
+
+10
+
+
+Minguk Jang and Sae-Young Chung. Test-time adaptation via self-training with nearest neighbor
+information. _arXiv preprint arXiv:2207.10792_, 2022.
+
+
+Rie Johnson and Tong Zhang. Accelerating stochastic gradient descent using predictive variance
+reduction. _Advances in neural information processing systems_, 26, 2013.
+
+
+Youngdong Kim, Junho Yim, Juseung Yun, and Junmo Kim. Nlnl: Negative learning for noisy
+labels. In _Proceedings of the IEEE/CVF international conference on computer vision_, pp. 101–
+110, 2019.
+
+
+Youngdong Kim, Juseung Yun, Hyounguk Shon, and Junmo Kim. Joint negative and positive learning for noisy labels. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition_, pp. 9442–9451, 2021.
+
+
+Pang Wei Koh, Shiori Sagawa, Henrik Marklund, Sang Michael Xie, Marvin Zhang, Akshay Balsubramani, Weihua Hu, Michihiro Yasunaga, Richard Lanas Phillips, Irena Gao, et al. Wilds: A
+benchmark of in-the-wild distribution shifts. In _International Conference on Machine Learning_,
+pp. 5637–5664. PMLR, 2021.
+
+
+Jungmin Kwon, Jeongseop Kim, Hyunseo Park, and In Kwon Choi. Asam: Adaptive sharpnessaware minimization for scale-invariant learning of deep neural networks. In _International_ _Con-_
+_ference on Machine Learning_, pp. 5905–5914. PMLR, 2021.
+
+
+Hao Li, Zheng Xu, Gavin Taylor, Christoph Studer, and Tom Goldstein. Visualizing the loss landscape of neural nets. _Advances in neural information processing systems_, 31, 2018.
+
+
+Yanghao Li, Naiyan Wang, Jianping Shi, Jiaying Liu, and Xiaodi Hou. Revisiting batch normalization for practical domain adaptation. _arXiv preprint arXiv:1603.04779_, 2016.
+
+
+Jian Liang, Dapeng Hu, and Jiashi Feng. Do we really need to access the source data? source
+hypothesis transfer for unsupervised domain adaptation. In _International Conference on Machine_
+_Learning_, pp. 6028–6039. PMLR, 2020.
+
+
+Hyesu Lim, Byeonggeun Kim, Jaegul Choo, and Sungha Choi. Ttn: A domain-shift aware batch
+normalization in test-time adaptation. _arXiv preprint arXiv:2302.05155_, 2023.
+
+
+Sheng Liu, Jonathan Niles-Weed, Narges Razavian, and Carlos Fernandez-Granda. Early-learning
+regularization prevents memorization of noisy labels. _Advances in neural information processing_
+_systems_, 33:20331–20342, 2020.
+
+
+Yong Liu, Siqi Mai, Xiangning Chen, Cho-Jui Hsieh, and Yang You. Towards efficient and scalable
+sharpness-aware minimization. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 12360–12370, 2022.
+
+
+Yuxiang Liu, Jidong Ge, Chuanyi Li, and Jie Gui. Delving into variance transmission and normalization: Shift of average gradient makes the network collapse. In _Proceedings_ _of_ _the_ _AAAI_
+_Conference on Artificial Intelligence_, volume 35, pp. 2216–2224, 2021.
+
+
+Nagarajan Natarajan, Inderjit S Dhillon, Pradeep K Ravikumar, and Ambuj Tewari. Learning with
+noisy labels. _Advances in neural information processing systems_, 26, 2013.
+
+
+Shuaicheng Niu, Jiaxiang Wu, Yifan Zhang, Yaofo Chen, Shijian Zheng, Peilin Zhao, and Mingkui
+Tan. Efficient test-time model adaptation without forgetting. In _International_ _conference_ _on_
+_machine learning_, pp. 16888–16905. PMLR, 2022.
+
+
+Shuaicheng Niu, Jiaxiang Wu, Yifan Zhang, Zhiquan Wen, Yaofo Chen, Peilin Zhao, and
+Mingkui Tan. Towards stable test-time adaptation in dynamic wild world. _arXiv_ _preprint_
+_arXiv:2302.12400_, 2023.
+
+
+Joaquin Quinonero-Candela, Masashi Sugiyama, Anton Schwaighofer, and Neil D Lawrence.
+_Dataset shift in machine learning_ . Mit Press, 2008.
+
+
+Hwanjun Song, Minseok Kim, Dongmin Park, Yooju Shin, and Jae-Gil Lee. Learning from noisy
+labels with deep neural networks: A survey. _IEEE Transactions on Neural Networks and Learning_
+_Systems_, 2022.
+
+
+11
+
+
+Dequan Wang, Evan Shelhamer, Shaoteng Liu, Bruno Olshausen, and Trevor Darrell. Tent: Fully
+test-time adaptation by entropy minimization. _arXiv preprint arXiv:2006.10726_, 2020.
+
+
+Feng Wang and Huaping Liu. Understanding the behaviour of contrastive loss. In _Proceedings of_
+_the IEEE/CVF conference on computer vision and pattern recognition_, pp. 2495–2504, 2021.
+
+
+Qin Wang, Olga Fink, Luc Van Gool, and Dengxin Dai. Continual test-time domain adaptation.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+7201–7211, 2022.
+
+
+Li Yi, Gezheng Xu, Pengcheng Xu, Jiaqi Li, Ruizhi Pu, Charles Ling, A Ian McLeod, and Boyu
+Wang. When source-free domain adaptation meets learning with noisy labels. _arXiv_ _preprint_
+_arXiv:2301.13381_, 2023.
+
+
+Marvin Zhang, Sergey Levine, and Chelsea Finn. Memo: Test time robustness via adaptation and
+augmentation. _Advances in Neural Information Processing Systems_, 35:38629–38642, 2022a.
+
+
+Ziyi Zhang, Weikai Chen, Hui Cheng, Zhen Li, Siyuan Li, Liang Lin, and Guanbin Li. Divide and
+contrast: Source-free domain adaptation via adaptive contrastive learning. _Advances_ _in_ _Neural_
+_Information Processing Systems_, 35:5137–5149, 2022b.
+
+
+Bowen Zhao, Chen Chen, and Shu-Tao Xia. Delta: degradation-free fully test-time adaptation. _arXiv_
+_preprint arXiv:2301.13018_, 2023.
+
+
+Stephan Zheng, Yang Song, Thomas Leung, and Ian Goodfellow. Improving the robustness of deep
+neural networks via stability training. In _Proceedings of the ieee conference on computer vision_
+_and pattern recognition_, pp. 4480–4488, 2016.
+
+
+12

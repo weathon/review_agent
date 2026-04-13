@@ -1,0 +1,1595 @@
+# DELLMA: DECISION MAKING UNDER UNCERTAINTY
+### WITH LARGE LANGUAGE MODELS
+
+
+**Ollie Liu** _[∗]_ **, Deqing Fu** _[∗]_ **, Dani Yogatama, Willie Neiswanger**
+Thomas Lord Department of Computer Science
+University of Southern California
+me@ollieliu.com, {deqingfu, yogatama, neiswang}@usc.edu
+
+
+ABSTRACT
+
+
+The potential of large language models (LLMs) as decision support tools is increasingly being explored in fields such as business, engineering, and medicine,
+which often face challenging tasks of _decision-making under uncertainty_ . In this
+paper, we show that directly prompting LLMs on these types of decision-making
+problems can yield poor results, especially as the problem complexity increases.
+To aid in these tasks, we propose DeLLMa (Decision-making Large Language
+Model assistant), a framework designed to enhance decision-making accuracy
+in uncertain environments. DeLLMa involves a multi-step reasoning procedure
+that integrates recent best practices in scaling _inference-time_ _reasoning_, drawing
+upon principles from decision theory and utility theory, to provide an accurate and
+human-auditable decision-making process. We validate our procedure on multiple
+realistic decision-making environments, demonstrating that DeLLMa can consistently enhance the decision-making performance of leading language models, and
+achieve up to a 40% increase in accuracy over competing methods. Additionally,
+we show how performance improves when scaling compute at test time, and carry
+out human evaluations to benchmark components of DeLLMa.
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) are rapidly gaining traction across many domains due to their potential for automating and enhancing a broad spectrum of tasks (Bommasani et al., 2021; Bubeck
+et al., 2023). One important potential use is in _decision_ _making_ _under_ _uncertainty_, i.e., deciding
+which action to take given some set of possibilities, properly factoring in user goals and uncertainty about the world. The ability to make good decisions under uncertainty holds broad relevance
+across high-stakes tasks in fields such as business, marketing, medicine, aeronautics, and logistics
+(Kochenderfer, 2015; Peterson, 2017)—and its value is not limited to organization-level decisions
+but extends to aiding individuals in making informed choices as well. The ability of LLMs to analyze
+large quantities of data makes them potentially well-suited for sophisticated decision support tools,
+and ensuring that these models give accurate, context-aware recommendations could significantly
+augment human decision-making capabilities.
+
+
+However, optimal decision making under uncertainty is often challenging. For humans, there exist
+frameworks from decision theory and utility theory (developed in fields such as economics, statistics, and philosophy) to provide a structured approach for better decision-making (Von Neumann &
+Morgenstern, 1944; Luce & Raiffa, 1989; Berger, 2013). Research has consistently demonstrated
+that without these frameworks, human decision-making can often be highly irrational, swayed by
+biases and incomplete information (Bazerman & Moore, 2012). Similarly, making decisions with
+LLMs faces its own set of challenges. Issues include the tendency to fixate on specific explanations
+or information without adequately balancing all evidence, and the inability to effectively handle
+uncertainty, manage biases, or align with a user’s goals and utilities (Ferrara, 2023; Benary et al.,
+2023). Our paper presents experiments that exemplify these issues.
+
+
+Furthermore, beyond merely making rational decisions, it is crucial to understand _why_ an LLM made
+a particular decision. This aids in building trust in the decision, assessing its quality, and improving
+any components that may lead to suboptimal outcomes. The ability to explain decisions and verify
+
+
+_∗_ Equal Contribution. [Project website and code available at https://dellma.github.io/.](https://dellma.github.io/)
+
+
+1
+
+
+decision-making quality—which we refer to as _human_ _auditability_ —is essential for the practical
+application of LLMs to aid decision making in many real problems (Thirunavukarasu et al., 2023).
+
+
+In this paper, our goal is to develop a framework that enables LLMs to make better decisions under
+uncertainty. Our aim is not only to enhance decision-making accuracy but also to allow human users
+to understand the rationale behind each decision. Drawing inspiration from prior work on multistep reasoning like Chain-of-Thought (CoT) (Wei et al., 2022) and Tree-of-Thoughts (ToT) (Yao
+et al., 2023), in which compute is scaled at inference time, we design a procedure based on classical
+decision theory, originally designed for rational decision making under uncertainty by humans. Our
+approach involves three key steps: first, identify and forecast pertinent unknown variables given incontext information; second, elicit a utility function that aligns with the user’s goals; and finally, use
+this utility function to identify the decision that maximizes expected utility. We call our proposed
+framework _DeLLMa_, short for Decision-making Large Language Model assistant.
+
+
+We evaluate DeLLMa on real decision-making scenarios in agriculture and finance, and compare it
+against existing strategies for LLM decision-making, including zero-shot (direct) prompting, selfconsistency (Wang et al., 2022), and CoT approaches. We find that DeLLMa significantly enhances
+decision-making accuracy, with improvements of up to a 40% increase in accuracy, particularly as
+the complexity and number of potential actions increases. Additionally, DeLLMa can consistently
+enhance performance across a variety of leading language models, and its structure allows us to
+understand the rationale behind each decision. In full, our contributions are:
+
+
+ - We introduce DeLLMa, a method for human-auditable LLM decision making under uncertainty,
+employing a multi-step reasoning process at inference time based on classical decision theory.
+
+ - We evaluate components of DeLLMa, including the calibration of its state forecasting approach
+and a human agreement study to assess its utility elicitation method.
+
+ - On realistic decision-making environments, we show that DeLLMa gives up to a 40% improvement in decision-making accuracy over competing methods, and yields consistent improvements
+when deployed across multiple leading LLMs.
+
+
+2 RELATED WORK
+
+
+Exemplified by OpenAI o1 (OpenAI, 2024), a combination of recent advances in scaling _inference-_
+_time reasoning_ —such as task decomposition and structured search—has brought forth superhuman
+performances on deterministic reasoning tasks (Hendrycks et al., 2021; Chen et al., 2021); but we
+nonetheless find that they are insufficient for decision-making _under uncertainty_ . DeLLMa offers a
+specialized inference-time solution that scales favorbly with _parallel sampling_ (Snell et al., 2024),
+a key ingredient for performant utility elicitation and decision optimization. Below, we summarize
+prior works pertaining to the DeLLMa framework.
+
+
+**LLMs for Decision Making.** Prior works have leveraged LLMs for optimizing blackbox functions
+(Yang et al., 2023; Nie et al., 2023; Shinn et al., 2024). These settings involve methods that make
+a substantial number of low-cost decisions (which do not incur a high price for suboptimality).
+Instead, we focus on single-step _expensive_ decisions, particularly in the prescence of uncertainty,
+with a focus on the optimality of decisions. Additionally, a number of applied domains that involve
+decision making have started to explore LLM-based methods, such as in supply chain optimization
+(Li et al., 2023), medicine and health (Benary et al., 2023), and automated driving (Mao et al., 2023).
+
+
+**Uncertainty** **in** **LLMs.** LLMs, without proper calibration, can be overly confident in their responses (Si et al., 2022). Such pitfalls make them unlikely to make reliable decisions under uncertainty. Prior work has aimed to solve this issue; one line of research involves asking LLMs for
+their own confidence, with or without additional finetuning (Kadavath et al., 2022; Lin et al., 2022;
+Mielke et al., 2022; Chen & Mueller, 2023; Tian et al., 2023; Xiong et al., 2023; Zeng et al., 2024).
+Referring to (Baan et al., 2023) for a detailed survey, many recent advances (Lin et al., 2023; Feng
+et al., 2025; Falck et al.; Wong et al., 2023) adopt a Bayesian inference framework to quantify and
+reason with uncertainties in LLMs. Other works have shown that tool usage (Ren et al., 2023),
+retrieval augmentation (Halawi et al., 2024), and model ensemble (Schoenegger et al., 2024) can
+improve calibration and forecasting capabilities of LLMs. Our framework can take advantage of
+these advances in LLM-based forecasting for improved decision making.
+
+
+**Inference-time Reasoning in LLMs.** Many recent works have leveraged _inference time compute_
+to extend the computational power of language models (Merrill & Sabharwal, 2023; Sun et al.,
+
+
+2
+
+
+|Goal Actions Context<br>I’m a farmer in California<br>planning what fruit to plant next<br>year. I would like to maximize my<br>revenue with 10 acres of land.<br>Which fruit should I grow?<br>I’m an investor planning which<br>stock to buy on 2023-12-01. I $GOOGL $GOOGL<br>want the largest return by the end $NVDA $NVDA<br>of the month. I have $10,000. $AMZN<br>Which stock should I buy?<br>$AMZN|Col2|Goal|Col4|Actions|Col6|Context|Col8|
+|---|---|---|---|---|---|---|---|
+|Context<br>$GOOGL<br>$NVDA<br>$AMZN<br>I’m an investor planning which<br>stock to buy on 2023-12-01. I<br>want the largest return by the end<br>of the month. I have $10,000.<br>Which**stock** should I buy?<br>I’m a farmer in California<br>planning what fruit to plant next<br>year. I would like to maximize my<br>revenue with 10 acres of land.<br>Which**fruit** should I grow?<br>Goal<br>Actions<br>$AMZN<br>$GOOGL<br>$NVDA|$GOOGL<br>$NVDA<br>$AMZN<br>I’m an investor planning which<br>stock to buy on 2023-12-01. I<br>want the largest return by the end<br>of the month. I have $10,000.<br>Which**stock** should I buy?<br>I’m a farmer in California<br>planning what fruit to plant next<br>year. I would like to maximize my<br>revenue with 10 acres of land.<br>Which**fruit** should I grow?<br><br><br>$AMZN<br>$GOOGL<br>$NVDA|$GOOGL<br>$NVDA<br>$AMZN<br>I’m an investor planning which<br>stock to buy on 2023-12-01. I<br>want the largest return by the end<br>of the month. I have $10,000.<br>Which**stock** should I buy?<br>I’m a farmer in California<br>planning what fruit to plant next<br>year. I would like to maximize my<br>revenue with 10 acres of land.<br>Which**fruit** should I grow?<br><br><br>$AMZN<br>$GOOGL<br>$NVDA|$GOOGL<br>$NVDA<br>$AMZN<br>I’m an investor planning which<br>stock to buy on 2023-12-01. I<br>want the largest return by the end<br>of the month. I have $10,000.<br>Which**stock** should I buy?<br>I’m a farmer in California<br>planning what fruit to plant next<br>year. I would like to maximize my<br>revenue with 10 acres of land.<br>Which**fruit** should I grow?<br><br><br>$AMZN<br>$GOOGL<br>$NVDA|$GOOGL<br>$NVDA<br>$AMZN<br>I’m an investor planning which<br>stock to buy on 2023-12-01. I<br>want the largest return by the end<br>of the month. I have $10,000.<br>Which**stock** should I buy?<br>I’m a farmer in California<br>planning what fruit to plant next<br>year. I would like to maximize my<br>revenue with 10 acres of land.<br>Which**fruit** should I grow?<br><br><br>$AMZN<br>$GOOGL<br>$NVDA|$GOOGL<br>$NVDA<br>$AMZN<br>I’m an investor planning which<br>stock to buy on 2023-12-01. I<br>want the largest return by the end<br>of the month. I have $10,000.<br>Which**stock** should I buy?<br>I’m a farmer in California<br>planning what fruit to plant next<br>year. I would like to maximize my<br>revenue with 10 acres of land.<br>Which**fruit** should I grow?<br><br><br>$AMZN<br>$GOOGL<br>$NVDA|$GOOGL<br>$NVDA<br>$AMZN<br>I’m an investor planning which<br>stock to buy on 2023-12-01. I<br>want the largest return by the end<br>of the month. I have $10,000.<br>Which**stock** should I buy?<br>I’m a farmer in California<br>planning what fruit to plant next<br>year. I would like to maximize my<br>revenue with 10 acres of land.<br>Which**fruit** should I grow?<br><br><br>$AMZN<br>$GOOGL<br>$NVDA|$GOOGL<br>$NVDA<br>$AMZN<br>I’m an investor planning which<br>stock to buy on 2023-12-01. I<br>want the largest return by the end<br>of the month. I have $10,000.<br>Which**stock** should I buy?<br>I’m a farmer in California<br>planning what fruit to plant next<br>year. I would like to maximize my<br>revenue with 10 acres of land.<br>Which**fruit** should I grow?<br><br><br>$AMZN<br>$GOOGL<br>$NVDA|
+|||||||||
+
+
+|Col1|Forecast|Col3|Elicit|Col5|LLM|Col7|
+|---|---|---|---|---|---|---|
+|Decision<br>Utility<br>Unknowns<br>Climate, Price, Supply Chain, etc.<br>Maximize revenue ⇒<br>_U_ :  Θ x_A_ → ℝ<br>Largest return ⇒<br>_U_ :  Θ x_A_ → ℝ<br>$GOOGL<br>$AMZN<br>$NVDA<br>Prices, Regulations, Releases, etc.<br>$NVDA|Unknowns|Unknowns|Utility|Utility|Decision|Decision|
+
+
+The decision problem is given as a prompt. DeLLMa maximizes the expected utility to make a decision.
+
+
+Figure 1: Given a decision problem and contextual information as a prompt, DeLLMa ( _decision-_
+_making LLM assistant_ ) maximizes an expected utility to select an available action. We illustrate the
+key steps of DeLLMa on decision-making tasks in agriculture planning ( _top_ ) and finance ( _bottom_ ).
+
+
+2024). These can be categorized into three main approaches: (1) instructing the model to generate
+intermediate reasoning traces (Wei et al., 2022; Yao et al., 2022; Zelikman et al., 2022; Zhuang et al.,
+2023; Ye et al., 2023; Shinn et al., 2024; Cheng et al., 2024), (2) decomposing a complex reasoning
+problem into tangible components (Zhou et al., 2022; Radhakrishnan et al., 2023; Yao et al., 2023;
+OpenAI, 2024), and most recently (3) scaling the number of parallel samples to be postprocessed
+into a final solution (Wang et al., 2022; Snell et al., 2024; Brown et al., 2024; OpenAI, 2024).
+
+
+3 METHODS
+
+
+**Preliminaries.** Suppose that a decision maker needs to make a choice between a set of options to
+achieve some goal—i.e., has a _decision_ _problem_ . We begin by formalizing such a decision problem, and afterwards describe how we approach decision making with LLMs. There are three main
+components to the decision problems that we will describe: _actions_, _states_, and _utilities_ .
+
+
+First, the _actions_ are the possible options that a decision maker wishes to choose between. We use
+_A_ to denote the space of actions, and _a_ _∈A_ for a single action. Second, the set of _unknown states_
+of nature are denoted Θ. In our formulation, we define a state _θ_ _∈_ Θ to be any latent variable whose
+true value is unknown, yet affects outcomes relevant to the decision maker’s goals. To perform
+optimal decision making, one must act while accounting for uncertainty over these unknown states.
+
+
+The third component involves the decision maker’s preferences for different possible outcomes. We
+formalize our framework for decision making under uncertainty using _utility theory_, which can be
+viewed as “modeling the preferences of an agent as a real-valued function over uncertain outcomes”
+(Kochenderfer et al., 2022; Schoemaker, 1982; Fishburn, 1968). A key element is the _utility function_
+(in some formulations, this is instead given in terms of a _loss_ _function_ _L_ ). The utility function,
+denoted _U_ : Θ _× A →_ R, assigns a scalar value to any state and action ( _θ, a_ ) _∈_ Θ _× A_ . Intuitively,
+a higher utility means that the state-action pair yields a more-preferable outcome for the user.
+
+The goal of the decision maker will be to choose a _final decision a_ _[∗]_ _∈A_, which yields the highest
+possible utility, while accounting for uncertainty in the unknown states _θ_ .
+
+
+**Decision** **Making** **with** **LLMs:** **Setup** **and** **Current** **Approaches.** We first describe the setting
+in which we intend our framework to operate. Suppose a human wishes to use this LLM assistant
+to help make a decision. They begin by describing a decision problem via a user prompt _P_ . We
+formalize a user prompt as a triplet _P_ = ( _G, A, C_ ), which includes: a natural language description
+of the user’s goal, a list of _n_ actions = ( _a_ 1 _, . . ., an_ ), and a passage of contextual information
+_G_ _A_
+_C_, which might be, _e.g._, pages from a report, or a text-based representation of historical data.
+
+Referring to the _agriculture planning_ decision problem in Figure 1 as a running example, the goal _G_
+is for a farmer to maximize their revenue in the forthcoming year; the action set _A_ lists the possible
+produce the farmer is considering planting ( _e.g._, apples, avocados, pears); and the context _C_ consists
+of historical summaries of agricultural yields or information about the climate around the farm.
+
+
+It is tempting to delegate such decision-making to LLMs with direct prompting. However, we
+observe that responses from conventional approaches, such as Self-Consistency and CoT, do not
+adequately balance available evidence, handle uncertain information, or align with user preferences;
+we show in Sec. 4 that these methods perform poorly, especially with increasing numbers of actions.
+
+
+3
+
+
+**DeLLMa:** **Decision-Making LLM Assistant.** To help encourage improved decisions under uncertainty, we propose a framework that guides an LLM to follow the scaffolding of classical decision
+theory. By restricting LLMs to this scaffold we can also explicitly see components of the decisionmaking process— _e.g._, predictions of unknown states and utility function values—which provides
+human-auditability, allowing a user to identify why a given decision was made by the model.
+
+
+In our initial formalization of this framework, we restrict ourselves to a slightly curtailed class of
+problems, and thus make a few simplifying assumptions. For example, we have assumed above
+that there are a discrete, enumerable set of _n_ possible actions, _i.e._, = ( _a_ 1 _, . . ., an_ ). We will also
+_A_
+assume there is a discrete set of _m_ possible states, Θ = ( _θ_ 1 _, . . ., θm_ ), though _m_ may be quite large.
+
+
+Our framework will use an LLM to produce a belief distribution over the unknown states, given the
+input context _C_ . We view this as a _posterior belief distribution_ over the states, which we denote by
+_π_ ( _θ_ _|_ _C_ ). Implicitly, we are assuming that the LLM implies a _prior belief distribution π_ ( _θ_ ), given
+only the model weights or training data.
+
+
+Our framework will also elicit a _utility function_, based in part on the description of the user’s goals
+_G_ _∈P_ . This utility function assigns a scalar value to any state-action pair ( _θ, a_ ). We denote this
+utility function as _U_ ( _θ, a_ ). Given these, the _expected utility_ under our LLM of taking an action _a_,
+given some additional context _C_, can be written
+
+        _UC_ ( _a_ ) = E _π_ ( _θ|C_ ) [ _U_ ( _θ, a_ )] = _π_ ( _θ_ _| C_ ) _U_ ( _θ, a_ ) _._ (1)
+
+_θ∈_ Θ
+
+
+Then, following the _expected utility principle_ for rational decision making (Machina, 1987; Peterson,
+2017), we select the _Bayes-optimal decision a_ _[∗]_, which maximizes the expected utility, written
+
+_a_ _[∗]_ = arg max _a∈A Uc_ ( _a_ ) _._ (2)
+
+
+We call our framework **DeLLMa**, short for **De** cision-making **L** arge **L** anguage **M** odel **a** ssistant.
+DeLLMa carries out this sequence of four steps—state enumeration, state forecasting, utility elicitation, and expected utility maximization. A full description of DeLLMa is shown in the box below.
+In the following sections we give details on our specific implementation of each of these four steps.
+
+
+3.1 STATE ENUMERATION
+
+
+As an initial demonstration of DeLLMa, our goal is to develop a simple implementation that performs well empirically; however, each component in the framework can be extended or made more
+sophisticated. We first describe the strategy that we adopt for enumerating a space of relevant latent
+states Θ = ( _θ_ 1 _, . . ., θm_ ). Given as context, we prompt an LLM to identify _k_ _latent factors_ that
+_P_
+are predicted to influence the user’s goal _G_ (see §C.2 for details on this prompt). Each latent factor
+is a string (a word or phrase), which can be viewed as describing a dimension of our state space Θ.
+We denote these _k_ latent factors as ( _f_ 1 _, . . ., fk_ ).
+
+
+For each latent factor, we prompt our LLM to generate _ℓ_ _plausible values_ of the latent factor (empirically we find that it is sufficient to set _ℓ_ to be small, e.g., _<_ 5). For a latent factor _fj_, we denote its
+
+
+4
+
+
+plausible values as _f_ [˜] _j_ [1:] _[ℓ]_ [, where each plausible value is also a string (a word or phrase).] [This process]
+discretizes the state space, where each of the _k_ dimensions has _ℓ_ bins. We find that this strategy,
+while simple, yields an empirically effective method for forecasting states (described in §3.2).
+
+
+A single state _θj_ in this state space consists of one plausible value from each of the _k_ latent factors,
+which we can denote by _θj_ = _θj_ [1:] _[k]_ Θ. In total, this produces a discretized state space of size
+_∈_
+_|_ Θ _|_ = _m_ = _ℓ_ _[k]_ . While this state space is too large to enumerate explicitly, we develop a procedure
+to forecast probabilities for these states in a scalable manner.
+
+
+3.2 STATE FORECASTING
+
+In the next step of DeLLMa, we form a probabilistic forecast of the unknown states, given information contained in the context _C_ _∈P_ . A number of recent works have shown that LLMs are capable of
+returning well-calibrated forecasts with respect to some provided information (Halawi et al., 2024;
+Schoenegger et al., 2024) (see §2). Here, we develop a relatively simple forecasting method that we
+find works well empirically; though DeLLMa allows us to flexibly use other forecasting methods in
+the future (potentially leveraging search and retrieval of information). This step yields a distribution
+over the state space, which we can sample from to get a Monte Carlo estimate of the expected utility.
+
+For each of the _k_ latent factors, and each of their _ℓ_ possible values _f_ [˜] _j_ [1:] _[ℓ]_ [, we prompt our LLM to assign]
+a _verbalized probability score ∈{very likely_, _likely_, _somewhat likely_, _somewhat unlikely_, _unlikely_,
+_very unlikely}_ . In total, we must assign _k×ℓ_ scores. We provide all prompts for this probability score
+procedure in Figure 11. We then define a dictionary _V_ that maps each verbalized probability score to
+a numerical value. Similar strategies converting from verbalized to numeric scores have been used
+with success in prior work (Xiong et al., 2023; Tian et al., 2023). After normalization, this yields a
+distribution over the state space Θ, assuming independence between the _k_ latent factors, which we
+posit for computational simplicity. We sample states from this distribution by iterating through each
+of the latent factors, sampling according to its approximate marginal probability, and concatenating
+the samples. In Sec. 4.1 we directly evaluate this state forecasting procedure to show that it yields
+well-calibrated forecasts in real-data scenarios, and we conduct an ablation study in Sec. 4.3.
+
+
+The full procedure is shown in Algorithm 1. Here, the Normalize function simply scales the weights
+instantiated in the marginal distribution to a well-defined probability mass function (PMF). We consider the sampled states to be from an LLM-defined proposal distribution _π_ [LLM] ( _θ_ _|_ _C_ ), returned as
+output from Algorithm 1, which approximates the posterior belief distribution _π_ ( _θ_ _| C_ ).
+
+
+**Algorithm 1** STATEFORECAST
+
+
+**Input:** LLM _M_, user prompt _P_ = ( _G, A, C_ ),
+plausibilty score mapping _V_, latent factors _{f_ 1 _,_
+
+_· · ·_ _, fk}_, and plausible values _{f_ [˜] 1 [1:] _[ℓ][,][ · · ·]_ _[,]_ _[f]_ [˜] _k_ [ 1:] _[ℓ][}]_ [.]
+
+
+**for** _i_ = 1 **to** _k_ **do**
+
+_πi_ ( _· | C_ ) _←{}_
+# Verbalized probability score
+
+[ _v_ 1 _, · · · vℓ_ ] _←M_ ( _P, fi,_ _f_ [˜] _i_ [1:] _[ℓ]_ )
+**for** _j_ = 1 **to** _ℓ_ **do**
+
+_πj_ ( _f_ [˜] _i_ _[j]_ _[| C]_ [)] _[ ←V]_ [[] _[v][j]_ []]
+**end for**
+_πi_ ( _· | C_ ) _←_ Normalize( _πi_ ( _· | C_ ))
+**end for**
+**return** _π_ [LLM] ( _f_ 1 _, · · ·_ _, fk_ _| C_ ) := [�] _i_ _[k]_ =1 _[π][i]_ [(] _[· | C]_ [)]
+
+
+**Algorithm 2** UTILITYELICITATION
+
+
+**Input:** LLM _M_, user prompt _P_ = ( _G, A, C_ ), proposal distribution _π_ [LLM] ( _θ_ _| C_ ), sample size _s_, minibatch size _b_, and overlap proportion _q_ .
+# Sample fixed states _∀a ∈A_
+_SA_ _←A × {θi_ _| θi_ _∼_ _π_ [LLM] _,_ 1 _≤_ _i ≤⌊s/|A|⌋}_
+_SA_ _←_ Shuffle( _SA_ )
+Ω _←{}_ # Pairwise comparisons
+**for** _i_ = 1 **to** _s_ with step _⌊b ×_ (1 _−_ _q_ ) _⌋_ **do**
+
+# Rank the minibatch
+_R ←M_ ( _P,_ ( _θi, ai_ ) _, · · ·_ _,_ ( _θi_ + _b, ai_ + _b_ ))
+# Format into comparison
+Ω _←_ Ω _∪_ FormatRank( _R_ )
+**end for**
+**return** _U_ ( _·, ·_ ) := BradleyTerry(Ω) _∈_ R _[s]_
+
+
+3.3 UTILITY FUNCTION ELICITATION
+Next, we need a method to _elicit_ (which is to say: _construct_ ) a utility function _U_ : Θ _×A →_ R, which
+maps a state-action pair to a real value. An accurate utility function, which balances the preferences
+of a human user with respect to the goal that they describe, is difficult to define directly in a generalpurpose manner. There is a long history of work on _utility_ _elicitation_ methods (Farquhar, 1984),
+which aim to construct a utility function from, e.g., pairwise preference data. Here, we combine
+these methods with large language models to try and automatically elicit a utility function.
+
+
+We conduct the following procedure. We first sample states from the forecast state distribution
+_π_ [LLM] ( _θ_ _| C_ ), and from these form a set of state-action pairs. We group these pairs into minibatches,
+
+
+5
+
+
+and prompt our LLM to rank the elements of each minibatch, given the user’s goal _G_ _∈P_ . This
+LLM-based ranking of items—where each item consists of an action and a particular instantation of
+states—is a procedure that can be broadly applied, and LLMs have a history of being successfully
+used for similar comparisons (Lee et al., 2024; Qin et al., 2023). Based on these rankings, we are
+able to extract pairwise preferences, which we can use in classic utility elicitation algorithms.
+
+
+We show this procedure in Algorithm 2 and discuss two implementations of the FormatRank step:
+Rank2Pairs and One-vs-All. Denoting ( _θ, a_ )( _i_ ) as the _i_ -th preferred state-action pair of the minibatch, Rank2Pairs converts a ranking of decreasing preference = �( _θ, a_ )(1) _,_ _,_ ( _θ, a_ )( _b_ )�
+_R_ _· · ·_
+
+to a list of pairwise comparisons by adding ( _θ, a_ )( _i_ ) ( _θ, a_ )( _j_ ) whenever _i_ _<_ _j_ . In contrast,
+_≻_
+One-vs-All assumes that the LLM is indifferent towards all but the top-ranked state-action pair, _i.e._,
+�( _θ, a_ )(1) ( _θ, a_ )( _i_ ) 2 _i_ _b_ �. This implementation may be desirable when accurate com_≻_ _| ∀_ _≤_ _≤_
+parisons of certain suboptimal state-actions is challenging. We then make use of these preferences
+as training data for a Bradley-Terry model (Bradley & Terry, 1952) to elicit an approximate utility
+function _U_ : Θ _× A_ _→_ R with respect to the sampled state-action pairs. Finally, we find two additional ingredients are beneficial for scaling our inference-time reasoning, which help improve the
+accuracy and computational efficiency of utility elicitation: _batching_ and _variance reduction_ .
+
+
+**Batching.** We implement a batched inference procedure that slices state-action samples _SA_ =
+_{_ ( _θ, a_ ) _}_ into overlapping minibatches for ranking. We ensure that _q_ % of samples are shared between two consecutive minibatches drawn from _SA_, where _q_ is a hyperparameter that modulates
+a minibatch’s degree of exposure to the preference of the previous minibatch. Larger _q_ results in
+finer-grained preference at the cost of more queries. Effects of _q_ are ablated in Figure 3.
+
+
+**Variance Reduction.** Directly sampling _SA_ state values from the proposal distribution _π_ [LLM] may
+_|_ _|_
+lead to high-variance estimates of utilities. We instead sample _SA_ _/_ independent state values
+_|_ _|_ _|A|_
+from _π_ [LLM], create _|A|_ duplicates, and pair them with each action _a_ (see Figure 5 in Appendix A).
+
+In Section 4.3, we conduct ablation studies to validate our utility elicitation procedure, which shows
+high agreement rate between DeLLMa rankings and human preferences. We also study scaling laws
+of sample size and overlap percentage. We find that this type of specialized inference-time solution
+scales favorably against general-purpose systems such as OpenAI o1 (OpenAI, 2024).
+
+
+3.4 EXPECTED UTILITY MAXIMIZATION
+
+
+In the final step of DeLLMa, we compute the expected utility for each action, and then return the
+action that maximizes the expected utility. In particular, for each action, we compute a Monte Carlo
+estimate of the expected utility using state-action samples (drawn from the state forecast distribution
+_π_ [LLM] ( _θ_ _|_ _C_ )), as well as the elicited utility function. Note that these calculations are all performed
+analytically (not via an LLM). We can then approximate the expected utility _UC_ ( _a_ ) as
+
+
+_UC_ ( _a_ ) = E _π_ ( _θ|C_ ) [ _U_ ( _θ, a_ )]
+_≈_ _S_ [1]
+
+_|_ _|_
+
+
+_U_ ( _θ, a_ ) _,_ (3)
+
+_θ∈S_
+
+
+given a set of state samples _S_ _⊆_ Θ drawn from our LLM-defined state forecast distribution, which
+is an _i.i.d._ approximation of the LLM’s posterior belief distribution about states given context _C_, _i.e.,_
+_S_ _π_ [LLM] ( _θ_ ) _π_ ( _θ_ ). After computing the expected utility _UC_ ( _a_ ) for each action,
+_∼_ _|_ _C_ _≈_ _|_ _C_
+DeLLMa returns the final decision: _a_ _[∗]_ = arg max _a∈A UC_ ( _a_ ).
+
+
+4 EXPERIMENTS
+
+
+We evaluate the performance of DeLLMa on two decision making under uncertainty environments
+sourced from different domains: agricultural planning ( **Agriculture** ) and finance investing ( **Stocks** ).
+Both involve sizable degrees of uncertainty from diverse sources, and are representative of distinct
+data modalities (natural language and tabular) involved in decision making. We propose the following DeLLMa variants designed to assess algorithmic improvements, as outlined in Section 3:
+
+
+- **DeLLMa-Pairs** is the method using all techniques in §3.3 and Rank2Pairs for utility elicitation.
+
+
+- **DeLLMa-Top1** is identical to DeLLMa-Pairs, but replaces Rank2Pairs with One-vs-All.
+
+
+- **DeLLMa-Naive** is a base version of DeLLMa-Pairs, where we sample multiple states per action
+and construct pairwise comparisons from a single batch ( _i.e._, no batching or variance reduction).
+
+
+6
+
+
+Chain-of-Thought
+DeLLMa (Top 1)
+
+
+Self-Consistency
+DeLLMa (Pairs)
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Zero-Shot
+DeLLMa (Naive)
+
+
+Number of Actions
+
+
+70
+
+60
+
+50
+
+40
+
+30
+
+20
+
+
+DeLLMa Zero-Shot
+
+
+GPT-4 Claude 3 Gemini 1.5
+Large Language Models
+
+
+Figure 2: Results on the **Agriculture** environment. **Left:** DeLLMa variants outperform baseline
+methods for varying numbers of actions. **Right:** We see that DeLLMa yields a consistent improvement in decision-making accuracy across three families of leading LLMs.
+
+
+For DeLLMa-Pairs and Top1, we allocate a _per action sample size_ of 64 and a minibatch size of 32.
+We set the overlap proportion _q_ to 25% for the **Agriculture** dataset and 50% for the **Stocks** dataset
+due to budget constraints. For DeLLMa-Naive, we fix a _total sample size_ of 50. As a default LLM in
+experiments (except for comparisons across different LLMs), we use GPT-4 (Achiam et al., 2023) [1] .
+
+
+We compare DeLLMa against three baselines—zero-shot, self-consistency, and Chain-of-Thought
+(where example prompts for these baselines are given in Figures 9, 10, 19, and 20):
+
+- **Zero-Shot.** Only the goal _G_, the action space _A_, and the context _C_ is provided. We adopt a greedy
+decoding process by setting temperature = 0.
+
+- **Self-Consistency** **(SC)** (Wang et al., 2022). We use the same prompt as in zero-shot, but with
+temperature = 0.5 to generate a set of _K_ responses. We take the majority vote of the _K_ responses.
+
+- **Chain-of-Thought (CoT)** (Wei et al., 2022). For decision-making tasks, there is no standard CoT
+pipeline. Inspired by workflows from decision theory, we create a prompting chain consisting of
+three steps: (1) ask for unknown factors that impact the decision; (2) given these, ask for their
+possibility of occurence; (3) then ask for a final decision. Such a mechanism is similar to the
+DeLLMa pipeline (see §3) but only consists of prompting.
+
+
+**Evaluation Metrics.** For both datasets, our action spaces consist of a set of items, and we evaluate
+the performance of both DeLLMa and baseline methods by comparing the _accuracy_ of their prediction from this set against the ground-truth optimal action ( _i.e._, the action that maximizes groundtruth utility). We also report _normalized_ _utility_ - _i.e._, the ground-truth utility of the action chosen
+by a given method, normalized by the optimal ground-truth utility—in Appendix B. We defer more
+involved decision-making under uncertainty problems, such as constructing a weighted combination
+of actions ( _i.e._, a portfolio), to future works.
+
+
+4.1 AGRICULTURE
+
+
+**Data** **Acquisition.** We collect bi-annual reports published by the United States Department of
+Agriculture (USDA) that provide analysis of supply-and-demand conditions in the U.S. fruit markets [2] . To emulate real-life farming timelines, we use the report published in September 2021 as
+context for planning the forthcoming agricultural year. We additionally supplement these natural
+language contexts with USDA-issued price and yield statistics in California [3] .
+
+We define the utility of planting a fruit as its price _×_ yield reported in the forthcoming year. We
+identify 7 fruits as our action set _A_ —apple, avocado, grape, grapefruit, lemon, peach, and pear—that
+are both studied in the September 2021 report, and endowed with these statistics in 2021 and 2022.
+We create decision making problems by enumerating all possible combinations of available fruits,
+resulting in 120 decision problem instances. For each decision-making instance, we use related
+sections of the USDA report and current-year price and yield statistics as context. See Appendix C.1
+and Figure 8 for additional details on preprocessing, and Figure 13 for DeLLMa prompts.
+
+
+1We use GPT-4 checkpoint gpt4-1106-preview.
+2www.ers.usda.gov/publications/pub-details/?pubid=107539
+3www.nass.usda.gov/Quick_Stats
+
+
+7
+
+
+DeLLMa (Pairs) DeLLMa (Top1)
+
+
+65
+
+
+60
+
+
+55
+
+
+50
+
+
+75
+
+
+64
+
+
+52
+
+
+40
+
+
+0% 25% 50% 75%
+Overlap Percentage
+
+
+4 8 16 32 64
+Sample Size
+
+
+Figure 3: **Left:** Study on _sample size_ and _overlap percentage_ used by DeLLMa. Scaling the compute
+at test time produces better average accuracy. When ablating overlap percentage, we fix sample
+size at 16; when ablating sample size, we fix overlap percentage at 25%. **Right:** Illustration of
+the DeLLMa decision tree for the Agriculture dataset, showing two of the actions, and two of the
+sampled states per action. Each weight _w_ denotes the posterior probability _π_ ( _θi_ [(] _[j]_ [)] ).
+_| C_
+
+
+**Main Result.** From Figure 2, we observe that all DeLLMa strategies consistently outperform baseline comparison methods, especially for larger action sets. We plot decision accuracy here, but include equivalent plots showing the utility of each strategy in Appendix B. Among DeLLMa variants,
+the performance of Pairs and Top1 are consistent across the board; both are significantly better than
+Naive. This observation shows the benefits of the algorithms outlined in §3.3. We give more detailed
+analyses in the ablation study below. We also show a comparison of DeLLMa deployed on multiple
+leading LLMs (GPT-4 (Achiam et al., 2023), Claude-3 (Anthropic, 2024), Gemini 1.5 (Reid et al.,
+2024)), with consistent performance improvements across multiple model families. We refer readers
+to Appendix C and supplementary material for details on data, prompts, and responses.
+
+
+**How Good Are State Forecasts?** We first evaluate the quality Table 1: An evaluation of state
+of forecast distributions. We manually annotate a set of ground forecasting, showing ECE and
+truth values for states that the LLMs forecast within DeLLMa, NLL. Lower is better.
+and then compare this with the forecast state distribution. We
+compare the average calibration (ECE), and the negative log- ECE _↓_ NLL _↓_
+likelihood (NLL), two popular metrics for assessing the qual- **GPT-4** 0.062 1.11
+ity of a probabilistic forecast. As shown in Table 1, all mod- **Claude 3** 0.142 1.20
+els achieve reasonable calibration performances, which correlate **Gemini 1.5** 0.064 1.09
+with the overall DeLLMa prediction accuracy. We defer additional comparisons to Table 6, in which DeLLMa outperform randomized baselines. We conduct
+additional ablation studies to assess each DeLLMa module contributions in Section 4.3.
+
+
+Table 1: An evaluation of state
+forecasting, showing ECE and
+NLL. Lower is better.
+
+
+ECE _↓_ NLL _↓_
+
+
+**GPT-4** 0.062 1.11
+**Claude 3** 0.142 1.20
+**Gemini 1.5** 0.064 1.09
+
+
+**Failure Modes of Baseline Methods.** One surprising observation is that, in the case of larger action sets, our baseline methods often _underperform_ random guessing. A failure mode is that these
+methods elicit decisions that echo the sentiments presented in context, and they lack the ability to
+reason _what-if_ scenarios that lead to utility changes. Our experiments on SC and CoT indicate
+that neither sampling reasoning paths, prompting the model to imagine the alternatives, nor augmenting an LLM with a posterior belief substantially enhance the model’s ability to reason with
+_uncertainty_ . By conditioning on sampled states, DeLLMa can avoid this pitfall while leveraging
+in-context learning to decide the preferred _state-action_ pair. See Appendix C.4 and Figures 12, 17
+and 18 for discussions on failure cases of baseline methods that are addressed by DeLLMa.
+
+
+In addition to performance improvements, our structured approach is endowed with _human_ _au-_
+_ditability_ . In Figure 3 (right), we show an abbreviated decision network, with actions, states, sampled latent factors, and derived utilities constructed from outputs of a DeLLMa agent. This modular
+approach to decision making can facilitate transparency and trust of LLMs in high-stake scenarios.
+
+
+4.2 STOCKS
+
+
+Making decisions involving financial investing requires handling a variety of uncertainties; however,
+it is fundamentally different from the agriculture decision problems. Most evidently is the difference
+in input format—contexts for agriculture rely more on textual information (summarizations from
+
+
+8
+
+
+Chain-of-Thought
+DeLLMa (Top 1)
+
+
+Self-Consistency
+DeLLMa (Pairs)
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+Zero-Shot
+DeLLMa (Naive)
+
+
+Number of Actions
+
+
+Figure 4: Results on the **Stocks** environment. **Left:** We see that on average, DeLLMa-Top1 outperforms all baselines. **Right:** Illustration of the DeLLMa decision tree for the Stocks dataset, showing
+two of the actions and two of the sampled states per action.
+
+
+USDA reports) whereas contexts for stocks involve tabular data (historical prices per share). Stocks
+decision problems are well suited to test LLMs capability in reasoning on dynamic tabular data.
+
+
+**Data Acquisition.** Similar to the setup in §4.1, the action space _A_ consists of individual stocks and
+we curate a total of 120 decision problem instances of varying sizes. In our experiments, we choose
+popular stocks whose symbols are AMD, DIS, GME, GOOGL, META, NVDA and SPY. Unlike
+agriculture data where the context _C_ are collected through USDA reports, we collect historical stock
+prices as the context for this problem. As illustrated in Figure 1, each stock is presented with 24
+monthly price in history. In preventing possible data leakage and promoting LLMs to use their
+common-sense knowledge in making decisions, when using gpt4-1106-preview as the LLM
+checkpoint, historical price between December 2021 to November 2023 are provided as the context
+_C_ . These historical monthly prices are collected via Yahoo Finance [4] manually by the authors.
+
+The goal of the LLM agent is to choose which stock to invest on December 1st, 2023, and sell on
+the last trading day of that month (December 29, 2023) so that the return is maximized. Detailed
+prompts are presented in Appendix D.1. We note that we only consider the simplistic setting—
+choosing _one_ stock from a set of options _a_ 1 _,_ _, an_ .
+_{_ _· · ·_ _}_
+
+**Main** **Results.** Similarly, we compare three variants of DeLLMa with the three popular baselines. Shown in Figure 4, most of the observations are consistent with those in the agriculture
+experiments—DeLLMa’s variants outperform the baseline candidates. Unlike the agriculture setting, here DeLLMa-Naive only slightly improves over the baselines. We hypothesis this is due to
+the high volatility of stocks data, where inefficient sample size without variance reduction produces
+highly volatile predictors as well. This also validates the need for the design of the DeLLMa-Pairs
+and DeLLMa-Top1 methods.
+
+
+Additionally, DeLLMa-Top1 performs better than DeLLMa-Pairs in the stocks data. This difference
+may stem from the simplicity of utility elicitation from only the top action choice, which requires
+less data processing and may mitigate noise compared to enumerating all state-action pairs. We
+hypothesize that in high-volatility data like stocks, LLMs may struggle with pairwise comparisons
+due to potential hallucination issues, particularly when the model attempts to rank options without
+a clear ground truth. By focusing on the top choice, DeLLMa-Top1 could avoid accumulating noise
+from these internal rankings, achieving better performance.
+
+
+4.3 ABLATION STUDIES
+
+
+**Scaling Laws for Inference-Time Compute.** Referring back to Figure 2, a potential explanation
+for the performance difference between DeLLMa-Naive and Pairs/Top1 is the discrepancy in sample
+size: for Naive, we allocate a fixed sample size (50) for all decision-making instances, and we
+allocate a fixed _per action sample size_ (64) for Pairs and Top1. We eliminate this confounder in our
+ablation study, by noting that with _per action sample size_ 8 (middle subfigure in Figure 3), DeLLMaPairs/Top1 achieve comparable performance to Naive, despite only receiving 16-48 samples in total
+for each problem instance.
+
+
+4finance.yahoo.com
+
+
+9
+
+
+Table 2: Performance comparison across variations of our
+state forecasting procedure.
+
+
+**GPT-4** **Claude 3** **Gemini 1.5**
+
+
+Uniform 58.3% 32.5% 45.8%
+Underspecified 55.0% 34.2% 42.5%
+Overspecified 56.7% 35.8% 45.8%
+DeLLMa 60.0% 40.8% 47.5%
+
+
+Table 3: Performance comparison against SotA inference-time
+reasoning models.
+
+
+Task **DeLLMa** ( _n_ = 64) **o1-preview**
+
+
+Agriculture 73.3% 33.3%
+Stock 64.2% 35.0%
+
+
+Table 4: Results on a human
+evaluation of utility elicitation
+in DeLLMa. Details in §4.3.
+
+
+**GPT-4** **Claude 3** **Gemini 1.5**
+
+
+Agreement %
+with Human 68.4% 65.3% 65.7%
+
+
+In Figure 3 (left), we observe linear performance trends when scaling up overlap percentage and
+sample size. Intuitively, both higher overlap percentages ( _i.e._, more exposure between minibatches)
+and larger sample size lead to construction of finer-grained pairwise comparisons and thus high
+quality approximate utilities. Furthermore, DeLLMa-Pairs consistently outperforms Top1, implying
+that a nontrivial portion of the pairwise comparisons are meaningful. However, we note that the
+number of required API queries scales linearly with both parameters, and users are advised to choose
+these parameters that balance performance and cost. We report statistics for API queries and prompt
+lengths for our methods in Table 5 of Appendix B.
+
+
+**State Forecasting Ablation.** We now assess the quality of the state forecasting procedure by evaluating DeLLMa in the presence of low-quality or extraneous state information. On the agriculture
+dataset, we report in Table 2 the ablation results from 3 variants for the propoal distribution _π_ [LLM] :
+uniform, underspecified, and overspecified. We fix a _per_ _action_ _sample_ _size_ of 16 and an _overlap_
+_percentage_ of 25%, and refer readers to Appendix E for additional details.
+
+
+We observe that the performance of the modified forecasting methods in GPT-4 and Gemini 1.5 are
+similar to full DeLLMa performance, and are better than our baseline methods. With these models,
+DeLLMa appears to be robust against misspecified, insufficiently representative, and extraneous
+forecast states. However, with Claude 3, ablation performance is more akin to zero-shot baselines.
+This discrepancy may be due to Claude’s weaker performance in DeLLMa (c.f. Figure 2). Overall,
+our state forecasting procedure appears to be beneficial for DeLLMa performance.
+
+
+**Evaluation Against OpenAI o1.** In Section 4, we have compared different prompting approaches
+while fixing the LLM backbone. We now evaluate OpenAI o1—a class of more advanced models
+adept in inference-time reasoning—against DeLLMa. Table 3 shows that our best performances
+(attained with a _per_ _action_ _sample_ _size_ of 64 and _overlap_ _percentage_ of 25%) can outperform o1
+with the _zero-shot_ prompt (c.f. Figures 9 and 22) by a wide margin, while attaining similar costs
+(DeLLMa: $0.09 to $0.37 vs. o1: $0.21 per instance) [5] . This study indicates the benefits of specialized inference-time reasoning for decision making under uncertainty.
+
+
+**Human Evaluation for Preference Ranking.** Lastly, we perform a study to evaluate the quality
+of utility elicitation in DeLLMa. We curate a dataset of 412 pairwise state-action samples; human
+annotators (the paper authors and 5 external volunteers) are then shown pairs of these state-action
+samples and asked to annotate a preference, based on the decision prompt _P_ . These pairs are presented in _shuffled_ order to eliminate potential positional bias. We then compute the agreement rate
+between the pairwise annotations given by DeLLMa and those given by the annotators. Although
+this step is noisy, we see a strong agreement between LLM and human annotations, as shown in Table 4, across multiple LLMs. We also find that our inter-annotator agreement rate is 67.0% ( _±_ 6 _._ 3%),
+which is on par with the human-LLM agreements. Additional details of our annotation procedure
+are reported in Appendix F.
+
+
+5 CONCLUSION
+
+
+We propose DeLLMa, a framework designed to harness LLMs for decision making under uncertainty in high-stakes settings. This is a structured approach in which we provide a process for
+inference-time reasoning in LLMs that follows the principles of classical decision theory. We then
+develop a feasible implementation with LLMs. Through experiments on real datasets, we highlight a
+systematic failure of popular prompting strategies when applied to this type of decision making task,
+and demonstrate the benefits of our approach to address these issues. The modularity of our framework avails many possibilities, most notably auditability and using LLMs for a broader spectrum of
+probablistic reasoning tasks.
+
+
+5DeLLMa costs can be further reduced by 50% with the OpenAI batch API.
+
+
+10
+
+
+REPRODUCIBILITY STATEMENT
+
+
+To facilitate reproducibility, we have included the following artifacts within our paper and supplementary materials:
+
+
+**Data.** All DeLLMa data, prompts, and LLM inference results for main experiments are given in
+Section 4. We also include all prompts in Appendices C.2 and D.1.
+
+
+**Code.** Our implementations for the zero-shot, self consistency, Chain-of-Thought, and DeLLMa
+methods are included in the supplementary material. While these inference results are included,
+reproducing them require OpenAI, Anthropic, and Gemini API access. We provide evaluation script
+in results.sh for reproducing all numerical results.
+
+
+ACKNOWLEDGEMENT
+
+
+We thank Yu Feng, the USC NLP Group, and anonymous reviewers for valuable insights, discussions, and comments.
+
+
+REFERENCES
+
+
+Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al. Gpt-4 technical
+report. _arXiv preprint arXiv:2303.08774_, 2023.
+
+
+AI Anthropic. The claude 3 model family: Opus, sonnet, haiku. _Claude-3 Model Card_, 2024.
+
+
+Joris Baan, Nico Daheim, Evgenia Ilia, Dennis Ulmer, Haau-Sing Li, Raquel Fernández, Barbara
+Plank, Rico Sennrich, Chrysoula Zerva, and Wilker Aziz. Uncertainty in natural language generation: From theory to applications. _arXiv preprint arXiv:2307.15703_, 2023.
+
+
+Max H Bazerman and Don A Moore. _Judgment in managerial decision making_ . John Wiley & Sons,
+2012.
+
+
+Manuela Benary, Xing David Wang, Max Schmidt, Dominik Soll, Georg Hilfenhaus, Mani Nassir,
+Christian Sigler, Maren Knödler, Ulrich Keller, Dieter Beule, et al. Leveraging large language
+models for decision support in personalized oncology. _JAMA_ _Network_ _Open_, 6(11):e2343689–
+e2343689, 2023.
+
+
+James O Berger. _Statistical_ _decision_ _theory_ _and_ _Bayesian_ _analysis_ . Springer Science & Business
+Media, 2013.
+
+
+Rishi Bommasani, Drew A Hudson, Ehsan Adeli, Russ Altman, Simran Arora, Sydney von Arx,
+Michael S Bernstein, Jeannette Bohg, Antoine Bosselut, Emma Brunskill, et al. On the opportunities and risks of foundation models. _arXiv preprint arXiv:2108.07258_, 2021.
+
+
+Ralph Allan Bradley and Milton E Terry. Rank analysis of incomplete block designs: I. the method
+of paired comparisons. _Biometrika_, 39(3/4):324–345, 1952.
+
+
+Bradley Brown, Jordan Juravsky, Ryan Ehrlich, Ronald Clark, Quoc V Le, Christopher Ré, and
+Azalia Mirhoseini. Large language monkeys: Scaling inference compute with repeated sampling.
+_arXiv preprint arXiv:2407.21787_, 2024.
+
+
+Sébastien Bubeck, Varun Chandrasekaran, Ronen Eldan, Johannes Gehrke, Eric Horvitz, Ece Kamar, Peter Lee, Yin Tat Lee, Yuanzhi Li, Scott Lundberg, et al. Sparks of artificial general
+intelligence: Early experiments with gpt-4. _arXiv preprint arXiv:2303.12712_, 2023.
+
+
+Jiuhai Chen and Jonas W. Mueller. Quantifying uncertainty in answers from any language model
+via intrinsic and extrinsic confidence assessment. _ArXiv_, abs/2308.16175, 2023. [URL https:](https://api.semanticscholar.org/CorpusID:261339369)
+[//api.semanticscholar.org/CorpusID:261339369.](https://api.semanticscholar.org/CorpusID:261339369)
+
+
+11
+
+
+Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde de Oliveira Pinto, Jared
+Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, Alex Ray, Raul Puri,
+Gretchen Krueger, Michael Petrov, Heidy Khlaaf, Girish Sastry, Pamela Mishkin, Brooke Chan,
+Scott Gray, Nick Ryder, Mikhail Pavlov, Alethea Power, Lukasz Kaiser, Mohammad Bavarian,
+Clemens Winter, Philippe Tillet, Felipe Petroski Such, Dave Cummings, Matthias Plappert, Fotios Chantzis, Elizabeth Barnes, Ariel Herbert-Voss, William Hebgen Guss, Alex Nichol, Alex
+Paino, Nikolas Tezak, Jie Tang, Igor Babuschkin, Suchir Balaji, Shantanu Jain, William Saunders,
+Christopher Hesse, Andrew N. Carr, Jan Leike, Josh Achiam, Vedant Misra, Evan Morikawa, Alec
+Radford, Matthew Knight, Miles Brundage, Mira Murati, Katie Mayer, Peter Welinder, Bob McGrew, Dario Amodei, Sam McCandlish, Ilya Sutskever, and Wojciech Zaremba. Evaluating large
+language models trained on code. 2021.
+
+
+Ching-An Cheng, Allen Nie, and Adith Swaminathan. Trace is the new autodiff–unlocking efficient
+optimization of computational workflows. _arXiv preprint arXiv:2406.16218_, 2024.
+
+
+Fabian Falck, Ziyu Wang, and Christopher C Holmes. Are large language models bayesian? a
+martingale perspective on in-context learning. In _ICLR 2024 Workshop on Secure and Trustworthy_
+_Large Language Models_ .
+
+
+Peter H Farquhar. State of the art—utility assessment methods. _Management science_, 30(11):1283–
+1300, 1984.
+
+
+Yu Feng, Ben Zhou, Weidong Lin, and Dan Roth. BIRD: A trustworthy bayesian inference framework for large language models. In _The Thirteenth International Conference on Learning Repre-_
+_sentations_, 2025. [URL https://openreview.net/forum?id=fAAaT826Vv.](https://openreview.net/forum?id=fAAaT826Vv)
+
+
+Emilio Ferrara. Should chatgpt be biased? challenges and risks of bias in large language models.
+_arXiv preprint arXiv:2304.03738_, 2023.
+
+
+Peter C Fishburn. Utility theory. _Management science_, 14(5):335–378, 1968.
+
+
+Danny Halawi, Fred Zhang, Chen Yueh-Han, and Jacob Steinhardt. Approaching human-level forecasting with language models. _arXiv preprint arXiv:2402.18563_, 2024.
+
+
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song,
+and Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. _arXiv_
+_preprint arXiv:2103.03874_, 2021.
+
+
+Saurav Kadavath, Tom Conerly, Amanda Askell, Tom Henighan, Dawn Drain, Ethan Perez,
+Nicholas Schiefer, Zac Hatfield-Dodds, Nova DasSarma, Eli Tran-Johnson, Scott Johnston, Sheer
+El-Showk, Andy Jones, Nelson Elhage, Tristan Hume, Anna Chen, Yuntao Bai, Sam Bowman, Stanislav Fort, Deep Ganguli, Danny Hernandez, Josh Jacobson, Jackson Kernion, Shauna
+Kravec, Liane Lovitt, Kamal Ndousse, Catherine Olsson, Sam Ringer, Dario Amodei, Tom
+Brown, Jack Clark, Nicholas Joseph, Ben Mann, Sam McCandlish, Chris Olah, and Jared Kaplan. Language models (mostly) know what they know, 2022.
+
+
+Mykel J Kochenderfer. _Decision_ _making_ _under_ _uncertainty:_ _theory_ _and_ _application_ . MIT press,
+2015.
+
+
+Mykel J Kochenderfer, Tim A Wheeler, and Kyle H Wray. _Algorithms for_ _decision making_ . MIT
+press, 2022.
+
+
+Harrison Lee, Samrat Phatale, Hassan Mansoor, Thomas Mesnard, Johan Ferret, Kellie Lu, Colton
+Bishop, Ethan Hall, Victor Carbune, Abhinav Rastogi, and Sushant Prakash. RLAIF: Scaling reinforcement learning from human feedback with ai feedback, 2024. URL [https:](https://openreview.net/forum?id=AAxIs3D2ZZ)
+[//openreview.net/forum?id=AAxIs3D2ZZ.](https://openreview.net/forum?id=AAxIs3D2ZZ)
+
+
+Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal,
+Heinrich Küttler, Mike Lewis, Wen-tau Yih, Tim Rocktäschel, et al. Retrieval-augmented generation for knowledge-intensive nlp tasks. _Advances in Neural Information Processing Systems_, 33:
+9459–9474, 2020.
+
+
+Beibin Li, Konstantina Mellou, Bo Zhang, Jeevan Pathuri, and Ishai Menache. Large language
+models for supply chain optimization, 2023.
+
+
+12
+
+
+Stephanie Lin, Jacob Hilton, and Owain Evans. Teaching models to express their uncertainty in
+words, 2022.
+
+
+Zhen Lin, Shubhendu Trivedi, and Jimeng Sun. Generating with confidence: Uncertainty quantification for black-box large language models, 2023.
+
+
+R Duncan Luce and Howard Raiffa. _Games and decisions: Introduction and critical survey_ . Courier
+Corporation, 1989.
+
+
+Mark J Machina. Choice under uncertainty: Problems solved and unsolved. _Journal of Economic_
+_Perspectives_, 1(1):121–154, 1987.
+
+
+Jiageng Mao, Junjie Ye, Yuxi Qian, Marco Pavone, and Yue Wang. A language agent for autonomous
+driving, 2023.
+
+
+William Merrill and Ashish Sabharwal. The expresssive power of transformers with chain of
+thought. _arXiv preprint arXiv:2310.07923_, 2023.
+
+
+Sabrina J. Mielke, Arthur Szlam, Emily Dinan, and Y-Lan Boureau. Reducing conversational
+agents’ overconfidence through linguistic calibration, 2022.
+
+
+Allen Nie, Ching-An Cheng, Andrey Kolobov, and Adith Swaminathan. Importance of directional
+feedback for llm-based optimizers. In _NeurIPS_ _2023_ _Foundation_ _Models_ _for_ _Decision_ _Making_
+_Workshop_, 2023.
+
+
+OpenAI. Learning to reason with llms. [https://openai.com/index/](https://openai.com/index/learning-to-reason-with-llms/)
+[learning-to-reason-with-llms/, 2024.](https://openai.com/index/learning-to-reason-with-llms/)
+
+
+Martin Peterson. _An introduction to decision theory_ . Cambridge University Press, 2017.
+
+
+Zhen Qin, Rolf Jagerman, Kai Hui, Honglei Zhuang, Junru Wu, Jiaming Shen, Tianqi Liu, Jialu Liu,
+Donald Metzler, Xuanhui Wang, and Michael Bendersky. Large language models are effective
+text rankers with pairwise ranking prompting, 2023.
+
+
+Ansh Radhakrishnan, Karina Nguyen, Anna Chen, Carol Chen, Carson Denison, Danny Hernandez,
+Esin Durmus, Evan Hubinger, Jackson Kernion, Kamil˙e Lukoši¯ut˙e, et al. Question decomposition
+improves the faithfulness of model-generated reasoning. _arXiv preprint arXiv:2307.11768_, 2023.
+
+
+Machel Reid, Nikolay Savinov, Denis Teplyashin, Dmitry Lepikhin, Timothy Lillicrap, Jeanbaptiste Alayrac, Radu Soricut, Angeliki Lazaridou, Orhan Firat, Julian Schrittwieser, et al. Gemini 1.5: Unlocking multimodal understanding across millions of tokens of context. _arXiv preprint_
+_arXiv:2403.05530_, 2024.
+
+
+Allen Z. Ren, Anushri Dixit, Alexandra Bodrova, Sumeet Singh, Stephen Tu, Noah Brown,
+Peng Xu, Leila Takayama, F. Xia, Jacob Varley, Zhenjia Xu, Dorsa Sadigh, Andy Zeng, and
+Anirudha Majumdar. Robots that ask for help: Uncertainty alignment for large language model
+planners. _ArXiv_, abs/2307.01928, 2023. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:259342058)
+[CorpusID:259342058.](https://api.semanticscholar.org/CorpusID:259342058)
+
+
+Paul JH Schoemaker. The expected utility model: Its variants, purposes, evidence and limitations.
+_Journal of economic literature_, pp. 529–563, 1982.
+
+
+Philipp Schoenegger, Indre Tuminauskaite, Peter S Park, and Philip E Tetlock. Wisdom of the
+silicon crowd: Llm ensemble prediction capabilities match human crowd accuracy. _arXiv preprint_
+_arXiv:2402.19379_, 2024.
+
+
+Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu Yao. Reflexion:
+Language agents with verbal reinforcement learning. _Advances in Neural Information Processing_
+_Systems_, 36, 2024.
+
+
+Chenglei Si, Chen Zhao, Sewon Min, and Jordan Boyd-Graber. Re-examining calibration: The
+case of question answering. In Yoav Goldberg, Zornitsa Kozareva, and Yue Zhang (eds.),
+_Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _EMNLP_ _2022_, pp. 2814–2829,
+Abu Dhabi, United Arab Emirates, December 2022. Association for Computational Linguistics.
+doi: 10.18653/v1/2022.findings-emnlp.204. URL [https://aclanthology.org/2022.](https://aclanthology.org/2022.findings-emnlp.204)
+[findings-emnlp.204.](https://aclanthology.org/2022.findings-emnlp.204)
+
+
+13
+
+
+Charlie Snell, Jaehoon Lee, Kelvin Xu, and Aviral Kumar. Scaling llm test-time compute optimally
+can be more effective than scaling model parameters. _arXiv preprint arXiv:2408.03314_, 2024.
+
+
+Yu Sun, Xinhao Li, Karan Dalal, Jiarui Xu, Arjun Vikram, Genghan Zhang, Yann Dubois, Xinlei
+Chen, Xiaolong Wang, Sanmi Koyejo, et al. Learning to (learn at test time): Rnns with expressive
+hidden states. _arXiv preprint arXiv:2407.04620_, 2024.
+
+
+Arun James Thirunavukarasu, Darren Shu Jeng Ting, Kabilan Elangovan, Laura Gutierrez,
+Ting Fang Tan, and Daniel Shu Wei Ting. Large language models in medicine. _Nature medicine_,
+29(8):1930–1940, 2023.
+
+
+Katherine Tian, Eric Mitchell, Allan Zhou, Archit Sharma, Rafael Rafailov, Huaxiu Yao, Chelsea
+Finn, and Christopher D Manning. Just ask for calibration: Strategies for eliciting calibrated
+confidence scores from language models fine-tuned with human feedback. _arXiv_ _preprint_
+_arXiv:2305.14975_, 2023.
+
+
+John Von Neumann and Oskar Morgenstern. Theory of games and economic behavior. 1944.
+
+
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc V Le, Ed H Chi, Sharan Narang, Aakanksha
+Chowdhery, and Denny Zhou. Self-consistency improves chain of thought reasoning in language
+models. In _The Eleventh International Conference on Learning Representations_, 2022.
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny
+Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. _Advances in_
+_Neural Information Processing Systems_, 35:24824–24837, 2022.
+
+
+Lionel Wong, Gabriel Grand, Alexander K Lew, Noah D Goodman, Vikash K Mansinghka, Jacob
+Andreas, and Joshua B Tenenbaum. From word models to world models: Translating from natural
+language to the probabilistic language of thought. _arXiv preprint arXiv:2306.12672_, 2023.
+
+
+Miao Xiong, Zhiyuan Hu, Xinyang Lu, Yifei Li, Jie Fu, Junxian He, and Bryan Hooi. Can llms
+express their uncertainty? an empirical evaluation of confidence elicitation in llms. _arXiv preprint_
+_arXiv:2306.13063_, 2023.
+
+
+Chengrun Yang, Xuezhi Wang, Yifeng Lu, Hanxiao Liu, Quoc V Le, Denny Zhou, and Xinyun
+Chen. Large language models as optimizers. _arXiv preprint arXiv:2309.03409_, 2023.
+
+
+Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, and Yuan Cao.
+React: Synergizing reasoning and acting in language models. _arXiv preprint arXiv:2210.03629_,
+2022.
+
+
+Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L Griffiths, Yuan Cao, and Karthik
+Narasimhan. Tree of thoughts: Deliberate problem solving with large language models. _arXiv_
+_preprint arXiv:2305.10601_, 2023.
+
+
+Yining Ye, Xin Cong, Yujia Qin, Yankai Lin, Zhiyuan Liu, and Maosong Sun. Large language
+model as autonomous decision maker. _arXiv preprint arXiv:2308.12519_, 2023.
+
+
+Eric Zelikman, Yuhuai Wu, Jesse Mu, and Noah Goodman. Star: Bootstrapping reasoning with
+reasoning. _Advances in Neural Information Processing Systems_, 35:15476–15488, 2022.
+
+
+Qingcheng Zeng, Mingyu Jin, Qinkai Yu, Zhenting Wang, Wenyue Hua, Zihao Zhou, Guangyan
+Sun, Yanda Meng, Shiqing Ma, Qifan Wang, et al. Uncertainty is fragile: Manipulating uncertainty in large language models. _arXiv preprint arXiv:2407.11282_, 2024.
+
+
+Denny Zhou, Nathanael Schärli, Le Hou, Jason Wei, Nathan Scales, Xuezhi Wang, Dale Schuurmans, Claire Cui, Olivier Bousquet, Quoc Le, et al. Least-to-most prompting enables complex
+reasoning in large language models. _arXiv preprint arXiv:2205.10625_, 2022.
+
+
+Yuchen Zhuang, Xiang Chen, Tong Yu, Saayan Mitra, Victor Bursztyn, Ryan A Rossi, Somdeb
+Sarkhel, and Chao Zhang. Toolchain*: Efficient action space navigation in large language models
+with a* search. _arXiv preprint arXiv:2310.13227_, 2023.
+
+
+14
+
+
+## APPENDIX
+
+
+A UTILITY ELICITATION DETAILS
+
+
+In Figure 5, we show an illustration of the overlapped batching and variance reduction strategies that
+DeLLMa uses in its utility elicitation procedure (described in detail in Section 3.3).
+
+
+|θ(1)<br>θ(2) ⊗ a1<br>θ(3)<br>a2<br>θ(4)|Pair|
+|---|---|
+|_θ_(1)<br>_θ_(2)<br>_θ_(3)<br>_θ_(4)<br>_a_1<br>⊗<br>_a_2||
+
+
+|( θ(1), a1) ( θ(1), a2)<br>( θ(2), a1) ( θ(2), a2)<br>( θ(3), a1) ( θ(3), a2)<br>( θ(4), a1) ( θ(4), a2)|Col2|
+|---|---|
+||Shufe|
+
+
+|Col1|Shuffle|
+|---|---|
+|**Overlapped**<br>**Batching**|(_θ_(1),_ a_1)<br>**(****_θ_(**2**),** **_a_**1**)**<br>(_θ_(3),_ a_2)<br>(_θ_(1),_ a_2)<br>(_θ_(2),_ a_2)<br>4<br>2<br>(_θ_(4),_ a_1)<br>**(****_θ_(**3**),** **_a_**2**)**<br>(_θ_(1),_ a_1)<br>2<br>1<br>(_θ_(3),_ a_1)|
+|||
+
+
+Figure 5: Schematic diagram of overlapped batching and variance reduction.
+
+
+B ADDITIONAL RESULTS
+
+
+In Figures 6 and 7 we show the normalized utility ( _i.e._, ground-truth utility of the chosen action,
+normalized by the maximum ground-truth utility) of each method. These results can be contrasted
+against the accuracy of each method’s prediction of the optimal action in Figures 2 and 4.
+
+
+Zero-Shot Chain-of-Thought Self-Consistency DeLLMa (Naive) DeLLMa (Top 1) DeLLMa (Pairs)
+
+
+100
+
+
+95
+
+90
+
+85
+
+80
+
+75
+
+70
+
+
+2 3 4 5 6 Average
+
+Number of Actions
+
+
+Figure 6: Normalized utility for the **Agriculture** dataset. Across all action sizes, DeLLMaPairs/Top1 outperforms other methods, including DeLLMa-Naive. Similar to accuracy, DeLLMaPairs slightly outperforms Top1, which is consistent with our hypothesis that the complete ranking
+generated from GPT-4 is meaningful.
+
+
+15
+
+
+Zero-Shot Chain-of-Thought Self-Consistency DeLLMa (Naive) DeLLMa (Top 1) DeLLMa (Pairs)
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+Figure 7: Normalized utility for the **Stock** dataset. DeLLMa-Top1 is competitive againt Pairs, suggesting that financial decision making may be a challenging scenario for GPT-4 to elicit preference
+unequivocally.
+
+
+Aside from performance improvements, we also compare the cost measured in terms of prompt
+length and API calls in Table 5. For the **Agriculture** dataset, DeLLMa-Naive is comparable to SC
+in terms of prompt length and significantly outperform the latter, while only requiring 20% of API
+calls. DeLLMa-Pairs/Top1 can push the performance further, but incurs a higher cost, especially for
+large sample sizes.
+
+
+Table 5: Number of GPT-4 API calls and word counts per decision-making instance (with action set
+size 4 for the **Agriculture** dataset) across all methods discussed in Section 4.1. For DeLLMa-Naive,
+we set the total sample size to 50. For DeLLMa-Pairs, we fix the overlap percentage to 25% and vary
+the _per action sample size_ from 16 to 64. DeLLMa-Top1 has the same statistics as DeLLMa-Pairs
+since they only differ in post processing.
+
+
+**Zero-Shot** **CoT** **SC** **D-Naive** **D-Pairs (16)** **D-Pairs (64)**
+**API Calls** 1 3 5 1 3 10
+**Token Counts** 495 1946 2477 2629 5181 20639
+
+
+We provide additional results on forecasting performance measured by the expected calibration error
+(ECE) to supplement Table 1, by focusing on two sets of statistics in Table 6:
+
+
+ - ECE under the uniform distribution forecast (ECE-Uniform).
+
+ - ECE under the LLM forecast, but with random choice as the ground truth (ECE-Random). We
+report the standard deviation from 100 random trials.
+
+
+To calculate the ECE, for a fixed set of latent factors (e.g., fruit price change, climate conditions),
+we manually find and annotate ground truth values — using the USDA report and web search. We
+can then compute metrics such as the expected calibration error (ECE) for forecasts of these latent
+factors given by a model. Together, these results indicate that our state forecasting algorithm attains
+much improved performance in comparison with these baselines.
+
+
+Table 6: Comparison of ECE across different proposal distributions against randomized baselines.
+
+
+**ECE** **ECE-Random (±SD)** **ECE-Uniform**
+**DeLLMa (GPT-4)** 0.062 0.135 ± 0.092 0.333
+**DeLLMa (Claude 3)** 0.142 0.157 ± 0.084 0.333
+**DeLLMa (Gemini 1.5)** 0.064 0.113 ± 0.083 0.333
+
+
+C ADDITIONAL DETAILS FOR AGRICULTURE
+
+
+C.1 DATASET CURATION
+
+
+To reduce context length, we first extract executive and per-fruit summaries of the report, reducing
+the context length from 8,721 words to around _<_ 700 words. These summaries are constructed on
+
+
+16
+
+
+a _per-model_ basis: each LLM (GPT-4, Claude-3, and Gemini 1.5) is prompted to generate its own
+summaries. We proof-read these summaries to ensure that they do not contain any factual errors.
+For each decision making instance, we use the executive summary, the summaries relevant to the
+fruits in consideration, and their current-year price and yield statistics as context. We provide these
+summaries in our supplementary material, and refer readers to the prompt for summarizing the report
+in Appendix C.2, and report concrete summaries and statistics in supplementary materials.
+
+
+C.2 PROMPT USED BY AGRICULTURE
+
+
+**Summary** **Prompt** In Figure 8 we present the prompt used for summarizing the context in our
+**Agriculture** experiments. This prompt is shared across all models tested.
+
+
+**Zero-Shot Prompt** In Figure 9 we present an example prompt for zero-shot experiments consisting of _P_ = ( _G, C, A_ ), with GPT-4 summaries generated from Figure 8 as context. We fix the prompt
+format for all LLMs and select the corresponding summaries for each LLM.
+
+
+**Self-Consistency Prompt** We adopt the same zero-shot prompt as the one shown in Figure 9, but
+take a majority vote from _K_ reasoning paths as the final prediction. Our preliminary study finds
+that LLMs tend to be very confident in their decisions, and even with much higher temperature than
+0.5, often all _K_ independent runs yield consistent decisions. We thus set _K_ = 5 to balance cost and
+performance.
+
+
+**Chain-of-Thought** **Prompt** We design a multi-prompt CoT procedure that closely emulates our
+DeLLMa agent, consisting of three steps: (1) ask for unknown factors that impact the decision; (2)
+given these, ask for their possibility of occurence; (3) then ask for a final decision. This procedure
+differs from DeLLMa agents as it does not use an external program for _utility elicitation_ and _expected_
+_utility maximization_, but delegates each step of the process to an LLM. Example prompt can be found
+in Figure 10.
+
+
+**DeLLMa Prompt** Similar to the CoT Prompt, DeLLMa is a multi-prompt procedure (1) ask for
+unknown factors that impact the decision; (2) given these, ask for their possibility of occurence
+( _i.e._ _a belief distribution_ ). Instead of directly deciding on an action, DeLLMa samples _state-action_
+pairs (via an external program) from this belief distribution, and leverage an LLM to elicit a utility
+function _U_ : _S_ _× A →_ R from pairwise comparisons. From here, we use another external program
+to search for an action that maximizes the expected utility.
+
+
+In Figures 8 and 11 we present the prompt for _state_ _enumeration_ and _state_ _forecasting_ ( _i.e._ step
+(1) and (2)) for the **Agriculture** dataset. Our implementation combines these two modules, but
+in the future they should be separate as our framework continues to progress. For example, _state_
+_enumeration_ may leverage retrieval-augmented generation Lewis et al. (2020) for generating highquality unknown factors, and _state forecasting_ may resort to tool usage to delibrate calibrated belief
+distributions from quanitative analysis.
+
+
+In Figure 13, we provide a DeLLMa prompt to generate ranked comparisons from sampled _state-_
+_action_ pairs. These state action pairs are sampled from the belief distribution via an external program, written in Python. We provide all our implementations in the supplementary material.
+
+
+C.3 AGRICULTURE DATASET RESPONSES
+
+
+**Summaries** See Figure 14 for formatted GPT-4 summaries from the USDA agricultural report
+and statistics. Claude-3 and Gemini summaries follow the exact same format, but differ in LLM
+generated contents.
+
+
+**Zero-Shot** **Responses** See Figures 12, 17 and 18 for sample GPT-4 responses to zero-shot
+prompts.
+
+
+**Self-Consistency** **Responses** SC responses follow the exact same format as those in Figures 12,
+17 and 18.
+
+
+17
+
+
+**Chain-of-Thought Responses** See Figure 15 for a curtailed version of GPT-4 CoT response.
+
+
+**DeLLMa Responses** See Figure 16 for a curtailed version of GPT-4 DeLLMa response.
+
+
+C.4 FAILURE CASES ON THE AGRICULTURE DATASET
+
+
+In Section 4.1, we postulate that a failure mode of our baseline approaches is that they lack the ability
+to perform probablistic reasoning, but are rather following the sentiment presented in context. Here,
+we qualitatively test this hypothesis, by showcasing prompts and responses from our Zero-Shot
+experiments. We present instances in Figures 12, 17 and 18 that are not able to make optimal
+prediction with baseline methods, but are solved by DeLLMa agents.
+
+Within each figure, we first present _P_, followed by the (incorrect) decision and explanation generated from the Zero-Shot baseline, and then present the top-ranked state action pair generated by
+DeLLMa along with its explanation.
+
+
+In the case of deciding between apple and grapefruit in Figure 12, GPT-4 presumes that a high price
+for grapefruit is sustainable due to the presence of extreme weather conditions in the _previous year_ .
+With CoT, the model reasons with some counterfactual scenarios, such as more suitable weather
+for the forthcoming year, but not in a systematic way. With DeLLMa, we provide these a list of
+counterfactual scenarios as context, and leverage the model’s ability for situational thinking and
+ranking to elicit an informative preference. We make similar observations for Figures 17 and 18.
+
+
+D ADDITIONAL DETAILS FOR STOCKS
+
+
+D.1 PROMPT USED BY STOCKS
+
+
+**Zero-Shot Prompt** Similar to the agriculture setup, we first present a sample zero-shot prompt in
+Figure 19. The zero-shot prompt consists of three main parts (see Figure 1 for visual illustrations):
+(1) an enumeration of action spaces (here AMD or GME), (2) a provided context (here, historical
+stock prices between December 2021 to November 2023), and (3) the goal of the user (choose only
+one stock to maximize their profit via investing in stocks).
+
+
+**Self-Consistency Prompt** SC prompts are identical to zero-shot prompts.
+
+
+**Chain-of-Thought** **Prompt** Similarly, we examplify a prompt for CoT. Notably, we break the
+chain into three parts in Figure 20: (1) Enumerating unknown factors, (2) Enumerating _π_ [LLM] ( _· | C_ ),
+and (3) making the final decision given the previous responses and context.
+
+
+**DeLLMa Prompt** Finally, we showcase the DeLLMa ranking prompts where the LLM is asked
+to provide comprehensive rankings of given state-action pairs.
+
+
+D.2 STOCK DATASET RESPONSES
+
+
+**Zero-Shot Responses** See Figure 22 for sample GPT-4 responses to zero-shot prompts.
+
+
+**Self-Consistency Responses** SC responses follow the exact same format as those in Figure 22.
+
+
+**Chain-of-Thought Responses** See Figure 23 for a curtailed version of GPT-4 CoT response.
+
+
+**DeLLMa Responses** See Figure 24 for a curtailed version of GPT-4 DeLLMa response.
+
+
+E ADDITIONAL DETAILS FOR ABLATION STUDIES
+
+
+- Uniform: we maintain the same set of states, but replace the forecast distribution _π_ [LLM] with a
+uniform distribution.
+
+
+18
+
+
+- Underspecified: we reduce the diversity of our set of states by removing a latent factor _fk_, chosen
+at random, and then perform state forecasting as usual.
+
+- Overspecified: in addition to the original set of latent factors, we add a small set of additional
+factors, which are intentionally unrepresentative or redundant. This represents a case where the
+latent factors contain extraneous information, which may confuse the LLM backbones.
+
+
+F DETAILS ON ANNOTATION PIPELINE
+
+
+For each pair of state-action values, we ask human evaluators (paper authors and 5 external volunteers) to annotate which state-action tuple is more preferred to the other, and compare our annotations against preferences elicited by LLMs. To reduce bias in this procedure, we present these pairs
+in _shuffled_ orders, _i.e._ it is not always true that ( _s, a_ )1 ( _s, a_ )2 if ( _s, a_ )1 _,_ ( _s, a_ )2 is presented to
+_≻_ _{_ _}_
+the annotators. For each pair, we ask the annotators to either label them as 1 (state-action tuple 1 is
+preferred), 2 (state-action tuple 2 is preferred), or 0 (uncertain). We then evaluate annotator-LLM
+agreement after evaluation is concluded. In total, this procedure yields 412 annotations.
+
+
+From these annotation results, we measure the agreement between each pair of annotators, and
+compute inter-annotator agreement by micro-averaging all agreements. This procedure yields an
+average agreement of 67.0% ( _±_ 6 _._ 3%), which is on par with human-LLM agreements.
+
+
+G LICENSE FOR EXISTING ASSETS
+
+
+**Large Language Models** DeLLMa is built on top of frontier class LLMs such as GPT-4 (Achiam
+et al., 2023), Claude-3 (Anthropic, 2024), and Gemini 1.5 (Reid et al., 2024). We are not aware of
+their licenses, but ascertain that we abide to their respective terms of service (ToS) [6] for our usage.
+
+
+**Agriculture Dataset** The **Agriculture** dataset is curated from statistics and reports published by
+the U.S. Department of Agriculture. These assets are freely accessible under the Freedom of Information Act. We ascertain that we abide to the USDA ToS [7] .
+
+
+**Stock** **Dataset** The **Stock** dataset is curated with the Yahoo Finance API [8] . We ascertain that we
+abide to the Yahoo Developer API ToS [9] .
+
+
+H SOCIETAL IMPACT AND LIMITATIONS
+
+
+Rational decision making under uncertainty has been extensively studied across many disciplines,
+but remains elusive even for humans. Our work bears significant societal consequences as we live
+in a world where humans increasingly rely on intelligent assistants for diverse problems. Unfortunately, existing foundation models and LLMs are not capable of acting optimally under uncertainties
+yet, which may induce harm if the general public delegate these models for decision making. These
+risks are exacerbated when intelligent assistants operate as a black box without adequate transparency. DeLLMa serves as a first step towards an approach that builds trust for humans to rely on
+these systems to make important decisions under uncertainty.
+
+
+While our approach sensibly improves the performance of LLMs for decision making under uncertainty, deploying a prototype system in the wild without additional guardrail could incur significant
+financial losses, in case of a suboptimal decision. We expect users to conduct extensive field tests
+for the feasibility of such systems, or leverage a hybrid approach that integrates analyst judgements
+for optimal decision making.
+
+
+Another limitation of our approach stems from constrained state and action spaces. Our framework
+currently operates on a small number of discrete state and action spaces, due to the context window
+
+
+[6GPT-4 ToS, Claude-3 ToS, and Gemini 1.5 ToS.](https://chatgpt.com/c/fe00ee45-e34c-4b64-812d-295abaedd20f)
+[7https://www.usda.gov/policies-and-links](https://www.usda.gov/policies-and-links)
+8finance.yahoo.com
+[9Yahoo Finance API ToS](https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apiforydn/index.html)
+
+
+19
+
+
+size of state-of-the-art LLMs. This drawback may potentially limit the applicability of our system
+in more complex use cases, or scenarios that require sequential decision making.
+
+
+Finally, our current experiments focus on specific domains (agriculture and stocks) as representative,
+controlled environments for testing decision-making under uncertainty. Future work will involve
+evaluating DeLLMa across a broader set of domains to better understand its strengths and limitations
+in diverse, real-world applications.
+
+
+20
+
+
+21
+
+
+22
+
+
+23
+
+
+24
+
+
+25
+
+
+26
+
+
+27
+
+
+28
+
+
+29
+
+
+30
+
+
+31
+
+
+32
+
+
+33
+
+
+34
+
+
+35
+
+
+36
+
+
+37

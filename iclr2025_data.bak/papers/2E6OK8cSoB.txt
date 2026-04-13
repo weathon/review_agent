@@ -1,0 +1,1238 @@
+# SEMANTIC-AWARE DIFFUSION MODEL FOR SEQUEN## TIAL RECOMMENDATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Sequential recommendation aims to predict the next click for a particular user based
+on their historical interacted item sequences. Recently, diffusion-based methods
+have achieved the state-of-the-art performance in sequential recommendation.
+However, they fail to effectively utilize the rich semantic information embedded in
+items during the diffusion process to accurately guide the generation, leading to suboptimal results. To address this limitation, we designed SDREC, a **S** emantic-aware
+**D** iffusion model for sequential **Rec** ommendation. Our model introduces a novel
+architecture, the Semantic Fusion Layer, which leverages the embedding
+table from the encoder to incorporate item semantics into the diffusion process
+through an attention mechanism. Together with the well-designed contrastive and
+generative losses, SDREC effectively utilizes the item semantics in diffusion model,
+unleashing the potential of sequential recommendation. Our experiments show
+that SDREC has over 10% relative gain with superior efficiency compared with
+existing methods.
+
+
+1 INTRODUCTION
+
+
+Sequential recommendation aims to mine the user’s behavior patterns from historical interaction
+sequences and predicts the next item that the user is most likely to click in the future. It has attracted
+widespread attention due to its high commercial value in many business scenarios, such as streaming
+media (Covington et al., 2016), e-commerce (Chen et al., 2019), and social networking (Zhou et al.,
+2018). Since sequential recommendation needs to identify the most suitable item from the existing
+item set based on a user’s historical interactions, the effectiveness of the recommendations hinges on
+the deep understanding of the semantics of the items (e.g., the categories that a movie belongs to) and
+the modeling of user interests (e.g., what kinds of movies does the user like).
+
+
+In order to efficiently capture the item semantics and user preferences, various types of methods
+have been proposed for sequential recommendation (Hidasi & Karatzoglou, 2018; Yuan et al., 2019;
+Sun et al., 2019; Xie et al., 2021; Ren et al., 2020). Recently, diffusion model (Ho et al., 2020)
+has shown remarkable results in generation tasks from Computer Vision (CV) (Dhariwal & Nichol,
+2021; Rombach et al., 2022) and Natural Language Processing (NLP) (Li et al., 2022; Gong et al.,
+2022). It defines a sequence of Gaussian distributions (i.e., Markov chain) instead of a single one in
+VAEs, granting it powerful fitting capabilities (Sohl-Dickstein et al., 2015; Vahdat & Kautz, 2020).
+Moreover, it addresses the training instability in adversarial learning in GANs (Salimans et al., 2016),
+making it easier to converge. Diffusion model corrupts inputs with random noises iteratively in the
+forward process. Under the guidance of some conditions, it can learn the distribution more deeply by
+removing noise and reconstructing the input. Thanks to its strong ability to fit complex distributions
+and to generate diverse outputs, it has been achieved the state-of-the-art performance in sequential
+recommendation (Wang et al., 2023; Li et al., 2023; Yang et al., 2024).
+
+
+Despite their advancements, there remain some problems for existing diffusion recommenders.
+Diffusion model was initially designed for generative tasks, allowing the model to create content
+randomly to some degree as long as it satisfies the provided conditions. In contrast, recommendation
+tasks require precise retrieval of suitable items that a user is likely to click in the future (Lin et al.,
+2023), which requires a thorough understanding of the semantics of each item. This highlights the
+need to effectively integrate item semantics at each diffusion step to accurately guide the generation
+process. Unfortunately, existing diffusion recommenders rely solely on user preferences as conditions
+
+
+1
+
+
+(i.e., historical interaction sequences), resulting in a limited view of item semantics. What’s worse,
+these methods introduce noise into user sequences and then pass them to Transformers or MLPs for
+denoising (Wang et al., 2023; Ben´ edict et al., 2023; Li et al., 2023), implicitly attempting to learn´
+item semantics during the reverse diffusion process (see Figure 1(a)). The presence of noise in the
+input sequences hinders the model’s ability to accurately capture the semantic relationships between
+items. Consequently, these methods struggle to capture the various semantics of items (e.g., a movie
+may belong to multiple categories). This limitation prevents them from effectively modeling users’
+diverse and dynamic interests, since user interests are indicated by user historical clicked items. As a
+result, they primarily identify simplistic features like historical click patterns as Figure 2(e) shows,
+leading to sub-optimal results. Therefore, how to efficiently leverage the item semantics in diffusion
+model becomes a vital problem for improved diffusion recommenders.
+
+
+(a) Existing diffusion recommenders (b) SDRec
+
+
+Figure 1: **Comparison of diffusion recommenders.** (a) Existing methods, corrupt the user sequences
+by adding noise and then feed them to a denoising network, using KL Divergence loss to implicitly
+learn item semantics. (b) SDREC, explicitly learn item semantics via contrastive loss in the encoder
+and enhance the corrupted item distribution by leveraging the embedding table from the encoder,
+which injects semantic information through the Semantic Fusion Layer.
+
+
+To address the problems mentioned above, we propose a novel **S** emantic-aware **D** iffusion model for
+sequential **Rec** ommendation named SDREC. The model is structured around an Encoder-Decoder
+architecture (refer to (b) in Figure 1). The encoder receives clean user sequences and explicitly
+capture the semantic relationships between items by contrastive learning. It also discerns user
+preferences from historical interactions, generating a conditional signal that effectively encodes
+user interests. Guided by this conditional signal, the decoder iteratively recovers the next item
+distribution from a noisy one. Before passing the noisy item distribution to the denosing network, we
+introduced a Semantic Fusion Layer that leverages the semantic embedding table from the
+encoder to transfer semantic information of items into the input distribution. Inspired by the attention
+mechanism, the embedding table is weighted by the noisy input distribution, enriching the semantic
+context while preserving the inherent randomness in diffusion model. Therefore, the reverse process
+of diffusion model can refer to the rich semantics embedded in item embeddings to accurately guide
+the generation. To sum up, the contributions of this work are as follows:
+
+
+_•_ We propose a novel diffusion recommender SDREC, which can effectively utilize the item semantics through the Semantic Fusion Layer, where the noisy input distribution is enriched by
+the semantic information from the item embedding table, improving the accuracy of the reverse
+process in the diffusion model.
+
+_•_ SDREC adopts an Encoder-Decoder architecture. Equipped with well-designed contrastive and
+generative loss, it can efficiently learn the item semantics and model user preferences simultaneously.
+
+_•_ We conduct extensive experiments to demonstrate impressive improvements over the baselines.
+Meanwhile, our model is more efficient than baselines, which is favorable for online serving.
+
+
+2 BACKGROUND AND RELATED WORK
+
+
+2.1 SEQUENTIAL RECOMMENDATION
+
+
+Given a user’s historical interacted item sequence arranged in chronological order _i_ 1 _, i_ 2 _, · · ·_ _, im_,
+sequential recommendation aims to capture the user preferences from that and forecasts the next
+
+
+2
+
+
+add
+
+
+user
+
+
+user
+
+
+item _i⋆_ that the user is likely to engage with in the future. The success of this task depends on a
+deep understanding of item semantics and accurate modeling of user interests. Due to the sequence
+format of the user’s historical interactions and the discriminative nature of this task (i.e., distinguish
+between items that users are interested in or not), combing sequential models with contrastive learning
+to capture the semantics of items and mine user interests becomes a straightforward idea. Such
+methods include Convolutions Neural Networks (CNN) (Tang & Wang, 2018; Yuan et al., 2019)
+and Recurrent Neural Networks (RNN) (Hidasi & Karatzoglou, 2018; Hidasi et al., 2015). Recent
+advances with Transformer-based methods (Kang & McAuley, 2018; Sun et al., 2019) have pushed
+their performance even further.
+
+
+However, in practical scenarios, users’ interests are dynamic and evolving over time (Sachdeva et al.,
+2019; Li et al., 2023). To capture such diversity and uncertainty of user behaviors, generative models
+have been introduced for sequential recommendation, such as VAE-based (Sachdeva et al., 2019; Xie
+et al., 2021) and GAN-based (Bharadhwaj et al., 2018; Ren et al., 2020) methods. These kinds of
+approaches can also stimulate new interests for users and discover more business opportunities. However, these models suffer from intrinsic limitations such as the instability of GANs (Salimans et al.,
+2016) and the limited representation capacity of VAEs (Vahdat & Kautz, 2020). Such deficiencies
+hinder the deep modeling of complex user behaviors and item semantics.
+
+
+2.2 DIFFUSION MODEL
+
+
+Recent proposed diffusion model (Ho et al., 2020) mitigates the weaknesses of VAEs and GANs
+and push the state-of-the-art performance even further in generation tasks of both CV (Dhariwal
+& Nichol, 2021; Rombach et al., 2022) and NLP (Li et al., 2022; Gong et al., 2022). Inspired by
+non-equilibrium thermodynamics (Sohl-Dickstein et al., 2015), diffusion model defines a Markov
+chain consisting of _T_ forward diffusion steps, denoted as _x_ 1: _T_, from an original distribution _x_ 0.
+Specifically, in the forward process _q_ at step _t_, noise sampled from Gaussian distribution is added:
+
+
+_q_ ( _xt|xt−_ 1) _∼N_ (�1 _−_ _βtxt−_ 1 _, βt_ **I** ) _,_ (1)
+
+
+where _{βt}_ _[T]_ _t_ =1 [are a series of predefined parameters controlling the amount of noises added at each]
+diffusion step. As _T_ _→∞_, _xT_ resembles an isotropic Gaussian distribution. Thanks to the Markov
+property, we can further calculate _xt_ directly from _x_ 0 with the following closed-form equation:
+
+
+where _C_ is a constant independent of the model parameter _θ_, KL is Kullback-Leibler Divergence.
+
+
+2.3 DIFFUSION RECOMMENDERS
+
+
+With the merits of diffusion model’s tractability and strong representation capability (Sohl-Dickstein
+et al., 2015; Ho et al., 2020), recent studies have explored integrating diffusion models into sequential
+recommendation and achieved state-of-the-art performance (Wang et al., 2023; Li et al., 2023; Yang
+et al., 2024). For example, DiffRec (Wang et al., 2023) modifies the noise scale in diffusion model
+to ensure personalized recommendations, DiffuRec (Wang et al., 2023) injects uncertainty into
+item representations and reconstruct them by diffusion model in order to capture users’ multi-level
+
+
+3
+
+
+_√_
+_xt_ = _[√]_ _α_ ¯ _tx_ 0 +
+
+
+1 _−_ _α_ ¯ _tϵ,_ _ϵ ∼N_ ( **0** _,_ **I** ) _,_ (2)
+
+
+where _αt_ = 1 _−_ _βt_, _α_ ¯ _t_ = [�] _i_ _[t]_ =1 _[α][i]_ [.] [Using Bayes’ theorem, the ] ~~_√_~~ [poste][rior distribut] ~~_√_~~ [ion] _[ q]_ [(] _[x][t][−]_ [1] _[|][x][t][, x]_ [0][)]
+can be derived from _N_ ( _c_ 1 _,tx_ 0 + _c_ 2 _,txt,_ _β_ [˜] _t_ **I** ), where _c_ 1 _,t_ = _α_ ¯ _t−_ 1 _βt_, _c_ 2 _,t_ = _αt_ (1 _−α_ ¯ _t−_ 1), _β_ [˜] _t_ =
+
+
+~~_√_~~
+1 _α_ ¯ _−t−α_ ¯1 _tβt_, _c_ 2 _,t_ = _αt_ 1(1 _−−α_ ¯ _α_ ¯ _tt−_ 1)
+
+
+can be derived from _N_ ( _c_ 1 _,tx_ 0 + _c_ 2 _,txt,_ _β_ [˜] _t_ **I** ), where _c_ 1 _,t_ = 1 _α_ ¯ _−t−α_ ¯1 _tβt_, _c_ 2 _,t_ = _αt_ 1(1 _−−α_ ¯ _α_ ¯ _tt−_ 1), _β_ [˜] _t_ =
+
+1 _−_ 1 _−α_ ¯ _αt_ ¯ _−t_ 1 _[β][t]_ [.] [Thus, a neural network model can be used to fit] _[ x]_ [0] [and subsequently learn the reverse]
+
+process _pθ_ for any step _t_ :
+
+
+_pθ_ ( _xt−_ 1 _|xt_ ) _∼N_ ( _c_ 1 _,tfθ_ ( _xt, t, c_ ) + _c_ 2 _,txt,_ _β_ [˜] _t_ **I** ) _,_ (3)
+
+
+where _fθ_ is the model with parameters _θ_ . Note that a classifier-free conditional diffusion model will
+further accept a conditional signal _c_ as input (Ho & Salimans, 2022). The model will be optimized by
+maximizing the variational lower bound of the log-likelihood of the input data _x_ 0:
+
+
++ _C,_ (4)
+
+
+_L_ = E _x_ 0 [ _−_ log _pθ_ ( _x_ 0)] _≤_ E _x_ 0
+
+
+- _T_
+
+
+KL ( _q_ ( _xt−_ 1 _|xt, x_ 0) _∥pθ_ ( _xt−_ 1 _|xt_ ))
+
+_t_ =1
+
+
+interests, DCDR (Lin et al., 2023) proposes to use step-wise discrete operations to add noise during
+the diffusion process, RecFusion (Ben´ edict et al., 2023) adopts a binomial Markov diffusion process´
+to fit the discrete recommendation datasets, DreamRec (Yang et al., 2024) proposes to generate the
+oracle item via diffusion model without any discriminative information.
+
+
+Despite their success, these methods have not effectively leveraged item semantics during the diffusion
+process to generate high-quality recommendations. Originally, diffusion models were designed for
+generative tasks, allowing for some randomness in content creation as long as the provided conditions
+were met. However, recommendation tasks require the precise retrieval of items that are likely to
+engage the user (Lin et al., 2023), which necessitates a deep and comprehensive understanding of
+item semantics to guide generation accurately. Unfortunately, current diffusion recommenders rely
+solely on user historical sequences as conditions, lacking a global awareness of item semantics.
+Furthermore, the noise introduced to the user sequences impairs the model’s ability to accurately
+capture the semantic relationships between items, further reduces the quality of recommendations.
+
+
+To illustrate how item semantics affect the recommendation quality, we extract data from Movielens1M (Harper & Konstan, 2015) as an example. Since category is an inherent attribute of each movie,
+we can use categories to express the semantics of movies. We count the number of each category that
+appears together with Drama movies (Category 6). As Figure 2(a) shows, Comedy, Romance, Drama,
+Action, and Thriller categories (Category 2, 5, 6, 7, and 9) often appear together, suggesting that
+Drama movie contains multiple semantics. Figure 2(b) shows the category counts of movies clicked
+by a user and (c) shows in a click timeline view. We can see that this user has a strong interest in
+Comedy, Drama, Action, and Thriller (Category 2, 6, 7, and 9), which aligns the semantic correlations
+confirmed from Figure 2(a). He also occasionally explores other categories like Adventure and
+Romance (Category 3 and 5), indicating his preferences are dynamic and diverse.
+
+
+18
+16
+14
+12
+10
+8
+6
+4
+2
+0
+
+
+Figure 2: **Case study on how item semantics affects the recommendation results.** (a) The number
+of each category that appears together with Drama movie (Category 6). Darker red indicates stronger
+correlations with Drama. (b) The number of each category that the user clicks according to his
+historical sequence. Darker red categories denote user major interests. (c) Categories of the movie
+clicked by the user at each timestamp. (d) Predictions of SDREC for this user in category level. (e)
+Predictions of DiffRec (Wang et al., 2023) for this user in category level.
+
+
+We applied a diffusion recommender DiffRec (Wang et al., 2023) to this case, shown as Figure 2(e).
+The corresponding ground truth is in the blue square (training data) and green square (validation
+and test data) in Figure 2(c). We collected top10 results predicted by this method at each click
+timestamp and accumulate them in the category level. The results indicate that the movie categories
+recommended by DiffRec are largely similar across timestamps without considering the diversity
+and dynamics of user interests.This is due to DiffRec’s inability to fully learn and leverage item
+semantics (i.e., movie categories) during the diffusion process, resulting in an incomplete modeling
+of user interests, which are based on their interaction history. This also leads to inaccurate guidance
+during the generation process. As a result, it tends to recommend content mechanically based on past
+click patterns. However, user interests are diverse and dynamic, making this approach ineffective.
+For SDREC, it can efficiently learn and leverage item semantics through the Semantic Fusion
+Layer and produce high-quality recommendations. For example, after identifying Drama is the
+user’s main interest, the model can recommend Adventure and Romance (Category 3 and 5) that are
+semantically related to Drama.
+
+
+3 PROPOSED METHOD: SDREC
+
+
+SDREC includes a semantic encoder and a denoising decoder, cooperating with the contrastive loss
+served for item semantic learning and the KL Divergence loss served for next item distribution
+
+
+4
+
+
+(a) Cate counts for Drama (b) Cate counts for this user (c) Timestamp (Ground Truth)
+
+
+(d) Timestamp ( SD Rec) (e) Timestamp (DiffRec)
+
+
+(d) Timestamp ( SD Rec)
+
+
+learning. It is designed to effectively integrate item semantics into the diffusion process for accurate
+generation.
+
+
+3.1 MODEL DESIGN
+
+
+Figure 3 shows the Encoder-Decoder architecture of SDREC. The semantic encoder serves to convert
+historical item IDs into embeddings and extract the semantic correlations of items, generating a
+_D_ -dimensional conditional embedding _c_, which can also be considered as the representation of user
+interests. Based on the condition signal _c_ from the encoder, the decoder is utilized to reconstruct the
+distribution of the next item from a noisy input. Before the noisy input is passed to the denoising
+network, the embedding table from the encoder will be fed into the Semantic Fusion Layer
+to offer a global view of item semantics during the reverse diffusion process.
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+|`Embedding Layer`|`Embedding Layer`|`Embedding Layer`|
+
+
+Figure 3: **Model** **architecture** **overview.** A semantic encoder is leveraged to encode historical
+sequences into a conditional embedding _c_ . The decoder predicts the clean distribution of the next
+item _x_ ˆ0 based on noisy distribution _xt_ and conditional embedding _c_ . Meanwhile, the Semantic
+Fusion Layer is designed to efficiently inject item semantics into the diffusion process.
+
+
+**Semantic Encoder** User’s historical interacted items _i_ 1 _, i_ 2 _, · · ·_ _, im_, which are sorted in chronological order, are firstly fed into an embedding layer (i.e., embedding lookup table), producing
+_m D_ -dimensional item embeddings _e_ 1 _, e_ 2 _, · · ·_ _, em_ . Because of the inconsistency of the length of
+users’ historical sequences, we just consider the last _m_ items. Conversely, for sequences with less
+than _m_ items, padding tokens will be appended to reach the length of _m_ . Then, a Transformer
+encoder (Vaswani, 2017) is applied to extract the semantic correlation of items based on their cooccurrence. Since no noise is injected into the inputs, the encoder can learn item semantics with
+greater accuracy. Finally, the last non-pad token embedding from the outputs of the last Transformer
+layer will be treated as the conditional embedding _c_ . The above process can be described as below:
+
+
+_c_ = _fφ_ ( _i_ 1 _, i_ 2 _, · · ·_ _, im_ ) _._ (5)
+
+
+Note that the conditional embedding _c_ can also be regarded as the tight representation of user interests.
+
+
+**Denoising** **Decoder** Following the classifier-free conditional diffusion model (Ho & Salimans,
+2022), the decoder generates the distribution of the next item from a noisy one _xt_, guided by the
+conditional signal _c_ . Additionally, a Semantic Fusion Layer is designed to take advantage
+of accurate correlations and rich semantics of items from the encoder while preserving the inherent
+randomness in the diffusion model. Specifically, given a _N_ -dimensional noisy distribution _xt_, where
+_N_ is the total number of items in the dataset, we regard _xt_ as the attention score in the traditional
+
+
+5
+
+
+attention mechanism (i.e., _QK_ _[T]_ ), and the value (i.e., _V_ ) is the detached embedding table _E_ from the
+embedding layer of the encoder, which is _N_ _× D_ dimension. Then, we can perform the attention
+mechanism by:
+_Ot_ = _softmax_ ( _xt_ ) _×_ ( _WvE_ ) _,_ (6)
+where _Wv_ is the weight matrix in the linear layer. The output _Ot_ is a _D_ -dimensional vector which can
+be considered as the weighted sum of all item embeddings according to the input noisy distribution.
+
+
+By employing this layer, we can integrate global item semantics into the inputs of the denoising
+network, effectively addressing the issue of insufficient awareness of item correlations and semantics
+in the traditional diffusion recommenders. During the reverse diffusion process, the denoising
+network can refer to the rich semantics embedded in item embeddings to accurately guide the
+generation direction. Besides, the Semantic Fusion Layer compresses the distribution vector
+considering that typically _N_ _≫_ _D_, thus diminishing the input size for the final denoising network
+and consequently reducing computational costs.
+
+
+After that, we project the scalar diffusion timestep _t_ into a _D_ -dimensional embedding by sinusoidal
+function (Vaswani, 2017), together with the conditional embedding _c_ and the attention output
+_Ot_, producing a vector that contains both item attributes and noise degree. Subsequently, this
+concatenated vector is passed through a denoising network (i.e., MLP) to derive a refined clean next
+item distribution, denoted as _x_ ˆ0. The above process can be described as follows:
+
+
+_x_ ˆ0 = _fθ_ ( _xt, t, c, E_ ) _._ (7)
+
+
+With the comprehensive awareness of item semantics introduced by Semantic Fusion Layer,
+the decoder can reconstruct a more realistic and accurate distribution for the next item.
+
+
+3.2 TRAINING PHASE
+
+
+During training, we optimize the encoder and decoder simultaneously, with discriminative learning
+for the semantic encoder and generative learning for the denoising decoder.
+
+
+**Discriminative** **Learning** Compared to the generative methods, discriminate methods usually
+exhibit superior abilities to capture deterministic features (Bernardo et al., 2007). Thus, contrastive
+learning will be applied to the encoder output and the item embeddings, so that the embedding table
+_E_ will contain discriminant semantic information (e.g., semantic correlations). Specifically, we
+propose to align the conditional embedding _c_ with the next item embedding _e⋆_ :
+
+
+This loss minimizes the disparity between the output of the encoder and the embedding of the
+ground truth next item. Additionally, it brings similar items closer in the representation space, better
+reflecting their semantics and thus enabling the subsequent diffusion model to generate a more
+accurate distribution for the next item.
+
+
+**Generative Learning** During the generative learning, the decoder will recover the distribution of
+the next item based on the conditional signal _c_ and the item semantics injected by the Semantic
+Fusion Layer. In the forward process _q_ ( _xt|xt−_ 1), following the Eq.(2), Gaussian noise is added
+to the ground truth distribution _x_ 0, which is the one-hot encoding of the ground truth next item _i⋆_ .
+In the reverse process, instead of predicting the noise _ϵ_, we predict the distribution itself (i.e., _x_ ˆ0 in
+Eq.(7) ). Following Jin et al. (2023), we optimize the diffusion model by the KL Divergence loss:
+
+
+_LG_ = E( _x_ 0 _,c,t_ ) [KL ( _x_ 0 _∥fθ_ ( _xt, t, c, E_ ))] _._ (9)
+
+
+This loss maximizes the probability of the ground truth by bringing _fθ_ ( _xt, t, c, E_ ) and _x_ 0 closer.
+Since _LG_ focuses on optimizing the decoder, to stabilize the item representation during training, we
+use detach function to block the gradient propagation of the _LG_ to the embedding table _E_ .
+
+
+By integrating both the discrimination and generation training objectives, the comprehensive training
+loss of the entire model is the sum of _LD_ and _LG_ . Besides, to alleviate overfitting, we randomly replace the conditional signal _c_ by a zero vector with probability _pu_, which can be seen as unconditional
+training of the diffusion model. Algorithm 1 shows the details of the training phase.
+
+
+6
+
+
+_LD_ = E( _c,e⋆_ )
+
+
+- _−_ log exp( _c_ _[T]_ _· e⋆_ )
+
+  - _e∈E_ [exp(] _[c][T]_ _[·][ e]_ [)]
+
+
+_._ (8)
+
+
+**Algorithm 1** Training Phase
+
+
+1: **repeat**
+2: Sample user historical sequence _i_ 1 _, · · ·_ _, im, i⋆_ from training dataset _D_ .
+3: _c_ = _fφ_ ( _i_ 1 _, i_ 2 _, · · ·_ _, im_ )
+4: _e⋆_ = _fφ._ Emb( _i⋆_ )
+5: Compute _LD_ by Eq.(8).
+6: Sample _t ∼_ Uniform( _{_ 1 _,_ 2 _, · · ·_ _, T_ _}_ ).
+7: _x_ 0 = OneHot Encode( _i⋆_ )
+8: Compute _xt_ by Eq.(2).
+9: _E_ = _fφ._ Emb _._ weight _._ detach()
+10: With probability _pu_ : _c_ = **0** .
+11: Compute _LG_ by Eq.(9).
+12: Update _φ_ and _θ_ via loss _L_ = _LD_ + _LG_ .
+13: **until** converged
+
+
+3.3 SAMPLING PHASE
+
+
+In the sampling phase, the distribution of the next item will be recovered by the reverse denoising
+steps. Inspired by Yang et al. (2024), we first restrict the effect of the conditional signal _c_ at the
+beginning of denoising in order to provide more diverse results. We achieve this by designing a
+_reweight strategy_ to modify the decoder outputs:
+
+
+1 _t_
+_f_ ˜ _θ_ ( _xt, t, c, E_ ) = (10)
+1 + _t_ _[f][θ]_ [(] _[x][t][, t, c, E]_ [) +] 1 + _t_ _[f][θ]_ [(] _[x][t][, t,]_ **[ 0]** _[, E]_ [)] _[.]_
+
+
+During the early denoising phase (i.e., _t_ = _T_ ), higher _t_ limits the strength of the conditional signal _c_,
+avoiding undermining diffusion generalization. As the denoising step proceeds, gradually decreased _t_
+will guide the model to generate outputs aligned with user interests effectively. Compared to Yang
+et al. (2024), our reweight strategy does not require the tuning of the hyper-parameter and thus has
+better adaptability.
+
+
+Subsequently, following Eq.(3), the decoder will gradually recovers the distribution of the next item
+by the reverse process starting from a Gaussian noise _x_ ˜ _T_ _∼N_ ( **0** _,_ **I** ), which can be reparameterized
+as follows:
+
+
+where _t ∈{T, T_ _−_ 1 _, · · ·_ _,_ 1 _}_ . Algorithm 2 shows the details of the sampling phase. Once the final
+predicted distribution _x_ ˜0 is reconstructed, we firstly exclude items that have interacted within the
+user’s historical sequence and then select the TopK items with the highest probabilities in _x_ ˜0 to form
+the final recommendation list.
+
+
+**Algorithm 2** Sampling Phase
+
+
+1: Obtain user historical sequence _i_ 1 _, · · ·_ _, im_ from test dataset _Dt_ .
+2: _c_ = _fφ_ ( _i_ 1 _, i_ 2 _, · · ·_ _, im_ )
+3: _E_ = _fφ._ Emb _._ weight
+4: Sample _x_ ˜ _T_ _∼N_ ( **0** _,_ **I** ).
+5: **for** _t_ = _T, T_ _−_ 1 _, · · ·_ _,_ 1 **do**
+6: Compute _f_ [˜] _θ_ (˜ _xt, t, c, E_ ) by Eq.(10).
+7: Compute _x_ ˜ _t−_ 1 by Eq.(11).
+8: **end for**
+9: **return** _x_ ˜0
+
+
+4 EXPERIMENTS
+
+
+In this section, we will demonstrate that SDREC exhibits superior recommendation capabilities
+compared to state-of-the-art baselines. Furthermore, we highlight the significance of our design
+
+
+7
+
+
+_√_
+
+_α_ ¯ _t−_ 1 _βt_ _f_ ˜ _θ_ (˜ _xt, t, c, E_ ) + _αt_ (1 _−_ _α_ ¯ _t−_ 1)
+
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+_βtz,_ _z_ _∼N_ ( **0** _,_ **I** ) _,_ (11)
+1 _−_ _α_ ¯ _t_
+
+
+_√_
+_α_ ¯ _t−_ 1 _βt_
+_x_ ˜ _t−_ 1 =
+
+
+(1 _−_ _α_ ¯ _t−_ 1) ~~�~~ 1 _−_ _α_ ¯ _t−_ 1
+
+_x_ ˜ _t_ +
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+choices, including the Semantic Fusion Layer and contrastive learning, which play crucial
+roles in effectively integrating item semantics into diffusion model for enhanced recommendation.
+
+
+4.1 EXPERIMENT SETUP
+
+
+**Datasets** We use three real-world datasets to validate the performance of our model. 1) **Amazon**
+**Beauty** and 2) **Amazon Toys and Games** (He & McAuley, 2016; McAuley et al., 2015) are two
+categories of Amazon review datasets, which contain a collection of user-item interactions on Amazon.
+3) **Movielens-1M** (Harper & Konstan, 2015) is a widely used benchmark dataset that includes user
+ratings on movies. Following the data preprocessing method of the previous work (Kang & McAuley,
+2018; Sun et al., 2019; Li et al., 2023), we treat all reviews or ratings as implicit feedback (i.e., a
+user-item interaction), chronologically organize them by their timestamps and discard users and items
+with fewer than 5 related actions. The maximum sequence length is set to 200 for MovieLens-1M
+dataset, and 50 for the other two datasets. Besides, we adopt the _leave-one-out_ evaluation strategy,
+leaving out the last item for test, the second-to-last item for validation, and the rest for training. The
+statistics of the processed datasets can be found in Table 1.
+
+
+Table 1: **Statistics of three experimental datasets**
+
+|Dataset|Beauty Toys and Games Movielens|
+|---|---|
+|**#Users**<br>**#Items**<br>**#Interactions**<br>**Avg. interactions per user**<br>**#Train Sequences**|22,363<br>19,412<br>6,040<br>12,101<br>11,924<br>3,706<br>198,502<br>167,597<br>1,000,209<br>8.88<br>8.63<br>165.60<br>131,413<br>109,361<br>982,089|
+
+
+**Baselines** We evaluate SDREC against several representative sequential recommendation methods,
+including discriminative methods and generative methods. **GRU4Rec** (Hidasi et al., 2015), utilizes
+RNN to model the sequential behavior of users; **Caser** (Tang & Wang, 2018), devises horizontal and
+vertical CNN to exploit user’s recent sub-sequence behaviors; **SASRec** (Kang & McAuley, 2018),
+utilizes a Transformer encoder to model the implicit correlations between items; **BERT4Rec** (Sun
+et al., 2019), proposes to adopt a bidirectional Transformer for recommendation; **STOSA** (Fan
+et al., 2022), adopts a stochastic Transformer with Wasserstein self-attention as sequence encoder;
+**SVAE** (Sachdeva et al., 2019), uses a variational self-attention network to characterize the uncertainty
+of user preferences; **ACVAE** (Xie et al., 2021), adopts an adversarial and contrastive variational
+autoencoder to learn personalized characteristics; **DreamRec** (Yang et al., 2024), generates the oracle
+item embeddings via diffusion model without discriminative learning; **DiffuRec** (Li et al., 2023),
+utilizes diffusion method to model users’ multi-level interests; **DiffRec** (Wang et al., 2023), proposes
+to incorporate the diffusion model in collaborative filtering.
+
+
+**Implementation Details** Follow the _full-ranking protocol_ (He et al., 2020), we rank all the noninteracted items for each user. We evaluate all methods with two widely used metrics, H@K (Hit
+Rate) and N@K (Normalized Discounted Cumulative Gain), where _K_ = _{_ 10 _,_ 20 _}_ . The code is
+implemented in Python 3.9 and PyTorch 1.10.0 and runs on NVIDIA P100 GPU with CUDA 11.8.
+We fix the learning rate as 0 _._ 001, batch size as 1024 and unconditional diffusion training probability
+_pu_ as 0 _._ 4. We set the embedding dimension to 64 for the large dataset Movielens and 32 for the other
+two datasets. The number of diffusion steps is 32 and the noise schedule is linear across all datasets.
+More hyper-parameter settings and tuning range can be found in Appendix A.
+
+
+4.2 RESULTS
+
+
+**Overall Performance** Table 2 shows the overall results of our method against baseline models in
+terms of TopK recommendation. Compared to RNN-based method GRU4Rec and CNN-based method
+Caser, Transformer-based methods SASRec and BERT4Rec capture more complicated dependency
+relations and more complex item semantics, resulting in better recommendations. For generative
+approaches, diffusion-based methods DiffuRec, DiffRec and DreamRec achieve better performance
+
+
+8
+
+
+than VAE-based methods SVAE, ACVAE, and STOSA due to the strong fitting capabilities inherent
+in diffusion models. Meanwhile, our approach demonstrates notably enhanced performance across
+all datasets than all baselines. This superiority is attributed to our design, which effectively integrates
+item semantics into the diffusion process, allowing the denoising network to leverage the rich
+semantics embedded in item embeddings to accurately guide the generation direction. A visualized
+case provided in Figure 2 also demonstrates the strong ability of SDREC in leveraging the item
+semantics. We conducted additional evaluations on two more datasets. Due to space limitations, the
+results are provided in Appendix B.
+
+
+Table 2: **Overall recommendation results on three datasets.** All results are reported in %. The best
+results are in **boldface**, and the second-best are underlined. _[⋆]_ indicates the results are borrowed from
+(Li et al., 2023). “H” denotes _Hit Rate_ while “N” denotes _Normalized Discounted Cumulative Gain_ .
+SDREC was conducted three times with different random seeds.
+
+|Algorithms|Beauty|Toys and Games|Movielens|
+|---|---|---|---|
+|**Algorithms**|H@10<br>H@20<br>N@10<br>N@20|H@10<br>H@20<br>N@10<br>N@20|H@10<br>H@20<br>N@10<br>N@20|
+|**GRU4Rec**_⋆_<br>**Caser**_⋆_<br>**SASRec**_⋆_<br>**BERT4Rec**_⋆_<br>**STOSA**_⋆_<br>**SVAE**_⋆_<br>**ACVAE**_⋆_<br>**DreamRec**<br>**DiffRec**<br>**DiffuRec**_⋆_|1.94<br>3.85<br>0.90<br>1.38<br>2.82<br>4.41<br>1.36<br>1.76<br>6.27<br>8.98<br>3.23<br>3.66<br>3.72<br>5.79<br>1.83<br>2.35<br>6.21<br>9.59<br>3.21<br>3.76<br>1.98<br>3.15<br>0.99<br>1.29<br>3.88<br>6.12<br>2.14<br>2.70<br>4.32<br>5.06<br>2.84<br>3.03<br>6.25<br>8.51<br>3.55<br>4.14<br>7.91<br>11.11<br>4.75<br>5.56|1.86<br>3.18<br>0.94<br>1.27<br>1.83<br>2.95<br>0.85<br>1.13<br>6.55<br>9.23<br>3.75<br>4.33<br>2.93<br>4.59<br>1.49<br>1.90<br>6.94<br>9.51<br>3.88<br>4.38<br>1.36<br>1.92<br>0.71<br>0.85<br>3.08<br>4.41<br>1.85<br>2.18<br>4.74<br>5.32<br>3.23<br>3.38<br>6.57<br>8.68<br>3.88<br>4.41<br>7.46<br>9.84<br>4.77<br>5.37|10.17<br>18.70<br>4.68<br>6.82<br>13.38<br>22.55<br>6.14<br>8.43<br>16.89<br>28.32<br>7.73<br>10.60<br>20.57<br>29.95<br>11.13<br>13.48<br>14.39<br>24.99<br>6.08<br>8.72<br>2.72<br>5.03<br>1.23<br>1.83<br>19.93<br>28.97<br>10.54<br>12.82<br>20.66<br>27.60<br>12.28<br>14.03<br>11.84<br>19.93<br>6.06<br>8.11<br>26.27<br>36.79<br>14.79<br>17.44|
+|**SDREC**|**8.62**_±_**.33**<br>**11.81**_±_**.32**<br>**5.27**_±_**.19**<br>**6.07**_±_**.21**|**9.45**_±_**.18**<br>**12.34**_±_**.18**<br>**6.12**_±_**.15**<br>**6.85**_±_**.23**|**32.38**_±_**.77**<br>**42.83**_±_**.43**<br>**18.89**_±_**.55**<br>**21.51**_±_**.28**|
+
+
+**Ablation Study** To verify the effectiveness of each design choice of SDREC, we perform four
+ablation experiments, shown in Table 3. The removal of the contrastive loss (w/o discriminative
+learning) leads to a significant decline in results. This is mainly due to the lack of constraints
+on item representation learning results in inaccurate item semantics, and thus the direction of
+the denoising process becomes blurred. After replacing the Semantic Fusion Layer to a
+linear layer which simply reduces the dimension from _N_ to _D_ (w/o Semantic Fusion Layer), the
+performance drops substantially due to the lack of a comprehensive awareness of item semantics
+during the reverse denoising process. Hence, the Semantic Fusion Layer plays a crucial role
+in enhancing recommendation performance. Besides, the absence of unconditional training and
+sampling (w/o unconditional training and reweight sample) will induce overfitting, leading to a drop
+in recommendation performance. However, for Beauty dataset, whether unconditional training is
+introduced has little impact on performance. This is because we trained relatively fewer steps on this
+dataset (see Table 5), resulting in a less pronounced overfitting phenomenon.
+
+
+Table 3: **Ablation results on three datasets.** All results are reported in %. The best results are in
+**boldface** . “H” denotes _Hit Rate_ while “N” denotes _Normalized Discounted Cumulative Gain_ .
+
+|Settings|Beauty|Toys and Games|Movielens|
+|---|---|---|---|
+|**Settings**|H@10<br>N@10|H@10<br>N@10|H@10<br>N@10|
+|**w/o discriminative learning**<br>**w/o Semantic Fusion Layer**<br>**w/o unconditional training**<br>**w/o reweight sample**|6.82<br>4.41<br>6.27<br>3.48<br>8.61<br>**5.30**<br>8.43<br>5.25|7.55<br>4.97<br>7.46<br>4.53<br>9.23<br>5.96<br>9.33<br>6.03|31.65<br>18.59<br>20.65<br>11.16<br>31.84<br>18.60<br>31.92<br>18.49|
+|**original**|**8.62**<br>5.27|**9.45**<br>**6.12**|**32.38**<br>**18.89**|
+
+
+**Impact of Hyper-parameters** We evaluate the recommendation results of SDREC on different
+diffusion steps, noise schedules, and unconditional training probabilities _pu_ . Figure 4 shows the
+results for Beauty dataset. As we can see, small diffusion steps (i.e., 8) notably hurt the performance.
+As the diffusion steps increase (i.e. _≥_ 16), we observe a discernible improvement in performance,
+while more diffusion steps won’t have much impact. As for the noise schedules, we observe that the
+
+
+9
+
+
+linear schedule consistently yields the most favorable results, while the truncated linear and square
+root schedules offer slightly worse performance compared to the linear schedule. Conversely, the
+cosine and truncated cosine schedules have exhibited notably inferior results in our experiments.
+Finally, our experiments show that setting unconditional training probabilities _pu_ to 0.4 achieves the
+best recommendation performance. The other two dataset results are in Appendix C.
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||~~baseline~~||
+|||||||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||~~baseline~~||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||baseline||
+||||||
+
+
+Figure 4: **Impact of some hyper-parameters.** Results for SDREC on **Beauty** dataset with different
+diffusion steps, noise schedules, and unconditional training probabilities _pu_ . “H” denotes _Hit Rate_ .
+Baseline is **DiffuRec** (Li et al., 2023).
+
+
+**Inference Efficiency** Due to the latency limitation for online systems, the inference speed is crucial
+for recommenders. Therefore, we compare the total inference time of three state-of-the-art diffusion
+recommenders on the test split of three datasets, shown in Table 4. For a fair comparison, we set
+the batch size to 1024 for all datasets and algorithms. Note that the batch size for DiffuRec on
+Movielens is set to 512 due to the GPU memory limitations. DreamRec takes the longest inference
+time due to its large embedding dimensionality (i.e., _>_ 1024) and extensive diffusion steps (i.e.,
+
+_>_ 500) required for favourable results. In contrast, DiffuRec employs a much smaller embedding
+dimensionality (i.e., 128) and achieves superior inference speed. DiffRec applies a smaller network
+(i.e., MLP) compared to the four-layer Transformer encoder of DiffuRec, further reducing inference
+time. Our method accelerates the inference even more by utilizing Semantic Fusion Layer,
+reducing the _N_ -dimensional distribution vector to a _D_ -dimensional vector before passing it through
+the denoising network. This reduction significantly cuts down computational complexity.
+
+
+Table 4: **Inference time on test split of three datasets.** The best results are in **boldface** .
+
+|Algorithms|Beauty Toys and Games Movielens|
+|---|---|
+|**DreamRec** (Yang et al., 2024)<br>**DiffRec** (Wang et al., 2023)<br>**DiffuRec** (Li et al., 2023)|283.42s<br>239.70s<br>74.37s<br>10.33s<br>9.35s<br>1.47s<br>82.47s<br>70.34s<br>113.31s|
+|**SDREC**|**7.51s**<br>**6.37s**<br>**1.31s**|
+
+
+5 CONCLUSION AND LIMITATIONS
+
+
+In this paper, we propose SDREC, a semantic-aware diffusion model for sequential recommendation
+which can efficiently leverage the item semantics during the diffusion process. Inspired by the
+attention mechanism, we designed the Semantic Fusion Layer. In this layer, the embedding
+table is weighted by the noisy input distribution, allowing the reverse denoising process aware
+of the item semantics comprehensively. Combined with contrastive learning, which constraints
+the embedding table to learn discriminant information, SDREC will better extract item semantics
+contained in the embeddings. Experiments demonstrate promise gain compared with existing methods.
+Furthermore, as SDREC shows efficient inference speed, it is friendly to online services.
+
+
+However, there is still a limitation for SDREC. The current model structure is based on a fixed
+candidate set, which is not suitable for handling new items in real recommendation scenarios. We
+believe that advanced methods for cold start scenarios will mitigate this problem, which also provides
+new research opportunities for future work.
+
+
+10
+
+
+0.2 0.4 0.6 0.8
+pu
+
+
+8.5
+
+
+8.0
+
+
+7.5
+
+
+7.0
+
+
+8 16 32 64 128
+diffusion steps
+
+
+8.5
+
+
+8.0
+
+
+7.5
+
+
+cosine
+noise schedule
+
+
+8.6
+
+
+8.4
+
+
+8.2
+
+
+8.0
+
+
+linear truncated
+
+
+sqrt cosine truncated
+
+
+linear
+
+
+REFERENCES
+
+
+Gabriel Ben´ edict,´ Olivier Jeunen, Samuele Papa, Samarth Bhargav, Daan Odijk, and Maarten
+de Rijke. Recfusion: A binomial diffusion process for 1d data for recommendation. _arXiv preprint_
+_arXiv:2306.08947_, 2023.
+
+
+JM Bernardo, MJ Bayarri, JO Berger, AP Dawid, D Heckerman, AFM Smith, and M West. Generative
+or discriminative? getting the best of both worlds. _Bayesian statistics_, 8(3):3–24, 2007.
+
+
+Homanga Bharadhwaj, Homin Park, and Brian Y Lim. Recgan: recurrent generative adversarial networks for recommendation systems. In _Proceedings of the 12th ACM Conference on Recommender_
+_Systems_, pp. 372–376, 2018.
+
+
+Qiwei Chen, Huan Zhao, Wei Li, Pipei Huang, and Wenwu Ou. Behavior sequence transformer for
+e-commerce recommendation in alibaba. In _Proceedings of the 1st international workshop on deep_
+_learning practice for high-dimensional sparse data_, pp. 1–4, 2019.
+
+
+Paul Covington, Jay Adams, and Emre Sargin. Deep neural networks for youtube recommendations.
+In _Proceedings of the 10th ACM conference on recommender systems_, pp. 191–198, 2016.
+
+
+Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. _Advances_
+_in neural information processing systems_, 34:8780–8794, 2021.
+
+
+Ziwei Fan, Zhiwei Liu, Yu Wang, Alice Wang, Zahra Nazari, Lei Zheng, Hao Peng, and Philip S
+Yu. Sequential recommendation via stochastic self-attention. In _Proceedings of the ACM Web_
+_Conference 2022_, pp. 2036–2047, 2022.
+
+
+Shansan Gong, Mukai Li, Jiangtao Feng, Zhiyong Wu, and LingPeng Kong. Diffuseq: Sequence to
+sequence text generation with diffusion models. _arXiv preprint arXiv:2210.08933_, 2022.
+
+
+Bin Hao, Min Zhang, Weizhi Ma, Shaoyun Shi, Xinxing Yu, Houzhi Shan, Yiqun Liu, and Shaoping
+Ma. A large-scale rich context query and recommendation dataset in online knowledge-sharing.
+_arXiv preprint arXiv:2106.06467_, 2021.
+
+
+F Maxwell Harper and Joseph A Konstan. The movielens datasets: History and context. _Acm_
+_transactions on interactive intelligent systems (tiis)_, 5(4):1–19, 2015.
+
+
+Ruining He and Julian McAuley. Ups and downs: Modeling the visual evolution of fashion trends
+with one-class collaborative filtering. In _proceedings of the 25th international conference on world_
+_wide web_, pp. 507–517, 2016.
+
+
+Xiangnan He, Kuan Deng, Xiang Wang, Yan Li, Yongdong Zhang, and Meng Wang. Lightgcn:
+Simplifying and powering graph convolution network for recommendation. In _Proceedings of the_
+_43rd International ACM SIGIR conference on research and development in Information Retrieval_,
+pp. 639–648, 2020.
+
+
+Balazs Hidasi and Alexandros Karatzoglou.´ Recurrent neural networks with top-k gains for sessionbased recommendations. In _Proceedings of the 27th ACM international conference on information_
+_and knowledge management_, pp. 843–852, 2018.
+
+
+Balazs´ Hidasi, Alexandros Karatzoglou, Linas Baltrunas, and Domonkos Tikk. Session-based
+recommendations with recurrent neural networks. _arXiv preprint arXiv:1511.06939_, 2015.
+
+
+Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. _arXiv preprint arXiv:2207.12598_,
+2022.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Peng Jin, Hao Li, Zesen Cheng, Kehan Li, Xiangyang Ji, Chang Liu, Li Yuan, and Jie Chen.
+Diffusionret: Generative text-video retrieval with diffusion model. In _Proceedings of the IEEE/CVF_
+_international conference on computer vision_, pp. 2470–2481, 2023.
+
+
+Wang-Cheng Kang and Julian McAuley. Self-attentive sequential recommendation. In _2018 IEEE_
+_international conference on data mining (ICDM)_, pp. 197–206. IEEE, 2018.
+
+
+11
+
+
+Xiang Li, John Thickstun, Ishaan Gulrajani, Percy S Liang, and Tatsunori B Hashimoto. Diffusion-lm
+improves controllable text generation. _Advances in Neural Information Processing Systems_, 35:
+4328–4343, 2022.
+
+
+Zihao Li, Aixin Sun, and Chenliang Li. Diffurec: A diffusion model for sequential recommendation.
+_ACM Transactions on Information Systems_, 42(3):1–28, 2023.
+
+
+Xiao Lin, Xiaokai Chen, Chenyang Wang, Hantao Shu, Linfeng Song, Biao Li, et al. Discrete
+conditional diffusion for reranking in recommendation. _arXiv preprint arXiv:2308.06982_, 2023.
+
+
+Julian McAuley, Christopher Targett, Qinfeng Shi, and Anton Van Den Hengel. Image-based
+recommendations on styles and substitutes. In _Proceedings of the 38th international ACM SIGIR_
+_conference on research and development in information retrieval_, pp. 43–52, 2015.
+
+
+The ACM Conference Series on Recommender Systems. Recsys challenge 2015, 2015. [https:](https://recsys.acm.org/recsys15/challenge/)
+[//recsys.acm.org/recsys15/challenge/.](https://recsys.acm.org/recsys15/challenge/)
+
+
+Ruiyang Ren, Zhaoyang Liu, Yaliang Li, Wayne Xin Zhao, Hui Wang, Bolin Ding, and Ji-Rong Wen.
+Sequential recommendation with self-attentive multi-adversarial network. In _Proceedings of the_
+_43rd international ACM SIGIR conference on research and development in information retrieval_,
+pp. 89–98, 2020.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bjorn¨ Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+Noveen Sachdeva, Giuseppe Manco, Ettore Ritacco, and Vikram Pudi. Sequential variational
+autoencoders for collaborative filtering. In _Proceedings of the twelfth ACM international conference_
+_on web search and data mining_, pp. 600–608, 2019.
+
+
+Tim Salimans, Ian Goodfellow, Wojciech Zaremba, Vicki Cheung, Alec Radford, and Xi Chen.
+Improved techniques for training gans. _Advances in neural information processing systems_, 29,
+2016.
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _International conference on machine learning_,
+pp. 2256–2265. PMLR, 2015.
+
+
+Fei Sun, Jun Liu, Jian Wu, Changhua Pei, Xiao Lin, Wenwu Ou, and Peng Jiang. Bert4rec: Sequential
+recommendation with bidirectional encoder representations from transformer. In _Proceedings of the_
+_28th ACM international conference on information and knowledge management_, pp. 1441–1450,
+2019.
+
+
+Jiaxi Tang and Ke Wang. Personalized top-n sequential recommendation via convolutional sequence
+embedding. In _Proceedings of the eleventh ACM international conference on web search and data_
+_mining_, pp. 565–573, 2018.
+
+
+Arash Vahdat and Jan Kautz. Nvae: A deep hierarchical variational autoencoder. _Advances in neural_
+_information processing systems_, 33:19667–19679, 2020.
+
+
+A Vaswani. Attention is all you need. _Advances in Neural Information Processing Systems_, 2017.
+
+
+Wenjie Wang, Yiyan Xu, Fuli Feng, Xinyu Lin, Xiangnan He, and Tat-Seng Chua. Diffusion
+recommender model. In _Proceedings of the 46th International ACM SIGIR Conference on Research_
+_and Development in Information Retrieval_, pp. 832–841, 2023.
+
+
+Zhe Xie, Chengxuan Liu, Yichi Zhang, Hongtao Lu, Dong Wang, and Yue Ding. Adversarial and
+contrastive variational autoencoder for sequential recommendation. In _Proceedings of the Web_
+_Conference 2021_, pp. 449–459, 2021.
+
+
+Zhengyi Yang, Jiancan Wu, Zhicai Wang, Xiang Wang, Yancheng Yuan, and Xiangnan He. Generate
+what you prefer: Reshaping sequential recommendation via guided diffusion. _Advances in Neural_
+_Information Processing Systems_, 36, 2024.
+
+
+12
+
+
+Fajie Yuan, Alexandros Karatzoglou, Ioannis Arapakis, Joemon M Jose, and Xiangnan He. A simple
+convolutional generative network for next item recommendation. In _Proceedings of the twelfth_
+_ACM international conference on web search and data mining_, pp. 582–590, 2019.
+
+
+Guorui Zhou, Xiaoqiang Zhu, Chenru Song, Ying Fan, Han Zhu, Xiao Ma, Yanghui Yan, Junqi Jin,
+Han Li, and Kun Gai. Deep interest network for click-through rate prediction. In _Proceedings_
+_of the 24th ACM SIGKDD international conference on knowledge discovery & data mining_, pp.
+1059–1068, 2018.
+
+
+A SETTINGS OF HYPER-PARAMETERS FOR SDREC
+
+
+We tuned the learning rate across the range of [0.0001, 0.001, 0.005, 0.01]; the embedding dimension
+was explored within [16, 32, 64, 128]; the number of encoding layers were tuned between [1, 2,
+4]; the number of diffusion steps were explored in the range of [8, 16, 32, 64, 128]; the diffusion
+noise schedule options included [linear, cosine, sqrt, truncated linear, truncated cosine]; and the
+unconditional training probability was tested within [0, 0.2, 0.4, 0.6, 0.8].
+
+
+The final hyper-parameter settings of SDREC for the three experimental datasets are shown in Table 5.
+
+
+Table 5: **Hyper-parameter settings of SDREC for three experimental datasets**
+
+|Dataset|Beauty Toys and Games Movielens|
+|---|---|
+|**learning rate**<br>**training steps**<br>**batch size**<br>_pu_|0.001<br>0.001<br>0.001<br>77400 (600 epochs)<br>107000 (1000 epochs)<br>480000 (500 epochs)<br>1024<br>1024<br>1024<br>0.4<br>0.4<br>0.4|
+|**#encoder layers**<br>**#attention heads**<br>**hidden dimension**<br>**dropout ratio**|2<br>1<br>2<br>4<br>4<br>4<br>32<br>32<br>64<br>0.3<br>0.5<br>0.3|
+|**diffusion steps**<br>**noise schedule**|32<br>32<br>32<br>linear<br>linear<br>linear|
+
+
+B RECOMMENDATION PERFORMANCE ON MORE DATASETS
+
+
+Table 6: **Recommendation results on two more datasets.** The best results are in **boldface**, and
+the second-best are underlined. _[⋆]_ indicates the results are borrowed from (Yang et al., 2024). “H”
+denotes _Hit Rate_ while “N” denotes _Normalized Discounted Cumulative Gain_ .
+
+|Algorithms|YooChoose|Zhihu|
+|---|---|---|
+|**Algorithms**|H@20(%)<br>N@20(%)|H@20(%)<br>N@20(%)|
+|**GRU4Rec**_⋆_(Hidasi et al., 2015)<br>**Caser**_⋆_(Tang & Wang, 2018)<br>**SASRec**_⋆_(Kang & McAuley, 2018)<br>**DreamRec**_⋆_(Yang et al., 2024)<br>**DiffRec**_⋆_(Wang et al., 2023)<br>**DiffuRec** (Li et al., 2023)|3.89_±_.11<br>1.62_±_.02<br>4.06_±_.12<br>1.88_±_.09<br>3.68_±_.08<br>1.63_±_.02<br>4.78_±_.06<br>2.23_±_.02<br>4.33_±_.02<br>1.84_±_.01<br>4.72_±_.10<br>2.40_±_.05|1.78_±_.12<br>0.67_±_.03<br>1.57_±_.05<br>0.59_±_.01<br>1.62_±_.01<br>0.60_±_.03<br>2.26_±_.07<br>0.79_±_.01<br>1.82_±_.03<br>0.65_±_.09<br>1.58_±_.15<br>0.58_±_.05|
+|**SDREC**|**4.92**_±_**.08**<br>**2.54**_±_**.02**|**2.52**_±_**.14**<br>**0.91**_±_**.04**|
+
+
+13
+
+
+To fully test the performance of SDREC, we additionally evaluate the recommendation results on
+two more datasets: 1) **YooChoose** from RecSys Challenge 2015 (on Recommender Systems, 2015)
+and we use the purchase sequences of the medium size data; 2) **Zhihu** (Hao et al., 2021) which is
+collected from a socialized knowledge Q&A platform. These two datasets are processed and split
+according to (Yang et al., 2024).
+
+
+We train SDREC on YooChoose dataset for 300 epochs, with _pu_ = 0 _._ 2 and truncated linear schedule.
+Other hyper-parameters remain consistent with those of Beauty dataset as Table 5 shows. For Zhihu
+dataset, we adopt the same hyper-parameters used for Toys and Games dataset except that the learning
+rate is set to 0.0005, training epochs are set to 300 and the batch size is set to 256.
+
+
+The recommendation results for the above two datasets are reported in Table 6. As demonstrated,
+SDREC outperforms all baselines, showing the high efficiency of our design.
+
+
+C MORE RESULTS FOR THE IMPACT OF HYPER-PARAMETERS
+
+
+Figure 5 and Figure 6 illustrate the impact of some hyper-parameters for SDREC on Toys and Games
+and Movielens datasets.
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+||||baseline|
+|||||
+|||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||~~baseline~~||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||baseline||
+||||||
+
+
+|Col1|Col2|Col3|Col4|
+|---|---|---|---|
+||||baseline|
+|||||
+|||||
+|||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||baseline||
+|||||||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||baseline||
+
+
+Figure 6: **Impact** **of** **some** **hyper-parameters.** Results for SDREC on **Movielens** dataset with
+different diffusion steps, noise schedules, and unconditional training probabilities _pu_ . “H” denotes
+_Hit Rate_ . Baseline is **DiffuRec** (Li et al., 2023).
+
+
+The choice of unconditional training probability _pu_ does not exert a significant impact on these two
+datasets. This is mainly because of the large number of training steps for these two datasets as Table 5
+shows. Consequently, even if _pu_ is increased, the sufficient number of conditional training steps
+ensures the attainment of favorable results.
+
+
+14
+
+
+0.2 0.4 0.6 0.8
+pu
+
+
+9
+
+
+8
+
+
+7
+
+
+8 16 32 64 128
+diffusion steps
+
+
+9.5
+
+
+9.0
+
+
+8.5
+
+
+8.0
+
+
+7.5
+
+
+cosine
+noise schedule
+
+
+9.5
+
+
+9.0
+
+
+8.5
+
+
+8.0
+
+
+7.5
+
+
+linear truncated
+
+
+sqrt cosine truncated
+
+
+linear
+
+
+Figure 5: **Impact of some hyper-parameters.** Results for SDREC on **Toys and Games** dataset with
+different diffusion steps, noise schedules, and unconditional training probabilities _pu_ . “H” denotes
+_Hit Rate_ . Baseline is **DiffuRec** (Li et al., 2023).
+
+
+0.2 0.4 0.6 0.8
+pu
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+8 16 32 64 128
+diffusion steps
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+cosine
+noise schedule
+
+
+linear truncated
+
+
+sqrt cosine truncated
+
+
+32
+
+
+30
+
+
+28
+
+
+26
+
+
+linear

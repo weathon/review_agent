@@ -1,0 +1,3864 @@
+# TRAINING FREE GUIDED FLOW MATCHING WITH OP## TIMAL CONTROL
+
+
+**Luran Wang** [1] **,** **Chaoran Cheng** [2] **,** **Yizhen Liao** [3] **,** **Yanru Qu** [2] **,** **Ge liu** [2]
+
+1University of Cambridge
+2University of Illinois Urbana-Champaign
+3Tsinghua University
+lw703@cam.ac.uk, chaoran7@illinois.edu
+liaoyz0711@gmail.com, yanruqu2@illinois.edu
+geliu@illinois.edu
+
+
+ABSTRACT
+
+
+Controlled generation with pre-trained Diffusion and Flow Matching models has
+vast applications. One strategy for guiding ODE-based generative models is
+through optimizing a target reward _R_ ( _x_ 1) while staying close to the prior distribution. Along this line, some recent work showed the effectiveness of guiding
+flow model by differentiating through its ODE sampling process. Despite the
+superior performance, the theoretical understanding of this line of methods is still
+preliminary, leaving space for algorithm improvement. Moreover, existing methods
+predominately focus on Euclidean data manifold, and there is a compelling need for
+guided flow methods on complex geometries such as SO(3), which prevails in highstake scientific applications like protein design. We present OC-Flow, a general
+and theoretically grounded training-free framework for guided flow matching using
+optimal control. Building upon advances in optimal control theory, we develop
+effective and practical algorithms for solving optimal control in guided ODE-based
+generation and provide a systematic theoretical analysis of the convergence guarantee in both Euclidean and SO(3). We show that existing backprop-through-ODE
+methods can be interpreted as special cases of Euclidean OC-Flow. OC-Flow
+achieved superior performance in extensive experiments on text-guided image
+manipulation, conditional molecule generation, and all-atom peptide design.
+
+
+1 INTRODUCTION AND RELATED WORK
+
+
+SDE and ODE-based generative models such as diffusion and continuous normalizing flow (CNF)
+have exhibited excellent performance on various domains such as images (Ho et al., 2020; Esser
+et al., 2024), audio (Zhang et al., 2023; Défossez et al., 2022), and discrete data (Lou et al., 2023;
+Cheng et al., 2024). Particularly, the simplicity of Riemannian Flow Matching on SO(3) manifold
+(Chen & Lipman, 2023) empowers _de novo_ generation of small molecules (Song et al., 2024; Xu
+et al., 2023) and proteins (Yim et al., 2023; Bose et al., 2023; Li et al., 2024), leading to enormous
+advancement in biomedicine. Controlled generation from pre-trained diffusion and flow matching
+priors has gained growing interest in numerous fields, as it encompasses a wide range of practical
+tasks including constrained generation (Giannone et al., 2023), solving inverse problems (Liu et al.,
+2023; Ben-Hamu et al., 2024), and instruction alignment (Black et al., 2023; Esser et al., 2024).
+
+
+There are several lines of work for guiding diffusion and flow models. Classifier-free guidance (CFG)
+(Ho & Salimans, 2022) trains conditional generative models that take conditions as input. Reward
+fine-tuning approaches update the generative model parameters to align with certain target objective
+functions (Black et al., 2023). Both methods require specialized training routines, which are costly
+and not extendable to new tasks. Training-free guidance on diffusion (Kawar et al., 2022; Chung
+et al., 2024; Song et al., 2023) alters the scores in the SDE generation process with the gradients from
+the target function to achieve posterior sampling. These guidances often rely on strong assumptions
+of the denoising process and require estimating target function gradients w.r.t noised samples which
+are often intractable. Accurate posterior sampling is only guaranteed for a limited family of objective
+functions such as linear. Therefore, efforts that deploy such guidance to flow models by bridging the
+ODE path and SDE path share similar constraints (Pokle et al., 2023; Yim et al., 2024).
+
+
+1
+
+
+Notably, two recent works showed the effectiveness of guiding pre-trained flow models by differentiating through the ODE sampling process, outperforming popular guidance-based approaches.
+Particularly, Ben-Hamu et al. (2024) differentiates a loss _R_ ( _x_ ) through the forward-ODE w.r.t the initial noise _x_ 0, which induces implicit regularization by projecting the gradient onto the “data manifold”
+under Gaussian path assumption. This strong confinement to the prior might hinder optimization
+when the target reward function diverges from the prior distribution. Liu et al. (2023) formulates
+an optimal control problem where a control term _ut_ at each timestep is solved to guide the ODE
+trajectory. However, the gradient decomposition trick used in Liu et al. (2023) ignores the running
+cost of control terms and thus could lead to suboptimal behavior. Despite the good performance, there
+is a lack of systematic theoretical analysis on the convergence behavior and explicit regularization of
+the differentiate-through-ODE approaches to better guide algorithm design in this space. Furthermore,
+existing works predominantly focus on the Euclidean manifold due to its simplicity, and there is a
+compelling need for a theoretically grounded guided flow matching framework on more complex
+geometries such as SO(3) which is heavily used in scientific applications.
+
+
+To fill the gap between the practical applications of guided generation and theoretical grounds, we
+propose OC-Flow, a general, practical, and theoretically grounded framework for training-free guided
+flow matching under optimal control formulation. Our key contributions are as follows:
+
+
+1. We formulate “controlled generation with pre-trained ODE-based priors” as an **optimal control**
+problem with a _control term ut_ and a _running cost_ that regulates the trajectory proximity to the prior
+model while optimizing for target loss. Building upon advances in optimal control theory, we develop
+effective optimization algorithms for **both Euclidean and SO(3) space** through iterative updates of a
+_co-state flow_ and control term, with **theoretical guarantees** under continuous-time formulation.
+
+
+2. In Euclidean space, we show that **running cost bounds the KL divergence** between prior and
+OC-Flow-induced joint distribution. We develop a simple algorithm for OC-Flow through iterative
+gradient update and provide convergence analysis. We further demonstrate that Dflow and Flow-grad
+can be interpreted as special cases of Euclidean OC-Flow, **providing a unified view** of the problem.
+
+
+3. We present one of the first guided flow-matching algorithm on the SO(3) manifold with theoretical
+grounds. Our approach extends the Extended Method of Successive Approximations (E-MSA) to
+SO(3) with a rigorous convergence analysis. Additionally, we propose approximation techniques to
+enable computationally **efficient OC-Flow on** SO(3).
+
+
+4. We provide an efficient and practical implementation of OC-Flow, by introducing the vectorJacobian product and asynchronous update scheme. We show the effectiveness of our method with
+extensive empirical experiments, including **text-guided image manipulation**, controllable generation
+of **small molecules** on QM9, and energy optimization of flow-based **all-atom peptide design** .
+
+
+2 PRELIMINARIES AND PERSPECTIVES ABOUT FLOW MATCHING
+
+
+**Euclidean Flow Matching.** Flow matching (Lipman et al., 2022; Liu et al., 2022) provides an
+efficient framework for training a generative model by approximating the time-dependent vector field
+associated with the flow represented as _ψt_ : [0 _,_ 1] _×_ R _[d]_ _→_ R _[d]_ . This vector field _ut_ : [0 _,_ 1] _×_ R _[d]_ _→_ R _[d]_
+defines a probability path of the evolution of an initial noise distribution, denoted by _p_ 0, towards
+a target distribution, _p_ 1, with the pushforward probability as _pt_ := ( _ψt_ ) _∗p_ 0. The dynamics of the
+vector field that governs this flow can be described by the flow ordinary differential equation (ODE)
+of the form _x_ ˙ _t_ = _ut_ ( _xt_ ), where we follow the convention to use Newton’s notation with respect
+to time _t_ and the state at time _t_ is given by _xt_ := _ψt_ ( _x_ 0). Lipman et al. (2022) demonstrates
+that a tractable flow matching objective can be obtained by conditioning on the target data _x_ 1.
+The primary goal of conditional flow matching is to train a model, _ft_ _[p]_ [:] [[0] _[,]_ [ 1]] _[ ×]_ [ R] _[d]_ _[→]_ [R] _[d]_ [,] [such]
+that it minimizes the difference between its output and the ground truth conditional vector field as
+_L_ CFM = E _t,p_ ( _x_ 0 _,x_ 1) _∥ft_ _[p]_ [(] _[x][t]_ [)] _[ −]_ _[u][t]_ [(] _[x][t]_ _[|]_ _[x]_ [1] _[, x]_ [0][)] _[∥]_ [2][.] [The] [trained] [model] _[f][ p]_ [can] [be] [employed] [as] [the]
+marginal vector field during the inference phase. In this context, once a noise sample _x_ 0 is drawn, the
+system’s evolution can be described by the following differential equation:
+
+_x_ ˙ _t_ = _ft_ _[p]_ [(] _[x][t]_ [)] _[,]_ _x_ 0 _∼_ _p_ 0( _x_ ) _._ (1)
+
+
+**Rotation Group SO(3).** The formulation of flow matching can naturally extend to Riemannian
+manifolds (Chen & Lipman, 2023). On the Riemannian manifold, a flow is defined as a timedependent diffeomorphisms _φt_ : _G →_ _G_, which describe the continuous evolution of points on the
+
+
+2
+
+
+Figure 1: Comparison of backpropagation-through-ODE algorithms. For D-Flow (left) and FlowGrad
+(middle), the black curves represent the state trajectory at the _k_ -th iteration, while the red curves show
+the updated trajectories at the ( _k_ + 1)-th iteration, using gradient updates (blue dashed arrows). DFlow updates the state at _t_ 0 only, while FlowGrad propagates updates across all time steps. OC-Flow
+(right) incorporates the running cost and reward-weighting factor _α_ into the terminal reward. The
+co-state flow _µt_ (green curves) combines gradient information and system dynamics to iteratively
+update the control terms _{θt}_, which in turn updates the states.
+
+
+manifold over time, generated by a vector field _V_, with _V_ ( _p_ ) _∈_ _TpG_ for each _p_ _∈_ _G_ where _Tp_ is
+the tangent space at point _p_ _∈_ _G_ . The flow evolves according to: d [d] _t_ _[x][t]_ [=] _[V]_ [ (] _[x][t]_ [)] [=] _[L][x][t][V]_ [ (] _[e]_ [)][.] [The]
+
+CFM objective in Equation 1 can also be adapted for Riemannian flow matching, in which the ground
+truth vector field can be calculated as the time derivative using the exponential and logarithm maps.
+Details about rotation group SO(3) can be found in Appendix A. In this work, we focus specifically
+on the SO(3), the Riemannian manifold of all 3D rotations equipped with the canonical Frobenius
+inner product. In previous flow-based protein design models, each amino acid is associated with a
+rotation that defines its orientation (Yim et al., 2023; Bose et al., 2023; Li et al., 2024). Guiding such
+pre-trained generative models toward the desirable protein properties can potentially have a profound
+impact on the pharmaceutical industry.
+
+
+3 OPTIMAL CONTROL FRAMEWORK FOR GUIDED FLOW MATCHING
+
+
+The key challenge in guided generation is balancing optimization and faithfulness to the prior
+distribution. To address such a need, we propose the following framework. Given a pre-trained flow
+model, _ft_ _[p]_ [(] _[x]_ [)][, parameterized by a neural network, our goal is to determine the optimal control terms]
+_θt_ that maximize the reward _R_ ( _x_ ) while maintaining the proximity of the resulting vector field to
+the original vector field induced by _ft_ _[p]_ [(] _[x]_ [)][.] [The reward can be customized for diverse tasks such]
+as inverse problem _R_ = _∥H_ ( _x_ ) _−_ _y∥_ [2], conditional generation _R_ = ( _f_ ( _x_ ) _−_ _c_ ) [2], and constrained
+generation _R_ = _∥x −_ _y∥_ [2] . To ensure proximity, we incorporate a penalty on the state trajectory or
+control terms �0 _T_ _[L]_ [(] _[θ][t]_ [)][, also known as the] _[ running cost]_ [.] [Optionally, one may also introduce a metric]
+_d_ ( _·, ·_ ) to penalize the deviation between the new terminal state _x_ _[θ]_ 1 [and the prior terminal state] _[ x]_ 1 _[p]_ [.]
+The modified terminal reward function is then defined as: Φ( _x_ _[θ]_ 1 [) =] _[ R]_ [(] _[x][θ]_ 1 [)] _[ −]_ _[d]_ [(] _[x][θ]_ 1 _[, x][p]_ 1 [)][.] [and scaling]
+the terminal reward by a constant _α_, we can formulate the problem as a standard optimal control task:
+
+
+              - _T_
+_J_ ( _θ_ ) := _α_ Φ( _x_ _[θ]_ _T_ [) +] _L_ ( _θt_ ) d _t_ subject to _x_ ˙ _[θ]_ _t_ [=] _[ h][t]_ [(] _[x]_ _t_ _[θ][, θ][t]_ [)] _[.]_ (2)
+
+0
+
+
+A fundamental result in optimal control theory is Pontryagin’s Maximum Principle (PMP) (Pontryagin (2018)), which provides the necessary conditions for optimal solutions in control problems.
+Specifically, at the core of PMP is the introduction of the Hamiltonian function, _H_ . This Hamiltonian
+is defined in terms of the state of the system, the control, and a new entity called the _co-state µ_, which
+resides in the cotangent space of the state manifold:
+
+
+_H_ ( _t, x, µ, θ_ ) = _⟨µ, ht_ ( _x_ _[θ]_ _t_ _[, θ][t]_ [)] _[⟩−]_ _[L]_ [(] _[θ]_ [)] _[.]_ (3)
+
+
+The co-state _µt_, also known as the adjoint variable, encodes the influence of the terminal cost function.
+Their evolution captures how the sensitivity of the system impacts the cost function, ensuring that the
+state variables evolve in accordance with the system dynamics. Consequently, in optimal control, the
+Hamiltonian must be maximized by jointly evolving the states and costates according to a system of
+coupled differential equations. The details of PMP conditions can be found in Appendix B.1.
+
+
+3
+
+
+3.1 OC-FLOW ON EUCLIDEAN MANIFOLD
+
+
+We first develop the algorithm and theoretical analysis for OC-flow in Euclidean space. One of the
+simplest choices for the control term is an additive control (Kobilarov & Marsden (2011)), which
+directly perturbs the prior trajectory. In fact, with the linear expansion, the additive control could be
+seen as a general case and is widely used in optimal control. Specifically, with _θt_ representing the
+control input, the new state dynamics and the corresponding running cost can be defined as:
+
+_x_ ˙ _t_ = _ht_ ( _x_ _[θ]_ _t_ _[, θ][t]_ [) =] _[ f]_ _t_ _[ p]_ [(] _[x][t]_ [) +] _[ θ][t]_ _L_ ( _θt_ ) = _−_ [1] (4)
+
+2 _[∥][θ][t][∥]_ [2] _[.]_
+The running cost effectively acts as a constraint on the trajectory to encourage proximity to the
+original prior distribution. To better understand the effect of running costs on the guided distribution,
+we provide the following proposition to formally prove that it can control deviation from the prior
+distribution measured by KL-divergence.
+
+
+**Proposition** **1.** _For_ _Affine_ _Gaussian_ _Probability_ _Path,_ _the_ _expectation_ _of_ _the_ _running_ _cost_ _upper_
+_bounds the KL divergence between the prior joint distribution p_ 1( _x_ _[p]_ _, x_ 1) = _p_ 1( _x_ _[p]_ _|x_ 1) _pdata_ ( _x_ 1) _and_
+_the joint distribution after guidance p_ 1( _x_ _[θ]_ _, x_ 1) = _p_ 1( _x_ _[θ]_ _|x_ 1) _pdata_ ( _x_ 1) _, with x_ 1 _∼_ _pdata, x_ _[p]_ _induced_
+_by prior conditional vector field u_ _[p]_ _t_ [(] _[x][|][x]_ [1][)] _[ and][ x][θ]_ _[sampled by applying control][ θ][t]_ [(] _[x]_ [1][)] _[ on][ u][p]_ _t_ _[:]_
+
+
+- 1 
+_∥θt_ ( _x_ 1) _∥_ [2] d _t_ _≥_ _C ·_ KL   - _p_ 1( _x_ _[θ]_ _, x_ 1) _∥p_ 1( _x_ _[p]_ _, x_ 1)� _._ (5)
+0
+
+
+E _x_ 1 _∼p_ data( _x_ 1)
+
+
+- 1
+
+2
+
+
+_Furthermore, for square-shaped data x with non-zero probability path, the expectation of the running_
+_cost,_ _combined with the_ _L_ 1 _-distance between the prior sample_ _x_ _[p]_ 1 _[and the corresponding guided]_
+_sample x_ _[θ]_ 1 _[, upper bounds the KL divergence between the marginal distributions of the prior model][ p][p]_ 1
+_and the guided model p_ _[θ]_ 1 _[:]_
+
+
+E _x_ _[p]_ 1 _[∼][p][p]_ 1 [(] _[x]_ [)]
+
+
+- - 1
+_A∥x_ _[p]_ 1 _[−]_ _[x]_ 1 _[θ][∥]_ [+] _[ B]_
+
+
+      _∥θt_ ( _x_ _[p]_ 1 [)] _[∥]_ [2][ d] _[t]_ _≥_ KL( _p_ _[p]_ 1 _[∥]_ _[p]_ 1 _[θ]_ [)] _[.]_ (6)
+0
+
+
+One effective approach for directly applying PMP to optimal control tasks is the Extended Method of Successive Approximations
+(E-MSA) (Li et al., 2018). E-MSA builds
+upon the basic MSA algorithm (Chernousko &
+Lyubushin (1982)), which iteratively updates the
+terms in the PMP conditions (Appendix B.2).
+The primary enhancement of E-MSA over the
+basic MSA is its ability to extend convergence
+guarantees beyond a limited class of linear
+quadratic regulators (Aleksandrov (1968)).
+
+
+**Algorithm 1** OC-Flow on Euclidean Space
+
+1: **Given:** Pre-trained model: _f_ _[p]_, initial state: _x_ 0
+2: **Initialize:** Control terms _θ_ [0], learning rate _η_,
+weight decay _β_
+3: **for** _k_ = 0 to MaxIterations **do**
+4: Solve for the state trajectory:
+
+         _Xt_ _[θ]_ +∆ _[k]_ _t_ [=] _[ X]_ _t_ _[θ][k]_ + _f_ _[p]_ ( _t, Xt_ _[θ][k]_ [) +] _[ θ][k]_ [�] ∆ _t_
+
+5: Update control:
+_θt_ _[k]_ [+1] = _βθt_ _[k]_ [+] _[ η][∇][x]_ _t_ [Φ(] _[X]_ 1 _[k]_ [)]
+6: **end for**
+
+
+A key assumption is the global Lipschitz condition for the functions involved. However, note
+that this assumption can be relaxed to a local Lipschitz condition if we can demonstrate that _x_ _[θ]_ _t_
+is bounded, which can be safely assumed provided that appropriate regularization techniques are
+applied. Furthermore several prior work has shown the Lipschitz continuity for the deep learning
+models. (Gouk et al. (2021),Khromov & Singh (2024))
+
+
+When the E-MSA algorithm is applied to the guided controlled generation task on Euclidean space,
+the trajectory of the co-states _µt_ can be calculated in closed form. Specifically, they can be expressed
+as _∇xt_ Φ( _X_ 1 _[k]_ [)][ which enables us to derive the following update rule with convergence guarantees:]
+
+
+**Theorem 2:** _Assume that the reward function, the prior model, and their derivatives satisfy Lipschitz_
+_continuity, bounded by a Lipschitz constant L._ _Utilizing the E-MSA, for each iteration k, for each_
+_constant γ_ _>_ 2 _C_ _with C_ _is a function of L, such that under the addictive control and the running_
+_cost defined in Equation 4, the optimal update is following:_
+
+_γ_ _α_
+_θt_ _[k]_ [+1] = _t_ [+] 1 [)] _[.]_ (7)
+1 + _γ_ _[θ][k]_ 1 + _γ_ _[∇][x][t]_ [Φ(] _[X]_ _[k]_
+
+_This update rule for the control term θt guarantees an increase in the objective function defined in_
+_Equation 2:_
+
+
+      _J_ ( _θ_ _[k]_ [+1] ) _−_ _J_ ( _θ_ _[k]_ ) _≥_ 1 _−_ [2] _[C]_
+
+_γ_
+
+
+4
+
+
+_ϵ_ _[k]_ _γ_ _[,]_ _ϵ_ _[k]_ _γ_ _[≥]_ [0] _[.]_ (8)
+
+
+In practice, solving continuous ODEs requires discretization. The discretized version of the proposed
+algorithm is outlined in Algorithm 1. In this formulation, the weight decay term is parameterized
+as _β_ = 1+ _γ_ _γ_ [, and the learning rate is defined as] _[ η]_ [=] 1+ _αγ_ [.] [As demonstrated in Appendix C.3, the]
+discretization error introduced by the Euler method is of the order _O_ (∆ _t_ ). This error diminishes as
+the number of ODE steps increases, ensuring the algorithm converges to the global optimum.
+
+
+3.2 PRACTICAL IMPLEMENTATION AND ACCELERATION
+
+
+3.2.1 ADJOINT METHOD AND VECTOR-JACOBIAN PRODUCT
+
+
+A significant portion of the computational time in the OC-Flow algorithm is spent on evaluating
+the gradient _∇xt_ Φ( _x_ 1). The computational cost of directly back-propagating through ODE with
+vanilla Autograd requires saving all intermediate computation values, which results in a demanding
+memory complexity of _O_ ( _ND_ [2] ) (Pan et al., 2023; Chen et al., 2018) where _N_ is the ODE steps. We
+instead employ the adjoint method where the gradient _∇xt_ Φ( _x_ 1) is computed using a vector-Jacobian
+product by the double-backwards trick, which reduces the memory cost to _O_ ( _D_ [2] ).
+
+
+_∇xk/N_ Φ =           - _∇x_ ( _k_ +1) _/N_ Φ� _·_ Φ _x_ ( _k_ +1) _/N_           - _xk/N_           - _._ (9)
+
+
+3.2.2 ASYNCHRONOUS SETTING FOR FLEXIBLE UPDATE SCHEDULING
+
+
+In practice, discretization techniques are employed to simulate the ODEs governing both the state
+trajectory _xt_ and the co-states _µt_ and operate in a _synchronous_ setting, where the number of time
+steps for the state trajectory _xt_ coincides with the number of control terms _θt_ .
+
+
+Here we show that OC-Flow can be extended to an _asynchronous_ framework, providing greater
+flexibility in scheduling. We subdivide the time interval ∆ _t_ into _N_ equally spaced subintervals. Let
+_{xt}_ denote the state trajectory over the time interval [ _t, t_ + ∆ _t_ ], and _{x_ _[θ]_ _t_ _[}]_ [ represent the trajectory]
+when the control term _θt_ is applied in the first subinterval. The trajectory can be approximated as:
+
+
+_N_ _−_ 1
+
+
+_f_ _[p]_ [ �] _xt_ + _lN_ ∆ _t_
+_l_ =1
+
+
+_xt_ +∆ _t_ = _xt_ + [∆] _[t]_
+
+_N_
+
+
+_N_ _−_ 1
+
+
+- _f_ _[p]_ [ �] _x_ _[θ]_ _t_ + _[l]_ _N_ [∆] _[t]_
+
+_l_ =1
+
+
+1
+
+_N_
+
+
++ [1]
+
+_N_ _[θ][t]_
+
+
+_._ (10)
+
+
+_N_
+
+
++ [∆] _[t]_ _[≈]_ _[x][t]_ [ + ∆] _[t]_
+
+_N_ _[θ][t]_
+
+
+_N_
+
+
+Consequently, the asynchronous setting allows the algorithm to be applied without modification while
+enabling finer updates to both the control terms and state trajectories by adjusting the frequency _N_
+of control term updates relative to the state trajectory simulation (see Appendix C.4 for the proof
+and justification of the approximations in Equation 10). In our peptide design experiment, the
+asynchronous setting is applied for efficient computing.
+
+
+Table 1: Comparison of runtime and memory complexity of different methods used in backpropthrough guided-ODE in Euclidean and SO(3) manifold. For complexity, _N_ is the number of ODE
+steps, _n_ is the number of effective control terms with synchronized and in the range [1 _, N_ ] and _D_ [2] is
+the complexity of computing 1-step gradient (VJP or Autograd), D depends on data and model size.
+
+
+**Number of** **Running** **Memory** **Runtime** **Convergence** **Generalization**
+**Control Terms** **Cost** **Complexity** **Complexity** **to Optimal** **to SO(3)**
+
+OC-Flow _n_ _∥θt_ [2] _[∥]_ _O_ ( _D_ [2] ) _O_ ( _nD_ [2] ) ✓ ✓
+FlowGrad _n_ 0 _O_ ( _D_ [2] ) _O_ ( _nD_ [2] ) ✗ ✗
+D-Flow 1 Implicit _O_ ( _ND_ [2] ) _O_ ( _ND_ [2] ) ✗ ✗
+
+
+3.3 CONNECTION TO OTHER BACKPROP-THROUGH GUIDED-ODE APPROACHES
+
+
+Several previous works discussed backprop-through-ODE guidance in flow-matching models. Notable
+examples include D-Flow (Ben-Hamu et al., 2024) and FlowGrad (Liu et al., 2023). An illustration
+of their algorithms and ours is shown in Figure 1. In this section, we demonstrate that our framework
+is more general, and both of these methods can be viewed as special cases of our algorithm.
+
+
+FlowGrad formulates the optimization task in a manner similar to our optimal control target in
+Equation 2. Specifically, it directly applies gradient descent to the control variables:
+
+_θt_ _[k]_ [+1] = _θt_ _[k]_ [+] _[ α][∇][θ]_ _t_ [Φ(] _[X]_ 1 _[k]_ [) =] _[ θ]_ _t_ _[k]_ [+] _[α]_ 1 [)] _[,]_ (11)
+
+_N_ [(] _[∇][x][t][X][t]_ [+∆] _[t]_ [)] _[−]_ [1] _[∇][x][t]_ [Φ(] _[X]_ _[k]_
+
+which can be interpreted as a limiting case of our algorithm in Equation 7, where _γ_ _→∞_ and given
+with d _t →_ 0, _∇xtXt_ +∆ _t_ _→_ _I_ . However, as shown in Equation 8, the convergence rate is a complex
+
+
+5
+
+
+function of _γ_, so in practice, _γ_ is treated as a tunable parameter. FlowGrad’s setting _γ_ _→∞_ may
+undermine the convergence speed. D-Flow optimizes the reward by applying gradient descent to the
+initial noise _x_ 0:
+_X_ 0 _[k]_ [+1] = _X_ 0 _[k]_ [+][ LBFGS][(] _[∇][x]_ 0 [Φ(] _[X]_ 1 _[k]_ [))] _[.]_ (12)
+
+
+In fact, with the update rule _xt_ +d _t_ = _x_ 0 + _f_ ( _x_ 0) d _t_ + _θt_ d _t_, the update of _θ_ 0 can be seen as
+an increment to _x_ 0. The LBFGS algorithm provides a dynamic learning rate, aligning with our
+framework, where _γ_ is allowed to vary across iterations. Hence, D-Flow can be viewed as a special
+case of our asynchronous algorithm when the number of control terms is 1. A more detailed
+comparison of the algorithms can be found in Table 6 and additional discussion on computation
+efficiency is in Appendix D.
+
+
+4 OPTIMAL CONTROL FRAMEWORK FOR GUIDED FLOW MATCHING ON
+SO(3)
+
+
+Most optimization algorithms are primarily designed for Euclidean spaces and face significant
+challenges when applied to non-Euclidean settings, such as the SO(3) manifold, which plays a crucial
+role in drug discovery and peptide design (Huguet et al. (2024)). This section extends the E-MSA
+algorithm to the SO(3) manifold and presents a rigorous proof of its convergence.
+
+
+4.1 OC-FLOW FOR SO3
+
+
+To begin, we define the vector field governing the system dynamics. The state trajectory, influenced
+by control terms _θt_ _∈_ so(3), evolves according to the following differential equation:
+
+
+_x_ ˙ _[θ]_ _t_ [=] _[ x]_ _t_ _[θ]_              - _ft_ ( _x_ _[θ]_ _t_ [) +] _[ θ][t]_              - _._ (13)
+
+
+In this work, the left-invariant vector field is utilized, under which the Hamiltonian can be shown to
+reduce to a linear functional in so(3) _[∗]_ (Jurdjevic (1996), Colombo & Dimarogonas (2020)). Given
+the co-state _µt_ _∈_ so(3) _[∗]_, the Hamiltonian function is redefined as:
+
+
+_H_ : [0 _, T_ ] _×_ SO(3) _×_ so(3) _[∗]_ _×_ so(3) _→_ R _,_ ( _t, x, µ, θ_ ) _�→_ _µt_  - _ft_ ( _x_ _[θ]_ _t_ [) +] _[ θ][t]_  - _−_ _L_ ( _θ_ ) _._ (14)
+
+
+A direct approach to apply PMP conditions on the SO(3) manifold involves iteratively updating the
+cotangent vector _µt_ and the state trajectory _xt_ as shown in Step 4 and Step 5 in Algorithm 2 and then
+apply an update rule to determine the control term _θt_ for the subsequent iteration with weight decay
+_β_ and learning rate _η_ the update for _θt_ can be written as:
+
+
+_θt_ _[k]_ [+1] = _βθt_ _[k]_ [+] _[ η][µ]_ [˜] _t_ _[θ][k]_ _[,]_ (15)
+
+
+where _µ_ ˜ _[θ]_ _t_ _[k]_ is defined by _⟨µ_ ˜ _[θ]_ _t_ _[k]_ _[, v][⟩]_ [=] _[ µ]_ _t_ _[θ][k]_ [(] _[v]_ [)][ with] _[µ]_ [˜] _[t]_ _[∈]_ [so][(3)][ for all] _[ v]_ _[∈]_ [so][(3)][.] [The existence of] _[µ]_ [˜] _[θ]_ _t_ _[k]_
+can be derived from the Riesz Representation Theorem (Goodrich (1970)). This formulation leads to
+the introduction of the OC-FLow algorithm on SO(3),as detailed in Algorithm 2.
+
+
+**Algorithm 2** OC-Flow on SO(3)
+
+
+1: **Given:** Pre-trained model: _fe_ _[p]_ [, initial state:] _[x]_ [0]
+2: **Initialize:** Control term _θ_ [0] _∈_ so(3), learning rate _η_, weight decay _β_
+3: **for** _k_ = 0 to MaxIterations **do**
+
+                 4: Solve for the state trajectory: _X_ [˙] _t_ _[θ][k]_ = _Xt_ _[θ][k]_ _f_ _[p]_ ( _t, Xt_ _[θ][k]_ [) +] _[ θ][k]_ [�] _, X_ 0 _[θ][k]_ = _x_ 0
+
+
+_∂H∂µ_ _[µ][θ][k]_ _[−]_ [(d] _[L][x][θ]_ _T_ [)] _[∗]_ _[∂H]_ _∂x_
+
+
+5: Solve for the adjoint variables: _µ_ ˙ _[θ]_ _t_ _[k]_ = _−_ ad _[∗]_ _∂H_
+
+
+_[∂H]_
+
+_∂x_ _[, µ]_ _T_ _[θ][k]_ [= (d] _[L]_ _x_ _[θ]_ _T_ [)] _[∗][∇]_ [Φ(] _[x]_ _T_ _[θ]_ [)]
+
+
+6: Update control: _θt_ _[k]_ [+1] = _βθt_ _[k]_ [+] _[ η][µ]_ [˜] _t_ _[θ][k]_
+7: **end for**
+
+
+4.2 CONVERGENCE OF OC-FLOW ON SO3
+
+
+To derive the proof of the convergence of our Algorithm 2, we first establish that under the PMP
+conditions on SO(3), the objective function _J_ ( _θ_ ), as defined in Equation 2, can be bounded. This is
+formalized in the following proposition:
+
+
+6
+
+
+**Proposition** **3:** _Assume_ _that_ _the_ _reward_ _function,_ _the_ _prior_ _model,_ _and_ _their_ _derivatives_ _satisfy_
+_Lipschitz continuity, bounded by a Lipschitz constant L._ _Then, there exists a constant C_ _>_ 0 _such_
+_that for any θ, ϕ ∈_ so(3) _, the following inequality holds:_
+
+
+            - 1
+_J_ ( _θ_ ) + ∆ _ϕ,θH_ ( _t_ ) d _t −_ _C∥ϕt −_ _θt∥_ [2] d _t ≤_ _J_ ( _ϕ_ ) _,_ (16)
+
+0
+
+
+_where X_ _[θ]_ _and P_ _[θ]_ _satisfy the PMP conditions on SO(3) manifold, and_ ∆ _Hϕ,θ_ _denotes the change in_
+_the Hamiltonian, defined as:_
+
+
+∆ _Hϕ,θ_ ( _t_ ) := _H_ ( _t, x_ _[θ]_ _t_ _[, µ][θ]_ _t_ _[, ϕ][t]_ [)] _[ −]_ _[H]_ [(] _[t, x][θ]_ _t_ _[, µ][θ]_ _t_ _[, θ][t]_ [)] _[.]_ (17)
+
+
+Proposition 2 provides a lower bound for the difference in the objective function values under two
+distinct control terms that satisfy the PMP conditions described by the Hamiltonian equations in
+Appendix B.1.
+
+
+However, applying this result directly as an optimization algorithm presents several challenges. First,
+the difference in the Hamiltonian ∆ _Hϕ,θ_ ( _t_ ) is not inherently bounded. Second, the term _||ϕ −_ _θ||_ [2] is
+non-negative, which complicates the minimization process. To address these issues, inspired by the
+method of E-MSA, we introduce a positive constant _γ_ and define an _Extended Hamiltonian_ :
+
+
+_H_ ˜ ( _t, x, µ, θ, ϕ_ ) := _H_ ( _t, x, µ, θ_ ) _−_ _[γ]_
+
+
+_[γ]_ [=] _[ ⟨][µ, f][t]_ [(] _[x]_ [) +] _[ θ][⟩−]_ [1]
+
+2 _[∥][θ][ −]_ _[ϕ][∥]_ [2] 2
+
+
+[1]
+
+2 _[∥][θ][∥]_ [2] _[ −]_ _[γ]_ 2
+
+
+(18)
+2 _[∥][θ][ −]_ _[ϕ][∥]_ [2] _[.]_
+
+
+The introduction of the extended Hamiltonian enables the combination of the original Hamiltonian
+with the penalty term _∥ϕ −_ _θ∥_ [2] into a unified expression that can be optimized jointly. A natural
+approach to achieve this is by updating _θ_ to maximize the Extended-Hamiltonian. The resulting
+update rule is given by:
+
+
+_γ_ 1
+_θt_ _[k]_ [+1] = arg max _H_ ˜ ( _t, x_ _[θ][k]_ _, µ_ _[θ][k]_ _, θ, θ_ _[k]_ ) = _t_ [=] _[ βθ][k]_ [ +] _[ ηµ]_ _t_ _[θ][k]_ _[.]_ (19)
+_θ_ 1 + _γ_ _[θ][k]_ [ +] 1 + _γ_ _[µ][θ]_
+
+
+By performing this maximization step at each iteration, we ensure that the change in the ExtendedHamiltonian, ∆ _H_ [˜], is non-negative, indicating that the algorithm progresses towards an optimal
+solution. Furthermore, we can show that when the update process converges, i.e., when ∆ _H_ [˜] = 0 or
+equivalently ∆ _H_ = 0, the algorithm has reached the optimal control point. These insights can be
+formalized in the following proposition:
+
+
+**Proposition 4:** _Let X_ _[θ]_ _and P_ _[θ]_ _satisfy the PMP conditions ._ _If the update rule follows Algorithm 2,_
+_we define ϵk_ := �01 [∆] _[θ][k]_ [+1] _[,θ][k]_ _[H]_ [(] _[t]_ [) d] _[t][, and][ ϵ][k]_ _[is bounded as:]_
+
+            - 1
+_ϵk_ := ∆ _θk_ +1 _,θk_ _H_ ( _t_ ) d _t,_ lim [= 0] _[.]_ (20)
+
+0 _k→∞_ _[ϵ][k]_
+
+_Furthermore, when ϵk_ = 0 _, we have θ_ = _θ_ _[∗]_ := arg max _θ J_ ( _θ_ )
+With these results, we can now extend the result in E-MSA to the SO(3) manifold and establish a
+bound for the optimization algorithm based on the derived theoretical properties:
+
+
+**Theorem 5:** _Assume that the reward function, the prior model, and their derivatives satisfy Lipschitz_
+_continuity, bounded by a Lipschitz constant L._ _Let θ_ [0] _∈_ so(3) _be any initial measurable control with_
+_J_ ( _θ_ [0] ) _<_ + _∞._ _Suppose also that_ inf _θ∈_ so(3) _J_ ( _θ_ ) _> −∞._ _If the update of θ satisfies equation 19, for_
+_sufficiently large γ, the following inequality holds for some constant D_ _>_ 0 _:_
+
+
+_Dϵk_ _≤_ _J_ ( _θ_ _[k]_ [+1] ) _−_ _J_ ( _θ_ _[k]_ ) _._ (21)
+
+
+Therefore, by invoking Proposition 3, we can conclude that after each update, the target function is
+non-decreasing and when the update process terminates, the optimal solution has been attained. This
+establishes the convergence of the OC-Flow algorithm on the SO(3) manifold.
+
+
+4.3 PRACTICAL IMPLEMENTATION
+
+
+In practice, directly optimizing Algorithm 2 using existing ODE methods is challenging due to the
+nature of the adjoint variable _µ_ ˙ _t_, which is a linear functional in the dual space so(3) _[∗]_ . Instead, we
+can optimize _µ_ ˜ _t_ as defined in Section 4.1. We can decompose _µ_ ˜ [˙] _t_ into its projections onto a set of
+orthogonal bases within the so(3) group.
+
+
+7
+
+
+Figure 2: Visualization of text-guided generated faces with different expressions.
+
+
+A frequently used choice for the basis in so(3) is the canonical basis _{E_ 1 _, E_ 2 _, E_ 3 _}_ (McCann et al.
+(2023)) satisfying the condition _⟨v, Ei⟩_ = 2 for all _v_ _∈_ so(3). Thus we can decompose the time
+derivative of the adjoint variable _µ_ ˜ [˙] _t_ as: _µ_ ˜ [˙] _i_ = _⟨µ, E_ ˜ [˙] _i⟩_ and _µ_ ˜ [˙] = [1] 2 �3 _i_ =1 _[µ]_ [˙˜] _[i][E][i]_ [.] [Thus, with the closed]
+
+forms for the partial derivatives related to Hamiltonian, the practical update for _µt_ in Algorithm 2 can
+
+_t_
+be written as follows. The vector-Jacobian method can be applied to compute the term _[∂f]_ _∂x_ _[ p]_ [(] _[x]_ _t_ _[k][E][j]_ [)][ in]
+Algorithm 2, which significantly reduces complexity from _O_ ( _D_ [4] ) to _O_ ( _D_ [2] ). Meanwhile, the method
+of asynchronous can also be applied. See Appendix C.4.
+
+
+        _µ_ ˙˜ _[k]_ _t,i_ [=] _[ −⟨][µ]_ [˜] _t_ _[k][,]_ [ [] _[f]_ _t_ _[ p]_ [+] _[ θ][t][, E][i]_ []] _[⟩−]_ _µ_ ˜ _[k]_ _t_ _[, ][∂f]_ _t_ _[ p]_ _t_ _[E][i]_
+_∂x_ _[x][k]_
+
+
+- _,_ _µ_ ˜ _t,_ _[∂f]_ _t_ _[ p]_ _t_ _[E][j]_
+_∂x_ _[x][k]_
+
+
+- = Tr - _µ_ ˜ _[T]_ _t_ _∂ft_ _[p]_ _t_ _[E][j]_ [)] _∂x_ [(] _[x][k]_
+
+
+_µ_ ˜ _[k]_ _t−_ ∆ _t_ [=] _[µ]_ [˜] _[k]_ _t_ _[−]_ [∆] _[t]_
+
+2
+
+
+3
+
+- _µ_ ˙˜ _[k]_ _t,i_ _[E][i][,]_ _µ_ ˜ _[k]_ _T,i_ [=] _[ ⟨∇]_ [Φ(] _[x]_ _T_ _[k]_ [)] _[, x]_ _T_ _[k]_ _[E][i][⟩][.]_ (22)
+
+_i_ =1
+
+
+5 EXPERIMENTS
+
+
+5.1 TEXT-GUIDED IMAGE MANIPULATION
+
+
+We first validate our OC-Flow on the traditional text-to-image generation task. Previous work has
+demonstrated the importance of alignment with the given text prompt using either automatic metrics
+or human preference as the reward (Black et al., 2023; Esser et al., 2024). In our text-guided image
+manipulation task, we want to guide the generative model pre-trained on the celebrity face dataset
+CelebA-HQ (Karras, 2017) to text guidance {sad, angry, curly hair} showing different
+facial expressions or traits. Following the same setup in Liu et al. (2023), given an input image _xg_, the
+reward for alignment with the text prompt can be effectively evaluated by the CLIP model (Radford
+et al., 2021) pre-trained in a contrastive way to score the similarity between arbitrary image-text pairs.
+Following (Liu et al., 2023), we adopt the pre-trained Rectified Flow (RF) (Liu et al., 2022) as the
+generative prior. Inspired by Proposition 1, for this image task where the square-like assumption is
+satisfied, an extra terminal constraint _x_ _[p]_ 1 _[−]_ _[x]_ 1 _[θ]_ [is added as part of the terminal reward function.]
+
+
+We choose two state-of-the-art text-guided image
+
+Table 2: Comparison of methods on LPIPS,
+
+manipulation baselines, StyleCLIP (Patashnik et al.,
+
+ID, and CLIP metrics. Lower LPIPS and ID
+
+2021) and FlowGrad (Liu et al., 2023). We run Style
+indicate better performance, while higher ID
+
+CLIP and FlowGrad with their official implementa
+and CLIP values are preferred.
+
+tion and default parameter configurations. For _ours_,
+
+**Method** **LPIPS** ↓ **ID** ↑ **CLIP** ↑
+
+we set time step of 100, step size _η_ = 2 _._ 5, weight
+decay of 0.995, the weight of the extra constraint of CG + RF 0.346 0.643 0.292
+0.4, and the number of optimization steps of 15. For CG + LDM 0.383 0.513 0.298
+
+DiffusionCLIP 0.398 0.659 0.285
+
+qualitative comparison, we show generated examples
+
+StyleCLIP + e4e 0.359 0.704 0.267
+
+of different text-guided expressions in Figure 2. Due
+
+FlowGrad + RF 0.302 **0.737** 0.299
+
+to the large gap between reference and guided dis
+**OC-Flow (Ours)** **0.207** 0.732 **0.302**
+
+tributions, StyleCLIP fails to manipulate with sad.
+Lacking in regularization, FlowGrad may change the content too much with curly hair. Our
+OC-Flow generally produces the best results with a good alignment with the text prompt while
+preserving the generative prior so as to produce reasonable faces that are not distorted much.
+
+
+5.2 MOLECULE GENERATION FOR QM9
+
+
+We further instantiate our OC-Flow for controllable molecule generation on the QM9 dataset (Ruddigkeit et al., 2012; Ramakrishnan et al., 2014), a commonly used molecular dataset containing small
+molecules with up to 9 heavy atoms from C, O, N, F. Following Hoogeboom et al. (2022); Ben-Hamu
+
+
+8
+
+
+Table 2: Comparison of methods on LPIPS,
+ID, and CLIP metrics. Lower LPIPS and ID
+indicate better performance, while higher ID
+and CLIP values are preferred.
+
+
+**Method** **LPIPS** ↓ **ID** ↑ **CLIP** ↑
+
+
+CG + RF 0.346 0.643 0.292
+CG + LDM 0.383 0.513 0.298
+DiffusionCLIP 0.398 0.659 0.285
+StyleCLIP + e4e 0.359 0.704 0.267
+
+
+FlowGrad + RF 0.302 **0.737** 0.299
+**OC-Flow (Ours)** **0.207** 0.732 **0.302**
+
+
+Figure 3: Visualization of OC-Flow generated molecules with various dipole moments condition.
+
+
+et al. (2024), we target for conditional generation of molecules with specified quantum chemical
+property values including polarizability _α_, orbital energies _ε_ HOMO _, ε_ LUMO and their gap ∆ _ε_, dipole
+moment _µ_, and heat capacity _cv_ . Such a conditional generation setting of molecules with desired
+properties has profound practical applications in drug design and virtual screening. To define the
+loss function, separate classifiers for each property are first trained to predict the property value
+for the generated molecule (Hoogeboom et al., 2022), and the loss can be then calculated as the
+mean absolute error (MAE) between the predicted and the reference property values. The pre-trained
+unconstrained generative model is taken from Song et al. (2024) (EquiFM), a flow-based generative
+model that uses an equivariant vector field parameterization for generating the atom coordinates and
+types via the learned flow dynamics. To demonstrate the zero-shot guidance performance on such a
+conditional generation task, we compare our approach with other gradient-based methods of D-Flow
+(Ben-Hamu et al., 2024) and FlowGrad (Liu et al., 2023) on the same pre-trained EquiFM. To be
+comparable to D-Flow, we follow its setting to use the L-BFGS optimizer with 5 optimization steps
+with linear search. We generate 1000 molecules for each property and report the MAE in Table 3.
+The unconditional EquiFM is also included as an upper bound for the guided models. It can be seen
+that our approach consistently outperforms both of them with lower MAEs, which better balances
+the reward optimization and the faithfulness to the prior. We provide guided generation samples in
+Figure 3 with respect to different target dipole moments. A clear trend from hydrocarbons with more
+symmetric structures to molecules with more high-electronegativity atoms of oxygen and nitrogen
+can be observed, indicating an increase in the dipole moment.
+
+
+As we have theoretically demonstrated the
+
+Table 3: MAE for guided generations on QM9 (lower is
+
+impact of the regularization strength from
+
+better).
+
+the optimal control perspective, we further
+
+Property _α_ ∆ _ε_ _ε_ HOMO _ε_ LUMO _µ_ _cv_
+
+experiment with a differentthe quality of the conditionally generated _γ_ and examine Unit Bohr³ meV meV meV D K _·_ calmol
+
+OC-Flow(Ours) **1.383** 367 **0.314** **0.819**
+
+molecules by evaluating additional met- D-Flow 1.566 205 346 0.330 0.893
+rics following Song et al. (2024). Specif- FlowGrad 2.484 517 273 429 0.542 1.270
+ically, we calculate the atom stability per- EquiFM 8.969 1439 622 1438 1.593 6.873
+centage (ASP), molecule stability percent- Classifier 0.095 64 40 35 0.046 0.041
+age (MSP), and valid & unique percentage
+(VUP). Ideally, these metrics should not be greatly lower than the pre-trained model, and a higher
+strength of regularization should lead to higher scores. Indeed, as demonstrated in Table 4, in which
+we provide these scores for two different settings of _γ_ = 0 _._ 01 and 10, all scores are higher with
+a higher strength of regularization at the cost of also a higher MAE. In this way, our OC-Flow
+effectively prevents exploitation from direct gradient descent that may hack the loss function and
+provides more flexible and fine-grained control over the guided generation.
+
+
+Table 4: MAE and other evaluation metrics for our approach with _γ_ = 0 _._ 01 / _γ_ = 10.
+
+
+Property _α_ ∆ _ε_ _ε_ HOMO _ε_ LUMO _µ_ _cv_
+
+
+MAE _↓_ 1.383 / 1.557 367 / 365 183 / 188 342 / 339 0.314 / 0.320 0.819 / 0.852
+ASP _↑_ 94.8 / 96.0 95.2 / 96.1 95.2 / 96.1 95.3 / 96.1 95.8 / 96.1 95.2 / 96.1
+MSP _↑_ 64.4 / 69.9 67.9 / 70.5 65.8 / 69.8 68.5 / 70.8 68.0 / 70.1 67.1 / 68.9
+VUP _↑_ 86.2 / 88.6 88.2 / 89.8 86.2 / 87.7 87.6 / 88.7 88.2 / 89.0 89.4 / 88.5
+
+
+5.3 PEPTIDE DESIGN
+
+
+We evaluate our OC-Flow approach for peptide backbone design using a test set derived from
+(Li et al., 2024), which includes 162 complexes clustered based on 40% sequence identity using
+mmseqs2 (Steinegger & Söding, 2017). Our experiments focus on PepFlow w/Bb, a model designed
+to exclusively sample peptide backbones while optimizing translations in Euclidean space and
+
+
+9
+
+
+Figure 4: Visualization of OC-Flow generated peptide and unconditional generated peptide (5djd_C).
+
+
+rotations in SO(3) space. The model employs the MadraX force field (Orlando et al., 2024) for energy
+optimization, and performance is evaluated using several key metrics. These metrics include MadraX
+energy, which assesses the total energy of the generated peptide structures, along with Rosetta-based
+measures of stability and affinity. Currently, our stability and affinity metrics are represented by
+their respective means: stability quantifies the energy states of peptide-protein complexes, while
+affinity measures the binding energies. In addition, we employ an existing metric, denoted as IMP,
+which measures the percentage of generated peptides that exhibit lower energy than the original
+ground truth. Additionally, we use the root-mean-square deviation (RMSD) to evaluate structural
+accuracy by aligning the generated peptides to their native structures and calculating the _Cα_ RMSD.
+To further analyze structural characteristics, we compute the secondary-structure similarity ratio
+(SSR), which reflects the proportion of shared secondary structures, and the binding site ratio (BSR),
+which quantifies the overlap between the binding sites of the generated and native peptides on the
+target protein. Structural diversity is assessed using the average of one minus the pairwise TM-Score
+(Zhang & Skolnick, 2005) among the generated peptides, representing their dissimilarities.
+
+
+We compare our method to the pre-trained unconditional PepFlow model (Li et al., 2024), serving
+as a baseline. We also include ablations where our model guides only translations (Euclidean) or
+rotations (SO(3)). As shown in Table 5, our OC-Flow method, applied to both Euclidean and SO(3)
+spaces, consistently outperforms the baseline, even though we only optimize for the Madrax target
+function. This indicates that our algorithm not only achieves higher target function scores but also
+captures more natural structural configurations. It generates peptide backbones that are more stable,
+energetically favorable, and diverse, while improving key metrics such as stability, affinity, IMP,
+diversity, SSR, and BSR. In comparison, optimizing in Euclidean space alone yields only marginal
+improvements in IMP, while optimizing rotations alone achieves comparable performance. More
+experimental details and ablation can be found in Appendix E.3.
+
+
+Table 5: Evaluation of OC-Flow peptide design.
+
+
+MadraX _↓_ RMSD _↓_ SSR % _↑_ BSR % _↑_ Stability _↓_ Affinity _↓_ Diversity _↑_ imp(%) _↑_
+
+
+Ground-truth -0.588  -  -  - -84.893 -36.063  -  PepFlow -0.195 1.645 0.794 0.874 -45.660 -26.538 0.310 14.3
+OC-Flow(trans) -0.229 1.774 **0.797** **0.876** -48.380 -27.328 0.323 14.4
+OC-Flow(rot) -0.221 **1.643** 0.794 0.872 -48.636 -27.211 0.310 14.5
+OC-Flow(trans+rot) **-0.263** 2.127 **0.797** 0.869 **-48.853** **-27.468** **0.338** **15.0**
+
+
+6 CONCLUSIONS AND DISCUSSION
+
+
+In this paper, we propose OC-Flow, a general and theoretically grounded framework for trainingfree guided flow matching under optimal control formulation. Our framework provides a unified
+perspective on existing backprop-through-ODE approaches and lays the foundation for systematic
+analysis of the optimization dynamics of this setting. Extensive empirical experiments demonstrate
+the effectiveness of OC-Flow. Future extensions of OC-Flow include generalizing beyond additive
+control terms and bridging connection with fine-tuning regimes where control terms can be solved
+as learning updates to the model parameters. Another extension could be scaling up the SO(3)
+OC-Flow to guide generative tasks for larger molecular systems such as protein motif scaffolding.
+One potential limitation of backprop-through-ode approaches, despite its superior result, is the higher
+computation cost compared to posterior sampling approaches. Such tradeoff has been demonstrated in
+Dflow/FlowGrad as well. Our practical implementations of OC-Flow improve the time and memory
+complexity (see analysis in Appendix D), where sampling on the image takes 216s compared to 15
+minutes in D-Flow. We hope that our findings can guide algorithm design and motivate further model
+improvement in guided flow matching.
+
+
+10
+
+
+REFERENCES
+
+
+Vladimir V Aleksandrov. On the accumulation of perturbations in the linear systems with two
+coordinates. _Vestnik MGU_, 3:67–76, 1968.
+
+
+Heli Ben-Hamu, Omri Puny, Itai Gat, Brian Karrer, Uriel Singer, and Yaron Lipman. D-flow:
+Differentiating through flows for controlled generation. _arXiv preprint arXiv:2402.14017_, 2024.
+
+
+Kevin Black, Michael Janner, Yilun Du, Ilya Kostrikov, and Sergey Levine. Training diffusion models
+with reinforcement learning. _arXiv preprint arXiv:2305.13301_, 2023.
+
+
+Avishek Joey Bose, Tara Akhound-Sadegh, Kilian Fatras, Guillaume Huguet, Jarrid Rector-Brooks,
+Cheng-Hao Liu, Andrei Cristian Nica, Maksym Korablyov, Michael Bronstein, and Alexander Tong.
+Se (3)-stochastic flow matching for protein backbone generation. _arXiv preprint arXiv:2310.02391_,
+2023.
+
+
+Ricky TQ Chen and Yaron Lipman. Riemannian flow matching on general geometries. _arXiv preprint_
+_arXiv:2302.03660_, 2023.
+
+
+Ricky TQ Chen, Yulia Rubanova, Jesse Bettencourt, and David K Duvenaud. Neural ordinary
+differential equations. _Advances in neural information processing systems_, 31, 2018.
+
+
+Chaoran Cheng, Jiahan Li, Jian Peng, and Ge Liu. Categorical flow matching on statistical manifolds.
+_arXiv preprint arXiv:2405.16441_, 2024.
+
+
+Felix L Chernousko and AA Lyubushin. Method of successive approximations for solution of optimal
+control problems. _Optimal Control Applications and Methods_, 3(2):101–114, 1982.
+
+
+Hyungjin Chung, Jeongsol Kim, Geon Yeong Park, Hyelin Nam, and Jong Chul Ye. Cfg++: Manifoldconstrained classifier free guidance for diffusion models. _arXiv preprint arXiv:2406.08070_, 2024.
+
+
+Leonardo Jesus Colombo and Dimos V. Dimarogonas. Symmetry reduction in optimal control of
+multiagent systems on lie groups. _IEEE Transactions on Automatic Control_, 65(11):4973–4980,
+2020. doi: 10.1109/TAC.2020.3004795.
+
+
+Alexandre Défossez, Jade Copet, Gabriel Synnaeve, and Yossi Adi. High fidelity neural audio
+compression. _arXiv preprint arXiv:2210.13438_, 2022.
+
+
+Floor Eijkelboom, Grigory Bartosh, Christian Andersson Naesseth, Max Welling, and Jan-Willem
+van de Meent. Variational flow matching for graph generation. _arXiv preprint arXiv:2406.04843_,
+2024.
+
+
+Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas Müller, Harry Saini, Yam
+Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling rectified flow transformers for
+high-resolution image synthesis. In _Forty-first International Conference on Machine Learning_,
+2024.
+
+
+Lawrence C Evans. An introduction to mathematical optimal control theory version 0.2. _Lecture_
+_notes available at http://math. berkeley. edu/evans/control. course. pdf_, 1983.
+
+
+Giorgio Giannone, Akash Srivastava, Ole Winther, and Faez Ahmed. Aligning optimization trajectories with diffusion models for constrained design generation. _Advances in Neural Information_
+_Processing Systems_, 36:51830–51861, 2023.
+
+
+Robert Kent Goodrich. A riesz representation theorem. _Proceedings of the American Mathematical_
+_Society_, 24(3):629–636, 1970.
+
+
+Henry Gouk, Eibe Frank, Bernhard Pfahringer, and Michael J Cree. Regularisation of neural networks
+by enforcing lipschitz continuity. _Machine Learning_, 110:393–416, 2021.
+
+
+Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. _arXiv preprint arXiv:2207.12598_,
+2022.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+11
+
+
+Emiel Hoogeboom, Vıctor Garcia Satorras, Clément Vignac, and Max Welling. Equivariant diffusion
+for molecule generation in 3d. In _International conference on machine learning_, pp. 8867–8887.
+PMLR, 2022.
+
+
+Guillaume Huguet, James Vuckovic, Kilian Fatras, Eric Thibodeau-Laufer, Pablo Lemos, Riashat
+Islam, Cheng-Hao Liu, Jarrid Rector-Brooks, Tara Akhound-Sadegh, Michael Bronstein, et al.
+Sequence-augmented se (3)-flow matching for conditional protein backbone generation. _arXiv_
+_preprint arXiv:2405.20313_, 2024.
+
+
+Velimir Jurdjevic. _Optimal problems on Lie groups_, pp. 368–406. Cambridge Studies in Advanced
+Mathematics. Cambridge University Press, 1996.
+
+
+Tero Karras. Progressive growing of gans for improved quality, stability, and variation. _arXiv preprint_
+_arXiv:1710.10196_, 2017.
+
+
+Bahjat Kawar, Roy Ganz, and Michael Elad. Enhancing diffusion-based image synthesis with robust
+classifier guidance. _arXiv preprint arXiv:2208.08664_, 2022.
+
+
+Grigory Khromov and Sidak Pal Singh. Some fundamental aspects about lipschitz continuity of
+neural networks. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+Gwanghyun Kim and Jong Chul Ye. Diffusionclip: Text-guided image manipulation using diffusion
+models. 2021.
+
+
+Marin B. Kobilarov and Jerrold E. Marsden. Discrete geometric optimal control on lie groups. _IEEE_
+_Transactions on Robotics_, 27(4):641–655, 2011. doi: 10.1109/TRO.2011.2139130.
+
+
+Jiahan Li, Chaoran Cheng, Zuofan Wu, Ruihan Guo, Shitong Luo, Zhizhou Ren, Jian Peng, and
+Jianzhu Ma. Full-atom peptide design based on multi-modal flow matching. In _Proceedings of the_
+_International Conference on Machine Learning (ICML)_, 2024.
+
+
+Qianxiao Li, Long Chen, Cheng Tai, and E Weinan. Maximum principle based algorithms for deep
+learning. _Journal of Machine Learning Research_, 18(165):1–29, 2018.
+
+
+Yaron Lipman, Ricky TQ Chen, Heli Ben-Hamu, Maximilian Nickel, and Matt Le. Flow matching
+for generative modeling. _arXiv preprint arXiv:2210.02747_, 2022.
+
+
+Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and
+transfer data with rectified flow. _arXiv preprint arXiv:2209.03003_, 2022.
+
+
+Xingchao Liu, Lemeng Wu, Shujian Zhang, Chengyue Gong, Wei Ping, and Qiang Liu. Flowgrad:
+Controlling the output of generative odes with gradients. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition_, pp. 24335–24344, 2023.
+
+
+Aaron Lou, Chenlin Meng, and Stefano Ermon. Discrete diffusion language modeling by estimating
+the ratios of the data distribution. _arXiv preprint arXiv:2310.16834_, 2023.
+
+
+Brennan S McCann, Annika Anderson, Morad Nazari, David Canales, and Ryne Beeson. On-manifold
+pose optimization on se (3) for spacecraft coverage maximization. In _AAS/AIAA Astrodynamics_
+_Specialists Conference_, 2023.
+
+
+Gabriele Orlando, Luis Serrano, Joost Schymkowitz, and Frederic Rousseau. Integrating physics in
+deep learning algorithms: a force field as a pytorch module. _Bioinformatics_, 40(4):btae160, April
+2024. doi: 10.1093/bioinformatics/btae160.
+
+
+Jiachun Pan, Jun Hao Liew, Vincent YF Tan, Jiashi Feng, and Hanshu Yan. Adjointdpm: Adjoint
+sensitivity method for gradient backpropagation of diffusion probabilistic models. _arXiv preprint_
+_arXiv:2307.10711_, 2023.
+
+
+Or Patashnik, Zongze Wu, Eli Shechtman, Daniel Cohen-Or, and Dani Lischinski. Styleclip: Textdriven manipulation of stylegan imagery. In _Proceedings of the IEEE/CVF international conference_
+_on computer vision_, pp. 2085–2094, 2021.
+
+
+Ashwini Pokle, Matthew J Muckley, Ricky TQ Chen, and Brian Karrer. Training-free linear image
+inversion via flows. _arXiv preprint arXiv:2310.04432_, 2023.
+
+
+12
+
+
+Lev Semenovich Pontryagin. _Mathematical theory of optimal processes_ . Routledge, 2018.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International conference on machine learning_, pp.
+8748–8763. PMLR, 2021.
+
+
+Raghunathan Ramakrishnan, Pavlo O Dral, Matthias Rupp, and O Anatole von Lilienfeld. Quantum
+chemistry structures and properties of 134 kilo molecules. _Scientific Data_, 1, 2014.
+
+
+Lars Ruddigkeit, Ruud Van Deursen, Lorenz C Blum, and Jean-Louis Reymond. Enumeration of 166
+billion organic small molecules in the chemical universe database gdb-17. _Journal of chemical_
+_information and modeling_, 52(11):2864–2875, 2012.
+
+
+Alessandro Saccon, John Hauser, and A. Pedro Aguiar. Exploration of kinematic optimal control on
+the lie group so(3)*. _IFAC Proceedings Volumes_, 43(14):1302–1307, 2010. ISSN 1474-6670. doi:
+https://doi.org/10.3182/20100901-3-IT-2016.00237. [URL https://www.sciencedirect.](https://www.sciencedirect.com/science/article/pii/S1474667015371457)
+[com/science/article/pii/S1474667015371457.](https://www.sciencedirect.com/science/article/pii/S1474667015371457) 8th IFAC Symposium on Nonlinear Control Systems.
+
+
+Jun John Sakurai and Jim Napolitano. _Modern quantum mechanics_ . Cambridge University Press,
+2020.
+
+
+Jiaming Song, Qinsheng Zhang, Hongxu Yin, Morteza Mardani, Ming-Yu Liu, Jan Kautz, Yongxin
+Chen, and Arash Vahdat. Loss-guided diffusion models for plug-and-play controllable generation.
+In _International Conference on Machine Learning_, pp. 32483–32498. PMLR, 2023.
+
+
+Yuxuan Song, Jingjing Gong, Minkai Xu, Ziyao Cao, Yanyan Lan, Stefano Ermon, Hao Zhou,
+and Wei-Ying Ma. Equivariant flow matching with hybrid probability transport for 3d molecule
+generation. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Martin Steinegger and Johannes Söding. Mmseqs2 enables sensitive protein sequence searching for
+the analysis of massive data sets. _Nature biotechnology_, 35(11):1026–1028, 2017.
+
+
+Minkai Xu, Alexander S Powers, Ron O Dror, Stefano Ermon, and Jure Leskovec. Geometric latent
+diffusion models for 3d molecule generation. In _International Conference on Machine Learning_,
+pp. 38592–38610. PMLR, 2023.
+
+
+Jason Yim, Andrew Campbell, Andrew YK Foong, Michael Gastegger, José Jiménez-Luna, Sarah
+Lewis, Victor Garcia Satorras, Bastiaan S Veeling, Regina Barzilay, Tommi Jaakkola, et al. Fast
+protein backbone generation with se (3) flow matching. _arXiv preprint arXiv:2310.05297_, 2023.
+
+
+Jason Yim, Andrew Campbell, Emile Mathieu, Andrew YK Foong, Michael Gastegger, José JiménezLuna, Sarah Lewis, Victor Garcia Satorras, Bastiaan S Veeling, Frank Noé, et al. Improved
+motif-scaffolding with se (3) flow matching. _arXiv preprint arXiv:2401.04082_, 2024.
+
+
+Chenshuang Zhang, Chaoning Zhang, Sheng Zheng, Mengchun Zhang, Maryam Qamar, Sung-Ho
+Bae, and In So Kweon. A survey on audio diffusion models: Text to speech synthesis and
+enhancement in generative ai. _arXiv preprint arXiv:2303.13336_, 2023.
+
+
+Yang Zhang and Jeffrey Skolnick. Tm-align: a protein structure alignment algorithm based on the
+tm-score. _Nucleic acids research_, 33(7):2302–2309, 2005.
+
+
+13
+
+
+A BACKGROUND OF RIEMANNIAN MANIFOLD AND SO(3) GROUP
+
+
+A Lie group _G_ is a smooth manifold equipped with group operations, such as multiplication and
+inversion, which are smooth maps. Specifically, _G_ is considered smooth when it possesses a _C_ _[∞]_
+differential structure. When _G_ is endowed with a left-invariant Riemannian metric, it becomes a
+Riemannian manifold, where the inner product of any two tangent vectors _v, w_ _∈_ _ThG_ at a point
+_h ∈_ _G_ is preserved under left multiplication. This property is expressed as:
+_⟨Lh_ ( _v_ ) _, Lh_ ( _w_ ) _⟩_ = _⟨v, w⟩,_ (23)
+where _Lh_ : _G →_ _G_ is the left multiplication map, and _⟨·, ·⟩_ : _TG × TG →_ R represents the inner
+product. Moreover, the tangent space at any point _x ∈_ _G_ is given by _TxG_ = _LxTeG_, where _TeG_ is
+the tangent space at the identity element _e_, which is identified with the Lie algebra g. Consequently,
+the full tangent bundle _TG_ can be written as _G ×_ g.
+
+
+At each point _x ∈_ _G_, a tangent space _TxG_ is attached, representing the space of tangent vectors at
+that point. The collection of these tangent spaces forms the tangent bundle _TG_, which itself is a
+smooth manifold. Additionally, for any point _h ∈_ _G_, the cotangent space _Th_ _[∗][G]_ [ is defined as the dual]
+space of _ThG_, consisting of linear functionals (co-states) that act on the tangent vectors.
+
+
+**Rotation Group** SO(3): The special orthogonal group SO(3), describing 3D rotations, is a compact
+3-dimensional Lie group. Its Lie algebra so(3) consists of skew-symmetric matrices. The group
+SO(3) is defined as:
+SO(3) = _{r_ _∈_ R [3] _[×]_ [3] : _r_ _[⊤]_ _r_ = _rr_ _[⊤]_ = _I,_ det( _r_ ) = 1 _}._ (24)
+It is a matrix Lie group, and its Lie algebra is given by:
+so(3) = _{r_ _∈_ R [3] _[×]_ [3] : _r_ _[⊤]_ = _−r}._ (25)
+
+
+**Parametrizations of** SO(3): The skew-symmetric matrices _r_ _∈_ so(3) can be uniquely represented
+by a vector _ω_ _∈_ R [3], such that for any _v_ _∈_ R [3], _rv_ = _ω × v_, where _×_ denotes the cross product. This
+vector is known as the _rotation vector_, where its magnitude _∥ω∥_ represents the angle of rotation, and
+its direction _eω_ = _ω/∥ω∥_ defines the axis of rotation. The mapping from R [3] to the skew-symmetric
+matrix is referred to as the _hat operation_, ( [ˆ] _·_ ).
+
+
+Another common parametrization of SO(3) is through _Euler angles_, described using three angles
+( _ϕ, θ, ψ_ ). In the _x-convention_, the rotation is expressed as a sequence of three rotations: a rotation
+about the _z_ -axis by _ϕ_, followed by a rotation about the updated _x_ -axis by _θ_, and finally, a rotation
+about the updated _z_ -axis by _ψ_ .
+
+
+One common inner product on so(3) is the induced Frobenius inner product, given by:
+_⟨A, B⟩_ = Tr( _A_ _[⊤]_ _B_ ) _,_ _∀A, B_ _∈_ so(3) _,_ (26)
+which equips SO(3) with a Riemannian structure. The manifold SO(3) has constant Gaussian
+curvature and is diffeomorphic to a solid ball with antipodal points identified. The exponential map
+exp : so(3) _→_ SO(3), originating from the identity element, is defined as matrix exponentiation:
+
+
+exp( _A_ ) =
+
+
+_∞_
+
+
+_k_ =0
+
+
+_A_ _[k]_
+
+_∀A ∈_ so(3) _,_ (27)
+_k_ ! _[,]_
+
+
+and can be represented more compactly via Rodrigues’ rotation formula:
+
+
+_[ θ]_
+
+_A_ + [1] _[ −]_ [cos] _[ θ]_
+_θ_ _θ_ [2]
+
+
+exp( _A_ ) = _I_ + [sin] _[ θ]_
+
+
+_A_ [2] _,_ _∀A ∈_ so(3) _,_ (28)
+_θ_ [2]
+
+
+where _θ_ = _∥A∥_ so(3) = [1] 2 _[∥][A][∥][F]_ [is the rotation angle.] [Similarly, the logarithm map][ log] [:] [SO][(3)] _[→]_
+
+so(3), also originating from the identity, is the matrix logarithm:
+
+
+_,_ (29)
+_k_
+
+
+log( _R_ ) =
+
+
+_∞_
+
+
+�( _−_ 1) _[k]_ [+1][ (] _[R][ −]_ _[I]_ [)] _[k]_
+
+_k_
+
+_k_ =1
+
+
+or more compactly as:
+
+
+where _A_ = [(] _[R][−][R][⊤]_ [)]
+
+
+_θ_
+log( _R_ ) = _∀R ∈_ SO(3) _,_ (30)
+sin _θ_ _[A,]_
+
+
+where _A_ = 2 _∈_ so(3) and _θ_ = _∥A∥_ so(3) is the rotation angle. In spherical geometry, the
+
+geodesic distance between two rotations is given by _d_ ( _R_ 1 _, R_ 2) = _∥_ log( _R_ 1 _[⊤][R]_ [2][)] _[∥][F]_ [, and interpolation]
+between rotations can be performed using exp( _tA_ ).
+
+
+14
+
+
+B BACKGROUND OF PMP AND E-MSA
+
+
+In this section, we shall introduce the details of the Pontryagin’s Maximum Principle on both
+Euclidean Space and SO(3) manifold as well as the algorithms of MSA and E-MSA.
+
+
+B.1 PMP
+
+
+As described in section 3, PMP offers a set of necessary conditions for an optimal control strategy.
+PMP states that for an optimal trajectory, there exists a co-state trajectory _µt_ such that the Hamiltonian
+(Equation 3) is maximized (or minimized, depending on the problem) with respect to the control
+at every time step. Additionally, the state and co-state evolve according to a system of coupled
+differential equations, where the co-state variables evolve in the cotangent space of the state variables.
+
+
+The governing differential equations are shown below:
+
+
+**Pontryagin’s Maximum Principle** Let _θ_ _[∗]_ _∈U_ be an essentially bounded optimal control, i.e. a
+solution to (2) with ess sup _t∈_ [0 _,T_ ] _∥θt_ _[∗][∥][∞]_ _[<][ ∞]_ [(ess sup denotes the essential supremum).] [Denote by]
+_X_ _[∗]_ the corresponding optimally controlled state process. Then, there exists an absolutely continuous
+co-state process _P_ _[∗]_ : [0 _, T_ ] _→_ R _[d]_ such that the Hamilton’s equations
+
+
+_X_ ˙ _t_ _[∗]_ [=] _[ ∇][p][H]_ [(] _[t, X]_ _t_ _[∗][, P]_ _t_ _[ ∗][, θ]_ _t_ _[∗]_ [)] _[,]_ _X_ 0 _[∗]_ [=] _[ x,]_ (31)
+
+_P_ ˙ _t_ _[∗]_ [=] _[ −∇][x][H]_ [(] _[t, X]_ _t_ _[∗][, P]_ _t_ _[ ∗][, θ]_ _t_ _[∗]_ [)] _[,]_ _PT_ _[∗]_ [=] _[ ∇]_ [Φ(] _[X]_ _T_ _[∗]_ [)] _[,]_ (32)
+are satisfied. Moreover, for each _t ∈_ [0 _, T_ ], we have the Hamiltonian maximization condition
+
+_H_ ( _t, Xt_ _[∗][, P]_ _t_ _[ ∗][, θ]_ _t_ _[∗]_ [)] _[ ≥]_ _[H]_ [(] _[t, X]_ _t_ _[∗][, P]_ _t_ _[ ∗][, θ]_ [)] for all _θ_ _∈_ Θ _._ (33)
+
+
+The PMP conditions can be naturally generalised to the Lie Group. Pontryagin’s Maximum Principle
+(PMP) for Lie groups (Saccon et al. (2010)) provides the conditions that govern the flow of the
+state _xt_ and its associated cotangent flow _λ_, describing the Hamiltonian equations that the optimal
+state-adjoint trajectory must satisfy. Specifically, the Hamiltonian equations are given by:
+
+
+_Xt_ _[−]_ [1] _X_ ˙ _t_ _[∗]_ [=] _[∂]_
+
+
+_t_ _[, P]_ _t_ _[ ∗][, θ]_ _t_ _[∗]_ [)] _[,]_ _X_ 0 _[∗]_ [=] _[ x,]_
+_∂p_ _[H]_ [(] _[t, X]_ _[∗]_
+
+
+_∂H∂µ_ _[µ]_ _t_ _[θ]_ _[−]_ [(d] _[L]_ _x_ _[θ]_ _t_ [)] _[∗]_ _[∂]_
+
+
+_µ_ ˙ _[θ]_ _t_ [=] _[ −]_ [ad] _[∗]_ _∂H_
+
+
+_∂x_ _[H]_ _[∗][,]_ _µ_ _[θ]_ _T_ [= (d] _[L]_ _x_ _[θ]_ _T_ [)] _[∗][∇][x]_ [Φ(] _[x]_ _T_ _[θ]_ [)] _[.]_ (34)
+
+
+The dual map (d _Lg_ ) _[⋆]_ : _Tgh_ _[⋆]_ [SO(3)] _[→]_ _[T][ ⋆]_ _h_ [SO(3)][ pulls back a cotangent vector at] _[ gh]_ [ to a cotangent]
+vector at _h_ . The coadjoint representation ad _[∗]_ _X_ [acts on][ so][(3)] _[∗]_ [and is defined as:]
+
+_⟨_ ad _[∗]_ _X_ _[µ, Y][ ⟩]_ [=] _[ −⟨][µ,]_ [ ad] _[X]_ _[Y][ ⟩][,]_ (35)
+
+where ad _X_ _Y_ = [ _X, Y_ ] = _XY_ _−_ _Y X_ for _µ_ _∈_ so(3) _[∗]_ and _X, Y_ _∈_ so(3). Additionally, for each
+_t ∈_ [0 _, T_ ], the Hamiltonian maximization condition is satisfied:
+
+
+_H_ ( _t, Xt_ _[∗][, µ]_ _t_ _[∗][, θ]_ _t_ _[∗]_ [)] _[ ≥]_ _[H]_ [(] _[t, X]_ _t_ _[∗][, µ]_ _t_ _[∗][, θ]_ [)] for all _θ_ _∈_ Θ _._ (36)
+
+
+B.2 EXTENDED-METHOD OF SUCCESSIVE APPROXIMATIONS (E-MSA)
+
+
+B.2.1 METHOD OF SUCCESSIVE APPROXIMATIONS (MSA)
+
+
+One numerical method for solving the Pontryagin Maximum Principle (PMP) is the Method of
+Successive Approximations (MSA) Chernousko & Lyubushin (1982), an iterative approach that
+alternates between propagation and optimization steps based on the PMP conditions. We first present
+the simplest form of MSA.
+
+
+Consider the general state dynamics:
+
+_X_ ˙ _t_ _[∗]_ [=] _[ f]_ [(] _[t, X]_ _t_ _[∗][, θ][∗]_ [)] _[.]_ (37)
+
+Given an initial guess _θ_ [0] _∈U_ for the optimal control, for each iteration _k_ = 0 _,_ 1 _,_ 2 _, . . ._, we first solve
+the state dynamics:
+_X_ ˙ _t_ _[θ][k]_ = _f_ ( _t, Xt_ _[θ][k]_ _[, θ]_ _t_ _[k]_ [)] _[,]_ _X_ 0 _[θ][k]_ = _x,_ (38)
+
+
+15
+
+
+to obtain _X_ _[θ][k]_, followed by solving the co-state equation:
+
+
+_µ_ ˙ _[θ]_ _t_ _[k]_ = _−∇xH_ ( _t, Xt_ _[θ][k]_ _[, µ]_ _t_ _[θ][k]_ _[, θ]_ _t_ _[k]_ [)] _[,]_ _µ_ _[θ]_ _T_ _[k]_ [=] _[ −∇]_ [Φ(] _[X]_ _T_ _[θ][k]_ [)] _[,]_ (39)
+
+
+to determine _µ_ _[θ][k]_ . Finally, the control is updated using the maximization condition:
+
+
+_θt_ _[k]_ [+1] = arg max _t_ _[, µ]_ _t_ _[θ][k]_ _[, θ]_ [)] _[,]_ (40)
+_θ∈_ Θ _[H]_ [(] _[t, X]_ _[θ][k]_
+
+
+for _t ∈_ [0 _, T_ ]. This process is summarized in Algorithm 3.
+
+
+**Algorithm 3** Basic MSA
+
+
+1: Initialize: _θ_ [0] _∈U_ ;
+2: **for** _k_ = 0 to #Iterations **do**
+3: Solve _X_ [˙] _t_ _[θ][k]_ = _f_ ( _t, Xt_ _[θ][k]_ _[, θ]_ _t_ _[k]_ [)] _[,]_ _X_ 0 _[θ][k]_ = _x_ ;
+
+
+4: Solve _µ_ ˙ _[θ]_ _t_ _[k]_ = _−∇xH_ ( _t, Xt_ _[θ][k]_ _[, µ]_ _t_ _[θ][k]_ _[, θ]_ _t_ _[k]_ [)] _[,]_ _µ_ _[θ]_ _T_ _[k]_ [=] _[ −∇]_ [Φ(] _[X]_ _T_ _[θ][k]_ [)][;]
+
+
+5: Set _θt_ _[k]_ [+1] = arg max _θ∈_ Θ _H_ ( _t, Xt_ _[θ][k]_ _[, µ]_ _t_ _[θ][k]_ _[, θ]_ [)][ for each] _[ t][ ∈]_ [[0] _[, T]_ []][;]
+6: **end for**
+
+
+B.2.2 E-MSA
+
+
+E-MSA introduces the augmented Hamiltonian
+
+
+[1]
+
+2 _[ρ][∥][v][ −]_ _[f]_ [(] _[t, x, θ]_ [)] _[∥]_ [2] _[ −]_ [1] 2
+
+
+_H_ ˜ ( _t, x, µ, θ, v, q_ ) := _H_ ( _t, x, µ, θ_ ) _−_ [1]
+
+
+(41)
+2 _[ρ][∥][q]_ [ +] _[ ∇][x][H]_ [(] _[t, x, µ, θ]_ [)] _[∥]_ [2] _[.]_
+
+
+Then, they define the following set of alternative necessary conditions for optimality:
+
+
+**Proposition 3 (Extended PMP)** Suppose that _θ_ _[∗]_ is an essentially bounded solution to the optimal
+control problem (2). Then, there exists an absolutely continuous co-state process _µ_ _[∗]_ such that the
+tuple ( _X_ _[∗]_ _, µ_ _[∗]_ _, θ_ _[∗]_ ) satisfies the necessary conditions
+
+
+_X_ ˙ _t_ _[∗]_ [=] _[ ∇][µ][H]_ [˜] [(] _[t, X]_ _t_ _[∗][, µ]_ _t_ _[∗][, θ]_ _t_ _[∗][,]_ _[X]_ [˙] _t_ _[∗][, µ]_ _t_ _[∗]_ [)] _[,]_ _X_ 0 _[∗]_ [=] _[ x]_
+
+
+_P_ ˙ _t_ _[∗]_ [=] _[ −∇][x][H]_ [˜] [(] _[t, X]_ _t_ _[∗][, µ]_ _t_ _[∗][, θ]_ _t_ _[∗][,]_ _[X]_ [˙] _t_ _[∗][, µ]_ _t_ _[∗]_ [)] _[,]_ _µ_ _[∗]_ _T_ [=] _[ −∇][x]_ [Φ(] _[X]_ _T_ _[∗]_ [)]
+
+_H_ ˜ ( _t, Xt_ _[∗][, µ]_ _t_ _[∗][, θ]_ _t_ _[∗][,]_ _[X]_ [˙] _t_ _[∗][, µ]_ _t_ _[∗]_ [)] _[ ≥]_ _[H]_ [˜] [(] _[t, X]_ _t_ _[∗][, µ]_ _t_ _[∗][,]_ [ 0] _[,]_ _[X]_ [˙] _t_ _[∗][, µ]_ _t_ _[∗]_ [)] _[,]_ _θ_ _∈_ Θ _, t ∈_ [0 _, T_ ] (42)
+
+
+The key contribution is that the control terms _θ_ can be updated by iteration using the Extended-PMP
+as shown below. Meanwhile, it is proven that under this update rule, for each iteration, the target
+function _J_ ( _θ_ ) is non-decreasing.
+
+
+**Algorithm 4** Extended MSA
+
+
+1: Initialize: _θ_ [0] _∈U_ . Hyper-parameter: _ρ_ ;
+2: **for** _k_ = 0 to #Iterations **do**
+3: Solve _X_ [˙] _t_ _[θ][k]_ = _f_ ( _t, Xt_ _[θ][k]_ _[, θ]_ _t_ _[k]_ [)] _[,]_ _X_ 0 _[θ][k]_ = _x_ ;
+
+
+4: Solve _P_ [˙] _t_ _[θ][k]_ = _−∇xH_ ( _t, Xt_ _[θ][k]_ _[, P]_ _t_ _[ θ][k]_ _[, θ]_ _t_ _[k]_ [)] _[,]_ _PT_ _[θ][k]_ = _−∇_ Φ( _XT_ _[θ][k]_ [)][;]
+
+
+5: Set _θt_ _[k]_ [+1] = arg max _θ∈_ Θ _H_ [˜] ( _t, Xt_ _[θ][k]_ _[, P]_ _t_ _[ θ][k]_ _[, θ,]_ _[X]_ [˙] _t_ _[θ][k]_ _[,]_ _[P]_ [˙] _[ θ]_ _t_ _[k]_ [)][ for each] _[ t][ ∈]_ [[0] _[, T]_ []][;]
+6: **end for**
+
+
+C PROOFS AND THEOREMS
+
+
+C.1 PROOF FOR PROPOSITION 1
+
+
+C.1.1 PART 1
+
+
+**Proposition** **1.** _For_ _Affine_ _Gaussian_ _Probability_ _Path,_ _the_ _expectation_ _of_ _the_ _running_ _cost_ _upper_
+_bounds the KL divergence between the prior joint distribution p_ 1( _x_ _[p]_ _, x_ 1) = _p_ 1( _x_ _[p]_ _|x_ 1) _pdata_ ( _x_ 1) _and_
+
+
+16
+
+
+_the joint distribution after guidance p_ 1( _x_ _[θ]_ _, x_ 1) = _p_ 1( _x_ _[θ]_ _|x_ 1) _pdata_ ( _x_ 1) _, with x_ 1 _∼_ _pdata, x_ _[p]_ _induced_
+_by prior conditional vector field ut_ ( _x|x_ 1) _and x_ _[θ]_ _sampled by applying control θt_ ( _x_ 1) _on ut._
+
+
+- 1 
+_∥θt_ ( _x_ 1) _∥_ [2] d _t_ _≥_ _C ·_ KL( _p_ 1( _x_ _[θ]_ _, x_ 1) _∥p_ 1( _x_ _[p]_ _, x_ 1)) _._ (43)
+0
+
+
+E _x_ 1 _∼p_ data( _x_ 1)
+
+
+- 1
+
+2
+
+
+**Proof.** For Affine Gaussian Probability Paths, the conditional flow distribution of the prior vector
+field can be written as: _Pt_ _[p]_ [(] _[x][|][x]_ [1][) =] _[ N]_ [(] _[µ][t]_ [(] _[x]_ [1][)] _[, σ][t]_ [(] _[x]_ [1][)][2] _[I]_ [)][, the conditional vector field is written as:]
+_ϕt_ ( _x_ ) = _µt_ ( _x_ 1) + _σt_ ( _x_ 1) _x_ (44)
+
+with its dynamics:
+_ϕ_ ˙ _t_ ( _x_ ) = _µ_ ˙ _t_ ( _x_ 1) + _σ_ ˙ _t_ ( _x_ 1) _x,_ (45)
+or
+_ut_ ( _x|x_ 1) = _µ_ ˙ _t_ ( _x_ 1) + _[σ]_ [˙] _[t]_ ( _x −_ _µt_ ( _x_ 1)) _._
+
+_σt_
+
+
+Although control terms _θ_ ( _x_ 1) are specifically derived for each ODE trajectory and are conditioned
+on the target point _x_ 1, we can define a marginalized control term _θt_ ( _x_ ) = - _θ_ ( _x_ 1) _p_ ( _x_ 1 _|x_ ) d _x_ 1 to
+assemble aggregated control from all possible controls applied to each target point. Adding that to
+the marginal vector field can be thought of as effectively adding the target-conditioned controls into
+the conditional vector field, and then marginalizing:
+
+
+               _u_ ( _x_ ) + _θt_ ( _x_ ) = ( _ut_ ( _x|x_ 1) + _θt_ ( _x_ 1)) _p_ ( _x_ 1 _|x_ ) d _x_ 1 _._ (46)
+
+
+Given the definition of the Gaussian path, we can derive that the additive control terms only alter the
+mean of the distribution by denoting it as _θt_ ( _x_ 1) by noticing it is not proportional to _x_ :
+_ϕ_ ˙ _[θ]_ _t_ [(] _[x]_ [) =] _[ u][t]_ [(] _[ϕ]_ [(] _[x]_ [)] _[|][x]_ [1][) +] _[ θ][t]_ [(] _[x]_ [1][) =] _[ θ][t]_ [(] _[x]_ [1][) +] _[µ]_ [˙] _[t]_ [(] _[x]_ [1][) +] _[σ]_ [˙] _[t]_ [(] _[x]_ [1][)] _[x.]_ (47)
+
+
+The resulting pushing-forward prob is equivalently:
+
+
+                _Pt_ _[θ]_ [(] _[x]_ [) =] _Pt_ _[θ]_ [(] _[x][|][x]_ [1][)] _[q]_ [(] _[x]_ [1][) d] _[x]_ [1] _[,]_
+
+
+_Pt_ _[θ]_ [(] _[x][|][x]_ [1][) =] _[ N]_ [(] _[µ]_ _t_ _[θ]_ [(] _[x]_ [1][)] _[, σ][t]_ [(] _[x]_ [1][)][2] _[I]_ [)] _[.]_ (48)
+Usually, besides maximising the reward, we hope the new distribution is not too much away from the
+original distribution. One common constraint on the terminal state distribution is the Kullback-Leibler
+(KL) divergence.
+
+
+Inspired by Variational Flow Matching (Eijkelboom et al. (2024)), we can the KL divergence
+between the joint distributions of the data point _x_ 1 and the prior terminal point _x_ _[p]_, denoted as
+_p_ 1( _x_ _[p]_ _, x_ 1) = _p_ 1( _x_ _[p]_ _|x_ 1) _p_ data( _x_ 1), and that of the data point _x_ 1 and the controlled terminal point _x_ _[θ]_,
+denoted as _p_ 1( _x_ _[θ]_ _, x_ 1): KL( _P_ 1 _[p]_ [(] _[x, x]_ [1][)] _[∥][P]_ 1 _[ u]_ [(] _[x, x]_ [1][))][.]
+
+
+The KL term can be simplified as:
+
+
+��
+1 [(] _[x][|][x]_ [1][)] _[p]_ [data][(] _[x]_ [1][)]
+KL( _P_ 1 _[p]_ [(] _[x, x]_ [1][)] _[||][P]_ 1 _[ θ]_ [(] _[x, x]_ [1][)) =] _P_ 1 _[p]_ [(] _[x][|][x]_ [1][)] _[q]_ [(] _[x]_ [1][) log] _[P][ p]_ (49)
+_P_ 1 _[θ]_ [(] _[x][|][x]_ [1][)] _[p]_ [data][(] _[x]_ [1][)] [d] _[x]_ [ d] _[dx]_ [1]
+
+= E _x_ 1 _∼p_ data( _x_ 1)[KL( _P_ 1 _[p]_ [(] _[x][|][x]_ [1][)] _[||][P]_ 1 _[ θ]_ [(] _[x][|][x]_ [1][))]] _[.]_
+
+
+Given _P_ 1 _[p]_ [(] _[x][|][x]_ [1][)][ and] _[ P]_ 1 _[ θ]_ [(] _[x][|][x]_ [1][)][ are two Gaussians with the same variance but different mean, and]
+when we consider the constraint per sample, the constraint can be written as:
+
+1 _∥µ_ _[θ]_ 1 [(] _[x]_ [1][)] _[ −]_ _[µ][p]_ 1 [(] _[x]_ [1][)] _[∥]_ [2]
+
+_,_ (50)
+
+2 _σ_ 1( _x_ 1) [2]
+
+
+given:
+
+
+- 1
+
+
+2 - 1
+_≤_
+
+
+_∥µ_ _[θ]_ 1 [(] _[x]_ [1][)] _[ −]_ _[µ][p]_ 1 [(] _[x]_ [1][)] _[∥]_ [2] [=]
+����
+
+
+1
+
+_θt_ d _t_
+0 ����
+
+
+_∥θt∥_ [2] d _t._ (51)
+0
+
+
+Therefore, we have the following inequality:
+
+
+- 1 - 1
+
+_∥θt_ ( _x_ 1) _∥_ [2] d _t_ _≥_ (52)
+0 4 _σ_ 1( _x_ 1) [2] _[·]_ [ KL][(] _[p]_ [1][(] _[x][θ][, x]_ [1][)] _[∥][p]_ [1][(] _[x][p][, x]_ [1][))] _[.]_
+
+
+17
+
+
+E _x_ 1 _∼p_ data( _x_ 1)
+
+
+- 1
+
+2
+
+
+C.1.2 PART 2
+
+
+**Proposition 1.** **Part 2** _For square-shaped data x with non-zero probability path, the expectation of_
+_the running cost, combined with the L_ 1 _-distance between the prior sample x_ _[p]_ 1 _[and the corresponding]_
+_guided sample x_ _[θ]_ 1 _[, upper bounds the KL divergence between the marginal distributions of the prior]_
+_model p_ _[p]_ 1 _[and the guided model][ p]_ 1 _[θ][:]_
+
+
+_Ex_ _[p]_ 1 _[∼][p][p]_ 1 [(] _[x]_ [)]
+
+
+- - 1 _A∥x_ _[p]_ 1 _[−]_ _[x]_ 1 _[θ][∥]_ [+] _[ B]_ _∥θt_ ( _x_ _[p]_ 1 [)] _[∥]_ [2][ d] _[t]_ _≥_ KL( _p_ _[p]_ 1 _[∥]_ _[p]_ 1 _[θ]_ [)] _[.]_ (53)
+
+0
+
+
+**Proof.** Firstly, we can build a bound for the distance of terminal points of pre-trained model _ϕ_ _[p]_ _t_ [(] _[x]_ [)]
+and our controlled model _ϕ_ _[θ]_ _t_ [(] _[x]_ [)][ given the same starting point.] [Given] [d] _[ϕ]_ d _t_ _[p]_ _t_ [(] _[x]_ [)] = _f_ _[p]_ ( _x_ ) with _f_ _[p]_ ( _·_ ) is
+
+the prior model and [d] _[ϕ]_ d _t_ _[θ]_ _t_ [(] _[x]_ [)] = _f_ _[p]_ ( _x_ ) + _θt_, meanwhile as the _θt_ are defined per sample, we can see
+them as a function of _x_ . Given the ODEs governing _ϕ_ _[θ]_ _t_ [(] _[x]_ [)][ and] _[ ϕ]_ _t_ _[p]_ [(] _[x]_ [)][ and use Lipschitz condition:]
+
+
+       - 1
+_∥ϕ_ _[θ]_ _t_ [(] _[x]_ [)] _[−][ϕ]_ _t_ _[p]_ [(] _[x]_ [)] _[∥≤]_
+
+
+1 - 1
+
+_∥f_ _[p]_ ( _ϕ_ _[θ]_ _t_ [(] _[x]_ [))] _[−][f][ p]_ [(] _[ϕ]_ _t_ _[p]_ [(] _[x]_ [))+] _[θ][t][∥]_ [d] _[t][ ≤]_ _[L]_
+0 0
+
+
+1 - 1
+
+_∥ϕ_ _[θ]_ _t_ [(] _[x]_ [)] _[−][ϕ]_ _t_ _[p]_ [(] _[x]_ [)] _[∥]_ [d] _[t]_ [+]
+0 0
+
+
+_∥θt∥_ d _t._
+0
+
+
+(54)
+By Gronwall’s inequality:
+
+
+         - 1
+_∥ϕ_ _[θ]_ 1 [(] _[x]_ [)] _[ −]_ _[ϕ][p]_ 1 [(] _[x]_ [)] _[∥≤]_ _[e][L]_ _∥θt∥_ d _t._ (55)
+
+0
+
+
+From the bound we build above, we can set
+
+
+                         - 1
+_ϕ_ _[θ]_ 1 [(] _[x]_ [)] _[ −]_ _[ϕ][p]_ 1 [(] _[x]_ [) =] _[ g]_ [(] _[θ][t][, x]_ [)] with _g_ ( _θt, x_ ) _≤_ _e_ _[L]_ _∥θt∥_ d _t,_ (56)
+
+0
+
+
+and then by definition:
+_ϕ_ _[−]_ _θ,_ [1] 1 [(] _[x]_ [) =] _[ ϕ]_ _p,_ _[−]_ [1] 1 [(] _[x][ −]_ _[g]_ [)] _[.]_ (57)
+
+Now we consider the push-forward functions and assume _p_ is non-zero for all _x_ :
+
+
+_p_ _[p]_ 1 [(] _[x]_ [) =] _[ p]_ [0][(] _[ϕ][−]_ _p,_ [1] 1 [(] _[x]_ [))][det]
+
+
+_p_ _[θ]_ 1 [(] _[x]_ [) =] _[ p]_ [0][(] _[ϕ][−]_ _θ,_ [1] 1 [(] _[x]_ [))][det]
+
+
+- _∂ϕ_ _[−]_ _p,_ [1] 1 _∂x_ [(] _[x]_ [)]
+
+
+- _∂ϕ_ _[−]_ _θ,_ [1] 1 _∂x_ [(] _[x]_ [)]
+
+
+_,_
+
+
+_._ (58)
+
+
+Given the starting distribution is standard Gaussian, we can get the KL divergence as:
+
+
+
+
+
+      KL( _p_ _[p]_ 1 _[∥]_ _[p]_ 1 _[θ]_ [) =] _p_ 1( _x_ )
+
+
+[1] _p,_ 1 [(] _[x]_ [)] _[∥]_ [2][ +] [1]
+
+2 _[∥][ϕ][−]_ [1] 2
+
+
+ _−_ [1]
+
+
+_∂ϕ_ _[−]_ _p,_ [1] 1
+
+[1] 2 _[∥][ϕ]_ _θ,_ _[−]_ [1] 1 [(] _[x]_ [)] _[∥]_ [2][ + log] [det] _∂ϕ∂x_ _[−]_ _θ,_ [1] 1 [(] _[x]_ [)]
+
+
+det _∂ϕ∂x_ _[−]_ _θ,_ [1] 1 [(] _[x]_ [)]
+
+
+
+
+
+ d _x._ (59)
+
+
+With the Mean Value Theorem, we can find a point _x_ ˜ between _x_ and _x −_ _g_ so that
+
+
+_′_
+_ϕ_ _[−]_ _p,_ [1] 1 [(] _[x]_ [)] _[ −]_ _[ϕ][−]_ _p,_ [1] 1 [(] _[x][ −]_ _[g]_ [) = (] _[ϕ][−]_ _p,_ [1] 1 [(˜] _[x]_ [))] _g._ (60)
+
+
+_′_
+Assume the gradient is bounded so that ( _ϕ_ _[−]_ _p,_ [1] 1 [(˜] _[x]_ [))] _≤_ _k_ :
+
+
+[1] _p,_ 1 [(] _[x]_ [)] _[∥]_ [2][ +] [1]
+
+2 _[∥][ϕ][−]_ [1] 2
+
+
+(61)
+2 _[∥][g][∥]_ [2] _[.]_
+
+
+_−_ [1]
+
+
+[1] _θ,_ 1 [(] _[x]_ [)] _[∥]_ [2] _[≤]_ _[k][∥][g][∥]_ [+] _[k]_ [2]
+
+2 _[∥][ϕ][−]_ [1] 2
+
+
+For the log term, with MVT again, there exists a point _ξ_ on the line segment between _x_ and _x −_ _g_
+such that:
+_h_ ( _x_ ) _−_ _h_ ( _x −_ _g_ ) = _∇h_ ( _ξ_ ) _· g._ (62)
+
+Applying this to _h_ ( _x_ ) = log det _f_ ( _x_ ):
+
+
+log det _f_ ( _x_ ) _−_ log det _f_ ( _x −_ _g_ ) = _∇_ (log det _f_ )( _ξ_ ) _· g._ (63)
+
+
+Thus,
+_|_ ∆( _x_ ) _|_ = _|∇_ (log det _f_ )( _ξ_ ) _· g| ≤∥∇_ (log det _f_ )( _ξ_ ) _∥∥g∥._ (64)
+
+
+18
+
+
+To bound _∥∇_ (log det _f_ )( _ξ_ ) _∥_, the gradient of log det _f_ ( _x_ ) with respect to _x_ is:
+
+
+_∇_ (log det _f_ ( _x_ )) = (det _f_ ( _x_ )) _[−]_ [1] _∇_ (det _f_ ( _x_ )) _._ (65)
+
+
+Given the derivative of the determinant of a matrix-valued function assuming _f_ ( _x_ ) is square:
+
+
+_∇_ (det _f_ ( _x_ )) = det _f_ ( _x_ ) _·_ Tr       - _f_ _[′]_ ( _x_ ) _[−]_ [1] _f_ _[′′]_ ( _x_ )� _._ (66)
+
+
+Therefore:
+_∇_ (log det _f_ ( _x_ )) = Tr        - _f_ _[′]_ ( _x_ ) _[−]_ [1] _f_ _[′′]_ ( _x_ )� _._ (67)
+
+
+Assuming that:
+
+
+    - _∥f_ _[′]_ ( _x_ ) _[−]_ [1] _∥≤_ _M_ for some constant _M_ ;
+
+    - _∥f_ _[′′]_ ( _x_ ) _∥≤_ _N_ for some constant _N_ .
+
+
+Then:
+_∥∇_ (log det _f_ ( _x_ )) _∥≤∥f_ _[′]_ ( _x_ ) _[−]_ [1] _∥· ∥f_ _[′′]_ ( _x_ ) _∥· n ≤_ _MNn_ = _K._ (68)
+
+
+Therefore:
+
+
+_∂ϕ_ _[−]_ _p,_ [1] 1
+_∂x_ [(] _[x]_ [)]
+log [det] _≤_ _K∥g∥._ (69)
+
+det _∂ϕ∂x_ _[−]_ _θ,_ [1] 1 [(] _[x]_ [)]
+
+
+Overall, we can bound the KL divergence using the integration of _θt_ and the integration of the square
+of _θt_ :
+
+
+KL( _p_ _[p]_ 1 _[∥]_ _[p]_ 1 _[θ]_ [)] _[ ≤]_ [E] _x_ 1 _∼p_ _[p]_ 1 [(] _[x]_ [)]
+
+
+_≤_ E _x_ 1 _∼p_ _[p]_ 1 [(] _[x]_ [)]
+
+
+C.2 PROOF FOR THEOREM 2
+
+
+- ( _k_ + _K_ ) _∥g∥_ + _[k]_ [2]
+
+2 _[∥][g][∥]_ [2]
+
+
+[2]  - 1
+
+2 _[e][L]_
+
+
+�( _k_ + _K_ ) _e_ _[L]_ _∥x_ 1 _−_ _x_ _[θ]_ 1 [(] _[x]_ [1][)] _[∥]_ [+] _[k]_ [2]
+
+
+    _∥θt∥_ [2] d _t_ _._ (70)
+0
+
+
+Since the Extended Method of Successive Approximations (E-MSA) is applied in this context, its
+convergence properties are directly inherited. In this section, we focus on how our update rule is
+derived from the E-MSA update rule, specifically under the framework of additive control terms and
+running cost.
+
+
+Define Hamiltonian _H_ and Extended Hamiltonian _H_ [˜] :
+
+_H_ ( _t, x, µ, θ_ ) = _µt · f_ ( _x, t_ ) + _µt · θt −_ [1]
+
+2 _[∥][θ][t][∥]_ [2] _[,]_
+
+
+_H_ ˜ ( _t, x, µ, θ,_ _x,_ ˙ _µ_ ˙ ) = _µt · f_ ( _x, t_ ) + _µt · θt_ _[k]_ [+1] _−_ [1]
+
+
+[1] 2 _[∥][θ]_ _t_ _[k]_ [+1] _∥_ [2] _−_ _[γ]_ 2
+
+
+_t_ _−_ _θt_ _[k][∥]_ [2] _[.]_ (71)
+2 _[∥][θ][k]_ [+1]
+
+
+Apply Extended MSA:
+_x_ ˙ _[k]_ _t_ [=] _[ θ]_ _t_ _[k]_ [+] _[ f]_ [(] _[x]_ _t_ _[k][, t]_ [)] _[,]_
+
+_µ_ ˙ _[k]_ _t_ [=] _[ −∇][x][H]_ [(] _[t, x][k][, µ][k][, θ][k]_ [) =] _[ −∇][x][f]_ [(] _[x]_ _t_ _[k][, t]_ [)] _[µ]_ _t_ _[k][,]_
+
+_µ_ _[k]_ 1 [=] _[ α][∇][x]_ 1 [Φ(] _[x][k]_ 1 [)] _[,]_
+
+_θt_ _[k]_ [+1] = argmax _θtH_ [˜] ( _t, x, µ, θ,_ _x,_ ˙ _µ_ ˙ ) _._ (72)
+
+_µ_ _[k]_ _t_ [can be calculated in closed form as below, with] _[ T]_ [exp][ is the time-order exponential:]
+
+
+�� 1            _µ_ _[k]_ _t_ [=] _[ T]_ [exp] _∇xf_ ( _x_ _[k]_ _s_ _[, s]_ [) d] _[s]_ _· α∇x_ 1Φ( _X_ 1 _[k]_ [)] (73)
+
+_t_
+
+
+Thus, the update rule of _θt_ is:
+
+
+_γ_ _α_ �� 1           _θt_ _[k]_ [+1] = _t_ [+] [exp] _∇xf_ ( _x_ _[k]_ _s_ _[, s]_ [) d] _[s]_ _· ∇x_ 1Φ( _X_ 1 _[k]_ [)] _[.]_ (74)
+1 + _γ_ _[θ][k]_ 1 + _γ_ _[T]_ _t_
+
+
+19
+
+
+Further, the time-order exponential term can be simplified as follows. Evans (1983) provides a method
+to calculate _p_ ( _t_ ) = _∇xtx_ (1) efficiently by defining the adjoint and using the following ODEs:
+
+_p_ ˙( _t_ ) = _−∇xf_ ( _x_ _[k]_ _t_ _[, t]_ [)] _[p]_ [(] _[t]_ [)] _[,]_ _p_ (1) = _∇x_ (1) _x_ (1) = _I._ (75)
+
+
+Sakurai & Napolitano (2020) provides an alternative viewpoint of the adjoint ODE, they show there
+would be a closed form solution:
+
+
+                     -                      - 1                      _p_ ˙( _t_ ) = _A_ ( _t_ ) _p_ ( _t_ ) _,_ _p_ ( _t_ ) = _T_ exp _−_ _A_ ( _s_ ) d _s_ _p_ (1) _._ (76)
+
+_t_
+
+
+Thus, combining the closed form solution and the adjoint representation, we find that:
+
+
+�� 1                  _∇xtx_ (1) = _T_ exp _∇xf_ ( _x_ _[k]_ _s_ _[, s]_ [) d] _[s]_ _._ (77)
+
+_t_
+
+
+Given the linearity of the ODEs, multiply a constant to the terminal by change _p_ ( _t_ ) = _∇xtx_ (1) into
+_p_ ( _t_ ) = _∇xtx_ (1) _∇x_ 1Φ( _x_ 1), the conclusions would not change, we have:
+
+
+�� 1                  _∇xtx_ (1) _∇x_ 1Φ( _x_ 1) = _T_ exp _∇xf_ ( _x_ _[k]_ _s_ _[, s]_ [) d] _[s]_ _∇x_ 1Φ( _x_ 1) _._ (78)
+
+_t_
+
+
+Therefore, our update rule is in fact:
+
+
+_γ_
+_θt_ _[k]_ [+1] = _t_ [+] _[ α][∇][x]_ _t_ [Φ(] _[X]_ 1 _[k]_ [)] _[.]_ (79)
+1 + _γ_ _[θ][k]_
+
+
+The solutions can be naturally generalised to the space of R _[N]_ if we use Tr( _A_ _[⊤]_ _B_ ) to replace _A · B_ .
+
+
+C.3 DISCRETIZATION ERROR
+
+
+Given the discretization method we are using is Euler step, we can show the error in terminal
+states due to Euler method with turning continous setting _x_ ˙ _[θ]_ _t_ [=] _[h][t]_ [(] _[x][θ]_ _t_ _[, θ][t]_ [)] [into] [discrete] [setting]
+_xt_ +1 = _xt_ + _ht_ ( _x_ _[θ]_ _t_ _[, θ][t]_ [)∆] _[t]_ [is] [bounded.] [Consider] [the] [first] [update] [of] [the] [states,] [define] [the] [local]
+truncation error as:
+_τk_ := _x_ _[∗]_ _t_ +1 _[−]_ _[x]_ _t_ _[∗]_ _[−]_ _[h][t]_ [(] _[x]_ _t_ _[θ][, θ][t]_ [)] _[ ·]_ [ ∆] _[t.]_ (80)
+By definition:
+
+            - _tk_ +1
+_τk_ = _hs_ ( _x_ _[θ]_ _s_ _[, θ][s]_ [) d] _[s][ −]_ _[h][t]_ [(] _[x]_ _t_ _[θ][, θ][t]_ [)] _[ ·]_ [ ∆] _[t.]_ (81)
+
+_tk_
+
+Given ∆ _t_ is small, with Taylor expansion:
+
+
+_hs_ ( _x_ _[θ]_ _s_ _[, θ][s]_ [) =] _[ h][t]_ [(] _[x][θ]_ _t_ _[, θ][t]_ [) +] _[∂h]_
+
+
+(82)
+_∂t_ [(] _[s][ −]_ _[t]_ [) +][ higher order terms] _[.]_
+
+
+_[∂h]_ _s_ _[−]_ _[x]_ _t_ _[θ]_ [) +] _[∂h]_
+
+_∂x_ [(] _[x][θ]_ _∂t_
+
+
+Similarly:
+_x_ _[θ]_ _s_ _[−]_ _[x]_ _t_ _[θ]_ [=] _[ h][t]_ [(] _[x]_ _t_ _[θ][, θ][t]_ [)(] _[s][ −]_ _[t]_ [) +][ higher order terms] _[.]_ (83)
+We can then obtain
+
+
+        - _∂ht_
+_hs_ ( _x_ _[θ]_ _s_ _[, θ][s]_ [) =] _[ h][t]_ [(] _[x][θ]_ _t_ _[, θ][t]_ [) +] _[∂h]_
+_∂x_ _[h][t]_ [ +] _∂t_
+
+
+( _s −_ _t_ ) + higher order terms _._ (84)
+
+
+Therefore:
+
+   - _tk_ +1
+
+
+_tk_ +1
+
+_hs_ ( _x_ _[θ]_ _s_ _[, θ][s]_ [) d] _[s]_ [ = ∆] _[t][ ·][ h][t]_ [(] _[x][θ]_ _t_ _[, θ][t]_ [) +] [∆] _[t]_ [2]
+_tk_ 2
+
+
++ higher order terms _,_
+
+
+2
+
+
+- _∂ht_
+
+_[∂h]_
+_∂x_ _[h][t]_ [ +] _∂t_
+
+
+_τk_ = [∆] _[t]_ [2]
+
+2
+
+
+- _∂ht_ 
+_[∂h]_ + higher order terms _._ (85)
+_∂x_ _[h][t]_ [ +] _∂t_
+
+
+Now we accumulate Local Errors to Global Error. Define error in k [th] step:
+
+_ek_ = _x_ _[∗]_ ( _tk_ ) _−_ _xk,_
+
+
+20
+
+
+_ek_ +1 = _x_ _[∗]_ ( _tk_ +1) _−xk_ +1 = ( _x_ _[∗]_ ( _tk_ ) + ∆ _t · f_ ( _x_ _[∗]_ ( _tk_ ) _, u_ _[∗]_ ( _tk_ ) _, tk_ ) + _τk_ ) _−_ ( _xk_ + ∆ _t · f_ ( _xk, u_ _[∗]_ _k_ _[, t][k]_ [))] _[ .]_
+(86)
+Simplifying:
+_ek_ +1 = _ek_ + ∆ _t_ ( _f_ ( _x_ _[∗]_ ( _tk_ ) _, u_ _[∗]_ ( _tk_ ) _, tk_ ) _−_ _f_ ( _xk, u_ _[∗]_ _k_ _[, t][k]_ [)) +] _[ τ][k][.]_ (87)
+Assuming _f_ is Lipschitz continuous in _x_ and _u_ :
+
+_∥f_ ( _x_ _[∗]_ ( _tk_ ) _, u_ _[∗]_ ( _tk_ ) _, tk_ ) _−_ _f_ ( _xk, u_ _[∗]_ _k_ _[, t][k]_ [)] _[∥≤]_ _[L][f]_ _[∥][x][∗]_ [(] _[t][k]_ [)] _[ −]_ _[x][k][∥]_ [=] _[ L][f]_ _[∥][e][k][∥][.]_ (88)
+
+
+Error Recurrence Inequality:
+
+
+_∥ek_ +1 _∥≤∥ek∥_ + ∆ _t · Lf_ _∥ek∥_ + _∥τk∥_ = (1 + ∆ _t · Lf_ ) _∥ek∥_ + _∥τk∥._ (89)
+
+
+Solving the Error Inequality given _∥τk∥≤_ _C_ (∆ _t_ ) [2], where _C_ is a constant depending on _f_ and its
+derivatives. We will solve the inequality:
+
+
+_ϵk_ +1 _≤_ _αϵk_ + _C_ (∆ _t_ ) [2] _,_ (90)
+
+
+where _ϵk_ = _∥ek∥_ and _α_ = 1 + ∆ _t · Lf_ . Thus:
+
+
+_k_
+_ϵk_ +1 _≤_ _α_ _[k]_ [+1] _ϵ_ 0 + _C_ (∆ _t_ ) [2]                - _α_ _[k][−][j]_ _._ (91)
+
+
+_j_ =0
+
+
+Since _ϵ_ 0 = 0 (assuming _x_ 0 is exact), the first term drops out. The sum becomes:
+
+
+_._ (92)
+_α −_ 1
+
+
+_Sk_ =
+
+
+_k_
+
+- _α_ _[k][−][j]_ = _[α][k]_ [+1] _[ −]_ [1]
+
+_α −_ 1
+
+_j_ =0
+
+
+_k_
+
+
+For small ∆ _t_ :
+_α ≤_ _e_ [∆] _[t][·][L][f]_ _,_
+
+
+_α_ _[k]_ [+1] _≤_ _e_ [(] _[k]_ [+1)∆] _[t][·][L][f]_ = _e_ _[L][f][ t][k]_ [+1] _._ (93)
+
+Compute the Sum _Sk_ :
+
+
+_[−]_ [1]
+_Sk_ _≤_ _[e][L][f][ t][k]_ [+1]
+
+
+_[L][f][ t][k]_ [+1] _[−]_ [1] _[−]_ [1]
+
+_e_ [∆] _[t][·][L][f]_ _−_ 1 _[≤]_ _[e][L]_ ∆ _[f][ t]_ _t_ _[k]_ _·_ [+1] _Lf_
+
+
+_._ (94)
+∆ _t · Lf_
+
+
+Final Bound on _ϵk_ +1:
+
+
+At the Final Time _tf_ :
+
+
+_[−]_ [1)]
+_ϵN_ = _∥x_ _[∗]_ ( _tf_ ) _−_ _xN_ _∥≤_ _[C]_ [∆] _[t]_ [(] _[e][L][f][ t][f]_ _._ (96)
+
+_Lf_
+
+
+_[−]_ [1]
+_ϵk_ +1 _≤_ _C_ (∆ _t_ ) [2] _·_ _[e][L][f][ t][k]_ [+1]
+
+
+_._ (95)
+_Lf_
+
+
+_[f][ t][k]_ [+1] _[−]_ [1] _[−]_ [1)]
+
+= _[C]_ [∆] _[t]_ [(] _[e][L][f][ t][k]_ [+1]
+∆ _t · Lf_ _Lf_
+
+
+For multiple rounds of updates, the error would be accumulated, for the N+1 _[th]_ update, an additional
+local error is added to _τk_ :
+
+_εk,N_ +1 = _x_ _[∗]_ _t,N_ _[−]_ _[x][t,N]_ [+ (] _[h][t]_ [(] _[x][∗]_ _t,N_ _[, θ]_ _N_ _[t,][∗]_ [)] _[ −]_ _[h][t]_ [(] _[x][t,N]_ _[, θ]_ _N_ _[t]_ [))] _[ ·]_ [ ∆] _[t.]_ (97)
+
+
+As the magnitude of this additional term is still _O_ (∆ _t_ [2] ), the order of magnitude of _τk_ does not change,
+thus our conclusion does not change. The case in the SO(3) manifold should be similar, noticing the
+discretization also uses the Euler step.
+
+
+C.4 ASYNCHRONOUS SETTING AND VJP IN SO(3)
+
+
+In practice, as described by equation 22, discretization techniques are employed to simulate the
+ordinary differential equations (ODEs) governing both the state trajectory _xt_ and the corresponding
+cotangent vector _µt_ . Most existing methods, as well as the algorithm presented earlier, operate under
+a _synchronous_ setting, where the number of time steps for the state trajectory _xt_ matches the number
+of control terms _θt_ .
+
+
+However, OC-Flow can be extended to an _asynchronous_ framework by approximation to allow greater
+flexibility in update scheduling.
+
+
+21
+
+
+Rather than employing the standard update rule _xt_ +∆ _t_ = _xt_ + _f_ ( _t, xt, θt_ )∆ _t_, we subdivide the time
+interval ∆ _t_ into _N_ equally spaced subintervals, applying the control term _θt_ only during the first
+subinterval. The update for _xt_ +∆ _t_ is given by:
+
+
+_xt_ +∆ _t_ = _xt_ + [∆] _[t]_
+
+
+[∆] _[t]_ [∆] _[t]_
+
+_N_ _[f]_ [(] _[x][t][, θ][t]_ [) +] _N_
+
+
+_N_ _[f][ p]_ [ �] _x_ _[θ]_ _t_ + [∆] _N_ _[t]_
+
+
+_N_
+
+
+_._ (98)
+
+
++ _· · ·_ + [∆] _[t]_
+
+
+_x_ _[θ]_ ( _N_ _−_ 1)∆ _t_
+_N_ _[f][ p]_ [ �] _N_
+
+
+_N_
+
+
+Moreover, for intermediate steps, we define:
+
+
+_i_ ∆ _t_ [∆] _[t]_
+
+_N_ [=] _[ x][t]_ [ +]
+
+
+_N_
+
+
+_,_ (99)
+
+
+_i−_ 1
+
+
+_l_ =1
+
+
+∆ _t_
+
+
+_N_ _[f][ p]_ [ �] _x_ _[θ]_ _t_ + _[l]_ _N_ [∆] _[t]_
+
+
+_xt_ + _i_ ∆ _t_
+
+
+_N_ _[f]_ [(] _[x][t][, θ][t]_ [) +]
+
+
+where _xt_ + _iN_ ∆ _t_ [denotes the state at the] _[ i]_ [-th subinterval.]
+
+
+Recall that _f_ ( _xt, θt_ ) = _f_ _[p]_ ( _xt_ )+ _θt_, when we have [∆] _N_ _[t]_ [is small enough, the update rule in Equation 10]
+
+can be approximated as a case in Equation 4 by considering _∇θxt_ +∆ _t_ :
+
+
+_∇θxt_ +∆ _t_ = [∆] _[t]_
+
+
+[∆] _[t]_ [∆] _[t]_
+
+_N_ [+] _N_
+
+
+_N_ _[∇][θ][f][ p]_ [ �] _x_ _[θ]_ _t_ + [∆] _N_ _[t]_
+
+
+_N_
+
+
++ _· · ·_ + [∆] _[t]_
+
+
+_x_ _[θ]_
+_N_ _[∇][θ][f][ p]_ [ �] _t_ + [(] _[N]_ _[−]_ _N_ [1)∆] _[t]_
+
+
+_N_
+
+
+�2
+_∇xf_ _[p]_ [ �] _x_ _[θ]_ _t_ + [∆] _N_ _[t]_
+
+
+�2
+_∇xf_ _[p]_ [ �] _x_ _[θ]_ _t_ + [∆] _[t]_
+
+
+- - ∆ _t_
++ _· · ·_ +
+_N_
+
+
+(100)
+
+
+   - ∆ _t_
+
+= [∆] _[t]_
+
+_N_ [+] _N_
+
+
+[∆] _[t]_ - ∆ _t_
+
+_N_ [+] _N_
+
+
+- _N_
+_∇xf_ _[p]_ [ �] _x_ _[θ]_ _t_ + [(] _[N]_ _[−]_ _N_ [1)∆] _[t]_
+
+
+= [∆] _[t]_
+
+_N_ [+] _[ O]_
+
+
+��
+∆ _t_
+
+_N_
+
+
+�2 [�]
+
+_._
+
+
+Therefore, if we denote _xt_ as the trajectory of the state variable _x_ over the time interval [ _t, t_ + ∆ _t_ ],
+and _x_ _[θ]_ _t_ [as the trajectory when the control term] _[ θ][t]_ [is applied in the first subinterval, it can be reasonably]
+approximated as:
+
+
+_xt_ +∆ _t_ _≈_ _xt_ + [∆] _[t]_
+
+_N_
+
+
+_i−_ 1
+
+
+_f_ _[p]_ [ �] _xt_ + _lN_ ∆ _t_
+_l_ =1
+
+
+_N_
+
+
++ [∆] _[t]_ (101)
+
+_N_ _[θ][t][.]_
+
+
++ [∆] _[t]_
+
+
+As a result, for the asynchronous setting, the step 4 in Algorithm 1 should be modified as:
+
+
+∆ _t_ [1]
+
+_N_ [) +]
+
+
+∆ _t._ (102)
+
+
+_i−_ 1
+
+
+_f_ _[p]_ ( _xt_ + _lN_ ∆ _t_
+_l_ =1
+
+
+_Xt_ _[θ]_ +∆ _[k]_ _t_ [=]
+
+
+1
+
+_N_
+
+
+  
+[1]
+
+_N_ _[θ][k]_
+
+
+For the case on the SO(3) manifold, the asynchronous setting can be deployed using the Taylor
+expansion of the matrix exponential exp( _A_ ), and noting that when [∆] _N_ _[t]_ [and][ ∆] _[t]_ [ are sufficiently small,]
+
+the terms become commutative. We can derive the approximation as follows:
+
+
+     - ∆ _t_     -     - ∆ _t_
+_xt_ +∆ _t_ = _xt_ exp _N_ _[f]_ [(] _[x][t][, θ][t]_ [)] exp _N_ _[f][ p]_ [ �] _x_ _[θ]_ _t_ + [∆] _N_ _[t]_
+
+
+- [�] - ∆ _t_
+
+_· · ·_ exp _x_ _[θ]_ ( _N_ _−_ 1)∆ _t_
+_N_ _[f][ p]_ [ �] _N_
+
+
+- [�]
+
+
+_i−_ 1
+
+
+_f_ _[p]_ [ �] _xt_ + _lN_ ∆ _t_
+_l_ =1
+
+
+(103)
+
+
+_≈_ _xt_ exp
+
+
+∆ _t_
+
+
+_N_
+
+
+_N_
+
+
++ [∆] _[t]_
+
+_N_ _[θ][t]_
+
+
++ [∆] _[t]_
+
+
+   -   _≈_ _xt_ exp ∆ _t_ _fe_ _[p]_ [(] _[x][t]_ [) +] [1]
+
+_N_ _[θ][t]_
+
+
+   -   _≈_ _xt_ exp ∆ _t_ _fe_ _[p]_ [(] _[x][t]_ [) +] [1]
+
+
+��
+_._
+
+
+_t_
+The vector-Jacobian method can also be applied to compute the term _[∂f]_ _∂x_ _[ p]_ [(] _[x]_ _t_ _[k][E][j]_ [)][ in Algorithm 2:]
+
+        - _µ_ ˜ _t,_ _[∂f]_ _t_ _[ p]_ _t_ _[E][j]_        - = Tr        - _µ_ ˜ _[T]_ _t_ _∂ft_ _[p]_ _t_ _[E][j]_ [)]        - _._ (104)
+_∂x_ _[x][k]_ _∂x_ [(] _[x][k]_
+
+
+C.5 PROOF FOR PROPOSITION 3
+
+
+The key inequality we used for the proof of Proposition 3 is following:
+
+
+_⟨h, v⟩≤∥h∥∥v∥,_ _∥x∥_ = 1 _._ (105)
+
+
+22
+
+
+for _h, v_ _∈_ so(3) and _x ∈_ SO(3) Before proving the proposition 3, we first show that the cotangent
+vector _{µt}_ is also bounded.
+
+**Lemma 2:** Assume all functions satisfy Lipschitz condition. Then, there exists a constant _K_ _[′]_ _>_ 0
+such that for any _θ_,
+_∥µ_ _[θ]_ _t_ _[∥≤]_ _[K]_ _[′][,]_
+
+for all _t ∈_ [0 _, T_ ].
+
+**Proof.** Using necessary condition and setting _τ_ := _T_ _−_ _t_, _µ_ ˜ _[θ]_ _τ_ [:=] _[ µ]_ _T_ _[θ]_ _−τ_ [we get]
+
+
+_µ_ ˙˜ _[θ]_ _τ_ [= ad] _[∗]_ _∂H∂µ_ _[µ]_ [˜] _τ_ _[θ]_ [+ (d] _[L][x]_ [)] _[∗]_ [(] _[∇][x][⟨][µ]_ [˜] _τ_ _[θ]_ _[, f]_ _[⟩]_ [)] _[,]_ _µ_ ˜ _[θ]_ 0 [= (d] _[L]_ _x_ _[θ]_ _T_ [)] _[∗][∇]_ [Φ(] _[x]_ _T_ _[θ]_ [)] _[.]_ (106)
+
+
+With Lipschitz condition, we have _∥µ_ ˜ _[θ]_ 0 _[∥≤∥∇]_ [Φ(] _[x][θ]_ _T_ [)] _[∥∥][x]_ _T_ _[θ]_ _[∥≤]_ _[K]_ [,] _[∥∇][x][f]_ [(] _[t, x][θ]_ _t_ _[, θ][t]_ [)] _[∥≤]_ _[K]_ [,] [and]
+_∥ad_ _[∗]_ _∂H_ _[µ][∥≤∥]_ _[∂H]_ _[∥∥][µ][∥≤]_ _[K][∥][µ][∥]_ [.] [Hence,]
+
+
+_∂H∂µ_ _[µ][∥≤∥]_ _[∂H]_ _∂µ_
+
+
+_∂µ_ _[∥∥][µ][∥≤]_ _[K][∥][µ][∥]_ [.] [Hence,]
+
+
+_∥µ_ ˜ [˙] _[θ]_ _τ_ _[∥≤]_ _[K][∥][µ]_ [˜] _[θ]_ _τ_ _[∥][,]_ (107)
+
+
+and
+
+
+           - _t_
+_∥µ_ ˜ _[θ]_ _τ_ _[∥−∥][µ]_ [˜] 0 _[θ][∥≤∥][µ]_ [˜] _τ_ _[θ]_ _[−]_ _[µ]_ [˜] 0 _[θ][∥≤]_
+
+
+_t_ - _t_
+
+_∥µ_ ˜ [˙] _[θ]_ _s_ _[∥]_ [d] _[s][ ≤]_
+0 0
+
+
+( _K∥µ_ ˜ _[θ]_ _τ_ _[∥]_ [) d] _[s,]_ (108)
+0
+
+
+and by Gronwall’s inequality,
+_∥µ_ ˜ _[θ]_ _τ_ _[∥≤∥][µ]_ [˜] 0 _[θ][∥][e][KT]_ [=:] _[ K]_ _[′][.]_ (109)
+
+
+This proves the claim since it holds for any _τ_ .
+
+
+Now given all related terms are bounded, we can prove Proposition 2.
+
+
+**Proposition** **3:** _Assume_ _that_ _the_ _reward_ _function,_ _the_ _prior_ _model,_ _and_ _their_ _derivatives_ _satisfy_
+_Lipschitz continuity, bounded by a Lipschitz constant L._ _Then, there exists a constant C_ _>_ 0 _such_
+_that for any θ, ϕ ∈_ so(3) _, the following inequality holds:_
+
+
+            - 1
+_J_ ( _θ_ ) + ∆ _ϕ,θH_ ( _t_ ) d _t −∥ϕt −_ _θt∥_ [2] _dt ≤_ _J_ ( _ϕ_ ) _,_ (110)
+
+0
+
+
+_where X_ _[θ]_ _and P_ _[θ]_ _satisfy the PMP conditions in Equation 34, and_ ∆ _Hϕ,θ_ _denotes the change in the_
+_Hamiltonian, defined as:_
+
+
+∆ _Hϕ,θ_ ( _t_ ) := _H_ ( _t, x_ _[θ]_ _t_ _[, µ]_ _t_ _[θ][, ϕ][t]_ [)] _[ −]_ _[H]_ [(] _[t, x]_ _t_ _[θ][, µ]_ _t_ _[θ][, θ][t]_ [)] _[.]_ (111)
+
+
+**Proof.** Firstly, by the definition of Hamiltonian and PMP conditions, we always have:
+
+
+             - _T_
+_I_ ( _x_ _[θ]_ _, µ_ _[θ]_ _t_ _[, θ]_ [) :=] _⟨µ_ _[θ]_ _t_ _[, f]_ _t_ _[ θ][⟩−]_ _[H]_ [(] _[t, x]_ _t_ _[θ][, µ]_ _t_ _[θ][, θ]_ [)] _[ −]_ _[L]_ [(] _[θ]_ [) d] _[t][ ≡]_ [0] _[.]_ (112)
+
+0
+
+Define _δµt_ = _µ_ _[ϕ]_ _t_ _[−]_ _[µ]_ _t_ _[θ]_ [and] _[ δf][t]_ [=] _[ f]_ _t_ _[ ϕ]_ _[−]_ _[f]_ _t_ _[ θ]_ [, the difference in] _[ I]_ [can be decomposed as:]
+
+0 _≡_ _I_ ( _x_ _[ϕ]_ _, µ_ _[ϕ]_ _t_ _[, ϕ]_ [)] _[ −]_ _[I]_ [(] _[x][θ][, µ]_ _t_ _[θ][, θ]_ [)]
+
+           - _T_
+= _⟨µ_ _[θ]_ _t_ _[, δf][t][⟩]_ [+] _[ ⟨][δµ][t][, f]_ _t_ _[ θ][⟩]_ [+] _[ ⟨][δµ][t][, δf][t][⟩]_ [d] _[t]_
+
+0
+
+
+ - _T_
+
+_−_ _H_ ( _t, x_ _[ϕ]_ _t_ _[, µ]_ _t_ _[ϕ][, ϕ]_ [)] _[ −]_ _[H]_ [(] _[t, x]_ _t_ _[θ][, µ][θ]_ _t_ _[, θ]_ [) d] _[t]_
+
+0
+
+ - _T_
+
+_−_ ( _L_ ( _ϕt_ ) _−_ _L_ ( _θt_ )) d _t._
+
+0
+
+
+(113)
+
+
+Now define _U_ ( _t_ ) = �0 _t_ _[f][s]_ [ d] _[s]_ [ = log(] _[x][t][x]_ 0 _[−]_ [1][)][ and by integrating by parts:]
+
+         - _T_          - _T_
+
+
+_T_ - _T_
+
+_⟨µ_ _[θ]_ _t_ _[, δf][t][⟩]_ [d] _[t]_ [ =] _[ ⟨][µ][θ]_ _t_ _[, δU][t][⟩|]_ 0 _[T]_ _[−]_
+0 0
+
+
+_⟨µ_ ˙ _[θ]_ _t_ _[, δU][t][⟩]_ [d] _[t,]_
+0
+
+
+23
+
+
+- _T_
+
+
+_T_ - _T_
+
+_⟨δµt, δft⟩_ d _t_ = _⟨δµt, δUt⟩|_ _[T]_ 0 _[−]_
+0 0
+
+
+_⟨δ_ ˙ _µt, δUt⟩_ d _t._ (114)
+0
+
+
+Combine the two terms above:
+
+- _T_
+
+
+_T_
+
+_⟨δµt,_ _[∂H]_ _[θ]_
+0 _∂µ_
+
+
+_[θ]_     
+_µ_ _[θ]_ _t_ _[,]_ [ ad] _[∂H][θ]_
+_∂µ_ _[⟩]_ [+] _∂µ_
+
+
+_T_ - _T_
+
+_⟨µ_ _[θ]_ _t_ _[, δf][t][⟩]_ [+] _[⟨][δµ][t][, f]_ _t_ _[ θ][⟩]_ [d] _[t]_ [ =] _[ ⟨][µ]_ _t_ _[θ][, δU][t][⟩|][T]_ 0 [+]
+0 0
+
+
+_[∂H][θ]_
+
+_∂µ_ _[δf][t]_
+
+
+- - _∂H_ _θ_
++ _∂x_ _[, δf][t][x]_ _t_ _[θ]_
+
+
+d _t._
+
+
+(115)
+Similarly, we get:
+
+
+- _T_
+
+
+_⟨δµt, δft⟩_ d _t_ = [1]
+0 2
+
+
+- _T_
+
+
+2
+
+
+_⟨δµt, δft⟩_ d _t_ + [1]
+0 2
+
+
+2
+
+
+- _T_
+
+_⟨δµt, δft⟩_ d _t_
+0
+
+
+= [1]
+
+
+2
+
+
+[1] 0 _[−]_ [1]
+
+2 _[⟨][δµ][t][, δU][t][⟩|][T]_ 2
+
+[1] 0 [+] [1]
+
+2 _[⟨][δµ][t][, δU][t][⟩|][T]_ 2
+
+
+- _T_
+
+
+_⟨δµ_ [˙] _t, δUt⟩_ d _t_ + [1]
+0 2
+
+
+2
+
+
+- _T_
+
+_⟨δµt, δft⟩_ d _t_
+0
+
+
+- 
+_−_ _µ_ _[θ]_ _t_ _[,]_ [ ad] _[∂H][θ]_
+
+_∂µ_ _[δU][t]_
+
+
+d _t_
+
+
+= [1]
+
+
+2
+
+
+- _T_
+
+
+0
+
+
+_µ_ _[ϕ]_ _t_ _[,]_ [ ad] _[∂H][ϕ]_
+
+_∂µ_ _[δU][t]_
+
+
+_µ_ _[ϕ]_ _t_ _[,]_ [ ad] _[∂H][ϕ]_
+
+
+- 
+_−_ _µ_ _[θ]_ _t_ _[,]_ [ ad] _[∂H][θ]_
+
+
+(116)
+
+
+_∂x_ _[, δU][t]_
+
+
++ [1]
+
+2
+
+
+(d _Lxϕt_ [)] _[∗]_ _[∂H]_ _∂x_ _[ϕ]_
+
+
+_[∂H]_ _[ϕ]_
+
+_∂x_ _[−]_ [(d] _[L][x]_ _t_ _[θ]_ [)] _[∗]_ _[∂H]_ _∂x_ _[θ]_
+
+
+d _t_
+
+
+_∂µ_
+
+
++ [1]
+
+2
+
+
+- _T_
+
+
+0
+
+- _T_
+
+
+0
+
+
+_δµt,_ _[∂H]_ _[ϕ]_
+
+
+_[ϕ]_
+
+_∂µ_ _[−]_ _[∂H]_ _∂µ_ _[θ]_
+
+
+d _t._
+
+
+With mean value theorem and _x, µ_ are bounded by constant _L_, we can always find _x_ _[γ]_ _t_ [between] _[ x]_ _t_ _[ϕ]_
+and _x_ _[θ]_ _t_ [,] _[ µ]_ _t_ _[γ]_ [between] _[ µ]_ _t_ _[ϕ]_ [and] _[ µ]_ _t_ _[θ]_ [,] _[ γ]_ [between] _[ ϕ]_ [ and] _[ θ]_ [, so that :]
+
+
+ - _T_
+
+
+0
+
+ - _T_
+=
+
+0
+
+
+(d _Lxϕt_ [)] _[∗]_ _[∂]_
+
+
+(d _Lxθt_ [)] _[∗]_ _[∂]_
+
+
+_t_ _[, µ]_ _t_ _[θ][, θ]_ [)] _[, δU][t]_
+_∂x_ _[H]_ [(] _[t, x][θ]_
+
+
+_[∂]_
+
+_∂x_ _[H]_ [(] _[t, x]_ _t_ _[ϕ][, µ]_ _t_ _[ϕ][, ϕ]_ [)] _[ −]_ [(d] _[L]_ _x_ _[θ]_ _t_ [)] _[∗]_ _∂x_ _[∂]_
+
+
+d _t_
+
+
+_t_ _[, µ]_ _t_ _[θ][, θ]_ [)] _[, δU][t]_
+_∂x_ _[H]_ [(] _[t, x][θ]_
+
+
+_[∂]_
+
+_∂x_ _[H]_ [(] _[t, x]_ _t_ _[θ][, µ]_ _t_ _[θ][, ϕ]_ [)] _[ −]_ [(d] _[L]_ _x_ _[θ]_ _t_ [)] _[∗]_ _[∂]_
+
+
+ - _T_
++
+
+0
+
+ - _T_
++
+
+0
+
+ - _T_
++
+
+0
+
+
+- _∇x_ (( _dLx_ _[γ]_ _t_ [)] _[∗]_ [)] _[x]_ _t_ _[γ][δU][t][∇][x][H]_ [(] _[t, x]_ _t_ _[ϕ][, µ]_ _t_ _[ϕ][, ϕ]_ [)] _[, δU][t]_ d _t_
+
+
+- (d _Lxθt_ [)] _[∗][∇]_ _x_ [2] _[H]_ [(] _[t, x]_ _t_ _[γ][, µ]_ _t_ _[ϕ][, ϕ]_ [)] _[x]_ _t_ _[γ][δU][t][, δU][t]_ d _t_
+
+
+- (d _Lxθt_ [)] _[∗][∇][µ][∇][x][H]_ [(] _[t, x]_ _t_ _[θ][, µ]_ _t_ _[γ][, ϕ]_ [)] _[δµ][t][, δU][t]_ d _t_
+
+
+d _t_
+
+
+d _t_
+
+
+ - _T_
+_≤_
+
+0
+
+
+(d _Lxθt_ [)] _[∗]_ _[∂]_
+
+
+_t_ _[, µ][θ]_ _t_ _[, θ]_ [)] _[, δU][t]_
+_∂x_ _[H]_ [(] _[t, x][θ]_
+
+
+_[∂]_
+
+_∂x_ _[H]_ [(] _[t, x]_ _t_ _[θ][, µ][θ]_ _t_ _[, ϕ]_ [)] _[ −]_ [(d] _[L]_ _x_ _[θ]_ _t_ [)] _[∗]_ _[∂]_
+
+
+  - _T_
++ _C_ _∥δUt∥_ [2] + _∥δµt∥∥δUt∥_ d _t._
+
+0
+
+
+Using the same method we get:
+
+
+- _T_
+
+
+[1] 0 [+] [1]
+
+2 _[⟨][δµ][t][, δU][t][⟩|][T]_ 2
+
+
+- 
+_−_ _µ_ _[θ]_ _t_ _[,]_ [ ad] _[ ∂H][θ]_
+
+_∂µ_ _[δU][t]_
+
+
+- 
+_−_ _µ_ _[θ]_ _t_ _[,]_ [ ad] _[ ∂H][θ]_
+
+
+d _t_
+
+
+(117)
+
+
+(118)
+
+
+_⟨δµt, δft⟩_ d _t ≤_ [1]
+0 2
+
+
+2
+
+
+- _T_
+
+
+0
+
+
+_µ_ _[ϕ]_ _t_ _[,]_ [ ad] _[ ∂H][ϕ]_
+
+_∂µ_ _[δU][t]_
+
+
+_µ_ _[ϕ]_ _t_ _[,]_ [ ad] _[ ∂H][ϕ]_
+
+
+d _t_
+
+
++ [1]
+
+2
+
+
+- _∂_
+_t_ _[, µ][θ]_ _t_ _[, ϕ]_ [)] _[ −]_ _[∂]_ _t_ _[, µ]_ _t_ _[θ][, θ]_ [)] _[, δU][t][x]_ _t_ _[θ]_
+_∂x_ _[H]_ [(] _[t, x][θ]_ _∂x_ _[H]_ [(] _[t, x][θ]_
+
+
+- _∂_
+_t_ _[, µ][θ]_ _t_ _[, ϕ]_ [)] _[ −]_ _[∂]_
+_∂x_ _[H]_ [(] _[t, x][θ]_ _∂x_
+
+
+d _t_
+
+
++ [1]
+
+2
+
+
+- _T_
+
+
+0
+
+- _T_
+
+
+0
+
+
+- _∂_
+_t_ _[, µ][θ]_ _t_ _[, ϕ]_ [)] _[ −]_ _[∂]_ _t_ _[, µ]_ _t_ _[θ][, θ]_ [)] _[, δµ][t]_
+_∂µ_ _[H]_ [(] _[t, x][θ]_ _∂µ_ _[H]_ [(] _[t, x][θ]_
+
+
+  - _T_
++ _C_ _∥δUt∥_ [2] + _∥δµt∥∥δUt∥_ d _t._
+
+0
+
+
+24
+
+
+With boundary conditions:
+
+
+_µ_ _[θ]_ _t_ [+] [1]
+
+2 _[δµ][t][, δU][t]_
+
+
+- _|_ _[T]_ 0 [=] _µ_ _[θ]_ _T_ [+] [1]
+
+2 _[δµ][T][, δU][T]_
+
+
+- _|_ _[T]_ 0 [=] _µ_ _[θ]_ _T_ [+] [1]
+
+
+ -  = (d _Lxθt_ [)] _[∗][∇]_ [Φ(] _[x]_ _T_ _[θ]_ [)] _[, δU][t]_ + [1] 2
+
+
+- (d _Lxϕt_ [)] _[∗][∇]_ [Φ(] _[x]_ _T_ _[ϕ]_ [)] _[ −]_ [(d] _[L]_ _x_ _[θ]_ _t_ [)] _[∗][∇]_ [Φ(] _[x]_ _T_ _[θ]_ [)] _[, δU][t]_
+
+
+_≤_ Φ( _x_ _[ϕ]_ _T_ [)] _[ −]_ [Φ(] _[x]_ _T_ _[θ]_ [) +] _[ K][∥][δU][T]_ _[∥]_ [2] _[.]_
+
+
+Using same method to _H_ ( _t, x_ _[ϕ]_ _t_ _[, µ]_ _t_ _[ϕ][, ϕ]_ [)] _[ −]_ _[H]_ [(] _[t, x]_ _t_ _[θ][, µ]_ _t_ _[θ][, θ]_ [)][, we obtain:]
+
+
+    - _T_
+Φ( _x_ _[ϕ]_ _T_ [) +] _L_ ( _ϕt_ ) d _t_
+
+0
+
+
+    - _T_
+Φ( _x_ _[θ]_ _T_ [) +] _L_ ( _θt_ ) d _t_
+
+0
+
+
+    - _T_
+Φ( _x_ _[θ]_ _T_ [) +]
+
+
+_−_
+
+
+      - _T_
+_≤_ _K∥δUT ∥_ [2] _−_
+
+
+2
+
+
+- 
+_−_ _µ_ _[θ]_ _t_ _[,]_ [ ad] _[∂H][θ]_
+
+_∂µ_ _[δU][t]_
+
+
+d _t_
+
+
+(119)
+
+
+(120)
+
+
+∆ _Hϕ,θ_ ( _t_ ) d _t_ + [1]
+0 2
+
+
+- _T_
+
+
+0
+
+
+_µ_ _[ϕ]_ _t_ _[,]_ [ ad] _[∂H][ϕ]_
+
+_∂µ_ _[δU][t]_
+
+
+d _t_
+
+
++ [1]
+
+2
+
+
+- _∂_
+_t_ _[, µ]_ _t_ _[θ][, ϕ]_ [)] _[ −]_ _[∂]_ _t_ _[, µ]_ _t_ _[θ][, θ]_ [)] _[, x]_ _t_ _[θ][δU][t]_
+_∂x_ _[H]_ [(] _[t, x][θ]_ _∂x_ _[H]_ [(] _[t, x][θ]_
+
+
+d _t_
+
+
++ [1]
+
+2
+
+
+- _T_
+
+
+0
+
+- _T_
+
+
+0
+
+
+- _∂_
+_t_ _[, µ]_ _t_ _[θ][, ϕ]_ [)] _[ −]_ _[∂]_ _t_ _[, µ]_ _t_ _[θ][, θ]_ [)] _[, δµ][t]_
+_∂µ_ _[H]_ [(] _[t, x][θ]_ _∂µ_ _[H]_ [(] _[t, x][θ]_
+
+
+  - _T_
++ _C_ _||δUt||_ [2] + _||δµt||||δUt||_ d _t._
+
+0
+
+
+By definition:
+
+
+and so
+
+
+   - _T_
+_δUt_ = _f_ ( _t, x_ _[ϕ]_ _T_ _[, ϕ]_ [)] _[ −]_ _[f]_ [(] _[t, x]_ _T_ _[θ]_ _[, θ]_ [) d] _[t,]_ (121)
+
+0
+
+
+    - _t_
+_∥δUt∥≤_ _∥f_ ( _s, x_ _[ϕ]_ _s_ _[, ϕ]_ [)] _[ −]_ _[f]_ [(] _[s, x]_ _s_ _[θ][, θ]_ [)] _[∥]_ [d] _[s]_
+
+0
+
+
+ - _t_
+_≤_
+
+
+_∥f_ ( _s, x_ _[θ]_ _s_ _[, ϕ]_ [)] _[ −]_ _[f]_ [(] _[s, x][θ]_ _s_ _[, θ]_ [)] _[∥]_ [d] _[s]_
+0
+
+
+_t_ - _t_
+
+_∥f_ ( _s, x_ _[ϕ]_ _s_ _[, ϕ]_ [)] _[ −]_ _[f]_ [(] _[s, x]_ _s_ _[θ][, ϕ]_ [)] _[∥]_ [d] _[s]_ [ +]
+0 0
+
+
+(122)
+
+
+ - _T_
+_≤_
+
+
+_T_ - _t_
+
+_∥f_ ( _s, x_ _[θ]_ _s_ _[, ϕ]_ [)] _[ −]_ _[f]_ [(] _[s, x][θ]_ _s_ _[, θ]_ [)] _[∥]_ [d] _[s]_ [ +] _[ K]_
+0 0
+
+
+_∥δUs∥_ d _s._
+0
+
+
+By Gronwall’s inequality:
+
+
+              - _T_
+_∥δUt∥≤_ _e_ _[KT]_ _∥f_ ( _s, x_ _[θ]_ _s_ _[, ϕ]_ [)] _[ −]_ _[f]_ [(] _[s, x][θ]_ _s_ _[, θ]_ [)] _[∥]_ [d] _[s.]_ (123)
+
+0
+
+
+To estimate _δµ_, we use the same substitution as in Lemma 6 with _τ_ = _T_ _−_ _t_, we get:
+
+
+     - _τ_
+_δµ_ ˜ _τ_ = _δµ_ ˜0 +
+
+
+(d _Lx_ ˜ _ϕs_ [)] _[∗][∇][x][H]_ [(] _[s,]_ [ ˜] _[x]_ _s_ _[ϕ][,]_ [ ˜] _[µ]_ _s_ _[ϕ][, ϕ]_ [)] _[ −]_ [(d] _[L]_ _x_ ˜ _[θ]_ _s_ [)] _[∗][∇][x][H]_ [(] _[s,]_ [ ˜] _[x]_ _s_ _[θ][,]_ [ ˜] _[µ][θ]_ _s_ _[, θ]_ [) d] _[s]_
+0
+
+
+ - _τ_
++
+
+0
+
+
+ad _[∗]_ _∂H_
+
+
+(124)
+
+  
+_∂H∂µ_ _[µ]_ [˜] _τ_ _[θ]_ d _s._
+
+
+_[∗]_ _∂H∂µ_ _[µ]_ [˜] _τ_ _[ϕ]_ _[−]_ [ad] _[∗]_ _∂H∂µ_
+
+
+25
+
+
+Using Lemma 1 and Liptichitz conditions:
+
+
+         - _τ_
+_∥δµ_ ˜ _τ_ _∥≤∥δµ_ ˜0 _∥_ + _∥_ (d _Lx_ ˜ _ϕs_ [)] _[∗][∇][x][H]_ [(] _[s,]_ [ ˜] _[x]_ _s_ _[ϕ][,]_ [ ˜] _[µ]_ _s_ _[ϕ][, ϕ]_ [)] _[ −]_ [(d] _[L]_ _x_ ˜ _[θ]_ _s_ [)] _[∗][∇][x][H]_ [(] _[s,]_ [ ˜] _[x]_ _s_ _[θ][,]_ [ ˜] _[µ][θ]_ _s_ _[, θ]_ [)] _[∥]_ [d] _[s]_
+
+0
+
+
+ - _τ_
++
+
+0
+
+
+_∗_
+ad _∂H_
+��� _∂µ_
+
+
+_∂H∂µ_ _[µ]_ [˜] _τ_ _[θ]_ ��� d _s_
+
+
+_∗_
+_∂H∂µ_ _[µ]_ [˜] _τ_ _[ϕ]_ _[−]_ [ad] _[∗]_ _∂H∂µ_
+
+
+        - _T_
+_≤_ _K∥δUT ∥_ + _KK_ _[′]_
+
+
+_T_ - _τ_
+
+_∥δUt∥_ d _t_ + _K_
+0 0
+
+
+_∥δµ_ ˜ _s∥_ d _s_
+0
+
+
+ - _T_
++ _∥_ ( _dLx_ ˜ _θs_ ) _[∗]_ _∇xH_ ( _s,_ ˜ _x_ _[θ]_ _s_ _[,]_ [ ˜] _[µ][θ]_ _s_ _[, ϕ]_ [)] _[ −]_ [(] _[dL]_ _x_ ˜ _[θ]_ _s_ [)] _[∗][∇][x][H]_ [(] _[s,]_ [ ˜] _[x]_ _s_ _[θ][,]_ [ ˜] _[µ][θ]_ _s_ _[, θ]_ [)] _[∥]_ [d] _[s]_
+
+0
+
+
+_≤_ _e_ _[KT]_ _K_
+
+
+     - _T_
+_∥δUT ∥_ + _K_ _[′]_
+
+
+_∥δUt∥_ d _t_
+0
+
+
+    - _T_
++ _e_ _[KT]_ _K_ _∥∇xH_ ( _s,_ ˜ _x_ _[θ]_ _s_ _[,]_ [ ˜] _[µ]_ _s_ _[θ][, ϕ]_ [)] _[ −∇][x][H]_ [(] _[s,]_ [ ˜] _[x]_ _s_ _[θ][,]_ [ ˜] _[µ]_ _s_ _[θ][, θ]_ [)] _[∥]_ [d] _[s.]_
+
+0
+
+
+Using the bound of _Ut_, we obtain:
+
+
+�� _T_
+_∥δµ_ ˜ _τ_ _∥≤_ _K_ _[′′]_
+
+
+_∥f_ ( _s, x_ _[θ]_ _s_ _[, ϕ]_ [)] _[ −]_ _[f]_ [(] _[s, x]_ _s_ _[θ][, θ]_ [)] _[∥]_ [d] _[s]_
+0
+
+
+    - _T_
++ _e_ _[KT]_ _K_ _∥∇xH_ ( _s,_ ˜ _x_ _[θ]_ _s_ _[,]_ [ ˜] _[µ]_ _s_ _[θ][, ϕ]_ [)] _[ −∇][x][H]_ [(] _[s,]_ [ ˜] _[x]_ _s_ _[θ][,]_ [ ˜] _[µ]_ _s_ _[θ][, θ]_ [)] _[∥]_ [d] _[s.]_
+
+0
+
+
+(125)
+
+
+(126)
+
+
+(127)
+
+
+Also we obtain:
+
+
+Finally we get:
+
+
+  - _T_
+_≤_ _C_ _∥δµt∥∥δUt∥_ d _t._
+
+0
+
+
+26
+
+
+d _t_
+
+
+- 
+_−_ _µ_ _[θ]_ _t_ _[, ad]_ _[∂H][θ]_
+
+_∂µ_ _[δU][t]_
+
+
+- 
+_−_ _µ_ _[θ]_ _t_ _[, ad]_ _[∂H][θ]_
+
+
+1
+
+2
+
+
+- _T_
+
+
+0
+
+
+_µ_ _[ϕ]_ _t_ _[, ad][ ∂H][ϕ]_
+
+_∂µ_ _[δU][t]_
+
+
+_µ_ _[ϕ]_ _t_ _[, ad][ ∂H][ϕ]_
+
+
+_[θ]_ _t_ _[, δU][t]_
+
+_∂µ_ _[µ][θ]_
+
+
+= [1]
+
+2
+
+
+- _T_
+
+
+0
+
+
+_ad_ _[∗]_ _∂H_ _[θ]_
+
+
+_∂H_ _[θ]_ _t_ _[−]_ _[ad][∗]_ _∂H_ _[θ]_
+
+_∂µ_ _[µ][ϕ]_ _∂µ_
+
+
+d _t_
+
+
+- _T_
+_J_ ( _θ_ ) _−_ _J_ ( _ϕ_ ) _≤−_ ∆ _Hϕ,θ_ ( _t_ ) d _t_
+
+0
+
++ [1]
+
+2 _[K]_ _[′′][∥][δU][T][ ∥]_ [2]
+
+
+   - _T_
++ _K_ _[′′]_
+
+0
+
+
+- _∥δUt∥_ [2] + _∥δµt∥_ [2][�] d _t_
+
+
++ [1]
+
+2
+
+
++ [1]
+
+2
+
+
+- _T_
+
+_∥δµt∥∥f_ ( _t, x_ _[θ]_ _t_ _[, ϕ][t]_ [)] _[ −]_ _[f]_ [(] _[t, x][θ]_ _t_ _[, θ][t]_ [)] _[∥]_ [d] _[t]_
+0
+
+- _T_
+
+_∥δUt∥∥∇xH_ ( _t, x_ _[θ]_ _t_ _[, µ][θ]_ _t_ _[, ϕ][t]_ [)] _[ −∇][x][H]_ [(] _[t, x]_ _t_ _[θ][, µ][θ]_ _t_ _[, θ][t]_ [)] _[∥]_ [d] _[t]_
+0
+
+
+  - _T_
+_≤−_ ∆ _Hϕ,θ_ ( _t_ ) d _t_
+
+0
+
+
+(128)
+
+
+�2
+
+
++ _C_
+
+
++ _C_
+
+
+�� _T_
+
+_∥f_ ( _t, x_ _[θ]_ _t_ _[, ϕ][t]_ [)] _[ −]_ _[f]_ [(] _[t, x]_ _t_ _[θ][, θ][t]_ [)] _[∥]_ [d] _[t]_
+0
+
+
+�� _T_
+
+_∥∇xH_ ( _t, x_ _[θ]_ _t_ _[, µ]_ _t_ _[θ][, ϕ][t]_ [)] _[ −∇][x][H]_ [(] _[t, x]_ _t_ _[θ][, µ]_ _t_ _[θ][, θ][t]_ [)] _[∥]_ [2][ d] _[t]_
+0
+
+
+�2
+
+
+  - _T_
+_≤−_ ∆ _Hϕ,θ_ ( _t_ ) d _t_
+
+0
+
+
+  - _T_
++ _C_ _∥f_ ( _t, x_ _[θ]_ _t_ _[, ϕ][t]_ [)] _[ −]_ _[f]_ [(] _[t, x]_ _t_ _[θ][, θ][t]_ [)] _[∥]_ [2][ d] _[t]_
+
+0
+
+
+  - _T_
++ _C_ _∥∇xH_ ( _t, x_ _[θ]_ _t_ _[, µ]_ _t_ _[θ][, ϕ][t]_ [)] _[ −∇][x][H]_ [(] _[t, x]_ _t_ _[θ][, µ]_ _t_ _[θ][, θ][t]_ [)] _[∥]_ [2][ d] _[t.]_
+
+0
+
+
+Therefore, given the form of the addictive control terms and the running cost, we can derive the final
+term of our claim:
+
+
+   - 1
+_J_ ( _θ_ ) +
+
+
+∆ _ϕ,θH_ ( _t_ ) d _t −_ _C∥ϕt −_ _θt∥_ [2] d _t ≤_ _J_ ( _ϕ_ ) _._ (129)
+0
+
+
+C.6 PROOF FOR PROPOSITION 4
+
+
+Due to the similarity between the bound derived in Proposition 3 and the bound obtained from the
+E-MSA method, the proofs of Proposition 4 and Theorem 5 follow the same reasoning as outlined in
+Section 3.3 of Li et al. (2018). For the sake of completeness, we provide the full derivations here.
+
+
+**Proposition 4:** _Let X_ _[θ]_ _and P_ _[θ]_ _satisfy the PMP conditions in Equation 34._ _If the update rule follows_
+_Equation 19, we define ϵk_ := �01 [∆] _[θ][k]_ [+1] _[,θ][k]_ _[H]_ [(] _[t]_ [) d] _[t][, and][ ϵ][k]_ _[is bounded as:]_
+
+            - 1
+_ϵk_ := ∆ _θk_ +1 _,θk_ _H_ ( _t_ ) d _t,_ lim [= 0] _[.]_ (130)
+
+0 _k→∞_ _[ϵ][k]_
+
+_Furthermore, when ϵk_ = 0 _, we have θ_ = _θ_ _[∗]_ := arg max _θ J_ ( _θ_ )To establish convergence, define
+
+               - _T_
+_ϵk_ := ∆ _Hθk_ +1 _,θk_ ( _t_ ) d _t ≥_ 0 _._ (131)
+
+0
+
+
+**Proof.** By definition, if _ϵk_ = 0, then from the update rule which maximizes the Hamiltonian, we
+must have
+
+
+0 = _−ϵk_ _≤−_ _[γ]_
+
+2
+
+
+- 1
+
+
+_∥θ_ _[k]_ [+1] _−_ _θ_ _[k]_ _∥_ [2] d _t ≤_ 0 _,_ (132)
+0
+
+
+and so
+max _H_ ˜ ( _x_ _[θ]_ _t_ _[k]_ _[, µ]_ _t_ _[θ][k]_ _[, θ,]_ _[x]_ [˙] _[θ]_ _t_ _[k]_ _[,]_ _[µ]_ [˙] _[θ]_ _t_ _[k]_ [) =] _[H]_ [˜] [(] _[x][θ]_ _t_ _[k]_ _[, µ]_ _t_ _[θ][k]_ _[, θ]_ _t_ _[k][,]_ _[x]_ [˙] _[θ]_ _t_ _[k]_ _[,]_ _[µ]_ [˙] _[θ]_ _t_ _[k]_ [)] _[.]_ (133)
+_θ_
+
+
+27
+
+
+Therefore, we always have the quantity _ϵk_ _≥_ 0 and it measures the distance from the optimal solution,
+and if it equals 0, then we reach the optimum.
+
+
+C.7 PROOF FOR THEOREM 5
+
+
+**Theorem 5:** _Assume that the reward function, the prior model, and their derivatives satisfy Lipschitz_
+_continuity, bounded by a Lipschitz constant L._ _Let θ_ [0] _∈_ so(3) _be any initial measurable control with_
+_J_ ( _θ_ [0] ) _<_ + _∞._ _Suppose also that_ inf _θ∈_ so(3) _J_ ( _θ_ ) _> −∞._ _If the update of θ satisfies equation 19, for_
+_sufficiently large γ, the following inequality holds:_
+
+
+_Dϵk_ _≤_ _J_ ( _θ_ _[k]_ [+1] ) _−_ _J_ ( _θ_ _[k]_ ) (134)
+
+
+_for some constant D_ _>_ 0
+
+
+**Proof.** Using Proposition 3 we have
+
+
+                    - _T_
+_J_ ( _θ_ _[k]_ ) _−_ _J_ ( _θ_ _[k]_ [+1] ) _≤−ϵk_ + _C_ _∥θ_ _[k]_ [+1] _−_ _θ_ _[k]_ _∥_ [2] d _t._ (135)
+
+0
+
+
+From the Algorithm 2 maximizing step, we know that
+
+_H_ ( _t, Xt_ _[θ][k]_ _[, P]_ _t_ _[ θ][k]_ _[, θ]_ _t_ _[k]_ [)] _[ ≤]_ _[H]_ [(] _[t, X]_ _t_ _[θ][k]_ _[, P]_ _t_ _[ θ][k]_ _[, θ]_ _t_ _[k]_ [+1] ) _−_ _[γ]_ (136)
+
+2 _[∥][θ][k]_ [+1] _[ −]_ _[θ][k][∥]_ [2] _[.]_
+
+
+Hence, we have
+
+
+       _J_ ( _θ_ _[k]_ ) _−_ _J_ ( _θ_ _[k]_ [+1] ) _≤−_ 1 _−_ [2] _[C]_
+
+_γ_
+
+
+_ϵk._ (137)
+
+
+Pick _γ_ _>_ 2 _C_, then we shall have _J_ ( _θ_ _[k]_ ) _−_ _J_ ( _θ_ _[k]_ [+1] ) _≤−Dϵk_ with _D_ = (1 _−_ [2] _γ_ _[C]_ [)] _[ >]_ [ 0][.]
+
+
+Moreover, we can rearrange and sum the above expression to get
+
+
+_M_     -     
+  - _ϵk_ _≤_ _D_ _[−]_ [1][ �] _J_ ( _θ_ _[M]_ [+1] ) _−_ _J_ ( _θ_ [0] )� _≤_ _D_ _[−]_ [1] inf _,_ (138)
+
+_θ∈U_ _[J]_ [(] _[θ]_ [)] _[ −]_ _[J]_ [(] _[θ]_ [0][)]
+_k_ =0
+
+and hence [�] _k_ _[∞]_ =0 _[ϵ][k]_ _[<]_ [ +] _[∞]_ [, which implies] _[ ϵ][k]_ _[→]_ [0][ and the algorithm converges to the optimum.]
+
+
+D COMPUTATIONAL EFFICIENCY
+
+
+Table 6: Comparison of runtime and memory complexity of different methods used in backpropthrough guided-ODE in Euclidean and SO(3) manifold. For complexity, _N_ is the number of ODE
+steps, _n_ is the number of effective control terms with synchronized and in the range [1 _, N_ ] and _D_ [2] is
+the complexity of computing 1-step gradient (VJP or Autograd), D depends on data and model size.
+_c_ is the defciency introduced by L-BFGS optimizer.
+
+
+**Number Of** **Memory** **Runtime** **Convergence** **Generalization**
+**Control Terms** **Complexity** **Complexity** **to Optimal** **to SO(3)**
+
+
+OC-Flow _n_ _O_ ( _D_ [2] ) _O_ ( _nD_ [2] ) ✓ ✓
+FlowGrad _n_ _O_ ( _D_ [2] ) _O_ ( _nD_ [2] ) ✗ ✗
+D-Flow _N_ _O_ ( _ND_ [2] ) _O_ ( _cND_ [2] ) ✗ ✗
+Red-Diff N/A _O_ ( _D_ ) _O_ ( _LND_ ) ✗ ✗
+
+
+In terms of memory complexity, both our implementation and FlowGrad utilize the vector-Jacobian
+approach, which allows solving differentiation through ODE-integral with the adjoint method,
+significantly reducing memory from _O_ ( _ND_ [2] ) (D-Flow) to _O_ ( _D_ [2] ). In comparison, D-Flow does not
+employ the adjoint method, significantly increasing the memory complexity to _O_ ( _ND_ [2] ), as detailed
+in Table 6.
+
+
+In terms of runtime, both FlowGrad and OC-Flow are predominantly influenced by the number of
+control terms. Various strategies are implemented to reduce either the number of control terms (or
+
+
+28
+
+
+Table 7: Illustration how different methods decrease the runtime and memory complexity and enhance
+model capability
+
+
+**Effective** **Memory** **Runtime** **Generalization**
+**Timestep** **Complexity** **Complexity** **to SO(3)**
+
+
+OC-Flow _n_ _O_ ( _D_ [2] ) _O_ ( _nD_ [2] ) ✗
+w/o-asynchronous _N_ _O_ ( _D_ [2] ) _O_ ( _ND_ [2] ) ✗
+w/o-VJP (adjoint) _N_ _O_ ( _ND_ [2] ) _O_ ( _ND_ [2] ) ✗
+OC-Flow-SO(3) _n_ _O_ ( _D_ [2] ) _O_ ( _nD_ [2] ) ✓
+w/o-asynchronous _N_ _O_ ( _D_ [2] ) _O_ ( _ND_ [2] ) ✓
+w/o-VJP (adjoint) _N_ _O_ ( _ND_ [4] ) _O_ ( _ND_ [4] ) ✓
+
+
+the effective time steps requiring back-propagation). Specifically, FlowGrad applies a straightening
+technique, and in oc-flow, this concept is extended to an asynchronous setting. Consequently, the
+runtime complexity is expressed as _O_ ( _nD_ [2] ) for both FlowGrad and OC-Flow. In contrast, D-Flow
+does not imply an asynchronous setting, necessitating N steps of Autograd, resulting in _O_ ( _ND_ [2] )
+complexity. In addition, D-Flow is heavily relying on L-BFGS optimizer (Table 4), which also adds a
+significant increase in runtime due to e.g., uncontrollable additional iteration of linear search, which
+we estimate with a factor of constant _c_ .
+
+
+Table 7 provides a more direct comparison of the impact of the asynchronous setting and the vectorJacobian product (VJP) method.
+
+
+Compared to optimization-based algorithms, in some methods such as _Red-Diff_ and DPS, the gradientguidance can be approximated directly. These methods demonstrate significantly lower memory
+complexity and faster runtime. However, their capability is notably constrained. As reported in
+the Dflow paper, _Red-Diff_ encounters difficulties in handling noise, even in simple linear inverse
+problems involving images.
+
+
+When oc-flow is adapted to the SO(3) manifold, an additional calculation is introduced for each
+control term. Specifically, this involves computing the trace of the product of two _D × D_ matrices,
+which adds a computational cost of _O_ ( _D_ [2] ). Despite this additional burden, the overall complexity
+remains in the order of _O_ ( _D_ [2] ). The VJP method is also applied for oc-flow on the SO(3) manifold,
+
+_t_ _t_
+as shown in Equation 15, for the term _⟨µ_ ˜ _[k]_ _t_ _[,]_ _[∂f]_ _∂x_ _[ p]_ _[x]_ _t_ _[k][E][i][⟩]_ [, where] _[∂f]_ _∂x_ _[ p]_ _[x]_ _t_ _[k]_ [is computed using VJP. This]
+additional complexity is justified by oc-flow’s improved convergence to optimal solutions on the
+SO(3) manifold. Notably, the OC-Flow-SO3 involves computing full Jacobian which could induce
+a complexity of _O_ ( _D_ [4] ) if directing computing it. Our Jacobian-Vector Product derivation significantly reduces the complexity of OC-Flow-SO3 from _O_ ( _D_ [4] ) to _O_ ( _D_ [2] ), which enabled our efficient
+implementation.
+
+
+Table 8: Memory Usage and Runtime on Text-guided Image (256*256) Manipulation. _Note:_ _ODE_
+
+|imization steps = 15.|Col2|Col3|Col4|
+|---|---|---|---|
+||FlowGrad|DFlow|OC-Flow|
+|Fast Simulation<br>Peak GPU Mem (GB)<br>Runtime per Sample (s)|on<br>off<br>5.2<br>5.2<br>114.7<br>206.2|-<br>OOM<br>-|on<br>off<br>5.4<br>5.4<br>115.7<br>216.7|
+
+
+In Table 8 we show memory usage and runtime on high-dimensional images, evaluated on a single
+A100 with 40G memory. We compare FlowGrad, DFlow, and OC-Flow on images. (Liu et al.,
+2023) proposed fast simulation through skipping some Euler steps if the relative velocity change is
+smaller than a threshold (1e-3 in (Liu et al., 2023)). We compare the 3 models with or without fast
+simulation. As for DFlow, we encountered Out-Of-Memory error even on 40G GPU. (Ben-Hamu
+et al., 2024) used gradient checkpoint to bypass the OOM error, however, due to the lack of code
+and implementation details of DFlow, we are unable to fully reproduce their implementation. For
+reference, DFlow takes 15 minutes per image (128*128) on a single 32GB V100 GPU, according to
+their paper. Generally speaking, FlowGrad and OC-Flow have similar memory usage and runtime
+except for DFlow.
+
+
+29
+
+
+Table 9: Memory Usage and Runtime Comparison of OC-Flow on Euclidean and SO(3).
+
+|Col1|SO(3) Euclidean|
+|---|---|
+|Peak GPU Mem (GB)<br>Runtime per Sample (s)|1.6<br>1.2<br>296.6<br>188.2|
+
+
+For peptides 9, since FlowGrad and DFlow are not applicable in SO(3), we only report results for
+OC-Flow using our proposed asynchronous algorithm for efficient simulation, evaluated on a single
+A100 with 40G memory. Comparing the results, rotation is computationally 0.5x more expensive
+than translation due to the additional cost introduced by Eq. 22. However, as shown in Table 7,
+the costs of rotation and translation remain within the same order of magnitude. It is important to
+note that the extra cost of rotation is justified, as the additional computations required by Eq. 22 are
+inherent to operations on the SO(3) manifold. Moreover, as demonstrated in Table 5, generation in
+SO(3) is crucial for the task.
+
+
+Table 10: Runtime Comparison on Molecule. _Note:_ _ODE steps = 50, SGD steps = 20, L-BFGS steps_
+
+|with inner steps = 5.|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||EquiFM|FlowGrad|DFlow|OC-Flow|
+|Optimizer<br>Runtime per Sample (s)|N/A<br>2.4|SGD<br>37.6|SGD<br>L-BFGS<br>31.3<br>102.8|SGD<br>L-BFGS<br>38.1<br>103.7|
+
+
+In Table 10, we compare FlowGrad, DFlow, and OC-Flow on molecule, evaluated on a single A100
+with 40G memory. For reference, we also list EquiFM model as used in our method. To align with
+DFlow, we also adopt L-BFGS optimizer and find it crucial in performance yet slows down the
+efficiency.
+
+
+E EXPERIMENTAL DETAILS
+
+
+E.1 TEXT-GUIDED IMAGE MANIPULATION
+
+
+In our text-to-image generation experiment, we adopted the pipeline presented in Liu et al. (2023),
+utilizing the generative prior from Liu et al. (2022). We employed standard evaluation metrics: LPIPS
+and ID (face identity similarity) as introduced in Kim & Ye (2021) to assess the differences between
+the original image and the manipulated image. Additionally, the CLIP score was used to evaluate the
+alignment between the generated image and the provided text prompt.
+
+
+To enforce consistency with the original image and inspired by Proposition 1, we introduced a
+constraint term to the terminal reward function to penalize significant deviations from the original
+image:
+
+Φ( _x_ 1) = _λ_ CLIP( _x_ 1 _, T_ ) _−_ (1 _−_ _η_ ) _∥x_ 1 _−_ _x_ _[p]_ 1 _[∥][.]_ (139)
+
+
+Here, the hyperparameter _λ_ was set to 0.7 across all experiments, and the Euler discretization step
+was set to _N_ = 100 and the number of optimization iterations _M_ = 15. As discussed in Theorem 2,
+increasing the learning rate _η_ results in greater emphasis on the terminal reward, leading to a higher
+CLIP score but lower LPIPS and ID scores. The weight decay is a function of _γ_, which is tuned to
+maximize (1 _−_ [2] _γ_ _[C]_ [)] _[ϵ]_ _γ_ _[k]_ [for iteration k.] [In this experiment, due to the limitation of storage, we set] _[ γ]_ [ the]
+
+same for all k. In our implementation, the learning rate _η_ was set to 2.5, and the weight decay _β_ was
+set to 0.995.
+
+
+Baseline configurations were aligned with those reported in Liu et al. (2023), and the results presented
+in Table 2 reflect the same experimental conditions. For quantitative comparison, we used the CelebA
+dataset, randomly sampling 1,000 images, which were manipulated based on text guidance: {old,
+sad, smiling, angry, curly hair}.
+
+
+30
+
+
+E.2 MOLECULE GENERATION
+
+
+In our QM9 generation experiment, we mostly followed the conditional generation pipeline in
+Hoogeboom et al. (2022). An equivariant geometric GNN was trained for each property on half of
+the QM9 data as the classifier, which was then frozen during our training-free controlled generation.
+The EquiFM (Song et al., 2024) checkpoint, trained on the whole QM9 training data, was loaded as
+the generative prior. The test time properties were sampled from the whole training dataset, making
+it slightly different from the settings in Ben-Hamu et al. (2024). Therefore, we reimplemented the
+D-Flow algorithm with 5 optimizer steps and 5 inner steps each with a linear search using the L-BFGS
+optimizer. The results roughly matched those reported in the D-Flow paper with slightly worse MAEs
+as we included the whole training dataset for property sampling. Our proposed OC-Flow also used
+the same optimization hyperparameters and also almost the same running time as the D-Flow. For
+FlowGrad, we followed the suggestion in the original paper to use 20 SGD steps to update the
+learnable parts, which ran slightly faster than OC-Flow and D-Flow.
+
+
+For all properties, MAE was used as the optimization target and _γ_ is the regularization coefficient
+such that _γ_ �01 _[∥][θ][t][∥]_ [2][ d] _[t]_ [ is the additional OC loss.] [For all optimization methods, we always used a]
+fixed number of 50 Euler steps so _θ_ can be indexed by discrete indices. As the integral is done with
+a step size of 1/50, any _γ_ is effectively ˜ _γ_ = 2 _γ/_ 50 = 0 _._ 04 when taking the derivative with respect
+to _θ_ or _x_ . Therefore, _γ_ = 10 effectively corresponds to ˜ _γ_ = 0 _._ 4, which is still a valid optimization
+scheme.
+
+
+We noted the difference in the optimizer in these settings in order to be consistent with the D-Flow
+setup. We provide additional ablation studies on the effect of the optimizer, in which all guided
+generation approaches used the SGD optimizer with 20 iterations and a learning rate of 1, following
+the FlowGrad setup. The results are summarized in Table 11. It can be clearly demonstrated that
+D-Flow performance is significantly worse than OC-Flow and even FlowGrad, the latter of which
+is a special case of our OC-Flow. Indeed, we can safely conclude that the advantage of D-Flow
+came solely from its optimizer of using L-BFGS. Using the SGD optimizer caused it to perform
+even worse than the unconditional EquiFM baseline on the dipole moment _µ_ . On the other hand,
+OC-Flow achieved consistent improvements, using either the L-BFGS or the simple SGD optimizer,
+demonstrating our superior performance.
+
+
+Table 11: Ablation on optimizer. MAE for guided generations on QM9 (lower is better).
+
+Property _α_ ∆ _ε_ _ε_ HOMO _ε_ LUMO _µ_ _cv_
+Unit Bohr³ meV meV meV D K _·_ calmol
+
+OC-Flow(Ours) **1.907** **0.362** **0.972**
+D-Flow-SGD 5.753 1241 571 1195 1.639 2.982
+FlowGrad 2.484 517 273 429 0.542 1.270
+
+
+OC-Flow-LBFGS(Ours) **1.383** 367 **0.314** **0.819**
+D-Flow-LBFGS (Ben-Hamu et al., 2024) 1.566 205 346 0.330 0.893
+
+
+EquiFM 8.969 1439 622 1438 1.593 6.873
+
+
+E.3 PEPTIDE DESIGN
+
+
+In our peptide experiments, we adopted PepFlow (Li et al., 2024) as the baseline model, utilizing the
+pre-trained checkpoint provided in the original PepFlow paper. The test dataset split was also based
+on the one defined in the PepFlow framework. For hyperparameter tuning, we randomly selected 10
+complexes from the dataset. After tuning, the full set of 162 complexes was used for guided sampling
+and evaluation to ensure a comprehensive performance assessment.
+
+
+To enable flexible update scheduling, we adopted an asynchronous setting in OC-Flow. This design
+maintains the same ODE time steps as PepFlow while utilizing fewer control terms. Specifically, 200
+time steps are used for ODE simulation, with 10 control terms, each controlling 20 time steps. As
+shown in Table 7, this approach reduces memory and runtime complexity without compromising the
+accuracy of the ODE simulation. Furthermore, for consistency and comparability across experiments,
+
+
+31
+
+
+we strictly controlled the initial noise during reruns to ensure consistency and comparability across
+experiments.
+
+
+We used the pre-trained model as the initialization for our experiments, allowing us to build upon
+the pre-trained weights and achieve consistent performance improvements through hyperparameter
+adjustments. In OC-Flow(rot), we used _α_ = 0 _._ 95 and _β_ = 0 _._ 8; in OC-Flow(trans), _α_ = 0 _._ 9 and
+_β_ = 1 _._ 2; and in OC-Flow(both), _α_ = 0 _._ 95 and _β_ = 2 _._ 0. For all methods, we followed the same
+hyperparameter choices outlined in the PepFlow paper to ensure fairness.
+
+
+For evaluation, in addition to MadraX, the reward function used and optimized during training, we
+included several key metrics not used for training to comprehensively assess the physical validity and
+overall performance of the generated structures:
+
+
+    - **Stability** : Calculated using Rosetta over five independent runs, averaged to reduce high
+variance.
+
+
+    - **Affinity** : Measured by Rosetta to determine the binding energy of designed peptides, also
+averaged over five runs.
+
+
+    - **IMP** **(Improvement** **Percentage)** : The percentage of peptides with improved affinities
+(lower binding energies) compared to the native peptides, aligning with the definition used
+in PepFlow.
+
+
+    - **Diversity** : Calculated as the average of 1 _−_ TM-Score among generated peptides, reflecting
+structural dissimilarities.
+
+
+    - **SSR (Secondary-Structure Similarity Ratio)** : The proportion of shared secondary structures between the designed peptide and the native peptide.
+
+
+    - **BSR (Binding Site Ratio)** : The overlapping ratio between the binding site of the generated
+peptide and the native binding site on the target protein.
+
+
+Due to the time-intensive nature of Rosetta evaluations, we drew 10 samples per pocket for our
+experiments, in contrast to PepFlow’s use of 64 samples. This approach enabled us to achieve
+reproducible and fair comparisons across methods without excessive computational costs. Moreover,
+by employing OC-Flow with guidance, we demonstrated that superior performance can be achieved
+with fewer samples while maintaining consistency in evaluation settings.
+
+
+As shown in Table 5, we demonstrated the importance of optimization on the SO(3) manifold
+for peptide design. To further evaluate the impact of using optimal control for updating rotations
+compared to standard gradient descent as in Euclidean space, we implemented Naive-SO(3). In this
+implementation, the gradient of the terminal reward with respect to the control terms is computed
+directly and mapped to so(3), and gradient descent is used to update the control terms.
+
+
+_θt_ _[k]_ [+1] = _βθt_ _[k]_ [+] _[ η]_ [[] _[∇]_ _θt_ _[k]_ [Φ(] _[x]_ 1 _[θ][k]_ [)]] so(3) _[,]_
+
+
+_x_ ˙ _[θ]_ _t_ _[k]_ [+1] = ( _f_ _[p]_ ( _x_ _[θ]_ _t_ _[k]_ [+1] ) + _θt_ _[k]_ [+1] ) _x_ _[θ]_ _t_ _[k]_ [+1] _._ (140)
+
+
+For the experimental setup, we conducted a comparative study using a randomly selected subset of
+30 pockets. Each peptide was tested under identical conditions, with the primary difference being the
+parameterization and update method for rotations.
+
+
+Table 12: Comparison of OC-Flow-SO3 and naive SO3 gradient descent
+
+
+MadraX _↓_ RMSD _↓_ SSR % _↑_ BSR % _↑_ Stability _↓_ Affinity _↓_ Diversity _↑_ imp(%) _↑_
+
+
+Ground-truth -0.610  -  -  - -91.107 -39.807  -  PepFlow -0.157 **1.932** 0.788 **0.882** -39.807 -28.080 0.322 11.6
+Naive-SO(3) 0.275 5.206 0.769 0.748 75.842 -21.901 **0.635** 6.0
+OC-Flow-SO(3) **-0.191** 1.943 **0.794** 0.874 **-50.947** **-29.027** 0.332 **14.0**
+
+
+As shown in Table 12, the results indicate that updating rotations on SO(3) using optimal control outperforms the naive method in terms of energy optimization and stability. The significant performance
+gap can be attributed to the accuracy loss during the projection of the gradient onto so(3), which may
+disrupt the delicate dynamics of the SO(3) space. Furthermore, due to the complexity of the SO(3)
+
+
+32
+
+
+manifold, gradient-based methods are more prone to becoming trapped in local optima, whereas the
+optimal control-based algorithm provides a pathway toward achieving the global optimum.
+
+
+Our efforts to reproduce the PepFlow baseline involved extensive steps, including reaching out to the
+original authors to address the absence of certain scripts and obtaining partial instructions for the
+evaluation pipelines. In the original PepFlow paper, affinity and stability are reported as percentages.
+However, to facilitate more fine-grained comparisons, we opted to report absolute energy values
+instead. Additionally, to ensure fairness in comparison, we included IMP (Interaction Metric for
+Peptides) as an evaluation metric, aligning it with the affinity measure used in PepFlow. Furthermore,
+our experiments were conducted using the latest version of MadraX, ensuring that our results are
+both robust and reproducible. These updates provide a consistent and comprehensive framework for
+evaluating and comparing future methods in peptide design.
+
+
+33

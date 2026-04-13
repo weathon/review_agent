@@ -1,0 +1,2237 @@
+# HOW TRANSFORMERS LEARN STRUCTURED DATA:
+
+## INSIGHTS FROM HIERARCHICAL FILTERING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Understanding the learning process and the embedded computation in transformers is becoming a central goal for the development of interpretable AI. In the
+present study, we introduce a hierarchical filtering procedure for generative models of sequences on trees, allowing us to hand-tune the range of positional correlations in the data. Leveraging this controlled setting, we provide evidence
+that vanilla encoder-only transformers can approximate the exact inference algorithm when trained on root classification and masked language modeling tasks,
+and study _how_ this computation is discovered and implemented. We find that correlations at larger distances, corresponding to increasing layers of the hierarchy,
+are sequentially included by the network during training. Moreover, by comparing attention maps from models trained with varying degrees of filtering and by
+probing the different encoder levels, we find clear evidence of a reconstruction of
+correlations on successive length scales corresponding to the various levels of the
+hierarchy, which we relate to a plausible implementation of the exact inference
+algorithm within the same architecture.
+
+
+1 INTRODUCTION
+
+
+Transformer-based large language models have revolutionized natural language processing, and have
+notably demonstrated their capacity to perfectly assimilate the grammatical rules of the languages
+they are trained on. While this evidence shows that transformers can handle and exploit the subtle
+long-range correlations that emerge in natural language, their inner workings remain largely unclear.
+
+
+Due to the complexity of the standard transformer architecture (Vaswani et al., 2017), understanding
+what strategy is precisely implemented via the attention mechanism to solve a given problem has
+been limited so far to very simple tasks (Weiss et al., 2021; Zhong et al., 2024; Behrens et al., 2024).
+Nonetheless, significant results have been obtained by studying transformers on simplified models of
+language known as Context-Free Grammars (CFGs). Through probing of the so-called parsing tree
+of CFGs, evidence has notably pointed towards transformers trained on predicting masked symbols
+implementing the optimal dynamic programming algorithm to reconstruct the hidden structure of
+the grammar, but alas without finding a fully plausible implementation within the architecture (Zhao
+et al., 2023; Allen-Zhu & Li, 2023). On the other hand, when tasked with reconstructing the most
+probable parsing tree in the context of probabilistic CFGs, transformers may struggle to match the
+optimal algorithm if ambiguity is high (Khalighinejad et al., 2023).
+
+
+Beyond language models, the significance of data structure in machine learning applications is well
+recognized yet remains poorly understood. CFGs represent a data structure characterized by hierarchical correlations (Mossel, 2016). In general, understanding how standard deep networks can
+take advantage of this hierarchical structure in their training is an important research question. Towards this objective, simplified hierarchical models of structured data on fixed trees have proved
+very useful in understanding the effectiveness of Convolutional Neural Networks (CNNs) (Cagnetta
+et al., 2024), for which there are now formal results supporting the idea that the optimal Belief Propagation (BP) algorithm can be approximately implemented (Mei, 2024). Unfortunately, while the
+implementation of the hierarchy in CNNs is made quite transparent by the hierarchical structure of
+their convolutional filters, this is not true for transformers, and one can therefore not straightforwardly transpose this interpretation to other architectures (Cagnetta & Wyart, 2024).
+
+
+In this work, we present a complementary study to those described above, which allows us to understand further _how_ transformers approach optimal inference in a structured data model.
+
+
+1
+
+
+|osed filtered hierarchical model, illustr|Col2|
+|---|---|
+|osed flte<br>|osed flte<br>|
+
+
+and generate data with more or less structure. (b) Scatter plot of the predictions of a trained transformer for a masked symbol ( _ℓ_ = 4, _k_ = 0, _q_ = 4 possible states) versus the corresponding exact
+marginals obtained with the BP oracle, in-sample on 10 [4] sequences (top), and out-of-sample on uniformly generated sequences (bottom). (c) Evolution along training, on a root classification task with
+_P_ = 2 [17] examples ( _ℓ_ = 4, _k_ = 0, _q_ = 4) of the average Kullback-Leibler divergence between transformer predictions and marginals obtained from the matched BP (black) and mismatched BP (from
+light green _k_ = 1 to purple _k_ = 4) on identical in-sample inputs, demonstrating the transformer
+learns increasingly structured representations. (d) Identical to (c) for a MLM task on _P_ = 2 [18] data.
+(e) Attention maps averaged over 10 [4] in-sample inputs, for a transformer with _nL_ = _ℓ_ = 4 layers
+of attention trained on the MLM task with fully hierarchical data, exhibiting a structure that mirrors
+the organization of the generative tree and the sequence of operations of BP. (f) Test accuracy on
+root classification on fully hierarchical data ( _ℓ_ = 4, _k_ = 0, _q_ = 4) versus number of labeled training
+samples _P_ with no pretraining (circles) compared to MLM pretraining with frozen (squares) and
+unfrozen (diamonds) encoder weights during fine-tuning.
+
+
+**Our** **contributions.** We propose a controlled hierarchical model of discrete sequences, in which
+we can easily tune the strength of correlations between tokens thanks to a “filtering” parameter _k_,
+illustrated in Fig. 1(a). This tree-based probabilistic graphical model gives us access to the _exact_
+inference algorithm for reconstructing any symbol on the tree, Belief Propagation (BP) (M´ezard &
+Montanari, 2009). Leveraging this context, we show that
+
+
+    - Transformers not only approach optimal performance in root classification and Mask Language Modeling (MLM) tasks, but they spontaneously do so in a calibrated way—i.e., by
+predicting probabilities that approximate those yielded by the BP oracle even on out-ofsample inputs, see Fig. 1(b)—which provides evidence of an equivalence in computation
+to the exact inference algorithm.
+
+    - When trained with stochastic gradient descent, transformers sequentially discover the existence of higher hierarchical correlation levels (i.e., longer-range correlations), progressively
+aligning with the prediction of algorithms that impute only parts of the full correlation
+structure, see Fig. 1(c)-(d). In other words, our simplified setting allows us to understand
+how transformers learn from structured data in _time_ .
+
+    - Well-trained transformers reconstruct the correct hierarchical structure through the succession of attention blocks. Matching the number of transformer layers to the number of
+layers in the generative tree, we find that the attention maps are compatible with a natural
+implementation of BP within the architecture, see Fig. 1(e). We verify this affinity through
+probing experiments, providing strong clues on how transformers learn from our structured data in _“space”_, thereby explaining the effectiveness of unsupervised pre-training for
+supervised classification tasks, illustrated in Fig. 1(f).
+
+
+2
+
+
+The paper is organized as follows. First, we provide a detailed description of our tunable hierarchical
+model in Sec. 2. We then perform numerical experiments on standard transformer architectures in
+Sec. 3, shedding light on the learning dynamics. The understanding of the implementation learned
+by the transformer, and its compatibility with a possible implementation of the Belief Propagation
+algorithm in the architecture that we propose, is analyzed in-depth in Sec. 4. We finally conclude
+and discuss the wider implications of our results in Sec. 5.
+
+
+2 A MODEL WITH FILTERED HIERARCHICAL CORRELATIONS
+
+
+2.1 THE FULL HIERARCHICAL MODEL
+
+
+We consider a tree-based generative process producing structured sequences of discrete symbols.
+We here focus on the fixed tree topology case, allowing for direct control over the effective range
+of the hierarchical correlations induced in the generated sequences (2.2), and enabling exact and
+efficient inference through Belief Propagation (2.4).
+
+
+The “full” hierarchical generative process shown in the first row of Fig 1(a) can be described as
+follows. The chain starts from an initial symbol _x_ 0, which we will refer to as the _root_ of the tree,
+sampled with probability _**p**_ 0 from a vocabulary = 1 _, . . ., q_ . Then, the first layer of the tree
+_X_ _{_ _}_
+is drawn randomly using a transition tensor **M**, which assigns the probability of generating some
+children—from the same vocabulary —given a parent (here _x_ 0). In this work, we will restrict
+ourselves to binary trees for simplicity. _X_ We therefore have **M** R _[q]_ + _[×][q][×][q]_, with _Mabc_ the probability
+_∈_
+of generating the _pair_ ( _b, c_ ) given a parent _a_ . Since its elements are transition probabilities, this
+tensor should satisfy _Mabc_ _∈_ [0 _,_ 1] _∀_ _a, b, c_ and [�] _bc_ _[M][abc]_ [=] [1] _[∀]_ _[a]_ [.] [The] [process,] [with] [the] [same]
+tensor **M**, is then repeated independently for each of the newly created children nodes for a total
+of _ℓ_ generations, eventually yielding a sequence of 2 _[ℓ]_ symbols _xi_ _i_ =1 _,...,_ 2 _ℓ_ . We will refer to the
+_{_ _}_
+symbols in the sequence as the _leaves_ of the generative tree.
+
+
+The class of transition tensors **M** that we use is defined precisely in Appendix A. In short, we
+will resort to randomly sampled log-normal transition probabilities, yielding complex long-range
+correlations along the sequences. Importantly, we will only consider tensors with non-overlapping
+entries, such that: if _Mabc_ _>_ 0, then _a_ _[′]_ = _a_ _Ma_ _[′]_ _bc_ = 0. As a result, the production rules of
+_∀_
+our unfiltered generative model are _non-ambiguous_ in the sense that a pair of children symbols can
+only have a single parent. Given all the symbols on the leaves, one can therefore _deterministically_
+reconstruct the underlying generative tree, all the way up to the root.
+
+
+2.2 FILTERING HIERARCHICAL CORRELATIONS
+
+
+We develop a filtering tool that enables control over the correlation structure in the generated sequences. In particular, we consider a family of generative models, indexed by an integer _k_ _≤_ _ℓ_, with
+hierarchical correlations truncated at a given depth _k_ of the tree.
+
+
+In the _k_ = 0 case described in the previous paragraph, all children generated at any level of the
+tree are sampled in pairs from their respective parents and are strongly correlated. When _k_ _>_ 0,
+we instead generate the tree by drawing the children at level _k_ _conditionally_ _independently_ given
+the root, with the same marginals as the full ( _k_ = 0) model. Then, for layers below layer _k_,
+the generative process is the standard one described above, inducing correlations within blocks of
+2 _[ℓ][−][k]_ tokens. The procedure is illustrated in Fig. 1(a), where dashed segments indicate conditional
+independence.
+
+
+In order to match the correct marginal probabilities in the truncated models, the conditional independent sampling at level _k_ is done as follows. For each of the 2 _[k]_ variables at level _k_, say _xj_, [1]
+one considers the unique path that relates the root to this intermediate child in the original fully
+hierarchical tree, yielding a probability
+
+
+with _σm_ ( _j_ ) _L, R_ indicating whether the path leading to the tree element _j_ considered at layer _k_
+takes a left or right branching at the previous layer _∈{_ _}_ _m_ . The _q × q_ transition matrices _**M**_ _[L]_ and _**M**_ _[R]_
+
+1Here we take _j_ _>_ 2 _ℓ_ to refer to the internal nodes of the tree, while _x_ 0 remains the root and _xi_ with
+_i_ = 1 _, . . .,_ 2 _[ℓ]_ are the leaves.
+
+
+3
+
+
+_P_ ( _xj_ = _b_ _x_ 0 = _a_ ) = - _**p**_ 0 _**M**_ _[σ]_ [0][(] _[j]_ [)] _**M**_ _[σ]_ [1][(] _[j]_ [)] _. . ._ _**M**_ _[σ][k][−]_ [1][(] _[j]_ [)][�]
+_|_
+
+
+(1)
+_a,b_ _[,]_
+
+
+are computed by tracing the original tensor
+
+
+By constructing filtered trees in such a way, we ensure that the conditional correlations of the leaves
+capture up to the _k_ [th] level of the hierarchy. Note, however, that when _k_ _>_ 0 the root can no longer
+be recovered deterministically from the leaves.
+
+
+2.3 RELATED DATA MODELS
+
+
+**Context-free grammars.** Our hierarchical model can be considered as an instance of a simplified
+probabilistic context-free grammar (PCFG) with log-normally distributed transition rates (De Giuli,
+2019). The simplification is two-fold. Standard CFGs typically include two distinct sets of symbols,
+non-terminals and terminals, representing parts of speech—i.e. nouns, verbs etc.—and actual words
+respectively, plus a root symbol. Here, instead, we consider a single vocabulary _X_ for all the symbols
+in the tree, including the root—which allows us to define a root classification task. Moreover, the
+_parsing trees_ underlying CFGs are not fixed: terminals can be produced at different levels and the
+sequence length can vary. Instead, we assume a fixed parsing tree for our model, where the 2 _[ℓ]_ leaves
+are collected from the last layer—which allows us to define a filtering procedure based on removing
+layers of hidden symbols above the leaves.
+
+
+**The Random Hierarchy Model.** Our model is closely related to the recently introduced Random
+Hierarchy Model (RHM) of Cagnetta et al. (2024), which was studied to improve the understanding
+of the effect of hierarchical structures on generative diffusion (Sclocchi et al., 2024) or last token
+prediction (Cagnetta & Wyart, 2024). The main differences to our formulation are that in the RHM
+the allowed transitions have uniform transition rates—while we consider a log-normal distribution—
+and that the production rules depend on the layer—while we here consider a single transition tensor
+throughout the tree. Correlations between the leaves arise in the RHM when some children pairs
+cannot be produced, leading to a reduced entropy of viable sequences. Having non-uniform transitions in our model similarly limits the entropy, while leading to a significantly different correlation
+structure. One should for instance notice that the staircase decrease of the correlations as a function
+of the distance between leaves presented in Cagnetta & Wyart (2024) is not visible in our case.
+
+
+2.4 EXACT INFERENCE
+
+
+A key advantage of generating sequences through a tree-based process is that we can perform exact
+inference efficiently using a dynamic programming approach. Moreover, the fixed tree topology
+allows us to consider a simplified version of the general _inside-outside_ algorithm (Baker, 1979),
+which can be written in a message-passing form within the Belief Propagation (BP) formalism (Sato,
+2007; M´ezard & Montanari, 2009). Assuming that the transition tensor **M** and root probabilities _**p**_ 0
+are known, with BP one can compute the exact marginal probabilities for all the symbols at any
+position in the tree, with a computational cost linear in the size of the tree. Without going into detail
+on the derivation, let us describe the BP scheme for the filtered tree graphs we are considering.
+
+
+We start by randomly initializing an upgoing and downgoing message—each one being a vector
+in R _[q]_ that represents a probability distribution over the _q_ possible symbols—for each edge in the
+generative tree. In the following, we denote with _νj→α_ a message going from a so-called variable
+node _j_ (shown by a circle in the sketches) to a factor node _α_ (shown by a full or empty square in the
+sketches), and with ˆ _να→j_ the message in the opposite direction. Wherever there is a known variable
+one should then fix _νj→α_ [ _xj_ ] = _δxj_ _,a_, where _a_ is the known value e.g. of the leaf.
+
+
+When the hierarchy is truncated, two distinct types of updates are possible, depending on whether
+one lies in the filtered or unfiltered regions of the tree. In the former, the root is directly connected
+to 2 _[k]_ “empty” factor nodes, as shown in Fig. 2(a), each connected to a single and distinct variable
+node below. In this case the BP fixed point equations for messages from the root to the empty factor
+are given by
+
+_ν_ 0 _→αj_ [ _x_ 0]               - _ν_ ˆ _αℓ→_ 0[ _x_ 0] _,_ (3)
+_∝_
+
+_ℓ_ = _j_
+
+
+4
+
+
+_Mab_ _[L]_ [=] 
+
+
+_Mabc,_ (2)
+
+_b_
+
+
+_Mabc,_ _Mac_ _[R]_ [=]  _c_ _b_
+
+
+i.e. outgoing messages are simply a product of the incoming messages from all the other edges. At
+each of the 2 _[k]_ factor nodes, both upgoing and downgoing messages satisfy
+
+
+where _∂i_ is the set of factor nodes connected to variable node _i_ . In our problem, this product will
+therefore typically be over a single factor node when inferring masked leaves, or 2 _[k]_ factor nodes
+when inferring the root.
+
+
+In the following, we will adopt the short-hand notation BP _k_ to denote a BP implementation that
+assumes the computational graph of the _k_ -filtered hierarchical model, thus able to perform exact
+inference in a matched case with data with filtering parameter equal to _k_ .
+
+
+3 HOW TRANSFORMERS LEARN TO CLIMB THE HIERARCHY IN TIME
+
+
+3.1 EXPERIMENTAL SETUP
+
+
+We will focus on the encoder-only variant (Devlin et al., 2019) of the celebrated “vanilla” transformer architecture, introduced in Vaswani et al. (2017). A full recap of this parametrization is
+given in Appendix B.
+
+
+In a nutshell, each of the sequence elements _xi_ 1 _, . . ., q_ is first converted to a positionally_∈{_ _}_
+informed token _**x**_ [(0)] _i_ R _[d]_ . For our experiments, we consider _d_ = 128 and the standard sinusoidal
+_∈_
+positional encoding of Vaswani et al. (2017). Each transformer block in the network then maps
+the previous encoded sequence onto a new sequence of tokens with the same length and embedding
+dimension, through a concatenation of a self-attention layer and a fully connected layer, with residual
+connections and layer normalization. The self-attention layer importantly introduces some mixing
+between the different tokens in the sequence, represented by what we will refer to as an attention
+matrix _**A**_ R [2] + _[ℓ][×]_ [2] _[ℓ]_ . We take the fully connected layer to be a standard 2-layer network with relu
+_∈_
+activations and hidden dimension _d_ _[′]_ = 2048. Following these operations, repeated _nL_ times to
+obtain the full encoder, we obtain a position-dependent high-dimensional representation of each of
+the original symbols in the sequence. What is finally done with this sequence of tokens depends
+on the task at hand: we consider root classification in Sec. 3.2 and masked language modeling in
+Sec. 3.3.
+
+
+5
+
+
+_P_ ( _xj_ _x_ 0) _νj→αj_ [ _xj_ ] _,_ _ν_ ˆ _αj_ _→j_ [ _xj_ ]  _|_ _∝_
+_xj_ _x_ 0
+
+
+_ν_ ˆ _αj_ _→_ 0[ _x_ 0] _∝_
+
+
+_P_ ( _xj_ _x_ 0) _ν_ 0 _→αj_ [ _x_ 0] _,_ (4)
+_|_
+_x_ 0
+
+
+where _P_ ( _xj_ _x_ 0) is given by equation 1, and is specific to the factor node considered. The notation
+_|_
+means that the messages—that are probabilities—are to be normalized (e.g. [�] _x_ 0 _[ν]_ [ˆ] _[α]_ _j_ _[→]_ [0][[] _[x]_ [0][] = 1][).]
+_∝_
+
+We now consider the lower, unfiltered part of the tree. As illustrated in Fig. 2(b), each of the “full” factor nodes is connected to
+three variable nodes, representing the parent and two children in
+the standard branching process. The outgoing messages from the
+factor node should satisfy
+
+
+_ν_ ˆ _α→u_ [ _xu_ ]     - _Mxuxℓxr_ _νl→α_ [ _xl_ ] _νr→α_ [ _xr_ ] _._ (5)
+_∝_
+
+_xl,xr_
+
+
+For all variable nodes except for the root detailed above, the single outgoing messages are equal to the single incoming messages
+in these variable nodes at the previous/next layer of the tree. For
+example, the upgoing messages _ν_ 1 _→α_ 1 in Fig. 2(a) is simply ˆ _να→_ 1,
+where _α_ is the _full_ factor node lying below variable 1 (assuming
+_k_ _<_ _ℓ_ ). Efficient convergence to the fixed point is guaranteed if
+one starts from the leaves and updates the messages in an upgoing
+pass, and then performs a downgoing pass from the root, for a total of 2( _ℓ_ _−_ _k_ + 1) steps. Once the messages have converged, any
+unknown variable can be optimally reconstructed by computing the
+marginals as
+_µ_ [ _xi_ ]        - _ν_ ˆ _α→i_ [ _xi_ ] _,_ (6)
+_∝_
+
+_α∈∂i_
+
+
+Figure 2: Illustration of the
+two types of BP updates: (a)
+above; (b) below the filter
+level _k_ .
+
+
+Motivated by our focus on understanding the transformer’s implementation, we will take the number
+of attention layers to match the depth of the unfiltered generative tree, _nL_ = _ℓ_ . Studying varying
+values of _k_ for the training data will effectively allow us to explore cases where there are more
+attention layers than hierarchical levels in the generative tree, while we discuss the consequences of
+having _nL_ smaller than the number of hierarchical levels in Appendix D.1.
+
+
+In the following, all numerical experiments are performed on the same realization of the transition tensor, randomly sampled for _q_ = 4 using the parametrization described in Appendix A (see
+also our Reproducibility Statement below). While there may be quantitative differences for different randomly generated tensors—particularly at small _q_ —results remain qualitatively unchanged in
+experiments on different grammars, see Appendix D.2.
+
+
+3.2 SUPERVISED CLASSIFICATION
+
+
+In the context of our model, a natural idea is to use the root of a tree _x_ 0 as a label for the generated
+sequence _xi_, and to train a transformer encoder architecture on the associated classification task
+_{_ _}_
+using a dataset of _P_ _labeled_ sequences. To perform the root prediction, the tokens in the final layer
+are concatenated position-wise (forming a large _d ×_ 2 _[ℓ]_ vector) and fed to a linear readout, which
+outputs _q_ logits associated with the possible root symbols. The network is trained by minimizing
+the cross-entropy loss between these logits and the correct one-hot encoding of the root.
+
+
+**Full** **prediction** **matching.** So far, we have established that the trained transformers match
+the accuracy of the exact inference algorithm on the root prediction in- and out-of-sample.
+We can however go one step further, as the transformers output _q_ logits, which were passed
+through an arg max operation to yield a prediction. Taking the softmax instead gives a normalized _q_ -dimensional vector, which we can interpret as the predicted probabilities of the root
+symbol given the input sequence, to be compared to the _exact_ marginals obtained with BP.
+We find a close match at the end of training, as shown by the small Kullback-Leibler divergences averaged over in-sample inputs in the _k_ = 0 case in Fig. 1(a), and similarly for
+_k_ _≥_ 0, on both in-sample and entirely out-of-sample inputs in Fig. 11 of the Appendix.
+
+
+6
+
+
+**Optimal** **test** **accuracy.** We find that given sufficient labeled data
+_P_ _≥_ _P_ _[∗]_, transformers achieve perfect in-sample root classification
+accuracy in the fully hierarchical model, _k_ = 0, as illustrated in
+Fig. 3. When the training data has filtering parameter _k_ _>_ 0, the
+networks approach the optimal in-sample accuracy predicted by BP _k_,
+see Fig. 10 of Appendix D.3. Notice that, while in the case _k_ = 0 the
+exact algorithm finds the value of the root with accuracy 1, this is no
+longer the case for _k_ _≥_ 1 where the optimal accuracy is _<_ 1.
+
+Different from the Random Hierarchy Model of Cagnetta et al.
+(2024), characterizing analytically the scaling of _P_ _[∗]_ with the parameters of the grammar with our non-uniform transition probabilities is
+a challenging goal, and is left for future work. Still, we discuss the
+role of the filtering parameter _k_ of the data model on the sample complexity in Appendix D.3
+
+
+Figure 3: Evolution of
+the root prediction accuracy on full hierarchical
+_k_ test = 0 test samples for
+transformers trained on _P_
+labeled samples generated
+with _k_ train = 0 _,_ 1 _,_ 2 _,_ 3 _,_ 4
+(top to bottom). Dashed
+lines indicate, for each _k_,
+the accuracy computed with
+the BP _k_ algorithm on unfiltered data.
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+10 [4] 10 [6]
+
+_P_
+
+
+**Out-of-sample** **testing.** In our data model, one can also test out
+transformers trained on _P_
+
+of-sample with respect to the filtering parameter _k_ . For example, we
+
+labeled samples generated
+
+test models trained on intermediate filtered data on a fully hierarchical dataset, i.e., _k_ train _>_ 0 and _k_ test = 0, in Fig. 3, or vice-versa, with(top to _k_ trainbottom).= 0 _,_ 1Dashed _,_ 2 _,_ 3 _,_ 4
+i.e., _k_ train = 0 and _k_ test _>_ 0, in Fig. 4. In both cases, the transformers lines indicate, for each _k_,
+achieve a performance that exactly matches that of BP _k_ train, in the pres- the accuracy computed with
+ence of the same mismatch between the assumed inference model and
+the data generative model. We stress that, in this mismatched task, the the BP _k_ algorithm on unfil
+tered data.
+
+BP prediction is no longer optimal, yet the trained networks systematically reach the same accuracy. This observation provides the first evidence that the transformers are
+implementing an approximation of the BP _k_ train algorithm matched to the training data distribution.
+
+
+While such a match is not entirely surprising in the deterministic
+_k_ = 0 problem, as the one-hot encoding of the root label against
+which the transformer logits are compared at training corresponds to
+the exact marginal distribution yielded by BP0, the match is highly
+non-trivial in the ambiguous _k_ _>_ 0 instances, where the transformer
+is never explicitly guided towards the correct values during training,
+as the one-hot encoding of the root label does not correspond to the
+exact marginals anymore. This calibration therefore provides a second strong piece of evidence that the transformers spontaneously implement exact inference.
+
+
+**Supervised** **learning** **dynamics.** Looking more specifically at the 0 10 [0] 10 [1] 10 [2]
+learning dynamics of a network trained on the full hierarchy sheds Epoch
+some light on the learning process of the transformer encoder. Fig. 4
+
+Figure 4: Evolution of
+
+shows the evolution of the test accuracy of the _k_ train = 0 model both the root prediction accu_k_ in-sample, withtest _>_ 0. One can notice multiple stages in the learning procedure: in _k_ test = 0 data, and out-of-sample, on filtered data with racymodel computed on filteredof the _k_ train = 0
+the first epochs, the network imputes a simplistic explanation of the
+training data, resolving the leaf-to-root correlations—aided by the su- test datasets, with _k_ test =
+
+0 _,_ 1 _,_ 2 _,_ 3 _,_ 4 (from top to bot
+pervised signal—, as well as the short-range correlations between the
+
+tom), for a model trained on
+
+leaves.As time progresses and longer-range correlations are discovered in theAs a result, the test accuracy increases for all values of _k_ test. _k_ train = 0 data and _P_ = 2 [17],
+
+_ℓ_ = 4, _q_ = 4. The dashed
+
+training data, the accuracy on the most filtered datasets drops towards
+
+lines represent the out-of
+the _mismatched_ BP0 prediction, since the imputed higher correlation sample BP prediction.
+levels are not present in the out-of-sample _k_ test _>_ 0 data. In the meantime, the accuracy for the smallest values of _k_ test keeps increasing. In a limited number of epochs,
+as the network perfectly learns to infer the root on _k_ test = 0 data, the BP0 oracle accuracy is reached
+on test sets generated with all levels of factorization.
+
+
+This picture can be further refined by considering the predictions of a transformer trained on the
+full hierarchy and the evolution of their distance from the marginals predicted on the same data
+by the BP _k_ oracles, for all _k_ 0. As illustrated by the _D_ KL in Fig. 1(c), we observe an initial
+_≥_
+stronger alignment to BP _ℓ_, which only considers leaf-to-root correlations. As training on _k_ train = 0
+data progresses and the transformer shifts towards the correct prediction, the model predictions
+sequentially align to versions of BP that incorporate more and more of the correlation structure—
+i.e., BP _k_ with decreasing values of _k_ .
+
+
+3.3 MASKED LANGUAGE MODELING
+
+
+We now turn to self-supervised training, where the model learns from a dataset of _P_ _unlabeled_
+sequences. In simple terms, the Masked Language Modeling (MLM) training procedure consists of
+randomly masking parts of the sequences and asking the model to recover them from the context.
+This is closer to what is done in practice to train large language models, see e.g. Devlin et al. (2019);
+Liu et al. (2019). While in principle one could mask several symbols simultaneously in training, we
+focus on single-symbol masking—at a random position in the sequence—in the following, given
+the limited length of our sequences (a single symbol representing already 6.25% of the sequence for
+_ℓ_ = 4). Contrary to the root inference task, in MLM perfect accuracy cannot be achieved even in the
+fully hierarchical case, because of the stochastic nature of the branching process in the generative
+tree. The optimal performance is still yielded by the BP matched to the test data.
+
+
+To reconstruct the masked symbol, we now feed a single token, selected from the final transformer
+encoding at the positions associated with the masked element, to a linear layer producing a vector
+of logits. The network is then trained by minimizing the cross-entropy loss between these logits and
+the one-hot encoding of the masked element in the sequence.
+
+
+**Optimal reconstruction performance.** Given sufficient data, we find that transformers again approach optimal in-sample accuracy on data with any level of filtering. We show the case trained
+on _k_ train = 0 in Fig. 5, where the transformer reaches the BP0 accuracy also on out-of-sample test
+data with _k_ test _>_ 0. Consistent with intuition, the required amount of training data _P_ _[∗]_ is increased
+relative to the supervised task, as the network must learn to resolve the weak long-range correlations
+in the sequence without any supervised signal from the top of the hierarchy. Moreover, compared to
+
+
+7
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 10 [0] 10 [1] 10 [2]
+
+
+Epoch
+
+
+Figure 4: Evolution of
+the root prediction accuracy of the _k_ train = 0
+model computed on filtered
+test datasets, with _k_ test =
+0 _,_ 1 _,_ 2 _,_ 3 _,_ 4 (from top to bottom), for a model trained on
+_k_ train = 0 data and _P_ = 2 [17],
+_ℓ_ = 4, _q_ = 4. The dashed
+lines represent the out-ofsample BP prediction.
+
+
+root classification, the networks trained for MLM require much longer training to approach optimal
+performance—typically _∼_ 10 [3] epochs in place of a mere _∼_ 10 epochs for classification—, see Fig. 5
+vs Fig. 4.
+
+
+**Full** **prediction** **matching.** To go beyond test accuracy, we also consider the full probabilities
+outputted by the transformer. As shown in the top panel Fig. 1(b), we find a close match with the
+exact marginals obtained from BP when measured on in-sample inputs. To confirm the generality
+of this correspondence, we extend the comparison to uniformly sampled data in the bottom panel of
+Fig. 1(b). In this setting, we still observe high correlations between the outputs, albeit with more
+dispersion related to the markedly atypical nature of these test samples compared to the training data
+distribution. Measuring the alignment using the Kullback-Leibler divergence, shown in Fig. 1(d),
+or else the sample-specific prediction match and Spearman (ranking) correlation between the two
+discrete probability distributions, shown in Fig. 12 of Appendix D.4, confirms the near equivalence
+between transformer and BP computation. Note again the remarkable calibration of the logits, although the network is trained with hard labels for the masked symbols despite the probabilistic
+nature of the task.
+
+
+4 HOW TRANSFORMERS EMBED THE EXACT INFERENCE COMPUTATION
+
+
+**Attention** **map** **analysis.** In the root inference task, the readout performing the prediction is fed
+with the entire sequence of tokens. As a result, there are many ways for the transformer encoder to
+distribute the computation across its layers, and no necessity for single tokens to carry information on
+all the ancestry levels in the tree, making it a non-ideal setting for mechanistic interpretation. [2] In the
+MLM task, on the other hand, single token encodings are used to predict the masked symbols. This
+requirement seems to guide the model towards more interpretable attention maps, shedding some
+light on how the model may approximate the optimal algorithm. They are shown in Fig. 6, each row
+referring to a transformer encoder trained on data with different filtering levels— _k_ increasing from
+top to bottom.
+
+
+In the fully filtered case (bottom row) there is no need to combine the different elements of
+the sequence before the readout and the attention matrices are nearly uniform. Now, as we reduce the level of filtering in the generative process, clear patterns emerge in the attention map.
+
+
+2Note that transformers trained on the classification task still present some patterns related to the hierarchical
+nature of the data model, albeit less clearly, see Appendix D.5.
+
+
+8
+
+
+**Self-supervised** **learning** **dynamics.** By analyzing the out-ofsample performance with different filtering levels, we also unveil the
+sequential nature of the MLM learning process. Computing the test
+accuracy on all _k_ test levels throughout the training dynamics, we observe a clean “staircase” behavior in the test accuracy, as shown in
+Fig. 5. This picture confirms and clarifies the experiments in Fig. 4,
+showing that the network sequentially resolves the nested levels of
+the hierarchy, in a bottom-up order. Note that the observation of the
+shorter-range correlations being learned first is consistent with the
+signal-to-noise picture exposed in Cagnetta & Wyart (2024). Moreover, the presence of a sequential mechanism of discovery and resolution of different moments of the data distribution has been studied in
+Refinetti et al. (2023); Bardone & Goldt (2024); Rende et al. (2024).
+Overall, the convergence of the transformer to both the in-sample and
+the out-of-sample token prediction accuracy of BP supports the claim
+that the model learns to implement a close approximation of the exact
+algorithm. The learning mechanism is also confirmed by the behavior
+of _D_ KL along the training, shown in Fig. 1(d): analogous to the root
+inference case, but more qualitatively compelling, the predictions of
+a transformer trained on the fully hierarchical data sequentially align
+with the marginals yielded by BP _k_, with decreasing _k_ as training progresses and longer-range correlations are accounted for.
+
+
+0 _._ 7
+
+
+0 _._ 6
+
+
+0 _._ 5
+
+
+0 _._ 4
+
+
+0 _._ 3
+
+
+0 10 [0] 10 [1] 10 [2] 10 [3]
+
+Epoch
+
+
+Figure 5: Evolution of
+the root prediction accuracy computed on filtered
+test datasets, with _k_ test =
+0 _,_ 1 _,_ 2 _,_ 3 _,_ 4 (from top to bottom), for a model trained on
+_k_ train = 0 data and _P_ = 2 [17],
+_ℓ_ = 4, _q_ = 4. The dashed
+lines represent the in- and
+out-of-sample BP0 predictions.
+
+
+First, the model focuses on short-ranged correlations between nearest neighbors when _k_ = 3
+and, as we decrease _k_, towards patterns of size
+_∼_ 2 _[ℓ][−][k]_, which is the exact size of the stronger
+correlated block with a filtering parameter _k_ —see
+Sec. 2. Note that the similarity between the _k_ = 1
+and _k_ = 0 cases (top two rows) is natural, the tree
+topology in these two cases being identical and
+with only the transition probabilities for this first
+layer differing.
+
+
+Interestingly, the network naturally organizes the
+attention layers hierarchically. This is particularly visible when there are fewer redundant layers i.e. in the cases _k_ = 0 _,_ 1 (two top rows in
+Fig. 6). Such a layout is consistent with the BP
+algorithm on the full tree, where one combines elements pairwise while going up the tree. While a
+typical BP implementation includes a downward
+pass, it is possible to avoid this step if the token embedding dimension, _d_, is sufficiently large.
+To illustrate this point, we propose an existence
+proof of a plausible implementation of the BP algorithm in an architecture.
+
+
+Figure 6: Visualization of the _nL_ = 4 attention
+matrices (averaged over 10 [4] input sequences)
+
+**Exact** **transformer** **embedding** **of** **BP.** In a
+
+for transformers trained on the MLM task on
+
+natural implementation of BP, inference for the
+
+different filtered datasets, with _k_ = 0 _,_ 1 _,_ 2 _,_ 3 _,_ 4
+
+MLM task requires the messages from the visi
+(top to bottom rows), and _P_ = 2 [18], _ℓ_ = 4,
+
+ble leaves to reach the top of the hierarchy and
+
+_q_ = 4. For the fully factorized model, _k_ = 4,
+
+descend back to the masked symbol, effectively
+
+where the leaves are independent conditional
+
+propagating through 2 _ℓ_ layers. A proposal in
+
+to the root the attention matrix appears struc
+Zhao et al. (2023) for a transformer embedding of
+
+tureless. When _k_ decreases one sees the emer
+the inside-outside parsing algorithm—a general
+gence of attention blocks of size 2 _[ℓ][−][k]_ . For
+
+ization of the above-described BP to the unknown _≤∼_
+
+_k_ = 0 _,_ 1, the trained attention matrices reflect
+
+topology setting—requires as many transformer
+
+all the hierarchies of the correlations.
+
+blocks as double the sequence length—here 2 _[ℓ]_ , and an attention head per hidden symbol in the hierarchy. Thus, it might seem surprising that a
+single-head transformer encoder with _ℓ_ blocks could be sufficient to mimic the BP algorithm. To
+prove the feasibility of its implementation within these architectural constraints, we propose an idealized transformer implementation of the BP algorithm. Note that some of the key ingredients of
+this feasible implementation are introduced for the sake of interpretability but are not imposed in our
+experiments, and therefore this does not represent an exact explanation of the trained transformer
+computation. The complete existence argument is deferred to Appendix E, while here we provide a
+high-level description of some key ideas.
+
+
+We consider a fully disentangled embedding of positional and semantic information in the vectorized
+tokens, contained in _d_ = _q_ ( _q_ + 2) + _ℓ_ dimensions. The isolation of the semantic information
+allows the implementation of a simple position-based attention mechanism, inspired by the factor
+graph structure, and compatible with the attention matrices in Fig. 6. Then, going up the hierarchy
+requires the computation of a trace of products (see equation 4), which can be well approximated
+by the fully connected layers in the second part of the transformer blocks, provided the attention
+selects the right terms in the product. The less intuitive component of the implementation is the
+computation of the messages directed towards the leaves, used in the MLM task. Given the limit
+on the number of transformer blocks, this computation must be done in parallel with the upward
+climb of the hierarchy, despite the missing downward messages. It turns out that, by exploiting
+_O_ ( _q_ [2] ) memory slots in the token embedding—and thus with an increased memory cost compared to
+BP—a different recursion with the same result as the standard message-passing can be implemented,
+within the _nL_ = _ℓ_ constraint for the number of transformers layers.
+
+
+9
+
+
+**Probing the encoder representations.** To confirm that the compu- 1 _._ 0
+tation going up the tree is distributed sequentially in the transformer
+blocks, consistent with the proposed embedding of BP, we undertake
+
+0 _._ 8
+
+a probing experiment similar to those performed e.g. in Zhao et al.
+(2023). First, we analyze the encoder trained for the MLM task on
+
+While in the exact embedding of BP the _k_ -th level ancestor infor- 0 1 2 3
+mation must be available at layer _k_ to iterate the recursion for the Tree layer
+downgoing messages, the MLM training does not set such a require
+Figure 7: Test accuracy in
+
+ment. To probe the encodings, we employ a specialized two-layer
+
+the ancestor prediction task
+
+readout for each encoder-layer/ancestry-level pair—independent of
+
+(layer 0 is the root) with _ℓ_ =
+
+the token position—trained on a supervised dataset with 2 [14] exam
+4, _q_ = 4, _k_ = 0 obtained by
+
+ples. In Fig. 7, we show that the prediction accuracy is high on an
+reading out the intermediate
+
+cestors up to the same level as the probed layer and deteriorates on
+
+transformer encoding levels
+
+higher levels of ancestry. Note that, unless the information about the
+
+(legend) of a model pre
+entire block of 2 _[ℓ][−][k]_ tokens is properly mixed in through the atten
+trained on the full hierar
+tion mechanism, a perfectly accurate prediction of the common _k_ _[th]_
+
+chy. The readout is trained
+
+level ancestor from a single token representation is impossible, as the
+
+on 2 [14] labeled examples.
+
+mapping becomes non-deterministic. Moreover, the “overfitting” scenario, where the ancestors are reconstructed solely by the trained probes and the sequential reconstruction is an artifact, can be ruled out by considering the gap between the accuracies achieved
+from different layers—the relative comparisons are fair since the readouts are trained on the same
+datasets—, and by training the probes only on some positions—see Appendix D.7.
+
+
+In Appendix D.7, we also conduct similar ancestor prediction experiments on the last encoder layer
+of models trained with _k_ _>_ 0 data (lower rows of Fig. 6), where we again find that the ancestry
+information is consistent with the attention maps.
+
+
+**Synergy between tasks and MLM pre-training.** In the context of our model, we can straightforwardly explain why self-supervised pre-training allows a large speed-up in the supervised training
+process, in line with many empirical observations on real-world data (Howard & Ruder, 2018). We
+show in Fig. 1(f) an MLM pre-trained model fine-teuned for root inference. A significant reduction
+in the labeled data required to achieve optimal root inference — _P_ _[∗]_ in Sec. 3.2— is observed, both
+with frozen and with fine-tuned encoder weights.
+
+
+5 CONCLUSIONS
+
+
+By using a simple, tunable, hierarchical model of structured sequences, we were able to shed some
+light on the inner workings of transformer encoders and better understand how they achieve optimal
+inference on both supervised and self-supervised tasks. The modularity of our data model also
+allowed us to uncover how transformers sequentially implement longer-range correlations during
+the learning dynamics, compatible with similar controlled studies (Rende et al., 2024) and with the
+general understanding of LLMs trained on natural language (Kaplan et al., 2020). This mechanism
+could perhaps be exploited to shape theory-driven curriculum learning strategies for NLP, where
+curating the presentation order of training examples was already proven effective (Campos, 2021).
+
+
+Generalizing our filtering-based interpretative tool to the case of variable sequence lengths (AllenZhu & Li, 2023; Zhao et al., 2023)—where the topology of the parsing tree is not known _a priori_ —is
+a challenging but promising direction for approaching a more detailed understanding of the learning
+dynamics and the embedded computation in transformer trained on natural language. On the other
+hand, while the idealized model of structured sequences studied in the present work might be less
+suited for modeling natural language compared to standard CFGs, the agnostic nature of the approach could open connections to other related fields, like protein sequences analysis (Zhang et al.,
+2023) and immunology (Meynard-Piganeau et al., 2024). It could finally be interesting to undertake
+a similar investigation on the way transformers learn in other problems where optimal inference can
+also be achieved via dynamic programming (Mossel et al., 2014; 2023).
+
+
+10
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 1 2 3
+
+
+Tree layer
+
+
+Figure 7: Test accuracy in
+the ancestor prediction task
+(layer 0 is the root) with _ℓ_ =
+4, _q_ = 4, _k_ = 0 obtained by
+reading out the intermediate
+transformer encoding levels
+(legend) of a model pretrained on the full hierarchy. The readout is trained
+on 2 [14] labeled examples.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+We provide the source code used to perform our numerical experiments in the Supplementary Material (SM). It includes a Python script generating the data, as well as the PyTorch implementation of
+the transformer and training scripts for both root inference and MLM. It finally provides an efficient
+implementation of the Belief Propagation algorithm which can be used for both root inference and
+Masked Language Modeling. The data used to produce the figures in the main text corresponds to
+fixing seed = 0 and sigma = 1 in the data generation script, see Appendix A for details on the
+role of the latter.
+
+
+A FURTHER DETAILS ON OUR DATA MODEL
+
+
+where the logits _habc_ are generated as
+
+_habc_ =               - _σξabc_ if ( _b, c_ ) _∈Oa,_ (8)
+_−∞_ otherwise _,_
+
+with _ξabc_ independent Gaussian random variables of zero mean and unit variance, and _σ_ controlling
+the probability fluctuations between likely and unlikely transitions. Here, the _q_ sets _a_ build a
+_O_
+equal-sized partition of the _q_ [2] possible children pairs ( _b, c_ ), i.e. _a_ _a_ _[′]_ = if _a_ = _a_ _[′]_ and
+_O_ _∩O_ _∅_
+_a_ _a_ = _q_ [2] . This non-overlapping prescription implies that the broadcast from the root to the
+_| ∪_ _O_ _|_
+leaves has no ambiguity. Therefore, as stated in the main text, if the transition tensor **M** is known,
+one can deterministically go up the hierarchy of the tree and infer the root given a set of leaves. We
+leave generalizations of this setting for future work.
+
+
+B VANILLA ENCODER-ONLY TRANSFORMER ARCHITECTURE
+
+
+A sequence of leaves _xi_ generated by the hierarchical model and represented by 2 _[ℓ]_ integers is
+first converted into a sequence _{_ _}_ of one-hot vectors _**x**_ _i_, with _**x**_ _i_ B _[q]_ . 3 Then, we perform the
+_{_ _}_ _∈_
+first encoding step producing a sequence of _tokens_ _**x**_ [(0)] _i_ [with] [arbitrary] [dimension] _[d]_
+_q_, obtained through a learnable projection to the embedding _{_ _[}]_ _[∈]_ space [R] _[d]_ [,] and the inclusion of positional _[≥]_
+encoding _**p**_ _i_,
+_**x**_ [(0)] _i_ = _**W**_ _E_ _**x**_ _i_ + _**p**_ _i,_ (9)
+
+with _**W**_ _E_ R _[d][×][q]_ and _**p**_ _i_ R _[d]_ . For our experiments, we consider _d_ = 128 and the standard
+_∈_ _∈_
+sinusoidal positional encoding of Vaswani et al. (2017).
+
+
+As described in the main text, each transformer block in the network then transforms the tokens as
+follows,
+
+_**x**_ ˜ [(] _i_ _[l]_ [)] = layernorm     - _**x**_ [(] _i_ _[l][−]_ [1)] + selfattention( _**x**_ [(] _[l][−]_ [1)] ; _**W**_ _Q_ [(] _[l]_ [)] _[,]_ _**[ W]**_ _K_ [ (] _[l]_ [)] _[,]_ _**[ W]**_ [ (] _V_ _[l]_ [)][)]     - _,_ (10)
+
+
+              -               _**x**_ [(] _i_ _[l]_ [)] = layernorm _**x**_ ˜ [(] _i_ _[l]_ [)] + FC(˜ _**x**_ [(] _i_ _[l]_ [)][;] _**[ W]**_ 1 [ (] _[l]_ [)] _[,]_ _**[ W]**_ [ (] 2 _[l]_ [)][)] _._ (11)
+
+
+The single-head self-attention layer considered in this work entails the computation of three different
+quantities from each token: the query _**q**_ _i_ = _**W**_ _Q_ _**x**_ _i_, the key _**k**_ _i_ = _**W**_ _K_ _**x**_ _i_ and the value _**v**_ _i_ = _**W**_ _V_ _**x**_ _i_ .
+
+
+3For simplicity, the procedure described here does not consider special tokens. In practice, we will take a
+vocabulary of size _q_ + 1 to account for _masked symbols_ when doing MLM, see Devlin et al. (2019).
+
+
+11
+
+
+The transition tensor **M** —the “grammar” of our generative model in CFG terminology—fully controls the properties of the above-defined generative process. We define a parametrized ensemble
+of random grammars, from which multiple transition tensors can be sampled independently. Two
+grammars generated with the same parameters are expected to share some high-level features and
+produce data of comparable complexity, at least in the large vocabulary size limit. Elaborating on
+recent work on context-free grammars (see Sec. 2.3 of the main text), we generate transition probabilities as
+
+
+e _[h][abc]_
+_Mabc_ = - _[h]_
+
+
+(7)
+_b_ _[′]_ _c_ _[′]_ [ e] _[h][ab][′]_ _[c][′]_
+
+
+D.1 INFLUENCE OF THE NUMBER OF ATTENTION LAYERS
+
+
+Establishing a relation between the number of encoder layers _nL_ in the transformer and the ability
+to achieve this optimal classification on data generated from hierarchical models is also not straightforward. Indeed, given the concatenation of operations involved in a single transformer block and
+the presence of residual and normalization layers, the effective number of computational layers in
+a transformer is not as explicit as in a multilayer perceptron or a CNN architecture. As apparent in
+the main text, setting _nL_ = _ℓ_ —or _nL_ _ℓ_ _k_ for filtered data—enables the transformer to converge
+_≥_ _−_
+towards a very interpretable parameter configuration. However, this natural choice does not appear
+to be strictly necessary for the transformers to achieve optimal inference, at least when the number
+of embedding dimensions _d_ is large.
+
+
+More specifically, Fig. 8 shows that the test accuracy on the root classification task on _k_ = 0
+unfiltered data can reach the optimal value for _nL_ _<_ _ℓ_ . While _nL_ = _ℓ_ = 4 is the most sample
+efficient, it is clear that _nL_ = 3 provides comparable performance, and only _nL_ = 1 appears to lead
+to poor sample efficiency. In all the performed experiments, a bigger value for _nL_ corresponded to
+better sample efficiency, which seems to indicate that more flexible models require less data to reach
+the same performance level despite the increased number of parameters to train.
+
+
+12
+
+
+For simplicity, we take _**W**_ _Q_, _**W**_ _K_ and _**W**_ _V_ in R _[d][×][d]_ . The queries and keys are combined to compute
+the attention matrix
+
+
+     - _**q**_ _i_ _**k**_ _j_
+_Aij_ = softmax _·_
+~~_√_~~ _d_
+
+
+_d_
+
+
+_,_ (12)
+
+
+then used to build a linear combination of the values,
+
+
+selfattention( _**x**_ ; _**W**_ _Q,_ _**W**_ _K,_ _**W**_ _V_ ) =
+
+
+2 _[ℓ]_
+
+- _Aij_ _**v**_ _j._ (13)
+
+
+_j_ =1
+
+
+The fully-connected layer, instead, is a standard 2-layer network with relu activations:
+
+
+FC( _**x**_ _i_ ; _**W**_ 1 _,_ _**W**_ 2) = _**W**_ 2 relu ( _**W**_ 1 _**x**_ _i_ ) _,_ (14)
+
+where _**W**_ 1 R _[d][×][d][′]_, _**W**_ 2 R _[d][′][×][d]_, and _d_ _[′]_ = 2048 in our experiments. We refer the reader to the
+_∈_ _∈_
+original paper by Vaswani et al. (2017) for additional details on the transformer encoder operations.
+
+
+C FURTHER DETAILS ON NUMERICAL EXPERIMENTS
+
+
+All numerical experiments presented in this paper were performed using PyTorch (Paszke et al.,
+2019) version 2.3.0. We use the Adam (Kingma & Ba, 2014) optimizer with batches of size 32
+and a fixed learning rate of 10 _[−]_ [4], other parameters left as default. We did not find learning rate
+scheduling to provide significant benefits in our experiments. All models were initialized randomly
+using the default settings (Xavier uniform distribution).
+
+
+In both root inference and MLM, the accuracy of the transformer implementation and of the BP over
+_M_ trials is measured straightforwardly as
+
+
+Accuracy = [1]
+
+_M_
+
+
+_M_
+
+- _δx_ ˆ _ν_ _,xν_ _,_ (15)
+
+
+_γ_ =1
+
+
+where _xν_ is understood as the ground truth and _x_ ˆ _ν_ the symbol inferred using the network or BP.
+
+
+The Kullback-Leibler divergence between two discrete probability distributions encoded as _n_ dimensional vectors _**u**_ and _**v**_, is given by
+
+
+_D_ KL( _**u**_ _**v**_ ) =
+_∥_
+
+
+D ADDITIONAL FIGURES
+
+
+- _n_ _uα_ log - _uα_
+
+_vα_
+_α_ =1
+
+
+_._ (16)
+
+
+D.2 OTHER GRAMMARS
+
+
+As expected from the log-normal nature of its entries, there may be significant sample to sample
+fluctuations in the transition tensor **M** for a given value of _σ_, which we expect to (slowly) decay
+as _q_ becomes large. All the results presented in the main text come from the same grammar with
+_q_ = 4, _σ_ = 1 (corresponding to seed = 0 in the data generation script provided in the SM, see the
+Reproducibility Statement above), however we illustrate that all our conclusions should qualitatively
+hold for any realizations of **M** in Fig. 9. Indeed, while there are some very clear differences in the
+“difficulty” of the grammars presented, the transformer architecture performs very similarly, here on
+the root inference task. All subsequent experiments can be reproduced on these different grammars,
+yielding an unchanged phenomenology.
+
+
+13
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+10 [3] 10 [4] 10 [5]
+
+_P_
+
+
+Figure 8: Reproduction of Fig. 1(b) with now _nL_ 4 attention layers in the transformer encoder
+_≤_
+and restricted to the “worst case” _k_ = 0 unfiltered dataset.
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+10 [3] 10 [4] 10 [5]
+
+_P_
+
+
+10 [3] 10 [4] 10 [5]
+
+_P_
+
+
+10 [3] 10 [4] 10 [5]
+
+_P_
+
+
+Figure 9: Reproduction of Fig. 1(b) on other realizations of the transition tensor **M** for the same
+parameters _ℓ_ = 4, _q_ = 4, _σ_ = 1. We remind that for the _k_ _>_ 0 cases, the BP predictions (dashed
+lines) are not Bayes optimal, as the test accuracy is measured out-of-sample here. From left to right,
+these grammars can be reproduced by fixing seed = _{_ 1,15,31 _}_ in the data generation code
+provided in the SM.
+
+
+In any case, the required complexity of the architecture is clearly related to the amount of structure
+in the data model. As an extreme illustration, in the case of fully filtered correlations _k_ = _ℓ_, the
+BP marginals for the root are just products of conditional probabilities on the leaves as _P_ ( _x_ 0 = _a_
+
+_[ℓ]_ _|_
+
+
+_xi_ ) _i_
+_{_ _}_ _∝_ [�][2] _[ℓ]_
+
+
+_xi_ ) _i_ =1 _[P]_ [(] _[x][i]_ _[x]_ [0] [=] _[a]_ [)][, i.e.] [a “Naive Bayes” classifier is optimal.] [Any layer of attention is]
+_{_ thus _}_ superfluous _∝_ [�] since _[|]_ a standard feed-forward network with a single hidden layer is sufficient for
+
+this task. In fact, the analysis of the attention maps (trained this time on MLM) in Sec. 4 confirms
+this natural intuition, as most attention layers appear effectively unused by the transformer when
+_nL_ _> k_ .
+
+
+1 _._ 0
+
+
+Figure 11: Reproduction of Fig. 10 with the Kullback-Leibler divergence between the transformer
+outputs BP marginals for identical levels of factorizations for (Left) in-sample inputs, (Right) uniformly randomly generated inputs.
+
+
+D.3 IN-SAMPLE CLASSIFICATION PERFORMANCE ON FILTERED DATASETS
+
+
+Fig. 10 shows the test accuracy computed in-sample for the factorized datasets as a function of the
+training set size _P_ . The optimal inference accuracy predicted by the Belief Propagation, which is
+not unity when _k_ _>_ 0, is reached by the transformers in all cases when trained on sufficient data.
+
+
+It appears that the required amount of data _P_ _[∗]_ for reaching optimal accuracy not only depends on
+the specific transition tensor **M** (see Fig. 9 for an illustration for _k_ = 0), but also on the level of
+factorization. For intermediate values of _k_, _P_ _[∗]_ is notably larger than with the _k_ = 0 full hierarchy.
+This is due to the fact that the _k_ = 0 case is quite unique for two (related) reasons. The first is
+that the logits outputted from the network need not be calibrated, so the accuracy can reach the
+optimum without the transformer having fully implemented an algorithm equivalent to BP, whereas
+the relative weights of prediction must be well understood to match the optimal inference in the
+ambiguous _k_ _>_ 0 cases—in other words it is easier to match perfect accuracy with approximate
+weights when the true distribution is _δ_ -distributed. The other is that this being said, matching the
+BP is also easier in the _k_ = 0 case because it is the only case where the training cross-entropy loss
+corresponds exactly to that computed with the true marginals—that are also delta distributed due to
+the determinism of the task—whereas in the _k_ _>_ 0 cases the training loss does not guide explicitly to
+the exact marginals. The latter clearly appears in Fig. 11, showing the Kullback-Leibler divergence
+between the transformer outputted logits and the BP marginals instead of the test accuracy.
+
+
+Note that the other case which has a singularly small sample complexity is that of the fully filtered
+data, _k_ = _ℓ_, as it is implementable in a single feedforward layer and does not require an implementation equivalent to BP.
+
+
+14
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+10 [4] 10 [6]
+
+_P_
+
+
+Figure 10: Reproduction of Fig. 3 with the test accuracy computed on (in-sample) factorized data,
+rather than the out-of-sample testing presented in the main text.
+
+
+10 [0]
+
+
+10 _[−]_ [1]
+
+
+10 _[−]_ [2]
+
+
+10 _[−]_ [3]
+
+
+_P_
+
+
+Figure 12: Reproduction of Fig. 1(d) with the prediction (i.e. arg max) match (left) and Spearman
+(i.e. ranking) correlation (right) between the transformer outputs and BP marginals.
+
+
+D.4 ADDITIONAL COMPARISON OF THE OUTPUTS
+
+
+For completeness, we show the comparison between the full transformer predictions and the BP
+marginals through MLM training using the percentage of matches in the largest value (i.e. prediction
+match) and the spearman (ordering) correlation in Fig. 12. These confirm the observations described
+in the main text.
+
+
+D.5 CLASSIFIER ATTENTION MAPS
+
+
+Figure 13: Reproduction of Fig. 6 for the supervised task on filtered datasets of size _P_ = 2 [17] for
+_k_ = 0 and _P_ = 2 [20] for _k_ _>_ 0.
+
+
+Fig. 13 shows the attention maps resulting from the supervised training for transformers achieving
+the optimal performance on datasets with different filtration levels. As in the masked language
+modeling task, one immediately notices the emergence of blocks of size _∼_ 2 _[ℓ][−][k]_ . In this prescription,
+where tokens are not required to be fully descriptive, it is however difficult to identify a clear pattern
+relating to the distribution of the computation across the different layers.
+
+
+15
+
+
+0 10 [0] 10 [1] 10 [2] 10 [3]
+
+Epochs
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+20
+
+
+0
+
+
+0 10 [0] 10 [1] 10 [2] 10 [3]
+
+Epochs
+
+
+1 _._ 0
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 _._ 2
+
+
+0 _._ 0
+
+
+1 _._ 0
+
+
+Figure 14: (Left) Reproduction of the probing experiment presented in Fig. 7, with the readout
+trained only on the first and last token embeddings of the sequences and tested on all elements.
+(Right) Test accuracy in the ancestor prediction task (layer 0 is the root) with _ℓ_ = 4, _q_ = 4,
+_k_ test = 0, obtained by reading out the complete transformer encoding of models pre-trained
+_k_ train = 0 _,_ 1 _,_ 2 _,_ 3 _,_ 4 (from top to bottom), i.e. using the attention maps illustrated in Fig. 6 The
+readout is trained on 2 [14] labeled examples.
+
+
+D.6 DETAILS ON THE PROBING EXPERIMENTS
+
+
+In order to perform the experiments presented in Fig. 7, we replace the linear readout of a trained
+MLM transformer by a two-layer feedforward network with 64 hidden units, acting _independently_
+on all of the _d_ -dimensional sequences ( _d_ = 128 in all of our experiments, see Sec. 3) outputted by
+the _frozen_ transformer encoder. The training of the readout is performed on 2 [14] labeled sequences,
+the labels being, for each of the elements of the sequence, the symbol on the relevant ancestor in the
+generative tree. Here again, the loss is taken to be the cross-entropy between the logits outputted
+by the network for each token and their correct ancestor label, then averaged on all the sequence
+elements. We present another experiment, where the cross-entropy is measured only with the first
+and the last token embeddings of the sequence, just below. The readout is trained on 100 epochs in
+all cases, which we found to be sufficient for the relatively small training set size we used.
+
+
+D.7 FURTHER PROBING EXPERIMENTS
+
+
+To complement and contextualize the probing experiments presented in the main text, we provide
+two additional experiments. In the left panel of Fig. 14, we perform the same experiment as in Fig.7,
+but with probes trained only on two positions in the token sequence (first and last) and tested across
+all positions. While some accuracy is lost, since the readout cannot fully disentangle the positional
+information from the semantic one in positions that were never seen at training, the sequential effect
+is still evident. Moreover, we also performed the same procedure as Fig. 7 on the tokens’ hidden
+representations, but with models trained on factorized data. As visible in the right panel of Fig. 14,
+a model trained of factorized data can only accurately recover ancestors up to the level in which
+factorization kicks in. For example, in an _l_ = 4 tree, a model trained on _k_ train = 2 data can
+only predict ancestors up to level 2 (two ancestry layers above the leaves - above that, the tree
+is factorized), while a model trained on _k_ train = 3 can only predict ancestors up to level 3 (the
+ancestors right above the leaves - for the same reason). This is exactly what could be expected from
+the attention maps of Fig. 6. As before, we are probing the hidden representations of individual
+tokens, so this happens because the attention must provide mixing between _∼_ 2 _[ℓ][−][k]_ elements of the
+sequence in order for individual tokens to carry information up to the level _k_ of the fully hierarchical
+generative model.
+
+
+E A POSSIBLE TRANSFORMER IMPLEMENTATION OF BELIEF PROPAGATION
+
+
+We show here how the BP algorithm for leaf inference can be implemented using _ℓ_ layers of transformers with token sizes which are compatible with what is used in our experiments. We consider
+the “worst case” scenario of a complete, unfiltered tree generative process of depth _ℓ_ .
+
+
+16
+
+
+0 _._ 8
+
+
+0 _._ 6
+
+
+0 _._ 4
+
+
+0 1 2 3
+
+Tree layer
+
+
+0 1 2 3
+
+Tree layer
+
+
+with _β_ _≫_ 1. Let us detail the role of this _ℓ_ _× ℓ_ sub-matrix. Its upper left terms proportional to _β_ will
+be relevant in the softmax, when _β_ _≫_ 1, if they are positive, meaning these are common ancestors
+to tokens _i_ and _j_, and negligible if they are negative. The diagonal term proportional to _−β_ requires
+
+
+17
+
+
+**Token embedding.** We propose an implementation that relies on vectorized tokens with a structure
+of the form
+
+
+
+
+
+
+
+
+
+
+
+_**x**_ [(] _i_ _[m]_ [)] =
+
+
+
+
+
+_**r**_ _i_ [(1] _[,m]_ [)]
+...
+_**r**_ _i_ [(] _[q,m]_ [)]
+_**m**_ [(] _i_ _[m]_ [)]
+_**m**_ ~~[(]~~ _i_ _[m]_ [)]
+_**p**_ ˜ _i_
+
+
+_,_ (17)
+
+
+where:
+
+
+- _i ∈{_ 1 _, ...,_ 2 _[ℓ]_ _}_ is the index of a leaf
+
+
+- _m ∈{_ 1 _, ..., ℓ}_ is the index of a transformer layer
+
+
+- _**r**_ _i_ [(1] _[,m]_ [)] _, . . .,_ _**r**_ _i_ [(] _[q,m]_ [)] are _q_ vectors of dimension _q_ ( _q_ [2] elements in total) storing the quantities
+needed to compute the final leaf marginals,
+
+
+    - _**m**_ [(] _i_ _[m]_ [)] is a vector of size _q_ storing the up-going message for the ancestor of leaf _i_ at level
+_m_,
+
+    - _**m**_ [(] _i_ _[m]_ [)] is a vector of size _q_ storing the up-going message for the _m_ [th] complementary ancestor
+of leaf _i_, see Fig. 15,
+
+    - _**p**_ ˜ _i_ is a _ℓ_ -dimensional binary vector containing positional information on the full path from
+root to leaf _i_ (see below).
+
+
+In this prescription, the total dimension of each token is therefore _d_ = _q_ [2] + 2 _q_ + _ℓ_ .
+
+
+**Initialization.** We are going to consider the following
+initialization,
+
+    -    _**r**_ _i_ [(] _[a,]_ [0)] [1] _a, b_ = 1 _, . . ., q,_ (18)
+
+[=] _[,]_
+
+
+[1]
+_b_ [=] _q_
+
+
+_a, b_ = 1 _, . . ., q,_ (18)
+_q_ _[,]_ _∀_
+
+
+_**m**_ [(0)] _i_ = **0** _,_ (19)
+
+while the messages _**m**_ [(0)] _i_ should be initialized as in the
+standard BP given a sequence, i.e. with a Kronecker _δ_ for
+known symbols and a uniform vector for masked leaves.
+The positional vector _**p**_ ˜ _i_ should finally be a binary 1
+_±_
+vector representing the sequence of left/right turns from
+the root to leaf _i_ (as _σ_ in equation 1).
+
+
+**Attention layer.** In our implementation, the dot product
+
+     - _**W**_ _Q_ [(] _[m]_ [)] _**x**_ [(] _i_ _[m]_ [)]     - _⊤_     - _**W**_ _K_ [(] _[m]_ [)] _**x**_ [(] _j_ _[m]_ [)]     
+
+
+Figure 15: Illustration of the upgoing
+messages embedded in the tokens of the
+transformer implementation of BP for a
+tree with _ℓ_ = 3. Complementary ancestors are shown with dashed lines.
+
+
+entering the softmax and at the heart of the attention
+mechanism only encodes positional information; more precisely, it combines the common ancestors of tokens _i_ and _j_ down to layer _ℓ_ _m_ of the generative tree. This can be achieved with query
+
+and key matrices such that - _**W**_ _Q_ [(] _[m]_ [)] - _⊤−_ _**W**_ _K_ [(] _[m]_ [)] has elements equal to zero except in its lower right
+corner of size _ℓ_ _× ℓ_ which has the following structure:
+ 
+
+
+ _β_ **1** ( _ℓ−m−_ 1) _×_ ( _ℓ−m−_ 1) 0 **0**
+
+ 0 _β_ **0**
+
+_−_
+**0** **0** [ **0** ] _m×m_
+
+
+
+
+
+ _,_ (20)
+
+
+the two considered tokens to be in different positions in the sequence to contribute to the softmax,
+ensuring there is no influence of the messages on themselves in the following steps. Its lower right
+corner, which is populated by a _m × m_ matrix of zeros, ensures that layers below _ℓ_ _−_ _m_ in the
+generative tree are no longer considered.
+
+
+On the other hand, the value matrix may be used to select the correct messages in the token vector,
+with zeros elsewhere.
+
+
+As a result, the total operation amounts to averaging the message incoming from the complementary
+sub-tree over all the trajectories within the complementary sub-tree
+
+
+where _i_ ( _b, c_ ) is either _bc_ or _cb_ depending on the topology of the factor node at which the up_P_
+date takes place—a piece of information fully contained in _**p**_ ˜ _i_ . This type of operation should be
+implementable, at least approximately, by a two-layer network since it is known to be a universal
+approximator.
+
+
+Now, we are to compute the actual leaf marginals. As mentioned in the presentation of the standard
+BP implementation (Sec. 2.4), the standard approach is to perform both an upwards and downwards
+pass, which would require 2 _ℓ_ attention layers.
+
+
+Here, we instead wish to perform the computation in _ℓ_ step, as we have seen from experiments that
+the transformer can achieve perfect accuracy with _ℓ_ attention layers and that it does not appear to
+use all layers when _k_ _< ℓ_ . To do so, we have included the _q_ [2] elements of _**r**_ 1 [(] _[l]_ [)] _[, . . .,]_ _**[ r]**_ _q_ [(] _[l]_ [)] in the token
+and now show how to update these. Note that if we had 2 _ℓ_ layers, we could instead only store _q_
+quantities.
+
+
+18
+
+
+
+
+
+
+
+
+
+
+
+
+
+...
+0
+
+
+
+
+
+
+
+selfattention( _**x**_ [(] _[m]_ [)] ; _**W**_ _Q_ [(] _[m]_ [)] _,_ _**W**_ _K_ [(] _[m]_ [)] _,_ _**W**_ _V_ [(] _[m]_ [)] ) _i_
+_≈_
+
+
+
+
+
+0
+...
+
+E _j∈S_ ( _im_ )
+
+
+- _**m**_ [(] _j_ _[m]_ [)]
+
+
+=
+
+
+
+
+
+
+
+0
+...
+_**m**_ ~~[(]~~ _i_ _[m]_ [)]
+...
+0
+
+
+_,_ (21)
+
+
+~~(~~ _m_ )
+where _i_ is the set of tokens belonging to the complementary tree of token _i_ at layer _ℓ_ _m_ of
+_S_ _−_
+the generative tree. Note that in principle it is not necessary to average since all of the paths should
+lead to the same message from the complementary tree, however keep in mind that in practice some
+tokens will be masked. The averaging procedure therefore allows recovering the information (unless
+~~(~~ _l_ )
+_all_ of the tokens in _i_ happen to be masked). Thanks to the skip connections, this contribution is
+_S_
+added to the initial token, populating the initially empty entries of these complementary messages
+while leaving the rest of the tokens unaffected.
+
+
+**Fully connected feedforward layer.** Following the initialization and after the attention layer, the
+encoded token has the correct structure of equation 17. One must now update the relevant information in order to go to the next attention layer and therefore the next layer in the generative tree. More
+precisely, we need to:
+
+
+    - Compute the messages of the _m_ + 1 [th] ancestor,
+
+
+    - Update the quantities needed to compute the marginal for the leaf associated with the token
+considered,
+
+
+    - Remove temporary or unwanted quantities stemming from the previous steps.
+
+
+All of these must be done with an identical operation for all tokens as the feedforward layer is
+applied independently for all positions in the sequence.
+
+
+The first part is to update the messages following the equivalent of equation 4,
+
+        - _**m**_ [(] _i_ _[m]_ [+1)]         -         - _MaPi_ ( _b,c_ )         - _**m**_ [(] _i_ _[m]_ [)]         -         - _**m**_ [(] _i_ _[m]_ [)]         
+_[,]_
+
+
+     -     _MaPi_ ( _b,c_ ) _**m**_ [(] _i_ _[m]_ [)]
+_bc_
+
+
+(22)
+_c_ _[,]_
+
+
+ 
+_a_
+
+_bc_
+
+_[∝]_
+
+
+_b_
+
+
+- _**m**_ [(] _i_ _[m]_ [)]
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+As an example, consider the factor graph in Fig. 15 and assume the root is not pinned. We can start
+from the standard BP recursion for the down-going message received by leaf _i_ :
+
+
+**Accommodating for filtration.** The implementation described above considered the case of _k_ =
+0, unfiltered generative trees, i.e. the most complex case from the BP standpoint. In the case of a
+dataset with filtering parameter _k_, one can adapt the implementation by taking _ℓ_ _−_ _k_ layers. The
+central difference then lies in the _ℓ_ _−_ _k_ [th] block, which must then combine the 2 _[k]_ messages going
+up to the root in its feedforward layer (instead of two messages like at all other layers in the _k_ = 0
+case).
+
+
+REFERENCES
+
+
+Zeyuan Allen-Zhu and Yuanzhi Li. Physics of language models: Part 1, context-free grammar. _arXiv_
+_preprint arXiv:2305.13673_, 2023.
+
+
+James K Baker. Trainable grammars for speech recognition. _The Journal of the Acoustical Society_
+_of America_, 65(S1):S132–S132, 1979.
+
+
+Lorenzo Bardone and Sebastian Goldt. Sliding down the stairs: how correlated latent variables
+accelerate learning with neural networks. _arXiv preprint arXiv:2404.08602_, 2024.
+
+
+Freya Behrens, Luca Biggio, and Lenka Zdeborov´a. Understanding counting in small transformers:
+The interplay between attention and feed-forward layers. _arXiv preprint arXiv:2407.11542_, 2024.
+
+
+Francesco Cagnetta and Matthieu Wyart. Towards a theory of how the structure of language is
+acquired by deep neural networks. _arXiv preprint arXiv:2406.00048_, 2024.
+
+
+Francesco Cagnetta, Leonardo Petrini, Umberto M Tomasini, Alessandro Favero, and Matthieu
+Wyart. How deep neural networks learn compositional data: The random hierarchy model. _Phys-_
+_ical Review X_, 14(3):031001, 2024.
+
+
+19
+
+
+_c_ 1 _[M][a]_ [2] _[b]_ [1] _[c]_ [1]
+
+
+_b_ 2 _[M][a]_ [3] _[b]_ [2] _[a]_ [2]
+
+
+- _**m**_ ˆ [(1)] _i_
+
+
+ _b_ 1 _∝_
+
+_a_ 2 _,c_ 1
+
+
+_c_ 3 _[M][a]_ [4] _[a]_ [3] _[c]_ [3]
+
+
+
+
+ [�]
+
+_a_ 3 _,b_ 2
+
+
+��
+
+
+_a_ 4 _,c_ 3
+
+
+- _**m**_ [(3)] _i_
+
+
+�� _**m**_ [(2)] _i_
+
+
+
+
+ -   _**m**_ ~~[(]~~ _i_ [1)]
+
+
+(23)
+and define an auxiliary message with a double index dependence:
+
+          - _**r**_ [(] _[a]_ [2] _[,]_ [1)][�] [=]           -           - _**m**_ [(1)]           - _[M][a]_ _[b]_ _[c]_ _[.]_ (24)
+
+
+(24)
+_c_ 1 _[M][a]_ [2] _[b]_ [1] _[c]_ [1] _[.]_
+
+
+ _b_ 1 [=]
+
+
+- _**m**_ [(1)] _i_
+
+
+_c_ 1
+
+
+In particular, the idea is that we are tracing only over the index of the complement ancestor—which
+is already available from the first layer—but not on the index of the downgoing message, which can
+only be computed after reaching the top of the hierarchy. Instead, we keep in memory all the separate
+contributions for each parent index. Then, we can obtain a recursion for the auxiliary messages:
+
+        - _**r**_ _i_ [(] _[a,m]_ [+1)]        -        - _MbPi_ ( _h,k_ )        - _**r**_ _i_ [(] _[a,m]_ [)]        -        - _**m**_ ~~[(]~~ _i_ _[m]_ [)]        - (25)
+
+_[,]_
+
+
+(25)
+_k_ _[,]_
+
+
+- _MbPi_ ( _h,k_ ) - _**r**_ _i_ [(] _[a,m]_ [)] 
+_h,k_
+
+
+ 
+_b_
+
+_h,k_
+
+_[∝]_
+
+
+_h_
+
+
+- _**m**_ ~~[(]~~ _i_ _[m]_ [)]
+
+
+with the base case given in Eq. 24 treated in the transformer first layer. At the last transformer layer,
+one can also trace over the root index, completing the recursion. Doing so in the final feedforward
+layer notably yields, at the end of the transformer encoder,
+
+
+_h_
+
+
+��
+
+_MbPi_ ( _h,k_ )
+
+_b_
+
+
+�� _**r**_ _i_ [(] _[a,ℓ][−]_ [1)]
+
+
+(26)
+_k_ _[,]_
+
+
+_b_
+
+
+- _**r**_ _i_ [(] _[a,ℓ]_ [)] - 
+_b_
+
+_h,k_
+
+_[∝]_
+
+
+- _**m**_ ~~[(]~~ _i_ _[ℓ][−]_ [1)]
+
+
+which is proportional to the incoming message on the leaf and therefore to its marginal if it is to
+be inferred. The final linear readout may then select this relevant part of the outputted tokens to
+perform the masked language modelling.
+
+
+**Including intermediate layers.** In principle, one could add _q ×_ ( _ℓ_ _−_ 1) new vectors entries in the
+token in order to store the marginals at intermediate layers. These would simply be used to store the
+
+          -           
+intermediate values of the [�] _b_ _**r**_ _i_ [(] _[a,l]_ [)] [.]
+
+
+ - _b_ _**r**_ _i_ [(] _[a,l]_ [)]
+
+
+_b_ [.]
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Daniel Campos. Curriculum learning for language modeling. _arXiv_ _preprint_ _arXiv:2108.02170_,
+2021.
+
+
+Eric De Giuli. Random language model. _Physical Review Letters_, 122(12):128301, 2019.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. BERT: Pre-training of
+deep bidirectional transformers for language understanding. In Jill Burstein, Christy Doran, and
+Thamar Solorio (eds.), _Proceedings_ _of_ _the_ _2019_ _Conference_ _of_ _the_ _North_ _American_ _Chapter_ _of_
+_the Association for Computational Linguistics:_ _Human Language Technologies, Volume 1 (Long_
+_and_ _Short_ _Papers)_, pp. 4171–4186, Minneapolis, Minnesota, June 2019. Association for Computational Linguistics. doi: 10.18653/v1/N19-1423. [URL https://aclanthology.org/](https://aclanthology.org/N19-1423)
+[N19-1423.](https://aclanthology.org/N19-1423)
+
+
+Jeremy Howard and Sebastian Ruder. Universal language model fine-tuning for text classification,
+2018. [URL https://arxiv.org/abs/1801.06146.](https://arxiv.org/abs/1801.06146)
+
+
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language
+models. _arXiv preprint arXiv:2001.08361_, 2020.
+
+
+Ghazal Khalighinejad, Ollie Liu, and Sam Wiseman. Approximating CKY with transformers. _arXiv_
+_preprint arXiv:2305.02386_, 2023.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv_ _preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike
+Lewis, Luke Zettlemoyer, and Veselin Stoyanov. Roberta: A robustly optimized bert pretraining
+approach, 2019. [URL https://arxiv.org/abs/1907.11692.](https://arxiv.org/abs/1907.11692)
+
+
+Song Mei. U-nets as belief propagation: Efficient classification, denoising, and diffusion in generative hierarchical models. _arXiv preprint arXiv:2404.18444_, 2024.
+
+
+Barthelemy Meynard-Piganeau, Christoph Feinauer, Martin Weigt, Aleksandra M Walczak, and
+Thierry Mora. Tulip: A transformer-based unsupervised language model for interacting peptides
+and t cell receptors that generalizes to unseen epitopes. _Proceedings of the National Academy of_
+_Sciences_, 121(24):e2316401121, 2024.
+
+
+Marc M´ezard and Andrea Montanari. _Information,_ _physics,_ _and_ _computation_ . Oxford University
+Press, 2009.
+
+
+Elchanan Mossel. Deep learning and hierarchal generative models. _arXiv_ _preprint_
+_arXiv:1612.09057_, 2016.
+
+
+Elchanan Mossel, Joe Neeman, and Allan Sly. Belief propagation, robust reconstruction and optimal
+recovery of block models. In _Conference on Learning Theory_, pp. 356–370. PMLR, 2014.
+
+
+Elchanan Mossel, Allan Sly, and Youngtak Sohn. Exact phase transitions for stochastic block models
+and reconstruction on trees. In _Proceedings_ _of_ _the_ _55th_ _Annual_ _ACM_ _Symposium_ _on_ _Theory_ _of_
+_Computing_, pp. 96–102, 2023.
+
+
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: An imperative style, highperformance deep learning library. _Advances in neural information processing systems_, 32, 2019.
+
+
+Maria Refinetti, Alessandro Ingrosso, and Sebastian Goldt. Neural networks trained with SGD learn
+distributions of increasing complexity. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp.
+28843–28863. PMLR, 2023.
+
+
+Riccardo Rende, Federica Gerace, Alessandro Laio, and Sebastian Goldt. A distributional simplicity
+bias in the learning dynamics of transformers. _arXiv preprint arXiv:2410.19637_, 2024.
+
+
+Taisuke Sato. Inside-outside probability computation for belief propagation. In _IJCAI_, pp. 2605–
+2610. Citeseer, 2007.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Antonio Sclocchi, Alessandro Favero, and Matthieu Wyart. A phase transition in diffusion models
+reveals the hierarchical nature of data. _arXiv preprint arXiv:2402.16991_, 2024.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Gail Weiss, Yoav Goldberg, and Eran Yahav. Thinking like transformers. In _International Confer-_
+_ence on Machine Learning_, pp. 11080–11090. PMLR, 2021.
+
+
+Shuang Zhang, Rui Fan, Yuti Liu, Shuang Chen, Qiao Liu, and Wanwen Zeng. Applications of
+transformer-based language models in bioinformatics: a survey. _Bioinformatics Advances_, 3(1):
+vbad001, 2023.
+
+
+Haoyu Zhao, Abhishek Panigrahi, Rong Ge, and Sanjeev Arora. Do transformers parse while predicting the masked word? _arXiv preprint arXiv:2303.08117_, 2023.
+
+
+Ziqian Zhong, Ziming Liu, Max Tegmark, and Jacob Andreas. The clock and the pizza: Two
+stories in mechanistic explanation of neural networks. _Advances in Neural Information Processing_
+_Systems_, 36, 2024.
+
+
+21

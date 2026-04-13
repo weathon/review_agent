@@ -1,0 +1,2223 @@
+# C3T: CROSS-MODAL TRANSFER THROUGH TIME
+## FOR HUMAN ACTION RECOGNITION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+In order to unlock the potential of diverse sensors, we investigate a method to
+transfer knowledge between modalities using the structure of a unified multimodal
+representation space for Human Action Recognition (HAR). We formalize and explore an understudied cross-modal transfer setting we term Unsupervised Modality
+Adaptation (UMA), where the modality used in testing is not used in supervised
+training, i.e. zero labeled instances of the test modality are available during training.
+We develop three methods to perform UMA: Student-Teacher (ST), Contrastive
+Alignment (CA), and Cross-modal Transfer Through Time (C3T). Our extensive
+experiments on various camera+IMU datasets compare these methods to each other
+in the UMA setting, and to their empirical upper bound in the supervised setting.
+The results indicate C3T is the most robust and highest performing by at least a
+margin of 8%, and nears the supervised setting performance even in the presence
+of temporal noise. This method introduces a novel mechanism for aligning signals
+across time-varying latent vectors, extracted from the receptive field of temporal
+convolutions. Our findings suggest that C3T has significant potential for developing generalizable models for time-series sensor data, opening new avenues for
+multi-modal learning in various applications.
+
+
+1 INTRODUCTION
+
+
+Humans can naturally actuate a motion they have only seen before; however, transferring motion
+knowledge across sensors for machine learning models is nontrivial. Our interaction with computing
+has historically been centered around visual and textual modalities, which has provided these models
+an abundance of data. Thus, deep learning based human action recognition (HAR) systems often
+collapse 3D motion into related but imprecise modalities such as visual data (Ji et al., 2012; Simonyan
+& Zisserman, 2014; Lin et al., 2022; Wang et al., 2023) or language models (Radford et al., 2021;
+Wang et al., 2022a; Tong et al., 2022; Piergiovanni et al., 2023; Feng et al., 2023).
+
+
+Inertial Measurement Units (IMUs), which typically provide 3-axis acceleration and 3-axis gyroscopic
+information on a wearable device, emerge as strong candidates for understanding human motion
+in a nonintrusive fashion. Smartwatches, smartphones, earbuds and other wearables have enabled
+the seamless integration of IMUs into daily life (Mollyn et al., 2023). Unfortunately, IMUs remain
+underutilized in current machine-learning approaches due to several challenges including (1) the
+lack of abundant labeled data (2) the difficulty in interpreting the raw sensor readings, and (3) a
+low-dimensional representation, which limits the amount of information that can be stored and
+learned from.
+
+
+|Col1|𝑍|Col3|
+|---|---|---|
+|Basketball shoot|Basketball shoot|Jogging|
+||||
+
+
+Figure 1: **Motivation for Unsupervised Modality Adaptation:** Depicts a scenario in which an AI
+system can add a new modality using no new labels, through latent space alignment.
+
+1
+
+
+Beyond IMUs, various sensing modalities are gaining popularity in wearables (e.g. surface electrocardiogram, electromyography) and ambient monitoring systems (e.g. WiFi signals, Radar). While
+numerous AI methods have been developed for HAR using these modalities, they struggle to achieve
+the level of generalization and capability demonstrated by visual and textual modalities, which benefit
+from internet-scale data, and new modalities are continuously emerging. This raises the critical
+question of _how to integrate new sensors with existing ones in the absence of labeled data._ One
+promising solution is to leverage a well-documented modality to transfer knowledge to another
+modality, a process known as cross-modal transfer (Niu et al., 2020). Ideally, the model for this
+source modality would teach the model for the new target modality without additional human annotation effort. Existing cross-modal learning techniques assume a semi-supervised or fully supervised
+setup where there exists some labels for each modality during training (An et al., 2021; Niu et al.,
+2020). Cross-modal learning has not thoroughly been investigated in a setting where one modality
+is completely unlabeled during training, which we refer to as **Unsupervised Modality Adaptation**
+(UMA), demonstrated in Figure 1.
+
+
+Multimodal learning and sensor fusion has long been studied for human action recognition, however,
+few methods study the UMA setting. In addition, existing works typically compress entire time-series
+sequences into single latent representations or segment data into fixed-size chunks for transformer
+inputs. However, this approach fails to account for the continuous nature of real-world data and the
+variable time spans over which actions occur. We propose 3 methods for the UMA setting. The first is
+called Student-Teacher (ST) akin to many existing knowledge distillation methods for other domain
+adaptation or semi-supervised settings. The second method, Contrastive Alignment (CA), aligns the
+latent representation of each data sample across modalities and uses a shared task head to perform
+transfer across modalities. The third method, entitled Cross-modal Transfer Through Time (C3T),
+extracts a time-varying latent dimension through the temporal receptive field of 3D convolution and
+uses a shared task self-attention head to perform transfer.
+
+
+Our research evaluates these three UMA methods—ST, CA, and C3T—by focusing on the challenging
+task of transferring knowledge from RGB video data to IMU signals across four diverse human action
+recognition datasets. Cross-modal Transfer Through Time (C3T) surpasses the other methods on all
+datasets by at least an 8% margin on Top-1 Accuracy. Remarkably, C3T in unsupervised modality
+adaptation even outperforms the RGB unimodal supervised setting, underscoring its effectiveness in
+cross-modal learning.
+
+
+Our qualitative analysis suggests that the success of CA and C3T lies in their ability to uncover
+hidden correlations between modalities within the latent space. This capability allows the model
+to leverage structural information from one modality to inform its understanding of another, even
+when labeled data is unavailable. To enhance performance over CA, C3T introduces a mechanism for
+aligning signals across time-varying latent vectors. This novel approach enables the model to capture
+temporal dynamics more effectively, resulting in enhanced robustness against time-related noise—a
+common challenge in real-world sensor data. We conduct additional experiments that demonstrate
+C3T’s superior resilience to time-shift, misalignment, and time-dilation noise compared to other
+methods. The promising results of C3T open new avenues for developing highly generalizable
+models for time-series sensor data. This has far-reaching implications across various domains,
+including healthcare monitoring, smarthomes, industrial IoT, and human-computer interaction, where
+multi-modal learning from limited labeled data is crucial.
+
+
+**Our contributions are as follows:**
+
+
+- A novel motivation and setup for cross-modal transfer learning to an unlabeled modality, referred
+to as Unlabeled Modality Adaptation, UMA.
+
+- Development and comparative analysis of three methods—Student-Teacher (ST), Contrastive
+Alignment (CA), and Cross-modal Transfer Through Time (C3T)—for performing UMA in human
+action recognition using RGB and IMU data (Sections 4 and 5)
+
+- Insights into the mechanisms of latent space alignment that enable effective knowledge transfer
+between modalities, potentially applicable to other multi-modal learning tasks beyond human
+action recognition (Section 5).
+
+- An in-depth analysis of how C3T’s structure, in particular its use of temporal tokens, provides
+superior performance with minimal model size and enhanced robustness to temporal distortions,
+showcasing its potential for real-world applications with sensor data (Sections 5.1 and 5.2)
+
+
+2
+
+
+2 RELATED WORKS
+
+
+We outline our motivation for the term UMA and then review the works related to each of our
+methods: Student-Teacher, Contrastive Alignment, and Cross-modal Transfer Through Time.
+
+
+**Unsupervised Modality Adaptation** Cross-modal transfer learning is a powerful technique that
+enables the transfer of knowledge from a data-rich modality to one with limited data availability (Niu
+et al., 2020). This approach can be viewed as a specialized form of domain adaptation, where a
+model, trained in a source domain, is tasked with efficiently adapting to a related target domain for
+the same output task, despite having access to fewer labeled data points (Pan & Yang, 2009; Farahani
+et al., 2021). Given the focus on domains with scarce labels, adaptation is often achieved through
+unsupervised (Chang et al., 2020) or semi-supervised (An et al., 2021) methods. In the context
+of human activity recognition (HAR), domain adaptation may involve adapting between different
+sensors (Bhalla et al., 2021), adjusting to varying positions of wearables on the body (Wang et al.,
+2018; Chang et al., 2020; Prabono et al., 2021), accommodating different users (Hu et al., 2023;
+Fu et al., 2021), or adapting to different IMU device types (Khan et al., 2018; Zhou et al., 2020;
+Chakma et al., 2021). Our work focuses on domain adaptation where the target domain is a new
+completely unlabeled modality, hence we introduce the term Unsupervised Modality Adaptation
+(UMA). Previous research explored similar concepts under various terms like knowledge distillation,
+missing modality, robust sensor fusion, multi-modal alignment, and zero-shot cross-modal transfer.
+We propose UMA as an encompassing term to unify the discussion for performing inference with a
+completely unsupervised modality.
+
+
+**Student Teacher:** Various knowledge distillation methods use student-teacher models for missing
+modality inference. They often use an extra auxiliary modality during training to increase a different
+modality’s performance during testing, however, they assume the availability of labeled training
+data from both modalities (Xue et al., 2022; Kong et al., 2019; Wang et al., 2020; Bruce et al.,
+2021). Notably, Thoker & Gall (2019) performs knowledge distillation without labels for one
+modality, i.e. in the UMA setting. However, they require an ensemble of students to perform mutual
+learning and limit their analysis to one method using two visual modalities on one dataset. Similarily,
+IMUTube (Kwon et al., 2020) and ChromoSim (Hao et al., 2022) simulate IMU data from videos to
+teach an IMU model and then perform zero-shot transfer to real IMU data. However, these approaches
+are resource-intensive, cannot easily extend to other modalities, and face simulation-reality gaps.
+
+
+**Contrastive Alignment:** Unsupervised contrastive methods, such as IMU and vision-based examples
+like ImageBind (Girdhar et al., 2023), IMU2CLIP (Moon et al., 2022), and mmg-Ego4d (Gong
+et al., 2023), have emerged as powerful tools for robust multimodal representation learning and are
+relevant to our Contrastive Alignment (CA) method. While these approaches have shown promise
+in alignment for retrieval and generation tasks, they have limitations. ImageBind and IMU2CLIP
+focus exclusively on egocentric data and IMU2CLIP aligns IMU data with text which violates our
+UMA setting. Although mmg-Ego4d, addresses UMA in their zero-shot cross-modal transfer task,
+but their work is limited to a single, private dataset and focuses mainly on few shot label learning.
+Our CA method addresses these limitations by encompassing both egocentric and third-person public
+datasets, tackling the UMA setting effectively, and offering flexibility during inference. Uniquely,
+our approach enables fusion of all available modalities during testing, even when trained on only one
+labeled modality. We also test for temporal robustness, visualize the latent space, and compare with
+other UMA methods.
+
+
+**Cross-modal** **Transfer** **Through** **Time:** Existing video understanding and robust sensor fusion
+methods often leverage temporal data heavily, employing techniques such as temporal masking
+and reconstruction (Tong et al., 2022; Kong et al., 2019), spatio-temporal memory banks (Islam
+et al., 2022), or fusion of temporal chunks through transformer self-attention (Shi et al., 2024; Zhao
+et al., 2022; Wang et al., 2022b). However, these approaches typically assume the availability of
+labeled data for all modalities during training, limiting their applicability to the UMA setting. While
+these methods, inspired by ViT (Arnab et al., 2021) and SwinTransformers (Liu et al., 2022), chunk
+continuous data to create input tokens for a transformer, they fundamentally differ from our approach.
+Traditional methods restrict each token to a specific time segment, or shifted time segments, whereas
+C3T learns time segments through temporal convolutions and performs alignment on these segments
+across modalities. This novel technique of cross-modal temporal alignment showcases significant
+potential for further investigation across various research domains.
+
+
+3
+
+
+3 BACKGROUND
+
+
+We investigate the creation of a multi-modal latent space for human action recognition, denoted as _Z_,
+that can be leveraged for UMA and exhibits robustness to input variations and noise. In this context,
+robustness refers to the ability of the latent space to maintain consistent representations despite
+shifts in input data distribution across modalities or variations in action execution speed or style. We
+assume that there exists a learnable projection _f_ [(] _[k]_ [)] from every modality _k_ _∈_ 1 _, . . ., M_ to this latent
+space _Z_, i.e., _f_ [(] _[k]_ [)] : _X_ [(] _[k]_ [)] _→Z_, such that the same actions viewed from different modalities map to
+proximal points in _Z_, while distinct actions map to disparate regions. We further assume there exists
+a learnable mapping _h_ from the latent space _Z_ to the label space of human actions _Y_, i.e., _h_ : _Z_ _→Y_ .
+This mapping should be invariant to the originating modality of the latent representation. Our method
+leverages the intuition that proximity in the high-dimensional space _Z_ indicates semantic similarity.
+Points near _zi_ _∈Z_ likely map to the same class, allowing classification of neighboring vectors
+regardless of their originating modality using the same decision boundary _h_ . We use cosine similarity
+to measure "nearness," as it’s more effective in high-dimensional spaces than Euclidean distance.
+This choice: (1) focuses on directional similarity, (2) mitigates the "curse of dimensionality," and
+(3) aligns with the distributional hypothesis in representation learning. This approach is common in
+multimodal alignment (Radford et al., 2021).
+
+
+For simplicity, we experiment with 2 modalities _M_ = 2 and assume _n_ data points are split into 4
+disjoint index sets _I_ 1 _∪_ _I_ 2 _∪_ _I_ 3 _∪_ _I_ 4 _∈{_ 1 _. . . n}_ . Under our UMA setting, during training the model
+has access to 2 of these datasets. One contains labeled data for one modality _D_ HAR = _{_ ( **x** [1] _i_ _[,]_ **[ y]** _[i]_ [)] _[}]_ _i_ _[I]_ =1 [1]
+and the other contains pairs of data between the modalities but these points are unlabeled: _D_ Align =
+_{_ ( **x** [1] _i_ _[,]_ **[ x]** _i_ [2][)] _[}]_ _i_ _[I]_ =1 [2] [.] [This is analogous to having an existing sensor with labeled data, and introducing a]
+new sensor in which data can be synchronously collected, but there is no additional annotation effort
+(Figure 1). Given this setup, the key question arises: In the absence of the sensor with labeled data,
+can the model effectively perform inference using only the unlabeled modality? The third and fourth
+sets are used for validation and testing and contain only labeled data from the second modality, i.e.
+_D_ Val = _{_ ( **x** [2] _i_ _[,]_ **[ y]** _[i]_ [)] _[}]_ _i_ _[I]_ =1 [3] [and] _[ D]_ [Test] [=] _[ {]_ [(] **[x]** [2] _i_ _[,]_ **[ y]** _[i]_ [)] _[}]_ _i_ _[I]_ =1 [4] [.]
+
+
+4 UNSUPERVISED MODALITY ADPATION METHODS
+
+
+We propose three methods for transferring knowledge to a new sensing modality without exposure
+to labels in that modality, i.e. Unsupervised Modality Adaptation (UMA): (1) a Student-Teacher
+approach (ST) (2) a Contrastive Alignment technique (CA), and (3) a method to perform Cross-modal
+Transfer Through leveraging Temporal information (C3T). In the context of human action or activity
+recognition (HAR), we conduct experiments using RGB videos as the source domain with some
+labeled data _x_ [(1)] = _x_ [(RGB)] and Inertial Measurement Unit (IMU) data as the target _x_ [(2)] = _x_ [(IMU)] .
+Training for UMA occurs in two phases: a) Supervised Learning with RGB data and b) Unsupervised
+alignment across both modalities, and inference (phase c) occurs on IMU data, as depicted for each
+method in Figure 2.
+
+
+**Student Teacher** ST leverages an RGB video model trained in phase a) to produce pseudo-labels
+to train the IMU model in phase b). In this case, the latent transfer space is the output logit space,
+_Z_ = _Y_, or equivalently the HAR module is the identity _h_ = **1**, and the cross-modal representations
+are aligned using the cross-entropy loss _LCE_, given in Appendix Equation (2). We denote the teacher
+network as _f_ [(1)] : _X_ [(1)] _→Y_ and the student network as _f_ [(2)] : _X_ [(2)] _→Y_ . First, we train the teacher
+_f_ [(1)] on _D_ HAR with labeled RGB data. Next, in order to train _f_ [(2)] on _D_ Align, which does not contain
+labels, we first use _f_ [(1)] ( _x_ [(1)] _i_ [) =] _[y]_ [ˆ] _i_ [(1)] to generate pseudo-labels for every datapoint _i ∈_ _I_ 2. Then we
+use the augmented dataset _D_ [ˆ] Align = _{_ ( **x** [1] _i_ _[,]_ **[ x]** _i_ [2] _[,]_ **[ ˆy]** _i_ [(1)] ) _}_ _[I]_ _i_ =1 [2] [to train] _[ f]_ [ (1)][.] [The teacher network minimizes]
+_LCE_ ( _Pf_ 1( _x_ ) _, Py_ ) and the student minimizes _LCE_ ( _Pf_ 2( _x_ ) _, Pf_ 2( _x_ )), where _P_ represents the ground
+truth distribution or the distribution given by the model’s outputs logits.
+
+
+**Contrastive Alignment** In our work, CA performs phase a) Supervised RGB training in the same
+fashion as the student teacher, however, it uses an a model with two parts: An encoder _f_ [(1)] to
+extract the latent variable _z_, and a task specific MLP head _h_ . The extracted latent space _Z_ allows for
+scalability and interoperability of adding different sensing modalities, types of encoders, and output
+task heads.
+
+
+4
+
+
+|Col1|c) 𝓓𝑻𝒆𝒔𝒕: Unlabeled IMU Data<br>𝑋𝐼𝑀𝑈 𝑓(2) 𝑌෠ 𝐼𝑀𝑈|Col3|Col4|Col5|
+|---|---|---|---|---|
+||𝑋𝐼𝑀𝑈<br>෠𝑌 𝐼𝑀𝑈<br>𝑓(2)<br>**c)**𝓓𝑻𝒆𝒔𝒕**: Unlabeled IMU Data**|**c)**𝓓𝑻𝒆𝒔𝒕**: Unlabeled IMU Data**|**c)**𝓓𝑻𝒆𝒔𝒕**: Unlabeled IMU Data**|**c)**𝓓𝑻𝒆𝒔𝒕**: Unlabeled IMU Data**|
+||𝑋𝐼𝑀𝑈<br>෠𝑌 𝐼𝑀𝑈<br>𝑓(2)<br>**c)**𝓓𝑻𝒆𝒔𝒕**: Unlabeled IMU Data**|𝑋𝐼𝑀𝑈|𝑓(2)|෠𝑌 𝐼𝑀𝑈|
+
+
+|Col1|c) 𝓓𝑻𝒆𝒔𝒕: Unlabeled IMU Data<br>𝑋𝐼𝑀𝑈 𝑓(2) 𝑍𝑅𝐺𝐵 ℎ 𝑌෠|Col3|
+|---|---|---|
+||𝑋𝐼𝑀𝑈<br>෠𝑌<br>𝑍𝑅𝐺𝐵<br>**c)**𝓓𝑻𝒆𝒔𝒕**: Unlabeled IMU Data**<br>ℎ<br>𝑓(2)|෠𝑌|
+
+
+|𝑋𝐼𝑀𝑈|Col2|𝑓(2)|Col4|
+|---|---|---|---|
+|𝑋𝐼𝑀𝑈||||
+
+
+|መ 𝑅𝐺𝐵|Col2|
+|---|---|
+|መ𝑍1<br>|መ𝑍1<br>|
+|||
+
+
+The symmetric contrastive loss will cluster representations in _Z_ by cosine similarity, which brings
+about the desired property of the latent space that vectors of the same class are near each other.
+
+
+**Cross-modal** **Transfer** **Through** **Time** CA and ST do not leverage latent temporal information
+as they collapse the entire time sequence into one latent vector. We thus propose a Cross-modal
+Transfer Through Time (C3T) model that leverages the temporal information of time-series sensors
+when aligning and fusing their representations. C3T removes the MLP layer at the end of the feature
+
+
+5
+
+
+(i) **Student Teacher (ST):** Trains a model with the
+teacher modality in a) and uses it to psuedolabel the
+data in b) and train the student model.
+
+
+**a)** 𝓓𝑯𝑨𝑹 **: Labeled RGB Data**
+
+
+**b)** 𝓓𝑨𝒍𝒊𝒈𝒏 **: Unlabeled RGB-IMU Data**
+
+
+(ii) **Contrastive Alignment (CA):** Trains a feature
+extractor and task module in a), and aligns each
+modality’s feature extractor in b).
+
+
+Frame-wise spatial extraction
+
+
+feature extraction
+
+
+**1D Conv**
+
+
+Temporal feature
+
+
+extraction
+
+
+(iii) **Cross-modal Transfer Through Time (C3T):** Is similar to CA, however, it aligns representations across the
+temporal receptive field of a 3D convolution and uses self-attention across this latent time sequence to perform
+HAR inference.
+
+
+Figure 2: **Training and Testing in the UMA setting:** Training happens in two phases: a) trains the
+HAR model on labeled RGB inputs and b) aligns unlabeled IMU and RGB modalities. UMA testing
+c) occurs on unlabled IMU data.
+
+
+In phase b) of training, CA performs unsupervised contrastive alignment with the outputs of the the
+RGB encoder _f_ [(1)] and the IMU encoder _f_ [(2)] on unlabeled data. To align different modalities in the
+feature space on _D_ Align we use a symmetric contrastive loss formulation _LCL_ (Radford et al., 2021;
+Moon et al., 2022; Girdhar et al., 2023; Gong et al., 2023) with temperature parameter _τ_ :
+
+
+_i_ _, k_ _∈{_ 1 _,_ 2 _}_ (1)
+
+_||f_ [(] _[k]_ [)] ( _x_ [(] _i_ _[k]_ [)] ) _||_
+
+
+_LCL_ = _−_ [1]
+
+_N_
+
+
+_N_
+
+
+- _i_ =1 _N_ log - _Ni_ =1exp( [exp (] _⟨z_ ˆ _i_ [(1)] _[⟨][z]_ [ˆ] _,_ ˆ _i_ [(1)] _zi_ [(2)] _,_ ˆ _z⟩i_ [(2)] _/τ⟩_ ) _/τ_ ) _,_ where _z_ ˆ _i_ [(] _[k]_ [)] = _||ff_ [(][(] _[k][k]_ [)][)] (( _xx_ [(] _i_ [(] _i_ _[k][k]_ [)][)] ))
+
+
+Table 1: **UMA** **vs.** **Supervised** **Performance:** The modules _f_ [(1)], _f_ [(2)], and _h_ can operate in
+supervised or UMA (ST, CA, CT3) modes. Top-1 and Top-3 accuracies shown.
+
+
+UTD-MHAD CZU-MHAD MMACT MMEA-CL
+Model Top-1 Top-3 Top-1 Top-3 Top-1 Top-3 Top-1 Top-3
+
+
+IMU **87.9** **97.7** **95.1** 98.2 70.0 90.0 65.8 87.6
+Supervised RGB 53.8 73.1 94.0 **99.7** 42.1 61.6 54.2 77.1
+Fusion 62.5 82.2 95.0 98.5 **76.7** **92.0** **80.1** **92.7**
+
+
+encoders and uses the output map of the temporal convolutions directly. This approach leverages
+the temporal receptive field, which represents the span of input time steps that influence each output
+feature vector. We use this set of output vectors _zt_ as latent vectors for _t_ = 1 _. . . t_ rec where _t_ rec
+is the length of the receptive field. Then during the alignment phase, we align each of these time
+vectors with the same time vector from the other modality. Each of the modality feature encoder
+convolutional structures was carefully designed to result in the same number of output feature vectors.
+When training the HAR model, we use self attention with a learned class token to predict the action.
+The intuition is that the encoder will learn which tokens over time are the most informative for
+the action class and predict accordingly. This is a common method to perform classification with
+transformers (Dosovitskiy et al., 2020; Carion et al., 2020; Meinhardt et al., 2022). Our implemented
+HAR task head is most notably similar to the ViT architecture (Dosovitskiy et al., 2020), but instead
+of inputs being image chunks, they are temporal feature chunks.
+
+
+5 EXPERIMENTAL RESULTS
+
+
+**Implementation:** Our methods utilize three key neural network modules:
+
+
+_(1) Video Feature Encoder f_ [(1)] : _X_ [(1)] _→Z_ : We employ a pretrained ResNet18 on every frame of
+the video followed by 3D convolution and a 2-layer MLP with ReLU activations. The Resnet is a
+well-established lightweight spatial feature extractor (Hara et al., 2017), and the 3D convolution is an
+effective temporal feature extractor (Tran et al., 2018).
+
+
+_(2)IMU Feature Encoder f_ [(2)] : _X_ [(2)] _→Z_ : A 1D CNN followed by an MLP is used here. CNNs have
+shown superior performance in extracting features from time-series data like IMU signals, efficiently
+capturing local patterns and temporal dependencies (Valarezo et al., 2017). Both feature encoders
+output the label for ST, the latent dimension vector for CA, and _t_ rec latent vectors for C3T.
+
+
+_(3) HAR Task Decoder h_ : _Z_ _→Y_ : ST does not require this module and CA uses a simple MLP. C3T
+employs a self-attention module to better capture long-range dependencies in the latent space, which
+is particularly beneficial for complex action sequences (Moutik et al., 2023).
+
+
+6
+
+
+UMA
+
+
+Random 3.7 11.1 4.6 16.6 2.9 8.6 3.1 9.4
+ST 12.9 24.6 41.1 61.9 17.6 34.7 9.9 22.7
+CA 42.6 67.4 70.0 92.7 24.5 47.6 29.3 51.7
+C3T **62.5** **86.4** **84.2** **96.7** **32.4** **57.9** **51.2** **78.8**
+
+
+Table 2: **Data** **Splits** **for** **Unsupervised**
+**Modality** **Adaptation** **(UMA)** : During
+training, no labeled IMU data is present,
+thus the model can only leverage the correlations between _X_ [IMU] and _X_ [RGB] to learn
+classes.
+
+
+Split _X_ [RGB] _X_ [IMU] _Y_ % of Data
+
+
+_D_ HAR: Train a) ✓ ✓ 40%
+_D_ Align: Train b) ✓ ✓ 40%
+_D_ Val: Val ✓ ✓ 10%
+_D_ Test: Test ✓ ✓ 10%
+
+
+Figure 3: **Performance vs Model Size:** Bubbles show
+accuracy for each latent space hidden size. Bubble size
+indicates model parameters (millions).
+
+
+Align Epoch 1 Align Epoch 50
+
+
+|Col1|Misclassif<br>points are<br>cluster bo|Col3|ied IMU<br>often near<br>undaries.|
+|---|---|---|---|
+||**Misclassif**<br>**points are**<br>**cluster bo**|**Misclassif**<br>**points are**<br>**cluster bo**|**ied IMU**<br>** often near**<br>** undaries.**|
+
+
+Figure 4: **CA TSNE Plots in UMA Training Method 1:** The following shows the progression of
+the latent representations of datapoints for 5 classes (Bowling, Clap, Draw circle (clockwise), Jog,
+Basketball shoot) during training CA on the UTD-MHAD dataset. At the end we plot the predicted
+labels and circle areas of confusion, which seems to often occur at the boundaries between clusters.
+
+
+Our simplified models with comparable module sizes across methods isolate the impact of our novel
+technique, demonstrating its efficacy independent of complex architectures or larger datasets, while
+allowing for potential future scaling and expansion.
+
+
+**Datasets:** We present results on four diverse datasets: (1) UTD-MHAD (Chen et al., 2015), a small
+yet structured dataset; (2) CZU-MHAD (Chao et al., 2022), a slightly larger dataset captured in a
+controlled environment; (3) MMACT (Kong et al., 2019), a very large dataset with various challenges;
+and (4) MMEA-CL (Xu et al., 2023), an egocentric camera dataset. For each dataset, we create an
+approximately 40-40-10-10 percent data split for the _D_ Align, _D_ HAR, _D_ Val, and _D_ Test sets respectively,
+as shown in Table 2. _D_ Val was used to perform a minor hyperparameter search on the UTD-MHAD
+dataset. The methods performed best with a learning rate of 1 _._ 5 _×_ 10 _[−]_ [4], a batch size of 16, and a
+latent representation dimension of 2048 with an Adam optimizer. Experiments were implemented
+in Pytorch and run on a 16GB NVIDIA Quadro RTX 5000, four 48GB A40s, or four 48GB A100s.
+More detailed information about each dataset and implementation can be found in Appendix A.4.
+
+
+**Quantitative Results:** Our results show our methods’ Top-1 and Top-3 test accuracies on 4 different
+datasets (Table 1). Our modular architecture also adapts to the supervised setting: IMU trains
+_f_ [(1)] : _X_ [(][IMU][)] _→Y_, RGB trains _f_ [(2)] : _X_ [(][RGB][)] _→Y_, and fusion averages the outputs of _f_ [(1)] and
+_f_ [(2)] with a linear head _h_ . The supervised setting serves as a strong empirical upper bound for our
+methods to approach, thus we use it as a comparison. We ran each experiment thrice with different
+random seeds, reporting the average accuracies, to ensure rigorous empirical results. Full trial data
+and standard deviations are available in Appendix Figure 6.
+
+
+The performance rankings of our UMA methods were consistent, with C3T consistently achieving the
+highest accuracy, followed by CA, while ST consistently ranked the lowest. We believe ST performs
+the worst since the student is bound by the performance of the teacher. Thus, given the noise in
+the teacher distribution, the student also suffers in performance. Furthermore, given that the latent
+space is the label distribution, ST provides little flexibility in extending to various modalities and
+
+
+7
+
+
+Align Epoch 100
+
+
+Table 3: **Additional Experiments** : Performance of ST, CA, and C3T across various training methods,
+modalities, and noise. All results report UMA accuracy on IMU data, except modality test 2. and 3.
+
+|Model|Training<br>1. Align 2. HAR 3. Inter 4. Comb|Modality Testing<br>1. IMU 2. RGB 3. Both|Noise Experiments<br>1. Crop 2. Misalign 3. Dilate 4.All None|
+|---|---|---|---|
+|ST<br>CA<br>C3T|-<br>-<br>-<br>-<br>38.6<br>43.2<br>27.3<br>**42.6**<br>**62.5**<br>35.2<br>51.1<br>27.9|12.9<br>53.8<br>17.0<br>42.6<br>56.8<br>60.2<br>**62.5**<br>**78.4**<br>**79.5**|3.4<br>5.7<br>5.7<br>10.2<br>12.9<br>10.2<br>2.3<br>21.6<br>18.2<br>42.6<br>**52.3**<br>**46.6**<br>**56.8**<br>**58.0**<br>**62.5**|
+
+
+tasks. Nonetheless, ST demonstrates a 3-10x improvement over random guessing, indicating some
+effectiveness in UMA. Unlike CA and C3T, whose performance declines with smaller hidden sizes
+(Figure 3), ST maintains consistent performance. This difference arises because, in CA and C3T, the
+hidden size directly influences the latent vector _z_, impacting overall model size. In contrast, ST’s
+hidden size primarily affects the internal latent space within _f_ [(2)] between convolutional outputs and
+the MLP classification head. Notably, ST begins to outperform CA at smaller hidden sizes, while
+C3T retains superior performance even with a reduced model size. This highlights C3T’s efficiency
+and suitability for resource-constrained environments, such as on-device computing for wearables or
+smart devices, where effective learning of new modalities is essential.
+
+
+The most notable quantitative result, is that on a few datasets _CA and C3T surpass the supervised_
+_RGB model_ . We believe that this is because _these methods leverage an inherent correlation between_
+_the modalities_, and for some of these datasets the IMU data is more informative than the RGB data.
+The superiority of the IMU modality in our test scenarios is further evidenced by the supervised
+unimodal IMU model outperforming both the RGB and fusion models.
+
+
+**Qualitative Results:** We visualized the latent space outputs of the CA model using TSNE plots
+(Figure 4). These plots show training when the alignment phase (phase b) is performed first, and then
+labeled-RGB training (phase a) is performed. The model quickly segments classes during the align
+phase, even without labels, suggesting that the data’s natural structure facilitates class distinction
+across different modalities. This implies that our methods could potentially adapt to new class labels
+during testing with just a few samples, as the latent structure would have already grouped similar
+classes. Furthermore, after alignment and HAR training, we notice how the model tends to misclassify
+points that are near the boundary between clusters. These visualizations support our initial hypothesis
+(Figure 1) on how a joint latent space could be leveraged to effectively perform UMA, by using a
+classification head trained only on RGB data.
+
+
+Interestingly, we observed that IMU data points consistently cluster towards the center of the plot,
+with RGB points surrounding them (more examples in Appendix A.6). This pattern persists even in
+early alignment stages, suggesting it’s not solely due to labeled RGB HAR training. While this might
+indicate that RGB data is more informative, it contradicts our quantitative findings where supervised
+IMU models outperform RGB models for our given datasets. This phenomenon warrants further
+investigation as it may have implications for continual learning, test-time adaptation, or domain
+adaptation, where different modalities should be leveraged differently depending on their placement
+in the shared latent space. TSNE plots for C3T are provided in Appendix A.6 but were excluded from
+this discussion due to their difficulty to interpret.
+
+
+5.1 ADDITIONAL EXPERIMENTS:
+
+
+We conduct three primary sets of experiments to further gain insights from our UMA methods: one
+investigates various training mechanisms of CA and C3T, the second examines the deployment of
+each model in different testing scenarios, and the third tests performance under temporal noise.
+
+
+_**How do we train the CA and C3T Architectures?**_
+
+
+**Experimental setup:** We experimented with four ways to perform the two phases of training for CA
+and C3T. In this setup, all tests were done on the IMU data in _DT est_ .
+
+
+1. **Align First:** First align the representations generated by the RGB and IMU encoders, _f_ [(1)] and
+_f_ [(2)] RGB on _D_ Align (phase b depicted in Figure 2). Then freeze the weights for both encoders and
+train the HAR module _h_ on RGB data in _D_ HAR (phase a in Figure 2).
+2. **HAR** **First:** Reverse the order from the previous method, first perform phase a), RGB HAR
+training, then freeze the RGB encoder _f_ [(1)] and align the IMU encoder _f_ [(2)], phase b).
+
+
+8
+
+
+3. **Interspersed Training:** Intermittently learn from _D_ Align and _D_ HAR. The model learns an epoch
+from a) and updates its weights to train the RGB HAR model, then learns an epoch from b) and
+updates it’s weights to align the encoders. The model continues to iterate between the two losses.
+4. **Combined Loss:** Train both phases a) and b) but within the same loss iteration. The loss from a)
+on a batch of data from _D_ HAR is added to the loss from b) on a batch of data from _D_ Align and the
+total loss is then used to update the weights of the model: _L_ Total = _L_ CE + _L_ CL.
+
+
+**Results:** As shown in Table 3 **Training**, method 1. Align First performs the best for C3T, whereas 4.
+Combined Loss performed the best for CA. The main experiments reported in this work (Table 1 use
+training methods 1. and 4. for C3T and CA, respectively. We hypothesize that in method 2. training
+the HAR model first yields a latent space that captures the best HAR features for RGB data, which is
+not directly applicable to IMU data. This implies that cross-modal alignment may be a more difficult
+task, i.e. adding a modality may require more restructuring of the latent space than adding an output
+head. This reaffirms findings from existing methods such as CLIP (Radford et al., 2021), where linear
+probing is used on aligned representations to learn new tasks. Method 3. faced instability in training
+and was unable to converge. In method 4, for CA we believe one loss acted as a regularizer for the
+other pushing the latent space _Z_ to the ideal balance for cross-modal transfer in HAR. However,
+given that C3T is a more difficult alignment problem, the contrastive loss was dominating the overall
+loss term preventing the model from learning to perform HAR well.
+
+
+_**Can UMA methods retain performance on the labeled modality? Can they leverage both modalities?**_
+
+
+**Experimental setup:** Table 3 **Modality Testing** shows the result of training in the UMA setting, but
+testing with all combinations of the modalities. Any inputs can be used to perform HAR by simply
+using the HAR module _h_ on an estimate for the latent vector, _z_ ˆ derived from the modalities. For ST,
+_h_ can be viewed as the identity, and _z_ ’s are the output logits.
+
+
+1. **RGB (Supervised Learning):** Tests the model on different samples of the training distribution,
+which is RGB data for our setup. Thus the estimated latent vector is given by _f_ [(1)] ( _x_ [(1)] _i_ [) =] _[z]_ [ˆ] _[i]_ [.]
+2. **IMU (Cross-modal Zero-Shot Transfer):** Is the main result of this paper and described above
+in Section 4. Here the estimated latent vector is given by _f_ [(2)] ( _x_ [(2)] _i_ [) =] _[z]_ [ˆ] _[i]_ [.]
+3. **Both (Sensor Fusion):** Merges latent vectors from each modality. Assuming each estimate is
+
+equally as good as the other: _z_ ˆ _i_ = E[ _zi|x_ [(1)] _i_ _, x_ [(2)] _i_ ] = _E_ [ _zi|z_ ˆ _i_ [(1)] _,_ ˆ _zi_ [(2)] ] = _|zz_ ˆˆ _i_ [(1)][(1)] _i_ +ˆ+ˆ _zzii_ [(2)][(2)] _|_ [.] [Given that we]
+
+align the latent vectors from different modalities by minimizing the angle between them, i.e.
+cosine similarity, we also fuse vectors by generating the normalized vector whose angle is halfway
+between the estimated vectors. This is a relatively unexplored fusion approach as most sensor
+fusion methods sum, average, concatenate, use attention, or apply a learned module over features.
+
+
+**Results:** As expected, Table 3 shows that C3T outperforms the other methods. When comparing the
+performances in the different test scenarios, intriguingly our experiments indicate that when given
+both modalities, fusion performs better than the RGB model alone. Instead of introducing noise or
+uncertainty into the model, introducing an unlabeled modality may add structure to the shared latent
+space that bolsters performance, especially if that modality is highly informative for the given task.
+This observation bears resemblance to knowledge distillation methods, where an auxiliary modality
+during training leads to improved testing outcomes, however, these methods usually assume that
+auxiliary modality is labeled (Chen et al., 2023). We believe using UMA for sensor fusion is an
+interesting direction that should be explored further in future works.
+
+
+_**How robust are these methods to time-related noise?**_
+
+
+**Experimental Setup:** We evaluated each method’s robustness to temporal noise during testing on
+_D_ test, simulating three real-life scenarios (Table 3):
+
+
+1. **Crop:** Randomly shifts and crops both modalities’ time sequences by 60%, simulating continuous
+real-time action recognition, where an action may not occur in the middle of the time sequence.
+2. **Misalign:** Applies crop to one modality, mimicking hardware asynchrony or differing framerates.
+3. **Dilation:** Applies crop to both modalities and then upsamples, imitating slower action movements.
+
+
+**Results:** C3T demonstrates robust performance under temporal noise, likely due to its attention-based
+HAR module leveraging tokens from the receptive field of a temporal convolution. The self-attention
+mechanism compares neighboring tokens from various time sections, effectively capturing actions
+
+
+9
+
+
+|Col1|Input Data|
+|---|---|
+|||
+|𝑋𝑅𝐺𝐵|𝑋𝑅𝐺𝐵|
+|||
+|𝑋𝐼𝑀𝑈|𝑋𝐼𝑀𝑈|
+|෨𝑋𝑅𝐺𝐵|**50% Crop and Shift**|
+|෨𝑋𝐼𝑀𝑈|෨𝑋𝐼𝑀𝑈|
+
+
+|𝑍റ𝑅𝐺𝐵|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|Col15|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|റ𝑍𝐼𝑀𝑈|||||||||||||||
+||||||||||||||||
+|റ෨𝑍𝑅𝐺𝐵|||||||||||||||
+|റ෨𝑍𝐼𝑀𝑈|||||||||||||||
+||𝑍1<br>𝐶𝑙𝑠 𝑇𝑘𝑛|𝑍2<br>𝑍3|𝑍4|𝑍5|𝑍6|𝑍7|𝑍8|𝑍9|𝑍10|𝑍11|𝑍12|𝑍13|𝑍14|𝑍15|
+
+
+|Method Encoders Params (M) Acc. (%)|Col2|
+|---|---|
+|ST<br>C/C/C<br>C/C/A<br>C/A/C<br>A/C/C|129.2<br>**12.9**<br>97.8<br>10.2<br>871.2<br>11.4<br>291.5<br>5.7|
+|CA<br>C/C/C<br>C/C/A<br>C/A/C<br>A/C/C|163.8<br>**38.6**<br>132.3<br>19.3<br>905.7<br>34.1<br>326.0<br>26.1|
+|C3T<br>C/C/C<br>C/C/A<br>C/A/C<br>A/C/C|137.7<br>**62.5**<br>106.3<br>15.9<br>879.6<br>53.4<br>300.0<br>33.0|
+
+
+|ds.|Col2|
+|---|---|
+|put|Attention<br>MLP<br>Class<br>Concat<br>Add<br>Concat|
+|lean<br>oisy|62.5<br>44.32<br>56.82<br>**70.45**<br>**52.27**<br>43.18<br>50.00<br>43.18|
+
+
+regardless of their temporal position within the sequence. Visually, we observe the attention weights
+over the latent vectors in C3T, and can see a shift when we shift the input sample (Figure 5).
+Additionally, C3T’s attention head’s ability to handle variable-length inputs during inference provides
+an advantage in cropped scenarios, requiring minimal zero-padding compared to ST and CA methods.
+
+
+5.2 ABLATIONS:
+
+
+We conducted comprehensive ablation experiments on our model architecture (Table 5), comparing
+convolutional and attention modules for RGB (spatial and temporal) and IMU (temporal) encoders.
+Results generally favored convolutional architectures across various methods in our UMA setting.
+Notably, C3T’s superior performance cannot be attributed solely to its attention head leveraging
+temporal information, as ST or CA models with temporal attention did not perform comparably well.
+Instead, C3T’s effectiveness stems from its unique method of alignment in the temporal space.
+
+
+Further ablation on C3T head architectures (Table 4) compared the class token-based self-attention
+head with alternatives: concatenating output attention tokens and projecting, adding latent vectors
+_Z_ 1 _. . . Zt_ rec and passing through an MLP, and concatenating vectors and using an MLP. The latter two
+methods do not use attention. While concatenating latent vectors and using an MLP performed best
+on clean data, the class token attention mechanism offered superior robustness to noise. The attention
+visualization in Figure 5 corroborates these findings, showing the class token approach’s resilience to
+shift noise. In addition, we notice all C3T variants outperformed CA and ST in UMA performance
+(Table 1) on the UTD-MHAD dataset, emphasizing C3T’s strength in temporal alignment, regardless
+of the classification head.
+
+
+6 CONCLUSION
+
+
+We explored the UMA framework for human action recognition, challenging models to perform
+inference with an unlabeled modality during training. Our experiments focused on constructing a
+unified latent space between modalities and comparing three UMA methods in various settings. Our
+C3T method, integrating temporal convolutions with self-attention, showed promising results for
+robust cross-modal transfer in UMA. Future work could explore continuous HAR with temporal
+localization, and generalization to additional modalities and tasks.We hope our results inspire further
+exploitation of cross-modal latent spaces for more robust human motion understanding in AI models.
+
+
+10
+
+
+Table 5: **Architecture** **Ablation:** Comparison of different architectures for RGB and
+IMU encoders across methods. Encoder
+types are reported as (RGB-Spatial / RGBTemporal / IMU-Temporal), where C = Convolutional and A = Attention.
+
+
+**Attention Weights for Class Token**
+
+
+Figure 5: **Attention** **heatmap** **for** **C3T’s**
+**HAR** **module:** Input shifts shift the attention weights of the temporal latent vectors.
+
+
+Table 4: **C3T HAR Module Ablations:** Comparison of 2 Attention methods and two MLP
+
+
+7 REPRODUCABILITY STATEMENT
+
+
+We have made significant efforts to ensure the reproducibility of our work. Our commitment to
+reproducibility extends to several key areas:
+
+
+1. Code Availability: The complete codebase for this work, including all models, training
+scripts, and evaluation procedures, is provided in the supplementary materials. Upon
+acceptance, this code will be open-sourced and made publicly available on GitHub.
+
+
+2. Dataset Preparation: Detailed instructions for dataset setup, including any preprocessing
+steps and data splits used in our experiments, are provided in the supplementary materials
+Appendix A.4. This ensures that other researchers can replicate our exact experimental
+conditions.
+
+
+3. Hardware and Hyperparameters: A comprehensive description hyperparameters used in our
+experiments is provided in Section 5. This includes model-specific parameters, optimization
+settings, the GPUs used for all experiments, and any other configuration details necessary
+for reproduction.
+
+
+4. Architecture Transparency: We are very transparent about our model architectures in
+Section 5, ensuring others can understand our code our reconstruct such models themselves.
+
+
+5. Random Seed Control: As mentioned, all key experiments were conducted with three
+different random seeds. The specific seeds used are documented in the code as well as
+Appendix A, allowing for exact replication of our experimental conditions. The full results
+across all trials is given in Table 1.
+
+
+Evaluation Metrics: The precise definitions of all evaluation metrics used in this study are provided in
+Section 4 of the main paper, with additional details in Appendix D. By providing this comprehensive
+set of resources and information, we aim to facilitate the reproduction of our results by the research
+community. We believe that this level of transparency is crucial for advancing the field and allowing
+for thorough validation and extension of our work.
+
+
+REFERENCES
+
+
+Sungtae An, Alessio Medda, Michael N Sawka, Clayton J Hutto, Mindy L Millard-Stafford, Scott
+Appling, Kristine LS Richardson, and Omer T Inan. Adaptnet: human activity recognition via
+bilateral domain adaptation using semi-supervised deep translation networks. _IEEE_ _Sensors_
+_Journal_, 21(18):20398–20411, 2021.
+
+
+Anurag Arnab, Mostafa Dehghani, Georg Heigold, Chen Sun, Mario Luˇci´c, and Cordelia Schmid.
+Vivit: A video vision transformer. In _Proceedings of the IEEE/CVF international conference on_
+_computer vision_, pp. 6836–6846, 2021.
+
+
+Sejal Bhalla, Mayank Goel, and Rushil Khurana. Imu2doppler: Cross-modal domain adaptation for
+doppler-based activity recognition using imu data. _Proceedings of the ACM on Interactive, Mobile,_
+_Wearable and Ubiquitous Technologies_, 5(4):1–20, 2021.
+
+
+XB Bruce, Yan Liu, and Keith CC Chan. Multimodal fusion via teacher-student network for indoor
+action recognition. In _Proceedings of the AAAI Conference on Artificial Intelligence_, volume 35(4),
+pp. 3199–3207, 2021.
+
+
+Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, and Sergey
+Zagoruyko. End-to-end object detection with transformers. In _European conference on computer_
+_vision_, pp. 213–229. Springer, 2020.
+
+
+Avijoy Chakma, Abu Zaher Md Faridee, Md Abdullah Al Hafiz Khan, and Nirmalya Roy. Activity
+recognition in wearables using adversarial multi-source domain adaptation. _Smart Health_, 19:
+100174, 2021.
+
+
+Youngjae Chang, Akhil Mathur, Anton Isopoussu, Junehwa Song, and Fahim Kawsar. A systematic
+study of unsupervised domain adaptation for robust human-activity recognition. _Proceedings of_
+_the ACM on Interactive, Mobile, Wearable and Ubiquitous Technologies_, 4(1):1–30, 2020.
+
+
+11
+
+
+Xin Chao, Zhenjie Hou, and Yujian Mo. Czu-mhad: A multimodal dataset for human action
+recognition utilizing a depth camera and 10 wearable inertial sensors. _IEEE Sensors Journal_, 22
+(7):7034–7042, 2022.
+
+
+Chen Chen, Roozbeh Jafari, and Nasser Kehtarnavaz. Utd-mhad: A multimodal dataset for human action recognition utilizing a depth camera and a wearable inertial sensor. In _2015 IEEE_
+_International conference on image processing (ICIP)_, pp. 168–172. IEEE, 2015.
+
+
+Mengxi Chen, Linyu Xing, Yu Wang, and Ya Zhang. Enhanced multimodal representation learning
+with cross-modal kd. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition_, pp. 11766–11775, 2023.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An
+image is worth 16x16 words: Transformers for image recognition at scale. _arXiv_ _preprint_
+_arXiv:2010.11929_, 2020.
+
+
+Abolfazl Farahani, Sahar Voghoei, Khaled Rasheed, and Hamid R Arabnia. A brief review of domain
+adaptation. _Advances in data science and information engineering:_ _proceedings from ICDATA_
+_2020 and IKE 2020_, pp. 877–894, 2021.
+
+
+Yao Feng, Jing Lin, Sai Kumar Dwivedi, Yu Sun, Priyanka Patel, and Michael J Black. Posegpt:
+Chatting about 3d human pose. _arXiv preprint arXiv:2311.18836_, 2023.
+
+
+Zhongzheng Fu, Xinrun He, Enkai Wang, Jun Huo, Jian Huang, and Dongrui Wu. Personalized
+human activity recognition based on integrated wearable sensor and transfer learning. _Sensors_, 21
+(3):885, 2021.
+
+
+Rohit Girdhar, Alaaeldin El-Nouby, Zhuang Liu, Mannat Singh, Kalyan Vasudev Alwala, Armand
+Joulin, and Ishan Misra. Imagebind: One embedding space to bind them all. In _Proceedings of the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 15180–15190, 2023.
+
+
+Xinyu Gong, Sreyas Mohan, Naina Dhingra, Jean-Charles Bazin, Yilei Li, Zhangyang Wang, and
+Rakesh Ranjan. Mmg-ego4d: Multimodal generalization in egocentric action recognition. In
+_Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+6481–6491, 2023.
+
+
+Yujiao Hao, Xijian Lou, Boyu Wang, and Rong Zheng. Cromosim: A deep learning-based crossmodality inertial measurement simulator. _IEEE Transactions on Mobile Computing_, 2022.
+
+
+Kensho Hara, Hirokatsu Kataoka, and Yutaka Satoh. Learning spatio-temporal features with 3d
+residual networks for action recognition. In _Proceedings of the IEEE international conference on_
+_computer vision workshops_, pp. 3154–3160, 2017.
+
+
+Rong Hu, Ling Chen, Shenghuan Miao, and Xing Tang. Swl-adapt: An unsupervised domain
+adaptation model with sample weight learning for cross-user wearable human activity recognition.
+In _Proceedings of the AAAI Conference on artificial intelligence_, volume 37(5), pp. 6012–6020,
+2023.
+
+
+Md Mofijul Islam and Tariq Iqbal. Hamlet: A hierarchical multimodal attention-based human activity
+recognition algorithm. In _2020_ _IEEE/RSJ_ _International_ _Conference_ _on_ _Intelligent_ _Robots_ _and_
+_Systems (IROS)_, pp. 10285–10292. IEEE, 2020.
+
+
+Md Mofijul Islam, Mohammad Samin Yasar, and Tariq Iqbal. Maven: A memory augmented recurrent
+approach for multimodal fusion. _IEEE Transactions on Multimedia_, 2022.
+
+
+Shuiwang Ji, Wei Xu, Ming Yang, and Kai Yu. 3d convolutional neural networks for human action
+recognition. _IEEE_ _transactions_ _on_ _pattern_ _analysis_ _and_ _machine_ _intelligence_, 35(1):221–231,
+2012.
+
+
+Md Abdullah Al Hafiz Khan, Nirmalya Roy, and Archan Misra. Scaling human activity recognition
+via deep learning-based domain adaptation. In _2018 IEEE international conference on pervasive_
+_computing and communications (PerCom)_, pp. 1–9. IEEE, 2018.
+
+
+12
+
+
+Quan Kong, Ziming Wu, Ziwei Deng, Martin Klinkigt, Bin Tong, and Tomokazu Murakami. Mmact:
+A large-scale dataset for cross modal human action understanding. In _Proceedings of the IEEE/CVF_
+_International Conference on Computer Vision_, pp. 8658–8667, 2019.
+
+
+Hyeokhyen Kwon, Catherine Tong, Harish Haresamudram, Yan Gao, Gregory D Abowd, Nicholas D
+Lane, and Thomas Ploetz. Imutube: Automatic extraction of virtual on-body accelerometry from
+video for human activity recognition. _Proceedings of the ACM on Interactive, Mobile, Wearable_
+_and Ubiquitous Technologies_, 4(3):1–29, 2020.
+
+
+Ziyi Lin, Shijie Geng, Renrui Zhang, Peng Gao, Gerard de Melo, Xiaogang Wang, Jifeng Dai,
+Yu Qiao, and Hongsheng Li. Frozen clip models are efficient video learners. In _Computer Vision–_
+_ECCV 2022:_ _17th European Conference, Tel Aviv, Israel, October 23–27, 2022, Proceedings, Part_
+_XXXV_, pp. 388–404. Springer, 2022.
+
+
+Ze Liu, Jia Ning, Yue Cao, Yixuan Wei, Zheng Zhang, Stephen Lin, and Han Hu. Video swin transformer. In _Proceedings of the IEEE/CVF conference on computer vision and pattern recognition_,
+pp. 3202–3211, 2022.
+
+
+Sharmin Majumder and Nasser Kehtarnavaz. Vision and inertial sensing fusion for human action
+recognition: A review. _IEEE Sensors Journal_, 21(3):2454–2467, 2020.
+
+
+Tim Meinhardt, Alexander Kirillov, Laura Leal-Taixe, and Christoph Feichtenhofer. Trackformer:
+Multi-object tracking with transformers. In _Proceedings of the IEEE/CVF Conference on Computer_
+_Vision and Pattern Recognition_, pp. 8844–8854, 2022.
+
+
+Vimal Mollyn, Riku Arakawa, Mayank Goel, Chris Harrison, and Karan Ahuja. Imuposer: Full-body
+pose estimation using imus in phones, watches, and earbuds. In _Proceedings of the 2023 CHI_
+_Conference on Human Factors in Computing Systems_, pp. 1–12, 2023.
+
+
+Seungwhan Moon, Andrea Madotto, Zhaojiang Lin, Alireza Dirafzoon, Aparajita Saraf, Amy
+Bearman, and Babak Damavandi. Imu2clip: Multimodal contrastive learning for imu motion
+sensors from egocentric videos and text. _arXiv preprint arXiv:2210.14395_, 2022.
+
+
+Oumaima Moutik, Hiba Sekkat, Smail Tigani, Abdellah Chehri, Rachid Saadane, Taha Ait Tchakoucht, and Anand Paul. Convolutional neural networks or vision transformers: Who will win the
+race for action recognitions in visual data? _Sensors_, 23(2):734, 2023.
+
+
+Shuteng Niu, Yongxin Liu, Jian Wang, and Houbing Song. A decade survey of transfer learning
+(2010–2020). _IEEE Transactions on Artificial Intelligence_, 1(2):151–166, 2020.
+
+
+Sinno Jialin Pan and Qiang Yang. A survey on transfer learning. _IEEE Transactions on knowledge_
+_and data engineering_, 22(10):1345–1359, 2009.
+
+
+AJ Piergiovanni, Weicheng Kuo, and Anelia Angelova. Rethinking video vits: Sparse video tubes for
+joint image and video learning. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 2214–2224, 2023.
+
+
+Aria Ghora Prabono, Bernardo Nugroho Yahya, and Seok-Lyong Lee. Hybrid domain adaptation with
+deep network architecture for end-to-end cross-domain human activity recognition. _Computers &_
+_Industrial Engineering_, 151:106953, 2021.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International Conference on Machine Learning_, pp.
+8748–8763. PMLR, 2021.
+
+
+Dhanesh Ramachandram and Graham W Taylor. Deep multimodal learning: A survey on recent
+advances and trends. _IEEE signal processing magazine_, 34(6):96–108, 2017.
+
+
+Rajeev Sharma, Vladimir I Pavlovic, and Thomas S Huang. Toward multimodal human-computer
+interface. _Proceedings of the IEEE_, 86(5):853–869, 1998.
+
+
+13
+
+
+Liang Shi, Yixin Chen, Meimei Liu, and Feng Guo. Dust: Dual swin transformer for multi-modal
+video and time-series modeling. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 4537–4546, 2024.
+
+
+Karen Simonyan and Andrew Zisserman. Two-stream convolutional networks for action recognition
+in videos. _Advances in neural information processing systems_, 27, 2014.
+
+
+Fida Mohammad Thoker and Juergen Gall. Cross-modal knowledge distillation for action recognition.
+In _2019 IEEE International Conference on Image Processing (ICIP)_, pp. 6–10. IEEE, 2019.
+
+
+Zhan Tong, Yibing Song, Jue Wang, and Limin Wang. Videomae: Masked autoencoders are dataefficient learners for self-supervised video pre-training. _Advances in neural information processing_
+_systems_, 35:10078–10093, 2022.
+
+
+Du Tran, Heng Wang, Lorenzo Torresani, Jamie Ray, Yann LeCun, and Manohar Paluri. A closer
+look at spatiotemporal convolutions for action recognition. In _Proceedings of the IEEE conference_
+_on Computer Vision and Pattern Recognition_, pp. 6450–6459, 2018.
+
+
+E Valarezo, P Rivera, JM Park, G Gi, TY Kim, MA Al-Antari, M Al-Masni, and T-S Kim. Human
+activity recognition using a single wrist imu sensor via deep learning convolutional and recurrent
+neural nets. _Journal of ICT, Design, Engineering and Technological Science_, pp. 1–5, 2017.
+
+
+Jindong Wang, Vincent W Zheng, Yiqiang Chen, and Meiyu Huang. Deep transfer learning for
+cross-domain activity recognition. In _proceedings of the 3rd International Conference on Crowd_
+_Science and Engineering_, pp. 1–8, 2018.
+
+
+Qi Wang, Liang Zhan, Paul Thompson, and Jiayu Zhou. Multimodal learning with incomplete
+modalities by knowledge distillation. In _Proceedings of the 26th ACM SIGKDD International_
+_Conference on Knowledge Discovery & Data Mining_, pp. 1828–1838, 2020.
+
+
+Rui Wang, Dongdong Chen, Zuxuan Wu, Yinpeng Chen, Xiyang Dai, Mengchen Liu, Lu Yuan, and
+Yu-Gang Jiang. Masked video distillation: Rethinking masked feature modeling for self-supervised
+video representation learning. In _Proceedings of the IEEE/CVF Conference on Computer Vision_
+_and Pattern Recognition_, pp. 6312–6322, 2023.
+
+
+Yi Wang, Kunchang Li, Yizhuo Li, Yinan He, Bingkun Huang, Zhiyu Zhao, Hongjie Zhang, Jilan
+Xu, Yi Liu, Zun Wang, et al. Internvideo: General video foundation models via generative and
+discriminative learning. _arXiv preprint arXiv:2212.03191_, 2022a.
+
+
+Yimu Wang, Kun Yu, Yan Wang, and Hui Xue. Multi-view fusion transformer for sensor-based
+human activity recognition. _arXiv preprint arXiv:2202.12949_, 2022b.
+
+
+Haoran Wei, Roozbeh Jafari, and Nasser Kehtarnavaz. Fusion of video and inertial sensing for deep
+learning–based human action recognition. _Sensors_, 19(17):3680, 2019.
+
+
+Linfeng Xu, Qingbo Wu, Lili Pan, Fanman Meng, Hongliang Li, Chiyuan He, Hanxin Wang, Shaoxu
+Cheng, and Yu Dai. Towards continual egocentric activity recognition: A multi-modal egocentric
+activity dataset for continual learning. _IEEE Transactions on Multimedia_, 2023.
+
+
+Zihui Xue, Zhengqi Gao, Sucheng Ren, and Hang Zhao. The modality focusing hypothesis: Towards
+understanding crossmodal knowledge distillation. _arXiv preprint arXiv:2206.06487_, 2022.
+
+
+Jiaojiao Zhao, Yanyi Zhang, Xinyu Li, Hao Chen, Bing Shuai, Mingze Xu, Chunhui Liu, Kaustav
+Kundu, Yuanjun Xiong, Davide Modolo, et al. Tuber: Tubelet transformer for video action detection. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_,
+pp. 13598–13607, 2022.
+
+
+Zhijun Zhou, Yingtian Zhang, Xiaojing Yu, Panlong Yang, Xiang-Yang Li, Jing Zhao, and Hao Zhou.
+Xhar: Deep domain adaptation for human activity recognition with smart devices. In _2020 17th_
+_Annual IEEE International Conference on Sensing, Communication, and Networking (SECON)_,
+pp. 1–9. IEEE, 2020.
+
+
+14
+
+
+A APPENDIX: MAIN EXPERIMENTS
+
+
+Below we report some addition Unsupervised Modality Adaptation (UMA) experiments. All tables
+report the accuracy on the _DT est_ for each method ( accuracy = _I_ 14 - _Ii_ =14 [1] **[ˆy]** _i_ [=] **[y]** _i_ [).] [In] [particular,]
+we attempt to implement baselines as described in the next section, however, all existing methods
+perform poorly.
+
+
+For reproducibility and to guarantee scientific rigour of our experiments, our main results table in
+Table 1 ran 3 times with pytorch random seeds 1,2, and 3. The full results are given in Figure 6. We
+also note that the supervised methods were only trained on 40% of the data given in _D_ HAR for a fair
+comparison to the other methods.
+
+
+A.1 FULL RESULTS:
+
+
+A.2 METHODS:
+
+
+**Student Teacher:**
+
+
+where ˆ _yi_ is the output of the _i_ th sample in the batch of _N_ samples, ˆ _yi,j_ is the score for the _j_ th class out
+of _C_ classes, and _Py_ represents the probability distribution produced by a given model’s output logits.
+The teacher network minimizes _LCE_ ( _Pf_ 1( _x_ ) _, Py_ ) and the student minimizes _LCE_ ( _Pf_ 2( _x_ ) _, Pf_ 2( _x_ )).
+Since the student approximates the teacher and the teacher approximates the true distribution, this
+implies that the student can only be as good as the teacher at approximating the true distribution:
+
+
+_LCE_ ( _Pf_ 1( _x_ ) _, Py_ ) _≤LCE_ ( _Pf_ 2( _x_ ) _, Py_ ) (3)
+
+
+A.3 C3T MODULES
+
+
+Here we provide a more precise formulation of the modules used for C3T.
+
+
+The updated modules are as follows:
+**Video Feature Encoder** _f_ [(1)] : _X_ [(1)] _→Z_ _[t][rec]_ : This module applies a pretrained Resnet18 to every
+frame a video and then performs a single 3D convolution. The resulting output is a set _trec_ _z_ :
+**ˆZ** [(1)] = (ˆ _z_ 1 [(1)] _. . ._ ˆ _zt_ [(1)] _rec_ [)][.]
+**IMU Feature Encoder** _f_ [(2)] : _X_ [(2)] _→Z_ _[t][rec]_ : This is a 1D CNN that decreases the time dimension
+to _trec_, resulting in an output of **Z** **[ˆ]** [(2)] = (ˆ _z_ 1 [(2)] _. . ._ ˆ _zt_ [(2)] _rec_ [)][.]
+**HAR** **Task** **Decoder** _h_ : _Z_ _[t][rec]_ _→Y_ : This module is like a transformer encoder that uses selfattention on an input sequence of length _trec_ vectors appended with a learned class token. The output
+class token of the self attention layer is then passed through a FFN and outputs a single action label
+_yi_ .
+
+
+A.4 DATASETS
+
+
+Here we provide more information on the datasets and how they were used in our experiments.
+
+
+**UTD-MHAD** Most of the development and experiments were performed on the UTD-Multi-modal
+Human Action Dataset (UTD-MHAD) (Chen et al., 2015). This dataset consists of roughly 861
+sequences of RGB, skeletal, depth and an inertial sensor, with 27 different labeled action classes performed by 8 subjects 4 times. The inertial sensor provided 3-axis acceleration and 3-axis gyroscopic
+information, and all 6 channels were used for in our model as the IMU input. Given our motivation,
+we only use the video and inertial data; however, CA can easily be extended to multiple modalities.
+
+
+**CZU-MHAD** The Changzhhou MHAD (Chao et al., 2022) dataset provides about 1,170 sequences
+and includes depth information from a Kinect camera synchronized with 10 IMU sensors, each 6
+channels, in a very controlled setting with a user directly facing the camera for 22 actions. They do
+not provide RGB information, thus we use depth as the visual modality, broadcast it to 3 channels,
+
+
+15
+
+
+_C_
+
+- exp ˆ _yi,j_
+
+1 _yi_ = _j_ log(  - _M_ ) (2)
+_j_ =1 _i_ =1 [exp ˆ] _[y][i,j]_
+
+
+_LCE_ ( _Py_ ˆ _, Py_ ) = _−_ [1]
+
+_N_
+
+
+_N_
+
+
+_i_ =1
+
+
+Figure 6: **Full results:** across all trials for Table 1. Values that we used are highlighted and best
+performance of each method within supervised and UMA are bolded.
+
+
+16
+
+
+Table 6: **UMA performance compared to supervised baselines Using Train Method 1:** Each
+method is modular and can be decomposed to perform in the traditional supervised setting, or can be
+combined into ST, CA or CT3 to perform UMA. We developed all models from scratch, however, ST
+and CA resemble existing methods whereas C3T introduces novel mechanisms. Top-1 and Top-3
+accuracies are reported for each dataset. Although ST performs poorly, it performs significantly better
+than randomly guessing, indicating it is still learning action information from the RGB data without
+any labels.
+
+
+UTD-MHAD CZU-MHAD MMACT MMEA-CL
+Model Top-1 Top-3 Top-1 Top-3 Top-1 Top-3 Top-1 Top-3
+
+
+IMU **87.9** **97.7** **95.1** 98.2 70.0 90.0 65.8 87.6
+Supervised RGB 53.8 73.1 94.0 **99.7** 42.1 61.6 54.2 77.1
+Fusion 62.5 82.2 95.0 98.5 **76.7** **92.0** **80.1** **92.7**
+
+
+and pass it into the RGB module. We concatenate the IMU data to provide a 60-channel input as the
+IMU modality and use depth as the input modality. Given the controlled environment and dense IMU
+streams, the models performed the best on this dataset.
+
+
+**MMACT** The MMAct dataset (Kong et al., 2019) is a large scale dataset containing about 1,900
+sequences of 35 action classes from 40 subjects on 7 modalities. This data is challenging because it
+provides data from 5 different scenes, including sitting a desk, or performing an action that is partially
+occluded by an object. Furthermore, the data was collected with the user facing random angles at
+random times. The dataset contains 4 different cameras at 4 corners of the room, and it measures
+acceleration on the user’s watch and acceleration, gyroscope and orientation data from a user’s phone
+in their pocket. We only use the cross-view camera 1 data, and again we concatenate the 4 3-axis
+inertial sensors into one 12 channel IMU modality.
+
+
+**MMEA-CL** The Multi-Modal Egocentric Activity recognition dataset for Continual Learning
+(MMEA-CL) (Xu et al., 2023) is a recent dataset motivated by learning strong visual-IMU based
+representations that can be used for continual learning. It provides about 6,4000 samples of synchronized first-person video clips and 6-channel accelerometer and gyroscope data from a wrist worn
+IMU for 32 classes. The dataset’s labels feature realistic daily actions in the wild, as opposed to
+recorded sequences in a lab. Due to issues with the data and technical constraints, we downsize the
+data proportionally from each class and use about the first 1,000 samples. Nonethless, CT3’s superior
+performance shows how this method can generalize to a different camera view, and different types of
+activities.
+
+
+A.5 MAIN TABLE WITH ALL TRAIN METHOD 1:
+
+
+Before the ablations discovered that Train method 4 (combined loss) was better for CA we used
+method 1 (Align first). This table shows the original experiment with all UMA models trained using
+method 1 (align first) and we observe no difference in the resulting rankings of the method.
+
+
+17
+
+
+UMA
+
+
+Random 3.7 11.1 4.6 16.6 2.9 8.6 3.1 9.4
+ST 12.9 24.6 41.1 61.9 17.6 34.7 9.9 22.7
+CA 38.6 56.1 81.0 95.5 27.3 45.6 42.3 62.1
+C3T **62.5** **86.4** **84.2** **96.7** **32.4** **57.9** **51.2** **78.8**
+
+
+A.6 ADDITIONAL VISUALIZATIONS
+
+
+Figure 7: **C3T TSNE plot with shifted input:** This plot visualizes the TSNE plots of the _t_ rec = 15
+latent _zi_ = 0 _. . . t_ rec for various points of two classes. The _z_ s shown are the fused representation
+between the IMU and RGB modalities. The dark blue star is a point that was _shifted by 50%_ compared
+to the rest of the visualized points for the class. Notice how some time steps are more distinctive than
+others between the classes, and the star tends towards the edge of the group for many _z_ s.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Figure 8: **C3T TSNE plot with shifted input:** Another TSNE plot with shifted input for different
+classes from the previous figure (Dark blue shows ’Swipe left’ and light blue shows ’Pick up and
+throw’). This time X marks the regular input and star marks the shifted inputs. Unexpectedly, they
+are relatively close through out, indicating the temporal convolutions that constructed these z’s might
+be doing part of the work when accounting for robustness to shift noise. Furthermore, notice how
+_z_ 7to _z_ 10 indicate latent variables that are more distinctive. This could indicate that these time steps
+are most important for distinguishing between the two given classes.
+
+
+Figure 9: **CA TSNE on CZU Dataset:** These plots indicate the same trend discussed in the main
+paper, that the IMU points in the multimodal representation space tend to cluster in the middle and
+mirror the RGB points on the outside. Particularly, for the CZU dataset the IMU signals are stronger
+(60 IMU channels, 6 on 10 wearable devices) and this clustering tends to be stronger.
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Figure 10: **CA TSNE Plots:** These are similar to the plot shown in the main paper. The following
+shows the progression of the latent representations for 5 classes (5 different colors) during training
+CA on the UTD-MHAD dataset in UMA. Circles indicate RGB data, and crosses indicate IMU data
+points.
+
+
+Table 7: **UMA Testing on Each Modality** Accuracy MMACT (Kong et al., 2019) when trained for
+UMA and tested on only RGB data, only IMU data, or Both.
+
+
+Model 1. RGB 2. IMU 3. Both
+
+
+ST 25.8% 16.7% **25.8%**
+CA 39.9% 26.9% **41.3%**
+C3T 39.2% 31.7% **47.3%**
+
+
+B APPENDIX: ADDITIONAL EXPERIMENTS
+
+
+B.1 BASELINES
+
+
+This method attempts to adapt existing methods to UMA and compare them as baselines against our
+methods.
+
+
+Many works deal with robustness to missing sensor data during training or testing, however, few
+works deal with zero-labeled training data from one modality. As a result, constructing baselines is
+tricky and most methods had to be modified or adapted to fit our our approach. Even so, as shown in
+Table 8 These methods perform very poorly in the UMA setting.
+
+
+We would like to note that all the baselines and methods were trained and tested on the data splits,
+i.e. it’s not the case that they have different train a) and train b) splits. We believe this allows for
+fair comparison. In addition, the supervised baselines were only trained on the Train a) Supervised
+HAR split. This assures that the supervised baselines don’t have an unfair advantage of seeing more
+data (they also only see 40% of the label data not 80%). The exact data splits are also provided in a
+separate repository linked in our code.
+
+
+B.1.1 SENSOR FUSION BASELINES
+
+
+Sensor fusion is often broken down into the following 3 methods based on where the data are
+combined (Ramachandram & Taylor, 2017; Majumder & Kehtarnavaz, 2020; Sharma et al., 1998),
+also shown in Figure 11:
+
+
+1. Early or data-level fusion combines the raw sensor outputs before any processing.
+
+
+2. Middle/intermediate or feature-level fusion combines each sensor modality after some
+preprocessing or feature extraction.
+
+
+3. Late or decision-level fusion combines the raw output, essentially ensembling separate
+models.
+
+
+Many IMU-RGB based sensor fusion models have the ability to train on partially available or
+corrupted data and are robust to missing modalities during inference (Islam et al., 2022; Islam &
+Iqbal, 2020). No works have attempted the extreme case where one modality is completely unlabeled
+during training. Existing sensor fusion methods can be adapted to our setup using a psuedo- labeling
+technique, similar to the student-teacher model above. The difference here is that the model learns a
+
+
+20
+
+
+**1080**
+
+**1081**
+
+**1082**
+
+**1083**
+
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+**1088**
+
+**1089**
+
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+**1094**
+
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+**1099**
+
+**1100**
+
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+**1105**
+
+**1106**
+
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+**1111**
+
+**1112**
+
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+**1117**
+
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+**1122**
+
+**1123**
+
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+**1128**
+
+**1129**
+
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Table 8: **UMA** **with** **Existing** **Methods:** Most methods fail to adapt to zero-shot cross-modal
+transfer from the RGB to IMU sensor modalities. Imagebind performs well on MMEA, which is an
+eogecentric dataset, similar to Ego-4d in which Imagebind was trained on.
+
+
+Model UTD-MHAD MMACT MMEA- CL CZU-MHAD
+
+
+Sensor Fusion (2019) (Wei et al., 2019) 5.2% 3.2 % 4.1 % 4.5 %
+HAMLET (2020) (Islam & Iqbal, 2020) 4.6 % 3.2 % 4.1 % 4.5 %
+ImageBind (2023) (Girdhar et al., 2023) 11.3 % 4.6 % 40.1 % 4.54 %
+
+
+Student Teacher (Ours) 12.9 % 17.6 % 9.9 % 41.1%
+Contrastive Alignement (Ours) 38.6 % 27.3 % 42.3 % 81.0 %
+Contrastive Alignment Through Time (Ours) **62.5** % **32.4** % **51.2** % **84.2** %
+
+
+joint distribution between the two modalities so hopefully it may be able to learn some correlation
+between the models. Nonetheless, we show that these methods cannot generalize to the scenario
+where there is zero-labeled training data for one modality.
+
+
+Let _g_ ( _·, ·_ ) : ( _X_ [(1)] _, X_ [(2)] ) _→Y_ . Our approach uses _DHAR_, to train by passing in zeros for one modality, e.g.
+we train _g_ ( _·,_ **0** ) : _X_ [(1)] _→Y_ . Then, with _DAlign_ we use _g_ ( _·,_ **0** ) to generated psuedo-labels and then train
+_g_ ( **0** _, ·,_ ) with those labels.
+
+
+We reproduced the conventional sensor fusion models (early, feature, and late) from (Wei et al., 2019) and
+indicate the performance of the top model on 8. We further reproduce a self-attention based sensor fusion
+appraoch (HAMLET (Islam & Iqbal, 2020)) and tested it on our setup. We follow a very similar architecture;
+however, extract spatio-temporal results using 3D convolution in the video as opposed to an LSTM and show
+similar results on the standard sensor fusion problem. We selected these model due to their state-of-the-art
+performance on the UTD-MHAD dataset, making them ideal benchmarks for comparison with our model.
+
+
+To verify the integrity of our reproduced models we compared to state-of-the-art reported methods and showed
+similar performance results. The results are given in Table 9 These experiments prove that our sensor fusion
+baselines are comparable to SOTA method, and they fail to perform well in the UMA setting underscoring the
+importance and novelty of our work.
+
+
+Table 9: SOTA Sensor Fusion Performance on
+UTD-MHAD. _†_ (Wei et al., 2019)
+
+
+, _∗_ (Islam & Iqbal, 2020)
+
+
+REPORTED MODELS ACCURACY
+
+
+HAMLET _∗_ 95.12%
+WEI ET AL. _†_ 95.6%
+
+
+REPRODUCED FROM _†_ ACCURACY
+
+
+ImageBind (Girdhar et al., 2023) learns encoders for 6 modalities, (Images/Videos, Text, Audio, Depth, Thermal
+and IMU) by performing CLIP’s training method (Radford et al., 2021) between each of those encoders and the
+Image/Video encoder. It was well tested for image, text and audio based alignment, retrieval and latent space
+generation tasks, however was not well test with IMU data and not used for specific tasks, such as HAR. In
+addition, one fundamental difference between Imagebind and CA is that Imagebind constructs a latent space
+amongst the sensing modalities and text and aligns between them. We hypothesize that this is vector space is
+more difficult and unnecessary to construct, for human action recognitoin using sensing modalities. The text
+modality, although sequential in nature, does not have a time dimension, thus it cannot leverage correlations
+between modalities in time like C3T.
+
+
+Let’s denote the video, IMU and text encoders as _g_ [(1)] : _X_ [(1)] _→Z, g_ [(2)] : _X_ [(2)] _→Z,_ and _g_ [(3)] : _X_ [(3)] _→Z_
+respectively. We perform two conventional task-specific adaptations for CLIP models. First, we attempt zero-shot
+transfer, in which we pass all the action labels through the text encoder. For a dataset with _C_ classes, we have
+_Z_ ˆ [(3)] = (ˆ _z_ 1 [(3)] _. . ._ ˆ _zC_ [(3)][)][.] [Finally,] [for a given IMU sample][ (] _[x]_ [(2)] _i_ _, yi_ ) _∈DT est_, we pass _x_ [(2)] _i_ through the IMU
+
+
+21
+
+
+Figure 11: Types of Sensor Fusion
+
+
+B.1.2 CONTRASTIVE LEARNING BASELINE
+
+
+EARLY FUSION 86.71%
+FEATURE FUSION 95.60%
+LATE FUSION 94.22%
+
+
+**1134**
+
+**1135**
+
+**1136**
+
+**1137**
+
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+**1142**
+
+**1143**
+
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+**1148**
+
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+**1153**
+
+**1154**
+
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+**1159**
+
+**1160**
+
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+**1165**
+
+**1166**
+
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+**1171**
+
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+**1176**
+
+**1177**
+
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+**1182**
+
+**1183**
+
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+encoder _g_ [(2)] and retrieve _z_ ˆ [(2)] . Finally, we classify the point by looking at which points gives the highest cosine
+
+similarity score in the latent space, e.g. _y_ ˆ _i_ = _argmaxj_ _⟨x_ [(2)] _i_ _,z_ ˆ _j_ [(3)] _⟩_
+
+_||⟨x_ [(2)] _i_ _,z_ ˆ _j_ [(3)] _⟩||_ [.]
+
+
+Given that ImageBind is a large model trained on massive corpuses of data it becomes impractical to train the
+model from scratch on our smaller datasets collected from wearables and edge devices. Instead, we fine-tuned
+the ImageBind model using a linear projection head on the encoders, that can then be trained for a specific task.
+The results of this method are depicted in Table 8.
+
+
+The results show a poor generalization of Imagebind to most experiments on our setup, and we hypothesize a
+few reasons. Firstly, ImageBind is a large model and may either overfit to small datasets, or not have enough
+training examples to learn strong enough representations. Second, ImageBind was pre-trained on Ego4D and
+Aria which contain egocentric videos to align noisy captions with the IMU data, whereas our datasets had fixed
+labels and were mostly 3rd person perspective. In fact ImageBind performed the best on the one egocentric
+dataset we used, MMEA-CL(Xu et al., 2023). Lastly, Imagebind was trained on a IMU sequences of 10s length
+sampled at a much higher frequency, thus we zero-padded or upsampled the IMU data to fit into ImageBind’s
+IMU encoder, and the sparse or repetitive signal may have been too weak for ImageBind’s encoder to accurately
+interpret the data.
+
+
+B.2 FEW SHOT CROSS-MODAL ADAPTATION
+
+
+_**How quickly can our models learn from labeled IMU samples?**_
+
+
+As illustrated in Figure 12, CA demonstrates faster learning, reaching peak performance within 20 shots, while
+C3T requires about 40 shots. Neither method matches the supervised IMU performance of 87.9% reported in
+Table 1, but they approach the fusion performance of approximately 62%.
+
+
+It’s important to note that this comparison with the supervised baselines may not be entirely fair, as the supervised
+baselines had access to the entire Train HAR dataset (40% of the data), whereas, the few-shot learning was
+conducted on the validation set (10% of the data). Given that the supervised IMU and fusion models share the
+same architecture as CA, repurposed for the supervised setting, we would expect similar performance under
+equal conditions.
+
+
+Nonetheless, these experiments clearly demonstrate CA’s superior ability in few-shot cross-modal learning
+compared to C3T. As shown in Figure 12, both IMU and combined modality performance improve with
+increasing shots, while RGB performance remains constant due to the learning shots containing only labeled
+IMU data.
+
+
+(i) **CA Cross-Modal Few Shot** (ii) **C3T Cross-Modal Few Shot**
+
+
+Figure 12: **Cross-Modal Few Shot Learning Comparison:** (a) CA method and (b) C3T method
+performance in cross-modal few shot learning scenarios when testing on IMU, RGB and Both
+modalities. RGB performance remains the same because the learning shots only contain labeled IMU
+data. However, we can see IMU and Both performance rise.
+
+
+B.3 ADDITIONAL ABLATIONS:
+
+
+We conducted a brief ablation study on the alignment loss, comparing our cosine similarity approach with
+the conventional L2 loss. As shown in Table 10, the results strongly support our initial intuition presented
+in Section 3. The substantial performance gap between cosine similarity and L2 loss for both CA and C3T
+
+
+22
+
+
+**1188**
+
+**1189**
+
+**1190**
+
+**1191**
+
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+**1196**
+
+**1197**
+
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+**1202**
+
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+**1207**
+
+**1208**
+
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+**1213**
+
+**1214**
+
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+**1219**
+
+**1220**
+
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+**1225**
+
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+**1230**
+
+**1231**
+
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+**1236**
+
+**1237**
+
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+models underscores that cosine similarity is indeed a more effective measure of alignment for high-dimensional
+vectors in this context. These findings align with well-established principles in high-dimensional space analysis,
+reinforcing the validity of our approach. Given the well-established nature of these results, we have included this
+comparison in the supplementary material rather than the main paper, focusing the primary discussion on novel
+contributions.
+
+
+Table 10: **Alignment** **Loss** **Comparison:** Performance of CA and C3T models using Cosine
+Similarity and L2 loss for alignment on the UTD-MHAD dataset.
+
+
+Model Cosine Similarity L2 Loss
+
+
+CA **44.32** 2.27
+C3T **62.50** 3.41
+
+
+23
+
+
+**1242**
+
+**1243**
+
+**1244**
+
+**1245**
+
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+**1250**
+
+**1251**
+
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+**1256**
+
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+**1261**
+
+**1262**
+
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+**1267**
+
+**1268**
+
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+**1273**
+
+**1274**
+
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+**1279**
+
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+**1284**
+
+**1285**
+
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+**1290**
+
+**1291**
+
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+Table 11: **Architecture Ablation Extensions:** This shows an extension of our architecture ablations
+to baselines. It shows a comparison of different architectures for RGB and IMU encoders across
+various methods. We report encoder types for spatial and temporal dimensions of RGB data, and the
+temporal dimension for IMU data, along with the number of parameters (in millions) and accuracy
+for each configuration. Convolutional architectures generally yielded superior performance, while
+still maintaining a relatively low model size. These results indicate that C3T’s performance advantage
+stems from its methodological approach rather than solely from it’s attention head or size.
+
+
+RGB IMU
+Method Spatial Temporal Temporal Params (M) Accuracy (%)
+
+
+ST
+
+
+CA
+
+
+C3T
+
+
+FUSION
+
+
+Conv Conv Conv 129.2 **12.9**
+Conv Conv Attn 97.8 10.2
+Conv Attn Conv 871.2 11.4
+Attn Conv Conv 291.5 5.7
+
+
+Conv Conv Conv 163.8 **38.6**
+Conv Conv Attn 132.3 19.3
+Conv Attn Conv 905.7 34.1
+Attn Conv Conv 326.0 26.1
+
+
+Conv Conv Conv 137.7 **62.5**
+Conv Conv Attn 106.3 15.9
+Conv Attn Conv 879.6 53.4
+Attn Conv Conv 300.0 33.0
+
+
+Conv Conv Conv 163.8 62.5
+Conv Conv Attn 132.3 77.3
+Conv Attn Conv 905.7 **89.8**
+Attn Conv Conv 326.0 64.8
+
+
+      -       - Conv 32.0 **87.9**
+IMU
+
+      -       - Attn 0.5 27.3
+
+
+RGB
+
+
+Conv Conv - 97.3 53.8
+Conv Attn - 839.2 **71.6**
+Attn Conv - 259.5 64.8
+
+
+24

@@ -1,0 +1,1248 @@
+# FULLDIFFUSION: DIFFUSION MODELS WITHOUT TIME TRUNCATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Diffusion models are predominantly used for generative modeling, which synthesize samples by simulating the reverse process of a stochastic differential equation
+(SDE) that diffuses data into Gaussian noise. However, when simulating the reverse SDE, the SDE solver suffers from numerical instability near the time boundary; hence, in practice, the simulation is terminated before reaching the boundary
+point. This heuristic time truncation hinders the rigorous formulation of diffusion models, and requires additional costs of hyperparameter tuning. Moreover,
+such numerical instability often occurs even in training, especially when using a
+maximum likelihood loss. Therefore, the current diffusion model heavily relies
+on the time truncation technique in both training and inference. In this paper,
+we propose a method that completely eliminates the heuristic of time truncation.
+Our method eliminates numerical instability during maximum likelihood training
+by modifying the parameterization of the noise predictor and the noise schedule.
+We also propose a novel SDE solver that can simulate without time truncation by
+taking advantage of the semi-linear structure of the reverse SDE. These improvements enable stable training and sampling of diffusion models without relying on
+time truncation. In our experiments, we tested the effectiveness of our method on
+the CIFAR-10 and ImageNet-32 datasets by evaluating the test likelihood and the
+sample quality measured by the Fr´echet inception distance (FID). We observe that
+our method consistently improve performance in both test likelihood and the FID
+compared to the baseline model of DDPM++.
+
+
+1 INTRODUCTION
+
+
+Diffusion probabilistic models (Sohl-Dickstein et al., 2015; Ho et al., 2020) and score-based generative models (Song & Ermon, 2019; 2020) have achieved state-of-the-art performance in terms of
+sample quality especially for image generation. Both models consider to pertub data with a sequence
+of noise distributions, and generate samples by learning to reverse the diffusion process from noise
+to data. Song et al. (2020b) have shown that these two types of models can be interpreted using a
+single framework, which we refer to as _diffusion models_ in this paper.
+
+
+The framework of diffusion models (Song et al., 2020b) involves gradually diffusing the data distribution towards a simple noise distribution, such as the standard Gaussian distribution, using a
+stochastic differential equation (SDE), and learning the time reversal of this SDE for generative modeling. The reverse-time SDE has an analytic expression which only depends on a time-dependent
+score function of the perturbed data distribution. This score function can be efficiently estimated
+by training a neural network (called a score-based model (Song & Ermon, 2019; 2020)) with a
+weighted combination of score matching losses (Hyv¨arinen & Dayan, 2005; Vincent, 2011; Song
+et al., 2020a) as the objective. After training, we can obtain samples from the model by simulating
+the reverse SDE from a simple noise using the estimated score function.
+
+
+However, when simulating the reverse-time SDE, the SDE solver suffers from numerical instability near the time boundary. This is mainly because the estimated score function diverges near the
+boundary, and simulation around the boundary region becomes infeasible with a numerical SDE
+solver. To avoid the numerical instability, the simulation is terminated before reaching the boundary point in practice. Moreover, such numerical instability is often observed even during training,
+especially when the model is trained with a maximum likelihood objective. Therefore, heuristics
+
+
+1
+
+
+like time truncation is widely used in both training and inference of diffusion models. Although
+time truncation is one of the most naive ways to avoid numerical instability, it requires tuning of the
+truncation time and also breaks the rigorous formulation of the diffusion model.
+
+
+In this paper, we propose a method to completely eliminate the heuristic of time truncation from
+both training and inference of diffusion models. First, to eliminate time truncation during training,
+we consider sufficient conditions for the maximum likelihood objective not to diverge. Specifically,
+by using a specific noise schedule and parameterization, we show that the objective becomes always
+finite even around the boundary points. This prevents the diffusion model from suffering from
+numerical instability when training with the maximum likelihood objective. We also provide a way
+to reduce variance of the Monte-Carlo estimate of the objective. Second, we propose a new SDE
+solver to eliminate time truncation time during sampling. This solver avoids numerical instability at
+boundary points by taking advantage of the semi-linear structure of the reverse SDE.
+
+
+By combining these techniques, we successfully remove the dependence on time truncation from
+both training and inference of the diffusion model. We name this framework _FullDiffusion_ . In
+experiments, we validate the effectiveness of FullDiffusion on CIFAR-10 and ImegeNet 32x32 using
+DDPM++ as a baseline and confirm that it consistently outperforms the baseline in terms of both
+likelihood and sample quality measured by the Fr´echet inception distance (FID).
+
+
+2 BACKGROUND
+
+
+2.1 DIFFUSION MODELS
+
+
+In this section, we provide a priliminary knowledge on the concept of diffusion models. Diffusion
+models are deep generative models that smoothly transform data **x** 0 _∈_ R _[D]_ to noise with a diffusion
+process, and generate samples by learning and simulating the time reversal of this diffusion. First,
+we consider a following stochastic differential equation to diffuse the data distribution _p_ data ( **x** 0)
+towards a noise distribution (i.e., a standard Gaussian distribution):
+
+
+_d_ **x** _t_ = _ft_ **x** _tdt_ + _gtd_ **w** _,_ (1)
+
+
+where _ft_ and _gt_ are drift and diffusion coefficients, and **w** is a standard Wiener process. The solution
+of an SDE, i.e., _{_ **x** _t}t∈_ [0 _,_ 1], is called a diffusion process. We denote the marginal distribution of **x** _t_
+and the transition probability from **x** 0 to **x** _t_ as _qt_ ( **x** _t_ ) and _q_ 0 _t_ ( **x** _t_ _|_ **x** 0), respectively. In the SDE of
+Eq. (1), the transition probability _q_ 0 _t_ can be analytically obtained as follows:
+
+
+_q_ 0 _t_ ( **x** _t_ _|_ **x** 0) = _N_               - **x** _t_ ; _αt_ **x** 0 _, σt_ [2] _**[I]**_               - _,_ (2)
+
+where _αt_ = exp ��0 _t_ _[f][s][ds]_ �, and _σt_ [2] [=] _[ α]_ _t_ [2] �0 _t_ - _gs_ [2] _[/α]_ _s_ [2] - _ds_ . By choosing the coefficients _ft_ and _gt_ so
+that _α_ 1 = 0 and _σ_ 1 = 1 hold, the solution of Eq. (1) approaches a standard Gaussian distribution as
+_t →_ 1, i.e., _q_ 1 ( **x** 1) = _N_ ( **x** 1; **0** _,_ _**I**_ ). There are several ways to meet this condition as listed below [1] .
+
+**Variance** **Preserving** **(VP)** : When _ft_ is non-positive and _gt_ [2] [is] [set] [to] _[−]_ [2] _[f][t]_ [,] [the] [SDE] [is] [known] [as]
+the _variance_ _preserving_ (VP) SDE, which is widely used for diffision models. In the VP SDE,
+_αt_ [2] [+] _[ σ]_ _t_ [2] [= 1][ holds.] [In previous works,] _[ g]_ _t_ [2] [is often denoted as] _[ β][t]_ [for the VP SDE.]
+
+**Sub-VP** : Song et al. (2020b) also propose another type of SDE named sub-VP SDE, in which� _t_ _gt_ [2] [is]
+defined as _−_ 2 _ft_ (1 _−_ _e_ 0 [4] _[f][s][ds]_ ). In this case, _αt_ [2] [+] _[ σ][t]_ [= 1][ holds instead.]
+
+
+                            - _t_
+**Straight** **Path** **(SP)** : When _gt_ [2] [is] [set] [to] _[−]_ [2] _[f][t]_ [(1] _[−]_ _[e]_ 0 _[f][s][ds]_ ), the SDE is called the _straight_ _path_
+(SP) SDE (Zheng et al., 2023), where _αt_ + _σt_ = 1 holds. The SP SDE is often used for the _optimal_
+_transport_ (OT) conditional vector field in the context of flow matching (Lipman et al., 2023; Albergo
+& Vanden-Eijnden, 2023; Liu et al., 2023).
+
+
+In this paper, we focus on the VP SDE, because it is most widely used in the context of diffusion
+models (Kingma et al., 2021; Kingma & Gao, 2023). If we can simulate the reverse process of
+
+
+1Although the variance exploding (VE) SDE is also widely used, we exclude it here because the VE SDE
+does not hold _α_ 1 = 0 and _σ_ 1 = 1.
+
+
+2
+
+
+Eq. (1) from a standard Gaussian distribution, we can obtain samples from the data distribution
+_p_ data = _q_ 0 at _t_ = 0. Fortunately, the reverse process of Eq. (1) has an analytical form as follows:
+
+
+_d_ **x** _t_ =             - _ft_ **x** _t −_ _gt_ [2] **[s]** _[t]_ [(] **[x]** _[t]_ [)]             - _dt_ + _gtd_ **w** ¯ _,_ (3)
+
+
+where **s** _t_ ( **x** _t_ ) = _∇_ **x** _t_ log _qt_ ( **x** _t_ ), and **w** ¯ is a standard Wiener process in the reverse-time direction. Since this reverse SDE includes a time-dependent score function **s** _t_, which is unknown in
+advance, we need to estimate it using a parameterized function, such as a neural network, i.e.,
+ˆ **s** _**θ**_ ( **x** _t, t_ ) _≈_ **s** _t_ ( **x** _t_ ). To fit the function ˆ **s** _**θ**_ to the true score function **s** _t_, its parameter _**θ**_ is optimized
+by minimizing the following score matching loss:
+
+
+                   
+_J_ SM ( _**θ**_ ) = [1] _λt ∥_ **s** _t_ ( **x** _t_ ) _−_ ˆ **s** _**θ**_ ( **x** _t, t_ ) _∥_ [2][�] _,_ (4)
+
+2 [E]
+
+
+where _t ∼U_ ( _t_ ; 0 _,_ 1), **x** _t_ _∼_ _qt_ ( **x** _t_ ), and _λt_ is some weighting function. Although _J_ SM is intractable
+since the true score **s** _t_ is not accesible, minimization of _J_ SM is equivalent to minimization of the
+following denoising score matching loss (Vincent, 2011):
+
+
+                
+_J_ DSM ( _**θ**_ ) = [1] _λt ∥∇_ **x** _t_ log _q_ 0 _t_ ( **x** _t_ _|_ **x** 0) _−_ ˆ **s** _**θ**_ ( **x** _t, t_ ) _∥_ [2][�] (5)
+
+2 [E]
+
+              - _λt_               
+= [1] _∥_ _**ϵ**_ _−_ _**ϵ**_ ˆ _**θ**_ ( **x** _t, t_ ) _∥_ [2] _,_ (6)
+
+2 [E] _σt_ [2]
+
+
+where **x** 0 _∼_ _p_ data ( **x** 0), _**ϵ**_ _∼N_ ( _**ϵ**_ ; **0** _,_ _**I**_ ), **x** _t_ = _αt_ **x** 0 + _σt_ _**ϵ**_, and _**ϵ**_ ˆ _**θ**_ ( **x** _t, t_ ) = _−σt_ ˆ **s** _**θ**_ ( **x** _t, t_ ). When
+_λt_ = _σt_ [2][,] [the] [denoising] [score] [matching] [loss] _[J]_ [DSM] [is] [equivalent] [to] [a] [simple] [noise] [prediction] [loss]
+used in the denoising diffusion probabilistic model (DDPM) (Ho et al., 2020) and DDPM++ (Song
+et al., 2020b). After training, the estimated score function ˆ **s** _**θ**_ ( **x** _t, t_ ) = _−_ _**ϵ**_ ˆ _**θ**_ ( **x** _t, t_ ) _/σt_ is substituted
+for the true score **s** _t_ to simulate the reverse diffusion process for sample generation:
+
+
+_d_ **x** _t_ =            - _ft_ **x** _t −_ _gt_ [2][ˆ] **[s]** _**[θ]**_ [(] **[x]** _[t]_ [)]            - _dt_ + _gtd_ **w** ¯ (7)
+
+
+          -           = _ft_ **x** _t_ + _[g]_ _t_ [2] _**ϵ**_ ˆ _**θ**_ ( **x** _t_ ) _dt_ + _gtd_ **w** ¯ _,_ (8)
+_σt_
+
+
+where **x** 1 _∼_ _p_ 1 ( **x** 1) = _N_ ( **x** 1; **0** _,_ _**I**_ ). To simulate the SDE, some numerical sover, e.g., the Euler–Maruyama method (Kloeden et al., 2012), is applied.
+
+
+2.2 TIME TRUNCATION IN SAMPING
+
+
+When simulating the estimated SDE of Eq. (8), we need to confront numerical instability around
+the boundary points at _t_ = 0 _,_ 1. For example, when we adopt the VP SDE, the coefficients of Eq.
+(8) take the following form:
+
+
+Since _αt_ _→_ 0 as _t_ _→_ 1 and _σt_ _→_ 0 as _t_ _→_ 0, these coefficients diverge at the boundary points.
+Therefore, it is difficult to simulate the SDE around _t_ = 0 _,_ 1 with a naive SDE solver. To avoid
+the singularity, some heuristics are commonly used in previous works. For instance, Song & Ermon
+(2019) limit the simulation time within _t ∈_ [ _t_ min _,_ 1] instead of _t ∈_ [0 _,_ 1] to avoid the divergence near
+_t_ = 0. The truncation time _t_ min is typically set to a small positive number (e.g., 10 _[−]_ [5] ). In addition,
+they use a noise schedule such that _gt_ [2] [=] _[ g]_ min [2] [+] - _g_ max [2] _[−]_ _[g]_ min [2] - _t_ . In this noise schedule, _α_ 1 does not
+exactly correspond to 0; hence the divergence at _t_ = 1 is also avoided, although _q_ 1 = _p_ 1 no longer
+holds. Such heuristics are dominantly used when sampling from continous-time diffusion models
+after introduced by the original paper by Song & Ermon (2019).
+
+
+2.3 TIME TRUNCATION IN MAXIMUM LIKELIHOOD TRAINING
+
+
+Song et al. (2021) have shown that when the weighting function _λt_ in Eq. (6) is equal to _gt_ [2][,] [the]
+denoising score matching loss can be seen as an upper bound of the negative log-likelihood except
+
+
+3
+
+
+_ft_ = [1]
+
+
+[1] _·_ _[dα][t]_ _[g][t]_ [=] _[ −]_ [2]
+
+_αt_ _dt_ _[,]_ _α_
+
+
+_t_ 2
+
+[2] _·_ _[dα][t]_ _[g]_ [2] = _−_ _·_ _[dα][t]_ (9)
+
+_αt_ _dt_ _[,]_ _σt_ _αtσt_ _dt_ _[.]_
+
+
+for a constant factor as follows:
+
+_−_ E [log _p_ 0 ( **x** 0; _**θ**_ )] _≤_ E   - _gt_ 2 _[|]_ **[ x]** [0][)] _[ −]_ [ˆ] **[s]** _**[θ]**_ [ (] **[x]** _[t][, t]_ [)] _[∥]_ [2]   - (10)
+2 _[∥∇]_ **[x]** _[t]_ [ log] _[ q]_ [0] _[t]_ [ (] **[x]** _[t]_
+
+_−_ E         - _gt_ 2 _[|]_ **[ x]** [0][)] _[∥]_ [2][ +] _[ Df][t]_ [ +] _[ H]_ [ (] _[q]_ [01] _[, p]_ [1][)]         2 _[∥∇]_ **[x]** _[t]_ [ log] _[ q]_ [0] _[t]_ [ (] **[x]** _[t]_
+
+
+Although the divergence at the boundary points occurs especially for the ELBO objective, time
+truncation is often used even when training with the non-ELBO objective (e.g., _λt_ = _σt_ [2] [in] [Song]
+et al. (2020b)).
+
+
+In summary, the heuristics to avoid the numerical instability at the time boundaries, such as time
+truncation, are predominantly applied in both trainig and inference time for diffusion models. Althoguh such heuristics help to stabilize training and sampling of diffusion models in practice, they
+hinder a rigorous correnpondence between the true SDE in Eq. (3) and the estimated SDE in Eq.
+(8). Furthermore, it is difficult to chooce appropriate values of hyperparameters (e.g., _t_ min, _g_ min [2] [,]
+and _g_ max [2] [), requiring additional tuning costs.] [Our main focus in this paper is to completely eliminate]
+these heuristics without harming the practical performance of the diffusion models.
+
+
+3 METHOD: FULLDIFFUSION
+
+
+In this section, we provide a way to eliminate the time truncation from both training and sampling of
+diffusion models. Specifically, we first demonstrate that the divergence of the ELBO objective at the
+boundary points can be avoided by carefully designing the parameterization and the noise schedule.
+By this modification, we can eliminate time truncation from training especially for the maximum
+likelihood objective. Furthermore, we provide a way to reduce the variance of the Monte-Carlo
+estimation of the ELBO objective using stratified sampling. Finally, to eliminate time truncation
+from sampling, we introduce a novel numerical SDE solver to avoid the divergence during the SDE
+simulation. By combining all of them, we can stably train and sample from diffusion models without
+relying on any heuristics like time truncation. We name the framework of this training and sampling
+scheme for diffusion models _FullDiffusion_ .
+
+
+3.1 PARAMETERIZATION AND NOISE SCHEDULE
+
+
+As described in the previous section, the negative ELBO, _L_ ELBO, in Eq. (11) includes divergent
+coefficients at the time boundaries _t_ = 0 _,_ 1. This indicates that _L_ ELBO almost always diverges to
+infinity in expectation; hence training is infeasible with the ELBO objective unless relying on time
+
+
+4
+
+
+= E **x** 0 E _t,_ _**ϵ**_
+
+
+- _gt_ 2 _∥_ _**ϵ**_ ˆ _**θ**_ _∥_ [2] _−_ _[g]_ _t_ [2] _**ϵ**_ ˆ _[⊤]_ _**θ**_ _**[ϵ]**_ _[ −]_ _[Df][t]_ [+] _[ H]_ [ (] _[q]_ [01] _[, p]_ [1][)] 2 _σt_ [2] _σt_ [2]
+
+
+(11)
+
+
+                 - ��                 _L_ ELBO( **x** 0 _,_ _**θ**_ )
+
+= _J_ DSM ( _**θ**_ ) + const _.,_ (12)
+
+
+where **x** 0 _∼_ _p_ data ( **x** 0), and _pt_ is a marginal distribution of the solution of an SDE defined by the
+estimated score function in Eq. (8). Eq. (12) justifies the minimization of the denoising score matching loss _J_ DSM as maximum likelihood training, since it is equivalent to maximizing the evidence
+lower bound (ELBO).
+
+
+However, when training diffusion models with the ELBO objective, we again encounter numerical
+instability around the boundary points, since the coefficients of _L_ ELBO include divergent terms.
+Therefore, heuristics to avoid the singularity, such as time truncation in Sec. 2.2, are also widely
+used for the maximum likelihood training of diffusion models (Song et al., 2021; Kingma et al.,
+2021). Song et al. (2021) justifies it by demonstrating that the ELBO objective with time truncation
+corresponds to maximizing the ELBO for the perturbed data **x** _t_ min _∼_ _qt_ min as follows:
+
+
+_−_ E [log _pt_ min ( **x** _t_ min; _**θ**_ )] _≤_ _J_ [˜] DSM ( _**θ**_ _, t_ min) + const _.,_ (13)
+
+
+       - 1
+_J_ ˜DSM ( _**θ**_ _, t_ min) =
+
+_t_ min
+
+
+_gt_ [2] _∥_ _**ϵ**_ _−_ _**ϵ**_ ˆ _**θ**_ ( **x** _t, t_ ) _∥_ [2] _dt._ (14)
+2 _σt_ [2]
+
+
+truncation. However, if the noise predictor _**ϵ**_ ˆ _**θ**_ has a structure that nagates the divergence at the time
+boundaries, the divergence of _L_ ELBO can be avoided even when the coefficients are divergent.
+
+
+More specifically, we derive sufficient conditions regarding the noise schedule and the parameterization to eliminate the divergence as follows:
+
+
+   - 1 _−_ 2 _t_ 2    _d_ **x** _t_ = _−t_ _dt_ +
+
+1 _−_ _t_ [2] **[x]** _[t]_ [ + 2ˆ] _**[ν][θ]**_ [ (] **[x]** _[t][, t]_ [)]
+
+
+5
+
+
+1. _ft_ = _−_ 1 _−tt_ [2] [and] _[ g][t]_ [=] - 1 _−_ 2 _tt_ [2] [, which leads to] _[ α][t]_ [=] _√_
+
+
+1 _−_ _t_ [2] and _σt_ = _t_ .
+
+
+2. The noise predictor _**ϵ**_ ˆ _**θ**_ takes the following form:
+_**ϵ**_ ˆ _**θ**_ ( **x** _t, t_ ) = _σt_               - _σt_ [2] **[x]** _[t]_ _[−]_ _[α]_ _t_ [2] _**[ν]**_ [ˆ] _**[θ]**_ [(] **[x]** _[t][, t]_ [)]               - _,_ (15)
+where _**ν**_ ˆ _**θ**_ is some parametric function defined by a neural network (e.g., U-Net).
+
+
+Under this parameterization and noise schedule, _L_ ELBO takes the following form:
+
+_L_ ELBO ( **x** 0; _**θ**_ ) = E    - _αt_ ˆ _**ν**_ ( **x** _t, t_ ) _[⊤]_ [�] _αtσt_ ˆ _**ν**_ ( **x** _t, t_ ) + 2    - _αt_ �1 + _σt_ [2]    - _**ϵ**_ _−_ _σt_ [3] **[x]** [0] �� [�]
+
+
+[1] _[D]_
+
+6 _[∥]_ **[x]** [0] _[∥]_ [2][ +] 2
+
+
++ [1]
+
+
+2
+
+
+- 7 _._ (16)
+6 [+ log (2] _[π]_ [)]
+
+
+The derivation is provided in Appendix A. It can be seen that the divergent coefficients are eliminated from _L_ ELBO under this difinition; hence diffusion models can be trained with this objective
+without relying on time truncation. In addition, the boundary conditions, i.e., ( _α_ 0 _, σ_ 0) = (1 _,_ 0)
+and ( _α_ 1 _, σ_ 1) = (0 _,_ 1), strictly hold for this noise schedule, so this definition does not break the
+correspondence between the true SDE and the estimated SDE.
+
+
+In fact, this parameterization of the noise predictor _**ϵ**_ ˆ _**θ**_ is a very natural choice when we see it
+as an estimator of the score function. Under this definition of _**ϵ**_ ˆ _**θ**_, the estimated score function
+ˆ **s** _**θ**_ = _−_ _**ϵ**_ ˆ _**θ**_ _/σt_ has the following form:
+
+ˆ **s** _**θ**_ ( **x** _t, t_ ) = _αt_ [2] _**[ν]**_ [ˆ] _**[θ]**_ [(] **[x]** _[t][, t]_ [)] _[ −]_ _[σ]_ _t_ [2] **[x]** _[t]_ (17)
+When the time _t_ approaches 1, this score estimator converges to _−_ **x** 1, which corresponds to the score
+function of the standard Gaussian distribution, whereas it converges to _**ν**_ ˆ _**θ**_ ( **x** 0 _,_ 0) as _t_ _→_ 0. Therefore, the neural network _**ν**_ ˆ _**θ**_ ( _·, t_ ) will naturally learn the interpolation between the score function of
+the non-perturbed data **x** 0 and the one of the pure Gaussian distribution of **x** 1 by definition.
+
+
+3.2 VARIANCE REDUCTION VIA STRATIFIED SAMPLING
+
+
+So far, we have focused on a way to fix the divergence of the ELBO itself. However, to train
+diffusion models in a feasible manner, the variance of the Monte Carlo estimate of the ELBO should
+also be small. Song et al. (2021) propose to use importance weighting to reduce the variance of the
+maximum likelihood objective, but it cannot be directly applied to our case due to the difference
+of the parameterization. Instead, we propose to use stratified sampling for the time variable _t_ for
+variance reduction. When we estimate the expectation of the ELBO over the training set using a
+
+
+      -       - _n_
+minbatch of _n_ data **x** [(] 0 _[i]_ [)]
+
+
+_i_ =1 [, we construct an unbiased estimator of the expectation as follows:]
+
+
+E **x** 0 [ _L_ ELBO ( **x** 0; _**θ**_ )]
+
+
+_n_
+
+- _αti_ ˆ _**νθ**_ - **x** [(] _ti_ _[i]_ [)] _[, t][i]_ - _⊤_ - _αtiσti_ ˆ _**νθ**_ - **x** [(] _ti_ _[i]_ [)] _[, t][i]_ - + 2 - _αti_ �1 + _σt_ [2] _i_ - _**ϵ**_ _−_ _σt_ [3] _i_ **[x]** 0 [(] _[i]_ [)] �� [�]
+
+_i_ =1
+
+
+= E
+
+
+1
+
+_n_
+
+
+- 7 _,_ (18)
+6 [+ log (2] _[π]_ [)]
+
+
++ [1]
+
+6 _n_
+
+
+_n_
+
+
+_i_ =1
+
+
+2
+( _i_ )
+��� **x** 0 ��� + _[D]_ 2
+
+
+where _ti_ _∼U_ ( _ti_ ; ( _i −_ 1) _/n, i/n_ ). We experimentally observe that this technique is effective to
+reduce the variance of the Monte-Carlo estimation and stabilize the training.
+
+
+3.3 FULLDIFFUSION-SOLVER: A SPECIAL SDE SOLVER FOR FULLDIFFUSION
+
+
+Under our parameterization, the reverse-time diffusion in Eq. (8) takes the following form:
+
+
+~~�~~ 2 _t_
+1 _−_ _t_ [2] _[d]_ **[w]** [ ¯] (19)
+
+
+**Algorithm 1** FullDiffusion-Solver-1
+**Require:** Number of discritization steps _M_, Predictor _**ν**_ ˆ _**θ**_
+
+**x** _s_ _∼N_ ( **x** _s_ ; **0** _,_ _**I**_ )
+_s ←_ 1
+**for** _i ←_ 1 to _M_ **do**
+
+_t ←_ _s −_ 1 _/M_
+
+**x** _t_ _∼N_   - **x** _t_ ;   - 11 _−−st_ [2][2] ��1 + _s_ [2] _−_ _t_ [2][�] **x** _s_ +   - _s_ [2] _−_ _t_ [2][�] _**ν**_ ˆ _**θ**_ ( **x** _s, s_ )� _,_ _ts_ [2][2] ((1 _s_ [2] _−−tt_ [2][2] )) _**[I]**_   
+_s ←_ _t,_ **x** _s_ _←_ **x** _t_
+**end for**
+**return x** _t_
+
+
+Since the coefficients of the first and last terms diverges at _t_ = 1, it is still difficult to simulate
+it using a naive SDE solver, such as the Euler–Maruyama method. However, we can avoid the
+singularity by utilizing the semi-linear structure of the SDE as proposed by Lu et al. (2022a;b).
+First, we reformulate the SDE with the signal predictor **x** ˆ _**θ**_ as follows:
+
+
+where 0 _< c ≤_ 1 _,_ _r_ = _s_ + _c_ ( _t −_ _s_ ). We set _c_ = 2 _/_ 3, which is known as the Ralston’s method (Ralston, 1962) that has the smallest local approximation error among two-stage RK methods. The algorithms of our solvers are summarized in Algorithms 1 and 2. We name our first- and second-order
+solvers _FullDiffusion-Solver-1_ and _-2_, respectively.
+
+
+As Song et al. (2020b) pointed out, there exists a corresponding probability flow ODE that shares
+the same marginal density with the forward SDE in Eq. (1).
+
+
+           -            _d_ **x** _t_ = _ft_ **x** _t −_ [1] _t_ **[s]** _[t]_ [(] **[x]** _[t]_ [)] _dt_ (29)
+
+2 _[g]_ [2]
+
+
+6
+
+
+2 
+1 _−_ _t_ [2] **[x]** [ˆ] _**[θ]**_ [ (] **[x]** _[t][, t]_ [)] _dt_ +
+
+
+- 2 _t_
+1 _−_ _t_ [2] _[d]_ **[w]** [ ¯] _[,]_ (20)
+
+
+_d_ **x** _t_ = [1]
+
+_t_
+
+
+- 2 _−_ _t_ 2
+
+
+2 _−_ _t_ 2
+
+1 _−_ _t_ [2] **[x]** _[t][ −]_ ~~_√_~~ 1
+
+
+where **x** ˆ _**θ**_ ( **x** _t, t_ ) = ( **x** _t −_ _**ϵ**_ ˆ _**θ**_ ( **x** _t, t_ )) _/αt_
+(21)
+= _αt_ ��1 + _σt_ [2]          - **x** _t_ + _σt_ [2] _**[ν]**_ [ˆ] _**[θ]**_ [(] **[x]** _[t][, t]_ [)]          
+The solution for this SDE given the initial state **x** _s_ can be analytically derived as follows:
+
+
+- _t_ 2 _−u_ [2]
+_τ_ _u_ 1 _−u_
+
+
+_u_ (1 _−u_ [2] ) _[du]_
+_d_ **w** _τ_ (22)
+
+
+- _t_ 2 _−u_ [2]
+_τ_ _u_ 1 _−u_
+
+
+~~_√_~~
+_τ_
+
+
+- _t_ 2 _−u_ [2]
+_s_ _u_ 1 _−u_ [2]
+
+
+_u_ (1 _−u_ [2] ) _[du]_
+
+
+(1 _−u_ [2] ) - _t_
+
+**x** ˆ _**θ**_ ( **x** _τ_ _, τ_ ) _dτ_ +
+1 _−_ _τ_ [2] _s_
+
+
+**x** _t_ = _e_
+
+
+2 _−u_ [2]  - _t_
+
+_u_ (1 _−u_ [2] ) _[du]_
+**x** _s −_
+
+
+2 _e_
+
+
+_s_
+
+
+- 2 _τ_
+1 _−_ _τ_ [2] _[e]_
+
+
+_s_
+
+
+1
+**x** ˆ _**θ**_ ( **x** _τ_ _, τ_ ) _dτ_ +
+_στ_ [3]
+
+
+= _[α][s][σ]_ _t_ [2] **x** _s −_ [2] _[σ]_ _t_ [2]
+_αtσs_ [2] _αt_
+
+
+- _t_
+
+
+_s_
+
+
+- _t_
+
+_στ_ _[−]_ [3] _[/]_ [2] _d_ **w** _τ_ _,_ (23)
+_s_
+
+
+_√_
+
+
+2 _σt_ [2]
+_αt_
+
+
+where 0 _≤_ _t_ _<_ _s_ _≤_ 1. Using a first-order approximation for the second term, we can derive a
+first-order solver for the SDE:
+
+
+**x** _t_ _≈_ _[t]_ [2] _[√]_
+
+~~_[√]_~~
+
+
+1 _−_ _s_ [2] _s_ [2] _−_ _t_ [2]
+
+1 _−_ _t_ [2] **[x]** _[s]_ [ +] _s_ [2] ~~_[√]_~~ 1 _−_
+
+
+~~_√_~~
+_s_
+
+
+1 _−_ _t_ [2] _**[ξ]**_ (24)
+
+
+1 _−_ _s_ [2]
+
+
+_s_ [2] ~~_[√]_~~
+
+
+_s_ [2] ~~_[√]_~~
+
+
+_√_
+
+_−_ _t_ [2]
+
+_[t]_ ~~_√_~~
+1 _−_ _t_ [2] **[x]** [ˆ] _**[θ]**_ [ (] **[x]** _[s][, s]_ [) +] _s_
+
+
+_s_ [2] _−_ _t_ [2]
+
+
+=
+
+
+~~�~~ 1 _−_ _s_ [2]
+
+
+1 _−_ _s_ [2] ��1 + _s_ [2] _−_ _t_ [2][�] **x** _s_ + - _s_ [2] _−_ _t_ [2][�] _**ν**_ ˆ _**θ**_ ( **x** _s, s_ )� + _[t]_
+
+1 _−_ _t_ [2] _s_
+
+
+_s_
+
+
+~~�~~ _s_ [2] _−_ _t_ [2]
+
+1 _−_ _t_ [2] _**[ξ]**_ (25)
+
+
+:= **x** ˜ _t_ (26)
+
+
+where _**ξ**_ _∼N_ ( _**ξ**_ ; **0** _,_ _**I**_ ). Since _s_ _>_ 0 and _t_ _<_ 1 always hold, this solver does not suffer from the
+divergence at all timesteps; hence it can be applied without relying on time truncation.
+
+
+Furthermore, we can extend it to a second-order approximation using the Runge–Kutta (RK)
+method (Runge, 1895; Kutta, 1901; R¨oßler, 2009) as follows:
+
+
+**x** _t_ _≈_ _[t]_ [2] _[√]_
+
+~~_[√]_~~
+
+
+1 _−_ _s_ [2] _s_ [2] _−_ _t_ [2]
+
+1 _−_ _t_ [2] **[x]** _[s]_ [ +] _s_ [2] ~~_[√]_~~ 1 _−_
+
+
+1 _−_ _s_ [2]
+
+
+_s_ [2] ~~_[√]_~~
+
+
+**x** ˆ _**θ**_ ( **x** _s, s_ ) + [1]
+
+
+_√_
+
+    
+[1] + _[t]_ ~~_√_~~
+
+2 _c_ **[x]** [ˆ] _**[θ]**_ [ (˜] **[x]** _[r][, r]_ [)] _s_
+
+
+~~_√_~~
+_s_
+
+
+_s_ [2] _−_ _t_ [2]
+
+
+1 _−_ _t_ [2] _**[ξ]**_ (27)
+
+
+_s_ [2] ~~_[√]_~~
+
+
+1 _−_ _t_ [2]
+
+
+��
+1 _−_ [1]
+
+2 _c_
+
+
+_s_ [2] _−_ _t_ [2]
+= **x** ˜ _t_ + ~~_[√]_~~
+
+
+2 _cs_ [2] ~~_[√]_~~
+
+
+1 _−_ _t_ [2] [(ˆ] **[x]** _**[θ]**_ [ (˜] **[x]** _[r][, r]_ [)] _[ −]_ **[x]** [ˆ] _**[θ]**_ [ (] **[x]** _[s][, s]_ [))] _[,]_ (28)
+
+
+**Algorithm 2** FullDiffusion-Solver-2
+**Require:** Number of discritization steps _M_, Predictor _**ν**_ ˆ _**θ**_
+
+**x** _s_ _∼N_ ( **x** _s_ ; **0** _,_ _**I**_ )
+_s ←_ 1
+**for** _i ←_ 1 to _M_ **do**
+
+_t ←_ _s −_ 1 _/M,_ _r_ _←_ _s −_ 2 _/_ (3 _M_ )
+_**ξ**_ _∼N_ ( _**ξ**_ ; **0** _,_ _**I**_ )
+
+_**ν**_ ˆ _s_ _←_ _**ν**_ ˆ _**θ**_ ( **x** _s, s_ )
+
+
+By approximating the score function **s** _t_ ( _·_ ) with the estimator ˆ **s** _**θ**_ ( _·, t_ ) = _−_ _**ϵ**_ ˆ _**θ**_ ( _·, t_ ) _/σt_, the ODE
+takes the following simple form under the noise schedule and the parameterization in Section 3.1:
+
+
+_d_ **x** _t_ = _−σt_ ( **x** _t_ + _**ν**_ ˆ _**θ**_ ( **x** _t, t_ )) _dt_ (30)
+
+
+Therefore, when using an ODE sampler, we do not need to care about the numerical instability, and
+can use any sampler, such as the Euler method, the Heun’s method and so forth. In addition, we
+can evaluate the exact likelihood of the ODE via the instantaneous change of variables formula as
+proposed in Song et al. (2020b).
+
+
+4 RELATED WORKS
+
+
+4.1 NUMERICAL INSTABILITY IN DIFFUSION MODELS
+
+
+The numerical instability of continuous-time diffusion models around the boundary points has been
+widely recognized ever since the original paper by Song & Ermon (2019). However, to the best of
+our knowledge, almost all previous works still rely on time truncation to deal with it (Kingma et al.,
+2021; Karras et al., 2022). One of the most related attempts regarding this topic is a technique called
+_soft_ _truncation_ (Kim et al., 2022), in which the truncation time _t_ min is randomly chosen during
+training. Although soft truncation alleviates the numerical instablity during training, it still requires
+the choice of a minimum truncation time. Yang et al. (2024) have also tackled the issue of the
+numerical instability, and pointed out that the Lipschitz constant of the noise predictor _**ϵ**_ ˆ _**θ**_ tends to
+diverge near the boundary point at _t_ = 0. To alleviate it, they propose to round the time variable
+_t_ near the boundary point with a staircase function when inputting small _t_ to the noise predictor.
+While they experimentally demonstrate the effectiveness of this method, they only apply it to the
+discrete-time diffusion model, so the applicability to the continuous-time model is still unclear.
+Moreover, the rounding operation loses information about time near the boundary point, which may
+leads to performance degradation especially for continuous-time models. On the other hand, our
+method can fundamentally solve the problem of numerical instability by the design of the model
+parameterization, the noise schedule, and the numerical solver.
+
+
+4.2 MAXIMUM LIKELIHOOD TRAINING OF DIFFUSION MODELS
+
+
+Originally, Ho et al. (2020) derived an ELBO objective for the discrete-time diffusion model, but
+they experimentally show that a non-ELBO objective performs better in terms of the sample quality.
+After Song et al. (2020b) reformulate the continuous-time diffusion model using stochastic differential equations, Song et al. (2021) and Huang et al. (2021) derive the corresponding ELBO objective
+for it. In previous works, it is reported that the ELBO objective tends to perform better in terms of
+
+
+7
+
+
+**x** ˜ _r_ _←_ - 11 _−−rs_ [2][2] ��1 + _s_ [2] _−_ _r_ [2][�] **x** _s_ + - _s_ [2] _−_ _r_ [2][�] _**ν**_ ˆ _s_ - + _[r]_ _s_
+
+
+1 _−r_ [2] _**[ξ]**_
+
+
+_[r]_ - _s_ [2] _−r_ [2]
+
+_s_ 1 _−r_ [2]
+
+
+_[t]_ - _s_ [2] _−t_ [2]
+
+_s_ 1 _−t_ [2]
+
+
+**x** ˜ _t_ _←_ - 11 _−−st_ [2][2] ��1 + _s_ [2] _−_ _t_ [2][�] **x** _s_ + - _s_ [2] _−_ _t_ [2][�] _**ν**_ ˆ _s_ - + _s_ _[t]_
+
+
+**x** ˜ _t_ _←_ 1 _−t_ [2] 1 + _s_ _−_ _t_ **x** _s_ + _s_ _−_ _t_ _**ν**_ ˆ _s_ + _s_ 1 _−t_ [2] _**[ξ]**_
+
+_**ν**_ ˆ _r_ _←_ _**ν**_ _√_ ˆ _**θ**_ (˜ **x** _r, r_ ) _√_
+**x** ˆ _s_ _←_ 1 _−_ _s_ [2] [��] 1 + _s_ [2][�] **x** _s_ + _s_ [2] _**ν**_ ˆ _s_ - _,_ **x** ˆ _r_ _←_ 1 _−_ _r_ [2] [��] 1 + _r_
+
+
+_r_ _√_
+
+1 _−_ _s_ [2] [��] 1 + _s_ [2][�] **x** _s_ + _s_ [2] _**ν**_ ˆ _s_ - _,_ **x** ˆ _r_ _←_
+
+
+1 _−_ _r_ [2] [��] 1 + _r_ [2][�] **x** ˜ _r_ + _r_ [2] _**ν**_ ˆ _r_ 
+
+
+3( _s_ [2] _−t_ [2] )
+**x** _t_ _←_ **x** ˜ _t_ + 4 _s_ [2] ~~_[√]_~~ 1 _−t_ [2] [(ˆ] **[x]** _[r][ −]_ **[x]** [ˆ] _[s]_ [)]
+
+_s ←_ _t,_ **x** _s_ _←_ **x** _t_
+**end for**
+**return x** _t_
+
+
+Table 1: Negative log-likelihood (bits/dim) and sample quality (FID scores) on CIFAR-10 and ImageNet 32 _×_ 32. Bold indicates best result in the corresponding column. Lower is better.
+
+CIFAR-10 ImageNet 32 _×_ 32
+Model
+
+NLL FID NLL FID
+
+
+_t_ min SDE ODE SDE ODE SDE ODE SDE ODE
+
+Baseline 10 _[−]_ [5] _≤_ 3 _._ 28 3 _._ 16 2 _._ 55 3 _._ 98 _≤_ 3 _._ 62 3 _._ 56 5 _._ 42 5 _._ 68
++ ELBO loss 10 _[−]_ [5] _≤_ 3 _._ 08 2 _._ 95 5 _._ 87 6 _._ 03 _≤_ 3 _._ 61 3 _._ 55 11 _._ 15 14 _._ 14
+
+
+FullDiffusion **0** _≤_ **2** _._ **83** **2** _._ **80** **2** _._ **53** **2** _._ **89** _≤_ **3** _._ **41** **3** _._ **41** **5** _._ **00** **5** _._ **02**
+
+_−_ Var. reduction **0** _≤_ 2 _._ 86 2 _._ 85 2 _._ 58 2 _._ 92 _≤_ 3 _._ 50 3 _._ 48 5 _._ 13 5 _._ 18
+
+
+the likelihood evaluation, but the sample quality is likely to degrade compared to the simple noise
+prediction loss (i.e., _λt_ = _σt_ [2][).] [However, we experimentally observe that, when using our method,]
+the ELBO objective shows good performance in terms of both likelihood and sample quality, which
+will be shown in Section 5.
+
+
+4.3 PARAMETERIZATION & NOISE SCHEDULE
+
+
+In the original paper by Song & Ermon (2019), the noise predictor _**ϵ**_ ˆ _**θ**_ is directly parameterized by a neural network (e.g., U-Net), and many subsequent works follow that parameterization. However, some variants are also proposed in the previous works, such as the signal predictor
+**x** ˆ _**θ**_ = ( **x** _t −_ _**ϵ**_ ˆ _**θ**_ ) _/αt_, the velocity predictor **v** ˆ _**θ**_ = (ˆ _**ϵθ**_ _−_ _σt_ **x** _t_ ) _/αt_ (Salimans & Ho, 2022). However, these variants also suffer from the numerical instability around the boundary points, so they do
+not contribute to our motivation.
+
+On the noise schedule, Song & Ermon (2019) use the linear _gt_ [2] [schedule as described in Section 2.2,]
+but many variants have been proposed in previous works. For example, the cosine _αt_ schedule is
+often used (Nichol & Dhariwal, 2021; Salimans & Ho, 2022; Choi et al., 2022). In this paper, we
+show that the combination of the linear _σt_ schedule and the parameterization in Eq. (15) contributes
+to the stable maximum likelihood training without time truncation. However, there might be other
+variants to achive the same goal, which we leave as future work.
+
+
+5 EXPERIMENT
+
+
+To demonstrate the effectiveness of our FullDiffusion, we perform experiments of image generation
+and density estimation tasks. We use DDPM++ (Song & Ermon, 2019) for VP SDE as a baseline
+model, and perform an ablation study by modifying the design of parameterization, noise schedule,
+and numerical solvers as explained in Section 3. We also compare with DDPM++ trained with
+the ELBO objective as proposed in Song et al. (2021). Our experimental settings are based on the
+original papers by Song et al. (2020b; 2021), and our implementations are also based on their official
+codes.
+
+
+**Datasets:** In our experiment, we use the CIFAR-10 and downsampled ImageNet (Deng et al., 2009)
+datasets. Note that the old version of the downsampled ImageNet dataset used in Song et al. (2021)
+is no longer available, so we adopt the new version of 32 _×_ [32 resolution images provided at https:](https://image-net.org)
+[//image-net.org.](https://image-net.org) For fair comparison, we reimplement the official codes of Song et al. (2021)
+for the new version of the downsampled ImageNet dataset, and compare the performance under the
+same settings. Following the setting of Song & Ermon (2019); Song et al. (2021), we use uniform
+dequantization to map the 8-bit images into a continuous space, since diffusion models are designed
+for continuous data. We did not adopt variational dequantization in this experiment.
+
+
+**Evaluation:** We evalutate the model performance with the negative log-liklihooed of the reverse
+SDE and the probability flow ODE, and the Fr´echet inception distance (FID) of the generated images
+via SDE/ODE samplers. Since the negative log-likelihood for the reverse SDE is intractable, we
+report its upper bound as in Song et al. (2021). We use FullDiffusion-Solver-2 introduced in Section
+
+
+8
+
+
+(a) Ablation of Stratified Sampling (b) NFE vs FID
+
+
+Figure 1: (a) Training curves of FullDiffusion with/without stratified sampling (SS). (b) Sample
+quality measured by FID of the baseline model (DDPM++) and FullDiffusion (FD) for CIFAR-10.
+For the baseline model, the Euler–Maruyama (EM) solver is applied.
+
+
+3.3 and Euler method as SDE and ODE solvers respectively in order to generate samples for FID
+evaluation of the FullDiffusion model.
+
+
+The result is summarized in Table 1. Our key observations are as follows:
+
+
+    - FullDiffusion consistently performs beter than the baseline models in terms of both the
+test likelihood and the FID, whereas previous studies have reported that there is a trade-off
+between likelihood and FID, and models trained with an ELBO objective tend to perform
+poorer in terms of FID. This may be due to the fact that our method eliminates numerical
+instability in maximum likelihood training and sampling.
+
+    - FullDiffusion tends to have small gaps between SDE and ODE in the likelihood evaluation.
+This indicates that FullDiffusion has a tight variational lower bound.
+
+    - Variance reduction via stratified sampling slightly improves the overall performance in
+terms of both the likelihood and the FID.
+
+
+**Effect of variance reduction:** To demonstrate the effectiveness of the stratified sampling for variance reduction of the Monte-Carlo estimate, we provide learning curves when training FullDiffusion
+for CIFAR-10 with or without the stratified sampling in Figure 1 (a). It can be seen that the loss variance is significantly reduced by introducing stratified sampling. Although the variance is relatively
+small even without stratified sampling, FullDiffusion can be trained more stably by using it.
+
+
+**Performance of FullDiffusion-Solvers:** We also compare the performance of our first- and secondorder FullDiffusion-Solvers in terms of sample quality measured by FID scores for CIFAR-10. We
+vary different number of function evaluations (NFE) which is the numebr of calls to the model
+_**ν**_ ˆ _**θ**_ . The results are shown in Figure 1 (b). We observe that the FID converges to good sample
+quality around 100 NFE even with the first-order solver, and the convergence accelerates slightly
+by using the second-order solver, whereas the original DDPM++ requires about 1,000 NFE with
+the Euler–Maruyama method to reach good quality. This indicates that our FullDiffusion-Solvers
+are effective not only to avoid the divergence at the boundary points but also to efficiently generate
+samples compared to naive solvers (e.g., the Euler–Maruyama method). The generated samples of
+CIFAR-10 by our FullDiffusion-Solver-2 are visualized in Figure 2.
+
+
+6 CONCLUSION
+
+
+In this paper, we propose FullDiffusion, a framework to train and infer score-based diffusion models
+without relying on time truncation around the boundary points. To overcome inherent numerical instability of diffusion models, we reformulate the parameterization and the noise schedule so that the
+maximum likelihood objective does not diverge around the boundary points. Moreover, to avoid the
+divergence during SDE simulation, we propose a special SDE solver named FullDiffusion-Solver.
+
+
+9
+
+
+(a) CIFAR-10 (b) ImageNet-32
+
+
+Figure 2: Generated samples of (a) CIFAR-10 and (b) ImageNet-32 by FullDiffusion-Solver-2.
+
+
+By combining these techniques, we completely eliminate heuristics like time truncation to alleviate
+the numerical instability from continuouse-time diffusion models. We experimentally observe that
+our FullDiffusion consistently outperforms the baseline models in terms of both likelihood evaluation and sample quality measured by FID scores. Our experiments only include low-resolution
+image generation, such as CIFAR-10, so validation in more large-scale and high-resolution datasets
+is promising future direction. We hope that this work will help practioners eliminate troublesome
+hyperparameter tunings regarding numerical instability (e.g., truncation time _t_ min) of diffusion models.
+
+
+REFERENCES
+
+
+Michael Samuel Albergo and Eric Vanden-Eijnden. Building normalizing flows with stochastic
+interpolants. In _The Eleventh International Conference on Learning Representations_, 2023. URL
+[https://openreview.net/forum?id=li7qeBbCR1t.](https://openreview.net/forum?id=li7qeBbCR1t)
+
+
+Jooyoung Choi, Jungbeom Lee, Chaehun Shin, Sungwon Kim, Hyunwoo Kim, and Sungroh Yoon.
+Perception prioritized training of diffusion models. In _Proceedings of the IEEE/CVF Conference_
+_on Computer Vision and Pattern Recognition (CVPR)_, pp. 11472–11481, June 2022.
+
+
+J. Deng, W. Dong, R. Socher, L.-J. Li, K. Li, and L. Fei-Fei. ImageNet: A Large-Scale Hierarchical
+Image Database. In _CVPR09_, 2009.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Chin-Wei Huang, Jae Hyun Lim, and Aaron C Courville. A variational perspective on
+diffusion-based generative models and score matching. In M. Ranzato, A. Beygelzimer, Y. Dauphin, P.S. Liang, and J. Wortman Vaughan (eds.), _Advances_ _in_ _Neural_ _In-_
+_formation_ _Processing_ _Systems_, volume 34, pp. 22863–22876. Curran Associates, Inc.,
+2021. URL [https://proceedings.neurips.cc/paper_files/paper/2021/](https://proceedings.neurips.cc/paper_files/paper/2021/file/c11abfd29e4d9b4d4b566b01114d8486-Paper.pdf)
+[file/c11abfd29e4d9b4d4b566b01114d8486-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2021/file/c11abfd29e4d9b4d4b566b01114d8486-Paper.pdf)
+
+
+Aapo Hyv¨arinen and Peter Dayan. Estimation of non-normalized statistical models by score matching. _Journal of Machine Learning Research_, 6(4), 2005.
+
+
+Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of
+diffusion-based generative models. In Alice H. Oh, Alekh Agarwal, Danielle Belgrave, and
+Kyunghyun Cho (eds.), _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 2022. URL
+[https://openreview.net/forum?id=k7FuTOWMOc7.](https://openreview.net/forum?id=k7FuTOWMOc7)
+
+
+10
+
+
+Dongjun Kim, Seungjae Shin, Kyungwoo Song, Wanmo Kang, and Il-Chul Moon. Soft truncation:
+A universal training technique of score-based diffusion model for high precision score estimation. In Kamalika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesvari, Gang Niu, and Sivan
+Sabato (eds.), _Proceedings_ _of_ _the_ _39th_ _International_ _Conference_ _on_ _Machine_ _Learning_, volume
+162 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp. 11201–11228. PMLR, 17–23 Jul 2022.
+[URL https://proceedings.mlr.press/v162/kim22i.html.](https://proceedings.mlr.press/v162/kim22i.html)
+
+
+Diederik Kingma and Ruiqi Gao. Understanding diffusion objectives as the elbo
+with simple data augmentation. In A. Oh, T. Naumann, A. Globerson, K. Saenko,
+M. Hardt, and S. Levine (eds.), _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, volume 36, pp. 65484–65516. Curran Associates, Inc., 2023. URL
+[https://proceedings.neurips.cc/paper_files/paper/2023/file/](https://proceedings.neurips.cc/paper_files/paper/2023/file/ce79fbf9baef726645bc2337abb0ade2-Paper-Conference.pdf)
+[ce79fbf9baef726645bc2337abb0ade2-Paper-Conference.pdf.](https://proceedings.neurips.cc/paper_files/paper/2023/file/ce79fbf9baef726645bc2337abb0ade2-Paper-Conference.pdf)
+
+
+Diederik Kingma, Tim Salimans, Ben Poole, and Jonathan Ho. Variational diffusion models.
+In M. Ranzato, A. Beygelzimer, Y. Dauphin, P.S. Liang, and J. Wortman Vaughan (eds.),
+_Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 34, pp. 21696–21707. Curran
+Associates, Inc., 2021. URL [https://proceedings.neurips.cc/paper_files/](https://proceedings.neurips.cc/paper_files/paper/2021/file/b578f2a52a0229873fefc2a4b06377fa-Paper.pdf)
+[paper/2021/file/b578f2a52a0229873fefc2a4b06377fa-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2021/file/b578f2a52a0229873fefc2a4b06377fa-Paper.pdf)
+
+
+Peter Eris Kloeden, Eckhard Platen, and Henri Schurz. _Numerical solution of SDE through computer_
+_experiments_ . Springer Science & Business Media, 2012.
+
+
+Wilhelm Kutta. _Beitrag zur n¨aherungsweisen Integration totaler Differentialgleichungen_ . Teubner,
+1901.
+
+
+Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maximilian Nickel, and Matthew Le. Flow
+matching for generative modeling. In _The Eleventh International Conference on Learning Repre-_
+_sentations_, 2023. [URL https://openreview.net/forum?id=PqvMRDCJT9t.](https://openreview.net/forum?id=PqvMRDCJT9t)
+
+
+Xingchao Liu, Chengyue Gong, and qiang liu. Flow straight and fast: Learning to generate and
+transfer data with rectified flow. In _The_ _Eleventh_ _International_ _Conference_ _on_ _Learning_ _Repre-_
+_sentations_, 2023. [URL https://openreview.net/forum?id=XVjTT1nw5z.](https://openreview.net/forum?id=XVjTT1nw5z)
+
+
+Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan LI, and Jun Zhu. Dpm-solver: A
+fast ode solver for diffusion probabilistic model sampling in around 10 steps. In S. Koyejo,
+S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh (eds.), _Advances_ _in_ _Neu-_
+_ral_ _Information_ _Processing_ _Systems_, volume 35, pp. 5775–5787. Curran Associates, Inc.,
+2022a. URL [https://proceedings.neurips.cc/paper_files/paper/2022/](https://proceedings.neurips.cc/paper_files/paper/2022/file/260a14acce2a89dad36adc8eefe7c59e-Paper-Conference.pdf)
+[file/260a14acce2a89dad36adc8eefe7c59e-Paper-Conference.pdf.](https://proceedings.neurips.cc/paper_files/paper/2022/file/260a14acce2a89dad36adc8eefe7c59e-Paper-Conference.pdf)
+
+
+Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver++: Fast
+solver for guided sampling of diffusion probabilistic models. _arXiv preprint arXiv:2211.01095_,
+2022b.
+
+
+Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models. In Marina Meila and Tong Zhang (eds.), _Proceedings_ _of_ _the_ _38th_ _International_ _Confer-_
+_ence_ _on_ _Machine_ _Learning_, volume 139 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp.
+8162–8171. PMLR, 18–24 Jul 2021. URL [https://proceedings.mlr.press/v139/](https://proceedings.mlr.press/v139/nichol21a.html)
+[nichol21a.html.](https://proceedings.mlr.press/v139/nichol21a.html)
+
+
+Anthony Ralston. Runge-kutta methods with minimum error bounds. _Mathematics of computation_,
+16(80):431–437, 1962.
+
+
+Andreas R¨oßler. Second order runge–kutta methods for itˆo stochastic differential equations. _SIAM_
+_Journal on Numerical Analysis_, 47(3):1713–1738, 2009.
+
+
+Carl Runge. Uber die numerische aufl¨osung von differentialgleichungen. [¨] _Mathematische Annalen_,
+46(2):167–178, 1895.
+
+
+Tim Salimans and Jonathan Ho. Progressive distillation for fast sampling of diffusion models. In
+_International Conference on Learning Representations_, 2022. [URL https://openreview.](https://openreview.net/forum?id=TIdIXIpzhoI)
+[net/forum?id=TIdIXIpzhoI.](https://openreview.net/forum?id=TIdIXIpzhoI)
+
+
+11
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _International_ _conference_ _on_ _machine_ _learn-_
+_ing_, pp. 2256–2265. PMLR, 2015.
+
+
+Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribution.
+_Advances in neural information processing systems_, 32, 2019.
+
+
+Yang Song and Stefano Ermon. Improved techniques for training score-based generative models.
+_Advances in neural information processing systems_, 33:12438–12448, 2020.
+
+
+Yang Song, Sahaj Garg, Jiaxin Shi, and Stefano Ermon. Sliced score matching: A scalable approach
+to density and score estimation. In _Uncertainty_ _in_ _Artificial_ _Intelligence_, pp. 574–584. PMLR,
+2020a.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. In _Interna-_
+_tional Conference on Learning Representations_, 2020b.
+
+
+Yang Song, Conor Durkan, Iain Murray, and Stefano Ermon. Maximum likelihood training of
+score-based diffusion models. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 34:1415–
+1428, 2021.
+
+
+Pascal Vincent. A connection between score matching and denoising autoencoders. _Neural compu-_
+_tation_, 23(7):1661–1674, 2011.
+
+
+Zhantao Yang, Ruili Feng, Han Zhang, Yujun Shen, Kai Zhu, Lianghua Huang, Yifei Zhang,
+Yu Liu, Deli Zhao, Jingren Zhou, and Fan Cheng. Lipschitz singularities in diffusion models.
+In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2024. URL [https:](https://openreview.net/forum?id=WNkW0cOwiz)
+[//openreview.net/forum?id=WNkW0cOwiz.](https://openreview.net/forum?id=WNkW0cOwiz)
+
+
+Kaiwen Zheng, Cheng Lu, Jianfei Chen, and Jun Zhu. Improved techniques for maximum likelihood
+estimation for diffusion ODEs. In Andreas Krause, Emma Brunskill, Kyunghyun Cho, Barbara
+Engelhardt, Sivan Sabato, and Jonathan Scarlett (eds.), _Proceedings_ _of_ _the_ _40th_ _International_
+_Conference_ _on_ _Machine_ _Learning_, volume 202 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_,
+pp. 42363–42389. PMLR, 23–29 Jul 2023. URL [https://proceedings.mlr.press/](https://proceedings.mlr.press/v202/zheng23c.html)
+[v202/zheng23c.html.](https://proceedings.mlr.press/v202/zheng23c.html)
+
+
+12
+
+
+A DERIVATION OF EQ. (16)
+
+
+_L_ ELBO ( **x** 0 _,_ _**θ**_ ) = E - _gt_ 2 _∥_ _**ϵ**_ ˆ _**θ**_ _∥_ [2] _−_ _[g]_ _t_ [2] _**ϵ**_ ˆ _[⊤]_ _**θ**_ _**[ϵ]**_ _[ −]_ _[Df][t]_ [+] _[ H]_ [ (] _[q]_ [01] _[, p]_ [1][)] - (31)
+2 _σt_ [2] _σt_ [2]
+
+
+For the derivation, we have used the following facts:
+
+E           - _∥_ _**ϵ**_ _∥_ [2][�] = _D,_ E           - _**ϵ**_ _[⊤]_ **x** 0� = 0 _._ (38)
+
+
+B DETAILS OF EXPERIMENTAL SETUPS
+
+
+B.1 CODE
+
+
+Our implementation for the experiment is available at [https://anonymous.4open.](https://anonymous.4open.science/r/fulldiffusion_iclr2025-54A1/)
+[science/r/fulldiffusion_iclr2025-54A1/.](https://anonymous.4open.science/r/fulldiffusion_iclr2025-54A1/)
+
+
+B.2 TOTAL AMOUNT OF COMPUTE
+
+
+We run our experiments mainly on cloud GPU instances with 8 _×_ A100. It took approximately 330
+hours for our experiments in total.
+
+
+B.3 LICENSE OF ASSETS
+
+
+**Datasets:** The terms of access for the CIFAR-10 database is provided at [https://www.cs.](https://www.cs.toronto.edu/~kriz/cifar.html)
+[toronto.edu/˜kriz/cifar.html](https://www.cs.toronto.edu/~kriz/cifar.html) The terms of access for the ImageNet database is pro[vided at https://www.image-net.org/download.](https://www.image-net.org/download)
+
+
+**Code:** Our implementation is based on the official PyTorch code of Song et al. (2020b) provided at
+[https://github.com/yang-song/score_sde_pytorch/tree/main.](https://github.com/yang-song/score_sde_pytorch/tree/main)
+
+
+C APPENDIX
+
+
+You may include other additional sections here.
+
+
+13
+
+
+  - 1
+= E _**ϵ**_ ˆ _[⊤]_ _**θ**_ [(ˆ] _**[ϵ][θ]**_ _[−]_ [2] _**[ϵ]**_ [) +] _[Dσ][t]_
+_αt_ [2] _[σ][t]_ _αt_ [2]
+
+
++ _[D]_ (32)
+
+2 [(1 + log (2] _[π]_ [))]
+
+
+  - 1
+= E
+_αt_ [2]
+
+
+- _σt_ [2] **[x]** _[t]_ _[−]_ _[α]_ _t_ [2] _**[ν]**_ [ˆ] _**[θ]**_ - _⊤_ - _σt_ - _σt_ [2] **[x]** _[t]_ _[−]_ _[α]_ _t_ [2] _**[ν]**_ [ˆ] _**[θ]**_ - _−_ 2 _**ϵ**_ - + _[Dσ][t]_
+
+_αt_ [2]
+
+
++ _[D]_ (33)
+
+2 [(1 + log (2] _[π]_ [))]
+
+
+  - 1
+= E
+_αt_ [2]
+
+
+- _αtσt_ [2] **[x]** [0] _[−]_ _[α]_ _t_ [2] _**[ν]**_ [ˆ] _**[θ]**_ [+] _[ σ]_ _t_ [3] _**[ϵ]**_ - _⊤_ - _αtσt_ [3] **[x]** [0] _[−]_ _[α]_ _t_ [2] _[σ][t]_ _**[ν]**_ [ˆ] _**[θ]**_ [+] - _σt_ [4] _[−]_ [2] - _**ϵ**_ - + _[Dσ][t]_
+
+_αt_ [2]
+
+
++ _[D]_ (34)
+
+2 [(1 + log (2] _[π]_ [))]
+
+= E - _σt_ �� _σt_ 2 **[x]** [0] _[−]_ _[α][t]_ _**[ν]**_ [ˆ] _**[θ]**_ ��2 + 2 _αt_ 2 �1 + _σt_ [2] - _**ϵ**_ _[⊤]_ _**ν**_ ˆ _**θ**_ + _Dσt_ - _σt_ [4] [+] _[ σ]_ _t_ [2] _[−]_ [1] - [�]
+
++ _[D]_ (35)
+
+2 [(1 + log (2] _[π]_ [))]
+
+= E - _αt_ [2] _[σ][t]_ _[∥]_ _**[ν]**_ [ˆ] _**[θ]**_ _[∥]_ [2] _[ −]_ [2] _[α][t][σ]_ _t_ [3] _**[ν]**_ [ˆ] _**θ**_ _[⊤]_ **[x]** [0] [+ 2] _[α]_ _t_ [2] �1 + _σt_ [2] - _**ϵ**_ _[⊤]_ _**ν**_ ˆ _**θ**_ 
++ E  - _σt_ [5] _[∥]_ **[x]** [0] _[∥]_ [2] _[ −]_ _[Dσ][t]_  - _σt_ [4] [+] _[ σ]_ _t_ [2] _[−]_ [1]  - [�] + _[D]_ (36)
+
+2 [(1 + log (2] _[π]_ [))]
+
+= E - _αt_ [2] _[σ][t]_ _[∥]_ _**[ν]**_ [ˆ] _**[θ]**_ _[∥]_ [2] _[ −]_ [2] _[α][t][σ]_ _t_ [3] _**[ν]**_ [ˆ] _**θ**_ _[⊤]_ **[x]** [0] [+ 2] _[α]_ _t_ [2] �1 + _σt_ [2] - _**ϵ**_ _[⊤]_ _**ν**_ ˆ _**θ**_ 
+
+
++ [1]
+
+
+2
+
+
+[1] _[D]_
+
+6 _[∥]_ **[x]** [0] _[∥]_ [2][ +] 2
+
+
+- 7 _._ (37)
+6 [+ log (2] _[π]_ [)]

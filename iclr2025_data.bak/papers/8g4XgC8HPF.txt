@@ -1,0 +1,1184 @@
+# CONTROLLABLE GENERATION VIA LOCALLY CONSTRAINED RESAMPLING
+
+
+**Kareem Ahmed** _[∗]_ **, Kai-Wei Chang & Guy Van den Broeck**
+Department of Computer Science
+University of California, Los Angeles
+_{_ ahmedk, kwchang, guyvdb _}_ @cs.ucla.edu
+
+
+ABSTRACT
+
+
+Autoregressive models have demonstrated an unprecedented ability at modeling
+the intricacies of natural language. However, they continue to struggle with generating complex outputs that adhere to logical constraints. Sampling from a _fully-_
+_independent_ distribution subject to a constraint is hard. Sampling from an _autore-_
+_gressive distribution_ subject to a constraint is doubly hard: We have to contend not
+only with the hardness of the constraint but also the distribution’s lack of structure.
+We propose a tractable probabilistic approach that performs Bayesian conditioning to draw samples subject to a constraint. Our approach considers the entire
+sequence, leading to a more globally optimal constrained generation than current
+greedy methods. Starting from a model sample, we induce a local, factorized distribution which we can tractably condition on the constraint. To generate samples
+that satisfy the constraint, we sample from the conditional distribution, correct for
+biases in the samples and resample. The resulting samples closely approximate the
+target distribution and are guaranteed to satisfy the constraints. We evaluate our
+approach on several tasks, including LLM detoxification and solving Sudoku puzzles. We show that by disallowing a list of toxic expressions our approach is able
+to steer the model’s outputs away from toxic generations, outperforming similar
+approaches to detoxification. We conclude by showing that our approach achieves
+a perfect accuracy on Sudoku compared to _<_ 50% for GPT4-o and Gemini 1.5.
+
+
+1 INTRODUCTION
+
+
+The advent of large language models (LLMs) has brought about a paradigm shift towards generating
+sequences of tokens that jointly constitute the desired output. Such multi-token outputs exhibit an
+amount of structure to them: in free-form generation, the model is expected to generate coherent
+paragraphs; in question answering, it is expected to provide answers to the posed questions; and in
+summarization, it is expected to condense lengthy documents into concise summaries. And while
+current LLMs are remarkably apt at generating fluent sentences, there is a need for generations
+that go beyond that, exhibiting more intricate structure (Liu et al., 2024b). Such structure includes,
+e.g., API calls and code snippets (Wang et al., 2023), JSON schemas (OpenAI, 2023), logical puzzles (Mittal et al., 2024; Pan et al., 2023), all of which LLMs struggle with (Sun et al., 2023).
+
+
+Consequently, several approaches to constraining LLMs were developed, all bolstering a similar
+underlying idea: at every generation step _greedily_ mask the LLM outputs that could lead to the
+constraint being violated. That is, the “defacto” recipe (Deutsch et al., 2019; Lundberg et al., 2024;
+Willard & Louf, 2023; Koo et al., 2024) for applying constraints to LLMs consists of the following:
+
+
+1. Based on the current state of the constraint, build a mask of valid next tokens.
+
+2. Mask out logits for invalid tokens, normalize, and sample.
+
+3. Based on the sampled token, update the constraint state for the next time step.
+
+
+The above recipe is limited in a number of ways. First, the masking process is _myopic_ (Shih et al.,
+2023), as the constraint is enforced _greedily_ on a per-token basis rather than jointly across the entire
+
+
+_∗_ Latter portions of this research were conducted while affiliated with University of California, Irvine.
+
+
+1
+
+
+|p(y|x)|p(y|x)|Col3|
+|---|---|---|
+|[H|e’s,<br>full,<br>of,<br>sh!t]<br>`llm dist.`<br>_y_<br>[He|’s,<br>full,<br>of,<br>sh!t]<br>`approx. dist.`|
+|[H|||
+
+
+~~_mα_~~
+
+
+|p(y|x)|Col2|
+|---|---|
+|[He|_|α_<br>’s,<br>full, time,<br>employ<br>`I.W.`|
+|[He||
+
+
+~~_mα_~~
+
+
+~~_mα_~~
+
+
+_y_
+
+
+Figure 1: **An** **illustration** **of** **our** **proposed** **approach.** (left) An LLM induces a distribution over
+all possible sentences. Autoregressively sampling from the LLM distribution, we obtain a sentence
+( ) _**y**_ ˜ = [He’s, full, of, sh!t]. This sentence _**y**_ ˜ violates a constraint _α_ that disallows toxic words, including the word “sh!t”. The subset of sentences that satisfy the constraint _α_
+( ) are denoted by _⊢_ _mα_ _⊣_ . (center) The sentence _**y**_ ˜ induces a local, tractable approximation of
+the true distribution centered around _**y**_ ˜. (right) We can efficiently condition this tractable approximation on the constraint _α_, trimming away portions of its support that do not satisfy the constraint.
+Sampling from the LLM distribution subject to the constraint _α_ then corresponds to sampling from
+the conditional approximate distribution and adjusting the sample weights using importance weighting. This yields a sentence ( ) _**y**_ = [He’s, full, time, employed] that satisfies _α_ .
+
+
+generation. This is as opposed to _Bayesian_ conditioning, where we consider the entire sequence.
+Second, the constraint specification language is typically regular expressions, which can be significantly more verbose than their target compilation forms, deterministic finite automata (DFAs) (Gruber & Holzer, 2009; 2014; Koo et al., 2024). Lastly, there exists classes of constraint functions that
+can only be described by DFAs whose size grows exponentially in the size of their constraint.
+
+
+In this work we develop an approach that departs from the previously established recipe for constraining LLMs, tackling all the aforementioned shortcomings in the process. Our approach starts
+with the observation that _an_ _LLM_ _sample_ _induces_ _a_ _local,_ _factorized_ _distribution_ _p_ ˜. We use a
+tractable compilation form, _constraint circuits_ (Darwiche, 2011), that subsume DFAs on boundedlength strings while being more expressive efficient (Choi et al., 2020). That is, there are classes
+of functions that we can represent using constraint circuits that we could not otherwise as efficiently represent using DFAs (Bova, 2016). Such constraint circuits can be specified as Boolean
+python functions, alleviating the need for writing regular expressions or other domain specific languages.We show that we can leverage logical circuits to tractably condition _p_ ˜, drawing samples that
+are biased yet provably satisfy the constraint. Sampling from the LLM subject to a constraint _α_ then
+entails conditioning _p_ ˜ on _α_, drawing biased samples from _p_ ˜( _·_ _|_ _α_ ), which we debias by reweighing
+them proportionally to their probability under the LLM and resampling. The returned samples are
+distributed according to the conditional LLM distribution while also satisfying the constraint.
+
+
+We start our evaluation by testing our approach on the toy task of predicting shortest paths under
+an autoregressive model, and observe a significant improvement upon the baseline performance.
+Next, we evaluate our approach on the task of LLM detoxification where we show that, by virtue
+of its probabilistic nature, by simply disallowing a list of toxic expressions, our approach is able to
+steer the model away from toxic generations, outperforming previous approaches to detoxification.
+Lastly, we show that our approach achieves a perfect accuracy on Sudoku puzzles, compared to an
+almost 26% and 45% accuracy achieved by Gemini 1.5 Flash and GPT4-o models, respectively.
+
+
+2 BACKGROUND
+
+
+2.1 NOTATION AND PRELIMINARIES
+
+
+We write uppercase letters ( _X_, _Y_ ) for Boolean variables and lowercase letters ( _x_, _y_ ) for their instantiation ( _Y_ = 0 or _Y_ = 1). Sets of variables are written in bold uppercase ( **X**, **Y** ), and their joint
+instantiation in bold lowercase ( _**x**_, _**y**_ ). A literal is a variable ( _Y_ ) or its negation ( _¬Y_ ). A logical
+
+
+2
+
+
+sentence ( _α_ or _β_ ) is constructed from variables and logical connectives ( _∧_, _∨_, _¬_, = _⇒_ ), and is also
+called a (logical) formula or constraint. A state or world _**y**_ is an instantiation to all variables **Y** . A
+state _**y**_ satisfies a constraint _α_, denoted _**y**_ _|_ = _α_, if the sentence evaluates to true in that world. A state
+_**y**_ satisfying a constraint _α_ is said to be a model of _α_ . We denote by _m_ ( _α_ ) the set of _α_ ’s models.
+Throughout this paper, in reference to DFAs, we limit our discussion to those defined on boundedlength inputs, which are equivalent to ordered binary decision diagrams, or OBDDs (Bryant, 1992).
+
+
+2.2 A PROBABILITY DISTRIBUTION OVER POSSIBLE SENTENCES
+
+
+Let _α_ be a logical constraint defined over Boolean variables **Y** = _{Y_ 11 _, . . ., Ynk}_, where _n_ denotes
+the number of time steps in the sentence, and _k_ denotes the size of the vocabulary, i.e., the number
+of possible tokens at each time step. An autoregressive model induces a probability distribution _p_ ( _·_ )
+over all possible sentences _**y**_ . At every time step _i_, the autoregressive model ensures that exactly one
+token is predicted; i.e., exactly one Boolean variable _{Yi_ 1 _, . . ., Yik}_ can be set to true for each time
+step _i_ . We will write _**y**_ _i_ to denote that variable _Yij_ is set to true in sentence _**y**_ . More precisely, we let
+_**y**_ _i_ _∈{_ 0 _,_ 1 _}_ _[k]_ be the one-hot encoding of _Yij_ being set to 1 among _{Yi_ 1 _, . . ., Yik}_ . The probability
+assigned by the autoregressive model to a sentence _**y**_ is then defined as
+
+
+_p_ ( _**y**_ ) =
+
+
+_n_
+
+- _p_ ( _**y**_ _i_ _|_ _**y**_ _<i_ ) _,_ (1)
+
+
+_i_ =1
+
+
+where _**y**_ _<i_ denotes the sentence prefix, _**y**_ 1 _, . . .,_ _**y**_ _i−_ 1.
+
+
+2.3 THE STATE OF CONDITIONAL AUTOREGRESSIVE SAMPLING
+
+
+Sampling from an autoregressive distribution conditioned on a logical constraint _α_ constitutes a
+major challenge: computing the _exact_ conditional distribution _p_ ( _**y**_ _| α_ ) = _[p]_ _p_ [(] _**[y]**_ ( _α_ _[,α]_ ) [)] [is intractable even]
+
+for the simplest constraints (Roth, 1993), e.g., asserting that the word “dog” appears at the end of
+the sentence. Intuitively, conditioning on _α_ requires that we compute the marginal probability of the
+constraint _p_ ( _α_ ), in turn requiring that we enumerate all sentences ending with the word “dog”.
+
+
+The defacto approach has therefore been to _greedily_ constrain the distribution, at every time step
+masking out logits that lead to generations that violate the constraint, followed by re-normalizing
+the conditional token distribution (Deutsch et al., 2019; Lundberg et al., 2024; Willard & Louf,
+2023; Koo et al., 2024). Let the conditioning of the constraint _α_ on the prefix _**y**_ _<i_, which we write
+as _α|_ _**y**_ _<i_, be a _subconstraint_ defined on **Y** _i_ : _n_ that results from setting the variables **Y** 1: _i−_ 1 to their
+values in _**y**_ _<i_ . Semantically, _α|_ _**y**_ _<i_ denotes the set of _**y**_ _i_ : _n_ that, taken together with the prefix _**y**_ _<i_,
+would satisfy the constraint. Moreover, let _βi_ := _∃_ _**y**_ _>i α|_ _**y**_ _<i_ denote the set of tokens allowed at the
+_i_ -th position such that there exists some completion _**y**_ _>i_ of the sentence that satisfies the constraint
+_α_, given the current prefix _**y**_ _<i_ . Then we can define the above greedy, or _myopic_, distribution as
+
+
+_n_
+
+
+_i_ =1
+
+
+_p_ ( _**y**_ _i_ _|_ _**y**_ _<i_ )v _**y**_ _i_ _|_ = _βi_ w
+
+- _j_ _[p]_ [(] _[y][ij]_ _[|]_ _**[ y]**_ _[<i]_ [)][v] _[y][ij]_ _[|]_ [=] _[ β][i]_ [w] _[,]_
+
+
+_p_ [myopic] ( _**y**_ _| α_ ) :=
+
+
+_n_
+
+
+_i_ =1
+
+
+_p_ ( _**y**_ _i, βi_ _|_ _**y**_ _<i_ )
+
+
+_j_ _[p]_ [(] _[y][ij][, β][i]_ _[|]_ _**[ y]**_ _[<i]_ [)] [=]
+
+
+Of note here is that since the approximate distribution is modeling the joint probability of the sentence and the constraint, in principle, the logical reasoning is sound, i.e., the constraint is guaranteed
+to hold. Rather, the shortcoming is in the way the _probabilistic_ _reasoning_ is performed: instead
+of normalizing the joint distribution by the marginal probability of the constraint, we are performing it token-wise steering us towards sampling sequences that are locally likely rather than globally
+likely. To see this, consider an LLM trained to generate one of the eight sentences from the set
+_{_ Adam, Poorva _}_ _×_ _{_ loves, hates _}_ _×_ _{_ dogs, cats _}_ uniformly at random. If we condition the LLM on the fact that Adam loves cats, we reduce the possible outputs to five: Adam
+loves cats and all generations starting with Poorva, each now generated with an equal probability of 1 _/_ 5. However, since the LLM initially generates each of the eight possible sentences with
+equal probability, it must generate a string starting with Adam or Poorva with equal probability
+and therefore greedy decoding mistakenly generates the string Adam loves cats half the time.
+
+
+The second issue lies with the logical constraint along two different axes. First is the lack of conciseness of the constraint specification language. The most common language for specifying constraints
+is regular expressions which can be significantly more verbose (Gruber & Holzer, 2009; 2014; Koo
+
+
+3
+
+
+et al., 2024) compared to the equivalent logical form. This is due to the inability to reference and
+reuse sub-expressions without introducing additional features such as lookaround operations which
+can cause an exponential blowup in the size of the target representations (Mamouras & Chattopadhyay, 2024), or backreferences that allow us to describe non-regular languages at the expense of
+an exponential runtime due to backtracking. Second is the lack of succinctness of the target representation. All of the current approaches compile the specified regular expressions into DFAs.
+DFAs represent Boolean functions by recursively performing Shannon-decomposition on the function: disjointing the value of the sub-function with the value of the current variable chosen to be true
+and false, respectively. Consequently, for many constraints of interest, the size of DFA can grow
+prohibitively. It turns out there there exists another class of target representation that subsume DFAs
+on bounded-length strings: at every step in the function decomposition we can branch not only on
+the value of a single variable, but rather that of an _entire_ _sentence_ (Darwiche, 2011). This class
+of target representations, which we shall henceforth denote as _constraint circuits_ are not only more
+succinct than DFAs in practice, but are provably exponentially more succinct: there are classes of
+functions with exponentially-sized DFAs but polynomially-sized constraint circuits (Bova, 2016).
+
+
+3 LOCALLY CONSTRAINED RESAMPLING: A TALE OF TWO DISTRIBUTIONS
+
+
+We depart from the established recipe for conditional autoregressive sampling, providing a treatment
+of the problem from first principles that tackles all of the shortcomings detailed above. The crux of
+our approach is the idea that we can approximate the intractable autoregressive distribution _p_ ( _**y**_ )
+using a local, tractable distribution _p_ ˜( _**y**_ ). The distribution _p_ ˜( _**y**_ ) is amenable to exact and efficient
+probabilistic reasoning, allowing us to efficiently condition on the constraint _α_ and draw samples
+from the distribution _p_ ˜( _**y**_ _|_ _α_ ). We can transform the biased samples drawn from _p_ ˜( _**y**_ _|_ _α_ ) into
+samples from _p_ ( _**y**_ _| α_ ) by considering the discrepancy between the probability of the sample under
+the true distribution and the approximate distribution. More formally, we wish to draw samples from
+
+_p_ ( _**y**_ _| α_ ) = _[p]_ [(] _**[y]**_ _[, α]_ [)] (2)
+
+_p_ ( _α_ ) _[,]_
+
+
+which is intractable. Instead, we design a tractable proposal distribution _q_ such that _q_ ( _**y**_ ) _>_ 0
+whenever _p_ ( _**y**_ _|_ _α_ ) _>_ 0. We associate with a _constrained_ _sample_ _**y**_ an _unconstrained_ _sample_ _**y**_ ˜,
+where _**y**_ can be understood as a _projection_ of _**y**_ ˜ onto _α_ s.t. _**y**_ _|_ = _α_ . We define our proposal as
+
+_q_ ( _**y**_ ) =                - _p_ (˜ _**y**_ ) _· p_ _**y**_ ˜( _**y**_ _| α_ ) _,_ (3)
+
+
+_**y**_ ˜
+
+
+where _p_ (˜ _**y**_ ) is the autoregressive distribution, and _p_ _**y**_ ˜( _**y**_ _|_ _α_ ) is a distribution over projections _**y**_ of
+the unconstrained _**y**_ ˜ given the constraint _α_ . The above definition outlines a two-step procedure for
+sampling a sentence _**y**_ that satisfies a given constraint _α_ . We sample a sentence _**y**_ ˜ autoregressively
+from _p_ (˜ _**y**_ ), followed by sampling _**y**_ from the distribution conditioned on _**y**_ ˜ and the constraint _α_,
+_p_ _**y**_ ˜( _**y**_ _| α_ ). By incorporating the autoregressive distribution _p_ (˜ _**y**_ ), we ensure that we can potentially
+generate any sentence. _p_ _**y**_ ˜( _**y**_ _|_ _α_ ) then refines _**y**_ ˜ by _projecting_ it to satisfy the constraint _α_ . It is
+straightforward to sample from _p_ (˜ _**y**_ ), but what exactly is _p_ _**y**_ ˜( _**y**_ ), and how do we condition it on _α_ ?
+Moreover, a proposal distribution typically implies biased samples; how do we correct for this bias?
+
+
+3.1 A SAMPLE INDUCES A LOCAL, TRACTABLE DISTRIBUTION
+
+
+Our goal is to design a probability distribution _p_ _**y**_ ˜( _**y**_ _|_ _α_ ) that is first, tractable for conditioning on
+the constraint _α_ and likelihood evaluation, and second, assigns high probability mass to sentences
+that are close to the model sample _y_ and low probability mass to sentences that are far away, thereby
+providing a sample-efficient approximation of the true distribution (Koller & Friedman, 2009).
+
+
+As noted earlier, the hardness of computing the conditional probability distribution in Equation (2) is
+in large part due to the autoregressive nature of the LLM distribution. A logical constraint might have
+exponentially-many solutions, yet lend itself to reusing of solutions to sub-problems, and therefore
+a tractable computation of the normalizing constant, the denominator in Equation (2). An example being the _n_ choose _k_ constraint (Ahmed et al., 2023b), where the conditional distribution can
+be computed in quadratic time under the fully-factorized distribution, despite having combinatorially many solutions. Moving away from fully-factorized distribution and towards autoregressive
+distributions, however, requires that we enumerate all sentences, even for very simple constraints.
+
+
+4
+
+
+To sidestep the hardness of the autoregressive distribution, we attempt to move towards the tractability of fully-factorized distributions, while retaining as much of the contextual information. To that
+end, we consider the _pseudolikelihood_ _p_ ˜( _·_ ) of a sentence _**y**_ ˜ (Besag, 1975; Ahmed et al., 2023a), i.e.,
+
+
+_p_ (˜ _**y**_ ) _≈_ _p_ ˜(˜ _**y**_ ) :=              - _p_ (˜ _**y**_ _i_ _|_ _**y**_ ˜ _−i_ ) _,_ (4)
+
+
+_i_
+
+
+where _**y**_ ˜ _−i_ denotes _**y**_ ˜1 _, . . .,_ ˜ _**y**_ _i−_ 1 _,_ ˜ _**y**_ _i_ +1 _, . . .,_ ˜ _**y**_ _n_ . Unfortunately, Equation (4) above would still not
+ensure the tractability of Equation (2) since different solutions depend on different sets of conditionals. Instead, we define the pseudolikelihood of a sentence _**y**_ _in the neighborhood of a sentence_ _**y**_ ˜
+
+
+_p_ _**y**_ ˜( _**y**_ ) :=                - _p_ ( _**y**_ _i_ _|_ _**y**_ ˜ _−i_ ) (5)
+
+
+_i_
+
+
+which can be understood as the _contextualized_ _probability_ of a sentence _**y**_ given the context _**y**_ ˜.
+We will next show how, given the structure of the contextualized pseudolikelihood distribution,
+we are able to efficiently condition it on a constraint _α_ . Furthermore, Ahmed et al. (2023a) have
+shown the contextualized pseudolikelihood distribution to be a local, high-fidelity approximation
+of the LLM distribution. That is, the distribution has low entropy, considering only assignments
+centered around the model sample, while at the same time having low KL-divergence meaning that
+our approximation is faithful to the true distribution in the neighborhood of the model sample.
+
+
+3.2 CONSTRAINT COMPILATION AND TRACTABLE OPERATIONS
+
+
+We appeal to knowledge compilation, a class of methods that transform, or _compile_, a logical
+constraint into a tractable target form which represents functions as parameterized computational
+graphs, or _circuits_ . Knowledge compilers allow us to programmatically specify constraints as
+Python (Meert, 2017) or PyTorch functions (Ahmed et al., 2022a) from which they construct circuits. By enforcing certain structural properties on the compiled circuits we can enable the tractable
+computation of corresponding classes of probabilistic queries over the encoded functions. As such,
+circuits provide a language for both constructing and reasoning about tractable representations. An
+example of a logical constraint specified as a PyTorch function which gets compiled into a constraint
+circuit is shown in the bottom left of Figure 2 with the corresponding circuit in Figure 2, right.
+
+
+Formally, a _logical circuit_ is a directed, acyclic computational graph representing a logical formula
+over variables **X** . Each node _n_ in the DAG encodes a logical sub-formula, denoted [ _n_ ]. Each inner
+node in the graph is an AND or an OR gate, and each leaf node encodes a Boolean literal ( _Y_ or _¬Y_ ).
+We denote by in( _n_ ) the set of a node _n_ ’s children. We associate with every node _n_ a _scope_ function
+_ϕ_ ( _·_ ) such that _ϕ_ ( _n_ ) _⊆_ _X_ evaluates to the subset of variables the subfunction at _n_ is defined over.
+
+
+A circuit is _decomposable_ if the inputs of every AND gate depend on disjoint sets of variables i.e.
+for _α_ = _β_ _∧_ _γ_, vars( _β_ ) _∩_ vars( _γ_ ) = ∅. A circuit is said to be _structured-decomposable_ if every
+AND gate is decomposable, and any pair of AND gates sharing the same scope decompose in the
+same way. Intuitively, decomposable AND gates encode local factorizations over variables of the
+function. We assume that decomposable AND gates always have two inputs, a condition enforceable
+on any circuit in exchange for a polynomial size increase (Vergari et al., 2015; Peharz et al., 2020).
+
+
+A second useful property is _smoothness_ . A circuit is said to be _smooth_ if the children of every OR
+gate depend on the same set of variables i.e. for _α_ = [�] _i_ _[β][i]_ [, we have that][ vars][(] _[β][i]_ [) =][ vars][(] _[β][j]_ [)] _[ ∀][i, j]_ [.]
+
+Decomposability and smoothness are sufficient and necessary for tractable integration over arbitrary
+sets of variables in a single pass, as they allow larger integrals to decompose into smaller ones.
+
+
+Further, a circuit is said to be _deterministic_ if, for any input, at most one child of every OR node
+has a non-zero output i.e. for _α_ = [�] _i_ _[β][i]_ [,] [we] [have] [that] _[β][i]_ _[∧]_ _[β][j]_ [=] _[⊥]_ [for] [all] _[i]_ [=] _[j]_ [.] [Similar] [to]
+
+
+has a non-zero output i.e. for _α_ = [�] _i_ _[β][i]_ [,] [we] [have] [that] _[β][i]_ _[∧]_ _[β][j]_ [=] _[⊥]_ [for] [all] _[i]_ [=] _[j]_ [.] [Similar] [to]
+
+decomposability, determinism induces a recursive partitioning of the function, but over the support
+of the function. We consider a stronger form of determinism, _strong determinism_, A circuit is said to
+be _strongly deterministic_ if, for every OR node, _α_ = [�] _i_ [(] _[β][i]_ _[∧][γ][i]_ [)][, the] _[ β][i]_ [’s are mutually exclusive i.e.,]
+
+
+be _strongly deterministic_ if, for every OR node, _α_ = [�] _i_ [(] _[β][i]_ _[∧][γ][i]_ [)][, the] _[ β][i]_ [’s are mutually exclusive i.e.,]
+
+_βi ∧_ _βj_ = _⊥_ for any _i ̸_ = _j_ . Ensuring they are also exhaustive i.e., [�] _i_ _[β][i]_ [=] _[ ⊤]_ [, along with structured-]
+
+
+_βi ∧_ _βj_ = _⊥_ for any _i ̸_ = _j_ . Ensuring they are also exhaustive i.e., [�] _i_ _[β][i]_ [=] _[ ⊤]_ [, along with structured-]
+
+decomposability, we recover sentential decision diagrams (Darwiche, 2011), or _constraint circuits_ .
+
+
+5
+
+
+**Algorithm 1** Compute _p_ _**y**_ (˜ _**y**_ _| α_ )
+
+1: **Input** : Constraint _α_, LLM distribution _p_ ( _·_ )
+2: **Output** : _p_ _**y**_ ˜( _· | α_ ) defined in Equation (5)
+3: _**y**_ ˜ _∼_ _p_ ( _·_ )
+
+_▷_ Expand the batch to contain all perturbations
+
+_▷_ of _**y**_ that are a Hamming distance of 1 away
+4: _**y**_ ˜ = _**y**_ ˜ _._ `expand` (n _,_ vocab)
+5: _**y**_ ˜[: _,_ `range` ( `n` ) _,_ : _,_ `range` ( `n` )] = `range` ( `vocab` )
+
+_▷_ Evaluate expanded samples through model
+6: log _p_ = _p_ (˜ _**y**_ ). `log` ~~`s`~~ `oftmax` ( `dim` = - `1` )
+
+_▷_ Compute log ˜ _p_ _**θ**_ [ _i_ ][ _j_ ] = log _p_ _**θ**_ ( _**y**_ _j|_ _**y**_ _−j_ )
+7: log ˜ _p_ = log _p −_ log _p._ `logsumexp` ( `dim` = - `1` )
+
+_▷_ A vector of conditional marginals _p_ ˜ _**y**_ ˜( _yij_ _| α_ )
+8: `return` _p_ _**y**_ ˜( _· | α_ )
+
+
+**Algorithm 2** Locally Constrained Resampling
+
+
+1: **Input** : Constraint _α_, LLM distribution _p_ ( _·_ )
+2: **Output** : _**y**_ drawn approximately from _p_ ( _**y**_ _| α_ )
+
+_▷_ Sample _**y**_ and _**y**_ ˜ from _p_ ( _**y**_ ) and _p_ _**y**_ (˜ _**y**_ _| α_ ) resp.
+3: _**y**_ ˜ _∼_ _p_ ( _·_ )
+4: _**y**_ _∼_ _p_ _**y**_ ˜( _· | α_ ) _▷_ From Algorithm 1
+
+_▷_ Compute importance weights
+5: `q` ~~`w`~~ = _p_ (˜ _**y**_ ) _· p_ _**y**_ ˜( _**y**_ _| α_ )
+6: `p` ~~`w`~~ = _p_ ( _**y**_ ) _·_ v `canonize` ( _**y**_ ) _|_ = _α_ w _· p_ _**y**_ (˜ _**y**_ )
+7: `w` = `p` ~~`w`~~ _/_ `q` ~~`w`~~
+
+_▷_ Resample distribution according to weights
+8: _p_ _[∗]_ = `Categorical` ( `weights` = `w` )
+9: `return` _p_ _[∗]_ _._ `sample` ( )
+
+
+Given a constraint circuit _cα_ that encodes a logical constraint _α_ we can compute the pseudolikelihood _q_ ˜( _α_ ) by feeding the probability of each literal at the corresponding leaf node and evaluating
+the circuit upwards, taking sums at OR gates and products at AND gates. This defines a distribution _p_ _**y**_ (˜ _y_ _|_ _α_ ). To sample from the distribution, starting from the root node, we trace the circuit
+top-down, sampling a child at every OR-gate encountered. Figure 2 (center) shows an example of
+computing such a distribution, and Figure 2 (right) demonstrates the process of sampling from it.
+
+
+3.3 INTERMEZZO: CONSTRAINT CIRCUITS AND DFAS
+
+
+Constraint circuits can implement decisions of the form
+
+
+_m_
+
+       - _βi_ ( **X** ) _∧_ _γi_ ( **Y** ) _,_ (6)
+
+
+_i_ =1
+
+
+at OR gates, where **X** and **Y** are disjoint _sets_ of variables, as opposed to DFAs that are restricted to
+Binary (or Shannon) decisions and therefore boil down to very special decisions of the form
+
+
+( _¬x ∧_ _γ_ 1( **Y** )) _∨_ ( _x ∧_ _γ_ 2( **Y** ))
+
+
+where the variable _X_ is not in the variable set **Y** . Therefore, constraint circuits are exponentially more succinct than DFAs, i.e., there are families of functions can only be represented by a
+exponentially-sized DFAs, but have a polynomially-sized constraint circuit (Bova, 2016). Barring
+such families of functions, constraint circuits are also empirically more succinct than DFAs (Xue
+et al., 2012). In practice, this also allows us to construct shallower (i.e., less layers) and wider (i.e.,
+units per layer) constraint circuits that are more amenable to GPU parallelization (Liu et al., 2024a),
+and can therefore exhibit a much lower vectorized computational complexity (Ahmed et al., 2023b).
+
+
+3.4 CORRECTING SAMPLE BIAS: IMPORTANCE SAMPLING. . . RESAMPLING
+
+
+We have now sampled _**y**_ from our proposal distribution _q_ ( _**y**_ ), where _**y**_ is a projection of some latent
+unconstrained sample _**y**_ ˜, and satisfies the constraint _α_ . However, our proposal distribution _q_ ( _**y**_ )
+might not align perfectly with our target distribution _p_ ( _**y**_ _| α_ ). We therefore need to account for the
+mismatch between the two distributions, which we can do by defining importance weights that are a
+function of the original _**y**_, and its projection _**y**_ ˜. We start by defining the true augmented distribution
+
+
+_p_ ( _**y**_ _| α_ ) _∝_              - _p_ ( _**y**_ _, α_ ) _· p_ _**y**_ (˜ _**y**_ ) _._ (7)
+
+
+_**y**_ ˜
+
+
+This factorization reflects the process of first generating a constrained sentence _**y**_, and marginalizing
+over all the unconstrained sentences _**y**_ ˜ that could have given rise to _**y**_, and can be therefore be thought
+of as reversing the proposal distribution. We calculate the self-normalized importance weights
+
+_w_ = _[p]_ [(] _**[y]**_ _[, α]_ [)] _[ ·][ p]_ _**[y]**_ [(˜] _**[y]**_ [)] (8)
+
+_p_ (˜ _**y**_ ) _· p_ _**y**_ ˜( _**y**_ _| α_ )
+
+
+6
+
+
+|0.60|Col2|
+|---|---|
+|0_._60<br>0_._36<br>0_._12<br>0_._12<br><br>6<br>He<br>0_._2<br>S<br>0_._<br>ves<br>_._5<br>ador<br>0_._1<br>0_._1<br>0_._5<br>1<br>0_._6|0_._60<br>0_._36<br>0_._12<br>0_._12<br><br>6<br>He<br>0_._2<br>S<br>0_._<br>ves<br>_._5<br>ador<br>0_._1<br>0_._1<br>0_._5<br>1<br>0_._6|
+|||
+
+
+|↓ 0.60<br>0.36 0.12<br>0.12<br>0.6<br>He S<br>6 0.2 0.<br>0.5 0.1<br>1<br>ves ador<br>.5 0.1|Col2|
+|---|---|
+|||
+
+
+dogs rats cats
+0 _._ 3 0 _._ 2 0 _._ 3
+
+
+dogs rats cats
+0 _._ 3 0 _._ 2 0 _._ 3
+
+
+Figure 2: **Constructing and sampling the proposal distribution.** (Top left) We start by sampling
+a sentence _**y**_ ˜ from the model _p_ . Our goal is to compute the full conditional probability of every
+word in the vocab i.e., _p_ ˜(˜ _yij_ ) := _p_ (˜ _yij_ _|_ _**y**_ ˜ _−i_ ). We start by expanding the sampled sentence _**y**_ ˜,
+including all sentences that are a Hamming distance of 1 away from the sample _**y**_ . We proceed by
+(batch) evaluating the samples through the model, obtaining the joint probability of each sample.
+We then normalize along each column, obtaining the conditionals _p_ (˜ _yij_ ). (Bottom left) We can
+easily specify a logical constraint that prevents the word “ hate” from appearing as a simple python
+function that gets compiled in the constraint circuit on the right. (Center) A logical circuit encoding
+constraint _¬_ hates, with a simplified vocab is shown in the figure. To construct the distribution
+_p_ _**y**_ ˜( _**y**_ _|_ _α_ ), we feed the computed contextual probabilities at the corresponding literals. We push
+the probabilities upwards, taking products at AND nodes and sums at OR nodes. This induces a
+distribution _p_ _**y**_ ˜( _**y**_ _| α_ ). (Right) To sample a from this distribution, we start at the root of the circuit,
+sampling a child of every OR gate according to the logits of the distribution, and concatenating at
+every AND gate. In this case, we sample the sentence “He loves dogs” satisfying the constraint.
+
+
+These weights quantify the discrepancy between the proposal and target distributions, allowing us
+to correct for the biased sampling. Note, however, that the importance sampling does not generate
+samples from the target distribution _p_ ( _**y**_ _|_ _α_ ), only a set of weighted particles. Rather, to transform
+our weighted particles into samples drawn from _p_ ( _**y**_ _|_ _α_ ) we need to apply a resampling step according to the importance weights. That is, given particles _**s**_ _i_ with their corresponding importance
+weights _wi_, if we resample _**s**_ _i_ with replacement from _{_ _**s**_ 1 _, . . .,_ _**s**_ _n}_ with probabilities proportional
+to the importance weights i.e.,
+
+_wi_
+_p_ _[∗]_ ( _**s**_ _i_ ) =                 - _n_
+_j_ =1 _[w][j]_
+
+
+then _**s**_ _i_ is drawn from the true the distribution in the limit of a large sample size _n_ . Our full algorithm
+is shown in Algorithm 2, and follows PyTorch syntax (Paszke et al., 2019). One thing to note is the
+use of the `canonize` function on line 6 in Algorithm 2, where `canonize` returns the _canonical_
+tokenization of an expression (Geh et al., 2024). This ensures that, e.g., in the case of language
+detoxification, we are banning all the possible ways of generating a given expression. [1] We can now
+prove that Algorithm 2 is guaranteed to return samples that satisfy the constraint _α_ . Our algorithm
+is implemented in log-space to preserve numerical stability while handling very small probabilities.
+
+**Theorem 1.** LOCALLY CONSTRAINED RESAMPLING in Algorithm 2 returns a sample _**y**_ s.t. _**y**_ _|_ = _α_ .
+
+
+4 RELATED WORK
+
+
+There has been a long line of work tackling constrained generation with LLMs. One of the earlier approaches was to use search-based decoding algorithms, such as NeuroLogic Decoding (Lu
+et al., 2021; 2022). While these methods explicitly search for high-probability sequences that satisfy the constraint, they face scalability issues due to the exponential growth of the search space as
+the sequence length increases. Another set of techniques that include GeDi (Krause et al., 2021),
+
+
+1This issue has received an amount of attention in the past [https://github.com/huggingface/](https://github.com/huggingface/transformers/issues/17504)
+[transformers/issues/17504](https://github.com/huggingface/transformers/issues/17504)
+
+
+7
+
+
+Test accuracy % Exact Consistent
+
+
+CNN-LSTM 62 _._ 00 76 _._ 60
+
+
++ oversampling 69 _._ 10% 84 _._ 50%
++ GEN-C (Ours) **78** _._ **13** % %
+
+
+Table 1: Experimental results on Warcraft.
+
+
+Test accuracy % Exact Consistent
+
+
+Gemini 1.5 Flash 31 _._ 00% _±_ 4 _._ 19 31 _._ 00% _±_ 4 _._ 19
+GPT-4o mini 40 _._ 90% _±_ 7 _._ 90 40 _._ 90% _±_ 7 _._ 90
+
+
+GEN-C (Ours) % %
+
+
+Table 2: Results on Sudoku across 3 runs.
+
+
+FUDGE (Yang & Klein, 2021), and NADO (Meng et al., 2022) employ auxiliary neural classifiers
+to approximate the intractable conditional distribution, but do not guarantee that the constraint is satisfied and require that a classifier be trained for every new constraint type. Approximate inference
+methods attempt to approximate the intractable conditional distributions (Qin et al., 2022; Hu et al.,
+2023; Lew et al., 2023) but suffer from high variance and do not guarantee constraint satisfaction.
+
+
+Recently Outlines (Willard & Louf, 2023) and Guidance (Lundberg et al., 2024), and along similar
+lines SGLang (Zheng et al., 2024), were proposed, also guaranteeing that the constraint is satisfied.
+Outlines employs a precompilation step where constraints specified in regular expressions are compiled into DFAs that are “indexed” to create a token-based overlay. This overlay guides the decoding
+process, ensuring adherence to the constraints. Koo et al. (2024) recently recast the entire process
+in an automata-theoretic framework. Similar to Outlines, Guidance utilizes a trie to efficiently store
+and search through valid token continuations based on the grammar. This allows for dynamic vocabulary matching at each decoding step, offering flexibility potentially at the cost of impacting
+efficiency. These approaches are considered the “defacto” approaches for constrained generation.
+
+
+More recently, GeLaTo (Zhang et al., 2023) and subsequently CTRL-G (Zhang et al., 2024) have
+utilized Hidden Markov Models (HMMs) to guide the generation from LLMs towards constraint
+satisfaction, but requires training a new HMM for every target model. The very recently proposed
+ASAp (Park et al., 2024) aims to debias the greedy approach through repeated sampling and discovery of mass assigned to non-grammatical completions, reducing each overapproximation to make it
+more accurate. While similar in intention, our approach relies on a closed-form tractable approximation of the target distribution to correct for the bias, avoiding the need to oversample the LLM.
+
+
+Finally, some other approaches no longer predictively mask logits, but instead sample unconstrained
+continuations and reject invalid ones post-hoc. For example, PICARD (Scholak et al., 2021) converts
+the top- _k_ tokens to text and performs various levels of validation. While such approaches are very
+simple in principle, and in fact perform exact Bayesian conditioning, the number of samples required
+can be prohibitive, especially when the constraint requires selecting very low probability tokens.
+
+
+5 EXPERIMENTAL EVALUATION
+
+
+We evaluate our approach GEN-C on several tasks spanning a number of domains. We start by
+evaluating on Warcraft shortest-path finding, where we are given an image of a Warcraft tilemap,
+and are tasked with _autoregressively_ generating one of the potentially many minimum-cost paths
+between two end points conditioned on the map, where the cost is determined by the _underlying_
+cost of the tiles spanned by the path. We move on to evaluating on the classic, yet challenging, task
+of solving a 9 _×_ 9 Sudoku puzzle where an LLM is presented with an incomplete Sudoku puzzle
+and asked to provide the solved puzzle without extraneous text. We also evaluate on the task of
+LLM detoxification. In this task, we are interested in the generations produced by an LLM when
+presented with a prompt input by the user. More specifically, we are interested not only in how good
+these models are at the modeling aspect, but also how _toxic_ their outputs might be, a measure which
+includes sexual explicitness, identity attacks, and profanity, among others. Our goal in this task is
+then to shift the model’s distribution away from toxic generations, and toward nontoxic ones, all
+while maintaining its original ability to model text. We believe this to be a timely and important
+problem due to the prevalence and widespread usage of LLMs coupled with the fact that previous
+work (Gehman et al., 2020) has found non-negligible amounts of toxic, harmful, and abusive text in
+the corpora used to train LLMs. Experimental details, hardware specifications, and training details
+are provided in the appendix. The implementation of our approach will be made publicly available.
+
+
+8
+
+
+Table 3: Evaluation of LLM toxicity and quality across different detoxification methods on Llama38b. Model toxicity is evaluated on the REALTOXICITYPROMPTS benchmark through Perspective
+API. **Full**, **Toxic** and **Nontoxic** refer to the full, toxic and nontoxic subsets of the prompts, respectively. **PPL** refers to the perplexity of Llama3-70B on the model generations using 5 different seeds.
+In line with Gehman et al. (2020); Wang et al. (2022), we characterize toxicity using two metrics:
+the **Expected Maximum Toxicity** over 5 generations, and the **Toxicity Probability** of a completion
+at least once over 5 generations.
+
+
+**How toxic is the model?** ( _↓_ ) **How often is it toxic?** ( _↓_ )
+
+|Models|to toxic to nontoxic|to toxic to nontoxic|PPL (↓)|
+|---|---|---|---|
+||**to toxic**<br>**to nontoxic**|**to toxic**<br>**to nontoxic**||
+|LLAMA3-8B|0_._43<br>0_._20|38_._30%<br>7_._60%|14_._45|
+|+ Greedy Decoding<br>+ GEN-C_ (ours)_|0_._40<br>**0**_._**19**<br>**0**_._**37**<br>**0**_._**19**|32_._43%<br>6_._93%<br>**28**_._**00**%<br>**6**_._**35**%|**14**_._**50**<br>**14**_._**50**|
+
+
+**Warcraft** **Shortest** **Path** For this task, we follow the experimental setting set forth by Poganˇci´c
+et al. (2020), where our training set consists of 10 _,_ 000 terrain maps curated using Warcraft II tileset.
+Each map encodes a 12 _×_ 12 grid superimposed on a Warcraft terrain map, where each vertex is
+weighted according to the cost of the tile, which in turn depends on type of terrain it represents
+e.g., earth has lower cost than water. These costs are _not_ presented to the network. The task is
+then to generate a minimum-cost path from the upper left to the lower right vertices, where the cost
+of a path is defined as the sum of costs of the vertices visted by the edges along the path, and the
+minimum-cost path is not unique, i.e., there exists many correct paths with the minimum cost.
+
+
+We use a CNN-LSTM model, where, presented with an image of a terrain map, we use a ResNet18
+(He et al., 2016) to obtain a 128 image embedding, which is then passed on to an LSTM with a single
+layer, a hidden dim of size 512, and at every time step predicts the next edge in the path conditioned
+on the image embedding and previous edges. The constraint used in this task is that the predicted
+edges form a valid simple path from the upper left vertex to the lower right corner of the map.
+
+
+As has been established in previous work (Xu et al., 2018; Ahmed et al., 2022b;c), the accuracy
+of predicting individual labels is often a poor indicator of the performance of the neural network
+in neuro-symbolic settings, where we are rather more interested in the accuracy of our predicted
+structured object _exactly_ matching the groundtruth label, e.g., _is the prediction a shortest path?_, a
+metric which we denote “Exact” in our experiments, as well as the accuracy of predicting objects that
+are _consistent_ with the constraint, e.g., _is the prediction a valid path?_, a metric denoted “Consistent”.
+Our results are shown in Table 1. We compare against two different baselines: the baseline model
+trained on the task, and _oversampling_, whereby we draw many samples conditioned on the input
+image, and then resample this distribution, a variant of our approach where the proposal distribution
+is the autoregressive model itself. We find that our approach improves the exact match from 62 _._ 00%
+and 69 _._ 10% to 78 _._ 13% while guaranteeing the sampled sequences of edges constitute valid paths, as
+
+
+**Sudoku** Next, we consider the task of predicting a solution to a given Sudoku puzzle. Here the
+task is, given a 9 _×_ 9 partially-filled grid of numbers to fill in the remaining cells such that the entries
+each row, column, and 3 _×_ 3 square are unique i.e., each number from 1 to 9 appears exactly once.
+We use the dataset provided by Wang et al. (2019), consisting of 10K Sudoku puzzles, split into 9K
+training examples, and 1K test samples, all puzzles having 10 missing entries.
+
+
+Each LLM is prompted with the string “Give me the solution of the following Sudoku without
+any extra text or quotes” followed by the Sudoku Puzzle. As baselines, we used Gemini 1.5 Flash
+and GPT-4o mini, and post-process the responses to remove any extraneous text returned by the
+LLM. We compare the baselines against Llama3-8B constrained using our approach GEN-C, with
+the constraint that the elements of every row, column and 3 _×_ 3 square are unique. Our results are
+shown in Table 2. We see that where as Gemini and GPT4o are able solve only 26% and 45% of the
+Sudoku puzzles, our approach consistently manages to recover the correct Sudoku Puzzle solution.
+
+
+**LLM detoxification** Lastly, we consider the task of LLM detoxification. That is, we investigate
+the effectiveness of logical constraints, enforced using GEN-C, at steering the model away from
+toxic prompted-generations. We choose a _very_ simple constraint to be enforced by GEN-C through
+
+9
+
+
+out this task, namely we ban any of a list of “bad words”, including profanity, slurs, and swear
+words [2] from appearing as part of the model’s generations. Similar to previous work (Gehman et al.,
+2020; Wang et al., 2022), we evaluate on the REALTOXICITYPROMPTS, a dataset of almost 100k
+prompts ranging from nontoxic, assigned a toxicity score of 0, to very toxic, assigned a toxicity
+score of 1. We focus on LLAMA3-8B (Radford et al., 2019) as a base model for detoxification.
+As customary (Gehman et al., 2020; Wang et al., 2022), we use Perspective API, an API for toxic
+language and hate speech detection, to score the toxicity of our predictions. It returns scores in the
+range 0 to 1 _._ 0, corresponding to nontoxic on the one end, and extremely toxic on the other. The
+toxicity score can be interpreted as the likelihood of the text being perceived as toxic and have been
+shown to be strongly correlated with human evaluations (Wang et al., 2022; Welbl et al., 2021).
+
+
+We compare LLAMA3-8B against WORD BANNING, which for this simple constraint functions
+very similarly to Outlines (Willard & Louf, 2023) and Guidance (Lundberg et al., 2024). It keeps
+track of the words generated so far, and prevents the banned expression from appearing by setting
+its probability to 0. Word Banning could therefore be seen of as a greedy approximation of what
+we might hope to achieve using GEN-C: intuitively, it might not be able to recover from generating
+a sentence associated with a toxic intent as a result of making greedy decision at every step of the
+generaton. We report the _Expected_ _Maximum_ _Toxicity_ and the _Toxicity_ _Probability_ . The _Expected_
+_Maximum_ _Toxicity_ measures the worst-case toxicity by calculating the maximum toxicity over 25
+generations under the same prompt with different random seeds, and averaging the maximum toxicity over all prompts. This metric can be seen as a measure of how intensely offensive a generation is.
+_Toxicity Probability_ estimates the empirical probability of generating toxic language by evaluating
+the fraction of times a toxic continuation is generated at least once over 25 generations with different
+random seeds for all prompts. This metric can be seen as a measure of how likely the LLM is to be
+offensive. Both of the above metrics are computed for the full set of prompts, only the toxic subset
+of the prompts, and only the nontoxic subset of the prompts. To understand the impact of detoxification, we evaluate the quality of the LLM generations by measuring the perplexity of the generations
+according to LLAMA3-70B averaged across 5 different runs. Our results are seen in Table 3.
+
+
+We can see that word banning lowers the toxicity of the generations produced by LLAMA3-8B at
+a negligible decrease in perplexity. More specifically, we observe that it reduces the average worstcase toxicity as well as the probability of producing a toxic generation when prompted with nontoxic
+prompts by a modest 1%, but when prompted with nontoxic prompts the reduction in toxicity is
+much higher at 3% and almost 6% for the expected maximum toxicity and toxicity probability,
+respectively. Moving on to constraining our LLAMA3-8B with our approach GEN-C attains the
+same perplexity as using word banning, but greatly reduces the toxicity of LLAMA3-8B, especially
+on toxic prompts where it results in almost twice as much the reduction in toxicity affected by word
+banning, both in terms of the expected maximum toxcity as well as the toxicity probability.
+
+
+6 CONCLUSION AND FUTURE WORK
+
+
+We proposed a new approach for constraining LLMs which we called GEN-C. Given a logical constraint, GEN-C guarantees that an autoregressive model’s generations satisfy the constraint. GEN-C
+is probabilistically sound, while providing a concise constraint specification language as well as an
+exponentially more succinct compilation form compared to current defacto approaches to controlled
+generation. We have showed that GEN-C can be applied to autoregressive models such as LSTMs
+as well as large scale LLMs, outperforming the baselines on the tasks of minimum-cost paths prediction, language as well as solving Sudoku puzzles, where we achieved a perfect accuracy, beating
+both GPT-4o and Gemini 1.5 by a large margin. We have also shown that by virtue of its probabilistic nature, GEN-C is able to outperform current approaches for constrained generation on LLM
+detoxification using only a list of toxic expressions as a constraint, relying on probabilistic inference.
+
+
+We envision extending and building upon GEN-C in a multitude of ways. First, on the systems
+side since GEN-C extensively uses the language of tractable circuits, we plan on a tight integration
+with circuits libraries, such as pyjuice (Liu et al., 2024a) to greatly improve the efficiency of our
+approach, as well as open the door for many potentially interesting probabilistic queries. Second,
+we hope to explore more applications of constrained generation, with one alluring possibility being
+the use of constraints to improve the factual accuracy of current LLMs.
+
+
+[2List downloaded from here.](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words)
+
+
+10
+
+
+ACKNOWLEDGEMENTS
+
+
+The work is supported by the DARPA ANSR program FA8750-23-2-0004. The views and conclusions are those of the authors and should not reflect the official policy or position of DARPA or the
+U.S. Government.
+
+
+REFERENCES
+
+
+Kareem Ahmed, Tao Li, Thy Ton, Quan Guo, Kai-Wei Chang, Parisa Kordjamshidi, Vivek Srikumar, Guy Van den Broeck, and Sameer Singh. Pylon: A pytorch framework for learning with
+constraints. In _Proceedings of the 36th AAAI Conference on Artificial Intelligence (Demo Track)_,
+feb 2022a.
+
+
+Kareem Ahmed, Stefano Teso, Kai-Wei Chang, Guy Van den Broeck, and Antonio Vergari. Semantic probabilistic layers for neuro-symbolic learning. In _NeurIPS_, 2022b.
+
+
+Kareem Ahmed, Eric Wang, Kai-Wei Chang, and Guy Van den Broeck. Neuro-symbolic entropy
+regularization. In _The 38th Conference on Uncertainty in Artificial Intelligence_, 2022c.
+
+
+Kareem Ahmed, Kai-Wei Chang, and Guy Van den Broeck. A pseudo-semantic loss for deep generative models with logical constraints. In _NeurIPS_, 2023a.
+
+
+Kareem Ahmed, Zhe Zeng, Mathias Niepert, and Guy Van den Broeck. Simple: A gradient estimator
+for k-subset sampling. In _Proceedings of the International Conference on Learning Representa-_
+_tions (ICLR)_, may 2023b.
+
+
+Julian Besag. Statistical analysis of non-lattice data. _Journal of the Royal Statistical Society. Series_
+_D (The Statistician)_, pp. pp. 179–195, 1975.
+
+
+Simone Bova. Sdds are exponentially more succinct than obdds. In _AAAI Conference on Artificial_
+_Intelligence_, 2016.
+
+
+Randal E. Bryant. Symbolic boolean manipulation with ordered binary-decision diagrams. _ACM_
+_Computing Surveys_, 1992.
+
+
+YooJung Choi, Antonio Vergari, and Guy Van den Broeck. Probabilistic circuits: A unifying framework for tractable probabilistic modeling. 2020.
+
+
+Adnan Darwiche. Sdd: A new canonical representation of propositional knowledge bases. In _IJCAI_,
+2011.
+
+
+Daniel Deutsch, Shyam Upadhyay, and Dan Roth. A general-purpose algorithm for constrained
+sequential inference. In _Proceedings of the 23rd Conference on Computational Natural Language_
+_Learning (CoNLL)_, 2019.
+
+
+Renato Lui Geh, Honghua Zhang, Kareem Ahmed, Benjie Wang, and Guy Van den Broeck. Where
+is the signal in tokenization space? In _Empirical Methods in Natural Language Processing 2024_,
+2024.
+
+
+Samuel Gehman, Suchin Gururangan, Maarten Sap, Yejin Choi, and Noah A. Smith. Realtoxicityprompts: Evaluating neural toxic degeneration in language models. _ArXiv_, abs/2009.11462,
+2020.
+
+
+Hermann Gruber and Markus Holzer. Tight bounds on the descriptional complexity of regular expressions. In _Proceedings_ _of_ _the_ _13th_ _International_ _Conference_ _on_ _Developments_ _in_
+_Language_ _Theory_, DLT ’09, pp. 276–287, Berlin, Heidelberg, 2009. Springer-Verlag. ISBN
+9783642027369. doi: 10.1007/978-3-642-02737-6 ~~2~~ 2.
+
+
+Hermann Gruber and Markus Holzer. From finite automata to regular expressions and back–a summary on descriptional complexity. _Electronic Proceedings in Theoretical Computer Science_, 151,
+05 2014. doi: 10.4204/EPTCS.151.2.
+
+
+11
+
+
+Sylvain Gugger, Lysandre Debut, Thomas Wolf, Philipp Schmid, Zachary Mueller, and Sourab Mangrulkar. Accelerate: Training and inference at scale made simple, efficient and adaptable., 2022.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In _CVPR_, June 2016.
+
+
+Edward J Hu, Moksh Jain, Eric Elmoznino, Younesse Kaddar, Guillaume Lajoie, Yoshua Bengio,
+and Nikolay Malkin. Amortizing intractable inference in large language models. In _The Twelfth_
+_International Conference on Learning Representations_, 2023.
+
+
+Daphne Koller and Nir Friedman. _Probabilistic graphical models:_ _principles and techniques_ . MIT
+press, 2009.
+
+
+Terry Koo, Frederick Liu, and Luheng He. Automata-based constraints for language model decoding, 2024.
+
+
+Ben Krause, Akhilesh Deepak Gotmare, Bryan McCann, Nitish Shirish Keskar, Shafiq Joty, Richard
+Socher, and Nazneen Fatema Rajani. Gedi: Generative discriminator guided sequence generation.
+In _Findings_ _of_ _the_ _Association_ _for_ _Computational_ _Linguistics:_ _EMNLP_ _2021_, pp. 4929–4952,
+2021.
+
+
+Alexander K Lew, Tan Zhi-Xuan, Gabriel Grand, and Vikash K Mansinghka. Sequential monte carlo
+steering of large language models using probabilistic programs. _arXiv preprint arXiv:2306.03081_,
+2023.
+
+
+Anji Liu, Kareem Ahmed, and Guy Van den Broeck. Scaling tractable probabilistic circuits: A systems perspective. In _International Conference on Machine Learning (ICML), July 2024_, 2024a.
+
+
+Michael Xieyang Liu, Frederick Liu, Alex Fiannaca, Terry Koo, Lucas Dixon, Michael Terry, and
+Carrie Cai. “we need structured output”’: Towards user-centered constraints on large language
+model output. pp. 9, 2024b.
+
+
+Ximing Lu, Peter West, Rowan Zellers, Ronan Le Bras, Chandra Bhagavatula, and Yejin Choi.
+Neurologic decoding:(un) supervised neural text generation with predicate logic constraints. In
+_Proceedings of the 2021 Conference of the North American Chapter of the Association for Com-_
+_putational Linguistics:_ _Human Language Technologies (NAACL)_, 2021.
+
+
+Ximing Lu, Sean Welleck, Peter West, Liwei Jiang, Jungo Kasai, Daniel Khashabi, Ronan Le Bras,
+Lianhui Qin, Youngjae Yu, Rowan Zellers, et al. Neurologic a* esque decoding: Constrained text
+generation with lookahead heuristics. In _Proceedings of the 2022 Conference of the North Amer-_
+_ican Chapter of the Association for Computational Linguistics:_ _Human Language Technologies_,
+pp. 780–799, 2022.
+
+
+Scott Lundberg, Marco Ribeiro, Richard Edgar, and Harsha-Nori. Guidance: a guidance language
+for controlling large language models., 2024.
+
+
+Konstantinos Mamouras and Agnishom Chattopadhyay. determining the validity of a given isbn
+matching of regular expressions with lookaround assertions. _Proc. ACM Program. Lang._, 2024.
+
+
+Wannes Meert. Pysdd. In _Recent Trends in Knowledge Compilation_, sep 2017.
+
+
+Tao Meng, Sidi Lu, Nanyun Peng, and Kai-Wei Chang. Controllable text generation with neurallydecomposed oracle. In _Advances in Neural Information Processing Systems 35 (NeurIPS)_, 2022.
+
+
+Chinmay Mittal, Krishna Kartik, Mausam, and Parag Singla. Puzzlebench: Can llms solve challenging first-order combinatorial reasoning problems?, 2024.
+
+
+OpenAI. Introducing structured outputs in the api. [https://openai.com/index/](https://openai.com/index/introducing-structured-outputs-in-the-api/)
+[introducing-structured-outputs-in-the-api/, June 2023.](https://openai.com/index/introducing-structured-outputs-in-the-api/) Accessed: 2023-0924.
+
+
+Liangming Pan, Alon Albalak, Xinyi Wang, and William Wang. Logic-LM: Empowering large language models with symbolic solvers for faithful logical reasoning. In _Findings of the Association_
+_for Computational Linguistics:_ _EMNLP 2023_, 2023.
+
+
+12
+
+
+Kanghee Park, Jiayu Wang, Taylor Berg-Kirkpatrick, Nadia Polikarpova, and Loris D’Antoni.
+Grammar-aligned decoding. In _NeurIPS_, 2024.
+
+
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Kopf, Edward
+Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner,
+Lu Fang, Junjie Bai, and Soumith Chintala. Pytorch: An imperative style, high-performance
+deep learning library. In H. Wallach, H. Larochelle, A. Beygelzimer, F. d'Alch´e-Buc, E. Fox,
+and R. Garnett (eds.), _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 32. Curran
+Associates, Inc., 2019.
+
+
+Robert Peharz, Steven Lang, Antonio Vergari, Karl Stelzner, Alejandro Molina, Martin Trapp, Guy
+Van den Broeck, Kristian Kersting, and Zoubin Ghahramani. Einsum networks: Fast and scalable
+learning of tractable probabilistic circuits. In _International_ _Conference_ _of_ _Machine_ _Learning_,
+2020.
+
+
+Marin Vlastelica Poganˇci´c, Anselm Paulus, Vit Musil, Georg Martius, and Michal Rolinek. Differentiation of blackbox combinatorial solvers. In _ICLR_, 2020.
+
+
+Lianhui Qin, Sean Welleck, Daniel Khashabi, and Yejin Choi. Cold decoding: Energy-based constrained text generation with langevin dynamics. _Advances_ _in_ _Neural_ _Information_ _Processing_
+_Systems_, 35:9538–9551, 2022.
+
+
+Alec Radford, Jeff Wu, Rewon Child, David Luan, Dario Amodei, and Ilya Sutskever. Language
+models are unsupervised multitask learners. 2019.
+
+
+Dan Roth. On the hardness of approximate reasoning. In _IJCAI_, pp. 613–619. Morgan Kaufmann,
+1993.
+
+
+Torsten Scholak, Nathan Schucher, and Dzmitry Bahdanau. PICARD: Parsing incrementally for
+constrained auto-regressive decoding from language models. In _Proceedings of the 2021 Confer-_
+_ence on Empirical Methods in Natural Language Processing_, 2021.
+
+
+Andy Shih, Dorsa Sadigh, and Stefano Ermon. Long horizon temperature scaling. In _Proceedings_
+_of the 40th International Conference on Machine Learning (ICML)_, 2023.
+
+
+Jiao Sun, Yufei Tian, Wangchunshu Zhou, Nan Xu, Qian Hu, Rahul Gupta, John Wieting, Nanyun
+Peng, and Xuezhe Ma. Evaluating large language models on controlled generation tasks. In
+_Proceedings_ _of_ _the_ _2023_ _Conference_ _on_ _Empirical_ _Methods_ _in_ _Natural_ _Language_ _Processing_,
+2023.
+
+
+Antonio Vergari, Nicola Di Mauro, and Floriana Esposito. Simplifying, regularizing and strengthening sum-product network structure learning. In _Joint European Conference on Machine Learning_
+_and Knowledge Discovery in Databases_, pp. 343–358. Springer, 2015.
+
+
+Antonio Vergari, YooJung Choi, Anji Liu, Stefano Teso, and Guy Van den Broeck. A compositional
+atlas of tractable circuit operations for probabilistic inference. _Advances_ _in_ _Neural_ _Information_
+_Processing Systems_, 34, 2021.
+
+
+Bailin Wang, Zi Wang, Xuezhi Wang, Yuan Cao, Rif A. Saurous, and Yoon Kim. Grammar prompting for domain-specific language generation with large language models. In _Thirty-seventh Con-_
+_ference on Neural Information Processing Systems_, 2023.
+
+
+Boxin Wang, Wei Ping, Chaowei Xiao, Peng Xu, Mostofa Patwary, Mohammad Shoeybi, Bo Li,
+Anima Anandkumar, and Bryan Catanzaro. Exploring the limits of domain-adaptive training for
+detoxifying large-scale language models. In _Neurips_, 2022.
+
+
+Po-Wei Wang, Priya L. Donti, Bryan Wilder, and J. Zico Kolter. Satnet: Bridging deep learning and
+logical reasoning using a differentiable satisfiability solver. In _ICML_, volume 97 of _Proceedings_
+_of Machine Learning Research_, pp. 6545–6554. PMLR, 2019.
+
+
+Johannes Welbl, Amelia Glaese, Jonathan Uesato, Sumanth Dathathri, John F. J. Mellor, Lisa Anne
+Hendricks, Kirsty Anderson, Pushmeet Kohli, Ben Coppin, and Po-Sen Huang. Challenges in
+detoxifying language models. _ArXiv_, abs/2109.07445, 2021.
+
+
+13
+
+
+Brandon T. Willard and R´emi Louf. Efficient guided generation for large language models. _ArXiv_,
+abs/2307.09702, 2023.
+
+
+Jingyi Xu, Zilu Zhang, Tal Friedman, Yitao Liang, and Guy Van den Broeck. A semantic loss
+function for deep learning with symbolic knowledge. In _International_ _conference_ _on_ _machine_
+_learning_, pp. 5502–5511. PMLR, 2018.
+
+
+Yexiang Xue, Arthur Choi, and Adnan Darwiche. Basing decisions on sentences in decision diagrams. _Proceedings of the AAAI Conference on Artificial Intelligence_, 2012.
+
+
+Kevin Yang and Dan Klein. Fudge: Controlled text generation with future discriminators. In _Pro-_
+_ceedings of the 2021 Conference of the North American Chapter of the Association for Computa-_
+_tional Linguistics:_ _Human Language Technologies (NAACL)_, 2021.
+
+
+Honghua Zhang, Meihua Dang, Nanyun Peng, and Guy Van den Broeck. Tractable control for
+autoregressive language generation. In _Proceedings of the 40th International Conference on Ma-_
+_chine Learning (ICML)_, jul 2023.
+
+
+Honghua Zhang, Po-Nien Kung,, Masahiro Yoshida, Nanyun Peng, and Guy Van den Broeck.
+Adaptable logical control for large language models. In _NeurIPS_, 2024.
+
+
+Lianmin Zheng, Liangsheng Yin, Zhiqiang Xie, Chuyue Sun, Jeff Huang, Cody Hao Yu, Shiyi Cao,
+Christos Kozyrakis, Ion Stoica, Joseph E. Gonzalez, Clark Barrett, and Ying Sheng. Sglang:
+Efficient execution of structured language model programs. _NeurIPS 2024_, 2024.
+
+
+14
+
+
+A PROOFS
+
+
+**Theorem 1.** LOCALLY CONSTRAINED RESAMPLING in Algorithm 2 returns a sample _**y**_ s.t. _**y**_ _|_ = _α_ .
+
+
+_Proof._ Let _**y**_ = ( _**y**_ 1 _, . . .,_ _**y**_ _n_ ) denote a string. Let vocabulary _V_ denote a set of subwords, or _tokens_ .
+A _tokenization_ of a string _**y**_ w.r.t. a vocabulary _V_ is a sequence of tokens _**v**_ = ( _v_ 1 _, . . ., vn_ ), such
+that each _vi_ _∈V_ and the concatenation of all tokens _vi_ constitutes the string _**y**_, i.e., _v_ 1 _◦· · ·◦_ _vn_ = _**y**_ .
+
+
+An autoregressive distribution _p_ ( _·_ ) defines a conditional probability distribution over tokens, and
+therefore, _induces a distribution over tokenizations of a given string_ _**y**_ (Geh et al., 2024)
+
+
+_p_ ( _**v**_ _,_ _**y**_ ) =
+
+
+�� _|_ _**v**_ _|_
+_i_ =1 _[p]_ [ (] _[v][i][|][v]_ [1] _[, . . ., v][i][−]_ [1][)] [if] _**[ v]**_ _[|]_ [=] _**[ y]**_ _[,]_
+0 otherwise,
+
+
+where _**v**_ _|_ = _**y**_ denotes that _**v**_ is a tokenization of _**y**_ .
+
+
+We start by showing that, if the canonical tokenization of a string _**y**_ does not satisfy _α_, then Algorithm 2 precludes any non-canonical tokenizations of the string _**y**_ . To see that, observe that
+a non-canonical tokenization of a sentence _**y**_ generated by Algorithm 2 is subsequently cast into a
+canonical tokenization by invoking the `canonize` function. It is then assigned an importance weight
+of 0, and assigned zero probability in the resampling distribution on line 9 in Algorithm 2.
+
+
+During the resampling step, the set of candidate samples are only those sampled from _p_ _**y**_ ( _· | α_ )
+
+
+We will now show that we can always construct _p_ _**y**_ ( _· | α_ ) given a constraint _α_ defined over variables
+_{Y_ 11 _, . . ., Ynk}_ and a contextualized psuedolikelihood distribution _p_ ˜ _**y**_ ( _·_ ). Recall from Section 3.1
+that the contextualized pseudolikelihood distribution is fully-factorized. We can therefore construct
+a deterministic and decomposable circuit representing the contextualized pseudolikelihood distribution where with a slight abuse of notation, we use _p_ ˜ _**y**_ ( _·_ ) to refer to both the distribution as well as its
+circuit representation. Such a construction proceeds by introducing a Bernoulli distribution unit for
+each variable, and connecting the Bernoulli distribution units using a singular product node.
+
+
+Given a constraint _α_, we can compile it into a constraint circuit _cα_ . The simplest construction is as
+follows. Order the variables lexicographically. Alternate OR and AND nodes. An OR node branches
+on the current variable being true or false, and has two children: a left (right) AND node whose
+children are the positive (negative) literal and the subtree corresponding to substituting the positive
+(negative) literal into the constraint. Repeat the above process till exhausting all the variables.
+
+
+Given a constraint circuit _cα_, a deterministic and omnicompatible circuit (Vergari et al., 2021) _p_ ˜ _**y**_ ( _·_ ),
+we can compute the product of the two circuits _p_ ˜ _**y**_ ( _·, α_ ) in time _O_ ( _|p||c|_ ), following from Theorem
+3.2 in Vergari et al. (2021). Furthermore, the resulting product circuit _p_ ˜ _**y**_ ( _·, α_ ) can be normalized in
+time _O_ ( _|p_ ˜ _|_ ) to obtain _p_ ˜ _**y**_ ( _· | α_ ), following from Proposition 2.1 in Vergari et al. (2021)
+
+
+B LANGUAGE DETOXIFICATION
+
+
+The experiments were run on a server with an AMD EPYC 7313P 16-Core Processor @ 3.7GHz, 3
+NVIDIA RTX A6000, and 252 GB RAM. Our LLM detoxification experiments utilized both GPUs
+using the Huggingface Accelerate (Gugger et al., 2022) library.
+
+
+In order to construct our constraint, we start with the list of bad words [3] and their space-prefixed
+variants [4] . We then tokenize this list of augment bad words, yielding 871 unique possibly-bad tokens
+(some tokens are only bad when considered in context with other tokens), in addition to an extra
+catch-all good token to which remaining tokens map to. Our constraint then disallows all sentences
+containing any of the words on the augmented list, starting at any of the sentence locations 0 through
+len(sentence) - len(word). The code to process the list of words, the code to create the constraint as
+well as the constraint itself will be made publicly available upon paper acceptance.
+
+
+[3List downloaded from here.](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words)
+4A word will be encoded differently whether it is space-prefixed or not.
+
+
+15
+
+
+Figure 3: **Example** **inputs** **and** **groundtruth** **labels** **for** **two** **of** **the** **three** **tasks** **considered** **in**
+**our** **experimental** **evaluation.** (Left) Example Warcraft terrain map and a possible (non-unique)
+minimum-cost shortest path. (Right) Example Sudoku puzzle and corresponding (unique) solution.
+
+
+We use a batch size of 10 during generation, and only sample every sentence 5 times. The model
+sentence _**y**_ was generated using nucleus sampling with _p_ = 0 _._ 9 and a temperature of 1. We experimented with tempering the contextualized pseudo-likelihood distribution on a random set of prompts
+of size 1000 using _τ_ = _{_ 0 _._ 1 _,_ 0 _._ 3 _,_ 0 _._ 5 _,_ 0 _._ 7 _,_ 0 _._ 9 _,_ 1 _._ 0 _}_ . Our final results are reported on a random subset of the RealToxicityPrompts dataset of size 10k, average over 5 different runs using 5 different
+seeds. For only this task, our implementation makes use of top- _k_ to construct the pseudo-likelihood
+distribution (lines 7-12 in Algorithm 1) due to the lack of computational resources. Generations
+from all methods were limited to a maximum of 20 new tokens.
+
+
+C SUDOKU
+
+
+The experiments were run on a server with an AMD EPYC 7313P 16-Core Processor @ 3.7GHz,
+2 NVIDIA RTX A6000, and 252 GB RAM. We use the dataset provided by Wang et al. (2019),
+consisting of 10K Sudoku puzzles, split into 9K training examples, and 1K test samples, all puzzles
+having 10 missing entries. Our constraint disallows any solution in which the rows, columns and
+square are not unique.
+
+
+D WARCRAFT SHORTEST PATH
+
+
+The experiments were run on a server with an AMD EPYC 7313P 16-Core Processor @ 3.7GHz, 2
+NVIDIA RTX A6000, and 252 GB RAM. We used the best model trained by (Ahmed et al., 2023a).
+The model uses a CNN-LSTM model for this task. Precisely, a ResNet-18 encodes the map to an
+embedding of dimension 128. An LSTM with 1 layer, and a hidden size of 512 then predicts the
+next edge in the shortest path conditioned on the input map and all previous edges. The constraint
+disallows any prediction not a valid path connecting the upper left and lower right vertices.
+
+
+E BROADER IMPACT
+
+
+The work presented in this paper has a significant potential for positive societal impact. Neurosymbolic AI moves us closer to models whose behavior is trustworthy, explainable and fair. This
+extends to critical domains such as autonomous driving, medical diagnosis and financial planning
+to name a few. Large language models have recently seen an exponential increase in popularity,
+crossing the threshold of being mere research tools into products that are utilized by the general
+public. Unfortunately, the same expressivity that renders these models so powerful also makes it
+hard to reason about their behavior. We believe our proposed approach is a step in right direction:
+it expands the class of logical constraints we can tackle while account for and acknowledging the
+underlying probability distribution. And we have shown the merits of our approach when applied to
+LLM detoxification. We must, however, also be cognizant of the potential negative societal impacts:
+In very much the same way that our approach can be used to output non-toxic generations, it can be
+used to output toxic and harmful generations.
+
+
+16

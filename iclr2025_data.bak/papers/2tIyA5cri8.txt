@@ -1,0 +1,2317 @@
+# SPARSE AUTOENCODERS REVEAL TEMPORAL DIF### FERENCE LEARNING IN LARGE LANGUAGE MODELS
+
+
+**Can Demircan** [˚] _[,]_ [1] **Tankred Saanum** [˚] _[,]_ [2]
+
+
+can.demircan@helmholtz-munich.de tankred.saanum@tuebingen.mpg.de
+
+
+**Akshay K. Jagadish** [1] _[,]_ [2] **Marcel Binz** [1] **Eric Schulz** [1]
+
+
+ABSTRACT
+
+
+In-context learning, the ability to adapt based on a few examples in the input
+prompt, is a ubiquitous feature of large language models (LLMs). However, as
+LLMs’ in-context learning abilities continue to improve, understanding this phenomenon mechanistically becomes increasingly important. In particular, it is not
+well-understood how LLMs learn to solve specific classes of problems, such as
+reinforcement learning (RL) problems, in-context. Through three different tasks,
+we first show that Llama 3 70B can solve simple RL problems in-context. We
+then analyze the residual stream of Llama using Sparse Autoencoders (SAEs) and
+find representations that closely match temporal difference (TD) errors. Notably,
+these representations emerge despite the model only being trained to predict the
+next token. We verify that these representations are indeed causally involved in
+the computation of TD errors and _Q_ -values by performing carefully designed interventions on them. Taken together, our work establishes a methodology for
+studying and manipulating in-context learning with SAEs, paving the way for a
+more mechanistic understanding.
+
+
+1 INTRODUCTION
+
+
+Large language models (LLMs) pretrained on large-scale text corpora are proficient in-context learners. They can predict and learn novel rules and functions conditioned only on a text prompt with a
+few examples. This phenomenon has been demonstrated under many different paradigms, such as
+translation (Brown et al., 2020; Wei et al., 2022), function learning and sequence prediction (Garg
+et al., 2022; Coda-Forno et al., 2023), and even reinforcement learning (Binz & Schulz, 2023; Shinn
+et al., 2024; Brooks et al., 2022; Schubert et al., 2024; Hayes et al., 2024). Consequently, understanding _how_ in-context learning is implemented mechanistically becomes increasingly important.
+In this paper, we investigate the mechanisms underlying in-context reinforcement learning (RL) in
+LLMs, specifically how they can learn to generate actions that maximize future discounted rewards
+through trial and error, given only a scalar reward signal.
+
+
+In RL, the central learning signal is the temporal difference (TD) error (Sutton, 1988). The TD error
+is the difference between the agent’s belief about a state-action pair’s value, and a target value, which
+is constructed as the immediate reward plus the discounted value of the successor state. For instance,
+when the agent receives an unexpected reward, or unexpectedly transitions to a high-value successor
+state, the corresponding TD error can be used to update beliefs about the value of the current state.
+This learning rule forms the foundation of many RL algorithms, such as _Q_ -learning (Mnih et al.,
+2015; Watkins & Dayan, 1992) and Actor-Critic (Konda & Tsitsiklis, 1999; Sutton et al., 1999;
+Haarnoja et al., 2018). TD learning has also played an important role in neuroscience, where several
+experiments have shown links between TD-like computations and dopamine in multiple species
+
+
+˚ Equal contribution.
+1Institute for Human-Centered AI, Helmholtz Computational Health Center, Munich, Germany
+2Max Planck Institute for Biological Cybernetics, T¨ubingen, Germany
+
+
+1
+
+
+A
+
+
+D
+
+
+Figure 1: We study the mechanisms of in-context learning in three different tasks: ( _A_ ) The Two-Step
+Task, ( _B_ ) the Grid World task, and ( _C_ ) the graph prediction task. ( _D_ ) Example pipeline for the TwoStep Task. We prompt Llama as shown on the left. As it selects its actions, we record the internal
+representation for the tokens that precede the actions, which are highlighted in orange. We train
+SAEs on these representations (middle) and correlate with the learned latents of the SAEs against
+the TD error signals and other variables of interest we obtain from reinforcement learning agents
+(right). After identifying such latents, we lesion [2] them and replace Llama’s internal representations
+with reconstructions following the lesions (middle). We then test whether the lesion created the
+expected effects in the behavior (right).
+
+
+(Montague et al., 1996; Schultz et al., 1997; Fiorillo et al., 2003; Flagel et al., 2011; Niv et al.,
+2015).
+
+
+TD learning is a fundamental algorithm that has been successful in modeling both machine and animal learning. Could LLMs learn to implement TD learning in-context simply from being trained
+to perform next-token prediction? We use sparse autoencoders (SAEs) to analyze the representations supporting in-context learning in RL settings. These models have successfully been used to
+build a mechanistic understanding of neural networks and their representations (Bricken et al., 2023;
+Templeton et al., 2024; Gao et al., 2024; Lieberum et al., 2024). Across several experiments, we
+establish a methodology for systematically studying _and_ manipulating in-context RL in Llama 3
+70B [1] (Dubey et al., 2024) with SAEs (see Figure 1). Using our methodology, we uncover representations similar to TD errors and _Q_ -values in multiple tasks. Moreover, we find that manipulating
+these features changes Llama’s behavior and representations in predictable ways. We believe our
+study paves the way for a mechanistic understanding of in-context learning, setting a precedent for
+investigating how LLMs solve other types of learning problems in context.
+
+
+1From here onwards, we refer to this model as Llama.
+2Lesioning refers to setting the activations of specific units to 0. This is also commonly referred to as zero
+ablation in the literature (Heimersheim & Nanda, 2024).
+
+
+2
+
+
+2 METHODS
+
+
+2.1 REINFORCEMENT LEARNING
+
+
+We investigate in-context learning in the setting of Markov Decision Processes (MDPs). An MDP
+consists of a state space _S_, an action space _A_, and transition dynamics _st_ `1 „ _T_ p _st_ `1| _st, at_ q,
+defining the probability distribution of successor states given the current state and action, as well
+as a reward function _r_ p _st, at_ q that maps state-action pairs to a scalar reward term. The goal of
+the agent is to learn”řa _T_ policy _πθ_ p _at_ | _s_ ı _t_ q that maximizes future discounted rewards, e.g. _Q_ -values
+_Qπθ_ p _st, at_ q “ E _πθ_ _t_ “0 _[γ][t][r]_ [p] _[s][t][, a][t]_ [q], where _γ_ is a discount factor.
+
+
+A canonical algorithm for learning the _Q_ -value function for a fixed policy _πθ_, is TD learning. From
+an initial estimate of the _Q_ -values, TD learning bootstraps a sequence of estimates that converge to
+the true values. This is done by minimizing _TD errors_, the difference between the agent’s previous
+estimated _Q_ -values, and the immediate reward plus the discounted _Q_ -value of the successor state.
+Assuming the policy always picks the action that maximizes _Q_ -values, the temporal difference error
+and subsequent _Q_ -value update can be written as follows:
+
+
+_δ_ TD “ _r_ p _st, at_ q ` _γ_ max _Q_ p _st_ `1 _, a_ q ´ _Q_ p _st, at_ q (1)
+_a_
+
+_Q_ p _st, at_ q Ð _Q_ p _st, at_ q ` _α δ_ TD (2)
+
+
+For subsequent analyses, we rely on _Q_ -learning, which is a variant of TD learning that learns a value
+function for the optimal policy. See Appendix A.1 for details surrounding the implementation of the
+_Q_ -learning model.
+
+
+2.2 SPARSE AUTOENCODERS
+
+
+A natural place to look for the traces of TD errors and _Q_ -values is in the residual streams of the
+Llama’s transformer blocks (Templeton et al., 2024; Bricken et al., 2023; Gurnee et al., 2023). The
+residual stream of a transformer block carries information from the input and all preceding blocks,
+making it a viable candidate for initial exploration.
+
+
+Directly searching for features that correspond to _Q_ -values or TD errors in the residual stream,
+while possible, is often impractical. In Llama, each token is represented as an 8192-dimensional
+vector in the residual stream. Due to the high number of statistical comparisons such an approach
+would necessitate, analyses showing connections between activations and TD errors will suffer from
+reduced power. Furthermore, it has been shown that LLMs represent concepts in an entangled
+and distributed manner. This phenomenon, known as polysemanticity (Elhage et al., 2022), occurs
+when single semantic concepts are represented across multiple neurons. Using tools from the field
+of mechanistic interpretability (Olah, 2023), we seek to learn a _disentangled_, _monosemantic_, and
+potentially lower dimensional set of features from the residual stream. We hypothesize that features
+corresponding to TD errors or action values can be found in this low-dimensional disentangled latent
+space.
+
+
+One popular model for learning such features is the Sparse Autoencoder (SAE) architecture. SAEs
+are trained with gradient descent to reconstruct the potentially entangled features learned by models
+like transformers through a linear combination of sparse latent features. SAEs have been shown to
+learn more easily interpretable and monosemantic features (Cunningham et al., 2023; Bricken et al.,
+2023). We used SAEs with a single dense encoder layer ( _f_ ), followed by a ReLU non-linearity ( _σ_ )
+and a single dense decoder layer ( _g_ ). We train SAEs to reconstruct vectors from the residual stream
+_h_ while minimizing the _L_ 1 norm of the encoded features:
+
+
+_L_ SAE “ || _h_ ´ _h_ [˜] || [2] 2 [`] _[ β]_ [||] _[σ]_ [p] _[f]_ [p] _[h]_ [qq||] 1 [2] (3)
+
+
+where _h_ [˜] “ _g_ p _σ_ p _f_ p _h_ qqq. We trained separate SAEs for each of the 80 blocks of Llama and each
+experiment. Further training details are provided under Appendix A.2.
+
+
+3
+
+
+70B
+8B
+
+|A|Col2|
+|---|---|
+|||
+|||
+
+
+0 10 20 30
+
+Episode
+
+|E|Col2|
+|---|---|
+||No<br>TD|
+|||
+
+
+0 10 20 30
+
+Episode
+
+
+7
+
+6
+
+5
+
+4
+
+3
+
+
+7
+
+6
+
+5
+
+4
+
+3
+
+
+|C Valu|ues|
+|---|---|
+|M<br>Q-|yopic<br>learning|
+|||
+
+
+|D Err|rors|
+|---|---|
+|M<br>Q|yopic<br>-learning|
+|||
+
+
+|G Valu|ues|
+|---|---|
+|<br>|No lesion<br>TD lesion|
+|||
+
+
+|H Err|rors|
+|---|---|
+|<br>|No lesion<br>TD lesion|
+|||
+
+
+0 25 50 75
+
+Block
+
+
+0 25 50 75
+
+Block
+
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+
+Block
+
+
+0 25 50 75
+
+Block
+
+
+3000
+
+2750
+
+2500
+
+2250
+
+2000
+
+
+3000
+
+2750
+
+2500
+
+2250
+
+2000
+
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+
+|B|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|M<br>F|M<br>F|yopi|yopi|c<br>le|Q<br>arni|Q<br>arni|ng|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|l<br>-l<br>e <br>  y<br>e<br>  re<br>|TD<br>esio<br>ike <br> Tw<br>  on<br>scri<br>  wa<br>|D||No<br>esio<br>eat<br>-St<br>   ha<br>d <br>   es<br>|C|n|n|
+|l<br>-l<br>e <br>  y<br>e<br>  re<br>|TD<br>esio<br>ike <br> Tw<br>  on<br>scri<br>  wa<br>|D|n<br>l<br> f<br>o<br>  d c<br>be<br>  rd<br>|n<br>l<br> f<br>o<br>  d c<br>be<br>  rd<br>|n<br><br>l<br>ure<br>ep<br>   nc<br>by <br>   tim<br>|n<br><br>l<br>ure<br>ep<br>   nc<br>by <br>   tim<br>|n<br><br>l<br>ure<br>ep<br>   nc<br>by <br>   tim<br>|
+
+
+a single TD feature in Llama is sufficient to impair performance and make behavior less consistent
+with _Q_ -learning. ( _G_ & _H_ ) Negatively scaling the TD feature decreases subsequent representations’
+similarity to _Q_ -values and TD errors.
+
+
+3 LLAMA USES TD FEATURES TO LEARN POLICIES IN-CONTEXT
+
+
+We first sought to assess Llama’s ability to solve an RL problem purely in-context. We designed
+a simple MDP inspired by the Two-Step Task (Daw et al., 2011; Kool et al., 2016). In this task,
+Llama first had to choose to go Left or Right to enter either the Apple state or the Orange
+state, respectively. This first state-transition was always awarded with 0 rewards. From there, Llama
+again had to choose Left or Right to enter the terminal state and receive a reward. The reward
+and task structure are visualized in Figure 1A. Rewards and transition dynamics were deterministic.
+We instructed Llama to maximize reward and encouraged it to explore more at the beginning of the
+experiment (see Appendix A.3 for the exact prompt). When entering a new state, we sampled an
+action from Llama’s predictive distribution of the possible action tokens with a temperature of 1.
+Llama completed 100 independent experiments initialized with unique seeds, each consisting of 30
+episodes. We sampled actions from a random policy in the first 7 episodes to ease the exploration
+problem.
+
+
+We first observe that Llama achieved significantly higher returns than chance in the Two-Step Task,
+and often learned the optimal policy (see Figure 2A). The smaller 8B parameter version of Llama
+performed roughly at chance level, suggesting that the ability to learn policies through RL emerges
+with scale. As a result, we focus on the 70B parameter version for subsequent analyses. Next, we
+fitted behavioral models to the sequences of actions performed by Llama. We fitted a _Q_ -learning
+model that updated _Q_ -values using TD errors, a myopic _Q_ -leaning model that only cared about
+immediate rewards [2], which we implemented by setting the discount parameter _γ_ of the _Q_ -learning
+model to 0, as well as a repetition model that computed choice probabilities as a function of how
+often an action was picked in a given state in the past. We see that Llama’s behavior is best captured
+by a _Q_ -learning model, attaining a negative log-likehood (NLL) score of 2729, outperforming the
+myopic model with an NLL of 2864. This indicates that it integrates information about future
+
+
+2In the animal learning literature, this is referred to as the Rescorla-Wagner model (Rescorla & Wagner,
+1972).
+
+
+4
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+1.0
+
+
+0.5
+
+
+0.0
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+Run 1 Run 2 Run 3 Run 4 Run 5 Run 6
+
+
+0 30 60
+
+
+0 30 60 0 30 60 0 30 60 0 30 60 0 30 60
+
+Step
+
+
+TD SAE feature
+
+
+Figure 3: Qualitative comparison of the TD error and the best matching SAE feature from block 34
+for three separate runs in all three variations of the Two-Step Task. The SAE feature shows similar
+jumps as TD when Llama encounters surprising events, such as transitioning to unexpected states or
+receiving an unexpected reward. The dashed line indicates the onset of the change in either transition
+dynamics or reward function.
+
+
+discounted rewards to select actions (see Figure 2B). The repetition model, which predicted that
+Llama simply repeated action patterns in the prompt, fits behavior worse than chance with an NLL
+of 5745.
+
+
+Next, we trained SAEs on the residual stream outputs from all of Llama’s transformer blocks. To
+create a diverse training set for the SAEs, we collected representations from Llama on two additional
+variations of the Two-Step Task where either the reward function or the transition function changed
+in the middle of the experiment. Since unexpected changes to either transition dynamics or reward
+function will be followed by large positive or negative TD errors, we expected it to be useful for
+detecting possible TD errors in Llama’s activations. We trained each SAE using a regularization
+strength _β_ “ 1 _e_ ´ 05 for 30 epochs on 18000 residual stream representations. In the resulting
+SAEs, we find features gradually developing over the transformer blocks that track both the reward
+function (captured in the myopic values) as well as _Q_ -values (see Figure 2C).
+
+
+Furthermore, we observe features that show significant correlation with TD errors (see Figure 2D).
+In block 34, we find the SAE feature with the highest correlation ( _r_ “ 0 _._ 58) with the TD error of
+our _Q_ -learning model. We visualize the normalized SAE feature – overlaid with the normalized TD
+error – in Figure 3 for six different runs and the three variations of the Two-Step Task. The feature
+shows the same qualitative change as the TD error when the reward function and transition dynamics
+change. We refer to these types of latent features that resemble TD errors as _TD latents_ . To establish
+whether this TD latent has a causal connection to RL behavior, we tested Llama on the Two-Step
+Task with the TD latent either deactivated or negatively scaled. Before each choice, we replaced the
+residual stream activations in block 34 with reconstructions from the trained SAE in which the TD
+latent was set to 0 or scaled. We see that simply deactivating the TD latent led to significantly worse
+performance in the task (see Figure 2E), producing behavior that differed more from a _Q_ -learning
+agent (Figure 2F). In contrast, deactivating the SAE feature in block 34 with the _lowest_ correlation
+to TD did not produce behavior that was less likely according to the _Q_ -learning model. Finally,
+we analyzed correlations between SAE features and _Q_ -values and TD errors _after_ we scale the TD
+latent by a value of ´10, similar to Templeton et al. (2024). Here we see a substantial decrease in
+the correlation strengths for both _Q_ -values and TD errors (see Figure 2G & H). In sum, we found an
+SAE feature showing the characteristics of TD error across three different variations of the Two-Step
+
+
+5
+
+
+A
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+D
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|True rewards<br>Random rewards|Col3|
+|---|---|---|
+||||
+||||
+||||
+||||
+||||
+
+
+0 100 200 300
+
+Step
+
+|Col1|True rewards<br>Control lesion<br>TD lesion|Col3|
+|---|---|---|
+||||
+||||
+||||
+||||
+||||
+
+
+0 100 200 300
+
+Step
+
+
+|Col1|Errors Q-learning|Col3|
+|---|---|---|
+||Q-learning<br>Myopic<br>Random rewards|Q-learning<br>Myopic<br>Random rewards|
+||||
+||||
+||||
+||||
+||||
+
+
+|Col1|Values|Col3|
+|---|---|---|
+||Q-learning<br>Myopic<br>Random rewards|Q-learning<br>Myopic<br>Random rewards|
+||||
+||||
+||||
+||||
+|0<br>25<br>|0<br>25<br>|50<br>75<br>|
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|0 25 50 75 Block Values|Col3|
+|---|---|---|
+||No lesion<br>TD lesion|No lesion<br>TD lesion|
+||||
+||||
+||||
+||||
+||||
+
+
+|Col1|0 25 50 75 Block Errors|Col3|
+|---|---|---|
+||No lesion<br>TD lesion|No lesion<br>TD lesion|
+||||
+||||
+||||
+||||
+||||
+
+
+0 25 50 75
+
+Block
+
+
+0 25 50 75
+
+Block
+
+
+Figure 4: Llama can predict the actions of a _Q_ -learning agent and keeps track of variables similar
+to _Q_ -values and TD errors. ( _A_ ) Llama predicts action sequences better when given correct information about rewards. ( _B_ & _C_ ) _Q_ -values and a reward-tracking variable, as well as accompanying
+error signals, are significantly correlated with SAE features. Max correlations shown after Gaussian
+smoothing with _σ_ “ 0 _._ 5. ( _D_ ) Lesioning the TD latents impacts action prediction accuracy, whereas
+lesioning other features barely affects action predictions. ( _E_ & _F_ ) Lesioning TD latents also impacts
+subsequent _Q_ -value and TD error representations.
+
+
+Task. Intervening on this single SAE feature was sufficient to significantly alter Llama’s ability to
+perform RL in-context and impacted subsequent representations.
+
+
+4 _Q_ -VALUES AND TD SUPPORT OPTIMAL ACTION PREDICTION
+
+
+In the previous task, we showed that Llama’s behavior and internal representations in a simple
+RL task could be predicted by a _Q_ -learning model. Next, we investigated whether we could also
+identify TD errors and _Q_ -values in Llama when prompted by a sequence of observations and actions
+generated by a _Q_ -learning agent. This setup allowed us to analyze Llama’s representations in a more
+complex MDP. We trained 50 separate _Q_ -learning agents to navigate from a fixed starting location
+to a fixed goal location in a 5 ˆ 5 grid using 4 different actions (UP, DOWN, LEFT, and RIGHT)
+(Figure 1B). Entering the goal state led to `1 reward and terminated the episode, while entering any
+other state yielded ´1 reward. Following Kaplan et al. (2020), we quantified Llama’s in-context
+reinforcement learning ability by how well it could predict the _Q_ -learning agent’s actions over time.
+Further details about the task, including the prompt structure, are provided in Appendix A.4.
+
+
+First, we observed that Llama improved at predicting the actions of the _Q_ -learning agent as it received more observations. While this indicates in-context learning, we cannot yet attribute this
+ability to reinforcement learning, as Llama could simply learn the action sequence without attending to the reward. To control for this, we provided Llama with a second prompt, where the action
+sequences were identical, but the rewards were randomly set to `1 or ´1, independently of whether
+the agent reached the goal. As shown in Figure 4A, Llama is better at predicting the same action
+sequences when given the correct rewards, indicating that it integrated reward information to predict
+actions. See Appendix A.4 for additional control analyses.
+
+
+6
+
+
+We then trained SAEs on Llama’s residual stream representations for this task and examined whether
+the learned latents corresponded to the _Q_ -values and the TD errors of the agent that generated the
+observations. The training was done for 15 epochs with a regularization strength of _β_ “ 1 _e_ ´ 05. As
+in the previous task, we correlated each latent representation learned by the SAEs with the _Q_ -values,
+as well as the myopic values. As an additional control, we included estimates from a _Q_ -learning
+agent trained on the random reward sequence from the control analysis presented above. Throughout Llama’s transformer blocks, we observed the highest correlations against the _Q_ -values that were
+used to generate the observations (Figure 4B). Similarly, most blocks showed the highest correlations for the TD errors of the same model. We also found high correlations with the myopic error
+signal, indicating that Llama learned rewards as well (Figure 4C). These findings further support the
+hypothesis that Llama’s internal representations encode reinforcement learning-like computations,
+even in more complex environments with larger state and action spaces.
+
+
+Lastly, we validated the causal role of the identified TD latents by deactivating and scaling them.
+We selected 4 different latents across 4 different blocks and set their activity to 0. All of these
+latents were selected from block 40 onwards and had _r_ ě 0 _._ 75 with the TD error. We selected
+more features to deactivate in this experiment to elicit stronger effects on Llama’s behavior. We also
+conducted control lesions, where we set the activity of latent units from the same blocks that has
+the lowest correlation with TD to 0. We find that lesioning the TD latents significantly degraded
+Llama’s ability to predict actions, whereas the control lesions led to very small changes in Llama’s
+action predictions (Figure 4D). Deactivating or scaling the TD latents, we observed a decrease in
+both the _Q_ -value correlations (Figure 4E) and the TD error correlations (Figure 4F). These results
+provide evidence for the causal role of the identified TD latents in Llama’s reinforcement learning
+capabilities.
+
+
+5 LEARNING GRAPH STRUCTURES WITHOUT REWARDS
+
+
+So far, we have studied TD learning in the context of RL. However, TD learning can also be used
+to learn about statistical structures in the absence of rewards. For example, the Successor Representation (SR; Dayan, 1993) encodes an MDP in terms of future discounted state occupancies given
+the agent’s policy, and can be learned using TD learning. The SR is represented as a state by state
+matrix **M**, where **M** p _s, s_ [1] q is the future discounted expected occupancy of state _s_ [1] when the agent
+
+
+„ ř8
+is at state _s_, e.g. **M** p _s, s_ [1] q “ E
+
+
+ř8 ȷ
+
+_γ_ _[t]_ Ip _st_ “ _s_ [1] q| _s_ 0 “ _s_ where I is the indicator function. The TD
+_t_ “0
+
+
+error computation and the update defined in equation 1 & equation 2 can be generalized to learn this
+representation as follows:
+
+
+_δ_ TD “ **1** _st_ ` _γ_ **M** p _st_ `1 _,_ :q ´ **M** p _st,_ :q (4)
+**M** p _st,_ :q Ð **M** p _st,_ :q ` _α δ_ TD (5)
+
+
+Here **1** _st_ is a one-hot vector at state index _st_ . The SR has seen wide application not only in RL
+research (Kulkarni et al., 2016; Barreto et al., 2017; Machado et al., 2017), but has also been used as
+a model of hippocampal function in neuroscience (Garvert et al., 2023; Gershman, 2018; Stachenfeld
+et al., 2017; Gardner et al., 2018). For example, it has been shown that when humans are presented
+with a sequence of stimuli that are generated from a latent graph, the representations in the medial
+temporal lobe resemble the diffusion properties of the graph (Schapiro et al., 2013; 2016; Garvert
+et al., 2017), which is captured by the SR.
+
+
+If Llama uses TD-like computations to represent _Q_ -values, does it similarly rely on a temporal
+difference error signal to learn something akin to the SR? To test this hypothesis, we prompted
+Llama with a sequence of observations generated from a random walk on a latent community graph
+(Schapiro et al., 2013) (Figure 1C). This graph had three communities, each community with five
+fully connected nodes. Each community also had two _bottleneck_ nodes that connected to other communities. The model was prompted to predict the next observation at each time point. There were
+401 observations, and we repeated this procedure 20 independent times, using randomly sampled
+node names.
+
+
+7
+
+
+Figure 5: Llama learns graph structures through TD-learning, representing them similarly to the
+successor representation (SR). ( _A_ ) Llama’s state representations projected in 2D space, using multidimensional scaling, shows the emergence of latent graph structure across transformer blocks. ( _B_ )
+Llama quickly achieves high accuracy in predicting the next state. Accuracy is averaged over 100
+runs. ( _C_ ) Bottleneck states can be linearly decoded from middle blocks onward. ( _D_ & _E_ ) Latent
+representations of SAEs trained on Llama’s representations strongly correlate with the SR and associated TD learning signals, outperforming model-based alternatives. Shaded regions in _B_ - _E_ indicate
+95% confidence intervals. Dashed horizontal lines indicate chance level performance, and the solid
+horizontal line represents the ceiling.
+
+
+First, we saw that Llama learns the local structure of the graph and can predict the next state with
+ceiling accuracy after around 100 observed state transitions (Figure 5B). Does Llama also learn the
+global connectivity structure of the graph? To test this, we performed multidimensional scaling
+(Torgerson, 1952) on all 80 residual streams’ representation of each node in the graph after learning.
+We saw that the 2D projections of these representations gradually grow more and more similar to
+the 2D projection of the SR of the graph (Figure 5A), indicating that Llama represents the global
+geometry of the latent graph.
+
+
+To further probe Llama’s understanding of the global graph structure, we tested whether it explicitly
+represents bottleneck states. These are special states that allow transitions between communities
+and are particularly useful for planning in hierarchically structured environments. Although such
+representations are not needed to predict the next tokens, we found that they can be linearly decoded
+starting around block 20 onward (Figure 5C), with the decoding accuracy peaking around halfway
+through the model.
+
+
+These findings show that Llama builds a representation of the graph’s global geometric properties
+over blocks. However, this could be achieved without TD learning, such as through a model that
+learns the environment’s transition matrix by counting experienced transitions. To test whether
+Llama acquires structural knowledge through TD learning, we trained SAEs on its representations
+and compared them to agents learning either the SR using TD errors, or simply the graph’s transition
+matrix, respectively (see Appendix A.5 for training details).
+
+
+We identified latents that were maximally correlated with each set of representations. We found
+stronger correlations with the SR (max _r_ “ 0 _._ 62) than with the transition matrix (max _r_ “ 0 _._ 49)
+throughout the model, as shown in Figure 5D. These representations build gradually and peak late in
+the model. Consequently, we found that the TD errors (max _r_ “ 0 _._ 60) that are used to learn the SR
+had much stronger correlations than a surprise signal corresponding to the log-likelihood of the next
+state under the learned transition matrix (max _r_ “ 0 _._ 18; Figure 5E). We additionally replicated these
+findings using more traditional methods such as representational similarity analysis (Kriegeskorte
+et al., 2008; Kornblith et al., 2019) in Appendix A.5.
+
+
+8
+
+
+Figure 6: Lesioning TD SAE latents impair behavior and representations. ( _A_ ) Following a lesion in
+block 64, Llama’s accuracy in predicting the next state drops. ( _B_ ) The SAE representations following
+the lesioning have reduced correlations with the SR, despite the recovery of the TD error following
+lesioning ( _C_ ). While the community structure is reflected in the original representations in Block 65
+( _D_ ), these representations are disrupted as a result of lesioning in earlier block ( _E_ ).
+
+
+Lastly, we deactivated the TD latent that had the strongest correlation with the TD error, which was
+in block 64. Following this intervention, Llama’s prediction accuracy for the next state decreased
+from 24 _._ 3% to 18 _._ 9% (Figure 6A). This also reduced the subsequent correlations between the SAE
+latents and the SR (Figure 6B), despite a rapid recovery of the TD correlations after the lesion (Figure
+6 C). The disruption of the learned structure can be seen in block 65, where the community structure
+of the graph is distorted (Figures 6D and 6E). Taken together, our behavioral and representational
+analyses show that Llama’s graph knowledge is represented similarly to the SR, and the TD latents
+we identified support learning these representations.
+
+
+6 RELATED WORK
+
+
+Understanding in-context learning in transformers has received significant attention (Garg et al.,
+2022; von Oswald et al., 2023; Dai et al., 2023; Ahn et al., 2023). Previous work has shown that
+transformers can discover known and existing algorithms without explicit guidance towards these
+algorithms. Aky¨urek et al. (2023) have trained transformers on linear regression problems and
+shown that the model can implement ridge regression, gradient descent, or ordinary least squares incontext. Focusing on RL, Wang et al. (2024) have shown that linear transformers trained explicitly
+to solve reinforcement learning problems discover TD learning methods. On a larger scale, Laskin
+et al. (2022) has shown that in-context RL can be distilled to smaller models. We build on this by
+showing that in-context RL can emerge in LLMs simply as a consequence of language pre-training,
+even if the model was never explicitly trained to solve RL problems.
+
+
+SAEs have been successfully used to decompose LLM activations into interpretable features. This
+has been demonstrated in both toy models (Cunningham et al., 2023; Bricken et al., 2023) and stateof-the-art language models (Gao et al., 2024). SAEs can identify features ranging from concrete
+objects to abstract concepts (Templeton et al., 2024). While specific static concepts have been
+identified using SAEs, we explore the characteristics of in-context learning algorithms using this
+technique.
+
+
+In the broader scope of RL and LLMs, several papers have investigated how the two methods can
+be integrated to improve LLMs. Le et al. (2022) coupled LLMs with deep RL in an Actor-Critic
+(Konda & Tsitsiklis, 1999) setup for program synthesis, where the deep RL model served as the
+critic for the code generated by the language models. Shinn et al. (2024) built a framework where an
+LLM received verbal RL feedback, allowing it to perform better in decision-making tasks, coding,
+and reasoning problems. Lastly, Brooks et al. (2022) developed a method for improving in-context
+policy iteration in LLMs for RL tasks. In contrast to these approaches where RL was used to improve
+LLM behavior, we focused on _understanding_ the mechanisms through which an LLM can do RL.
+Given the demonstrated usefulness of RL in improving LLMs’ abilities, it is essential to understand
+these mechanisms.
+
+
+9
+
+
+7 DISCUSSION
+
+
+TD learning is a fundamental algorithm in artificial intelligence research (Sutton & Barto, 1987;
+2018; Mnih et al., 2015). It offers a simple yet efficient solution to the problem of distilling temporally distant consequences of actions into an immediate value signal. TD learning is general: it
+can be used not only to learn future discounted rewards but also state occupancies (Dayan, 1993),
+uncertainties (Guez et al., 2012) and prediction errors (Burda et al., 2018; Saanum et al., 2024). It
+is therefore perhaps not surprising that neuroscience research has found traces of TD learning in
+striatal neural populations in several species. In this paper, we offer evidence that similar substrates
+of prediction and reward are implemented in the circuits of a large transformer network pretrained
+on internet-scale text corpora. This is surprising because the LLM was not trained using an RL
+objective but simply to perform next-token prediction. One hypothesis is that TD learning could
+facilitate next-token prediction by allowing the LLM to build more general models of the task. In
+the Graph Learning Task, the TD error can be used to build the SR which offers global geometric
+information about the graph structure. Representing features that span longer temporal horizons
+could be important for building rich representations of the world, which TD learning affords.
+
+
+7.1 LIMITATIONS & FUTURE WORK
+
+
+There are some important limitations and extensions of our work. First, our SAEs are task-specific
+and are not suitable for identifying RL-related variables for arbitrary tasks. Future work should
+attempt to build more generic SAEs and repeat our analyses with them. Perhaps, this can be accomplished through training SAEs on representations coming from a large and diverse corpus of
+RL tasks, or by fine-tuning pretrained SAEs (e.g., Lieberum et al. (2024)) on RL data. Similarly, to
+establish the generality of our results, future work could aim to replicate our findings using different
+LLMs.
+
+
+Second, while we mapped out TD errors and _Q_ -values across the residual blocks of Llama, a circuitlevel understanding of how these representations come about remains unclear. Can induction heads
+(Olsson et al., 2022) give rise to these representations? Using methods such as path patching (Hanna
+et al., 2024; Wang et al., 2022), can in-context TD circuits be identified? These remain important
+questions for a complete understanding of how LLMs do in-context RL.
+
+
+Lastly, while we can predict Llama’s behavior using _Q_ -learning agents and find TD-like representations in the model, their alignment is not perfect. Future work should identify which additional
+components are needed to fully account for the model’s behavior. For example, adding a preference for repetition to the _Q_ -learning model can be a natural extension to capture the tendency of
+pretrained LLMs to repeat themselves.
+
+
+7.2 CONCLUSION
+
+
+In this work, we have shown evidence that LLMs implement TD learning to solve RL problems
+in-context. Our work not only demonstrates that SAEs can disentangle features used during incontext learning but also that these discovered features can be used to manipulate LLM behavior
+and representations in a systematic fashion. Our finding paves the way for studying other types of
+in-context learning abilities using SAEs. Lastly, our work establishes a line of convergence between
+the learning mechanisms of LLMs and biological agents, who have been shown to implement TD
+computations in similar settings.
+
+
+10
+
+
+REFERENCES
+
+
+Kwangjun Ahn, Xiang Cheng, Hadi Daneshmand, and Suvrit Sra. Transformers learn to implement
+preconditioned gradient descent for in-context learning, 2023. URL [https://arxiv.org/](https://arxiv.org/abs/2306.00297)
+[abs/2306.00297.](https://arxiv.org/abs/2306.00297)
+
+
+Ekin Aky¨urek, Dale Schuurmans, Jacob Andreas, Tengyu Ma, and Denny Zhou. What learning
+algorithm is in-context learning? investigations with linear models, 2023. URL [https://](https://arxiv.org/abs/2211.15661)
+[arxiv.org/abs/2211.15661.](https://arxiv.org/abs/2211.15661)
+
+
+Andr´e Barreto, Will Dabney, R´emi Munos, Jonathan J Hunt, Tom Schaul, Hado P van Hasselt,
+and David Silver. Successor features for transfer in reinforcement learning. _Advances in neural_
+_information processing systems_, 30, 2017.
+
+
+Marcel Binz and Eric Schulz. Using cognitive psychology to understand GPT-3. _Proceed-_
+_ings_ _of_ _the_ _National_ _Academy_ _of_ _Sciences_, 120(6):e2218523120, February 2023. doi: 10.
+1073/pnas.2218523120. URL [https://www.pnas.org/doi/abs/10.1073/pnas.](https://www.pnas.org/doi/abs/10.1073/pnas.2218523120)
+[2218523120.](https://www.pnas.org/doi/abs/10.1073/pnas.2218523120) Publisher: Proceedings of the National Academy of Sciences.
+
+
+Trenton Bricken, Adly Templeton, Joshua Batson, Brian Chen, Adam Jermyn, Tom Conerly, Nick
+Turner, Cem Anil, Carson Denison, Amanda Askell, Robert Lasenby, Yifan Wu, Shauna Kravec,
+Nicholas Schiefer, Tim Maxwell, Nicholas Joseph, Zac Hatfield-Dodds, Alex Tamkin, Karina
+Nguyen, Brayden McLean, Josiah E Burke, Tristan Hume, Shan Carter, Tom Henighan, and
+Christopher Olah. Towards Monosemanticity: Decomposing Language Models With Dictionary
+Learning. _Transformer Circuits Thread_, 2023.
+
+
+Ethan Brooks, Logan A Walls, Richard Lewis, and Satinder Singh. In-context policy iteration. In
+_NeurIPS 2022 Foundation Models for Decision Making Workshop_, 2022.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are
+few-shot learners. _Advances in neural information processing systems_, 33:1877–1901, 2020.
+
+
+Yuri Burda, Harrison Edwards, Amos Storkey, and Oleg Klimov. Exploration by random network
+distillation. _arXiv preprint arXiv:1810.12894_, 2018.
+
+
+Julian Coda-Forno, Marcel Binz, Zeynep Akata, Matt Botvinick, Jane Wang, and Eric
+Schulz. Meta-in-context learning in large language models. In A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine (eds.), _Advances_ _in_ _Neural_
+_Information_ _Processing_ _Systems_, volume 36, pp. 65189–65201. Curran Associates, Inc.,
+2023. URL [https://proceedings.neurips.cc/paper_files/paper/2023/](https://proceedings.neurips.cc/paper_files/paper/2023/file/cda04d7ea67ea1376bf8c6962d8541e0-Paper-Conference.pdf)
+[file/cda04d7ea67ea1376bf8c6962d8541e0-Paper-Conference.pdf.](https://proceedings.neurips.cc/paper_files/paper/2023/file/cda04d7ea67ea1376bf8c6962d8541e0-Paper-Conference.pdf)
+
+
+Hoagy Cunningham, Aidan Ewart, Logan Riggs, Robert Huben, and Lee Sharkey. Sparse autoencoders find highly interpretable features in language models, 2023. URL [https://arxiv.](https://arxiv.org/abs/2309.08600)
+[org/abs/2309.08600.](https://arxiv.org/abs/2309.08600)
+
+
+Damai Dai, Yutao Sun, Li Dong, Yaru Hao, Shuming Ma, Zhifang Sui, and Furu Wei. Why can gpt
+learn in-context? language models implicitly perform gradient descent as meta-optimizers, 2023.
+[URL https://arxiv.org/abs/2212.10559.](https://arxiv.org/abs/2212.10559)
+
+
+Nathaniel D. Daw, Samuel J. Gershman, Ben Seymour, Peter Dayan, and Raymond J. Dolan. ModelBased Influences on Humans’ Choices and Striatal Prediction Errors. _Neuron_, 69(6):1204–1215,
+March 2011. ISSN 0896-6273. doi: 10.1016/j.neuron.2011.02.027. URL [https://www.](https://www.cell.com/neuron/abstract/S0896-6273(11)00125-5)
+[cell.com/neuron/abstract/S0896-6273(11)00125-5.](https://www.cell.com/neuron/abstract/S0896-6273(11)00125-5) Publisher: Elsevier.
+
+
+Peter Dayan. Improving Generalization for Temporal Difference Learning: The Successor Representation. _Neural Computation_, 5(4):613–624, July 1993. ISSN 0899-7667. doi: 10.1162/neco.
+1993.5.4.613. [URL https://doi.org/10.1162/neco.1993.5.4.613.](https://doi.org/10.1162/neco.1993.5.4.613)
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv preprint arXiv:2407.21783_, 2024.
+
+
+11
+
+
+Nelson Elhage, Tristan Hume, Catherine Olsson, Nicholas Schiefer, Tom Henighan, Shauna Kravec,
+Zac Hatfield-Dodds, Robert Lasenby, Dawn Drain, Carol Chen, Roger Grosse, Sam McCandlish,
+Jared Kaplan, Dario Amodei, Martin Wattenberg, and Christopher Olah. Toy models of superposition. _Transformer Circuits Thread_, 2022.
+
+
+Christopher D Fiorillo, Philippe N Tobler, and Wolfram Schultz. Discrete coding of reward probability and uncertainty by dopamine neurons. _Science_, 299(5614):1898–1902, 2003.
+
+
+Jaden Fiotto-Kaufman, Alexander R Loftus, Eric Todd, Jannik Brinkmann, Caden Juang, Koyena
+Pal, Can Rager, Aaron Mueller, Samuel Marks, Arnab Sen Sharma, Francesca Lucchetti, Michael
+Ripa, Adam Belfki, Nikhil Prakash, Sumeet Multani, Carla Brodley, Arjun Guha, Jonathan Bell,
+Byron Wallace, and David Bau. Nnsight and ndif: Democratizing access to foundation model
+internals. 2024. [URL https://arxiv.org/abs/2407.14561.](https://arxiv.org/abs/2407.14561)
+
+
+Shelly B Flagel, Jeremy J Clark, Terry E Robinson, Leah Mayo, Alayna Czuj, Ingo Willuhn,
+Christina A Akers, Sarah M Clinton, Paul EM Phillips, and Huda Akil. A selective role for
+dopamine in stimulus–reward learning. _Nature_, 469(7328):53–57, 2011.
+
+
+Leo Gao, Tom Dupr´e la Tour, Henk Tillman, Gabriel Goh, Rajan Troll, Alec Radford, Ilya Sutskever,
+Jan Leike, and Jeffrey Wu. Scaling and evaluating sparse autoencoders, 2024. URL [https:](https://arxiv.org/abs/2406.04093)
+[//arxiv.org/abs/2406.04093.](https://arxiv.org/abs/2406.04093)
+
+
+Matthew P H Gardner, Geoffrey Schoenbaum, and Samuel J Gershman. Rethinking dopamine as
+generalized prediction error. _Proc. Biol. Sci._, 285(1891):20181645, November 2018.
+
+
+Shivam Garg, Dimitris Tsipras, Percy S Liang, and Gregory Valiant. What can transformers learn
+in-context? a case study of simple function classes. _Advances in Neural Information Processing_
+_Systems_, 35:30583–30598, 2022.
+
+
+Mona M Garvert, Raymond J Dolan, and Timothy EJ Behrens. A map of abstract relational knowledge in the human hippocampal–entorhinal cortex. _eLife_, 6:e17086, April 2017. ISSN 2050084X. doi: 10.7554/eLife.17086. URL [https://doi.org/10.7554/eLife.17086.](https://doi.org/10.7554/eLife.17086)
+Publisher: eLife Sciences Publications, Ltd.
+
+
+Mona M Garvert, Tankred Saanum, Eric Schulz, Nicolas W Schuck, and Christian F Doeller. Hippocampal spatio-predictive cognitive maps adaptively guide reward generalization. _Nature Neu-_
+_roscience_, 26(4):615–626, 2023.
+
+
+Samuel J Gershman. The successor representation: its computational logic and neural substrates.
+_Journal of Neuroscience_, 38(33):7193–7200, 2018.
+
+
+Arthur Guez, David Silver, and Peter Dayan. Efficient bayes-adaptive reinforcement learning using
+sample-based search. _Advances in neural information processing systems_, 25, 2012.
+
+
+Wes Gurnee, Neel Nanda, Matthew Pauly, Katherine Harvey, Dmitrii Troitskii, and Dimitris Bertsimas. Finding neurons in a haystack: Case studies with sparse probing. _arXiv_ _preprint_
+_arXiv:2305.01610_, 2023.
+
+
+Tuomas Haarnoja, Aurick Zhou, Pieter Abbeel, and Sergey Levine. Soft actor-critic: Off-policy
+maximum entropy deep reinforcement learning with a stochastic actor. In _International_ _confer-_
+_ence on machine learning_, pp. 1861–1870. PMLR, 2018.
+
+
+Michael Hanna, Ollie Liu, and Alexandre Variengien. How does gpt-2 compute greater-than?: Interpreting mathematical abilities in a pre-trained language model. _Advances in Neural Information_
+_Processing Systems_, 36, 2024.
+
+
+William M. Hayes, Nicolas Yax, and Stefano Palminteri. Large language models are biased reinforcement learners, 2024. [URL https://arxiv.org/abs/2405.11422.](https://arxiv.org/abs/2405.11422)
+
+
+Martin N. Hebart, Adam H. Dickter, Alexis Kidder, Wan Y. Kwok, Anna Corriveau, Caitlin Van
+Wicklin, and Chris I. Baker. THINGS: A database of 1,854 object concepts and more than 26,000
+naturalistic object images. _PLOS_ _ONE_, 14(10):e0223792, October 2019. ISSN 1932-6203.
+doi: 10.1371/journal.pone.0223792. URL [https://journals.plos.org/plosone/](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0223792)
+[article?id=10.1371/journal.pone.0223792.](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0223792) Publisher: Public Library of Science.
+
+
+12
+
+
+Stefan Heimersheim and Neel Nanda. How to use and interpret activation patching, 2024. URL
+
+[https://arxiv.org/abs/2404.15255.](https://arxiv.org/abs/2404.15255)
+
+
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B. Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language
+models, 2020. [URL https://arxiv.org/abs/2001.08361.](https://arxiv.org/abs/2001.08361)
+
+
+Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization, 2017. URL
+
+[https://arxiv.org/abs/1412.6980.](https://arxiv.org/abs/1412.6980)
+
+
+Vijay Konda and John Tsitsiklis. Actor-critic algorithms. _Advances in neural information processing_
+_systems_, 12, 1999.
+
+
+Wouter Kool, Fiery A. Cushman, and Samuel J. Gershman. When Does Model-Based Control Pay
+Off? _PLOS_ _Computational_ _Biology_, 12(8):e1005090, August 2016. ISSN 1553-7358. doi:
+10.1371/journal.pcbi.1005090. URL [https://journals.plos.org/ploscompbiol/](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005090)
+[article?id=10.1371/journal.pcbi.1005090.](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005090) Publisher: Public Library of Science.
+
+
+Simon Kornblith, Mohammad Norouzi, Honglak Lee, and Geoffrey Hinton. Similarity of neural
+network representations revisited. In _International_ _conference_ _on_ _machine_ _learning_, pp. 3519–
+3529. PMLR, 2019.
+
+
+Nikolaus Kriegeskorte, Marieke Mur, and Peter A Bandettini. Representational similarity analysisconnecting the branches of systems neuroscience. _Frontiers in systems neuroscience_, 2:249, 2008.
+
+
+Tejas D Kulkarni, Ardavan Saeedi, Simanta Gautam, and Samuel J Gershman. Deep successor
+reinforcement learning. _arXiv preprint arXiv:1606.02396_, 2016.
+
+
+Michael Laskin, Luyu Wang, Junhyuk Oh, Emilio Parisotto, Stephen Spencer, Richie Steigerwald,
+DJ Strouse, Steven Hansen, Angelos Filos, Ethan Brooks, et al. In-context reinforcement learning
+with algorithm distillation. _arXiv preprint arXiv:2210.14215_, 2022.
+
+
+Hung Le, Yue Wang, Akhilesh Deepak Gotmare, Silvio Savarese, and Steven C. H. Hoi. Coderl:
+Mastering code generation through pretrained models and deep reinforcement learning, 2022.
+[URL https://arxiv.org/abs/2207.01780.](https://arxiv.org/abs/2207.01780)
+
+
+Tom Lieberum, Senthooran Rajamanoharan, Arthur Conmy, Lewis Smith, Nicolas Sonnerat, Vikrant
+Varma, J´anos Kram´ar, Anca Dragan, Rohin Shah, and Neel Nanda. Gemma scope: Open sparse
+autoencoders everywhere all at once on gemma 2, 2024. [URL https://arxiv.org/abs/](https://arxiv.org/abs/2408.05147)
+[2408.05147.](https://arxiv.org/abs/2408.05147)
+
+
+Marlos C Machado, Clemens Rosenbaum, Xiaoxiao Guo, Miao Liu, Gerald Tesauro, and Murray
+Campbell. Eigenoption discovery through the deep successor representation. _arXiv_ _preprint_
+_arXiv:1710.11089_, 2017.
+
+
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei A Rusu, Joel Veness, Marc G Bellemare, Alex Graves, Martin Riedmiller, Andreas K Fidjeland, Georg Ostrovski, et al. Human-level
+control through deep reinforcement learning. _Nature_, 518(7540):529–533, 2015.
+
+
+P Read Montague, Peter Dayan, and Terrence J Sejnowski. A framework for mesencephalic
+dopamine systems based on predictive hebbian learning. _Journal_ _of_ _neuroscience_, 16(5):1936–
+1947, 1996.
+
+
+Yael Niv, Reka Daniel, Andra Geana, Samuel J. Gershman, Yuan Chang Leong, Angela Radulescu,
+and Robert C. Wilson. Reinforcement learning in multidimensional environments relies on attention mechanisms. _Journal_ _of_ _Neuroscience_, 35(21):8145–8157, 2015. ISSN 0270-6474. doi:
+10.1523/JNEUROSCI.2978-14.2015. URL [https://www.jneurosci.org/content/](https://www.jneurosci.org/content/35/21/8145)
+[35/21/8145.](https://www.jneurosci.org/content/35/21/8145)
+
+
+Chris Olah. Mechanistic Interpretability, Variables, and the Importance of Interpretable Bases,
+2023. [URL https://transformer-circuits.pub/2022/mech-interp-essay/](https://transformer-circuits.pub/2022/mech-interp-essay/index.html)
+[index.html.](https://transformer-circuits.pub/2022/mech-interp-essay/index.html)
+
+
+13
+
+
+Catherine Olsson, Nelson Elhage, Neel Nanda, Nicholas Joseph, Nova DasSarma, Tom Henighan,
+Ben Mann, Amanda Askell, Yuntao Bai, Anna Chen, Tom Conerly, Dawn Drain, Deep Ganguli,
+Zac Hatfield-Dodds, Danny Hernandez, Scott Johnston, Andy Jones, Jackson Kernion, Liane
+Lovitt, Kamal Ndousse, Dario Amodei, Tom Brown, Jack Clark, Jared Kaplan, Sam McCandlish,
+and Chris Olah. In-context learning and induction heads. _Transformer_ _Circuits_ _Thread_, 2022.
+https://transformer-circuits.pub/2022/in-context-learning-and-induction-heads/index.html.
+
+
+Fabian Pedregosa, Ga¨el Varoquaux, Alexandre Gramfort, Vincent Michel, Bertrand Thirion, Olivier
+Grisel, Mathieu Blondel, Peter Prettenhofer, Ron Weiss, Vincent Dubourg, et al. Scikit-learn:
+Machine learning in python. _the Journal of machine Learning research_, 12:2825–2830, 2011.
+
+
+[Qwen Team. Qwen2.5: A party of foundation models, September 2024. URL https://qwenlm.](https://qwenlm.github.io/blog/qwen2.5/)
+[github.io/blog/qwen2.5/.](https://qwenlm.github.io/blog/qwen2.5/)
+
+
+RA Rescorla and Allan Wagner. _A theory of Pavlovian conditioning:_ _Variations in the effectiveness_
+_of reinforcement and nonreinforcement_, volume Vol. 2. 01 1972.
+
+
+Tankred Saanum, No´emi Eltet˝o, Peter Dayan, Marcel Binz, and Eric Schulz. Reinforcement learning [´]
+with simple sequence priors. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Anna C. Schapiro, Timothy T. Rogers, Natalia I. Cordova, Nicholas B. Turk-Browne, and
+Matthew M. Botvinick. Neural representations of events arise from temporal community structure. _Nature neuroscience_, 16(4):486–492, April 2013. ISSN 1097-6256. doi: 10.1038/nn.3331.
+[URL https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3749823/.](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3749823/)
+
+
+Anna C. Schapiro, Nicholas B. Turk-Browne, Kenneth A. Norman, and Matthew M. Botvinick.
+Statistical learning of temporal community structure in the hippocampus. _Hippocampus_, 26(1):
+3–8, January 2016. ISSN 1098-1063. doi: 10.1002/hipo.22523.
+
+
+Johannes A. Schubert, Akshay Kumar Jagadish, Marcel Binz, and Eric Schulz. In-context learning agents are asymmetric belief updaters. In _Proceedings_ _of_ _the_ _41st_ _International_ _Con-_
+_ference_ _on_ _Machine_ _Learning_, volume 235 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_,
+pp. 43928–43946. PMLR, 21–27 Jul 2024. URL [https://proceedings.mlr.press/](https://proceedings.mlr.press/v235/schubert24a.html)
+[v235/schubert24a.html.](https://proceedings.mlr.press/v235/schubert24a.html)
+
+
+W. Schultz, P. Dayan, and P. R. Montague. A neural substrate of prediction and reward. _Science_
+_(New_ _York,_ _N.Y.)_, 275(5306):1593–1599, March 1997. ISSN 0036-8075. doi: 10.1126/science.
+275.5306.1593.
+
+
+Noah Shinn, Federico Cassano, Ashwin Gopinath, Karthik Narasimhan, and Shunyu Yao. Reflexion:
+Language agents with verbal reinforcement learning. _Advances in Neural Information Processing_
+_Systems_, 36, 2024.
+
+
+Kimberly L Stachenfeld, Matthew M Botvinick, and Samuel J Gershman. The hippocampus as a
+predictive map. _Nature neuroscience_, 20(11):1643–1653, 2017.
+
+
+Richard S. Sutton. Learning to predict by the methods of temporal differences. _Machine Learning_,
+3(1):9–44, August 1988. ISSN 1573-0565. doi: 10.1007/BF00115009. [URL https://doi.](https://doi.org/10.1007/BF00115009)
+[org/10.1007/BF00115009.](https://doi.org/10.1007/BF00115009)
+
+
+Richard S Sutton and Andrew G Barto. A temporal-difference model of classical conditioning. In
+_Proceedings of the ninth annual conference of the cognitive science society_, pp. 355–378. Seattle,
+WA, 1987.
+
+
+Richard S. Sutton and Andrew G. Barto. _Reinforcement learning:_ _An introduction,_ _2nd ed_ . Reinforcement learning: An introduction, 2nd ed. The MIT Press, Cambridge, MA, US, 2018. ISBN
+978-0-262-03924-6. Pages: xxii, 526.
+
+
+Richard S Sutton, David McAllester, Satinder Singh, and Yishay Mansour. Policy gradient methods for reinforcement learning with function approximation. _Advances_ _in_ _neural_ _information_
+_processing systems_, 12, 1999.
+
+
+14
+
+
+Gemma Team, Morgane Riviere, Shreya Pathak, Pier Giuseppe Sessa, Cassidy Hardin, Surya Bhupatiraju, L´eonard Hussenot, Thomas Mesnard, Bobak Shahriari, Alexandre Ram´e, et al. Gemma
+2: Improving open language models at a practical size. _arXiv e-prints_, pp. arXiv–2408, 2024.
+
+
+Adly Templeton, Tom Conerly, Jonathan Marcus, Jack Lindsey, Trenton Bricken, Brian Chen,
+Adam Pearce, Craig Citro, Emmanuel Ameisen, Andy Jones, Hoagy Cunningham, Nicholas L
+Turner, Callum McDougall, Monte MacDiarmid, C. Daniel Freeman, Theodore R. Sumers,
+Edward Rees, Joshua Batson, Adam Jermyn, Shan Carter, Chris Olah, and Tom Henighan.
+Scaling monosemanticity: Extracting interpretable features from claude 3 sonnet. _Trans-_
+_former_ _Circuits_ _Thread_, 2024. URL [https://transformer-circuits.pub/2024/](https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html)
+[scaling-monosemanticity/index.html.](https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html)
+
+
+Warren S. Torgerson. Multidimensional scaling: I. theory and method. _Psychometrika_, 17:401–419,
+1952. [URL https://api.semanticscholar.org/CorpusID:120849755.](https://api.semanticscholar.org/CorpusID:120849755)
+
+
+Johannes von Oswald, Eyvind Niklasson, Ettore Randazzo, Jo˜ao Sacramento, Alexander Mordvintsev, Andrey Zhmoginov, and Max Vladymyrov. Transformers learn in-context by gradient
+descent, 2023. [URL https://arxiv.org/abs/2212.07677.](https://arxiv.org/abs/2212.07677)
+
+
+Jiuqi Wang, Ethan Blaser, Hadi Daneshmand, and Shangtong Zhang. Transformers learn temporal
+difference methods for in-context reinforcement learning, 2024. [URL https://arxiv.org/](https://arxiv.org/abs/2405.13861)
+[abs/2405.13861.](https://arxiv.org/abs/2405.13861)
+
+
+Kevin Wang, Alexandre Variengien, Arthur Conmy, Buck Shlegeris, and Jacob Steinhardt. Interpretability in the wild: a circuit for indirect object identification in gpt-2 small. _arXiv_ _preprint_
+_arXiv:2211.00593_, 2022.
+
+
+Christopher JCH Watkins and Peter Dayan. Q-learning. _Machine learning_, 8:279–292, 1992.
+
+
+Jason Wei, Yi Tay, Rishi Bommasani, Colin Raffel, Barret Zoph, Sebastian Borgeaud, Dani Yogatama, Maarten Bosma, Denny Zhou, Donald Metzler, Ed H. Chi, Tatsunori Hashimoto, Oriol
+Vinyals, Percy Liang, Jeff Dean, and William Fedus. Emergent Abilities of Large Language
+Models, October 2022. [URL http://arxiv.org/abs/2206.07682.](http://arxiv.org/abs/2206.07682) arXiv:2206.07682
+
+[cs].
+
+
+Safoora Yousefi, Leo Betthauser, Hosein Hasanbeig, Rapha¨el Milli`ere, and Ida Momennejad. Decoding in-context learning: Neuroscience-inspired analysis of representations in large language
+models, 2024.
+
+
+15
+
+
+A APPENDIX
+
+
+A.1 _Q_ -LEARNING
+
+
+In most RL settings we compute the TD error over a _batch_ of observations. In offline or off-policy
+RL (Haarnoja et al., 2018), we calculate the TD error over a batch of state transitions experienced
+in the past, potentially collected using a different policy. To model TD learning in Llama, whose
+transformer architecture allows it to easily integrate information over multiple episodes in the past,
+we calculate the TD error as an average over the _k_ last state transitions, where _k_ is a hyperparameter.
+In the Two-Step Task, we use a _k_ “ 4, as this gave a good behavioral and representational fit. In
+the other tasks, we use the entire history of previous observations to compute the TD error, slightly
+smoothing out the error relative to _k_ “ 4. See Figure 7 for a qualitative comparison of the TD error
+with these settings. Other hyperparameters used to train the _Q_ -learning model include the discount
+parameter _γ_ “ 0 _._ 99 across all tasks. The learning rate _α_ was 0 _._ 1 in the Two-Step Task and the Grid
+World, and 0 _._ 05 in the Graph Learning Task. In the Two-Step task and in the Grid World, we passed
+the _Q_ -value estimates through a softmax to obtain action probabilities, which were used to compute
+´ log _p_ p _a_ q.
+
+
+In the Grid World task, we train the _Q_ -learning agent using an _ϵ_ -greedy exploration strategy, where
+we linearly decay _ϵ_ for the first 15 episodes, leaving it at 0 for the remaining episodes of the training
+run.
+
+
+n=4
+
+
+0 25 50
+
+Step
+
+
+n=10
+
+
+0 25 50
+
+Step
+
+
+n=full
+
+
+0 25 50
+
+Step
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+n=1
+
+
+0 25 50
+
+Step
+
+
+Figure 7: As the replay window _k_ grows, the TD signal is smoothed.
+
+
+A.2 SAE TRAINING
+
+
+For each task and each block of Llama, we train separate SAEs. For all SAEs, a batch size of 256,
+a learning rate of 1 _e_ ´ 04, and _β_ “ 1 _e_ ´ 05 were used. We used the Adam optimizer (Kingma
+& Ba, 2017) with the default parameters and shuffled the training data. The latent space for the
+Two-Step and the Grid World tasks was doubled in size. For the Graph Learning Task, we used an
+8192-dimensional latent space, equal to the input space size. We scaled our input data **H** P R _[n]_ [ˆ] _[d]_
+
+
+?
+as follows before passing it through the SAEs: **H** [1] “
+
+
+ř **H**
+_d_ ¨ _n_ 1 _ni_ “1 [|] **[h]** _[i]_ [|][2] [.] [When we replaced Llama’s]
+
+
+activations with the reconstructed activity **H** **[˜]** [1] from the SAEs, we applied the inverse transformation.
+All the interventions were performed using the nnsight (Fiotto-Kaufman et al., 2024) library.
+
+
+A.2.1 SAE _L_ 0 NORMS
+
+
+Training SAEs on residual stream activations for the three experiments, we see that the original
+8192-dimensional representational space can be reduced to low-dimensional feature spaces with a
+few dozen active features. See Figure 8.
+
+
+16
+
+
+Grid World
+
+
+0 25 50 75
+
+Block
+
+
+Community Graph
+
+
+0 25 50 75
+
+Block
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+Two-Step Task
+
+
+0 25 50 75
+
+Block
+
+
+Figure 8: The _L_ 0 norm of SAE representations (e.g. the number of features with non-zero variance)
+tends to peak in the middle blocks of Llama, except for in the Graph Learning Task, where it increases again towards the last blocks. This is presumably because Llama needs to predict the next
+token out of a larger set of token candidates in that task.
+
+
+A.3 THE TWO-STEP TASK
+
+
+We used the prompt shown above for the Two-Step Task. Llama’s internal representations were
+recorded at the pick tokens.
+
+
+**Model** **comparison.** To test whether the negative log-likelihoods between the Myopic and the _Q_ learning were significant, we averaged negative-log likelihoods over each run and conducted a paired
+t-test. The _Q_ -learning model was significantly better than the Myopic model (t(99q “ ´3 _._ 40,
+_p_ “ 0 _._ 001).
+
+
+A.4 REINFORCEMENT LEARNING IN A GRID WORLD
+
+
+17
+
+
+For the Grid World task, we prompt Llama as shown above. The go tokens are the recording points
+for internal representations, and the logits here were used to predict the action probabilities. This
+task was repeated 50 independent times, and we analyzed the behavior and the representations from
+the first 320 observations.
+
+
+A Original - No Reward
+
+0.07
+
+
+0.06
+
+
+0.05
+
+
+0.04
+
+
+0.03
+
+
+0.02
+
+
+0.01
+
+
+0.00
+
+
+0.01
+
+
+0 50 100 150 200 250 300
+
+Step
+
+
+B Original - Swapped Reward
+
+
+0 50 100 150 200 250 300
+
+Step
+
+
+Figure 9: Additional control analyses for the Grid World. ( _A_ ) The change in Llama’s prediction
+accuracy of the _Q_ -learning agent’s actions from a control prompt with no rewards to the original
+prompt. ( _B_ ) Same as _A_, except the control prompt uses sign-swapped rewards from the original
+prompt. Higher values in both plots indicate the effect of reinforcement during learning.
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+1.0
+
+
+0.5
+
+
+0.0
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+Run 1 Run 2 Run 3 Run 4 Run 5 Run 6
+
+
+0 30 60
+
+
+0 30 60 0 30 60 0 30 60 0 30 60 0 30 60
+
+Step
+
+
+Q-value SAE feature
+
+
+Figure 10: Examples of SAE features and _Q_ -value for the Left action in the Two-Step task. There
+are dips both in the SAE feature and the _Q_ -value at certain points that are late in the task. If Llama
+does TD-learning, this is to be expected when Llama ends up in a state where a particular action is
+suboptimal, just like the _Q_ -value.
+
+
+**Additional control analyses** . In addition to randomizing the rewards as described in the main text,
+we conducted two other control analyses. In the first one (Figure 9A), we removed the reward
+
+
+18
+
+
+information altogether from the prompt. During the exploration phase, this did not change how
+well Llama predicts actions, but we observed better predictions for the original prompt in later
+trials. In another control analysis, instead of randomizing the rewards, we swapped the ` and the ´
+signs (Figure 9B). This led to a smaller effect as removing the reward, but the shift was smaller in
+magnitude.
+
+
+**Testing a simpler alternative to TD learning.** A reviewer raised the point that Llama’s behavior
+could potentially be explained by a simpler mechanism than TD learning, for instance a model that
+keeps track of the rewards obtained at the end of each episode: Suppose in state _s_, it assigns an
+action a logit of 1 if the action was performed in _s_ in the maximally rewarding episode. We then get
+the action probabilities by applying a softmax with a temperature parameter to the logits, where we
+fit the temperature parameter to minimize the negative log likelihood on Llama’s behavior. We refer
+to this as the Look-up model. As can be seen in Fig. 11, the _Q_ -learning model predicts Llama’s
+choices better than the look up model.
+
+
+3400
+
+3200
+
+3000
+
+2800
+
+2600
+
+2400
+
+2200
+
+2000
+
+
+this task as well.
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+||||||||
+||||||||
+|M<br> f<br> ad<br> d,<br>l <br>th<br>   ts<br>   rv<br>    g<br>   d<br>   e<br>   s<br>ch<br>he<br>|yop<br> ts L<br> diti<br> inc<br>loca<br>at L<br>    us<br>   ed h<br>    rid<br>   ictio<br>   nvir<br>    also<br> epi<br>reas<br>|ic<br>Q-l<br> lama’s beha<br> onally teste<br> reasing the<br>tion of Llam<br>lama can le<br>    dissociate Ll<br>    ighly simila<br>    world and i<br>   ns severely<br>   onment, the<br>    a good mod<br>sode also c<br> Look-up ca<br>|arn<br>  vior<br> d Ll<br>  state<br>a, r<br>arn <br>     ama<br>    r pre<br>     nitia<br>    dive<br>    sequ<br>     el f<br>hang<br> nno<br>|ing<br>Lo<br>  better than<br>  ama on a dif<br>   space from<br>equiring str<br>to predict th<br>     ’s behavior<br>     dictions bet<br>     lized its sta<br>    rged, where<br>    ences of act<br>      or that envir<br>es the sequ<br> t. The discr<br>|ok-<br>   the<br>   fere<br> 25 <br>ong <br>e _Q_<br>      fro<br>     wee<br>      rtin<br>     Lo<br>     ions<br>       onm<br>enc<br> epa<br>|up<br>    L<br>   n<br> to<br> g<br>-l<br>      m<br>     n<br>      g<br>     ok<br>      b<br>       e<br>e <br> nc<br>|
+
+
+We also tested whether Llama’s internal representations correlate more strongly with _Q_ -values or
+Look-up values. As displayed in Fig. 13, in both environments, SAE features across blocks correlate
+more strongly with _Q_ -values than with Look-up values. Notably, the differences in correlations are
+larger in the more difficult 7 by 7 Grid World (Fig. 13B), paralleling our behavioral findings. Taken
+together, both our behavioral and representational results show stronger evidence for Llama using
+TD learning than Look-up.
+
+
+Lastly, we analyzed the models’ predictions in states that don’t occur at the start of the trajectories,
+but in the middle of other trajectories. Here the Look-up model predicts actions at random. Llama’s
+action probabilities are not only considerably higher, but also match the action probabilities of the
+_Q_ -learning agent with an _ϵ_ -greedy policy (Fig. 14).
+
+
+19
+
+
+Figure 12: Llama learns to predict actions in larger grid-world environments. While Llama’s predictions match those of the Look-up model in the small grid-world, this is not the case with larger
+grids which requires the agent to cache state-action values.
+
+
+Figure 13: In both Grid World environments, SAEs show stronger correlations with _Q_ -values than
+Look-up values.
+
+
+A.5 GRAPH LEARNING
+
+
+20
+
+
+Figure 14: We analyze the models’ predictions in states that have been visited before in the past,
+but from different starting states. Here the Look-up model predicts actions at random. Llama’s
+action probabilities are not only considerably higher, but also match the action probabilities of the
+_Q_ -learning agent with an _ϵ_ -greedy policy.
+
+
+For the Graph Learning Task, we prompt Llama as shown above. Colors indicate how the text is
+tokenized. The representations corresponding to the, token are recorded, and we obtain Llama’s
+predictions for the tokens that follow this. Recording representations always at the same token
+eliminates any differences in representations that may arise from using different tokens.
+
+
+The latent community graph consisted of 3 communities, with 5 nodes in each community. Every
+node had 4 adjacent nodes. The node names are sampled from the category labels in the THINGS
+database (Hebart et al., 2019). We only sampled from labels represented as a single token in isolation, and the sampling was done with replacement across the 20 runs.
+
+
+**Behavior.** On average, Llama had an accuracy of 24 _._ 3% in predicting the next token, and the ceiling
+accuracy expected in the environment was 25%.
+
+
+**Multidimensional scaling (MDS).** We used cosine distance to calculate the pairwise dissimilarity
+of representations both for Llama and the SR. This was done separately for different blocks of the
+transformer and the SR. For this analysis, we only considered the last encounter of both the Llama
+and the SR for each state. The dissimilarity matrices were used to project the representations onto a
+2D space using metric MDS as implemented in scikit-learn (Pedregosa et al., 2011). What is
+plotted in Figure 5A is an example from one of the runs.
+
+
+**Decoding bottleneck states.** We trained a linear support vector machine on Llama’s state representations to predict whether the corresponding state is a bottleneck state. We did this in a leave-onerun-out fashion, where the data from each run served as the test data in one fold. This procedure
+also ensured that the state names could not be leveraged to aid classification, as they are randomly
+assigned across runs.
+
+
+**Learning models.** We introduced some new learning models in this task that learn representations
+of the graph. First is the Successor Representation (SR)(Dayan, 1993), which is defined in the main
+text. We also consider an agent learning the transition matrix of the graph. This agent learns a
+representation **T**, where **T** p _s, s_ [1] q is the estimated immediate transition probability from state _s_ to _s_ [1],
+which can be written as **T** p _s, s_ [1] q “ ErIp _st_ `1 “ _s_ [1] q| _st_ “ _s_ s. We learn this by counting the times the
+agent transitions from _s_ to _s_ [1], divided by the total number of transitions from _s_ .
+
+
+21
+
+
+To accompany the transition probabilities, we also compute the _surprise_ of a transition, as a measure
+of the _error_ of the learned model.
+
+
+surprisep _st, s_ [1] q “ "´ log **T** p _st, s_ 1q _,_ if _s_ [1] “ _st_ `1 (6)
+´ logp1 ´ **T** p _st, s_ [1] qq _,_ otherwise
+
+
+This yields a vector-valued signal surprisep _s,_ :q for a given state _s_ .
+
+
+**SAE analyses.** The SAEs were trained for 20 epochs with an 8192 dimensional latent space, which
+was identical to the input space size. After training the SAEs for each transformer block, we correlated the activity of the SAE latents with non-zero variance against estimates of our learning models.
+For each model, we stack representations row-wise and obtain a step-by-state matrix. We then correlate every column of this matrix with every SAE unit. Then, for each model and each state, we
+take the maximum correlation and report the average of this across runs.
+
+
+A
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|SR Transition Matrix|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+0 20 40 60 80
+
+Layer
+
+
+B
+
+
+|Col1|TD Surprise|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+0 20 40 60 80
+
+Layer
+
+
+Figure 15: Replication of Graph Learning SAE results using CKA. SR (TD) is more similar to
+Llama than the learned transition matrix (surprise).
+
+
+**Replication** **using** **representational** **similarity** **analysis** **(RSA).** Comparing vector-valued model
+representations across two different spaces has traditionally been done using RSA both in neuroscience (Kriegeskorte et al., 2008) and machine learning (Yousefi et al., 2024). Here, we replicate
+our SAE findings using RSA. Specifically, we used a variation of RSA called Centered Kernel Alignment (Kornblith et al., 2019) (CKA) that is commonly used in machine learning, where similarity is
+calculated between representations **X** and **Y** as follows:
+
+
+CKAp **X** _,_ **Y** q “ || **Y** _[T]_ **X** || [2] _F_ (7)
+|| **X** _[T]_ **X** || _F_ || **Y** _[T]_ **Y** || _F_
+
+
+where || ¨ || _F_ denotes the Frobenius norm. CKA is bounded between 0 and 1, and higher CKA
+indicates stronger similarity. We stacked Llama’s and the learning models’s representations during
+the task row-wise and calculated the CKA between them for each run. As shown below, we arrive
+at the same conclusion using this method: Llama represents the environment like the SR and learns
+this representation through TD learning.
+
+
+B APPENDIX: REPLICATIONS WITH OTHER LLMS
+
+
+To test whether our results generalize to other LLMs outside the Llama family, we repeated the
+majority of our analyses for all three tasks (Two-Step, Grid World, and Graph Learning) on two new
+
+
+22
+
+
+models, Gemma-2-27B (Team et al., 2024) and Qwen-2 _._ 5-72B (Qwen Team, 2024). Remarkably,
+almost all analyses yielded qualitatively matching results, showing a high degree of similarity in
+how these models solve RL tasks in-context. We discuss each individual point raised in the review
+in more detail below.
+
+
+We observed that neither model can do the Two-Step task as well as Llama. Consequently, the RL
+models predict behavior not as accurately for these models. However, the SAE correlations remain
+similar to the original findings. The results are visualized in Fig. 16 and Fig. 17 respectively. For
+the Grid World, the replications closely match the original findings. We visualize them in Fig. 18
+and 19. Both models can learn to predict the actions in the sequence, and we observe stronger
+correlations in the SAE features with TD driven value and error signals compared to alternatives.
+Similarly, in the Graph Learning task, both models have strong SR and the community structures
+emerge over the transformer blocks. These findings are visualized in Fig. 20 and Fig. 21.
+
+
+23
+
+
+**Gemma-2-27B**
+
+
+Values
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+Errors
+
+
+Block
+
+
+6000
+
+
+5000
+
+
+4000
+
+
+3000
+
+
+6
+
+
+4
+
+
+0 20
+
+Episode
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+Figure 16: For Gemma-2-27B, there are SAE features that correlate highly with TD errors and
+values. The model can not do the task as well as Llama. Consequently, the RL models predict
+behavior not as well for these models
+
+
+**Qwen-2.5-72B**
+
+
+Values
+
+
+0 25 50 75
+
+Block
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+Errors
+
+
+6000
+
+
+5000
+
+
+4000
+
+
+3000
+
+
+6
+
+
+4
+
+
+0 20
+
+Episode
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+|B|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|M|M|yopi|c<br>le|Q<br>arnin|g|
+
+
+Figure 17: For Qwen-2 _._ 5-72B, there are SAE features that correlate highly with TD errors and
+values. The model can not do the task as well as Llama. Consequently, the RL models predict
+behavior not as well for these models
+
+
+24
+
+
+**Gemma-2-27B**
+
+
+C Errors
+
+
+A
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0 100 200 300
+
+Step
+
+
+B Values
+
+
+Block
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Figure 18: Behavioral and SAE correlation analyses reported in Fig. 4 replicate with Gemma-2-27B.
+
+
+**Qwen-2.5-72B**
+
+
+A
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+|Col1|True rewards<br>Random rewards|Col3|
+|---|---|---|
+||||
+||||
+||||
+||||
+||||
+
+
+0 100 200 300
+
+Step
+
+
+|Col1|Values|Col3|
+|---|---|---|
+||Q-learning<br>Myopic<br>Random rewards|Q-learning<br>Myopic<br>Random rewards|
+||||
+||||
+||||
+||||
+||||
+
+
+0 25 50 75
+
+Block
+
+
+|Col1|Errors Q-learning|Col3|
+|---|---|---|
+||Q-learning<br>Myopic<br>Random rewards|Q-learning<br>Myopic<br>Random rewards|
+||||
+||||
+||||
+||||
+||||
+
+
+0 25 50 75
+
+Block
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Figure 19: Behavioral and SAE correlation analyses reported in Fig. 4 replicate with Qwen-2 _._ 5-72B.
+
+
+25
+
+
+**Gemma-2-27B**
+
+Gemma Block 5 Gemma Block 20 Gemma Block 44 Successor Representation
+A
+
+
+B
+
+
+C
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+Values
+D
+
+
+0 10 20 30 40
+
+Block
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+Errors
+E
+
+
+0 10 20 30 40
+
+Block
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0 200 400
+
+Step
+
+
+0 10 20 30 40
+
+Block
+
+
+Figure 20: Behavioral, decoding, and SAE correlation analyses reported in Fig. 5 replicate with
+Gemma-2-27B.
+
+
+**Qwen-2.5-72B**
+
+
+Qwen Block 5 Qwen Block 40 Qwen Block 79 Successor Representation
+A
+
+
+B
+
+
+C
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+Values
+D
+
+
+0 20 40 60 80
+
+Block
+
+
+1.00
+
+
+0.75
+
+
+0.50
+
+
+0.25
+
+
+0.00
+
+
+Errors
+E
+
+
+0 20 40 60 80
+
+Block
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0 200 400
+
+Step
+
+
+0 20 40 60 80
+
+Block
+
+
+Figure 21: Behavioral, decoding and SAE correlation analyses reported in Fig. 5 replicate with
+Qwen-2 _._ 5-72B.
+
+
+26

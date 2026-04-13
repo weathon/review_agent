@@ -211,56 +211,17 @@ def get_or_client():
     )
 
 
-def get_submission_deadline(or_client) -> int:
-    """Fetch the submission invitation deadline in milliseconds."""
-    venue = f"ICLR.cc/{YEAR}/Conference"
-    venue_group = or_client.get_group(venue)
-    submission_name = venue_group.content["submission_name"]["value"]
-    invitations = or_client.get_invitations(
-        prefix=f"{venue}/-/{submission_name}",
-        expired=True,
-    )
-    if not invitations:
-        raise RuntimeError(f"Could not find submission invitation for {venue}")
-    submission_invitation = invitations[0]
-    if submission_invitation.duedate is None:
-        raise RuntimeError(f"Submission invitation {submission_invitation.id} has no duedate")
-    return submission_invitation.duedate
-
-
-def get_latest_pre_deadline_reference(or_client, paper_id: str, deadline_ms: int):
-    """Return the most recent paper revision at or before the submission deadline."""
-    response = or_client.session.get(
-        or_client.reference_url,
-        params={"referent": paper_id, "original": "true"},
-        headers=or_client.headers,
-    )
-    response = or_client._OpenReviewClient__handle_response(response)
-    references = response.json().get("references", [])
-    eligible_references = [
-        ref for ref in references
-        if ref.get("tcdate") is not None
-        and ref["tcdate"] <= deadline_ms
-        and ref.get("content", {}).get("pdf")
-    ]
-    if not eligible_references:
-        raise RuntimeError(f"No pre-deadline revision found for paper {paper_id}")
-    return max(eligible_references, key=lambda ref: ref["tcdate"])
-
-
 def download_pdf(
     or_client,
     paper_id: str,
-    deadline_ms: int,
     pdfs_dir: Path = None,
 ) -> Path | None:
-    """Download the last PDF version submitted before the deadline."""
+    """Download the latest PDF version from OpenReview."""
     outfile = (pdfs_dir or DEFAULT_DATA_DIR / "pdfs") / f"{paper_id}.pdf"
     if outfile.exists() and outfile.stat().st_size > 0:
         return outfile
 
-    reference = get_latest_pre_deadline_reference(or_client, paper_id, deadline_ms)
-    pdf_bytes = or_client.get_pdf(reference["id"], is_reference=True)
+    pdf_bytes = or_client.get_pdf(paper_id)
     if len(pdf_bytes) <= 1000:
         raise RuntimeError(f"Download failed for {paper_id}: got {len(pdf_bytes)} bytes")
     outfile.write_bytes(pdf_bytes)
@@ -363,8 +324,6 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
     # Download PDFs and convert to markdown
     print("Authenticating with OpenReview for PDF downloads...")
     or_client = get_or_client()
-    submission_deadline_ms = get_submission_deadline(or_client)
-    print(f"Using submission deadline: {submission_deadline_ms}")
 
     # Load existing ratings to skip already-finished papers
     existing_ids: set[str] = set()
@@ -407,7 +366,7 @@ def main(n_samples: int = 100, seed: int = 42, balanced: bool = False, data_dir:
         pdf_path = PDFS_DIR / f"{pid}.pdf"
         if not (pdf_path.exists() and pdf_path.stat().st_size > 0):
             try:
-                pdf_path = download_pdf(or_client, pid, submission_deadline_ms, PDFS_DIR)
+                pdf_path = download_pdf(or_client, pid, PDFS_DIR)
             except Exception as e:
                 print(f"  SKIPPED download: {paper['title'][:60]} | {e}")
                 continue

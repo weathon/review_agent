@@ -1,0 +1,4621 @@
+# DO CONTEMPORARY CAUSAL INFERENCE MODELS CAPTURE REAL-WORLD HETEROGENEITY? FINDINGS FROM A LARGE-SCALE BENCHMARK
+
+
+**Haining Yu**
+Amazon
+hainiy@amazon.com
+
+
+**Yizhou Sun**
+Department of Computer Science
+University of California, Los Angeles
+yzsun@cs.ucla.edu
+
+
+ABSTRACT
+
+
+We present unexpected findings from a large-scale benchmark study evaluating
+Conditional Average Treatment Effect (CATE) estimation algorithms, i.e., CATE
+models. By running 16 modern CATE models on 12 datasets and 43,200 sampled
+variants generated through diverse observational sampling strategies, we find that:
+(a) 62% of CATE estimates have a higher Mean Squared Error (MSE) than a trivial
+zero-effect predictor, rendering them ineffective; (b) in datasets with at least one
+useful CATE estimate, 80% still have higher MSE than a constant-effect model;
+and (c) Orthogonality-based models outperform other models only 30% of the time,
+despite widespread optimism about their performance. These findings highlight
+significant challenges in current CATE models and underscore the need for broader
+evaluation and methodological improvements.
+
+Our findings stem from a novel application of _observational sampling_, originally
+developed to evaluate Average Treatment Effect (ATE) estimates from observational methods with experiment data. To adapt observational sampling for CATE
+evaluation, we introduce a statistical parameter, _Q_, equal to MSE minus a constant
+and preserves the ranking of models by their MSE. We then derive a family of
+sample statistics, collectively called _Q_ [ˆ], that can be computed from real-world
+data. When used in observational sampling, _Q_ [ˆ] is an unbiased estimator of _Q_ and
+asymptotically selects the model with the smallest MSE. To ensure the benchmark
+reflects real-world heterogeneity, we handpick datasets where outcomes come from
+field rather than simulation. By integrating observational sampling, new statistics,
+and real-world datasets, the benchmark provides new insights into CATE model
+performance and reveals gaps in capturing real-world heterogeneity, emphasizing
+the need for more robust benchmarks.
+
+
+1 INTRODUCTION
+
+
+Conditional Average Treatment Effect (CATE) models are increasingly used to answer causal inference questions in fields such as medicine, economics, and policy. But how well do these models
+capture real-world heterogeneity? We present unexpected findings from a large-scale benchmark
+study on contemporary CATE estimation algorithms. Based on 43,200 sampled variants derived from
+12 datasets and evaluated across 16 CATE models, we find: (a) 62% of CATE estimates have a higher
+Mean Squared Error (MSE) than a trivial estimator that consistently predicts zero effect, rendering
+them ineffective; (b) in cases where at least one useful CATE estimate exists, 80% have higher MSE
+than a constant-effect estimator; and (c) orthogonality-based models outperform other models only
+30% of the time. These findings raise important questions about the current models’ ability to fully
+reflect the complexities of real-world heterogeneity.
+
+
+Rather than introducing new models, our benchmark study focuses on evaluating existing CATE
+estimation models. The past decade has seen significant advancements in CATE estimation, with
+new methods emerging from statistics, econometrics, and machine learning (see Chernozhukov
+et al. (2017); Athey & Imbens (2016); Kennedy (2023); Shalit et al. (2017); Alaa & van der Schaar
+
+
+1
+
+
+(2017); Chernozhukov et al. (2023); Künzel et al. (2019)). Widely available and easy-to-use tools
+like EconML (Battocchi et al., 2019) and DoubleML (Bach et al., 2022) have made CATE models
+accessible to users with minimal expertise, leading to their broad application in high-stakes business
+and scientific decisions, where accuracy is critical.
+
+
+Understanding real-world model accuracy is challenging because CATE estimation models lack access
+to ground truth CATE. To compensate, these models rely on estimates of potential outcomes and/or
+propensity, known as _nuisance functions_ . As a result, models face two key risks - _inaccurate potential_
+_outcome estimation_ and _inaccurate propensity estimation_ - forcing difficult trade-offs. When potential
+outcome risk approaches zero, the ground truth CATE estimate can be recovered, which is the core
+idea behind S-learner and T-learner models (Künzel et al., 2019). Conversely, when propensity is
+known, the Horvitz-Thompson estimator (Horvitz & Thompson, 1952) provides unbiased CATE
+estimates. Most contemporary CATE models attempt a hybrid approach, estimating both potential
+outcomes and propensities to generate the final CATE estimate. The error of nuisance estimates
+impacts the accuracy of CATE estimates. To minimize the effect of errors, modern CATE models
+employ loss functions with robustness guarantees, ensuring that errors in nuisance estimates do not
+have a first-order effect on the CATE estimate. Such guarantees come from a family of closely related
+theories, including but not limited to doubly robustness (Kennedy, 2023), Neyman Orthogonality
+(Chernozhukov et al., 2017; Nie & Wager, 2020; Foster & Syrgkanis, 2023), and Influence function
+(Alaa & Van Der Schaar, 2019). We refer to such models from these theories as _orthogonality-based_
+_models_ . These theories rely on stringent assumptions regarding smoothness, Lipschitz continuity,
+sparsity, convexity, and orthogonality of the true potential outcomes, propensities, and loss functions.
+While mathematically elegant, their effectiveness is typically validated using simulation data.
+
+
+Despite theoretical guarantees, evaluating CATE models in practice remains challenging. CATE
+model _evaluation_ methods aim to assess the accuracy of CATE estimation models but encounter
+the same challenges as the models they evaluate. Ideally, we would compute the MSE for CATE
+estimates and rank estimators by their MSE relative to the ground truth CATE, a process known as
+_oracle ranking_ . However, in most real-world datasets, only the factual outcome is observed, not the
+counterfactual, making the ground truth CATE unknown unless the counterfactual generation process
+is explicitly known. It is widely accepted that without observing both factual and counterfactual
+outcomes, ground truth CATE cannot be computed, making it difficult to select the most accurate
+CATE estimators (Curth & van der Schaar, 2021; 2023; Neal et al., 2021; Mahajan et al., 2023).
+Without understanding CATE estimate accuracy, users cannot effectively evaluate the quality of
+estimators or the risk of inaccurate estimates.
+
+
+To address challenge of evaluating CATE models without ground truth, two main approaches are used,
+each with drawbacks. The first approach simulates potential outcomes and ranks CATE estimators by
+their MSE on semi-synthetic datasets, effectively removing the risk of potential outcome estimation
+(see Hill (2011); Shalit et al. (2017); Künzel et al. (2019); Diemert et al. (2021)). But doubts remain
+about whether promising simulation results translate to equally promising outcomes in real-world
+cases. The second approach ranks CATE estimators using proxy loss functions (see details in Section
+2), particularly those with doubly robust or Neyman orthogonal properties. This approach attempts to
+manage both potential outcome and propensity estimation risks by exploiting orthogonality properties
+in the loss. Doubts remain about proxy loss functions, particularly concerning their stringent
+assumption requirement, finite sample property, and self-serving bias (Curth & van der Schaar, 2023).
+The last bias occurs when a CATE estimator is evaluated using a loss function sharing common
+assumptions. For example, if we use R-loss to score CATE estimators and find R-learner (which
+optimizes R-loss) performs best, we cannot determine whether R-learner has indeed the lowest MSE
+or simply shares assumptions with R-loss. This situation is analogous to a sports player also acting as
+the referee. Note that, this situation is unique to causal inference where ground truth is missing in test
+dataset, making it impossible to compute MSE there like one would do in supervised learning. To
+summarize, from a risk perspective, current CATE evaluation methods either try to remove potential
+outcome estimation risk, or manage both outcome estimation and propensity risks. Meanwhile, few
+work explores removing the risk of propensity estimation.
+
+
+Given the limitations of current CATE evaluation methods, we seek new approaches that can assess
+CATE estimator performance on real-world heterogeneous data while relying on fewer and simpler
+assumptions. Drawing from the risk discussion, we ask: _could eliminating the risk of propensity_
+_estimation_ _be_ _the_ _solution?_ At first glance, this seems counter-intuitive. Observational methods
+inherently work with unknown propensity, thus the risk cannot be removed. This is where the method
+
+
+2
+
+
+of observational sampling comes in (LaLonde, 1986; Gentzel et al., 2021). In observational sampling,
+an observational dataset is created by sampling from an Randomized Controlled Trial (RCT) dataset
+through a carefully designed process that introduces selection bias. This approach allows CATE
+estimators to be trained on the observational sub-sample (with propensity estimation risk) while their
+performance is evaluated using the full RCT data (without propensity estimation risk).
+
+
+The history of observational sampling dates back as long as the field of causal inference itself.
+For instance, LaLonde (1986) used it to construct the IHDP dataset for evaluating ATE estimates
+from observational data. Since then, large RCT datasets have become more available in certain
+domains (Gordon et al., 2019; 2022). However, few researchers (except Gentzel et al. (2021))
+explore observational sampling for CATE evaluation, as mainstream research often relies on small
+semi-synthetic datasets, which have the drawbacks discussed earlier.
+
+
+Recognizing the untapped potential of observational sampling, we hypothesize that it offers opportunities to develop new statistics for identifying the most accurate CATE estimators and assessing
+their ability to capture real-world heterogeneity. This forms the central hypothesis of our research.
+To rigorously test this, we aim to develop new theoretical results and create a benchmark procedure
+using observational sampling for CATE evaluation.
+
+
+This paper offers three key contributions to the field of CATE evaluation:
+
+
+1. **Benchmark Findings:** Our primary contribution is new findings from the large-scale benchmark
+study, evaluating sixteen contemporary CATE estimation methods across 43,200 variants sampled
+from 12 unique datasets with real-world outcomes. As noted in the opening paragraph, these findings
+reveal current CATE models’ limitations in capturing real-world heterogeneity. They highlight the
+need for further research.
+
+
+2. **New Evaluation Metrics:** Our second contribution is new CATE evaluation metrics. We define a
+new statistical parameter, _Q_, which equals MSE minus a constant, and develop a family of statistics,
+collectively called _Q_ [ˆ], that converge to _Q_ . We prove that, for RCT data, _Q_ [ˆ] is an unbiased estimator
+_√_
+to _Q_ and achieves a _O_ (1 _/_ _N_ ) asymptotic convergence rate. Additionally, we introduce a control
+variates-based framework to reduce the variance of _Q_ [ˆ], showing that common CATE estimation losses,
+such as R-loss and DR-loss, are special cases of this framework.
+
+
+3. **Novel Evaluation Procedure:** Our third contribution is a novel CATE evaluation procedure based
+on observational sampling and the newly developed _Q_ . This method allows for the training of CATE
+estimators on observational sub-samples and evaluates their performance using _Q_ [ˆ] on the full RCT
+dataset. Unlike previous benchmarks, our approach does not rely on simulated potential outcomes,
+addressing concerns about real-world heterogeneity and mitigating the risk of self-serving bias.
+
+
+2 PRELIMINARY AND RELATED WORK
+
+
+2.1 PRELIMINARIES
+
+
+We formalize our problem setting using the potential outcomes framework Rubin (2005). All
+notations can be found in Table 2 in Appendix A. Let ( _X, T, Y_ ) be a tuple of random variables
+following distribution Π, where _X_ _∈X_ is the pre-treatment covariates, _Y_ _∈R_ is the observed
+outcome, and _T_ _∈{_ 0 _,_ 1 _}_ is the treatment assignment. Each tuple is associated with two potential
+outcomes _Y_ (0) and _Y_ (1). However, we observe only the outcome associated to the factual treatment
+_T_ _∈{_ 0 _,_ 1 _}_, _Y_ = _Y_ ( _T_ ). We denote _µ_ [(0)] ( _x_ ) = E[ _Y_ (0) _|X_ = _x_ ] and _µ_ [(1)] ( _x_ ) = E[ _Y_ (1) _|X_ = _x_ ] as
+the expected potential outcome functions given the covariate _x_, and _e_ ( _x_ ) = Pr( _T_ = 1 _|X_ = _x_ ) as
+the _treatment propensity function_ . The _Conditional Average Treatment Effect (CATE)_ is then defined
+as: _τ_ ( _x_ ) = E[ _Y_ (1) _−_ _Y_ (0) _|X_ = _x_ ] = _µ_ [(1)] ( _x_ ) _−_ _µ_ [(0)] ( _x_ ). The _Average Treatment Effect (ATE)_ is
+then _τAT E_ = E _X_ [ _τ_ ( _X_ )].
+
+
+Let _D_ denote a dataset with _N_ i.i.d samples _{_ ( _xn, tn, yn_ ) _}_ drawn from Π. When the treatment
+assignment is independent of covariates, i.e., _T_ _⊥_ _X_, we call such dataset a RCT dataset and define
+the constant treatment propensity _E_ 1 = _e_ ( _x_ ) = Pr( _T_ = 1 _|X_ = _x_ ) = Pr( _T_ = 1) and _E_ 0 = 1 _−_ _E_ 1.
+
+
+The goal of _CATE estimation_ is to train a CATE estimator _τ_ ˆ( _x_ ) using an observational dataset that
+approximates _τ_ ( _x_ ) as close as possible. Given a trained CATE estimator _τ_ ˆ( _·_ ) : _X_ _→_ R, the goal
+
+
+3
+
+
+of _CATE evaluation_ is to evaluate the quality of _τ_ ˆ( _·_ ) by comparing it to _τ_ ( _·_ ). One commonly used
+evaluation criterion is its MSE, also known as _Precision in Estimating Heterogeneous Effects (PEHE)_
+(Hill, 2011): _P_ (ˆ _τ_ ( _·_ )) = E _X_ [( _τ_ ( _X_ ) _−_ _τ_ ˆ( _X_ )) [2] ], which is a functional that maps an estimator _τ_ ˆ to
+a non-negative real number. Note that, MSE can be calculated only when _τ_ ( _·_ ) is available, which
+requires the observation of both factual and counterfactual outcomes. To ensure that effects are
+identifiable from observational data, we rely on the standard ignorability assumptions (Rosenbaum &
+Rubin, 1983):
+
+
+**Assumption** **2.1.** (i) Consistency: for a sample with treatment assignment _T_, we observe the
+associated potential outcome, i.e. _Y_ = _Y_ ( _T_ ). (ii) Unconfoundedness: there are no unobserved
+confounders, so that _Y_ (0) _, Y_ (1) _⊥_ _T_ _|X_ . (iii) Overlap: treatment assignment is non-deterministic,
+i.e., 0 _<_ Pr( _T_ = 1 _|X_ = _x_ ) _<_ 1.
+
+
+2.2 RELATED WORK
+
+
+**CATE estimation.** There exist many methods to construct CATE estimator ˆ _τ_ ( _x_ ). Here we cover three
+most popular strategies. The first _outcome prediction_ strategy predicts potential outcomes _µ_ [(0)] ( _x_ )
+and _µ_ [(1)] ( _x_ ), and uses their difference as the CATE estimate, i.e., _τ_ ˆ( _x_ ) = _µ_ ˜ [(1)] ( _x_ ) _−_ _µ_ ˜ [(0)] ( _x_ ). [1] This
+approach essentially minimizes _LOP_ (˜ _µ_ [(0)] _,_ ˜ _µ_ [(1)] ) = _N_ 1 - _n_ - _yn −_ _µ_ ˜ [(] _[t][n]_ [)] ( _xn_ )�2 by any regression
+
+model. Examples include S-learner, which regress _Y_ on _X_ and _T_, and T-learner, which regress _Y_
+on _X_ for _T_ = 0 and _T_ = 1 separately (Künzel et al., 2019). Solving the minimization problem of
+arg min _µ_ ˜(0) _,µ_ ˜(1) _LOP_ yields the estimator of ˆ _τOP_ ( _x_ ) = _µ_ ˜ [(1)] ( _x_ ) _−µ_ ˜ [(0)] ( _x_ ). For observational datasets,
+learning a shared representation _ϕ_ ( _x_ ) for both treatment groups can improve CATE estimates. This approach regresses _Y_ on _ϕ_ ( _X_ ) to estimate potential outcomes; Johansson et al. (2018) provides bounds
+on generalization error. Dragonnet (Shi et al., 2019), a variation of this approach, learns the representations of _µ_ [(0)] ( _ϕ_ ( _x_ )), _µ_ [(1)] ( _ϕ_ ( _x_ )), and _e_ ( _ϕ_ ( _x_ )) using a three-head neural network. The loss function
+
+
+for dragonnet is _LRL_ (˜ _µ_ [(0)] _,_ ˜ _µ_ [(1)] ) = [1]
+
+
+ - _n_ ( _yn −_ _µ_ ˜( _tn, ϕ_ ( _xn_ ))) [2] + _λ_ BCE( _tn,_ ˜ _e_ ( _ϕ_ ( _xn_ ))) . Solving
+
+
+[1] 
+_N_
+
+
+the problem of arg min _ϕ,µ_ ˜(0) _,µ_ ˜(1) _,e_ ˜ _LRL_ yield the estimator _τ_ ˆ _RL_ ( _x_ ) = _µ_ ˜ [(1)] ( _ϕ_ ( _x_ )) _−_ _µ_ ˜ [(0)] ( _ϕ_ ( _x_ )).
+
+
+The second _semi-parametric regression_ strategy estimates CATE based on transformed outcomes.
+When the true model is _Y_ = _f_ ( _X_ ) + _Tτ_ ( _X_ ) + _ϵ_, it can be rewritten as _Y_ _−_ _m_ ( _X_ ) = ( _T_ _−_
+_e_ ( _X_ )) _τ_ ( _X_ ) + _ϵ_ where _m_ ( _x_ ) = E[ _Y |X_ = _x_ ] = _f_ ( _x_ ) + _e_ ( _x_ ) _τ_ ( _x_ ). This reformulation then estimates
+_τ_ ( _x_ ) by regressing transformed outcome _Y_ _−_ _m_ ( _X_ ) on transformed covariate _T_ _−_ _e_ ( _X_ ). Robinson
+_√_
+(1988) and subsequent work show that these estimates are _N_ -consistent. Historically, this approach
+
+carried different names such as residual-on-residual, partialling-out estimators, Double Machine
+Learning (Chernozhukov et al., 2017), and Neyman orthogonality (Newey, 1994), to name a few.
+
+                        
+In its simplest form, the loss function is _LR_ (ˆ _τ_ ) = _N_ [1] - _n_ (( _yn −_ _m_ ˜ ( _xn_ )) _−_ ( _tn −_ _e_ ˜( _xn_ ))ˆ _τ_ ( _xn_ )) [2][�]
+
+with plug-in estimates _m_ ˜ ( _x_ ) and _e_ ˜( _x_ ); this is called R-loss in Nie & Wager (2020). Minimizing
+_LR_ yields the estimator _τ_ ˆ _R_ ( _x_ ). A notable extension of this method is causal forests (Athey et al.,
+2018), which adaptively partition the data to maximize the difference between CATE estimates from
+different tree partitions, improving the accuracy of the estimates.
+
+
+The third approach is _Inverse-Propensity Weighting_ (IPW). IPW is based on the Horvitz-Thompson
+estimator, defined as _η_ ( _x, t, y_ ) = - _e_ ( _tx_ ) _[−]_ 1(1 _−−e_ ( _tx_ )) - _y_ . When the propensity score _e_ ( _x_ ) is
+known, this estimator is an unbiased estimate of _τ_ ( _x_ ) (Horvitz & Thompson, 1952). That
+is, E[ _η_ ( _X, T, Y_ ) _|X_ = _x_ ] = _τ_ ( _x_ ). However, IPW is known to have high variance (Robins
+et al., 1994). To reduce variance, Kennedy (2023) suggests constructing doubly robust loss
+_LDR_ (ˆ _τ_ ) = _N_ 1 - _n_ [[] _[η]_ [(] _[x][n][, t][n][, y][n]_ [) +] _[ γ]_ [(] _[x][n][, t][n]_ [)] _[ −]_ _[τ]_ [ˆ][(] _[x][n]_ [)]][2][,] [where] _[γ]_ [(] _[x, t]_ [)] [=] �1 _−_ _e_ ˜( _tx_ ) - _µ_ ˜ [(1)] ( _x_ ) _−_
+
+�1 _−_ 1 _−_ 1 _−e_ ˜( _tx_ ) - _µ_ ˜ [(0)] ( _x_ ) is a shorthand function with plug-in estimates _µ_ ˜ [(1)] _,_ ˜ _µ_ [(0)] and ˜ _e_ ( _x_ ) that we will
+
+use later. Solving the problem of arg min _τ_ ˆ _LDR_ yields the Doubly Robust estimator _τ_ ˆ _DR_ ( _x_ ).
+
+
+When explaining the strategies mentioned above, we omit the details for sample splitting and
+regularization to improve readability. Modern implementation of these methods use standard ML
+
+
+1Let _f_ be a ground truth function defining the data generation process; _f_ is often unobservable. We use _f_ ˆ to
+represent the main estimator, and _f_ [˜] to represent the plug-in.
+
+
+4
+
+
+ _n_ (( _yn −_ _m_ ˜ ( _xn_ )) _−_ ( _tn −_ _e_ ˜( _xn_ ))ˆ _τ_ ( _xn_ )) [2][�]
+
+
+[1] 
+_N_
+
+
+regression and classification models as components. In different literature components are called
+_plug-ins_, _base learners_, or _nuisance functions_ .
+
+
+**CATE model evaluation.** There is extensive literature on CATE model evaluation. In principle, any
+score function _S_ (ˆ _τ_ ) can rank and evaluate CATE estimators. However, the key question is whether
+the ranking helps users identify the best estimators for their needs. While this paper focuses on score
+functions that rank by MSE, it’s useful to first explore the broader landscape of score functions.
+
+
+The first category of score functions includes hypothesis testing statistics. Studies such as Chernozhukov et al. (2023); Bartolomeis et al. (2024); Hussain et al. (2023) develop statistics to detect
+heterogeneity, unobserved confounding, or transportability. These statistics can rank CATE estimators but do not guarantee finding the estimator with smaller MSE; this makes them unsuitable
+for general CATE evaluation. For instance, the BLP statistic from Chernozhukov et al. (2023) is
+ineffective when the CATE estimator has small heterogeneity. The second category covers rank-based
+metrics, commonly used in uplift modeling and CATE calibration. Examples include Radcliffe
+(2007); Dwivedi et al. (2020); Yadlowsky et al. (2023); Imai & Li (2021); Xu & Yadlowsky (2022).
+While useful in specific contexts, these metrics lack a direct connection to MSE. For example, the
+Qini index (Radcliffe, 2007) assigns the same score to two estimators _τ_ ˆ( _x_ ) and _τ_ ˆ( _x_ ) + 1, even if
+their MSE differs. The third category consists of score functions that compare CATE estimators to
+ATE estimates from experimental data, as discussed in Gentzel et al. (2021) and related work.
+
+
+Now, let us turn to methods designed to find model with smallest MSE; see Curth & van der Schaar
+(2021; 2023); Mahajan et al. (2023); Neal et al. (2021) for reviews. The most common approach is
+simulation using semi-synthetic datasets, such as IHDP and Jobs (Hill, 2011; LaLonde, 1986), where
+simulated potential outcomes make MSE calculation feasible. Extensions of this approach include
+generative models for synthetic data (Neal et al., 2021; Athey et al., 2020; Parikh et al., 2022). As
+noted before, simulation misrepresents real-world heterogeneity, the precise risk we want to evaluate.
+
+
+Another strategy is hold-out validation, which constructs CATE estimation loss functions on test
+datasets. For instance, by estimating potential outcomes _µ_ ˜ [(0)] ( _x_ ) and _µ_ ˜ [(1)] ( _x_ ), one can compute the
+proxy _τ_ ˜( _x_ ) and calculate the MSE as _LP L_ (ˆ _τ_ ) = _N_ 1 - _n_ [(ˆ] _[τ]_ [(] _[x][n]_ [)] _[ −]_ _[τ]_ [˜][(] _[x][n]_ [))][2][.] [Other] [loss] [functions]
+
+can also apply; theorem 15.2.1 in Chernozhukov et al. (2024) is an example. The primary risk with
+this approach is still self-serving bias: model may unfairly benefit from being judged by losses
+that favor its own design. Furthermore, hold-out validation introduces complexity, as there are
+numerous choices: base regression models, hyperparameters, regularization, sample-splitting, and
+bias correction techniques (e.g., Neyman orthogonality (Newey, 1994), influence functions (Alaa &
+Van Der Schaar, 2019)). These choices further aggravate the self-serving bias.
+
+
+Recent studies (Curth & van der Schaar, 2023; Mahajan et al., 2023; Neal et al., 2021; Athey et al.,
+2020; Parikh et al., 2022), largely based on semi-synthetic datasets, have evaluated various CATE
+evaluation criteria, including _LOP_, _LR_, _LDR_, and _LP L_ . However, consensus is yet form.
+
+
+3 THE PROPOSED EVALUATION METRIC _Q_
+
+
+As discussed, existing CATE evaluation criteria fall short of selecting the best models, particularly
+when it comes to capturing real-world heterogeneity. This makes it difficult for practitioners to choose
+the most suitable models and prevents the community from making substantial breakthroughs in
+CATE estimation. We propose to break this dilemma by introducing a new statistical parameter _Q_,
+equal to MSE minus a constant, and a family of statistics _Q_ [ˆ] that can be computed from real-world
+data. We show that, when propensity is known (as in observational sampling), _Q_ [ˆ] is an _unbiased_
+estimator to _Q_, thus asymptotically preserving the same order as MSE when ranking different CATE
+models. We also discuss the generalization property, variance reduction strategies, and ways to use _Q_ [ˆ]
+to evaluate CATE estimators.
+
+
+3.1 _Q_ AND ITS STATISTICAL ESTIMATOR _Q_ [ˆ]
+
+
+For a given CATE estimator _τ_ ˆ, we refactor MSE _P_ (ˆ _τ_ ) into three parts:
+
+
+_P_ (ˆ _τ_ ) = E _X_ [( _τ_ ( _X_ ) _−_ _τ_ ˆ( _X_ )) [2] ] = E _X_ [ _τ_ [2] ( _X_ )]
+
+                - ��                 unobservable constant
+
+
+5
+
+
++ E _X_ [ˆ _τ_ [2] ( _X_ )] _−_ 2E _X_ [ _τ_ ( _X_ )ˆ _τ_ ( _X_ )]
+
+ - ��  can be approximated from real-world dataset
+
+
+(1)
+
+
+The first part, _P_ 1 = E _X_ [ _τ_ [2] ( _X_ )], is unobservable but independent from the CATE estimator, thus
+can be dropped when we evaluate _relative performance_ of models. The two other parts, _P_ 2(ˆ _τ_ ) =
+E _X_ [ˆ _τ_ [2] ( _X_ )], and _P_ 3(ˆ _τ_ ) = E _X_ [ _τ_ ( _X_ )ˆ _τ_ ( _X_ )], can be approximated with confidence. This yields the
+statistical parameter that drives oracle model ranking:
+
+_Q_ (ˆ _τ_ ) = _P_ 2(ˆ _τ_ ) _−_ 2 _P_ 3(ˆ _τ_ ) = _P_ (ˆ _τ_ ) _−_ _P_ 1 (2)
+
+Let _q_ ( _x, t, y_ ; ˆ _τ_ ) = _τ_ ˆ [2] ( _x_ ) _−_ 2ˆ _τ_ ( _x_ ) _η_ ( _x, t, y_ ), where _η_ is the shorthand for Horwitz-Thompson estimator,
+and let _qn_ (ˆ _τ_ ) = _q_ ( _xn, tn, yn_ ; ˆ _τ_ ) for _n_ -th sample. We now define the sample statistic:
+
+
+_Q_ ˆ(ˆ _τ_ ) = [1]
+
+_N_
+
+
+_qn_ (ˆ _τ_ ) = [1]
+
+_N_
+
+_n_
+
+
+_N_
+
+
+�[ˆ _τ_ [2] ( _xn_ ) _−_ 2ˆ _τ_ ( _xn_ ) _η_ ( _xn, tn, yn_ )] (3)
+
+
+_n_
+
+
+Note that we can compute the value of _Q_ [ˆ] without counterfactual ground truth. It follows that:
+**Lemma** **3.1.** _Unbiasedness._ _When_ _the_ _propensity_ _function_ _P_ ( _T_ = 1 _|X_ = _x_ ) = _e_ ( _x_ ) _is_ _known,_
+E[ _Q_ [ˆ] (ˆ _τ_ )] = _Q_ (ˆ _τ_ ) _._
+
+
+See Appendix B for all proofs. In particular, Theorem B.2 establish the consistency of _Q_ [ˆ] when
+propensity needs to be estimated.
+_Remark_ 3.2 _._ _Relationship with orthogonal ML._ Lemma 3.1 is connected to orthogonal ML methods
+(Foster & Syrgkanis, 2023). For example, Theorem 15.2.1 in Chernozhukov et al. (2024) discuss
+similar CATE evaluation techniques based on orthogonality assumptions, requiring the triple product
+of the propensity error, plug-in outcome estimate error, and the difference between two CATE
+_√_
+estimates to converge at an _O_ (1 _/_ _N_ ) rate.
+
+
+While Lemma 3.1 may initially appear similar to results in orthogonal ML (by zero-ing out propensity
+risk), it is essential to establish these results without relying on orthogonal ML assumptions. As
+discussed in Section 1, CATE evaluation should be based on fewer and simpler assumptions than
+CATE estimation. Furthermore, as Section 4 will show, orthogonality-based estimators often fail
+to capture real-world heterogeneity, raising doubts about their reliability in CATE evaluation. This
+makes it critical to develop results on stronger foundation. To our knowledge, our result is the first to
+provide asymptotic guarantees for oracle ranking under such general conditions.
+_Remark_ 3.3 _._ _Local Effect._ Lemma 3.1 can be easily extended to the case where _Q_ is weighted by
+function _w_ ( _x_ ) _>_ 0. That is, _Q_ [ˆ] ( _τ_ ; _w_ ) = [�] _n_ - _w_ ( _xn_ )(ˆ _τ_ [2] ( _xn_ ) _−_ 2 _η_ ( _xn, tn, yn_ )ˆ _τ_ ( _xn_ ))� _/_ [�] _n_ _[w]_ [(] _[x][n]_ [)]
+
+
+_n_ - _w_ ( _xn_ )(ˆ _τ_ [2] ( _xn_ ) _−_ 2 _η_ ( _xn, tn, yn_ )ˆ _τ_ ( _xn_ ))� _/_ [�]
+
+
+function _w_ ( _x_ ) _>_ 0. That is, _Q_ ( _τ_ ; _w_ ) = [�] _n_ _w_ ( _xn_ )(ˆ _τ_ ( _xn_ ) _−_ 2 _η_ ( _xn, tn, yn_ )ˆ _τ_ ( _xn_ )) _/_ [�] _n_ _[w]_ [(] _[x][n]_ [)]
+
+is an unbiased estimator of _Q_ (ˆ _τ_ ; _w_ ) = E _X_ [ _w_ ( _X_ )(ˆ _τ_ [2] ( _X_ ) _−_ 2ˆ _τ_ ( _X_ ) _τ_ ( _X_ ))]. This result is useful when
+some samples are more important than others.
+
+
+Intuitively, _Q_ [ˆ] are relative performance metrics. Meanwhile, they can be used to measure absolute
+performance of CATE estimators, in three ways below. We will demonstrate their use in Section 4.
+_Remark_ 3.4 _._ _Degeneracy._ A CATE estimator is useless if _Q_ (ˆ _τ_ ) _≥_ 0; when this happens, we call the
+estimator is _degenerate_ . To see that, let _τ_ ˆ0 = 0 be a (trivial) CATE estimator that estimates no CATE
+constantly. If _Q_ (ˆ _τ_ ) _≥_ 0, the CATE estimator _τ_ ˆ has a higher MSE than _τ_ ˆ0. This suggests the model is
+useless. As a result, _Q_ [ˆ] (ˆ _τ_ ) _≥_ 0 can be used to detect severe errors in CATE estimation.
+_Remark_ 3.5 _._ _Heterogeneity screening._ Secondly, let _Q_ (ˆ _τB_ ) be a constant effect (ATE) estimator. A
+CATE estimator with _Q_ (ˆ _τ_ ) _≥_ _Q_ (ˆ _τB_ ) is useless as its MSE is higher than a constant effect estimator.
+_Remark_ 3.6 _._ _Approximate MSE._ Finally, we can construct an MSE estimate, _P_ [ˆ] (ˆ _τ_ ), by decorating
+_P_ ˆ(ˆ _τ_ ) with plug-in estimates of potential outcomes _µ_ ˜ [(0)] ( _x_ ) and _µ_ ˜ [(1)] ( _x_ ) as follows. _P_ ˆ(ˆ _τ_ ) helps
+us understand the error magnitude of CATE estimator and retains same ranking property as _Q_ [ˆ] (ˆ _τ_ )
+_P_ ˆ(ˆ _τ_ ) = _Q_ ˆ(ˆ _τ_ ) + _N_ [1] - _n_ [(˜] _[µ]_ [(1)][(] _[x]_ [)] _[ −]_ _[µ]_ [˜][(0)][(] _[x]_ [))][2][.]
+
+
+Does CATE evaluation result generalize to new distributions? We answer in the next two theorems:
+
+
+A scientist with access to a dataset generated by one distribution may want to use it to find the
+best CATE estimator for a second, different but related distribution, without the cost of second data
+selection. Theorem 3.7 below shows that we can use data from one distribution to estimate _Q_ on
+another, via Inverse Propensity Weighting, when the density ratio between two distributions are
+known or can be reliably estimated.
+**Theorem 3.7.** _Generalization via Inverse Propensity Weighting._ _Let_ Π1 _and_ Π2 _be two data dis-_
+_tributions_ _sharing_ _the_ _same_ _τ_ ( _x_ ) _._ _Let_ _X_ 1 _and_ _X_ 2 _be_ _their_ _marginal_ _distribution_ _of_ _X_ _with_ _den-_
+_sity ρ_ 1( _x_ ) _and ρ_ 2( _x_ ) _respectively._ _Also assume both distributions share common support and let_
+
+
+6
+
+
+_n_ [(˜] _[µ]_ [(1)][(] _[x]_ [)] _[ −]_ _[µ]_ [˜][(0)][(] _[x]_ [))][2][.]
+
+
+[1] 
+_N_
+
+
+_ζ_ ( _x_ ) = _ρ_ 2( _x_ ) _/ρ_ 1( _x_ ) _be the density ratio._ _Let {_ ( _xn, tn, yn_ ) _}_ (1 _≤_ _n ≤_ _N_ ) _be N_ _i.i.d samples drawn_
+_from_ Π1 _._ _We have Q_ (ˆ _τ_ ; _X_ 2) = EΠ1 - _N_ 1 - _n_ _[ζ]_ [(] _[x][n]_ [)] - _τ_ ˆ [2] ( _xn_ ) _−_ 2 _η_ ( _xn, tn, yn_ )ˆ _τ_ ( _xn_ )�� _._
+
+
+When density ratio is difficult to estimate, or when the potential outcome distribution changes, a
+scientist may wonder if the best CATE estimator identified for one distribution is also the best for
+another. Theorem 3.8 below states that the CATE estimator with smaller _Q_ on one distribution is also
+the CATE estimator with smaller _Q_ on the second, when the two distributions are close enough:
+
+**Theorem** **3.8.** _Ranking_ _Generalization._ _Let_ Π1 _and_ Π2 _be_ _two_ _different_ _joint_ _distribution_ _of_
+_X, Y_ [(0)] _, Y_ [(1)] _._ _Let_ _τ_ ˆ1 _and_ _τ_ ˆ2 _be two deterministic CATE estimators._ _Let h_ 0( _x, y_ 0 _, y_ 1; ˆ _τ_ ) = _τ_ ˆ [2] ( _X_ ) _−_
+2ˆ _τ_ ( _x_ )( _y_ 1 _−_ _y_ 0)) _be a shorthand function._ _Let DH_ (Π1 _,_ Π2) := sup _h∈H |E_ Π1[ _h_ ( _X, Y_ [(0)] _, Y_ [(1)] )] _−_
+_E_ Π2[ _h_ ( _X, Y_ [(0)] _, Y_ [(1)] )] _| <_ ∆ _be the Integral Probability Metric bounded by a finite constant_ ∆ _, where_
+_H is a set of real-valued functions such that h_ 0(ˆ _τ_ 1) _, h_ 0(ˆ _τ_ 2) _∈_ _H. When Q_ (ˆ _τ_ 1; Π1) _−Q_ (ˆ _τ_ 2; Π1) _≥_ 2∆ _,_
+_we have Q_ (ˆ _τ_ 1; Π2) _−_ _Q_ (ˆ _τ_ 2; Π2) _>_ 0 _._
+
+
+3.2 RESULTS FOR OBSERVATIONAL SAMPLING
+
+
+In case of observational sampling (to be used in Section 4), results can be further improved. In
+observational sampling, we sample a subset from experiment data to train CATE estimators. We then
+evaluate the CATE estimators on the remaining RCT sub-sample. These results help the benchmark.
+
+
+First we explore opportunities of variance reduction. Even with Lemma 3.1, the variance of _Q_ [ˆ] can
+still be large in finite-sample settings, driven by the high-variance nature of Horwitz-Thompson
+estimator _η_ . In this section we provide a general control variates framework to reduce variance of
+_Q_ ˆ while preserving its desirable unbiased property. To start, we introduce the basic concepts of
+control variates (Glynn & Szechtman, 2002). Let _U_ be a real-valued random variable and we want
+to estimates its mean E[ _U_ ]. We can use the sample mean estimator _U_ [¯] = [�] _n_ _[u][n][/N]_ [where] _[ u][n]_ [are]
+i.i.d samples of _U_ . Suppose that there exists a zero-mean random variable _V,_ E[ _V_ ] = 0. Then, the
+control variate _U_ [¯] ( _θ_ ) = [�] _n_ [(] _[u][n]_ [ +] _[ θv][n]_ [)] _[/N]_ [=] _[U]_ [¯][ +] _[ θ]_ [ �] _n_ _[v][n][/N]_ [is also an unbiased estimator of][ E][[] _[U]_ []][.]
+
+
+_n_ [(] _[u][n]_ [ +] _[ θv][n]_ [)] _[/N]_ [=] _[U]_ [¯][ +] _[ θ]_ [ �]
+
+
+control variate _U_ ( _θ_ ) = [�] _n_ [(] _[u][n]_ [ +] _[ θv][n]_ [)] _[/N]_ [=] _[U]_ [ +] _[ θ]_ [ �] _n_ _[v][n][/N]_ [is also an unbiased estimator of][ E][[] _[U]_ []][.]
+
+Moreover, the variance-minimizing choice is _θ_ _[∗]_ = _−_ Cov( _U, V_ ) _/_ Var[ _V_ ].
+
+
+To apply control variates on _Q_ [ˆ], note that _Q_ [ˆ] = _N_ 1 - _n_ _[q][n]_ [is the sample mean of] _[ q]_ [(] _[X, T, Y]_ [ ; ˆ] _[τ]_ [)][.] [Let]
+
+_r_ ( _x, t, y_ ; ˆ _τ_ ) be a _control variates function_ with zero mean, i.e., E[ _r_ ( _X, T, Y_ ; ˆ _τ_ )] = 0. Therefore
+
+
+To apply control variates on _Q_ [ˆ], note that _Q_ [ˆ] = _N_ 1 
+
+
+_Q_ ˆ( _r_ ( _·_ ); ˆ _τ_ ) = [1]
+
+_N_
+
+
+�� _q_ ( _xn, tn, yn_ ; ˆ _τ_ ) + _θr_ ( _xn, tn, yn_ ; ˆ _τ_ )� (4)
+
+
+_n_
+
+
+has the same expectation as _Q_ [ˆ] (ˆ _τ_ ), i.e., E[ _Q_ [ˆ] ( _r_ ( _·_ ); ˆ _τ_ ) = E[ _Q_ [ˆ] (ˆ _τ_ )].
+
+
+Next we show that location invariance and commonly used CATE estimation losses are special cases
+of this control variates framework.
+
+**Proposition 3.9.** _Location Invariance._ _Assume X_ _⊥_ _T_ _._ _Let the location invariance control variates_
+_function be rLI_ ( _x, t, y_ ; ˆ _τ_ ) = 2 - _Et_ 1 _[−]_ [(1] _E_ _[−]_ 0 _[t]_ [)] - _τ_ ˆ( _x_ ) _._ _Q_ [ˆ] ( _rLI_ ) = _Q_ [ˆ] + _θ_ _N_ [1] - _n_ _[r][LI]_ [(] _[x][n][, t][n][, y][n]_ [; ˆ] _[τ]_ [)] _[ is an]_
+
+
+_function be rLI_ ( _x, t, y_ ; ˆ _τ_ ) = 2 _Et_ 1 _[−]_ _E_ 0 _τ_ ˆ( _x_ ) _._ _Q_ [ˆ] ( _rLI_ ) = _Q_ [ˆ] + _θ_ _N_ [1] - _n_ _[r][LI]_ [(] _[x][n][, t][n][, y][n]_ [; ˆ] _[τ]_ [)] _[ is an]_
+
+_unbiased estimator of Q._
+
+**Proposition 3.10.** _Doubly Robust loss._ _Assume X_ _⊥_ _T_ _._ _Define the control variates function as_
+_rDR_ ( _x, t, y_ ; ˆ _τ_ ) = _−_ 2 _γ_ ( _x, t_ )ˆ _τ_ ( _x_ ) _and_ _Q_ [ˆ] ( _rDR_ ) = _Q_ [ˆ] + _N_ [1] - _n_ _[r][DR]_ [(] _[x][n][, t][n][, y][n]_ [; ˆ] _[τ]_ [)] _[,]_ _[where][ γ]_ [(] _[x, t]_ [)] _[ is]_
+
+_the shorthand function defined in Section 2._ _We have_ E[ _Q_ [ˆ] ( _rDR_ )] = _Q and LDR_ (ˆ _τ_ ) = _Q_ [ˆ] ( _rDR_ ) +
+
+
+_E_ 0
+
+
+- _τ_ ˆ( _x_ ) _._ _Q_ [ˆ] ( _rLI_ ) = _Q_ [ˆ] + _θ_ [1]
+
+
+[1] 
+_N_
+
+
+_N_ 1 - _n_ - _η_ ( _xn, tn, yn_ ) + _γ_ ( _xn, tn_ )�2 _is equal to_ _Q_ [ˆ] ( _rDR_ ) _plus a constant independent from_ _τ_ ˆ _._
+
+
+**Proposition 3.11.** _R-loss. Assume X_ _⊥_ _T_ _. Define the control variates function as rR_ ( _x, t_ ) = _−_ 4(1 _−_
+2 _t_ ) ˜ _m_ ( _x_ )ˆ _τ_ ( _x_ ) _and_ _Q_ [ˆ] ( _rR_ ) = _Q_ [ˆ] + [1] - _[r][R]_ [(] _[x][n][, t][n][, y][n]_ [; ˆ] _[τ]_ [)] _[.]_ _[We have]_ [ E][[ ˆ] _[Q]_ [(] _[r][R]_ [)] =] _[ Q][.]_ _[Moreover when]_
+
+
+_n_ _[r][R]_ [(] _[x][n][, t][n][, y][n]_ [; ˆ] _[τ]_ [)] _[.]_ _[We have]_ [ E][[ ˆ] _[Q]_ [(] _[r][R]_ [)] =] _[ Q][.]_ _[Moreover when]_
+
+
+[1] 
+_N_
+
+
+_E_ 1 = Pr( _T_ = 1) = 0 _._ 5 _,_ _LR_ (ˆ _τ_ ) = _Q_ ˆ( _rR_ )
+
+
+[1] 
+_N_
+
+
+_E_ 1 = Pr( _T_ = 1) = 0 _._ 5 _,_ _LR_ (ˆ _τ_ ) = _Q_ ˆ(4 _rR_ ) + _N_ [1] - _n_ [(] _[y][n]_ _[−]_ _[m]_ [˜] [(] _[x][n]_ [))][2] _[is]_ _[equal]_ _[to]_ _[Q]_ [ˆ][(] _[r][R]_ [)] _[/]_ [4] _[plus]_ _[a]_
+
+_constant independent from_ _τ_ ˆ _._
+
+
+4 _rR_ ) + _N_ [1]
+
+
+Variations of _Q_ [ˆ] are rank-preserving when used to evaluate CATE models. When the dataset grows
+large, their difference disappears. Which variant to use depends on theoretical and practical considerations: the original _Q_ [ˆ] and _Q_ [ˆ] ( _rLI_ ) are model-free and easy to implement. Meanwhile, the variance
+
+
+7
+
+
+reduction variants _Q_ [ˆ] ( _r_ ), including its special cases _Q_ [ˆ] ( _rR_ ) and _Q_ [ˆ] ( _rDR_ ), offers the potential benefit
+of even lower variance, at the price of fitting and saving the extra plug-in estimators. Finally, note that
+Chernozhukov et al. (2023) proved results similar to Propositions 3.11 and 3.10, based on stringent
+orthogonality assumptions; their result do not generalize to other control variates.
+
+
+_√_
+Finally, we prove that all variants of _Q_ [ˆ] achieves _O_ (1 _/_
+
+
+Finally, we prove that all variants of _Q_ achieves _O_ (1 _/_ _N_ ) convergence rate:
+
+
+**Theorem 3.12.** _Convergence Rate._ _Assume Y_ _is a bounded random variable,_ _τ_ ˆ( _x_ ) _is a bounded_
+_function, propensity score is bounded, i.e.,_ 0 _<_ _e < e_ ¯ ( _x_ ) = Pr( _T_ = 1 _|X_ = _x_ ) _<_ 1 _−_ _e <_ ¯ 1 _, and that_
+_√_
+_the control variate function r_ ( _x, t, y_ ; ˆ _τ_ ) _is bounded._ _We have_ _N_ ( _Q_ [ˆ] ( _r_ ; ˆ _τ_ ) _−_ _Q_ ) _→N_ (0 _, σ_ [2] ( _r,_ ˆ _τ_ ))
+
+
+_the control variate function r_ ( _x, t, y_ ; ˆ _τ_ ) _is bounded._ _We have_ _N_ ( _Q_ [ˆ] ( _r_ ; ˆ _τ_ ) _−_ _Q_ ) _→N_ (0 _, σ_ [2] ( _r,_ ˆ _τ_ ))
+
+_where σ_ [2] ( _r,_ ˆ _τ_ ) _is the finite variance for q_ ( _r_ ; ˆ _τ_ ) _._
+
+
+4 BENCHMARK AND FINDINGS
+
+
+4.1 BENCHMARK DESIGN VIA OBSERVATIONAL SAMPLING
+
+
+Now that we have studied the statistical properties of variations of _Q_ [ˆ], we are ready to use it to
+evaluate CATE estimation models using real-world datasets. We emphasize that the evaluation is
+more than a _post-mortem_ examination. Theorems 3.7 and 3.8 suggests that results obtained from one
+distribution can generalize to a new one under the right conditions. Performance of CATE estimators
+on a carefully selected portfolios of observational sampling study are predictive indicators to their
+future performance on new and similar distributions.
+
+
+_Dataset generation._ We use twelve large RCT datasets for this evaluation study. They are listed in
+Table 4. These datasets were selected to represent diverse real-world data generation processes; the
+rationale for their inclusion and additional details are in Appendix E.
+
+
+_Observational sampling._ For each RCT dataset _D_, we sample it to generate the estimation _Dest_ with
+selection bias, and an evaluation RCT dataset _Deval_ ; there is no overlap between them. See Appendix
+F for details. We vary three sampling parameters, 4 variations in estimation dataset size, 3 variations
+in treatment %, and 3 variations in assignment mechanism nonlinearity; this results in 36 settings. For
+every setting, we sample _Dest_ and _Deval_ jointly 100 times, yielding 3,600 pairs of _Dest_ and _Deval_ .
+Repeating same process for the 12 RCT datasets yields 12 _×_ 3 _,_ 600 = 43 _,_ 200 benchmark datasets.
+
+
+_Estimation model selection._ We evaluate 16 CATE estimation models on _Dest_ . These models include
+variations of S, R, and T learners (Künzel et al., 2019), Doubly Robust learners (Kennedy, 2023),
+Double Machine Learning models (Chernozhukov et al., 2017; Nie & Wager, 2020), representation
+learning-based models (Shi et al., 2019), and causal random forest models (Athey et al., 2018).
+We use the format <model-name>.<base-learner>.<details> as the model code when
+presenting results. Full model details can be found in Table 3 in Appendix C. We use code from
+Curth & van der Schaar (2023); Curth (2023); Battocchi et al. (2019) for reproducibility.
+
+
+_Estimation and Evaluation._ We train 16 models listed in Table 3 on _Dest_ . See Appendix C for details.
+We then evaluate the trained models on _Deval_, using _Q_ [ˆ] ( _rDR_ ).
+
+
+4.2 FINDINGS
+
+
+Table 1 summarizes the benchmark findings. For each dataset, we calculate _Q_ [ˆ] for every model. Out
+of 43,200 datasets, 41,499 (96%) have at least one non-degenerate model with _Q_ [ˆ] (ˆ _τ_ ) _<_ 0. For these
+datasets, models are ranked from best (rank 1 for the most negative _Q_ [ˆ] ) to worst. A model "wins" if it
+ranks 1, and its "win share" reflects how often it outperforms other models. We also compute each
+model’s average degenerate rate.
+
+
+The benchmark reveals critical insights into the current landscape of CATE estimation models:
+
+
+1. _CATE models produce degenerate estimators more than half the time._ We found 62% of fitted
+CATE estimators are degenerate; Among them, 94% are statistically different from zero at 5%
+significance level. This highlights the need for problem-specific fine-tuning. It also suggests that
+using using _Q_ [ˆ] (ˆ _τ_ ) _≤_ 0 as a guardrail is crucial for avoiding poor performance, when possible.
+
+
+2. _CATE estimators fail to outperform a constant-effect benchmark 80% of the time._ We use Double
+ML with a Lasso base learner (dml.lasso) to construct _τ_ ˆ _B_, a constant-effect estimator. Among
+
+
+8
+
+
+Table 1: Model comparison: summary of 43,200 datasets
+
+|Model|Wins|Win share|Degenerate|Degenerate rate|Avg rank|
+|---|---|---|---|---|---|
+|s.xgb.cv|10,491|25.5%|2,600|6.3%|4.4|
+|s.ridge.cv|5,327|12.9%|12,837|31.2%|4.2|
+|dragon.nn|4,976|12.1%|18,021|43.8%|5.1|
+|s.ext.ridge.cv|4,582|11.1%|20,760|50.4%|5.6|
+|dml.elastic|3,413|8.3%|19,913|48.4%|5.6|
+|dml.lasso|3,279|8.0%|19,916|48.4%|5.7|
+|s.ext.xgb.cv|2,648|6.4%|21,344|51.8%|6.9|
+|r.ridge.cv|2,532|6.2%|25,209|61.2%|8.7|
+|dr.ridge.cv|2,499|6.1%|24,384|59.2%|7.1|
+|t.ridge.cv|1,780|4.3%|26,383|64.1%|8.2|
+|dr.xgb.cv|476|1.2%|29,409|71.4%|9.9|
+|cforest|209|0.5%|31,286|76.0%|10.5|
+|t.xgb.cv|187|0.5%|31,561|76.7%|11.4|
+|r.xgb.cv|110|0.3%|34,814|84.6%|12.4|
+|dml.xgb|-|0.0%|40,741|99.0%|15.9|
+|dml.linear|-|0.0%|38,796|94.2%|14.3|
+
+
+25,440 datasets with non-degenerate _τ_ ˆ _B_ _<_ 0, only 20% of CATE estimators ( _τ_ ˆ) outperform _τ_ ˆ _B_ .
+This finding is striking, given that these methods are explicitly designed to capture heterogeneity. It
+also highlights the underappreciated value of heterogeneity detection methods (Crump et al., 2008;
+Chernozhukov et al., 2023), which deserve significantly more attention.
+
+
+3. _Orthogonality-based learners underperform._ Despite their theoretical advantages, these models
+(model name dml, r, dr, and cforest) have an average degenerate rate of 71%, and win only
+30% of the time. This underperformance raises concerns about the self-serving bias inherent in
+using their proxy losses as CATE evaluation criteria. Their performance, we hypothesize, arises
+from a combination of factors, including the data-generating process and modeling choices. While
+the sample-splitting and debiasing mechanisms should, in theory, mitigate risks from poorly specified outcome models, other practical challenges—such as violations of assumptions required for
+orthogonality conditions to hold—may play a role. This is a topic for our ongoing research.
+
+
+4. _All learners are weak learners._ Among the sixteen models evaluated, s.xgb.cv had the highest
+win share at 25.5%. Unlike prior studies, our findings are based on real-world data rather than
+simulated outcomes, reinforcing the relevance of these results for practical applications. Detailed
+performance analysis is available in Appendix I.1.
+
+
+4.3 RESULT VALIDITY AND CONSIDERATIONS
+
+
+We were surprised by the findings. While we anticipated relative accuracy varies, we did expect
+contemporary CATE estimators to provide generally useful estimates. Before concluding that these
+results reflect fundamental issues with CATE estimation, we consider several alternative explanations:
+
+
+_Is_ _Q_ [ˆ] _really performing oracle ranking?_ We present simulation results on the agreement between _Q_ [ˆ]
+and MSE _P_ when used to select best models. We tested using semi-synthetic datasets based on the
+Hillstrom dataset (Hillstrom, 2008). Synthetic potential outcomes and treatments were generated, and
+the dataset was split into an estimation set ( _Dest_ ) and an evaluation set ( _Deval_ ) of varying sizes (1,000
+to 64,000 samples). We trained the same 16 CATE models on _Dest_ and evaluated them on _Deval_
+using _Q_ [ˆ] variants as the evaluation criteria. To assess the accuracy of _Q_ [ˆ], we compared model rankings
+from _Q_ [ˆ] with oracle rankings available in the simulated data using ranking metrics; see Figure 1
+for MRR and Appendix D for more details. As predicted by theory, the agreement between _Q_ [ˆ] and
+the oracle improved with larger evaluation datasets, and _Q_ [ˆ] consistently outperformed alternative
+evaluation metrics. See Appendix D.2 for more results.
+
+
+_Implementation_ _Accuracy._ The possibility of implementation errors is a valid concern, but we
+minimize the risk by re-using the codebase (Curth, 2023) that has been used for recent large-scale
+
+
+9
+
+
+1.0
+
+0.9
+
+0.8
+
+0.7
+
+0.6
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+
+
+Dataset s ze
+
+
+oracle
+
+Q
+
+
+MSE aga n() S-learner (xgb) proxy loss
+
+
+MSE against S-learner (lr) proxy loss
+
+
+Q(rLI
+
+Q(rR
+
+Q(rR
+
+Q(r
+
+Q(r
+
+
+)
+
+
+) w )h xgb ba(e learner
+
+
+MSE against T-learner (xgb) proxy loss
+
+
+LI
+
+
+MSE against T-learner (lr) proxy loss
+
+
+MSE against ATE
+
+Calibration Score
+
+
+R
+
+
+R
+
+
+) w )h lr ba(e learner
+
+) w )h xgb ba(e learner
+
+
+Qini
+
+
+) w )h lr ba(e learner
+
+
+DR
+
+
+DR
+
+
+Ou)come pred c) on accuracy
+
+
+Figure 1: Ranking agreement between _Q_ [ˆ] variants and oracle.
+
+
+benchmarks (Curth & van der Schaar, 2023). We relied on existing CATE estimators and evaluation
+criteria when possible and used EconML for additional implementations. We are committed to
+releasing our code following proper approval to further ensure transparency and reproducibility.
+
+
+_Model_ _Selection._ Our evaluation focused on 16 widely used CATE models; they span the major
+strategies in CATE estimation discussed in Section 2.2. While resource constraints limited the number
+of models we could include, this selection offers a representative evaluation of contemporary methods.
+However, we acknowledge that additional models, particularly from deep learning and Gaussian
+Process approaches (Alaa & van der Schaar, 2017), could provide further insights.
+
+
+_Context-Specific Generalizability._ While the datasets used in our benchmark may not cover every
+researcher’s specific needs, they represent a diverse range of real-world data generation processes.
+Our results expose significant risks in CATE estimation, particularly for practitioners without the
+deep domain expertise necessary for rigorous model fine-tuning. These findings provide crucial
+insights into the limitations of widely used CATE methods in capturing real-world heterogeneity.
+
+
+5 CONCLUSIONS
+
+
+We introduce a new approach to evaluating CATE estimators using observational sampling, centered
+around the statistical parameter _Q_ to identify the estimator with the lowest MSE. The _Q_ [ˆ] family of
+statistics are computable from real-world RCT datasets, allowing us, for the first time, to evaluate
+CATE estimator’s ability to capture real-world heterogeneity without counterfactual ground truth.
+However, the most important contribution of this work is not just the method, but the empirical findings
+themselves. These findings reveal that contemporary CATE estimators often fail to outperform
+trivial baselines, raising fundamental concerns about the field’s reliance on limited benchmarks
+and simulation-driven validation. They highlight significant challenges in CATE estimation and
+underscore the need for a re-examination of evaluation practices.
+
+
+Our work brings renewed attention to foundational principles and highlights new opportunities. First,
+it underscores the central role of RCTs in causal inference and renews interest in observational
+sampling methods, an underutilized tool for CATE evaluation. Second, it reveals the need for broader,
+more representative benchmarks. Our study, while large by current standards, is an early step toward
+this goal. Systematic evaluation across more datasets, including high-sample regimes, may clarify
+when and why models fail. Third, the observed performance gaps suggest future work should explore
+alternative modeling assumptions, improved regularization, or new architectures tailored to realworld heterogeneity. Ultimately, our findings do not suggest that progress in CATE estimation has
+stalled, but that evaluation practices must evolve. The reliance on small benchmarks and simulated
+comparisons may have created an artificial sense of model superiority. Moving forward, the field
+requires both methodological innovation and stronger empirical validation on diverse, high-quality
+datasets. We hope this work catalyzes broader benchmarking efforts, ensuring that future models and
+model evaluation better capture real-world heterogeneity.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+We sincerely thank Randall Lewis, Lihong Li, Rui Song, Ryan Shyu, Max Farrell, Mathias Cattaneo,
+and Andrew Gelman for their valuable discussions and contributions to this work. We appreciate the
+constructive feedback from the anonymous reviewers, which helped improve this manuscript.
+
+
+REFERENCES
+
+
+Ahmed Alaa and Mihaela Van Der Schaar. Validating causal inference models via influence functions.
+In Kamalika Chaudhuri and Ruslan Salakhutdinov (eds.), _Proceedings of the 36th International_
+_Conference_ _on_ _Machine_ _Learning_, volume 97 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_,
+pp. 191–201. PMLR, 09–15 Jun 2019. [URL https://proceedings.mlr.press/v97/](https://proceedings.mlr.press/v97/alaa19a.html)
+[alaa19a.html.](https://proceedings.mlr.press/v97/alaa19a.html)
+
+
+Ahmed M. Alaa and Mihaela van der Schaar. Bayesian inference of individualized treatment effects
+using multi-task gaussian processes, 2017.
+
+
+Susan Athey and Guido Imbens. Recursive partitioning for heterogeneous causal effects. _Proceedings_
+_of the National Academy of Sciences_, 113(27):7353–7360, 2016.
+
+
+Susan Athey, Julie Tibshirani, and Stefan Wager. Generalized random forests, 2018.
+
+
+Susan Athey, Guido Imbens, Jonas Metzger, and Evan Munro. Using wasserstein generative adversarial networks for the design of monte carlo simulations, 2020.
+
+
+Philipp Bach, Victor Chernozhukov, Malte S. Kurz, and Martin Spindler. DoubleML – An objectoriented implementation of double machine learning in Python. _Journal of Machine Learning_
+_Research_, 23(53):1–6, 2022. [URL http://jmlr.org/papers/v23/21-0862.html.](http://jmlr.org/papers/v23/21-0862.html)
+
+
+Piersilvio De Bartolomeis, Javier Abad, Konstantin Donhauser, and Fanny Yang. Hidden yet
+quantifiable: A lower bound for confounding strength using randomized trials, 2024.
+
+
+Keith Battocchi, Eleanor Dillon, Maggie Hei, Greg Lewis, Paul Oka, Miruna Oprescu, and Vasilis
+Syrgkanis. EconML: A Python Package for ML-Based Heterogeneous Treatment Effects Estimation. https://github.com/py-why/EconML, 2019. Version 0.x.
+
+
+Victor Chernozhukov, Denis Chetverikov, Mert Demirer, Esther Duflo, Christian Hansen, Whitney
+Newey, and James Robins. Double/debiased machine learning for treatment and causal parameters,
+2017.
+
+
+Victor Chernozhukov, Mert Demirer, Esther Duflo, and Iván Fernández-Val. Fisher-schultz lecture:
+Generic machine learning inference on heterogenous treatment effects in randomized experiments,
+with an application to immunization in india, 2023.
+
+
+Victor Chernozhukov, Christian Hansen, Nathan Kallus, Martin Spindler, and Vasilis Syrgkanis.
+Applied causal inference powered by ml and ai, 2024. URL [https://arxiv.org/abs/](https://arxiv.org/abs/2403.02467)
+[2403.02467.](https://arxiv.org/abs/2403.02467)
+
+
+Richard K. Crump, V. Joseph Hotz, Guido W. Imbens, and Oscar A. Mitnik. Nonparametric Tests for
+Treatment Effect Heterogeneity. _The Review of Economics and Statistics_, 90(3):389–405, 08 2008.
+doi: 10.1162/rest.90.3.389. [URL https://doi.org/10.1162/rest.90.3.389.](https://doi.org/10.1162/rest.90.3.389)
+
+
+Alicia Curth. Cateselection: Sklearn-style implementations of model selection criteria for cate
+estimation. [https://github.com/AliciaCurth/CATESelection, 2023.](https://github.com/AliciaCurth/CATESelection) Accessed:
+2023-05-08.
+
+
+Alicia Curth and Mihaela van der Schaar. Doing great at estimating cate? on the neglected assumptions
+in benchmark comparisons of treatment effect estimators, 2021.
+
+
+Alicia Curth and Mihaela van der Schaar. In search of insights, not magic bullets: Towards demystification of the model selection dilemma in heterogeneous treatment effect estimation, 2023.
+
+
+11
+
+
+Michael Davern, Rene Bautista, Jeremy Freese, Pamela Herd, and Stephen L. Morgan. General social
+survey 1972-2022. [machine-readable data file]., 2023.
+
+
+Eustache Diemert, Artem Betlei, Christophe Renaudin, Massih-Reza Amini, Théophane Gregoir,
+and Thibaud Rahier. A large scale benchmark for individual treatment effect prediction and uplift
+modeling, 2021.
+
+
+Raaz Dwivedi, Yan Shuo Tan, Briton Park, Mian Wei, Kevin Horgan, David Madigan, and Bin Yu.
+Stable discovery of interpretable subgroups via calibration in causal studies, 2020.
+
+
+Bruno Ferman. Reading the fine print: Information disclosure in the brazilian credit card market.
+_Management Science_, 62(12):3534–3548, 2015.
+
+
+Dylan J. Foster and Vasilis Syrgkanis. Orthogonal statistical learning, 2023.
+
+
+Amanda Gentzel, Purva Pruthi, and David Jensen. How and why to use experimental data to evaluate
+methods for observational causal inference, 2021.
+
+
+Peter W. Glynn and Roberto Szechtman. Some new perspectives on the method of control variates. In
+_Monte Carlo and Quasi-Monte Carlo Methods 2000_, pp. 27–49, Berlin, Heidelberg, 2002. Springer
+Berlin Heidelberg.
+
+
+Brett R. Gordon, Florian Zettelmeyer, Neha Bhargava, and Dan Chapsky. A comparison of approaches
+to advertising measurement: Evidence from big field experiments at facebook. _Marketing Science_,
+38(2):193–225, 2019.
+
+
+Brett R. Gordon, Robert Moakler, and Florian Zettelmeyer. Close enough? a large-scale exploration
+of non-experimental approaches to advertising measurement, 2022.
+
+
+Jennifer Hill. Bayesian nonparametric modeling for causal inference. _Journal of Computational and_
+_Graphical Statistics_, 20:217–240, 03 2011. doi: 10.1198/jcgs.2010.08162.
+
+
+Kevin Hillstrom. The minethatdata e-mail analytics and data mining challenge, 2008. URL [https://blog.minethatdata.com/2008/03/](https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html)
+[minethatdata-e-mail-analytics-and-data.html.](https://blog.minethatdata.com/2008/03/minethatdata-e-mail-analytics-and-data.html)
+
+
+D. G. Horvitz and D. J. Thompson. A generalization of sampling without replacement from a
+finite universe. _Journal of the American Statistical Association_, 47(260):663–685, 1952. ISSN
+01621459.
+
+
+Zeshan Hussain, Ming-Chieh Shih, Michael Oberst, Ilker Demirel, and David Sontag. Falsification
+of internal and external validity in observational studies via conditional moment restrictions, 2023.
+
+
+Kosuke Imai and Michael Lingzhi Li. Experimental evaluation of individualized treatment rules.
+_Journal of the American Statistical Association_, 118(541):242–256, June 2021. ISSN 1537-274X.
+doi: 10.1080/01621459.2021.1923511. [URL http://dx.doi.org/10.1080/01621459.](http://dx.doi.org/10.1080/01621459.2021.1923511)
+[2021.1923511.](http://dx.doi.org/10.1080/01621459.2021.1923511)
+
+
+IST Collaborative Group and P.A.G. Sandercock. The international stroke trial (ist): A randomised trial of aspirin, subcutaneous heparin, both, or neither among 19 435 patients with
+acute ischaemic stroke. _The Lancet_, 349(9065):1569–1581, May 1997. ISSN 0140-6736. doi:
+10.1016/S0140-6736(97)04011-7.
+
+
+Fredrik D. Johansson, Uri Shalit, and David Sontag. Learning representations for counterfactual
+inference, 2018.
+
+
+Edward H. Kennedy. Towards optimal doubly robust estimation of heterogeneous causal effects,
+2023.
+
+
+Sören R. Künzel, Jasjeet S. Sekhon, Peter J. Bickel, and Bin Yu. Metalearners for estimating
+heterogeneous treatment effects using machine learning. _Proceedings of the National Academy_
+_of_ _Sciences_, 116(10):4156–4165, feb 2019. doi: 10.1073/pnas.1804597116. URL [https:](https://doi.org/10.1073%2Fpnas.1804597116)
+[//doi.org/10.1073%2Fpnas.1804597116.](https://doi.org/10.1073%2Fpnas.1804597116)
+
+
+12
+
+
+Robert J. LaLonde. Evaluating the econometric evaluations of training programs with experimental
+data. _The_ _American_ _Economic_ _Review_, 76(4):604–620, 1986. ISSN 00028282. URL [http:](http://www.jstor.org/stable/1806062)
+[//www.jstor.org/stable/1806062.](http://www.jstor.org/stable/1806062)
+
+
+Divyat Mahajan, Ioannis Mitliagkas, Brady Neal, and Vasilis Syrgkanis. Empirical analysis of model
+selection for heterogeneous causal effect estimation, 2023.
+
+
+Brady Neal, Chin-Wei Huang, and Sunand Raghupathi. Realcause: Realistic causal inference
+benchmarking, 2021.
+
+
+Whitney K. Newey. The asymptotic variance of semiparametric estimators. _Econometrica_, 62(6):
+1349–1382, 1994.
+
+
+Xinkun Nie and Stefan Wager. Quasi-oracle estimation of heterogeneous treatment effects, 2020.
+
+
+Harsh Parikh, Carlos Varjao, Louise Xu, and Eric Tchetgen Tchetgen. Validating causal inference
+methods. In Kamalika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesvari, Gang Niu, and
+Sivan Sabato (eds.), _Proceedings_ _of_ _the_ _39th_ _International_ _Conference_ _on_ _Machine_ _Learning_,
+volume 162 of _Proceedings of Machine Learning Research_, pp. 17346–17358. PMLR, 17–23 Jul
+2022. [URL https://proceedings.mlr.press/v162/parikh22a.html.](https://proceedings.mlr.press/v162/parikh22a.html)
+
+
+Nicholas Radcliffe. Using control groups to target on predicted lift: Building and assessing uplift
+model. 2007. [URL https://api.semanticscholar.org/CorpusID:22535399.](https://api.semanticscholar.org/CorpusID:22535399)
+
+
+James M. Robins, Andrea Rotnitzky, and Lue Ping Zhao. Estimation of regression coefficients when
+some regressors are not always observed. _Journal of the American Statistical Association_, 89(427):
+846–866, 1994.
+
+
+P. M. Robinson. Root-n-consistent semiparametric regression. _Econometrica_, 56(4):931–954, 1988.
+ISSN 00129682, 14680262. [URL http://www.jstor.org/stable/1912705.](http://www.jstor.org/stable/1912705)
+
+
+Paul R. Rosenbaum and Donald B. Rubin. The central role of the propensity score in observational
+studies for causal effects. _Biometrika_, 70(1):41–55, 04 1983.
+
+
+Donald B. Rubin. Causal inference using potential outcomes: Design, modeling, decisions. _Journal_
+_of the American Statistical Association_, 100(469):322–331, 2005. ISSN 01621459. [URL http:](http://www.jstor.org/stable/27590541)
+[//www.jstor.org/stable/27590541.](http://www.jstor.org/stable/27590541)
+
+
+Uri Shalit, Fredrik D. Johansson, and David Sontag. Estimating individual treatment effect: generalization bounds and algorithms, 2017.
+
+
+Claudia Shi, David M. Blei, and Victor Veitch. Adapting neural networks for the estimation of
+treatment effects, 2019.
+
+
+Stefan Wager, Wenfei Du, Jonathan Taylor, and Robert J. Tibshirani. High-dimensional regression
+adjustments in randomized experiments. _Proceedings of the National Academy of Sciences_, 113
+(45):12673–12678, 2016. doi: 10.1073/pnas.1614732113. [URL https://www.pnas.org/](https://www.pnas.org/doi/abs/10.1073/pnas.1614732113)
+[doi/abs/10.1073/pnas.1614732113.](https://www.pnas.org/doi/abs/10.1073/pnas.1614732113)
+
+
+Yizhe Xu and Steve Yadlowsky. Calibration error for heterogeneous treatment effects, 2022.
+
+
+Steve Yadlowsky, Scott Fleming, Nigam Shah, Emma Brunskill, and Stefan Wager. Evaluating
+treatment prioritization rules via rank-weighted average treatment effects, 2023.
+
+
+13
+
+
+A NOTATION TABLE
+
+
+Let _f_ be a ground truth function defining the data generation process; _f_ is often unobservable. We
+use _f_ [ˆ] to represent the main estimator, and _f_ [˜] to represent the plug-in.
+
+|Notation|Definition|
+|---|---|
+|_X_<br>_T_<br>_Y_ (0) and_ Y_ (1)<br>_Y_ =_ Y_ (_T_)<br>_µ_(0)(_x_) and_ µ_(1)(_x_)<br>˜_µ_(0)(_x_) and ˜_µ_(1)(_x_)<br>_τ_(_x_) =_ µ_(1)(_x_)_ −µ_(0)(_x_)<br>ˆ_τ_(_x_)<br>_e_(_x_) = Pr(_T_ = 1_|X_ =_ x_)<br>˜_e_(_x_)<br>_E_1<br>_D_<br>_N_<br>(_xn, tn, yn_)<br>_Dest_<br>_Deval_<br>_P_<br>_Q_<br>ˆ_Q_<br>_r_(_·_)<br>ˆ_Q_(_r_)<br>_LR_<br>_LDR_<br>_m_(_x_)<br>˜_m_(_x_)<br>_η_(_x, t, y_)<br>_γ_(_x, t_)|Pre-treatment random vector<br>Binary treatment<br>Potential outcomes<br>Outcome<br>Expectations of potential outcomes<br>Plug-in estimates of potential outcomes<br>ground truth CATE function<br>CATE estimate<br>Propensity function<br>Plug-in estimate of_ e_(_x_)<br>Treatment probability in RCT, i.e.,_ E_1 = Pr(_T_ = 1). Also_ E_0 = 1_ −E_1<br>A dataset, a list of (_X, T, Y_ ) tuples<br>Number of samples in dataset<br>_n_-th sample in_ D_<br>The estimation dataset, a subset of_ D_<br>The evaluation dataset, a subset of_ D_<br>Mean Squared Error of CATE estimator. Also known as PEHE<br>The statistical parameter; also the part of MSE that depends on ˆ_τ_<br>The sample statistics computed on dataset_ D_<br>The zero-mean control variate function<br>The sampled statistics with control variates function_ r_<br>R loss<br>DR loss<br>E[_Y |X_ =_ x_], used in R loss<br>Plug-in estimate of_ m_(_x_)<br>Shorthand function used for IPW estimator<br>Shorthand function used in DR learner|
+
+
+Table 2: Notations
+
+
+B PROOFS
+
+
+B.1 PROOF OF LEMMA 3.1
+
+
+_Proof._ To see that, notice
+
+
+_P_ 3(ˆ _τ_ ) = E _X_ [ˆ _τ_ ( _x_ ) _τ_ ( _x_ )]
+= E _X_ [ˆ _τ_ ( _x_ )E _T,Y |X_ [ _η_ ( _X, T, Y_ )]]
+
+= E _X_ [E _T,Y |X_ [ˆ _τ_ ( _x_ ) _η_ ( _X, T, Y_ )]]
+
+= E _X,T,Y_ [ˆ _τ_ ( _x_ ) _η_ ( _X, T, Y_ )]
+
+
+   - 1
+= E
+_N_
+
+
+- _τ_ ˆ( _xn_ ) _η_ ( _xn, tn, yn_ )�
+
+
+_n_
+
+
+14
+
+
+where the second equation is due to unbiasedness of Horwitz-Thompson estimator _η_ . It follows that
+
+
+_Q_ = _P_ 2 _−_ 2 _P_ 3
+
+
+   - 1
+= E
+_N_
+
+
+   - 1
+= E
+_N_
+
+
+= E[ _Q_ [ˆ] ]
+
+
+�(ˆ _τ_ ( _xn_ ) _−_ 2ˆ _τ_ ( _xn_ ) _η_ ( _xn, tn, yn_ ))�
+
+
+_n_
+
+
+- _q_ ( _xn, tn, yn_ ; ˆ _τ_ )�
+
+
+_n_
+
+
+Thus _E_ [ _Q_ [ˆ] ] = _Q_ holds as long as the ground truth propensity function _e_ ( _x_ ) is known, even if it is not
+constant.
+
+
+_Remark_ B.1 _._ The proof can be extended to other unbiased CATE estimators.
+
+
+B.2 PROOF OF THEOREM B.2
+
+
+Based on Lemma 3.1, We can establish the consistency of _Q_ [ˆ] when propensity needs to be estimated:
+
+**Theorem** **B.2.** _Consistency._ _Assume_ _propensity_ _e_ ( _x_ ) _and_ _its_ _estimate_ _e_ ˆ( _x_ ) _are_ _both_ _bounded_
+_away_ _from_ _zero_ _and_ _way_ _on_ _their_ _support:_ 0 _<_ _e_ ¯ _≤_ _e_ ( _x_ ) _,_ ˆ _e_ ( _x_ ) _≤_ 1 _−_ _e_ ¯ _<_ 1 _._ _Also_ _assume_
+lim _n→∞_ Pr(E _X_ [ _|e_ ˆ _n_ ( _x_ ) _−_ _e_ ( _X_ ) _|_ ] _> ϵ_ ) = 0 _for all ϵ >_ 0 _._ _We have for all ϵ >_ 0 _,_
+
+
+lim (5)
+_n→∞_ [Pr(] _[|][Q]_ [ ˆ] _[n]_ [(ˆ] _[τ]_ [)] _[ −]_ _[Q]_ [(ˆ] _[τ]_ [)] _[|][ > ϵ]_ [) = 0]
+
+
+_Proof._ First, notice
+
+
+(6)
+
+
+(7)
+
+
+1
+_Q_ ˆ( _e_ ( _x_ )) _−_ _Q_ ˆ(ˆ _e_ ( _x_ )) =
+_N_
+
+
+1
+
+_−_
+_N_
+
+
+1
+=
+_N_
+
+
+It follows that
+
+
+- - _τ_ ˆ [2] ( _xn_ ) _−_ 2ˆ _τ_ ( _xn_ )( _tn_ 1 _−_ _tn_
+
+_e_ ( _xn_ ) _[−]_ 1 _−_ _e_ ( _xn_ ) [)] _[y][n]_
+
+_n_
+
+- - _τ_ ˆ [2] ( _xn_ ) _−_ 2ˆ _τ_ ( _xn_ )( _tn_ 1 _−_ _tn_
+
+_e_ ˆ( _xn_ ) _[−]_ 1 _−_ _e_ ˆ( _xn_ ) [)] _[y][n]_
+
+_n_
+
+
+- 2ˆ _τ_ ( _xn_ ) _yn_
+
+
+_n_
+
+
+- _tn_ _tn_ 1 _−_ _tn_ 1 _−_ _tn_
+_e_ ˆ( _xn_ ) _[−]_ _e_ ( _xn_ ) [+] 1 _−_ _e_ ( _xn_ ) _[−]_ 1 _−_ _e_ ˆ( _xn_ )
+
+
+(8)
+
+
+_|Q_ [ˆ] ( _e_ ( _x_ )) _−_ _Q_ [ˆ] (ˆ _e_ ( _x_ )) _|_ (9)
+
+
+1 _−_ _tn_ 1 _−_ _tn_
++
+���� ���� 1 _−_ _e_ ( _xn_ ) _[−]_ 1 _−_ _e_ ˆ( _xn_ )
+
+
+(10)
+
+����
+
+
+1
+_≤_
+_N_
+
+
+1
+=
+_N_
+
+
+- _|_ 2ˆ _τ_ ( _xn_ ) _yn|_ _tn_ _tn_
+
+����� _e_ ˆ( _xn_ ) _[−]_ _e_ ( _xn_ )
+_n_
+
+
+- _|_ 2ˆ _τ_ ( _xn_ ) _yn|_ - _tn_ 1 _−_ _tn_ (11)�
+
+_e_ ( _xn_ )ˆ _e_ ( _xn_ ) _[|][e]_ [ˆ][(] _[x][n]_ [)] _[ −]_ _[e]_ [(] _[x][n]_ [)] _[|]_ [ +] (1 _−_ _e_ ( _xn_ ))(1 _−_ _e_ ( _xn_ )) _[|][e]_ [ˆ][(] _[x][n]_ [)] _[ −]_ _[e]_ [(] _[x][n]_ [)] _[|]_
+_n_
+
+
+- _|_ 2ˆ _τ_ ( _xn_ ) _yn|_ - _tn_ 1 _−_ _tn_
+
+_e_ ( _xn_ )ˆ _e_ ( _xn_ ) [+] (1 _−_ _e_ ( _xn_ ))(1 _−_ _e_ ( _xn_ ))
+_n_
+
+
+- _|e_ ( _xn_ ) _−_ _e_ ( _xn_ ) _|_
+
+
+_≤_
+
+
+1
+
+_N_
+
+
+(12)
+
+
+1
+_≤_ _C_ 1
+_N_
+
+
+- _|e_ ( _xn_ ) _−_ _e_ ˆ( _xn_ ) _|_ (13)
+
+
+_n_
+
+
+= _C_ 1 (E _X_ [ _|e_ ( _X_ ) _−_ _e_ ˆ( _X_ ) _|_ ] + _ε_ 1) (14)
+_≤_ _C_ 1 (E _X_ [ _|e_ ( _X_ ) _−_ _e_ ˆ( _X_ ) _|_ ] + _|ε_ 1 _|_ ) (15)
+
+
+where
+
+
+    - 1 1
+_C_ 1 = 4 max
+_e_ ¯ [2] _[,]_ (1 _−_ _e_ ¯) [2]
+
+
+max _|τ_ ˆ( _xn_ ) _yn|_ (16)
+_n_
+
+
+- _|e_ ( _xn_ ) _−_ _e_ ˆ( _xn_ ) _|_ (17)
+
+
+_n_
+
+
+is a constant and
+_ε_ 1 = E _X_ [ _|e_ ( _X_ ) _−_ _e_ ˆ( _X_ ) _|_ ] _−_ [1]
+
+_N_
+
+
+15
+
+
+_√_
+_ε_ 1 is a zero-mean random variable with asymptotic variance on the order of _o_ (1 _/_ _N_ ) due to Central
+
+Limit Theorem. As a result we have lim _n→∞_ Pr( _ε_ 1 _> ϵ_ ) = 0. It follows that
+
+
+lim (18)
+_n→∞_ [Pr(][E] _[ |][e]_ [(] _[X]_ [)] _[ −]_ _[e]_ [ˆ][(] _[X]_ [)] _[|][ > ε]_ [) = 0]
+
+
+Combining the two yields
+
+
+lim (19)
+_n→∞_ [Pr(] _[|][Q]_ [ ˆ][(] _[e]_ [(] _[x]_ [))] _[ −]_ _[Q]_ [ˆ][(ˆ] _[e]_ [(] _[x]_ [))] _[|][ > ϵ]_ [) = 0]
+
+
+Secondly, by Theorem 3.12, we have
+
+_√_
+
+_N_ ( _Q_ [ˆ] ( _e_ ( _x_ )) _−_ _Q_ ( _e_ ( _x_ ))) _→_ _N_ (0 _, σ_ [2] ) (20)
+
+
+It follows that
+
+
+lim (21)
+_n→∞_ [Pr(] _[|][Q]_ [ ˆ][(] _[e]_ [(] _[x]_ [))] _[ −]_ _[Q]_ [(] _[e]_ [(] _[x]_ [))] _[|][ > ϵ]_ [) = 0]
+
+
+Finally, notice that
+
+
+_Q_ ˆ(ˆ _e_ ( _x_ )) _−_ _Q_ ( _e_ ( _x_ )) = [ ˆ _Q_ (ˆ _e_ ( _x_ )) _−_ _Q_ ˆ( _e_ ( _x_ ))] + [ ˆ _Q_ ( _e_ ( _x_ )) _−_ _Q_ ( _e_ ( _x_ ))] (22)
+
+
+is the sum of two parts. The convergence for the first part is given by (19) and the second part by
+(21). It follows that
+
+
+lim (23)
+_n→∞_ [Pr(] _[|][Q]_ [ ˆ][(ˆ] _[e]_ [(] _[x]_ [))] _[ −]_ _[Q]_ [(] _[e]_ [(] _[x]_ [))] _[|][ > ϵ]_ [) = 0]
+
+
+B.3 PROOF OF THEOREM 3.7
+
+
+_Proof._ Recall _Q_ = _P_ 2 _−_ 2 _P_ 3. We have:
+
+
+_P_ 2(ˆ _τ_ ; _X_ 2) = E _X_ 2[ˆ _τ_ [2] ( _X_ )] (24)
+
+= E _X_ 1[ _ζ_ ( _X_ )ˆ _τ_ [2] ( _X_ )] (25)
+
+
+      
+- _ζ_ ( _xn_ )ˆ _τ_ [2] ( _xn_ )
+
+
+_n_
+
+
+= EΠ1
+
+
+1
+
+_N_
+
+
+(26)
+
+
+where the second equation is is due to inverse propensity weighting and the definition of density ratio,
+and the third equation is due to the unbiasedness nature of sample mean. Similarly,
+
+
+_P_ 3(ˆ _τ_ ; _X_ 2) = E _X_ 2 [ _τ_ ( _X_ )ˆ _τ_ ( _x_ )] (27)
+= E _X_ 1 [ _ζ_ ( _X_ ) _τ_ ( _X_ )ˆ _τ_ ( _x_ )] (28)
+= E _X_ 1 [ _ζ_ ( _X_ ) _η_ ( _X_ )ˆ _τ_ ( _x_ )] (29)
+
+
+          
+- _ζ_ ( _xn_ ) _η_ ( _xn, tn, yn_ ) _τ_ ( _xn_ )
+
+
+_n_
+
+
+= EΠ1
+
+
+1
+
+_N_
+
+
+Combining the two yields
+
+
+_Q_ (ˆ _τ_ ; _X_ 2) = EΠ1
+
+
+1
+
+_N_
+
+
+               
+- _ζ_ ( _xn_ ) - _τ_ ˆ [2] ( _xn_ ) _−_ 2 _η_ ( _xn, tn, yn_ )ˆ _τ_ ( _xn_ )�
+
+
+_n_
+
+
+(30)
+
+
+(31)
+
+
+To summarize, if we compute _Q_ [ˆ] (ˆ _τ_ ) on Π1 and weight it by IPW density ratio _ζ_, we get an unbiased
+estimator of _Q_ (ˆ _τ_ ) on Π2.
+
+
+16
+
+
+B.4 PROOF OF THEOREM 3.8
+
+
+_Proof._ First note that, for a given CATE estimator _τ_ ˆ, the difference between _Q_ (ˆ _τ_ ) under Π1 and Π2
+is bounded by ∆:
+
+_|Q_ (ˆ _τ_ ; Π1) _−_ _Q_ (ˆ _τ_ ; Π2) _|_ = _|EX_ 1[ˆ _τ_ [2] ( _X_ ) _−_ 2ˆ _τ_ ( _X_ ) _τ_ ( _X_ )] _−_ _EX_ 2[ˆ _τ_ [2] ( _X_ ) _−_ 2ˆ _τ_ ( _X_ ) _τ_ ( _X_ )] _|_
+
+= _|EX_ 1[ˆ _τ_ [2] ( _X_ ) _−_ 2ˆ _τ_ ( _X_ ) _EY_ 1 _|_ [ _Y_ [(1)] _−_ _Y_ [(0)] ]] _−_ _EX_ 2[ˆ _τ_ [2] ( _X_ ) _−_ 2ˆ _τ_ ( _X_ ) _EY_ 2[ _Y_ [(1)] _−_ _Y_ [(0)] ]] _|_
+
+= _|E_ Π1[ _h_ 0( _X, Y_ [(0)] _, Y_ [(1)] )] _−_ _E_ Π2[ _h_ 0( _X, Y_ [(0)] _, Y_ [(1)] )] _|_
+
+_≤_ sup _|E_ Π1[ _h_ ( _X, Y_ [(0)] _, Y_ [(1)] )] _−_ _E_ Π2[ _h_ ( _X, Y_ [(0)] _, Y_ [(1)] )] _|_
+_h∈H_
+
+= _DH_ (Π1 _,_ Π2)
+_<_ ∆
+
+
+where the third equality is due to the definition of _h_ 0 and the fifth step is due to the definition of IPM
+_DH_ (Π1 _,_ Π2).
+
+
+Let us assume we have two CATE estimators, _τ_ ˆ1( _x_ ) and _τ_ ˆ2( _x_ ), and
+
+
+_Q_ (ˆ _τ_ ; Π1)(ˆ _τ_ 1) _−_ _Q_ (ˆ _τ_ ; Π1)(ˆ _τ_ 2) _≥_ 2∆ (32)
+
+
+It follows that
+
+
+_Q_ (ˆ _τ_ 1; Π2) _−_ _Q_ (ˆ _τ_ 2; Π2) _>_ _Q_ (ˆ _τ_ 1; Π1) _−_ ∆ _−_ ( _Q_ (ˆ _τ_ 2; Π1) + ∆)
+
+_>_ _Q_ (ˆ _τ_ 1; Π1) _−_ _Q_ (ˆ _τ_ 2; Π1) _−_ 2∆
+
+_>_ 0
+
+
+That is, _τ_ ˆ2 is also better on Π2.
+
+
+B.5 PROOF OF PROPOSITION 3.9
+
+
+_Proof._ First we show that E[ _rLI_ ( _X, T, Y_ ; ˆ _τ_ ] = 0, i.e., it is a control variates function. This is obvious
+because
+
+
+�� _T_
+E[ _rLI_ ( _X, T, Y_ ; ˆ _τ_ )] = 2 _θ_ E _−_ [(1] _[ −]_ _[T]_ [)]
+_E_ 1 _E_ 0
+
+
+- _τ_ ˆ( _X_ ) (33)
+
+
+    - _T_
+= 2 _θ_ E _−_ [(1] _[ −]_ _[T]_ [)]
+_E_ 1 _E_ 0
+
+
+E[ _τ_ (ˆ _X_ )] (34)
+
+
+= 2 _θ_ (1 _−_ 1)E[ _τ_ (ˆ _X_ )] (35)
+
+= 0 (36)
+
+
+where the first step is by definition of _rLI_ ( _·_ ), and the second step is by property of RCT dataset.
+
+
+It follows that
+
+
+       
+E[ _Q_ [ˆ] ( _rLI_ )] = E _Q_ ˆ + [1]
+
+_N_
+
+
+        
+- _rLI_ ( _xn, tn, yn_ ; ˆ _τ_ )
+
+
+_n_
+
+
+(37)
+
+
+= E[ _Q_ [ˆ] ] + E[ _rLI_ ( _X, T, Y_ ; ˆ _τ_ )] (38)
+
+= E[ _Q_ [ˆ] ] (39)
+
+= _Q_ (40)
+
+
+B.6 PROOF OF PROPOSITION 3.10
+
+
+_Proof._ First we prove E[ _rDR_ ( _X, T, Y_ ; ˆ _τ_ )] = 0. First note that,
+
+
+ E (1 _−_ _[T]_
+
+
+        
+_[T]_ )ˆ _µ_ [(1)] ( _X_ )ˆ _τ_ ( _X_ ) = E[(1 _−_ _[T]_
+
+_E_ 1 _E_
+
+
+)]E[ˆ _µ_ [(1)] ( _X_ )ˆ _τ_ ( _X_ )] (41)
+_E_ 1
+
+
+= (1 _−_ 1)E[ˆ _µ_ [(1)] ( _X_ )ˆ _τ_ ( _X_ )] (42)
+
+= 0 (43)
+
+
+17
+
+
+Similarly
+
+
+               -               E 1 _−_ [1] _[ −]_ _[T]_ _µ_ ˆ [(0)] ( _X_ )ˆ _τ_ ( _X_ ) = 0 (44)
+
+1 _−_ _E_ 0
+
+
+Combining the results above yields E( _rDR_ ( _X, T, Y_ ; ˆ _τ_ )] = 0. It follows that E[ _Q_ [ˆ] _DR_ ] = E[ _Q_ [ˆ] ] = _Q_
+
+
+Next we show that _LDR_ is a linear function of _Q_ [ˆ] (ˆ _τ_ ). Recall
+
+
+1
+_LDR_ (ˆ _τ_ ) =
+_N_
+
+
+1
+=
+_N_
+
+
+1
+=
+_N_
+
+
+- [ _η_ ( _xn, tn, yn_ ) + _γ_ ( _xn, tn_ ) _−_ _τ_ ˆ( _xn_ )] [2] (45)
+
+
+_n_
+
+
+�[( _η_ ( _xn, tn, yn_ ) + _γ_ ( _xn, tn_ )] [2] + ˆ _τ_ [2] ( _xn_ ) _−_ 2[ _η_ ( _xn, tn, yn_ ) + _γ_ ( _xn, tn_ )]ˆ _τ_ ( _xn_ (46))�
+
+
+_n_
+
+
+- �2
+_η_ ( _xn, tn, yn_ ) + _γ_ ( _xn, tn_ ) + _Q_ [ˆ] + [1]
+
+
+�� _rDR_ ( _xn, tn_ )ˆ _τ_ ( _xn_ )� (47)
+
+
+_n_
+
+
+_N_
+
+
+= 
+
+_n_
+
+
+_n_
+
+1
+
+_N_
+
+
+- �2
+_η_ ( _xn, tn, yn_ ) + _γ_ ( _xn, tn_ ) + _Q_ [ˆ] ( _rDR_ ) (48)
+
+
+where the first term is independent from _τ_ ˆ and thus can be omitted for ranking purposes.
+
+
+B.7 PROOF OF PROPOSITION 3.11
+
+
+_Proof._ First we prove the zero-mean property:
+
+
+E[(1 _−_ 2 _T_ ) _m_ ( _X_ )ˆ _τ_ ( _X_ )] = E[ _m_ ( _X_ )ˆ _τ_ ( _X_ )]E[1 _−_ 2 _T_ ] (49)
+= E[ _m_ ( _X_ )ˆ _τ_ ( _X_ )] _·_ 0 (50)
+
+= 0 (51)
+
+
+It follows that E[ _Q_ [ˆ] _R_ ] = E[ _Q_ [ˆ] ] = _Q_ .
+
+
+Next, note that when _E_ 1 = _E_ 0 = _e_ ˜( _x_ ) = 0 _._ 5
+
+
+_Q_ ˆ = [1]
+
+_N_
+
+
+- - _τ_ ˆ [2] ( _xn_ ) + 4(1 _−_ 2 _tn_ ) _ynτ_ ˆ( _xn_ )� (52)
+
+
+_n_
+
+
+It follows that
+
+
+1
+_LR_ (ˆ _τ_ ) =
+_N_
+
+
+1
+=
+_N_
+
+
+1
+=
+_N_
+
+
+1
+=
+_N_
+
+
+1
+=
+_N_
+
+
+1
+=
+_N_
+
+
+1
+=
+_N_
+
+
+( _yn −_ _m_ ˜ ( _xn_ )) [2] + [1]
+
+4
+
+_n_
+
+
+_n_
+
+
+_n_
+
+
+(( _yn −_ _m_ ˜ ( _xn_ )) _−_ ( _tn −_ _e_ ˜( _xn_ ))ˆ _τ_ ( _xn_ )) [2][�]
+
+
+(53)
+
+
+�( _yn −_ _m_ ˜ ( _xn_ )) [2] + ( _tn −_ _e_ ˜( _xn_ )) [2] _τ_ ˆ [2] ( _xn_ ) _−_ 2( _yn −_ _m_ ˜ ( _xn_ ))( _tn −_ _e_ ˜( _xn_ ))ˆ _τ_ ( _xn_ )� (54)
+
+
+( _yn −_ _m_ ˜ ( _xn_ )) [2] + [1]
+
+_N_
+
+_n_
+
+( _yn −_ _m_ ˜ ( _xn_ )) [2] + [1]
+
+_N_
+
+_n_
+
+( _yn −_ _m_ ˜ ( _xn_ )) [2] + [1]
+
+4
+
+_n_
+
+( _yn −_ _m_ ˜ ( _xn_ )) [2] + [1]
+
+4
+
+_n_
+
+
+_N_
+
+
+��( _tn −_ _e_ ˜( _xn_ )) [2] _τ_ ˆ [2] ( _xn_ ) _−_ 2( _yn −_ _m_ ˜ ( _xn_ ))( _tn −_ _e_ ˜( _xn_ ))ˆ _τ_ ( _xn_ )� (55)
+
+
+_n_
+
+
+_N_
+
+
+_n_
+
+
+- 1 4 _[τ]_ [ˆ][ 2][(] _[x][n]_ [) + (] _[y][n][ −]_ _[m]_ [˜] [(] _[x][n]_ [))(1] _[ −]_ [2] _[t][n]_ [)ˆ] _[τ]_ [(] _[x][n]_ [)] (56)
+
+
+4 _N_
+
+
+�� _τ_ ˆ [2] ( _xn_ ) + 4( _yn −_ _m_ ˜ ( _xn_ ))(1 _−_ 2 _tn_ )ˆ _τ_ ( _xn_ )� (57)
+
+
+_n_
+
+
+4 ˜ _m_ ( _xn_ )(1 _−_ 2 _tn_ )ˆ _τ_ ( _xn_ )
+
+_n_
+
+
+(58))
+
+
+��
+
+
+4 _N_
+
+
+_n_
+
+
+- _τ_ ˆ [2] ( _xn_ ) + 4 _yn_ (1 _−_ 2 _tn_ )ˆ _τ_ ( _xn_ )� _−_ 
+
+
+_Q_ ˆ( _rR_ ) (59)
+4
+
+
+where the first term is a constant without impact on ranking.
+
+
+18
+
+
+B.8 PROOF OF THEOREM 3.12
+
+
+_Proof._ Based on the assumptions, it is easy to see that the random variable _η_ ( _X, T, Y_ ) is bounded.
+Combining this with the boundedness of _τ_ ˆ( _x_ ) we get _q_ ( _x, t, y|τ_ ) = _τ_ ˆ [2] ( _x_ ) _−_ 2ˆ _τ_ ( _x_ ) _η_ ( _x, t, y_ ) is
+bounded. It follow that _q_ ( _r_ ; ˆ _τ_ ) = _q_ + _r_ is also bounded and thus have finite expectation and finite
+variance. Let us denote its variance as _σ_ [2] ( _r,_ ˆ _τ_ ). By Lindeberg–Lévy CLT, the sample mean _Q_ [ˆ] ( _r_ ; ˆ _τ_ )
+_√_
+converges in distribution to its expectation _Q_ : _N_ ( _Q_ [ˆ] ( _r_ ; ˆ _τ_ ) _−_ _Q_ ) _→N_ (0 _, σ_ [2] ( _r,_ ˆ _τ_ ))
+
+
+C DETAILED CONFIGURATION OF CATE ESTIMATION MODELS
+
+
+We train sixteen CATE estimation models listed in Table 3. This includes two S-learners, two
+T-learners, two R-learners, two Doubly Robust learners, four Double ML learners, a causal tree
+(forest) learner, and one representation learning learner, discussed in Section 2.
+
+
+We hope the selection covers mainstream CATE estimation methods. We include meta-learner
+(e.g., S and T learners in Künzel et al. (2019)) in our empirical study, because they represent the
+outcome prediction strategy, arguably the most simple and direct methods for causal inference. We
+include Double ML methods (Chernozhukov et al., 2017) because they represent econometric/semiparametric view of causal inference, as well as the recent development of orthogonal and debiased
+Machine Learning. We include Doubly Robust learners (Kennedy, 2023) because they represent
+Inverse Propensity Weighting (Robins et al., 1994), a classic causal inference technique. We include
+causal forest because they are one of the earliest ML-based work with theoretical guarantee. Finally,
+we include DragonNet to represent recent trend using deep learning and representation learning for
+causal inference.
+
+
+Our limited resource prevents us from including more CATE estimation methods. As a result we do
+not claim this list to be complete or “optimal”. Due to resource constraint, we were unable to include
+more variations of deep learning models following Shalit et al. (2017), causal tree models following
+Athey et al. (2018), or Gaussian Process models following Alaa & van der Schaar (2017). The list
+may not be “optimal” because some of the modeling approaches are related, most notably between
+Double Machine Learning and R learners.
+
+
+Table 3: CATE estimation Models
+
+|CATE estimation Method|Base Learner|Model Code|
+|---|---|---|
+|DR learner|Ridge Regression|dr.ridge.cv|
+|DR learner|XGBoost|dr.xgb.cv|
+|R learner|Ridge Regression|r.ridge.cv|
+|R learner|XGBoost|r.xgb.cv|
+|S learner|Ridge Regression|s.ridge.cv|
+|S learner|XGBoost|s.xgb.cv|
+|S learner|Ridge Regression|s.ext.ridge.cv|
+|S learner|XGBoost|s.ext.xgb.cv|
+|T learner|Ridge Regression|t.ridge.cv|
+|T learner|XGBoost|t.xgb.cv|
+|Double ML|Linear Regression|dml.linear|
+|Double ML|Lasso|dml.lasso|
+|Double ML|Elastic Net|dml.elastic|
+|Double ML|XGBoost|dml.xgb|
+|Generalized Causal Forest|Random Forest|cforest|
+|Representation Learning|Neural Net|dragon.nn|
+
+
+Note that, s.ext.xgb.cv and s.ext.ridge.cv models are variants of S learners where the
+interaction _X_ _· T_ are constructed explicitly as model inputs.
+
+
+We use codebase in Curth (2023) for model estimation and evaluation. Out of the sixteen models listed
+in Table 3, eight meta-learners (S-learners, T-learners, R-learners) and two Doubly Robust learners
+directly come from Curth (2023) implementation. Following Curth & van der Schaar (2023), we use
+two base learners, linear regression (implemented as an sklearn RidgeCV object), and XGBoost
+
+
+19
+
+
+(implemented as an XGBoost XGBRegressor object with grid search implemented by sklearn
+GridSearchCV). See Curth (2023) for details. The five Double Machine Learning learners are
+implemented using LinearDML and NonParamDML classes in EconML package, using sklearn
+GradientBoostingRegressor as the potential outcome learner and respective base learner as
+the residual model learner.
+
+
+All treatment propensity estimators are implemented using sklearn RandomForestClassifier
+class; we clip propensity outputs between 0 _._ 05 and 0 _._ 95.
+
+
+20
+
+
+D SECTION 4.3 SUPPLEMENTAL DETAILS
+
+
+D.1 SEMI-SYNTHETIC DATASET GENERATION DETAILS
+
+
+We follow the steps below to transform raw covariates into feature _x_ :
+
+
+    - Apply one-hot encoding on all categorical covariates
+
+
+    - Linearly scale all float covariates between 0 and 1
+
+
+    - Colume stack all covariates to generate a feature vector
+
+
+    - If feature vector has more than 100 elements, randomly select 100.
+
+
+We follow the steps below to generate synthetic outcome:
+
+
+    - Generate two random vectors _β_ 0 and _β_ 1 with discrete values of [0 _,_ 1 _,_ 2 _,_ 3 _,_ 4] and discrete
+probability of [0 _._ 5 _,_ 0 _._ 2 _,_ 0 _._ 15 _,_ 0 _._ 1 _,_ 0 _._ 05]
+
+
+    - Compute transformed feature and outcome using the one of following three approaches:
+
+       - _Linear._ First compute _z_ 0( _x_ ) = _x, z_ 1( _x_ ) = _e_ _[x]_ then generate _µ_ 0( _x_ ) = _β_ 0 _[T]_ _[z]_ [0][(] _[x]_ [)] [and]
+_µ_ 1 = _e_ _[β]_ 1 _[T]_ _[z]_ [1][(] _[x]_ [)]
+
+
+       - _Interaction._ First compute _z_ 0( _x_ ) = [ _x_ 0 _x_ 1 _, x_ 1 _x_ 2 _, ..., xD−_ 1 _x_ 0] and _z_ 1( _x_ ) =
+
+[ _x_ 0 _x_ 2 _, x_ 1 _x_ 3 _, ..., xD−_ 1 _x_ 1] then generate _µ_ 0( _x_ ) = _β_ 0 _[T]_ _[z]_ [0][(] _[x]_ [)][ and] _[ µ]_ [1] [=] _[ β]_ 1 _[T]_ _[z]_ [1][(] _[x]_ [)]
+
+       - _Sine._ First compute _z_ 0( _x_ ) = [ _x_ 0 _x_ 1 _, x_ 1 _x_ 2 _, ..., xD−_ 1 _x_ 0] and _z_ 1( _x_ ) =
+
+[ _x_ 0 _x_ 2 _, x_ 1 _x_ 3 _, ..., xD−_ 1 _x_ 1] then generate _µ_ 0( _x_ ) = cos( _β_ 0 _[T]_ _[z]_ [0][(] _[x]_ [))][ and] _[ µ]_ [1] [= sin(] _[β]_ 1 _[T]_ _[z]_ [1][(] _[x]_ [))]
+
+    - Scale _µ_ 0( _x_ ) and _µ_ 1( _x_ ) to have zero mean and unit standard deviation
+
+
+    - generate _y_ 0 = _µ_ 0( _x_ ) + _N_ (0 _,_ 1) and _y_ 1 = _µ_ 1( _x_ ) + _N_ (0 _,_ 1) + _τ_, where _τ_ is now the ATE
+estimate.
+
+
+We generate synthetic treatment as follows:
+
+
+    - Generate random vector _βT_
+
+    - Calculate Pr( _T_ _|X_ = _x_ ) = 1
+1+ _e_ _[βT x]_ [+1] _[.]_
+
+    - Sample _T_ using the Pr( _t|x_ )
+
+
+D.2 AGREEMENT BETWEEN MODEL SELECTION CRITERIA AND ORACLE
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+oracle
+
+Q
+
+
+Q(rLI
+
+Q(rR
+
+Q(rR
+
+Q(r
+
+Q(r
+
+
+LI )
+
+
+) wi(h xgb base learner
+
+
+R ) with lr base learner
+
+R ) wi(h xgb base learner
+
+
+R
+
+
+R
+
+
+DR
+
+
+DR
+
+
+) wi(h lr base learner
+
+
+O)(come predic(ion acc)racy
+
+MSE agains( S-learner (xgb)
+
+
+MSE agains( S-learner (lr)
+
+
+MSE agains( T-learner (xgb)
+
+
+MSE agains( T-learner (lr)
+
+
+Qini
+
+
+MSE agains( ATE
+
+Calibra(ion Score
+
+
+Figure 2: Interaction transformation; _τ_ = 2 _._ 0
+
+
+21
+
+
+mrr
+
+
+prec1
+
+
+1k 2k 4k 8k 16k 32k 64k
+
+
+1k 2k 4k 8k 16k 32k 64k
+
+
+spearman
+
+
+1k 2k 4k 8k 16k 32k 64k
+
+
+1k 2k 4k 8k 16k 32k 64k
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+) wi(h lr base learner
+
+
+Q(r
+
+
+oracle
+
+Q
+
+Q(rLI )
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+Q(rR
+
+Q(rR
+
+Q(r
+
+
+R ) with lr base learner
+
+R ) wi(h xgb base learner
+
+
+R
+
+
+R
+
+
+DR
+
+
+MSE agains( T-learner pl)g-in (lr base learner)
+
+Qini
+
+
+MSE agains( ATE
+
+Calibra(ion Sscore
+
+
+DR
+
+
+) wi(h xgb base learner
+
+
+O)(come predic(ion acc)racy
+
+
+MSE agains( S-learner pl)g-in (lr base learner)
+
+MSE agains( T-learner pl)g-in (xgb base learner)
+
+
+MSE agains( S-learner pl)g-in (xgb base learner)
+
+
+mrr
+
+
+Figure 3: Sine transformation; _τ_ = 0 _._ 5
+
+
+prec1
+
+
+1k 2k 4k 8k 16k 32k 64k
+
+
+spearman
+
+
+1k 2k 4k 8k 16k 32k 64k
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+1.0
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+) wi(h lr base learner
+
+
+Q(r
+
+
+oracle
+
+Q
+
+Q(rLI )
+
+
+Q(rR
+
+Q(rR
+
+Q(r
+
+
+R ) with lr base learner
+
+R ) wi(h xgb base learner
+
+
+R
+
+
+R
+
+
+DR
+
+
+MSE agains( T-learner pl)g-in (lr base learner)
+
+Qini
+
+
+MSE agains( ATE
+
+Calibra(ion Sscore
+
+
+DR
+
+
+) wi(h xgb base learner
+
+
+O)(come predic(ion acc)racy
+
+
+MSE agains( S-learner pl)g-in (lr base learner)
+
+MSE agains( T-learner pl)g-in (xgb base learner)
+
+
+MSE agains( S-learner pl)g-in (xgb base learner)
+
+
+Figure 4: Linear transformation; _τ_ = 0 _._ 5
+
+
+22
+
+
+E DATASET INTRODUCTION
+
+
+We use twelve RCT datasets in Section 4.3 and 4, listed in Table 4. In this section we discuss the
+rationale of data selection, and provide a brief introduction to individual datasets and data handling.
+
+
+The goal for the dataset selection is to ensure that, collectively, they better represent real applications
+of causal inference than those datasets studied by current state of the art (e.g, Curth & van der Schaar
+(2023); Mahajan et al. (2023); Neal et al. (2021)): including IHDP, ACIC, and LaLonde. We achieve
+that by applying the following four factors when selecting the datasets:
+
+
+    - _Real-world heterogeneity._ We select datasets collected from real-world, and forgo datasets
+with simulated outcomes, to allow evaluation performance of CATE estimator on _real-world_
+heterogeneity. In comparison, simulated outcome on IHDP or ACIC do not achieve the
+same rigor.
+
+
+    - _Dataset size._ we prefer large datasets to allow the asymptotic property of _Q_ [ˆ] to kick in. The
+smallest in the selection sandercock has 19,000 samples.
+
+
+    - _Diversity._ The datasets are curated to cover a diverse sources. They differ in domains (e.g.,
+marketing in criteo and hilstrom, consumer behavior in ferman, medical science in
+sandercock, and sociology and political science in GSS datasets), geography (GSS from
+the United States, ferman from Brazil, sandercock from Europe, and criteo from
+Russia), and form of experiments (traditional RCT in sandercock, online A/B testing in
+criteo and hillstrom, and field survey in GSS)
+
+
+    - _Prior work._ We select datasets previously studied by causal inference and related literature.
+For example criteo is used for uplift modeling in Diemert et al. (2021); the natfare is
+used for regression adjustment in Wager et al. (2016)
+
+
+Table 4: RCT Datasets
+
+|Dataset|Samples|Treatment %|Features|References|
+|---|---|---|---|---|
+|criteo|13,979,592|85%|12|Diemert et al. (2021)|
+|ferman|103,116|82%|9|Ferman (2015)|
+|hillstrom|64,000|67%|12|Hillstrom (2008)|
+|sandercock|19,435|50%|24|IST Collaborative Group & Sandercock (1997)|
+|nataid|51,957|50%|20|Davern et al. (2023)|
+|natarms|51,987|50%|20|Davern et al. (2023)|
+|natcity|51,915|50%|20|Davern et al. (2023)|
+|natcrime|51,977|50%|20|Davern et al. (2023)|
+|natdrug|51,961|50%|20|Davern et al. (2023)|
+|nateduc|52,017|50%|20|Davern et al. (2023)|
+|natenvir|52,027|50%|20|Davern et al. (2023)|
+|natfare|51,993|50%|20|Davern et al. (2023)|
+
+
+_Criteo_ dataset Diemert et al. (2021) captures advertising related online shopping behavior for
+13,979,592 web users (identified by a browser cookie) in RCT. Each user is randomly assigned
+to either treatment or control group. Pre-assignment user activities before assignment is used to
+construct covariates. If a user is in treatment, they are subject to an ad exposure; if they are in control
+group, they are expose to the ad. The dataset tracks multiple outcomes such as visits and conversion.
+We use visit as the outcome in the current analysis.
+
+
+_Hillstrom_ dataset Hillstrom (2008) contains email marketing related activity for 64,000 shoppers
+who had purchase records within a year. Through randomization, one third of the shoppers receive
+a marketing e-mail campaign featuring Men’s merchandise; one third receive an email featuring
+women’s; and the last one third received no marketing email. Covariates include past purchase history,
+gender, geo location, etc. In the current paper, we combine the two groups who receive marketing
+email into one treatment group; the remaining group (who receives no marketin email) is the control
+group. We use visit as the outcome variable.
+
+
+23
+
+
+_Sandercock_ dataset IST Collaborative Group & Sandercock (1997) includes data on 19,435 patients
+with acute stroke. Patients in treatment group are treated with aspirin; patients in control group
+are not. Covariates include age, gender, and other medical information. The binary outcome is
+whether patient is dead or dependent on other people for activities of daily living at six months after
+randomisation.
+
+
+_Ferman_ dataset Ferman (2015) includes shopping activity related to credit card payment plan on
+103,116 customers of a Brazilian credit company. Customers are randomly assigned into three groups:
+34,743 customers in the first group were offered a menu of payment plans with interest rate equal to
+6:39%, 49,573 customers in second group were offered plans with interest rate equal to 9:59%, and
+the third group of 18,800 customers did not receive any payment plan offer. The outcome is whether
+the customer defaults within 12 months after the offer. We combine the first and second group into
+one treatment group.
+
+
+_GSS_ datasets include responses to eight questions from more than 50,000 respondents surveyed by
+The General Social Survey (GSS) Davern et al. (2023) between 1986 and 2022; response to each
+question consistutes a RCT dataset. GSS is an annual sociological survey created in 1972 by the
+National Opinion Research Center (NORC) at the University of Chicago. It collects information
+biannually and keeps a historical record of the concerns, experiences, attitudes, and practices of
+residents of the United States. GSS Survey regularly include randomized wording experiments to
+capture heterogeneity in respondent’s opinion on social issues. For a given randomized question,
+the question variation forms different treatment arms, the answer to the question forms the outcome.
+GSS also collects hundreds of high-quality demographic variables, capturing demographic, work,
+family and spouse, household, racial, and region related information. These variables become
+the pre-treatment covariates. We use eight wording experiments (nataid, natarms, natcity,
+natcrime, natdrug, nateduc, natenvir, natfare)) to construct the binary outcome. Its
+value is equal to 1 if and only if when a respondent answers “too much” to a question, and 0 otherwise.
+
+
+F SECTION 4 ADDITIONAL DETAILS ON OBSERVATIONAL SAMPLING
+
+
+For every original dataset in Table 4, we vary three parameters when generating _Dest_ : first we set the
+estimation dataset size to be one of the following value [1000, 2000, 4000, 8000], to test if certain
+models perform better with more (or less) data. Secondly, we set the expected treatment % to be one
+of the following values [0.1, 0.5, 0.9], to test if certain models are sensitive to treatment imbalance. [2]
+Third, we use a MLP in generating assignment mechanism, and set the number of MLP layers to be
+1, 2, or 3. This tests if models are sensitive to nonlinearity in assignment mechanism. We enumerate
+all parameter combinations, leading to 4 _×_ 3 _×_ 3 = 36 settings. For every setting, we sample _Dest_
+and _Deval_ jointly 100 times. This gives 3,600 pairs of _Dest_ and _Deval_ . Repeating same process for
+the 12 datasets yields 12 _×_ 3 _,_ 600 = 43 _,_ 200 datasets.
+
+
+We train model on small estimation datasets with selection bias, and evaluate model performance
+on large unbiased RCT datasets. The starting point is an RCT dataset _D_ . We first randomly split _D_
+into _Deval_ and _D −_ _Deval_ . We then sample _D −_ _Deval_ to get estimation dataset: for every sample
+( _x, t, y_ ), define a random variable _K_ _∈{_ 0 _,_ 1 _}_ with Pr( _K_ = 1 _|T_ = _t, X_ = _x_ ) = _G_ ( _t, x_ ). We keep
+the _n_ -th sample in _Dest_ if and only if _kn_ = 1. _G_ ( _t, x_ ) is the _biasing function_ since it introduces
+selection bias to the original RCT dataset. This creates the estimation dataset _Dest_, a subset of _D_
+with selection bias. We apply any CATE estimation method on _Dest_ to obtain an CATE estimator
+_τ_ ˆ( _x_ ), and use _τ_ ˆ( _x_ ) on _Deval_ to compute _Q_ [ˆ] . Fig. 5 illustrates the process. Note that, in estimation
+dataset, the treatment is a function of covariates; in evaluation dataset, the treatment is randomly
+generated based on standard binary distribution. For every dataset and evaluation dataset size, we
+repeat simulation 100 times.
+
+
+The complete algorithm of creating _Dest_ is summarized below:
+
+
+2Treatment % of 0.9 can be different from 0.1 because different potential outcomes may be different in
+real-world datasets.
+
+
+24
+
+
+Figure 5: Overall approach
+
+
+**Algorithm 1** Creating estimation dataset _Dest_
+
+
+**Input:** RCT dataset _D_
+**Input:** function _G_ ( _t, x_ ) _,_ 0 _< G_ ( _t, x_ ) _<_ 1
+**Output:** Observational dataset _Dest_
+_Dest_ = _∅_
+**for** every sample _n_ in _D_ **do**
+
+Sample a binary random variable _Kn_ with Pr( _K_ = 1 _|X_ = _xn, T_ = _tn_ ) = _G_ ( _tn, xn_ )
+If _Kn_ = 1, add sample _n_ to _Dest_
+**end for**
+Return _Dest_
+
+
+Note that, the biasing function _G_ ( _t, x_ ) function generates the following assignment mechanism for
+_Dest_ :
+
+
+Pr( _T_ = 1 _|X_ = _x, K_ = 1) (60)
+
+
+Pr( _T_ = 1 _, X_ = _x, K_ = 1)
+= (61)
+
+Pr( _X_ = _x, K_ = 1)
+
+
+Pr( _T_ = 1 _, X_ = _x, K_ = 1)
+= (62)
+
+Pr( _X_ = _x, K_ = 1)
+
+Pr( _T_ = 1) Pr( _X_ = _x_ ) Pr( _K_ = 1 _|X_ = _x, T_ = 1)
+= (63)
+
+Pr( _X_ = _x_ ) Pr( _K_ = 1 _|X_ = _x_ )
+
+Pr( _T_ = 1) Pr( _X_ = _x_ ) Pr( _K_ = 1 _|X_ = _x, T_ = 1)
+= ~~(64)~~
+Pr( _X_ = _x_ )(Pr( _T_ = 1) Pr( _K_ = 1 _|X_ = _x, T_ = 1) + Pr( _T_ = 0) Pr( _K_ = 1 _|X_ = _x, T_ = 0))
+
+
+Pr( _T_ = 1) _G_ ( _x,_ 1)
+= (65)
+Pr( _T_ = 1) _G_ ( _x,_ 1) + Pr( _T_ = 0) _G_ ( _x,_ 0)
+
+
+1
+=
+
+
+1 + [Pr(] _[T]_ [ =0)]
+
+
+[Pr(] _[T]_ [ =0)] _G_ ( _x,_ 0)
+
+Pr( _T_ =1) _G_ ( _x,_ 1)
+
+
+(66)
+
+
+As a result, _T_ is dependent on _X_, achieving selection bias on _Dest_ .
+
+
+25
+
+
+Note that
+
+
+Pr( _X_ _≤_ _x|K_ = 1) = Pr( _X_ _≤_ _x|K_ = 1 _, T_ = 1) Pr( _T_ = 1) + Pr( _X_ _≤_ _x|K_ = 1 _, T_ = 0) Pr( _T_ = 0)(67)
+
+
+Pr( _x ≤_ _x, K_ = 1 _, T_ = 1)
+=
+
+
+(68)
+Pr( _K_ = 1 _, T_ = 0)
+
+
+_x ≤_ _x, K_ = 1 _, T_ = 1) _[≤]_ _[x, K]_ [= 1] _[, T]_ [= 0)]
+
++ [Pr(] _[X]_
+Pr( _K_ = 1 _, T_ = 1) Pr( _K_ = 1 _, T_ = 0)
+
+
+- _x_
+0 _[f]_ [(] _[x]_ [)] _[G]_ [(] _[x,]_ [ 0)] _[dx]_
+�0 _∞_ _f_ ( _x_ ) _G_ ( _x,_ 0) _dx_ (69)
+
+
+=
+
+
+=
+
+
+- _x_
+0 _[f]_ [(] _[x]_ [)] _[G]_ [(] _[x,]_ [ 1)] _[dx]_
+�0 _∞_ _f_ ( _x_ ) _G_ ( _x,_ 1) _dx_ [+]
+
+
+- _x_
+0 _[f]_ [(] _[x]_ [)] _[G]_ [(] _[x,]_ [ 1)] _[dx]_
+
++
+E _X_ [ _G_ ( _X,_ 1)]
+
+
+- _x_
+0 _[f]_ [(] _[x]_ [)] _[G]_ [(] _[x,]_ [ 0)] _[dx]_
+
+(70)
+E _X_ [ _G_ ( _X,_ 0)]
+
+
+where _f_ is density of _X_ on Π. It follows that
+
+
+           - _G_ ( _x,_ 1) _G_ ( _x,_ 0)
+_fest_ ( _x_ ) = _f_ ( _x_ )
+E _X_ [ _G_ ( _X,_ 1)] [+] E _X_ [ _G_ ( _X,_ 0)]
+
+
+(71)
+
+
+The complete CATE estimator evaluation algorithm is summarized below.
+
+
+**Algorithm 2** Selecting best CATE Estimator
+
+
+**Input:** A list of _A_ CATE estimation models _a_ = 1 _,_ 2 _, ..., A_
+**Input:** RCT dataset _D_
+**Input:** Biasing function _G_ ( _t, x_ )
+**Output:** _a_ _[∗]_ _,_ 1 _≤_ _a_ _[∗]_ _≤_ _A_ the best performing model
+Randomly split _D_ into _Dtrain_ and _Deval_
+Generate _Dest_ from _Dtrain_ using _G_ as the biasing function
+**for** model _a,_ 1 _≤_ _a ≤_ _A_ **do**
+
+Train a CATE estimator _τ_ ˆ _a_ ( _x_ ) using data _Dest_
+Compute _qn_ on every sample ( _xn, tn, yn_ ) _∈_ _Deval_
+Compute _Q_ [ˆ] (ˆ _τa, Deval_ )
+**end for**
+Return _a_ _[∗]_ = arg min _a_ _Q_ [ˆ] (ˆ _τa, Deval_ )
+
+
+26
+
+
+G SECTION 4 RESULTS FOR ALL RCT DATASETS COMBINED
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. dataset size: all
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 6: Model win share by training dataset size: all RCT datasets
+
+
+Model win share vs. mean treatment %: all
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 7: Model win share by treatment ratio: all RCT datasets
+
+
+27
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. complexity: all
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 8: Model win share by assignment mechanism complexity: all RCT datasets
+
+
+Win vs. degenerate rates: all
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0.0% 5.0% 10.0% 15.0% 20.0% 25.0%
+
+Win rate
+
+
+Figure 9: Win share vs. degenerate rate, by model, all RCT datasets
+
+
+28
+
+
+H TABLE 1 WITH STANDARD ERROR AND 95% CONFIDENCE INTERVALS
+
+
+Table 5: Model comparison: summary of 43,200 datasets. The standard error and 95% confidence
+interval come from 10,000 bootstrapping
+
+
+|Model|Win Rate<br>Mean (SE)|Win Rate<br>95% CI|Degeneracy Rate<br>Mean (SE)|Degeneracy Rate<br>95% CI|Avg Rank<br>Mean (SE)|Avg Rank<br>95% CI|
+|---|---|---|---|---|---|---|
+|cforest|0.005 ( 0.000 )|(0.004, 0.006)|0.760 ( 0.002 )|(0.756, 0.764)|10.5 ( 0.0 )|(10.4, 10.5)|
+|dml.elastic|0.083 ( 0.001 )|(0.080, 0.086)|0.484 ( 0.002 )|(0.479, 0.488)|5.6 ( 0.0 )|(5.6, 5.6)|
+|dml.lasso|0.080 ( 0.001 )|(0.077, 0.082)|0.484 ( 0.002 )|(0.479, 0.489)|5.7 ( 0.0 )|(5.6, 5.7)|
+|dml.linear|0.000 ( 0.000 )|(0.000, 0.000)|0.942 ( 0.001 )|(0.940, 0.945)|14.3 ( 0.0 )|(14.3, 14.3)|
+|dml.xgb|0.000 ( 0.000 )|(0.000, 0.000)|0.990 ( 0.000 )|(0.989, 0.991)|15.9 ( 0.0 )|(15.9, 15.9)|
+|dr.ridge.cv|0.061 ( 0.001 )|(0.058, 0.063)|0.592 ( 0.002 )|(0.588, 0.597)|7.1 ( 0.0 )|(7.1, 7.2)|
+|dr.xgb.cv|0.012 ( 0.001 )|(0.011, 0.013)|0.714 ( 0.002 )|(0.710, 0.719)|9.9 ( 0.0 )|(9.8, 9.9)|
+|dragon.nn|0.121 ( 0.002 )|(0.118, 0.124)|0.438 ( 0.002 )|(0.433, 0.443)|5.1 ( 0.0 )|(5.1, 5.2)|
+|r.ridge.cv|0.062 ( 0.001 )|(0.059, 0.064)|0.612 ( 0.002 )|(0.608, 0.617)|8.7 ( 0.0 )|(8.7, 8.8)|
+|r.xgb.cv|0.003 ( 0.000 )|(0.002, 0.003)|0.846 ( 0.002 )|(0.842, 0.849)|12.4 ( 0.0 )|(12.4, 12.4)|
+|s.ext.ridge.cv|0.111 ( 0.002 )|(0.108, 0.114)|0.504 ( 0.002 )|(0.499, 0.509)|5.6 ( 0.0 )|(5.6, 5.6)|
+|s.ext.xgb.cv|0.064 ( 0.001 )|(0.062, 0.067)|0.518 ( 0.002 )|(0.514, 0.523)|6.9 ( 0.0 )|(6.9, 6.9)|
+|s.ridge.cv|0.129 ( 0.002 )|(0.126, 0.133)|0.312 ( 0.002 )|(0.307, 0.316)|4.2 ( 0.0 )|(4.2, 4.2)|
+|s.xgb.cv|0.255 ( 0.002 )|(0.251, 0.259)|0.063 ( 0.001 )|(0.061, 0.066)|4.4 ( 0.0 )|(4.4, 4.4)|
+|t.ridge.cv|0.043 ( 0.001 )|(0.041, 0.045)|0.641 ( 0.002 )|(0.636, 0.646)|8.2 ( 0.0 )|(8.2, 8.3)|
+|t.xgb.cv|0.005 ( 0.000 )|(0.004, 0.005)|0.767 ( 0.002 )|(0.763, 0.771)|11.4 ( 0.0 )|(11.4, 11.4)|
+
+
+29
+
+
+I SECTION 4 DATASET LEVEL STATISTICS
+
+
+I.1 SUMMARY OF DATASET SPECIFIC BEHAVIOR
+
+
+_Does models’ relative performance vary by amount of training data, treatment imbalance, or level_
+_of_ _nonlinearity_ _in_ _assignment_ _mechanism?_ Looking at the aggregated results (Appendix G), we
+found moderate fluctuation of model performance when varying these drivers. This is likely because
+variations averages out. Dataset level statistics shows a different picture. We present selected results
+in this section and leave more in Appendix I.
+
+
+_Training_ _dataset_ _size_ can have large impact on model performance. On criteo, Win share of
+R-learner (r.ridge.cv) increase from 7% with 1k estimation data, to 26% with 8k estimation
+data. See Figure 10.
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. dataset size: criteo
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 10: Training size on criteo
+
+
+_Treatment imbalance_ can have large impact on model performance. On natcity, win share of DR
+learner is 40% with balanced treatment, and 16% when treated ratio is 0.9. See Figure 11.
+
+
+_Level of nonlinearity in assignment mechanism_, we found, has limited impact on model performance.
+This is partly, we think, because our propensity estimator (Random Forest with propensity clipping)
+is flexible enough to fit different degrees of nonlinearity. See Figure 8 in Appendix.
+
+
+30
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. mean treatment %: natcity
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 11: treatment % on natcity
+
+
+31
+
+
+I.2 CRITEO
+
+
+Win vs. degenerate rates: criteo
+
+100%
+
+
+90%
+
+
+80%
+
+
+70%
+
+
+60%
+
+
+50%
+
+
+40%
+
+
+30%
+
+
+20%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Figure 12: Win share vs. degenerate percentage, by model on criteo
+
+
+Model win share vs. dataset size: criteo
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 13: Model win share by estimation data, criteo
+
+
+32
+
+
+0.0% 2.5% 5.0% 7.5% 10.0% 12.5% 15.0%
+
+Win rate
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 14: Model win share by treatment ratio, criteo
+
+
+Model win share vs. complexity: criteo
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 15: Model win share by assignment mechanism complexity, criteo
+
+
+33
+
+
+Model win share vs. mean treatment %: criteo
+
+
+I.3 HILLSTROM
+
+
+Win vs. degenerate rates: hillstrom
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Figure 16: Win share vs. degenerate percentage, by model on hillstrom
+
+
+Model win share vs. dataset size: hillstrom
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 17: Model win share by estimation data, hillstrom
+
+
+34
+
+
+0.0% 5.0% 10.0% 15.0% 20.0%
+
+Win rate
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. mean treatment %: hillstrom
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 18: Model win share by treatment ratio, hillstrom
+
+
+Model win share vs. complexity: hillstrom
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 19: Model win share by assignment mechanism complexity, hillstrom
+
+
+35
+
+
+I.4 FERMAN
+
+
+Win vs. degenerate rates: ferman
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+0% 20% 40% 60% 80%
+
+Win rate
+
+
+Figure 20: Win share vs. degenerate percentage, by model on ferman
+
+
+Model win share vs. dataset size: ferman
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 21: Model win share by estimation data, ferman
+
+
+36
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. mean treatment %: ferman
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 22: Model win share by treatment ratio, ferman
+
+
+Model win share vs. complexity: ferman
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 23: Model win share by assignment mechanism complexity, ferman
+
+
+37
+
+
+I.5 SANDERCOCK
+
+
+Win vs. degenerate rates: sandercock
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Figure 24: Win share vs. degenerate percentage, by model on sandercock
+
+
+Model win share vs. dataset size: sandercock
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 25: Model win share by estimation data, sandercock
+
+
+38
+
+
+0.0% 5.0% 10.0% 15.0% 20.0% 25.0%
+
+Win rate
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. dataset size: sandercock
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 26: Model win share by treatment ratio, sandercock
+
+
+Model win share vs. complexity: sandercock
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 27: Model win share by assignment mechanism complexity, sandercock
+
+
+39
+
+
+I.6 NATAID
+
+
+Win vs. degenerate rates: nataid
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Figure 28: Win share vs. degenerate percentage, by model on nataid
+
+
+Model win share vs. dataset size: nataid
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 29: Model win share by estimation data, nataid
+
+
+40
+
+
+0.0% 5.0% 10.0% 15.0% 20.0% 25.0%
+
+Win rate
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 30: Model win share by treatment ratio, nataid
+
+
+Model win share vs. complexity: nataid
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 31: Model win share by assignment mechanism complexity, nataid
+
+
+41
+
+
+Model win share vs. mean treatment %: nataid
+
+
+I.7 NATARMS
+
+
+Win vs. degenerate rates: natarms
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Figure 32: Win share vs. degenerate percentage, by model on natarms
+
+
+Model win share vs. dataset size: natarms
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 33: Model win share by estimation data, natarms
+
+
+42
+
+
+0.0% 5.0% 10.0% 15.0% 20.0% 25.0% 30.0%
+
+Win rate
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. mean treatment %: natarms
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 34: Model win share by treatment ratio, natarms
+
+
+Model win share vs. complexity: natarms
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 35: Model win share by assignment mechanism complexity, natarms
+
+
+43
+
+
+I.8 NATCITY
+
+
+Win vs. degenerate rates: natcity
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+0.0% 5.0% 10.0% 15.0% 20.0%
+
+Win rate
+
+
+Figure 36: Win share vs. degenerate percentage, by model on natcity
+
+
+Model win share vs. dataset size: natcity
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 37: Model win share by estimation data, natcity
+
+
+44
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. mean treatment %: natcity
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 38: Model win share by treatment ratio, natcity
+
+
+Model win share vs. complexity: natcity
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 39: Model win share by assignment mechanism complexity, natcity
+
+
+45
+
+
+I.9 NATCRIME
+
+
+Win vs. degenerate rates: natcrime
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Figure 40: Win share vs. degenerate percentage, by model on natcrime
+
+
+Model win share vs. dataset size: natcrime
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 41: Model win share by estimation data, natcrime
+
+
+46
+
+
+0.0% 5.0% 10.0% 15.0% 20.0%
+
+Win rate
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. mean treatment %: natcrime
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 42: Model win share by treatment ratio, natcrime
+
+
+Model win share vs. complexity: natcrime
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 43: Model win share by assignment mechanism complexity, natcrime
+
+
+47
+
+
+I.10 NATDRUG
+
+
+Win vs. degenerate rates: natdrug
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Figure 44: Win share vs. degenerate percentage, by model on natdrug
+
+
+Model win share vs. dataset size: natdrug
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 45: Model win share by estimation data, natdrug
+
+
+48
+
+
+0.0% 5.0% 10.0% 15.0% 20.0%
+
+Win rate
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. mean treatment %: natdrug
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 46: Model win share by treatment ratio, natdrug
+
+
+Model win share vs. complexity: natdrug
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 47: Model win share by assignment mechanism complexity, natdrug
+
+
+49
+
+
+I.11 NATEDUC
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. complexity: nateduc
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 48: Win share vs. degenerate percentage, by model on nateduc
+
+
+Win vs. degenerate rates: nateduc
+
+
+0% 10% 20% 30% 40% 50% 60% 70% 80%
+
+Win rate
+
+
+Figure 49: Model win share by estimation data, nateduc
+
+
+50
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. dataset size: nateduc
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 50: Model win share by treatment ratio, nateduc
+
+
+Model win share vs. mean treatment %: nateduc
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 51: Model win share by assignment mechanism complexity, nateduc
+
+
+51
+
+
+I.12 NATENVIR
+
+
+Win vs. degenerate rates: natenvir
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+0.0% 5.0% 10.0% 15.0% 20.0% 25.0% 30.0% 35.0%
+
+Win rate
+
+
+Figure 52: Win share vs. degenerate percentage, by model on natenvir
+
+
+Model win share vs. dataset size: natenvir
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 53: Model win share by estimation data, natenvir
+
+
+52
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. mean treatment %: natenvir
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 54: Model win share by treatment ratio, natenvir
+
+
+Model win share vs. complexity: natenvir
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 55: Model win share by assignment mechanism complexity, natenvir
+
+
+53
+
+
+I.13 NATFARE
+
+
+Win vs. degenerate rates: natfare
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Figure 56: Win share vs. degenerate percentage, by model on natfare
+
+
+Model win share vs. dataset size: natfare
+
+
+all 1k 2k 4k 8k
+
+Training dataset size
+
+
+Figure 57: Model win share by estimation data, natfare
+
+
+54
+
+
+0% 10% 20% 30% 40% 50% 60%
+
+Win rate
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+100%
+
+
+80%
+
+
+60%
+
+
+40%
+
+
+20%
+
+
+0%
+
+
+Model win share vs. mean treatment %: natfare
+
+
+all 0.1 0.5 0.9
+
+Mean treatment %
+
+
+Figure 58: Model win share by treatment ratio, natfare
+
+
+Model win share vs. complexity: natfare
+
+
+all 1 2 3
+
+Complexity
+
+
+Figure 59: Model win share by assignment mechanism complexity, natfare
+
+
+55

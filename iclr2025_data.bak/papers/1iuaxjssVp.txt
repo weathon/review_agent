@@ -1,0 +1,4354 @@
+# FAST UNCOVERING OF PROTEIN SEQUENCE DIVERSITY
+
+## FROM STRUCTURE
+# CONFERENCE SUBMISSIONS
+
+
+**Luca Alessandro Silva**
+Department of Computing Sciences
+Bocconi University
+Milan, MI 20100, Italy
+silva.luca@phd.unibocconi.it
+
+
+**Carlo Lucibello**
+Department of Computing Sciences
+BIDSA
+Bocconi University
+Milan, MI 20100, Italy
+carlo.lucibello@unibocconi.it
+
+
+**Barthelemy Meynard-Piganeau**
+Institut de Biologie Paris Seine, Biologie Computationnelle
+et Quantitative LCQB
+Sorbonne Universit´e
+Paris, France
+barthelemy.meynard@polytechnique.edu
+
+
+**Christoph Feinauer**
+Department of Computing Sciences
+Bocconi University
+Milan, MI 20100, Italy
+christoph.feinauer@unibocconi.it
+
+
+ABSTRACT
+
+
+We present InvMSAFold, an inverse folding method for generating protein sequences that is optimized for diversity and speed. For a given structure, InvMSAFold generates the parameters of a probability distribution over the space of
+sequences with pairwise interactions, capturing the amino acid covariances observed in Multiple Sequence Alignments (MSA) of homologous proteins. This
+allows for the efficient generation of highly diverse protein sequences while preserving structural and functional integrity. We show that this increased diversity
+in sampled sequences translates into greater variability in biochemical properties,
+highlighting the exciting potential of our method for applications such as protein
+design. The orders of magnitude improvement in sampling speed compared to
+existing methods unlocks new possibilities for high-throughput virtual screening.
+
+
+1 INTRODUCTION
+
+
+Inverse folding aims to predict amino acid sequences that fold into a given protein structure, and plays
+a fundamental role, for example, in the protein design pipeline of RFDiffusion (Watson et al., 2023).
+Recent deep learning approaches such as ESM-IF1 (Hsu et al., 2022) or ProteinMPNN (Dauparas
+et al., 2022) achieve remarkable accuracy in this task. However, instead of predicting a single ground
+truth sequence, it is often desirable to have a method that is able to generate a variety of different
+sequences with the desired fold, i.e., solving a _one-to-may_ problem, see Fig. 2. This diversity could
+be leveraged for example by starting from a source sequence Sturmfels et al. (2022); Bryant et al.
+(2021) and taking different molecular environments into consideration (Krapp et al., 2023). Such an
+approach would expand the sequence design space while preserving structural consistency, enabling a
+larger pool of sequences for selection based on additional properties like thermostability, solubility, or
+toxicity. In drug discovery, for example, it would facilitate the generation of a large number of diverse
+candidates, allowing further selection optimized for properties such as bioavailability. Similarly, in
+biotechnology and enzyme engineering, it would facilitate the creation of enzymes with tailored
+properties, such as improved stability and activity under varying conditions. On the computational
+side instead, even after training, sampling from transformer-based architectures such as ESM-IF1
+Hsu et al. (2022) or ProteinMPNN Dauparas et al. (2022) can be very expensive. This can severely
+limit the widespread use of such models, especially in virtual screening-like settings.
+
+
+1
+
+
+sequence
+
+
+InvMSAfold : captures the landscape
+
+of sequences with this
+fold
+
+
+|True sequence of|Col2|
+|---|---|
+|<br>the Structure<br>Homologs|<br>the Structure<br>Homologs|
+|||
+
+
+Sequence Space
+
+
+Figure 1: InvMSAfolds expands the scope of inverse folding to the retrieval of the entire landscape of
+homologous proteins with similar folds.
+
+
+In this work, we present an efficient method that is able to generate diverse protein sequences given
+a structure, including sequences far away from the native one (see Fig. 1). Recent architectures
+for inverse folding are based on encoder-decoder architectures, where a structure is encoded and a
+sequence decoded. During training, such models typically take into account only the native sequence
+of a given structure, maximizing its probability given the structure (Hsu et al., 2022; Dauparas et al.,
+2022).
+
+
+Figure 2: _One-to-many_ nature of inverse
+folding. **Top** : Structure of 1KA0. **Bot-**
+**tom** : Some homologos sharing the fold.
+
+
+In our approach, we use the decoder to generate the
+complete set of parameters for a lightweight model that
+is sufficiently expressive to describe the sequence diversity of the _multiple sequence alignment_ (MSA) of
+the native sequence. This architecture is trained endto-end to capture the broader probability distribution of
+sequences corresponding to a specific fold. We consider
+different choices for the lightweight model, and settle
+on the pairwise family (Figliuzzi et al., 2018), since it
+has been widely applied to protein sequence data Cocco
+et al. (2018a), proven to be good at generation (Russ
+et al., 2020) and demonstrated to capture information
+that enables fitness prediction (Poelwijk et al., 2017). A
+potential issue with pairwise models is that they typically have a number of parameters that is quadratic in
+the sequence length. We solve this issue by considering
+low-rank approximations, thus reducing the effective
+number of parameters to the same order of the sequence
+length. By doing so we drastically reduce the number
+of parameters, boosting training efficiency.
+
+
+Our model generates all of these parameters in a single forward pass, similar to previous research Li
+et al. (2023). Once this generation is done, the resulting pairwise model can be used for generating
+a large number of diverse sequences very efficiently leveraging CPUs on a standard machine,
+dramatically facilitating its use. We show that the models we generate are able to capture the
+diversity of the protein family better than other models and are able to find sequences far away from
+the natural sequence that are predicted to still fold into the same structure. We also show that this
+increased diversity translates into a more spread distribution in other properties, enabling selection of
+promising sequences from a larger pool. Codes to train the models and replicate some of the results
+[can be found at the Potts Inverse Folding repository.](https://github.com/luchinoprince/Potts_Inverse_Folding)
+
+
+2 METHODS
+
+
+In this Section, we describe the components of our architecture, InvMSAFold, and its training
+procedure. Given a structure-sequence pairing ( _**X**_ _,_ _**σ**_ _X_ ), inverse folding methods typically define a
+probability distribution on the space of sequences _**σ**_ as _p_ ( _**σ**_ _|_ _**X**_ ). Most deep learning-based methods
+
+
+2
+
+
+model this distribution auto-regressively, using _p_ ( _**σ**_ _|_ _**X**_ ) = [�] _i_ _[L]_ =1 _[p]_ [(] _[σ][i][|][σ][i][−]_ [1] _[, . . ., σ]_ [1] _[,]_ _**[ X]**_ [)][, where] _[ L]_ [ is]
+the length, and train by minimizing the loss on the true sequence _**σ**_ _X_, possibly after adding noise to
+the coordinates _**X**_ (Hsu et al., 2022; Dauparas et al., 2022). Sampling amino acids auto-regressively
+requires a full forward pass through the neural network for every generated amino acid, making
+it very expensive to use in a virtual screening-like setting, where a large number of sequences are
+scanned for properties beyond folding into structure _**X**_ . Moreover, minimizing the loss on the true
+sequence ignores the _one-to-many_ property of inverse folding depicted in Figure 2, resulting in a
+distribution peaked around very few sequences (as we will show later) and not capturing other parts
+of sequence space that might be interesting for the problem at hand.
+
+
+We address both issues, reduced diversity and slow sampling, by having InvMSAFold output a simple
+and easy-to-sample-from model for fast inference and by training our architecture over multiple
+sequence alignments for any given input structure instead of a single sequence.
+
+
+2.1 THE INVMSAFOLD ARCHITECTURE
+
+
+InvMSAFold is a neural network whose inputs are the structure backbone coordinates _**X**_ and whose
+outputs are the parameters of a lightweight sequence model. These parameters, _**θ**_ ( _**X**_ ), are then used
+to sample amino acid sequences compatible with the given structure. Therefore, our overall model
+takes the form _p_ ( _**σ**_ _|_ _**X**_ ) = _p_ ( _**σ**_ _|_ _**θ**_ ( _**X**_ )).
+
+
+We explore different parametric families for the lightweight model. In order to go beyond distributions
+that treat different positions in the protein as independent and to ensure sufficient expressivity, we
+focus on pairwise models Cocco et al. (2018a) that correspond to the well-known Potts model (BarratCharlaix, 2018) from statistical physics. Such models have an experimentally validated ability to
+capture structure-sequence relationships Russ et al. (2020). We therefore train the neural network to
+learn the mapping _**X**_ _→_ _**θ**_ = ( **J** _,_ _**H**_ ), where **J** is a tensor of size _L × q × L × q_ and _**H**_ is a matrix of
+size _L × q_, with _L_ the sequence length and _q_ the number of different amino acids. As is common in
+pairwise models, we call the quantities _Hi,a_ the _fields_, indexed by position _i_ and amino acid type _a_,
+and the quantities _Ji,a,j,b_ the _couplings_, indexed by a pair of positions _i, j_ and a pair of amino acid
+types _a, b_ . Fields describe the propensity of amino acids to appear at given positions, while couplings
+describe the propensity of pairs of amino acids to appear at pairs of positions.
+
+
+The complete InvMSAFold architecture is composed of two parts, the structure encoder and a decoder
+which outputs the fields and couplings, see Fig. 3.
+
+
+|Col1|Col2|GVP-Layer|Col4|
+|---|---|---|---|
+|||GVP-Laye<br> GVP-Layer<br>|GVP-Laye<br> GVP-Layer<br>|
+|||GVP-Laye<br> GVP-Layer<br>|GVP-Laye|
+|||||
+
+
+Transformer Decoder
+
+
+Encoded
+Structure
+
+
+dim: BatchSize x L x 512
+
+|Col1|Col2|Transformer<br>DecTordaenrs Lfoarymeerr<br>DecodTerra Lnasyfoerrm|Col4|Col5|Low Rank appro<br>of Potts Para<br>er<br>ayer<br>Linear Layer|Col7|
+|---|---|---|---|---|---|---|
+|||Transformer<br>Decoder Layer<br>Transformer<br>Decoder Layer<br>Transform|Decoder Layer<br>Transformer<br>Decoder Layer<br>Transform|Decoder Layer<br>Transformer<br>Decoder Layer<br>Transform|Decoder Layer<br>Transformer<br>Decoder Layer<br>Transform|Decoder Layer<br>Transformer<br>Decoder Layer<br>Transform|
+|||Transformer<br>Decoder Layer<br>Transformer<br>Decoder Layer<br>Transform||Decoder L|ayer||
+|||Transformer<br>Decoder Layer<br>Transformer<br>Decoder Layer<br>Transform|||||
+
+
+dim: BatchSize x K x L x q
+
+
+Couplings
+
+
+dim: BatchSize x (L x q)x(L x q)
+
+
+dim: BatchSize x L x q
+
+
+Figure 3: **Left** : Decoder architecture up to the generation of the low-rank tensor **V** . Right: The
+low-rank tensor **V** is used to generate the couplings **J** and the fields _**H**_ .
+
+
+For the encoder, we use the pre-trained encoder from the ESM-IF1 model of Hsu et al. (2022) which
+follows the GVP-GNN architecture proposed in (Jing et al., 2020). This encoder gives a rotationally
+invariant representation of the input _**X**_ that has been shown to be effective in capturing the geometric
+features coming from the protein’s 3D structure. During training we add Gaussian noise to these
+representations as commonly done in previous research Hsu et al. (2022). The decoder takes as input
+a batch of encoded structures, padded to a common length _L_ . These _L × D_ matrices ( _D_ = 512 in our
+experiments) batched into a tensor are passed through 6 Transformer layers with 8 attention heads.
+The output is first embedded into a _L × DK_ dimensional space through a linear layer followed by an
+
+
+3
+
+
+element-wise ReLU activation function, then it is reshaped to a _L × K × D_ tensor and finally it is
+projected to a _L × K × q_ tensor **V** through another linear layer. By selecting _K_ _≪_ _L_, we then create
+from **V** a low-rank coupling tensor according to
+
+
+1
+_Ji,a,j,b_ = ~~_√_~~
+
+_K_
+
+
+_K_
+
+- _Vi,k,aVj,k,b._ (1)
+
+
+_k_ =1
+
+
+Thanks to this low-rank structure, we drastically reduce the number of parameters of our pairwise
+_√_
+model from _L_ [2] _× q_ [2] to _L × q × K_ . The 1 _/_ _K_ factor instead is used to obtain _O_ (1) at initialization,
+
+similar to scaled dot product attention in Vaswani et al. (2017). We note that in other settings,
+low-rank decompositions like equation 1 of **J** have been shown to be similarly effective for most
+tasks as their full-rank counterparts (Cocco et al., 2013). The fields _**H**_ are computed by passing **V**
+through another linear layer, and then contracting the tensor by summing the entries across the latent
+_√_
+dimension. Also here after summing we scale by _K_ to ensure the fields to remain _O_ (1).
+
+
+2.2 INVMSAFOLD-PW
+
+
+Given the parameters **J** and _**H**_ we explore two different approaches to define a probability distribution
+over sequences of amino acids. The first distribution, which we term _InvMSAFold-PW_, is a standard
+pairwise distribution Cocco et al. (2018a) that defines the negative log-likelihood of a sequence _**σ**_ as
+
+
+
+
+
+_L_
+
+ 
+
+
+_Hi,σi_
+
+_i_
+
+
+log _p_ _[pw]_ ( _**σ**_ _|_ _**H**_ _,_ **J** ) = _−E_ ( _**σ**_ ) _−_ log( _Z_ _[pw]_ ) =
+
+
+- _Ji,σi,j,σj_ + 
+
+_i<j_ _i_
+
+
+
+
+ _−_ log( _Z_ _[pw]_ ) _,_ (2)
+
+
+where _Z_ _[pw]_ is a _**σ**_ -independent normalizing constant and _E_ ( _**σ**_ ) is called _energy_ . This distribution
+has been explored extensively for proteins Cocco et al. (2013) as it possesses some nice theoretical properties Barrat-Charlaix (2018), yet has the disadvantage that _Z_ _[pw]_ is intractable, making
+likelihood optimization difficult. To overcome this issue, a standard alternative is to resort to pseudologlikelihood (Besag, 1977; Ekeberg et al., 2013)
+
+
+_pL_ ( _**σ**_ _|_ _**H**_ _,_ **J** ) = [1]
+
+_L_
+
+
+_L_
+
+- log _p_ _[pw]_ ( _σi|_ _**σ**_ _\i,_ _**H**_ _,_ **J** ) _,_ (3)
+
+
+_i_ =1
+
+
+which is a statistically consistent estimator Barrat-Charlaix (2018). Moreover, as we will show, pairing
+Eq. 3 with the low-rank assumption on the couplings (Eq. 1), allows for very efficient computations.
+
+
+2.2.1 FAST PSEUDO-LIKELIHOOD COMPUTATION
+
+
+By enforcing the low-rank constraint on the matrix **J**, the number of parameters is reduced from _O_ ( _L_ [2] )
+to _O_ ( _L_ ). However, calculating the pseudo-likelihood naively by materializing the full coupling matrix
+**J** as in Eq. 1 leads to a quadratic computational cost. To achieve linear cost in both memory and
+computational complexity we note that, given the low-rank structure, the coupling term in Eq. 3
+becomes
+
+
+_−_ [1]
+
+2
+
+
+2
+
+
+- _L_
+
+ - _Vi,k,σi_
+
+
+_i_ =1
+
+
+_L_
+
+- _Vi,k,σ_ [2] _i_ _[,]_ (4)
+
+_i_ =1
+
+
+- _Ji,σi,j,σj_ = [1] 2
+
+_i<j,a,b_
+
+
+_K_
+
+
+_k_ =1
+
+
+2
+
+
+_K_
+
+
+_k_ =1
+
+
+which can be computed in _O_ ( _L_ ) time since it contains a single sum over the positions _i_ . For position
+_p_, the pseudo-likelihood is
+
+_p_ _[pw]_ ( _**σ**_ _|_ _**H**_ _,_ **J** ) exp _{−E_ ( _**σ**_ ) _}_
+_p_ _[pw]_ ( _σp|_ _**σ**_ _\p,_ _**H**_ _,_ **J** ) =  - _q_  - _q_ (5)
+_c_ =1 _[p][pw]_ [(] _[σ][p]_ [=] _[ c,]_ _**[ σ]**_ _[\][p][,]_ _**[ H]**_ _[,]_ **[ J]** [)] [=] _c_ =1 [exp] _[{−][E]_ [(] _[σ][p]_ [=] _[ c,]_ _**[ σ]**_ _[\][p]_ [)] _[}]_ _[,]_
+
+
+where the numerator is independent of _p_ and therefore the same for all positions. If we can compute
+the denominators efficiently for every position _p_, we can then maintain a linear cost also for the sum
+of Eq. 3. Let’s call _**σ**_ ˜ _[p,c]_ the configuration that is equal to _**σ**_ except for having amino acid _c_ in position
+_p_ . The relevant quantity for the computation of the energy _E_ (˜ _**σ**_ _[p,c]_ ) can be written as
+
+    -    
+
+
+_Vi,k,σ_ ˜ _i_ _[p,c]_ =  _i_ _i_
+
+
+_Vi,k,σi_ _−_ _Vp,k,σp_ + _Vp,k,c._ (6)
+
+_i_
+
+
+4
+
+
+The first term is common to all positions _p_, hence can be computed just once. Combining Eq. 6 and
+Eq. 4 we can compute all the denominator terms in Eq. 5 for the different positions _p_ efficiently,
+resulting in _O_ ( _L_ ) cost for Eq. 3. Finally, for the quadratic regularization on the couplings we have
+
+
+
+
+
+
+
+
+2
+
+
+_−_ [1]
+
+2
+
+
+�2 []
+
+ _,_ (7)
+
+
+_k,k_ _[′]_
+
+
+_i<j_
+
+
+_Ji,a,j,b_ [2] [=] [1]
+
+2
+
+_a,b_
+
+
+
+
+ [�] _Vi,k,aVi,k′,a_
+
+_i,a_
+
+
+
+
+ [�]
+
+_i_
+
+
+��
+
+_Vi,k,aVi,k′,a_
+
+_a_
+
+
+2
+
+
+_k,k_ _[′]_
+
+
+which leads again to linear cost. Similar reasoning can be applied to the field-dependent part of the
+energy.
+
+
+2.3 INVMSAFOLD-AR
+
+
+Although, as previously mentioned, the pseudo-log-likelihood Eq. 3 is a statistically consistent
+estimator, it is known in practice it could struggle to fit the second moments of the MSAs it is trained
+on Trinquier et al. (2021). Moreover, for sampling, we have to resort to MCMC algorithms, which
+can have difficulties in navigating the complex high-dimensional landscape given by Eq. 2.
+
+
+Based on the above practical limitations, we consider an alternative efficient auto-regressive variant of pairwise models Trinquier et al. (2021), which we term InvMSAFold-AR, that defines an
+autoregressive distribution _p_ _[ar]_ over amino acids having negative log-likelihood
+
+
+log _p_ _[ar]_ ( _σi|σ_ 1 _, . . ., σi−_ 1 _,_ _**H**_ _,_ **J** ) _∝_ _Hi,σi_ +
+
+
+_i−_ 1
+
+- _Ji,σi,j,σj_ _._ (8)
+
+
+_j_ =1
+
+
+Since this parametrization decouples into a sequence of univariate distributions, it has the advantage
+that the normalization factor is tractable allowing for closed-form computation of the likelihood. As
+a result, we can train with _maximum likelihood_ and also sample much more robustly from the model.
+Since for InvMSAFold-AR the number of terms in the sum in Eq. 8 depends on the position _i_, we
+rescale the couplings as
+
+_Ji,a,j,b_ _←_ _Ji,a,j,b_ (9)
+_max_ ( _i, j_ ) _[,]_
+
+
+following what was done in (Ciarella et al., 2023). We found this to be beneficial for training and
+note that without this scaling the neural network would have to generate couplings of significantly
+different magnitudes for different sites. This would not be a problem if we were to optimize the
+couplings directly, as in previous research Trinquier et al. (2021), but might be problematic if the
+couplings are generated by a neural network.
+
+
+2.4 TRAINING ON HOMOLOGOUS SEQUENCES
+
+
+In most other works Hsu et al. (2022); Dauparas et al. (2022), inverse folding models are trained
+to predict the ground truth sequences only. In this work, we aim to generate a distribution that
+captures the complete sequence space that is compatible with the input structure _**X**_ . To this end, we
+leverage the ground truth sequence corresponding to a structure _**X**_ to extract an MSA _**M**_ _X_ from
+a sequence database (see next section for details). We then use the pairs ( _**X**_ _,_ _**M**_ _X_ ) for training
+by taking the mean negative (pseudo) log-likelihood of a random subsample of sequences in _**MX**_
+given the parameters _**θ**_ ( _**X**_ ) generated by the network. For both InvMSAFold-PW and InvMSAFoldAR, we add a regularizing _L_ 2 term for the fields and the couplings as is typical for these models
+Barrat-Charlaix (2018), Cocco et al. (2018b). For details, see Sec. 4.1.
+
+
+3 DATA AND TRAIN-TEST SPLITS
+
+
+In order to control the level of homology in our evaluation, we create three test sets, which we call
+respectively _inter-cluster_, _intra-cluster_, and _MSA_ test set. We base these on the CATH database
+Sillitoe et al. (2021), which classifies protein domains into superfamilies and then further into clusters
+based on sequence homology. We use the non-redundant dataset of domains at 40% similarity and
+associate to every domain a cluster as indicated in the CATH database. We then choose 10% of the
+
+
+5
+
+
+sequence clusters uniformly at random and assign them to the inter-cluster test set, excluding these
+clusters from the training set. Because many superfamilies contain only one sequence cluster, there
+is a significant amount of superfamilies that appear only in the inter-cluster test set and not in the
+training set, making this a hard test set. We then create the less stringent intra-cluster test set by
+taking from every domain sequence cluster that is not in the inter-cluster test set and has at least two
+domains a single random domain. We then use the remaining domains as the training set. Finally,
+[we create MSAs for all sequences in the datasets using the MMseqs2 software and the Uniprot50](https://github.com/soedinglab/MMseqs2)
+database. We further split the sequences in the MSAs into 90% used for training and 10% for the
+MSA test set. This last test set is the least stringent one since it is based on domains that are also
+in the training set. The resulting sizes of the datasets are the following: 22468 for the training set,
+22428 for the MSA, 1374 for the _intra-cluster_, and 2673 for _inter-cluster_ test sets respectively.
+
+
+4 RESULTS
+
+
+4.1 MODEL TRAINING
+
+
+For both training and inference, we create embeddings for the structures using the ESM-IF1 encoder
+(Hsu et al., 2022). We then add independent Gaussian noise with standard deviation equal to 5%
+of the standard deviation of the embeddings across all positions, dimensions, and samples in the
+training set. The random MSA subsets _**M**_ _X_ are independently generated at each training step, where
+the number of sequences sampled is a model hyperparameter. For InvMSAFold-PW, we train with
+a single structure in each batch, with a MSA subsample size for _**M**_ _X_ of 64, a rank _K_ of 48, a
+learning rate of 10 _[−]_ [4] and L2 regularization constants of _λh_ = _λJ_ = 10 _[−]_ [4] for fields and couplings.
+For InvMSAFold-AR, we tune the hyperparameters as discussed in Appendix A.2.2 for the details.
+Both models are trained with AdamW optimizer for a total of 94 epochs. We monitor the negative
+pseudo-loglikelihood for InvMSAFold-PW and the negative likelihood for InvMSAFold-AR on the
+train and the different test sets. Training and test curves are reported in Appendix A.2.1, here we
+just mention that the ordering of the losses on the different datasets is consistent with the hardness
+reasoning behind the split in the last section, yet all curves are significantly better than a null model,
+signaling that the model is able to generalize in all cases.
+
+
+4.2 SYNTHETIC DATA GENERATION
+
+
+Transformer-based architectures such as ESM-IF1 (Hsu et al., 2022) or ProteinMPNN (Dauparas
+et al., 2022) can be very expensive to use at inference time, as data generation requires a forward
+pass through the decoder for every sample. On the other hand, InvMSAFold requires just a single
+forward pass through the decoder after training; once the parameters **J** _,_ _**H**_ of the pairwise model are
+obtained (either of the two parametrizations), it can be run on the CPUs of a standard machine to
+produce many samples. The sampling speed is drastically faster than ESM-IF1 or ProteinMPNN.
+
+
+As can be seen from Figure 4, the sampling speed on CPU of InvMSAFold-AR is orders of magnitudes
+faster than the one of ESM-IF1 on GPU (notice that the _y_ -axis is on log-scale). Moreover, given
+the lightweight model generated by InvMSAFold-AR, and the fact that host RAM is typically more
+abundant than GPU memory, sampling for InvMSAFold-AR can be easily batched, resulting in a
+virtually constant sampling time across all lengths _L_ . This is crucial in a virtual screening-like setting,
+where proteins in the order of millions are generated and analyzed for properties beyond folding
+into a desired structure; looking at Figure 4, this would be unfeasible for ESM-IF1. In Figure 4, we
+report just InvMSAFold-AR and not InvMSAFold-PW, as the latter requires an MCMC sampler,
+while the former and ESM-IF1 return i.i.d. samples from their respective distribution. To sample
+from ESM-IF1 we utilized a NVIDIA GeForce RTX 4060 Laptop having 8Gb of memory, while for
+InvMSAFold-AR we used a _single_ core of a i9-13905H processor.
+
+
+4.3 COVARIANCE RECONSTRUCTION
+
+
+The ability of a generative model to reproduce covariances between amino acids in MSAs has been
+shown to be a good metric for measuring how well the protein landscape is captured (Figliuzzi et al.,
+2018). Models with this ability have been shown to enable efficient sampling of experimentally
+validated, functional protein sequences (Russ et al., 2020). In order to test this ability, we created
+
+
+6
+
+
+Figure 4: Comparing the sampling speeds in seconds ( _y_ -axis in logscale) of ESM-IF1 (green) and
+InvMSAFold-AR (blue non-batched, red batched) for 1a0aA00, 1a8dA02, 1a0cA00 having increasing
+lengths _L_ respectively of 63 _,_ 206 _,_ 437 as we increase the number of samples generated ( _x_ -axis).
+
+|Col1|ESM-IF1|InvMSAFold-PW|InvMSAFold-AR|
+|---|---|---|---|
+|Inter-Cluster<br>Intra-Cluster|15.8<br>11.9|4.6<br>11.2|**0****_._49**<br>**0****_._67**|
+
+
+Table 1: Average KL Divergence across domains reported in Appendix A.3.2 between estimated
+densities of natural and synthetic samples projected on the first two PC components of the MSA for
+the Inter/Intra-Cluster datasets. For each method and for each backbone, we sampled 2k sequences.
+Densities are estimated through a Gaussian KDE of kernel size 1.0.
+
+
+MSAs with synthetic samples from InvMSAFold-PW, InvMSAFold-AR and ESM-IF1, and compared
+the amino acid covariances in these MSAs with the covariances in the MSAs of natural sequences.
+Given an MSA of sampled or natural sequences, we define the covariance between amino acids _a_
+and _b_ at positions _i_ and _j_ as _Cij_ ( _a, b_ ) = _fij_ ( _a, b_ ) _−_ _fi_ ( _a_ ) _fj_ ( _b_ ), where _fij_ ( _a, b_ ) is the frequency of
+finding amino acids _a_ and _b_ at these positions in the same sequence in the MSA and _fi_ ( _a_ ) and _fj_ ( _b_ )
+are the overall frequencies of the amino acids _a_ and _b_ at these positions. In order to compare two sets
+of covariances, we calculate their Pearson correlation as in previous research (Trinquier et al., 2021).
+For details on these experiments, we refer to the Appendix A.3.1.
+
+
+From Figure 5 and the attached table, we can see that InvMSAFold-AR and InvMSAFold-PW capture
+the covariances significantly better than ESM-IF1, especially at longer sequence lengths. In fact,
+InvMSAFold-AR shows the best performance overall, with a performance robust to _L_ . The worse
+performance of ESM-IF1 in this task is not surprising, as it has not been trained for it, yet it signals
+a significant limitation of the model for many tasks. On the other hand, the stronger performance
+of InvMSAFold-AR compared to InvMSAFold-PW could be due to the latter being trained with
+pseudo-loglikelihoods, which do not capture covariances perfectly even when training a pairwise
+model directly (Ekeberg et al., 2013), or due to inefficient MCMC sampling. We also tested synthetic
+MSAs from ProteinMPNN (Dauparas et al., 2022), detecting an analogous behavior to ESM-IF1. We
+report the results in Appendix A.1.
+
+
+The result strengthens our confidence that InvMSAFold is able to model the sequence landscape of
+an unseen structure. We explore this in more detail in the next section.
+
+
+4.4 SEQUENCE PATTERNS
+
+
+In this Section, we compare the projections of sampled sequences onto the first two PCA components
+of the one-hot encoded MSA of natural homologs to get a more fine-grained analysis of how the
+models are exploring the space of natural homologs compared to the global measure reported in
+Figure 5. Results for the NDP Kinase 1xqi (Pedelacq et al., 2005) are shown in Figure 6.The most´
+striking feature is the narrow focus in this space for sequences generated from ESM-IF1, suggesting
+that the distribution of ESM-IF1 is too centered around a single sequence, with very small coverage
+of the full sequence space. Sequences sampled from InvMSAFold-PW show a broader coverage of
+
+
+7
+
+
+|Quartiles (↑)|ESM-IF1|Col3|InvMSAFold-PW|Col5|InvMSAFold-AR|Col7|
+|---|---|---|---|---|---|---|
+|**Quartiles (**_↑_)|Inter-Cluster|Intra-Cluster|Inter-Cluster|Intra-Cluster|Inter-Cluster|Intra-Cluster|
+|First quartile<br>Median<br>Third quartile|0.23<br>0.31<br>0.43|0.21<br>0.31<br>0.45|0.29<br>0.43<br>0.50|0.28<br>0.42<br>0.53|**0.37**<br>**0.53**<br>**0.60**|**0.35**<br>**0.53**<br>**0.60**|
+
+
+Figure 5: Distribution of Pearson’s correlation coefficients between the covariances from sampled and
+natural sequences for domains having at least 2 _k_ natural sequences. **Top** : KDE plots representing how
+the correlations for InvMSAFold-AR (blue), InvMSAFold-PW (red) and ESM-IF1 (green) vary with
+sequence length _L_ . The top/bottom rows show results for the Intra/Inter-Cluster test sets respectively.
+**Bottom** : Table with quartiles of the above Pearson’s correlation coefficients. The best model for each
+quartile is highlighted by boldface numbers.
+
+
+Kernel Density Estimates of PCA Components: PDB 1xqiA00
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+Figure 6: Estimated densities of natural and synthetic samples projected on the first two PC components of the MSA for 1xqiA00, with KL-divergence reported in the title of each subplot.
+
+
+8
+
+
+sequence space but are still concentrated around the single dominant mode. This again could be a
+result of the approximate training given the _pseudo likelihood_, or of the challenges of sampling from
+multimodal distributions for MCMC algorithms. While this increased diversity in the samples might
+already be useful in some settings, it is notable that in this case secondary modes are not captured at
+all, and that even the dominant mode is still covered only in part. In contrast, sequences sampled
+from InvMSAFold-AR cover the sequence space more comprehensively, demonstrating an ability to
+cover multiple distinct modes. These results are not restricted to this specific NDP Kinase, but are
+consistent across a variety of out-of-sample proteins we tested, as can be seen from Table 1. Other
+plots are reported in Appendix B.2, where we report also results for ProteinMPNN, which, although
+typically samples less narrowly, generally displays a similar performance to ESM-IF1.
+
+
+4.5 PREDICTED STRUCTURES OF SAMPLED SEQUENCES
+
+
+Similarly to other works (Li et al., 2023; Dauparas et al., 2022), we test to what extent the sequences
+generated by our models are predicted to fold into the correct structure as we increase the normalised hamming distance to the native one. From Figure 7 we can see that InvMSAFold-AR and
+InvMSAFold-PW are naturally capable of generating sequences with low sequence similarity to the
+native sequence, while ESM-IF1 often generates sequences very close to the native sequence, which
+is consistent with what we observed in Subsection 4.4.
+
+
+Figure 7: Distances to native sequences, averaged over 15 structures from the inter-cluster test set.
+
+
+We therefore sampled sequences from ESM-IF1 at a higher temperature (for details of the sampling
+procedure we refer to the Appendix A.3.2). Following the generation of these sequences, we predicted
+their structures with AlphaFold 2 (Jumper et al., 2021; Mirdita et al., 2022) with templates switched
+off. From Figure 8, which shows results for the intra-cluster test set, we can see that for lower
+distances ESM-IF1 is the best-performing method. However, its performance drops significantly
+for larger distances, eventually becoming worse than both InvMSAFold-AR and InvMSAFold-PW,
+which show a more robust performance at higher distances. For the inter-cluster test set, we observe
+a similar behavior as the distance increases, with a general worsening of all of them (results reported
+in Appendix B.1). For the complete list of domains used from the two test sets in this experiment, we
+refer to Appendix A.3.2
+
+
+4.6 PROTEIN PROPERTY SAMPLING
+
+
+Another potential area of application for InvMSAFold are protein design tasks where other structural
+properties of the designed protein are important. In a virtual screening-like setting, one might want to
+generate a large number of sequences that obey certain structural constraints and then select from
+this set sequences that have other desirable properties. We test this setting by analyzing the range
+of (predicted) thermal stabilities and solubility of the sequences generated by the different models.
+In order to predict thermal stabilities we use Thermoprot (Erickson et al., 2022), which takes into
+account whether the protein operates within a Mesophile or Thermophile species. For solubility,
+we use predictions from Protein-Sol (Hebditch et al., 2017). Working with aligned sequence also
+introduces gaps, creating therefore variable effective length of the proteins (in terms of amino acids).
+We verified that the number of gaps was not discriminative for the two predicted properties. From
+Figure 9, which shows domain 1ny1A00, we observe that the support of InvMSAfold is significantly
+larger than of ESM-IF1, showing that the larger sequence diversity generated by both InvMSAFoldPW and InvMSAFold-AR translates into a wider range of predicted protein properties. Note also that
+
+
+9
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+Distance
+
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+
+Distance
+
+
+Figure 8: Comparison of the quality of the generated sequences at increasing hamming distance from
+native one. Shown is an average of 14 structures from the intra-cluster test set. We then refold the
+sequence with Alphafold and compare the refolded structure with the original one using RMSD.
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Solubility
+
+
+1ny1A00
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+Solubility
+
+
+Figure 9: Comparison of the distribution of predicted solubility and thermostability of samples from
+InvMSAFold and ESM-IF1 for 1ny1A00. The x-axis reports the solubility predicted by Protein-Sol,
+while the y-axis the output of Thermoprot, a binary classifier (0 is mesophile and 1 thermophile).
+
+
+while we generated the same number of sequences for a fair comparison, the computational resources
+are very different as we have shown in Subsection 4.2. These results are not specific to this domain,
+for more examples and for more details on the procedure we refer the reader to Appendix B.3.
+
+
+5 CONCLUSION
+
+
+InvMSAFold is a novel approach to inverse folding that combines modeling the complete sequence
+space corresponding to a structure with computational efficiency. The core idea is to frame the problem
+as a two-stage generation process: an expressive large neural network generates the parameters of a
+sufficiently expressive family-specific model. During training, the loss is computed on data augmented
+through an MSA, which captures the variability of sequences compatible with the input and prevents
+the model from narrowly focusing on the native sequence. Notably, this idea is not specific to our
+model formulation and could also be applied to other architectures, such as ESM-IF1. Once trained,
+for any input structure, the model requires only a single forward pass to generate the parameters of the
+pairwise model, which can then be used to generate diverse sequences orders of magnitude faster on
+CPUs compared to previous architectures. We extensively validate InvMSAFold through numerous
+out-of-sample tests, demonstrating its ability to generate sequences that deviate significantly from
+the native sequence while maintaining structural fidelity and capturing the evolutionary patterns
+of the MSAs. Additionally, we show that the broader exploration of the sequence domain enables
+the sampling of a wider range of protein properties of interest. We believe that InvMSAFold,
+with its combination of diverse sequence exploration and rapid sequence generation, opens up new
+possibilities for virtual screening, for example enabling simultaneous optimization of properties like
+thermostability, altered substrate specificity, and reduced toxicity.
+
+
+10
+
+
+6 ETHICAL CONSIDERATIONS AND CONCERNS
+
+
+We recognize the importance of biosecurity considerations in protein design and the role of sequencebased screening systems. In principle, our approach generates diverse protein sequences that fold
+into known structures, which raises the question of how dangerous sequences are detected by existing
+screening methods.
+
+
+To mitigate this risk, we emphasize that our method relies on homologous sequence data during training. This inherently means that any generated sequences remain within the evolutionary
+space of known proteins and would be detectable by homolog detection algorithms. Given that
+biosecurity screening protocols, such as those employed by DNA synthesis providers [https:](https://genesynthesisconsortium.org/)
+[//genesynthesisconsortium.org/,](https://genesynthesisconsortium.org/) increasingly incorporate homology-based detection,
+we recommend that safeguards extend beyond simple sequence matching to include homologous
+sequence analysis for known hazardous proteins.
+
+
+Moreover, existing tools for structure prediction and homology detection have reached a level of
+accuracy where they can reliably identify structurally and functionally similar sequences. The
+maturity of these technologies enables the detection of potentially dangerous sequences even when
+sequence similarity is low.
+
+
+REFERENCES
+
+
+Pierre Barrat-Charlaix. _Understanding_ _and_ _improving_ _statistical_ _models_ _of_ _protein_ _sequences_ .
+Theses, Sorbonne Universite,´ November 2018. URL [https://theses.hal.science/](https://theses.hal.science/tel-02866062)
+[tel-02866062.](https://theses.hal.science/tel-02866062)
+
+
+Julian Besag. Efficiency of pseudolikelihood estimation for simple Gaussian fields. _Biometrika_,
+64(3):616–618, 12 1977. ISSN 0006-3444. doi: 10.1093/biomet/64.3.616. URL [https:](https://doi.org/10.1093/biomet/64.3.616)
+[//doi.org/10.1093/biomet/64.3.616.](https://doi.org/10.1093/biomet/64.3.616)
+
+
+Drew H Bryant, Ali Bashir, Sam Sinai, Nina K Jain, Pierce J Ogden, Patrick F Riley, George M
+Church, Lucy J Colwell, and Eric D Kelsic. Deep diversification of an aav capsid protein by
+machine learning. _Nature Biotechnology_, 39(6):691–696, 2021.
+
+
+Simone Ciarella, Jeanne Trinquier, Martin Weigt, and Francesco Zamponi. Machine-learning-assisted
+monte carlo fails at sampling computationally hard problems. _Machine Learning:_ _Science and_
+_Technology_, 4(1):010501, 2023.
+
+
+Simona Cocco, Remi´ Monasson, and Martin Weigt. Inference of hopfield-potts patterns from
+covariation in protein families: calculation and statistical error bars. In _Journal_ _of_ _Physics:_
+_Conference Series_ . IOP Publishing, 2013.
+
+
+Simona Cocco, Christoph Feinauer, Matteo Figliuzzi, Remi Monasson, and Martin Weigt.´ Inverse
+statistical physics of protein sequences: a key issues review. _Reports on Progress in Physics_, 81(3):
+032601, 2018a.
+
+
+Simona Cocco, Christoph Feinauer, Matteo Figliuzzi, Remi Monasson, and Martin Weigt.´ Inverse
+statistical physics of protein sequences: a key issues review. _Reports on Progress in Physics_, 81
+(3):032601, jan 2018b. doi: 10.1088/1361-6633/aa9965. [URL https://dx.doi.org/10.](https://dx.doi.org/10.1088/1361-6633/aa9965)
+[1088/1361-6633/aa9965.](https://dx.doi.org/10.1088/1361-6633/aa9965)
+
+
+Justas Dauparas, Ivan Anishchenko, Nathaniel Bennett, Hua Bai, Robert J Ragotte, Lukas F Milles,
+Basile IM Wicky, Alexis Courbet, Rob J de Haas, Neville Bethel, et al. Robust deep learning–based
+protein sequence design using proteinmpnn. _Science_, 378(6615):49–56, 2022.
+
+
+Magnus Ekeberg, Cecilia Lovkvist, Yueheng Lan, Martin Weigt, and Erik Aurell.¨ Improved contact
+prediction in proteins: using pseudolikelihoods to infer potts models. _Physical Review E_, 87(1):
+012707, 2013.
+
+
+Erika Erickson, Japheth E Gado, Luisana Avilan, Felicia Bratti, Richard K Brizendine, Paul A Cox,´
+Raj Gill, Rosie Graham, Dong-Jin Kim, Gerhard Konig,¨ et al. Sourcing thermotolerant poly
+(ethylene terephthalate) hydrolase scaffolds from natural diversity. _Nature communications_, 13(1):
+7850, 2022.
+
+
+11
+
+
+Matteo Figliuzzi, Pierre Barrat-Charlaix, and Martin Weigt. How Pairwise Coevolutionary Models
+Capture the Collective Residue Variability in Proteins? _Molecular Biology and Evolution_, 35(4):
+1018–1027, 01 2018. ISSN 0737-4038. doi: 10.1093/molbev/msy007. [URL https://doi.](https://doi.org/10.1093/molbev/msy007)
+[org/10.1093/molbev/msy007.](https://doi.org/10.1093/molbev/msy007)
+
+
+Max Hebditch, M Alejandro Carballo-Amador, Spyros Charonis, Robin Curtis, and Jim Warwicker.
+Protein–sol: a web tool for predicting protein solubility from sequence. _Bioinformatics_, 33(19):
+3098–3100, 2017.
+
+
+Chloe Hsu, Robert Verkuil, Jason Liu, Zeming Lin, Brian Hie, Tom Sercu, Adam Lerer, and Alexander
+Rives. Learning inverse folding from millions of predicted structures. _bioRxiv_, 2022.
+
+
+Bowen Jing, Stephan Eismann, Patricia Suriana, Raphael JL Townshend, and Ron Dror. Learning
+from protein structure with geometric vector perceptrons. _arXiv preprint arXiv:2009.01411_, 2020.
+
+
+John Jumper, Richard Evans, Alexander Pritzel, Tim Green, Michael Figurnov, Olaf Ronneberger,
+Kathryn Tunyasuvunakool, Russ Bates, Augustin Z [ˇ] ´ıdek, Anna Potapenko, et al. Highly accurate
+protein structure prediction with alphafold. _Nature_, 596(7873):583–589, 2021.
+
+
+Lucien Krapp, Fernado Meireles, Luciano Abriata, and Matteo Dal Peraro. Context-aware geometric
+deep learning for protein sequence design. _bioRxiv_, pp. 2023–06, 2023.
+
+
+Alex J Li, Mindren Lu, Israel Desta, Vikram Sundar, Gevorg Grigoryan, and Amy E Keating. Neural
+network-derived potts models for structure-based protein design using backbone atomic coordinates
+and tertiary motifs. _Protein Science_, 32(2):e4554, 2023.
+
+
+Milot Mirdita, Konstantin Schutze, Yoshitaka Moriwaki, Lim Heo, Sergey Ovchinnikov, and Martin¨
+Steinegger. Colabfold: making protein folding accessible to all. _Nature methods_, 19(6):679–682,
+2022.
+
+
+Jean-Denis Pedelacq,´ Geoffrey S Waldo, Stephanie´ Cabantous, Elaine C Liong, and Thomas C
+Terwilliger. Structural and functional features of an ndp kinase from the hyperthermophile
+crenarchaeon pyrobaculum aerophilum. _Protein science_, 14(10):2562–2573, 2005.
+
+
+FJ Poelwijk, M Socolich, and R Ranganathan. Learning the pattern of epistasis linking genotype and
+phenotype in a protein. biorxiv: 213835, 2017.
+
+
+William P Russ, Matteo Figliuzzi, Christian Stocker, Pierre Barrat-Charlaix, Michael Socolich, Peter
+Kast, Donald Hilvert, Remi Monasson, Simona Cocco, Martin Weigt, et al. An evolution-based
+model for designing chorismate mutase enzymes. _Science_, 369(6502):440–445, 2020.
+
+
+Ian Sillitoe, Nicola Bordin, Natalie Dawson, Vaishali P Waman, Paul Ashford, Harry M Scholes,
+Camilla SM Pang, Laurel Woodridge, Clemens Rauer, Neeladri Sen, et al. Cath: increased
+structural coverage of functional space. _Nucleic acids research_, 49(D1):D266–D273, 2021.
+
+
+Pascal Sturmfels, Roshan Rao, Robert Verkuil, Zeming Lin, Tom Sercu, Adam Lerer, and Alex
+Rives. Seq2msa: A language model for protein sequence diversification. In _Machine Learning in_
+_Structural Biology Workshop, NeurIPS 2022_, 2022.
+
+
+Jeanne Trinquier, Guido Uguzzoni, Andrea Pagnani, Francesco Zamponi, and Martin Weigt. Efficient generative modeling of protein sequences using simple autoregressive models. _Nature_
+_communications_, 12(1):1–11, 2021.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. In _Advances_ _in_ _neural_ _information_
+_processing systems_, pp. 5998–6008, 2017.
+
+
+Joseph L Watson, David Juergens, Nathaniel R Bennett, Brian L Trippe, Jason Yim, Helen E Eisenach,
+Woody Ahern, Andrew J Borst, Robert J Ragotte, Lukas F Milles, et al. De novo design of protein
+structure and function with rfdiffusion. _Nature_, 620(7976):1089–1100, 2023.
+
+
+12
+
+
+A APPENDIX
+
+
+A.1 COVARIANCE RECONSTRUCTION FOR PROTEINMPNN
+
+
+In this Appendix, we report the results for another popular method available in the literature, ProteinMPNN (Dauparas et al., 2022). The architecture is built upon a transformer Vaswani et al. (2017)
+encoder-decoder architecture, similar to ESM-IF1 Hsu et al. (2022), but it is shallower as it consists
+of only three encoder and decoder layers. Moreover, the training is performed only on structures of
+the CATH dataset in contradistinction to ESM-IF1, which augments the training data with millions of
+structures predicted from Alpha-Fold (Jumper et al., 2021).
+
+
+We begin with the covariance reconstruction capabilities of synthetic sequences generated from
+Protein-MPNN. The sampling procedure is analogous to that reported in Appendix A.3.1. To have
+consistency with the other models explored in Section 4.3, we sampled sequences at the training
+temperature of 1. From Figure 10, we can observe that the results are similar to those observed for
+ESM-IF1, as the recovered covariances are worse than both InvMSAFold-PW and InvMSAFold-AR,
+and the performance worsens significantly with sequence length. One difference with ESM-IF1
+can be observed in the top-right plot of Figure 10; Protein-MPNN at temperature 1 can generate
+sequences with higher diversity, although still smaller than the one observed in the native MSAs.
+This could be due to the shallower architecture and the reduced training set of Protein-MPNN.
+
+|Quartiles (↑)|Protein-MPNN|Col3|
+|---|---|---|
+|**Quartiles (**_↑_)|Inter-Cluster|Intra-Cluster|
+|First quartile<br>Median<br>Third quartile|0.23<br>0.31<br>0.43|0.21<br>0.31<br>0.45|
+
+
+Figure 10: **Top** : KDE plots representing how the correlations between covariances of sequences
+from Protein-MPNN and natural homologous vary with sequence length _L_ for sequences in the
+inter-cluster (left) and intra-cluster (center) test sets, and distances to native sequences for samples
+from Protein-MPNN, averaged over 15 structures from the inter-cluster test set (right). **Bottom** :
+Table with quartiles of the above Pearson’s correlation coefficients.
+
+
+13
+
+
+A.2 TRAINING DETAILS
+
+
+A.2.1 TRAINING AND TEST CURVES
+
+
+Figure 11: Negative pseudo log-likelihood (npll) for the train and test sets by training epochs. The
+training loss is a rolling average over a window of 5 epochs, which is why the plotted value is higher
+than the test losses initially.
+
+
+As can be seen from Fig. 11, for both models the ordering of the losses on the different datasets is
+consistent with the reasoning behind the split in the last section: The _MSA_ test set has sequences
+coming from domains which the model has seen during training, and the loss on this test set is similar
+to the training loss. The _intra-cluster_ test set contains domains of which the model has seen domains
+belonging to the same sequence cluster; the loss on this test set is higher than the training loss and
+seems to saturate during training. For the _inter-cluster_ test dataset, which contains domains that
+belong to sequence clusters not present in the training set, the loss is significantly higher, even though
+still much better than random.
+
+
+A.2.2 HYPERTUNING
+
+
+[To select hyperparameters for InvMSAFold-AR we relied on the library Optuna.](https://optuna.org/) The parameters we
+optimized for where Adam’s learning rate( _lr_ ), the rank of the approximation for the coupling matrix
+_J_ ( _K_ ), the penalties for the couplings and the fields ( _λJ_ _, λH_ ), the batch size used for training ( _B_ ), the
+batch MSA size used in the loss ( _|_ _**M**_ _X_ _|_ ) and the value of dropout. We sampled parameters through
+the TPESampler, allowing median pruning of bad trials to improve the speed. We gave Optuna 50
+trials of 90 epochs each (irrespective of batch size), while as a selecting metric, we used the average
+of the log-likelihood between the inter/intra-cluster test dataset. In the table below we recap the
+parameter values selected by the hyper-tuning
+
+|Hypertuning results|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|Model|Dropout|B|M|K|(_λJ, λh_)|lr|
+|ArDCA|0.1|8|32|48|(3.2e-6, 5.0e-5)|3.4e-4|
+
+
+Table 2: Parameters selected arDCA by hyperparamter optimization
+
+
+We applied an identical strategy for InvMSAFold-PW, yet we found that in many applications the
+tuned model slightly underperformed the original one we were previously using whose hyperparameter
+values are the ones reported in Section 2.
+
+
+14
+
+
+A.3 EXPERIMENTS DETAILS
+
+
+A.3.1 SECOND ORDER RECONSTRUCTION
+
+
+The experimental procedure for both the inter and intra cluster datasets can be organized in the
+following steps:
+
+
+1. [We filtered the structures, keeping only those for which the MSA generated by MMseqs2](https://github.com/soedinglab/MMseqs2)
+has at least 2 _k_ sequences. This is because small MSAs tend to give very noisy covariances
+which could bias the benchmarking.
+
+
+2. For every sequence in the filtered dataset, we generate 10 _k_ synthetic samples for all three
+models. [To generate the samples from InvMSAFold-PW we use the library bmDCA, running](https://github.com/ranganathanlab/bmDCA)
+10 parallel chains of standard Metropolis-Hastings MCMC algorithm and pooling the results,
+for ESM-IF1 we used the built-in sampler while for InvMSAFold-AR we built our own
+sampler.
+
+
+3. For ESM-IF1, once generated the samples, we re-aligned them using the full MSA to get a
+fair comparison. Note that, while InvMSAFold-PW and InvMSAFold-AR have seen gaps
+during training, ESM-IF1 was trained on the gapless native sequence. It therefore produces
+un-aligned sequences. [We used the PyHMMER library for alignment tasks.](https://pyhmmer.readthedocs.io/en/stable/)
+
+
+4. Given the samples, we compute the covariance matrices of the generated samples and of the
+true MSA. We then compute the Pearson correlation between the flattened versions.
+
+
+A.3.2 PREDICTED STRUCTURES OF SAMPLED SEQUENCES
+
+
+First, we report the list of the domains used from the intra/inter-cluster test set in this experiment
+
+
+    - **intra-cluster** : 5i0qB02, 4iulB00, 2wfhA00, 2egcA00, 3oz6B02, 3m8bA01, 2pz0B00,
+2cnxA00, 4k7zA02, 1dl2A00, 1vjkA00, 1udkA00, 3bs9A00.
+
+
+    - **inter-cluster** : 1otjA00, 2ytyA00, 1p9hA00, 2o0bA02, 1b34B00, 1f6mA02, 2hs5A01,
+2bh8A02, 2de6A03, 1ia6A00, 4gc1A01, 3sobB02, 1xqiA00, 4yt9A01.
+
+
+Synthetic sequences from both InvMSAFold-AR and InvMSAFold-PW produce very diverse sequences without further intervention. On the other hand, ESM-IF1 produces sequences whose
+hamming distance from the native sequence is significantly lower. Given that we want to test the
+different models’ ability to recover the native structure from sequences having high dissimilarity from
+the native one, we leverage the built-in temperature parameter of the model to get such sequences
+from ESM-IF1, increasing it to sample more diverse sequences.
+
+
+Specifically, InvMSAFold-PW and InvMSAFold-AR generate sequences having normalized hamming
+distance between 0 _._ 65 and 0 _._ 9. We hence split the interval [0 _._ 65 _,_ 0 _._ 9] into 5 bins of equal width of
+0 _._ 05.
+
+
+We use the following procedure to fill each of these bins with at least 10 sequences from ESM-IF1:
+
+
+1. Generate 1000 samples from ESM-IF1.
+
+
+2. Fill the bins that still are lacking some sequences.
+
+
+3. If all the bins are full, return the binned sequences, otherwise increase the temperature of
+ESM-IF1 by 0 _._ 1 and go back to step 1.
+
+
+For InvMSAFold-PW and InvMSAFold-AR we just generate 10 _k_ sequences each for each domain,
+and then fill the bins relative to every domain.
+
+
+15
+
+
+B ADDITIONAL PLOTS
+
+
+B.1 PREDICTED STRUCTURES FOR INTER-CLUSTER TEST SET
+
+
+30
+
+
+25
+
+
+20
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+Distance
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+Distance
+
+
+Figure 12: Comparison of the quality of the generated sequences at increasing hamming distance
+from native one. Shown is an average of 14 structures from the inter-cluster test set. We then refold
+the sequence with Alphafold and compare the refolded structure with the original one using RMSD.
+
+
+16
+
+
+B.2 PCA WITH ALSO PROTEINMPNN
+
+
+Kernel Density Estimates of PCA Components: PDB 1b34B00
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+Kernel Density Estimates of PCA Components: PDB 1f6mA02
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+Kernel Density Estimates of PCA Components: PDB 1ia6A00
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+Kernel Density Estimates of PCA Components: PDB 1l3wA04
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+Figure 13: Sampled sequences projected onto the first two PCA components of natural sequences for
+various PDBs. We also used this density estimate to compute the Kullbach-Leiber (KL) divergence
+between the density of the natural data and the density of the sampled data. The values of these KLs
+are written in the title of each subplots.
+
+
+17
+
+
+Kernel Density Estimates of PCA Components: PDB 1m1sA00
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+7.5
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 1ny1A00
+
+
+PCA Component 1
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+Kernel Density Estimates of PCA Components: PDB 1otjA00
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+7.5
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+7.5
+
+
+Kernel Density Estimates of PCA Components: PDB 1viuA00
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+7.5
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+PCA Component 1
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+PCA Component 1
+
+
+Figure 14: Sampled sequences projected onto the first two PCA components of natural sequences for
+various PDBs. We also used this density estimate to compute the Kullbach-Leiber (KL) divergence
+between the density of the natural data and the density of the sampled data. The values of these KLs
+are written in the title of each subplots.
+
+
+18
+
+
+Kernel Density Estimates of PCA Components: PDB 1vjkA00
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 1x9nA04
+
+
+PCA Component 1
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 1xqiA00
+
+
+PCA Component 1
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 2egcA00
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+PCA Component 1
+
+
+Figure 15: Sampled sequences projected onto the first two PCA components of natural sequences for
+various PDBs. We also used this density estimate to compute the Kullbach-Leiber (KL) divergence
+between the density of the natural data and the density of the sampled data. The values of these KLs
+are written in the title of each subplots.
+
+
+19
+
+
+Kernel Density Estimates of PCA Components: PDB 2hs5A01
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 2m5jA00
+
+
+PCA Component 1
+
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+
+Kernel Density Estimates of PCA Components: PDB 2pz0B00
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+
+PCA Component 1
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 2wfhA00
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+PCA Component 1
+
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+PCA Component 1
+
+
+Figure 16: Sampled sequences projected onto the first two PCA components of natural sequences for
+various PDBs. We also used this density estimate to compute the Kullbach-Leiber (KL) divergence
+between the density of the natural data and the density of the sampled data. The values of these KLs
+are written in the title of each subplots.
+
+
+20
+
+
+Kernel Density Estimates of PCA Components: PDB 2x64A02
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+Kernel Density Estimates of PCA Components: PDB 3bs9A00
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 3cx3A01
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 3oz6B02
+
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+6
+
+
+PCA Component 1
+
+
+Figure 17: Sampled sequences projected onto the first two PCA components of natural sequences for
+various PDBs. We also used this density estimate to compute the Kullbach-Leiber (KL) divergence
+between the density of the natural data and the density of the sampled data. The values of these KLs
+are written in the title of each subplots.
+
+
+21
+
+
+Kernel Density Estimates of PCA Components: PDB 3qwwA03
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+6
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+6
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+6
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 3sobB02
+
+
+PCA Component 1
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 4atkB00
+
+
+PCA Component 1
+
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+6
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+3
+
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+2
+
+3
+
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+
+Kernel Density Estimates of PCA Components: PDB 4hdtA00
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+
+Figure 18: Sampled sequences projected onto the first two PCA components of natural sequences for
+various PDBs. We also used this density estimate to compute the Kullbach-Leiber (KL) divergence
+between the density of the natural data and the density of the sampled data. The values of these KLs
+are written in the title of each subplots.
+
+
+22
+
+
+Kernel Density Estimates of PCA Components: PDB 4k7zA02
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+12
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+12
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+2.5
+
+5.0
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+2
+
+
+4
+
+
+PCA Component 1
+
+
+Kernel Density Estimates of PCA Components: PDB 4wecC00
+
+
+PCA Component 1
+
+
+PCA Component 1
+
+
+12
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+2
+
+4
+
+
+Kernel Density Estimates of PCA Components: PDB 5b7cA02
+
+
+PCA Component 1
+
+
+Figure 19: Sampled sequences projected onto the first two PCA components of natural sequences for
+various PDBs. We also used this density estimate to compute the Kullbach-Leiber (KL) divergence
+between the density of the natural data and the density of the sampled data. The values of these KLs
+are written in the title of each subplots.
+
+
+23
+
+
+B.3 BIVARIATE PLOTS: THERMOSTABILITY VS SOLUBILITY
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Solubility
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Solubility
+
+
+Solubility
+
+
+1b34B00
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1ia6A00
+
+
+1f6mA02
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Solubility
+
+
+Solubility
+
+
+Solubility
+
+
+1.0
+
+
+Figure 20: Comparison of the distribution of predicted solubility an thermostability of samples
+generated with InvMSAFold and ESM-IF1. These plots show the results for domain 1ia6A00,
+1f6mA02, 1b34B00.
+
+
+24
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Solubility
+
+
+Solubility
+
+
+1ny1A00
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1viuA00
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+Solubility
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1otjA00
+
+
+Solubility
+
+
+1.0
+
+
+Solubility
+
+
+Solubility
+
+
+Figure 21: Comparison of the distribution of predicted solubility an thermostability of samples
+generated with InvMSAFold and ESM-IF1. These plots show the results for domain 1ny1A00,
+1otjA00, 1viuA00.
+
+
+25
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Solubility
+
+
+Solubility
+
+
+Solubility
+
+
+1m1sA00
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1xqiA00
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+2hs5A01
+
+1.0
+
+
+2hs5A01
+
+
+Solubility
+
+
+Solubility
+
+
+Solubility
+
+
+Figure 22: Comparison of the distribution of predicted solubility an thermostability of samples
+generated with InvMSAFold and ESM-IF1. These plots show the results for domain 1m1sA00,
+1xqiA00, 2hs5A01.
+
+
+26
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Solubility
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Solubility
+
+
+2m5jA00
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+2x64A02
+
+1.0
+
+
+Solubility
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+3cx3A01
+
+
+Solubility
+
+
+Solubility
+
+
+Solubility
+
+
+1.0
+
+
+Figure 23: Comparison of the distribution of predicted solubility an thermostability of samples
+generated with InvMSAFold and ESM-IF1. These plots show the results for domain 2m5jA00,
+2x64A02, 3cx3A01.
+
+
+27
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Solubility
+
+
+3qwwA03
+
+1.0
+
+
+Solubility
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+3sobB02
+
+
+1.0
+
+
+Solubility
+
+
+Solubility
+
+
+Solubility
+
+
+Solubility
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+4atkB00
+
+1.0
+
+
+0.8
+
+
+0.6
+
+
+0.4
+
+
+0.2
+
+
+0.0
+
+
+Figure 24: Comparison of the distribution of predicted solubility an thermostability of samples
+generated with InvMSAFold and ESM-IF1. These plots show the results for domain 3qwwA03,
+3sobB02, 4atkB00.
+
+
+28

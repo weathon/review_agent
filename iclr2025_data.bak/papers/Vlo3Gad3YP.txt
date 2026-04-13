@@ -1,0 +1,2500 @@
+# DIFF-BBO: DIFFUSION-BASED INVERSE MODELING
+## FOR BLACK-BOX OPTIMIZATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Black-box optimization (BBO) aims to optimize an objective function by iteratively
+querying a black-box oracle in a sample-efficient way. While prior studies focus
+on forward approaches to learn surrogates for the unknown objective function,
+they struggle with steering clear of out-of-distribution and invalid inputs. Recently,
+inverse modeling approaches that map objective space to the design space with
+conditional diffusion models have demonstrated impressive capability in learning
+the data manifold. They have shown promising performance in offline BBO tasks.
+However, these approaches require a pre-collected dataset. How to design the
+acquisition function for inverse modeling to _actively_ query new data remains an
+open question. In this work, we propose _diffusion-based inverse modeling for black-_
+_box_ _optimization_ (Diff-BBO), an _inverse_ approach leveraging diffusion models
+for online BBO problem. Instead of proposing candidates in the design space,
+Diff-BBO employs a novel acquisition function _Uncertainty-aware Exploration_
+(UaE) to propose objective function values. Subsequently, we employ a conditional
+diffusion model to generate samples based on these proposed values within the
+design space. We demonstrate that using UaE results in optimal optimization
+outcomes, supported by both theoretical and empirical evidence.
+
+
+1 INTRODUCTION
+
+
+Practical problems in science and engineering often involve optimizing a black-box objective function
+that is expensive to evaluate, seen in fields such as neural network architecture design (Zoph & Le,
+2016), robotics (Tesch et al., 2013), and molecular design (Sanchez-Lengeling & Aspuru-Guzik,
+2018). How to achieve a near-optimal solution while minimizing function evaluations is thus a major
+challenge in black-box optimization (BBO). To improve sample efficiency, prior works in BBO
+have largely focused on the online setting where the algorithm can iteratively select candidates in
+the design space and query the black-box function for evaluation (Turner et al., 2021; Zhang et al.,
+2021; Hebbal et al., 2019; Mockus, 1974). Most existing algorithms belong to the class of forward
+methods, including Bayesian optimization (BO) (Kushner, 1964; Mockus, 1974; Wu et al., 2023;
+Frazier, 2018), bandit algorithms (Agrawal & Goyal, 2012; Karbasi et al., 2023), and conditional
+sampling approaches (Brookes et al., 2019; Gruver et al., 2024; Stanton et al., 2022). They build a
+surrogate model to approximate and optimize the black-box function sequentially.
+
+
+However, these approaches may face difficulties in scenarios where valid inputs represent a small
+subspace, such as valid protein sequences or molecular structures. Such optimization problems
+become exceptionally challenging, as the optimizer must navigate and avoid out-of-distribution and
+invalid inputs (Kumar & Levine, 2020). Recently, a novel set of methods, termed _inverse approaches_,
+have been proposed to address this issue. These methods (Kumar & Levine, 2020; Krishnamoorthy
+et al., 2023; Kim et al., 2023) break the traditional paradigm by learning an inverse mapping from the
+objective space back to the input space (a.k.a., the black-box function’s design space). Leveraging
+state-of-the-art generative models, such as diffusion models (Song et al., 2020), these approaches
+effectively capture data distributions in the design space and facilitate optimization within the data
+manifold (Kong et al., 2024). Besides, diffusion models naturally provide uncertainty estimates
+through the probabilistic nature of the diffusion process (Chan et al., 2024; Du & Li, 2023), which can
+be further utilized to design informative exploration strategies to propose better candidate solutions
+for optimization problems. They achieve high performance in _offline_ optimization settings (Kumar &
+Levine, 2020; Lu et al., 2023; Wang et al., 2018), assuming access to a fixed pre-collected dataset.
+
+
+1
+
+
+Note that the offline setting can be restrictive compared with the _online_ setting, which allows for
+continuous learning and improvements from new data samples.
+
+
+Despite the advancements in the offline setting, we cannot directly apply inverse modeling approaches
+to the online setting due to the unresolved issues regarding how to accurately capture the uncertainty
+of the inverse model and design an acquisition function for data-efficient querying. In this paper,
+we propose Diff-BBO, an inverse approach for online black-box optimization (BBO). Diff-BBO
+places a distribution within the design space and represents it with a conditional diffusion model.
+Although diffusion model necessitates a relatively large dataset to effectively learn the data manifold,
+we show that the low-quality pre-collected dataset with average or below-average objective function
+values suffices for the initial training stage of Diff-BBO. Our approach consists of a novel acquisition
+function _Uncertainty-aware Exploration_ (UaE), which leverages the uncertainty of the conditional
+diffusion model to strategically propose the desired objective function values for sampling the design
+space. We summarize our main contributions as follows:
+
+
+    - We present Diff-BBO, an inverse modeling approach for efficient online black-box optimization (BBO) leveraging uncertainty of conditional diffusion models.
+
+
+    - We provide an uncertainty decomposition into epistemic uncertainty and aleatoric uncertainty for conditional diffusion models. We rigorously analyze how uncertainty propagates
+throughout the denoising process of conditional diffusion model.
+
+
+    - We design a novel acquisition function UaE for Diff-BBO. Theoretically, we prove that the
+balance between targeting higher objective values and minimizing the epistemic uncertainty
+lead to optimal optimization outcomes.
+
+
+    - We demonstrate that Diff-BBO achieves state-of-the-art performance with superior sample
+efficiency on Design-Bench and molecular discovery task in the online BBO setting.
+
+
+2 RELATED WORK
+
+
+**Black-box Optimization.** While recent studies aim to solve offline Black-box Optimization (BBO)
+using a pre-collected dataset (Li et al., 2024; Krishnamoorthy et al., 2023; Fu & Levine, 2021)
+without querying the oracle function, prior works in BBO have largely focused on the online setting
+where a model can iteratively query the function during training (Turner et al., 2021; Zhang et al.,
+2021; Hebbal et al., 2019; Mockus, 1974). In both settings, most existing algorithms belong to the
+class of forward methods, including Bayesian optimization (BO) (Kushner, 1964; Mockus, 1974;
+Wu et al., 2023; Frazier, 2018), bandit algorithms (Agrawal & Goyal, 2012; Karbasi et al., 2023),
+and conditional sampling approaches (Brookes et al., 2019; Gruver et al., 2024; Stanton et al., 2022).
+Liu et al. (2024) further integrate LLM capabilities into the BO framework to enable zero-shot
+warmstarting and enhance surrogate modeling and candidate sampling, thereby improving the sample
+efficiency. Forward methods build a surrogate model to approximate and optimize the black-box
+objective function. However, these approaches can struggle with capturing the data manifold within
+the design space and avoiding out-of-distribution and invalid inputs (Kumar & Levine, 2020). Song
+et al. (2022); Zhang et al. (2021) proposed Likelihood-free BO using likelihood-free inference to
+extend BO to a broader class of models and utilities. It directly models the acquisition function
+without separately performing inference with a surrogate model. However, there is a risk where the
+acquisition function is over-confident. Our work builds upon recent progress in inverse approaches
+for offline BBO, which utilize diffusion modeling to better learn the data manifold within the design
+space (Krishnamoorthy et al., 2023; Kong et al., 2024). But we focus solely on online BBO setting by
+introducing a sample-efficient inverse modeling method using conditional diffusion models.
+
+
+**Diffusion Models.** As an emerging class of generative models with strong expressiveness, diffusion
+models (Sohl-Dickstein et al., 2015; Song et al., 2020) have been successfully deployed across various
+domains including image generation (Rombach et al., 2022), reinforcement learning (Wang et al.,
+2022), robotics (Chi et al., 2023), etc. Notably, through the formulation of stochastic differential
+equations (SDEs), (Song et al., 2020) provides a unified continuous-time score-based framework
+for distinctive classes of diffusion models. To steer the generation toward high-quality samples with
+desired properties, it is important to guide the backward data-generation process using task-specific
+information. Hence, different types of guidance are studied in prior works (Bansal et al., 2023;
+Nichol et al., 2021; Zhang et al., 2023), including classifier guidance (Dhariwal & Nichol, 2021)
+where the classifier is trained externally, and classifier-free guidance (Ho & Salimans, 2022), in
+
+
+2
+
+
+which the classifier is implicitly specified. In this work, we employ classifier-free guidance to
+eliminate the requirement of training a separate classifier model, thereby enabling feasible uncertainty
+quantification in conditional diffusion models.
+
+
+**Uncertainty Quantification.** Uncertainty quantification (UQ) often relies on probabilistic modeling, with Bayesian approximation and ensemble learning being two popular types of approaches.
+Bayesian Neural Networks (BNNs) (MacKay, 1992; Neal, 2012; Kendall & Gal, 2017; Zhang et al.,
+2018) employ variational inference (VI) to sample model weights from a tractable distribution and
+estimate uncertainty through sample variance. When training large-scale models, Monte Carlo (MC)
+dropout (Srivastava et al., 2014) offers a cost-effective alternative by approximating BNNs during
+inference (Gal & Ghahramani, 2016). On the other hand, deep ensembles (Lakshminarayanan et al.,
+2017) train multiple NNs with different initial weights to gauge uncertainty via model variance,
+which also faces scalability issues as network size increases. To address this issue, recent efforts
+incorporate ensembling techniques in generative models to separate uncertainty into aleatoric and
+epistemic components (Valdenegro-Toro & Mori, 2022; Ekmekci & Cetin, 2023). To further improve
+the scalability of deep ensembles, (Chan et al., 2024) proposed hyper-diffusion to quantify the
+uncertainty with a single diffusion model. In comparison, we take one step further by utilizing the
+quantified uncertainty of conditional diffusion models to solve the black-box optimization problem as
+a downstream task.
+
+
+3 PRELIMINARIES
+
+
+3.1 PROBLEM FORMULATION
+
+Let _f_ : _X_ _→_ R denote the unknown ground-truth black-box function that evaluates the quality of any
+data point _**x**_, with _X_ _⊆_ R _[d]_ . Our goal is to find the optimal point _**x**_ _[∗]_ that maximizes _f_ :
+
+_**x**_ _[∗]_ _∈_ argmax _**x**_ _∈X_ _f_ ( _**x**_ ) _._ (1)
+
+
+We are interested in the online BBO setting in which _f_ is expensive to evaluate and the number of
+evaluations is limited. In particular, we consider batch online BBO. With a fixed query budget of _K_
+and batch size _N_, we iteratively query _f_ with _N_ new inputs in each batch, and update the surrogate
+model of _f_ based on observed outputs within _K_ iterations. A key concept in online BBO is the
+acquisition function, which guides the selection of new query points by balancing exploration and
+exploitation. This function aims to efficiently identify high-performing inputs, thereby efficiently
+solving the online optimization problem.
+
+
+3.2 CONDITIONAL DIFFUSION MODEL
+
+Diffusion Models (Sohl-Dickstein et al., 2015; Song et al., 2020) are probabilistic generative models
+that learn distributions through an iterative denoising process. These models consist of three components: a forward diffusion process that produces a series of noisy samples by adding Gaussian noise,
+a reverse process to reconstruct the original data samples from the noise, and a sampling procedure to
+generate new data samples from the learned distribution. Let the original sample be **x** 0 and _t_ be the
+diffusion step. For conditional diffusion models, a conditional variable _y_ is added to both the forward
+process as _q_ ( _**x**_ _t|_ _**x**_ _t−_ 1 _, y_ ) and reverse process as _pθ_ ( _**x**_ _t−_ 1 _|_ _**x**_ _t, y_ ) _,_ _∀t ∈_ [ _T_ ].
+
+
+The reverse process begins with the standard Gaussian distribution _p_ ( _**x**_ _T_ ) = _N_ ( **0** _,_ _**I**_ ), and denoises
+_**x**_ _t_ to recover _**x**_ 0 through the following Markov chain with reverse transitions:
+
+_pθ_ ( _**x**_ 0: _T |y_ ) = _p_ ( _**x**_ _T_ )         - _T_ _[|]_ _**[ x]**_ _[t][, y]_ [)] _[,]_ _**[x]**_ _[T]_ _[∼N]_ [(] **[0]** _[,]_ _**[ I]**_ [)] _[,]_
+
+_t_ =1 _[p][θ]_ [ (] _**[x]**_ _[t][−]_ [1]
+
+_pθ_ ( _**x**_ _t−_ 1 _|_ _**x**_ _t, y_ ) = _N_ ( _**x**_ _t−_ 1; _µθ_ ( _**x**_ _t, t, y_ ) _,_ Σ _θ_ ( _**x**_ _t, t, y_ )) _._
+
+
+During training, Σ _θ_ is empirically fixed, and _µθ_ is reparametrized by a trainable denoise function
+_**ϵ**_ _θ_ ( _**x**_ _t, t, y_ ), which is used to estimate the noise vector _ϵ_ that was added to input _**x**_ _t_, and is trained by
+minimizing a reweighted version of the evidence lower bound (ELBO):
+
+
+                          -                           _L_ dif = E _**x**_ 0 _∼q_ ( _**x**_ ) _,y,_ _**ϵ**_ _∼N_ (0 _,_ _**I**_ ) _,t∼U_ (0 _,T_ ) _,_ _**x**_ _t∼q_ ( _**x**_ _t|_ _**x**_ 0 _,y_ ) _w_ ( _t_ ) _∥_ _**ϵ**_ _−_ _**ϵ**_ _θ_ ( _**x**_ _t, t, y_ ) _∥_ [2] 2 _._ (2)
+
+
+Note that the loss in Equation (2) (Ho et al., 2020) for _**ϵ**_ _θ_ is denoising score matching for all
+time step _t_, which estimates the gradient of the log probability density of the noisy data (a.k.a.
+score function): _**ϵ**_ _θ_ ( _**x**_ _t, t, y_ ) _≈−σt∇_ _**x**_ log _p_ ( _**x**_ _|_ _y_ ). We further denote the score function as
+_sθ_ ( _**x**_ _t, y, t_ ) := _−_ _**ϵ**_ _θ_ ( _**x**_ _t, t, y_ ) _/σt_ .
+
+
+3
+
+
+Figure 1: Forward modeling vs inverse modeling for black-box optimization. ( _Top_ ) Forward modeling approach
+using surrogate models (e.g., GPs) for forward modeling and acquisition functions (e.g., UCB, PI, and EI) to
+select **x** . ( _Bottom_ ) Our inverse modeling approach using generative model (e.g., diffusion model) for inverse
+modeling and acquisition function (e.g., UaE) to select _y_ .
+
+
+**Algorithm 1:** Diff-BBO
+**Input:** Initial dataset _D_ = _{_ **x** _, y}_, total number of iterations _K_, candidate feasible range _C_,
+oracle function _f_ ( _·_ ), batch size _N_
+
+**1** **Initialization** : Conditional diffusion model _pθ_ ( **x** _|y_ )
+
+**2** **for** _k_ = 1 _,_ 2 _, · · · K_ **do**
+
+**3** Train the conditional diffusion model with _D_
+
+
+max
+_yk∈_ R
+
+
+**4** Construct a candidate set _Y_ = _{y_ : 0 _≤_ _y_ _≤_ _C}_
+
+
+**5** _yk_ _[∗]_ [= argmax] _y∈Y_ _[α]_ [(] _[y,][ D]_ [)]
+
+
+**6** Generate _{_ **x** _j}_ _[N]_ _j_ =1 [where] **[ x]** _[j]_ _[∼]_ _[p][θ]_ [(] **[x]** _[ |][ y]_ _k_ _[∗][,][ D]_ [)]
+
+
+**7** Query the oracle function _f_ ( _·_ ) with generated samples _{_ **x** _j}_ _[N]_ _j_ =1
+
+**8** _D_ _←D ∪{_ **x** _j, f_ ( **x** _j_ ) _}_ _[N]_ _j_ =1
+
+**9** _ϕk_ _←_ max ( _f_ ( _x_ )) _s.t._ _x ∈D_
+**Output:** Reconstructed _{ϕk}_ _[K]_ _k_ =1
+
+
+4 DIFF-BBO
+
+
+In this section, we present _Diffusion-based Inverse Modeling for Black-Box Optimization_ (Diff-BBO),
+followed by the details of training its conditional diffusion model in the Bayesian setting.
+
+
+4.1 THE DIFF-BBO FRAMEWORK
+
+
+A key distinction of Diff-BBO is to solve the online BBO problem in the inverse modeling setting,
+whereas prior works mainly focus on the forward modeling setting. In the latter, a surrogate model
+_p_ ( _y|_ _**x**_ _, D_ ) for the unknown objective _f_ is learnt by utilizing models such as GPs. These methods
+typically rely on heuristic approaches to generate new candidate solutions, which can lead to out-ofdistribution and invalid designs. In contrast, our approach leverages the power of diffusion models to
+represent _p_ ( _**x**_ _|y, D_ ), allowing it to provide high-quality candidate solutions in the design space and
+to leverage arbitrary function values as conditional information. Besides, diffusion models naturally
+provide uncertainty estimates, which are further utilized in our design of the acquisition function.
+Figure 1 demonstrates a detailed comparison of Diff-BBO with prior forward methods to solve the
+online BBO problem.
+
+
+Given this inverse modeling setting, we model the conditional distribution of _p_ ( _**x**_ _|y, D_ ) with training
+data _D_ . The function value _y_ to condition on is proposed by an acquisition function, which quantifies
+the quality of the generated _**x**_ . As the optimization performance at each iteration matters, the
+optimization objective given in Equation (1) becomes:
+
+
+_K_
+
+- _f_ ( _**x**_ _k_ ) _,_ _**x**_ _k_ _∼_ _pθ_ ( _· | yk, D_ ) _,_ _θ_ _∈_ Θ _._ (3)
+
+
+_k_ =1
+
+
+4
+
+
+Figure 2: Black-box optimization framework using the conditional diffusion model as the inverse model. The
+overall framework includes 4 stages. 1. Train the conditional diffusion model given the current training dataset.
+2. Compute the acquisition function and select the optimal _y_ _[∗]_ to condition on. 3. Generate samples _{_ **x0** _}_
+conditioned on _y_ _[∗]_ . 4. Query the oracle given generated samples _{_ **x0** _}_ and update the training dataset.
+
+
+To solve the above optimization problem, we introduce Diff-BBO in Algorithm 1. At each iteration
+_k_, we train a conditional diffusion model and compute the optimal _yk_ _[∗]_ [with the designed acquisition]
+function. In practice, we select _y_ = _w_ _·_ _ϕk_ from a constructed candidate set _Y_ based on the
+acquisition function scores _α_ ( _y_ ), where the weight _w_ belongs to a set of positive scalars _W_ and _ϕk_
+is the maximum function values being queried in the current training dataset _D_ . Conditioning on
+_yk_ _[∗]_ [, we generate] _[ N]_ [samples] _[ {]_ **[x]** _[j][}][N]_ _j_ =1 [, where] _**[ x]**_ _[j]_ _[∼]_ _[p][θ]_ [(] **[x]** _[|][y]_ _k_ _[∗][,][ D]_ [)][.] [By querying the black-box oracle]
+to evaluate each _**x**_ _j_, we obtain the best possible reconstructed value _ϕk_ for the current iteration,
+and append all queried data pairs _{_ **x** _j, f_ ( **x** _j_ ) _}_ _[N]_ _j_ =1 [to the training dataset] _[ D]_ [.] [The overall Diff-BBO]
+framework with the conditional diffusion model is shown on Figure 2.
+
+
+4.2 CONDITIONAL DIFFUSION MODEL TRAINING IN BAYESIAN SETTING
+
+Instead of estimating a set of deterministic parameters _θ_ from a deterministic neural network, we
+are interested in learning its Bayesian posterior to further understand and improve the model’s
+performance as well as its reliability with uncertainty quantification. In Bayesian settings, we
+consider the model parameters _θ_ _∈_ Θ, where Θ is the parameter space, and maintain its posterior distribution _p_ ( _θ|D_ ), which is learned from training data _D_ . By choosing _θ_ from its
+posterior, essentially we sample a score function _s_ - _θ_ ( _**x**_ _t, y, t_ ) from the probability distribution
+_p_ ( _sθ |_ _**x**_ _t, y, t, D_ ) = _N_ ( _sθ_ ( _**x**_ _t, y, t_ ) _,_ Σ _sθ_ ( _**x**_ _t, y, t_ )), whose expected value is _sθ_ ( _**x**_ _t, y, t_ ), and variance
+is a diagonal covariance matrix Σ _sθ_ ( _**x**_ _t, y, t_ ).
+
+
+Specifically, we adopt classifier-free guidance as in (Ho & Salimans, 2022) to eliminate the requirement of training a separate classifier model. We jointly train an unconditional diffusion model _pθ_ ( _**x**_ )
+parameterized by _ϵθ_ ( **x** _, t, ∅_ ) and a conditional diffusion model _pθ_ ( _**x**_ _|y_ ) parameterized by _ϵθ_ ( **x** _, t, y_ )
+by minimizing the following loss function:
+
+
+                -                 _L_ = E _**x**_ 0 _,y,_ _**ϵ**_ _,t,_ _**x**_ _t,λ_ _w_ ( _t_ ) _∥_ _**ϵ**_ _−_ _**ϵ**_ _θ_ ( _**x**_ _t, t,_ (1 _−_ _λ_ ) _y_ + _λ∅_ ) _∥_ [2] 2 _,_ (4)
+
+
+where _**x**_ 0 _∼_ _q_ ( _**x**_ ) _,_ _**ϵ**_ _∼N_ (0 _,_ _**I**_ ) _, t_ _∼U_ (0 _, T_ ) _,_ _**x**_ _t_ _∼_ _q_ ( _**x**_ _t_ _|_ _**x**_ 0) _, λ_ _∼_ Bernoulli( _p_ uncond), and
+_p_ uncond is the probability of setting _y_ to the unconditional information _∅_ .
+
+
+5 ACQUISITION FUNCTION DESIGN
+
+
+In this section, we propose a novel acquisition function called _Uncertainty-aware Exploration_ (UaE)
+for Diff-BBO. We first analyze the uncertainty of Diff-BBO from both theoretical and practical
+perspectives, decomposing the uncertainty into the aleatoric and epistemic components. Based on the
+uncertainty decomposition, we then propose UaE. We prove that by achieving a balance between
+
+
+5
+
+
+high objective values and low epistemic uncertainty, UaE effectively provides a near-optimal solution
+to the online BBO problem.
+
+
+5.1 UNCERTAINTY QUANTIFICATION ON CONDITIONAL DIFFUSION MODEL
+
+The optimization problem defined in Equation (3) presents a probabilistic formulation of the online
+BBO problem using inverse modeling. Instead of searching for a single optimal point _**x**_, it aims
+to learn a parameterized distribution _pθ_ ( _**x**_ _| y, D_ ) for a given _y_, and sampling from this predictive
+distribution. As such, we resort to the tools of Bayesian inference to solve this task. More specifically,
+given an observed value _y_ of a sample _**x**_, the objective of Bayesian inference is to estimate the
+predictive distribution:
+
+
+                    _p_ ( _**x**_ _| y, D_ ) = E _θ_ [ _pθ_ ( _**x**_ _| y_ )] = _pθ_ ( _**x**_ _| y_ ) _p_ ( _θ_ _| D_ ) _dθ._ (5)
+
+_θ_
+
+
+Its empirical estimation over an ensemble of _M_ conditional diffusion models is computed as:
+
+
+While Theorem 1 establishes the existence of closed-form solutions to quantify uncertainty based
+on the intrinsic properties of diffusion models, performing exact Bayesian inference when training
+diffusion models in practice requires non-trivial efforts and can be computationally demanding.
+Hence, in Section 5.2, we will introduce a practically-efficient approach to quantify and decompose
+the uncertainty based on Equation (5) .
+
+
+5.2 UNCERTAINTY DECOMPOSITION
+
+To systematically analyze the effect of uncertainty in our inverse modeling approach using Diff-BBO,
+we now provide a practical method to perform uncertainty decomposition in terms of the aleatoric
+component and its epistemic counterpart.
+
+
+The _aleatoric uncertainty_ in inverse modeling is captured by the variance of the likelihood _pθ_ ( _**x**_ _| y_ ),
+which is proportional to the variance of the measurement noise during sample generation, irreducible
+and task-inherent. To estimate the aleatoric uncertainty, we can Monte Carlo (MC) sample _**x**_ for _N_
+times from a learned likelihood function _pθ_ ( _**x**_ _| y_ ) for fixed _y, θ_ .
+
+
+6
+
+
+E� _θ_ [ _pθ_ ( _**x**_ _| y_ )] = _M_ [1]
+
+
+_M_
+
+- _pθi_ ( _**x**_ _| y_ ) _._
+
+
+_i_ =1
+
+
+By Equation (5), we recognize that the uncertainty arises from two sources: uncertainty in deciding
+parameter _θ_ from its posterior _p_ ( _θ|D_ ) and uncertainty in generating sample _**x**_ from a fixed diffusion
+model _pθ_ ( _**x**_ _|_ _y_ ) after _θ_ is chosen. Before proceeding with the uncertainty decomposition in DiffBBO, it is crucial to understand how to capture the overall uncertainty when using a diffusion model
+to generate _**x**_ . Essentially, it can be explicitly traced through the denoising process. More specifically,
+Theorem 1 provides analytical solutions to compute the uncertainty on a single denoising process of
+general score-based conditional diffusional models. It offers theoretical insights of how uncertainty
+is being propagated through the reverse denoising process both in discrete time and continuous
+time, which is characterized through the lens of stochastic differential equations (SDEs) of the
+Ornstein–Uhlenbeck (OU) process. Detailed proofs can be found in Appendix A.
+
+
+**Theorem 1.** _(Uncertainty propagation)_ _Let t_ _∈_ [ _T_ ] _be the diffusion step, sθ_ ( _**x**_ _, y, t_ ) _be the score_
+_function_ _of_ _the_ _corresponding_ _diffusion_ _model_ _pθ_ ( _**x**_ _|_ _y_ ) _._ _For_ _a_ _single_ _conditional_ _diffusional_
+_model pθ_ ( _**x**_ _|_ _y_ ) _, the uncertainty in generating a sample_ _**x**_ _can be analytically traced through the_
+_discrete-time reverse denoising process as follows:_
+
+
+Var( _**x**_ _t−_ 1) = [1]
+
+
+[1] [1]
+
+4 [Var(] _**[x]**_ _[t]_ [) + Var(] _[s][θ]_ [(] _**[x]**_ _[, y, t]_ [)) +] 2
+
+
+2 [(][E][ [] _**[x]**_ _[t][ ◦]_ _[s][θ]_ [(] _**[x]**_ _[t][, y, t]_ [)]] _[ −]_ [E][[] _**[x]**_ _[t]_ []] _[ ◦]_ [E][[] _[s][θ]_ [(] _**[x]**_ _[t][, y, t]_ [)]) +] _[ I,]_
+
+
+E( _**x**_ _t−_ 1) = [1]
+
+2 [E][(] _**[x]**_ _[t]_ [) +][ E][(] _[s][θ]_ [(] _**[x]**_ _[, y, t]_ [))] _[,]_
+
+
+_where ◦_ _is the Hadamard product, and I_ _is the identity matrix._ _Similarly, in continuous-time process,_
+_the uncertainty can be captured as follows:_
+
+
+Var( _**x**_ 0) = ( _T_ + 1) _I_ + Var
+
+
+�� _T_
+
+
+_t_ =0
+
+
+- 1 d _t_
+2 _**[x]**_ _[t]_ [ +] _[ s][θ]_ [(] _**[x]**_ _[, y, t]_ [)]
+
+
+_._ (6)
+
+
+In contrast, the _epistemic uncertainty_ is captured through the variance of the posterior distribution
+_p_ ( _θ_ _| D_ ), which is proportional to the variance of the score network, and is reducible with the increase
+of training data. Recall that Θ is the parameter space that contains all possible model parameters _θ_,
+which are used to generate samples from the predictive distribution _p_ ( _**x**_ _| y, D_ ). As the dataset size
+and quality grows, the variance of the posterior distribution shrinks, corresponding to the reduction
+of epistemic uncertainty in learned parameters _θ_ _∼_ _p_ ( _θ_ _| D_ ).
+
+
+To estimate the epistemic uncertainty, we use ensemble techniques. During the inference time, by
+initializing the trained ensemble models with different random seeds, we first sample _M_ model
+parameters _{θi}_ _[M]_ _i_ =1 [to] [simulate] _[M]_ [conditional] [diffusion] [models.] [Then] [we] [generate] _[N]_ [samples]
+_{_ _**x**_ _j}_ _[N]_ _j_ =1 [for each diffusion model with corresponding parameter] _[ θ][i][,]_ _[∀][i][ ∈]_ [[] _[M]_ []][.] [Combining the above]
+gives a systematic way to decompose and estimate the two types of uncertainty in practice, which is
+formally described in Proposition 1.
+
+
+**Proposition 1** (Uncertainty Decomposition) **.** _At each iteration k_ _∈_ [ _K_ ] _, the overall uncertainty in_
+_inverse_ _modeling_ _can_ _be_ _decomposed_ _into_ _its_ _aleatoric_ _and_ _epistemic_ _components,_ _which_ _can_ _be_
+_empirically measured as follows:_
+
+
+                 -                  ∆ _aleatoric_ ( _y, D_ ) = E _θi∼p_ ( _·|D_ ) Var _**x**_ _i,j_ _∼pθi_ ( _·|y_ ) ( _∥_ _**x**_ _i,j∥_ ) _,_ _∀i ∈_ [ _M_ ] _, j_ _∈_ [ _N_ ];
+
+(7)
+
+               -               ∆ _epistemic_ ( _y, D_ ) = Var _θi∼p_ ( _·|D_ ) E _**x**_ _i,j_ _∼pθi_ ( _·|y_ ) [ _∥_ _**x**_ _i,j∥_ ] _,_ _∀i ∈_ [ _M_ ] _, j_ _∈_ [ _N_ ] _._
+
+
+5.3 UNCERTAINTY-AWARE EXPLORATION.
+
+At each iteration _k_ _∈_ [ _K_ ] of Diff-BBO algorithm, the acquisition function _α_ ( _y, D_ ) proposes an
+optimal scalar value _yk_ _[∗]_ [as follows:]
+_yk_ _[∗]_ [= argmax] _y_ _[α]_ [(] _[y,][ D]_ [)] _[,]_
+which is used to generate _**x**_ in the design space using conditional difussion model.
+
+
+Note that to design an effective acquisition function for inverse modeling, we need to achieve a
+balance between high objective values _y_ and low epistemic uncertainty. On the one hand, it is
+advantageous to focus on the regions in _X_ whose corresponding _y_ is of high values. As function
+evaluations are expensive to perform, we prefer to generate samples _**x**_ conditioned on higher _y_, and
+only query the oracle for such promising samples to solve the black-box optimization task. On the
+other hand, we employ the epistemic uncertainty to gauge the error in the trained diffusion model.
+Specifically, it helps reduce the approximation error between _yk_ _[∗]_ [and the reconstructed function value]
+max _j∈_ [ _N_ ] _f_ ( _**x**_ _j_ ), where _f_ ( _·_ ) is the black-box oracle, and _**x**_ _j_ _∼_ _pθ_ ( _·|yk_ _[∗][,][ D]_ [)] _[,][ ∀][j]_ _[∈]_ [[] _[N]_ []][.]
+
+
+We introduce the _Uncertainty-aware Exploration_ (UaE) as our designed acquisition function:
+_α_ ( _y, D_ ) = _y −_ ∆epistemic( _y, D_ ) _,_ (8)
+which utilizes the uncertainty estimation on conditional diffusion model as given in Proposition 1.
+It effectively penalizes the candidates for which the model is less certain. As shown later, by
+balancing the exploration-exploitation trade-off, UaE provides an effective way to solve the online
+BBO problem.
+
+
+5.4 SUB-OPTIMALITY OF UAE
+
+To quantify the quality of generated samples, we theoretically analyze the sub-optimality performance
+gap between _yk_ _[∗]_ [and reconstructed value at each iteration.] [In particular,][ Theorem 2][ and][ Theorem 3]
+demonstrate that such sub-optimality gap can be effectively handled in inverse modeling, with proofs
+deferred to Appendix B. We first show that by using conditional diffusion model, the expected error
+of the sub-optimality performance gap can be effectively bounded under mild assumptions.
+
+
+**Theorem 2.** _At each iteration k_ _∈_ [ _K_ ] _, define the sub-optimality performance gap as_
+
+
+∆( _pθ, yk_ _[∗]_ [) =] _yk∗_ _[−]_ [max] _,_ where _**x**_ _j_ _∼_ _pθ_ ( _·|yk∗_ _[,][ D]_ [)] _[,]_ _[∀][j]_ _[∈]_ [[] _[N]_ []] _[.]_ (9)
+���� _j∈_ [ _N_ ] _[f]_ [(] _**[x]**_ _[j]_ [)] ����
+
+_Assume_ _that_ _there_ _exists_ _some_ _θ_ _[∗]_ _∼_ _p_ ( _θ|D_ ) _that_ _produces_ _a_ _probability_ _distribution_ _pθ∗_ ( _·_ _|_ _D_ )
+_such that it is able to generate a sample_ _**x**_ _[∗]_ _that perfectly reconstructs yk_ _[∗][.]_ _[Suppose function][ f]_ _[is]_
+_L-Lipschitz and each sample is σ-subGaussian, it can be shown that_
+
+
+E [∆( _pθ, yk_ [)]] _[ ≤]_ _[c]_ [1] _[L]_ _dσ,_
+
+_where d is the dimensionality of the design space, c_ 1 _is some universal constant._
+
+
+_√_
+E [∆( _pθ, yk_ _[∗]_ [)]] _[ ≤]_ _[c]_ [1] _[L]_
+
+
+7
+
+
+Theorem 2 suggests that in expectation, the reconstructed function value max _j∈_ [ _N_ ] _f_ ( _**x**_ _j_ ) closely
+approximates the provided conditional information _yk_ _[∗]_ [, implying Diff-BBO is effective in searching]
+for promising samples in the design space by utilizing the information from the objective space.
+Hence, to achieve a robust estimator for the online BBO problem, the primary concern shifts to
+controlling the variance of the sub-optimality gap defined in Equation (9), which is further assessed
+and evaluated in Theorem 3.
+
+
+**Theorem** **3.** _(Sub-optimality_ _bound)_ _At_ _each_ _iteration_ _k_ _∈_ [ _K_ ] _,_ _suppose_ _M_ _model_ _parameters_
+_{θi}_ _[M]_ _i_ =1 _[are generated from the ensemble model for some fixed dataset][ D][.]_ _[Suppose function][ f]_ _[is]_
+_L-Lipschitz, it can be shown that the variance of the sub-optimality performance gap of each model_
+_is bounded by the epidemic uncertainty:_
+
+Var (∆( _pθi, yk_ _[∗]_ [))] _[ ≤]_ _[c]_ [2] _[L]_ [2] _[dσ]_ [2][ +] _[ c]_ [2] _[L]_ [2][∆][epistemic][(] _[y]_ _k_ _[∗][,][ D]_ [)] _[,]_ _[∀][i][ ∈]_ _[M,]_ (10)
+
+
+_where c_ 2 _is some universal positive constant._
+
+
+Theorem 3 shows that the variance of the sub-optimality performance gap can be upper bounded by
+the epistemic uncertainty of diffusion model with some global constants. It implies that decreasing
+the epistemic uncertainty will reduce the variance of the performance gap, leading to more reliable
+optimization performance. Therefore, it is crucial to achieve an effective balance between maximizing
+the objective value and minimizing epistemic uncertainty when designing the acquisition function.
+By dosing so, UaE not only explores the objective space with high-value solutions, but also ensures
+stability and consistency in the optimization process.
+
+
+Finally, we prove in Theorem 4 that by adopting UaE for inverse modeling to guide the selection of
+generated samples for solving BBO problems, we can obtain a near-optimal solution for the online
+optimization problem defined in Equation (3). The proof is available in Appendix C.
+
+
+**Theorem 4.** _Let Y_ _be the constructed candidate set at each iteration k_ _∈_ [ _K_ ] _in Algorithm 1._ _By_
+_adopting_ _UaE_ _as_ _the_ _acquisition_ _function_ _to_ _guide_ _the_ _sample_ _generation_ _process_ _in_ _conditional_
+_diffusion model, Diff-BBO (Algorithm 1) achieves a near-optimal solution for the online BBO problem_
+_defined in Equation_ (3) _:_
+
+
+As a result, equipped with the novel design of UaE, Diff-BBO is a theoretically sound approach
+utilizing inverse modeling to effectievely solve the online BBO problem.
+
+
+6 EXPERIMENTS
+
+
+To validate the efficacy of Diff-BBO, we conduct experiments on six online black-box optimization
+tasks for both continuous and discrete optimization settings. Ablation studies are performed to
+verify the effectiveness of the proposed acquisition function, assess the robustness of our model in
+relation to the batch size, and evaluate the computational efficiency of our model. More details of the
+experimental setups are provided in Appendix D.
+
+
+6.1 DATASET
+
+
+We restructured 5 high-dimensional real-world tasks from Design-Bench to facilitate online black-box
+optimization. We test on 3 continuous and 2 discrete tasks. In **D’Kitty** and **Ant** Morphology, the
+goal is to optimize for the morphology of robots. In **Superconductor**, the aim is to optimize for
+finding a superconducting material with a high critical temperature. **TFBind8** and **TFBind10** are
+discrete tasks where the goal is to find a DNA sequence that has a maximum affinity to bind with a
+specified transcription factor. We also include a **Molecular Discovery** task to optimize a compound’s
+activity against a biological target with therapeutic value. For each task, we arrange the offline dataset
+from (Krishnamoorthy et al., 2023) in ascending order based on objective values and select data from
+the 25th to the 50th percentile as the initial training dataset. We prioritize data with lower objective
+scores to better observe performance differences across each baseline. Each optimization iteration
+is allocated 100 queries to the oracle function (batch size _N_ = 100), with a total of 16 iterations
+conducted. More details of the dataset are provided in Appendix D.1.
+
+
+8
+
+
+_K_
+
+- _α_ ( _yk, D_ ) _._
+
+
+_k_ =1
+
+
+max
+_yk∈_ R
+
+
+_K_
+
+- _f_ ( _**x**_ _k_ ) _,_ _**x**_ _k_ _∼_ _pθ_ ( _· | yk, D_ ) _,_ _θ_ _∈_ Θ _⇒_ max
+
+_yk∈Y_
+_k_ =1
+
+
+|2 4 6 8 10 12 TFBind8|14 16 Random|
+|---|---|
+||GP (EI)<br>GP (UCB)<br>GP (JES)<br>Evolution<br>LFBO (EI)<br>LFBO (PI)<br>CbAS<br>TuRBO<br>LOL-BO<br>Diff-BBO|
+|2<br>4<br>6<br>8<br>10<br>12<br>14<br>16<br>ure 3: Comparison of Diff-BBO <br>lecular Discovery task. All plots s<br>|2<br>4<br>6<br>8<br>10<br>12<br>14<br>16<br>ure 3: Comparison of Diff-BBO <br>lecular Discovery task. All plots s<br>|
+
+
+Figure 4: Impact of acquisition function design for black-box optimization on both discrete task ( **TFBind10** )
+and continous task ( **D’Kitty** ). Comparison of Diff-BBO against fixed-condition approaches using weights
+_w_ _∈{_ 0 _._ 6 _,_ 0 _._ 8 _,_ 1 _._ 0 _,_ 1 _._ 2 _,_ 1 _._ 4 _,_ 2 _._ 0 _,_ 2 _._ 5 _,_ 3 _._ 0 _}_ . Results averaged across three random runs.
+
+
+9
+
+
+225
+
+200
+
+175
+
+150
+
+125
+
+100
+
+75
+
+
+0.9
+
+
+0.8
+
+
+0.7
+
+
+0.6
+
+
+100
+
+
+80
+
+
+60
+
+
+40
+
+
+0.95
+
+0.90
+
+0.85
+
+0.80
+
+0.75
+
+0.70
+
+0.65
+
+
+500
+
+
+400
+
+
+300
+
+
+200
+
+
+100
+
+
+0
+
+
+1.8
+
+1.6
+
+1.4
+
+1.2
+
+1.0
+
+0.8
+
+0.6
+
+
+0.4
+
+
+0.60
+
+
+0.5
+
+
+queries to the oracle.
+
+
+6.2 BASELINES
+
+
+We compare Diff-BBO with 10 baselines, including Bayesian optimization (BO), trust region BO
+(TuRBO) (Eriksson et al., 2019), local latent space Bayesian optimization (LOL-BO) (Maus et al.,
+2022), likelihood-free BO (LFBO) (Song et al., 2022), evolutionary algorithms (Brindle, 1980;
+Real et al., 2019), conditioning by adaptive sampling (CbAS) (Brookes et al., 2019), and random
+sampling. For BO approaches, we include Gaussian Processes (GP) with Monte Carlo (MC)-based
+batch expected improvement (EI), MC-based batch upper confidence bound (UCB) (Wilson et al.,
+2017), and joint entropy search (JES (Hvarfner et al., 2022) as the acquisition functions. For LFBO,
+we use EI and probability of improvement (PI) as the acquisition functions.
+
+
+6.3 RESULTS
+
+
+Figure 3 illustrates the performance across six datasets for all baselines and our proposed algorithm.
+Notably, Diff-BBO consistently outperforms other baselines in both discrete and continuous settings,
+with the sole exception of the TF-BIND-8 task. Specifically, in the Ant and Dkitty tasks, Diff-BBO
+demonstrates a significant lead over all baseline methods, starting from the very first iteration of
+the online optimization process. This remarkable performance can be attributed to Diff-BBO’s
+diffusion model-based inverse modeling approach, which effectively learns the data manifold in the
+design space from the initial dataset, even when the initial dataset lacks data with high objective
+function values. In contrast, the forward approach employed by BO and LFBO, which relies solely on
+optimizing the trained surrogate model, is more prone to converging on suboptimal solutions.
+
+
+Number of Iterations
+
+
+1.6
+
+1.4
+
+1.2
+
+1.0
+
+0.8
+
+0.6
+
+
+Number of Iterations
+
+
+240
+
+
+220
+
+
+200
+
+
+180
+
+
+160
+
+
+140
+
+
+|Task|GP (EI) GP (UCB) Evolution LFBO (EI) LFBO (PI) CbAS TuRBO Diff-BBO|
+|---|---|
+|TFBind8<br>Molecular Discovery|112_._92<br>113_._81<br>0_._0021<br>0_._59<br>1_._44<br>0_._075<br>67_._23<br>136_._29<br>53_._14<br>53_._82<br>0_._0024<br>1_._93<br>1_._12<br>0_._023<br>76_._84<br>69_._44|
+
+
+Table 1: Model training and acquisition function computation time in seconds.
+
+
+6.4 ABLATION STUDY
+
+
+In this section, we conduct ablation studies to investigate the impact of our designed acquisition
+function, UaE. We compare Diff-BBO with the fixed-condition approach. Instead of using UaE
+to dynamically determine which _y_ = _w · ϕk_ to condition on, the fixed condition approach always
+generates new samples conditioned on _w · ϕk_ with a fixed weight _w_ . As shown in Figure 4, Diff-BBO
+consistently outperforms the fixed condition approach. Furthermore, it can be found that simply
+conditioning on higher _y_ by increasing _w_ does not enhance optimization performance. This highlights
+the effectiveness of UaE in identifying the optimal _y_ for conditioning by balancing between targeting
+higher objective values and minimizing the epistemic uncertainty.
+
+
+Figure 5: Ablation study to evaluate the effect of
+
+Finally, we analyze the computational time for model batch size on the superconductor task. The mean
+training and acquisition function computation for and standard deviation across three random seeds
+Diff-BBO and existing baselines, as shown in Ta- are plotted. Diff-BBO shows robust performances
+ble 1. The results indicate that the computational across different batch size given the same total
+time for Diff-BBO is comparable to BO approaches number of evaluations.
+using GP as the surrogate model, typically ranging
+from 1 to 2 minutes per iteration for model training
+and acquisition function computation. Given the context of online BBO, where querying the oracle to
+generate new data is the most expensive or time-consuming part, a few minutes spent on training and
+acquisition function computation should not be considered a significant computational burden.
+
+
+7 CONCLUSION, LIMITATION, AND FUTURE WORK
+
+
+In this paper, we introduced Diff-BBO, a novel inverse modeling approach for black-box optimization
+that leverages the uncertainty of conditional diffusion models. By utilizing the novel acquisition
+function UaE, Diff-BBO strategically proposes objective function values to improve sample efficiency
+in online settings. Our empirical evaluations on the Design-Bench benchmark and molecular design
+experiments demonstrate that Diff-BBO achieves state-of-the-art performance, establishing its potential as a robust tool for efficient and effective online black-box optimization. Theoretically, we prove
+that using UaE leads to optimal optimization solutions. We conclude by discussing the limitations and
+potential extensions of Diff-BBO: (i) _acquisition function improvement:_ Our current implementation
+for the acquisition function, UaE, requires presetting the candidate sets. This necessitates additional hyperparameter tuning. (ii) _BBO extensions:_ Diff-BBO can be extended to various Bayesian
+optimization settings, including multi-objective and multi-fidelity Bayesian optimization.
+
+
+REPRODUCIBILITY STATEMENT
+
+
+The experimental details can be found in Appendix D. We provide the code in the supplementary
+materials for reproducing the results.
+
+
+10
+
+
+Furthermore, we evaluate the effect of batch size,
+aka the number of queries per iteration on Diff-BBO
+on the Superconductor task. As shown in Figure 5,
+we compare the objective function score over number of function evaluations. We can see the performance of our approach remains similar when the
+batch size becomes larger, suggesting remarkable
+robustness across different batch sizes. Hence, DiffBBO is a highly-scalable inverse modeling approach
+that can efficiently leverage parallelism to handle
+larger computational loads without compromising
+performance.
+
+
+110
+
+
+100
+
+
+90
+
+
+80
+
+
+70
+
+
+60
+
+
+Number of Evaluations
+
+
+REFERENCES
+
+
+Shipra Agrawal and Navin Goyal. Analysis of thompson sampling for the multi-armed bandit problem.
+In _Conference on learning theory_, pp. 39–1. JMLR Workshop and Conference Proceedings, 2012.
+
+
+Arpit Bansal, Hong-Min Chu, Avi Schwarzschild, Soumyadip Sengupta, Micah Goldblum, Jonas
+Geiping, and Tom Goldstein. Universal guidance for diffusion models. In _Proceedings of the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 843–852, 2023.
+
+
+Anne Brindle. Genetic algorithms for function optimization. 1980.
+
+
+David Brookes, Hahnbeom Park, and Jennifer Listgarten. Conditioning by adaptive sampling for
+robust design. In _International conference on machine learning_, pp. 773–782. PMLR, 2019.
+
+
+Matthew A Chan, Maria J Molina, and Christopher A Metzler. Hyper-diffusion: Estimating epistemic
+and aleatoric uncertainty with a single model. _arXiv preprint arXiv:2402.03478_, 2024.
+
+
+Cheng Chi, Siyuan Feng, Yilun Du, Zhenjia Xu, Eric Cousineau, Benjamin Burchfiel, and Shuran Song. Diffusion policy: Visuomotor policy learning via action diffusion. _arXiv_ _preprint_
+_arXiv:2303.04137_, 2023.
+
+
+Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. _Advances_
+_in neural information processing systems_, 34:8780–8794, 2021.
+
+
+Zhekai Du and Jingjing Li. Diffusion-based probabilistic uncertainty estimation for active domain
+adaptation. _Advances in Neural Information Processing Systems_, 36:17129–17155, 2023.
+
+
+Peter Eckmann, Kunyang Sun, Bo Zhao, Mudong Feng, Michael K Gilson, and Rose Yu. Limo:
+Latent inceptionism for targeted molecule generation. _arXiv preprint arXiv:2206.09010_, 2022.
+
+
+Canberk Ekmekci and Mujdat Cetin. Quantifying generative model uncertainty in posterior sampling
+methods for computational imaging. In _NeurIPS 2023 Workshop on Deep Learning and Inverse_
+_Problems_, 2023.
+
+
+David Eriksson, Michael Pearce, Jacob Gardner, Ryan D Turner, and Matthias Poloczek. Scalable
+global optimization via local bayesian optimization. _Advances in neural information processing_
+_systems_, 32, 2019.
+
+
+Peter I Frazier. A tutorial on bayesian optimization. _arXiv preprint arXiv:1807.02811_, 2018.
+
+
+Justin Fu and Sergey Levine. Offline model-based optimization via normalized maximum likelihood
+estimation. _arXiv preprint arXiv:2102.07970_, 2021.
+
+
+Yarin Gal and Zoubin Ghahramani. Dropout as a bayesian approximation: Representing model
+uncertainty in deep learning. In _international conference on machine learning_, pp. 1050–1059.
+PMLR, 2016.
+
+
+Nate Gruver, Samuel Stanton, Nathan Frey, Tim GJ Rudner, Isidro Hotzel, Julien Lafrance-Vanasse,
+Arvind Rajpal, Kyunghyun Cho, and Andrew G Wilson. Protein design with guided discrete
+diffusion. _Advances in neural information processing systems_, 36, 2024.
+
+
+Ali Hebbal, Loic Brevault, Mathieu Balesdent, El-Ghazali Talbi, and Nouredine Melab. Bayesian
+optimization using deep gaussian processes. _arXiv preprint arXiv:1905.03350_, 2019.
+
+
+Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. _arXiv preprint arXiv:2207.12598_,
+2022.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Carl Hvarfner, Frank Hutter, and Luigi Nardi. Joint entropy search for maximally-informed bayesian
+optimization. _Advances in Neural Information Processing Systems_, 35:11494–11506, 2022.
+
+
+Woosung Jeon and Dongsup Kim. Autonomous molecule generation using reinforcement learning
+and docking to develop potential novel inhibitors. _Scientific reports_, 10(1):22104, 2020.
+
+
+11
+
+
+Amin Karbasi, Nikki Lijing Kuang, Yian Ma, and Siddharth Mitra. Langevin thompson sampling
+with logarithmic communication: bandits and reinforcement learning. In _International Conference_
+_on Machine Learning_, pp. 15828–15860. PMLR, 2023.
+
+
+Alex Kendall and Yarin Gal. What uncertainties do we need in bayesian deep learning for computer
+vision? _Advances in neural information processing systems_, 30, 2017.
+
+
+Minsu Kim, Federico Berto, Sungsoo Ahn, and Jinkyoo Park. Bootstrapped training of scoreconditioned generator for offline design of biological sequences. _Advances in Neural Information_
+_Processing Systems_, 37, 2023.
+
+
+Lingkai Kong, Yuanqi Du, Wenhao Mu, Kirill Neklyudov, Valentin De Bortol, Haorui Wang, Dongxia
+Wu, Aaron Ferber, Yi-An Ma, Carla P Gomes, et al. Diffusion models as constrained samplers for
+optimization with unknown constraints. _arXiv preprint arXiv:2402.18012_, 2024.
+
+
+Siddarth Krishnamoorthy, Satvik Mehul Mashkaria, and Aditya Grover. Diffusion models for blackbox optimization. In _International Conference on Machine Learning_, pp. 17842–17857. PMLR,
+2023.
+
+
+Aviral Kumar and Sergey Levine. Model inversion networks for model-based optimization. _Advances_
+_in neural information processing systems_, 33:5126–5137, 2020.
+
+
+Harold J Kushner. A new method of locating the maximum point of an arbitrary multipeak curve in
+the presence of noise. 1964.
+
+
+Balaji Lakshminarayanan, Alexander Pritzel, and Charles Blundell. Simple and scalable predictive
+uncertainty estimation using deep ensembles. _Advances in neural information processing systems_,
+30, 2017.
+
+
+Seul Lee, Jaehyeong Jo, and Sung Ju Hwang. Exploring chemical space with score-based out-ofdistribution generation. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 18872–18892.
+PMLR, 2023.
+
+
+Zihao Li, Hui Yuan, Kaixuan Huang, Chengzhuo Ni, Yinyu Ye, Minshuo Chen, and Mengdi Wang.
+Diffusion model for data-driven black-box optimization. _arXiv preprint arXiv:2403.13219_, 2024.
+
+
+Tennison Liu, Nicolás Astorga, Nabeel Seedat, and Mihaela van der Schaar. Large language models
+to enhance bayesian optimization. _arXiv preprint arXiv:2402.03921_, 2024.
+
+
+Huakang Lu, Hong Qian, Yupeng Wu, Ziqi Liu, Ya-Lin Zhang, Aimin Zhou, and Yang Yu.
+Degradation-resistant offline optimization via accumulative risk control. In _ECAI_ _2023_, pp.
+1609–1616. IOS Press, 2023.
+
+
+David JC MacKay. A practical bayesian framework for backpropagation networks. _Neural computa-_
+_tion_, 4(3):448–472, 1992.
+
+
+Natalie Maus, Haydn Jones, Juston Moore, Matt J Kusner, John Bradshaw, and Jacob Gardner.
+Local latent space bayesian optimization over structured inputs. _Advances in neural information_
+_processing systems_, 35:34505–34518, 2022.
+
+
+Jonas Mockus. On bayesian methods for seeking the extremum. In _Proceedings of the IFIP Technical_
+_Conference_, pp. 400–404, 1974.
+
+
+Garrett M Morris, Ruth Huey, William Lindstrom, Michel F Sanner, Richard K Belew, David S
+Goodsell, and Arthur J Olson. Autodock4 and autodocktools4: Automated docking with selective
+receptor flexibility. _Journal of computational chemistry_, 30(16):2785–2791, 2009.
+
+
+Radford M Neal. _Bayesian learning for neural networks_, volume 118. Springer Science & Business
+Media, 2012.
+
+
+Alex Nichol, Prafulla Dhariwal, Aditya Ramesh, Pranav Shyam, Pamela Mishkin, Bob McGrew,
+Ilya Sutskever, and Mark Chen. Glide: Towards photorealistic image generation and editing with
+text-guided diffusion models. _arXiv preprint arXiv:2112.10741_, 2021.
+
+
+12
+
+
+Juhwan Noh, Dae-Woong Jeong, Kiyoung Kim, Sehui Han, Moontae Lee, Honglak Lee, and Yousung
+Jung. Path-aware and structure-preserving generation of synthetically accessible molecules. In
+_International Conference on Machine Learning_, pp. 16952–16968. PMLR, 2022.
+
+
+Esteban Real, Alok Aggarwal, Yanping Huang, and Quoc V Le. Regularized evolution for image
+classifier architecture search. In _Proceedings_ _of_ _the_ _aaai_ _conference_ _on_ _artificial_ _intelligence_,
+volume 33, pp. 4780–4789, 2019.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Björn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+Benjamin Sanchez-Lengeling and Alán Aspuru-Guzik. Inverse molecular design using machine
+learning: Generative models for matter engineering. _Science_, 361(6400):360–365, 2018.
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _International conference on machine learning_,
+pp. 2256–2265. PMLR, 2015.
+
+
+Jiaming Song, Lantao Yu, Willie Neiswanger, and Stefano Ermon. A general recipe for likelihoodfree bayesian optimization. In _International Conference on Machine Learning_, pp. 20384–20404.
+PMLR, 2022.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. _arXiv preprint_
+_arXiv:2011.13456_, 2020.
+
+
+Nitish Srivastava, Geoffrey Hinton, Alex Krizhevsky, Ilya Sutskever, and Ruslan Salakhutdinov.
+Dropout: a simple way to prevent neural networks from overfitting. _The_ _journal_ _of_ _machine_
+_learning research_, 15(1):1929–1958, 2014.
+
+
+Samuel Stanton, Wesley Maddox, Nate Gruver, Phillip Maffettone, Emily Delaney, Peyton Greenside,
+and Andrew Gordon Wilson. Accelerating bayesian optimization for biological sequence design
+with denoising autoencoders. In _International Conference on Machine Learning_, pp. 20459–20478.
+PMLR, 2022.
+
+
+Matthew Tesch, Jeff Schneider, and Howie Choset. Expensive multiobjective optimization for
+robotics. In _2013 ieee international conference on robotics and automation_, pp. 973–980. IEEE,
+2013.
+
+
+Emanuel Todorov, Tom Erez, and Yuval Tassa. Mujoco: A physics engine for model-based control.
+In _2012_ _IEEE/RSJ_ _international_ _conference_ _on_ _intelligent_ _robots_ _and_ _systems_, pp. 5026–5033.
+IEEE, 2012.
+
+
+Brandon Trabucco, Xinyang Geng, Aviral Kumar, and Sergey Levine. Design-bench: Benchmarks for
+data-driven offline model-based optimization. In _International Conference on Machine Learning_,
+pp. 21658–21676. PMLR, 2022.
+
+
+Ryan Turner, David Eriksson, Michael McCourt, Juha Kiili, Eero Laaksonen, Zhen Xu, and Isabelle
+Guyon. Bayesian optimization is superior to random search for machine learning hyperparameter
+tuning: Analysis of the black-box optimization challenge 2020. In _NeurIPS 2020 Competition and_
+_Demonstration Track_, pp. 3–26. PMLR, 2021.
+
+
+Matias Valdenegro-Toro and Daniel Saromo Mori. A deeper look into aleatoric and epistemic
+uncertainty disentanglement. In _2022 IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition Workshops (CVPRW)_, pp. 1508–1516. IEEE, 2022.
+
+
+Martin J Wainwright. _High-dimensional statistics:_ _A non-asymptotic viewpoint_, volume 48. Cambridge university press, 2019.
+
+
+Handing Wang, Yaochu Jin, Chaoli Sun, and John Doherty. Offline data-driven evolutionary optimization using selective surrogate ensembles. _IEEE Transactions on Evolutionary Computation_,
+23(2):203–216, 2018.
+
+
+13
+
+
+Zhendong Wang, Jonathan J Hunt, and Mingyuan Zhou. Diffusion policies as an expressive policy
+class for offline reinforcement learning. _arXiv preprint arXiv:2208.06193_, 2022.
+
+
+James T Wilson, Riccardo Moriconi, Frank Hutter, and Marc Peter Deisenroth. The reparameterization
+trick for acquisition functions. _arXiv preprint arXiv:1712.00424_, 2017.
+
+
+Dongxia Wu, Ruijia Niu, Matteo Chinazzi, Yian Ma, and Rose Yu. Disentangled multi-fidelity deep
+bayesian active learning. In _International Conference on Machine Learning_, pp. 37624–37634.
+PMLR, 2023.
+
+
+Cheng Zhang, Judith Bütepage, Hedvig Kjellström, and Stephan Mandt. Advances in variational
+inference. _IEEE transactions on pattern analysis and machine intelligence_, 41(8):2008–2026,
+2018.
+
+
+Dinghuai Zhang, Jie Fu, Yoshua Bengio, and Aaron Courville. Unifying likelihood-free inference
+with black-box optimization and beyond. _arXiv preprint arXiv:2110.03372_, 2021.
+
+
+Lvmin Zhang, Anyi Rao, and Maneesh Agrawala. Adding conditional control to text-to-image
+diffusion models. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_,
+pp. 3836–3847, 2023.
+
+
+Barret Zoph and Quoc V Le. Neural architecture search with reinforcement learning. _arXiv preprint_
+_arXiv:1611.01578_, 2016.
+
+
+14
+
+
+## **Appendices**
+
+
+A UNCERTAINTY QUANTIFICATION THROUGH SDES
+
+
+A.1 CONDITIONAL DIFFUSION SDE
+
+It can be shown that the conditional diffusion model can be represented by the Ornstein–Uhlenbeck
+(OU) process, which is a time-homogeneous continuous-time Markov process:
+
+
+d _**x**_ _t_ = _−γ_ _**x**_ _t_ d _t_ + _σ_ d _**w**_ _t,_ (11)
+
+where _γ_ is the relaxation rate, _σ_ is the strength of fluctuation, and _**w**_ _t_ is the standard Wiener proce _√_ ss
+(a.k.a., Brownian motion). Both _γ_ and _σ_ are time-invariant. In particular, setting _γ_ = 1 and _σ_ = 2,
+
+we are able to establish that Denoising Diffusion Probabilistic Model (DDPM) is equivalent to OU
+process observed at discrete times. In the remaining text, we consider SDEs for general score-based
+diffusion models. The SDE of the forward process in conditional diffusion model can then be written
+as:
+d _**x**_ _t_ = _−_ [1] ~~�~~ _g_ ( _t_ ) d _**w**_ _t,_ _**x**_ 0 _∼_ _q_ ( _**x**_ _|y_ ) (12)
+
+2 _[g]_ [(] _[t]_ [)] _**[x]**_ _[t]_ [ d] _[t]_ [ +]
+
+where _g_ ( _t_ ) is a nondecreasing weighting function that controls the speed of diffusion in the forward
+process and _g_ ( _t_ ) _>_ 0. For simplicity of analysis, we fix _g_ ( _t_ ) = 1 for all _t ∈_ [ _T_ ].
+
+
+The generation process of a conditional score-based diffusion model can be viewed as a particular
+discretization of the following reverse-time SDE:
+
+
+       - 1        d _**x**_ _t_ = d _t_ + d _**w**_ _t,_ _**x**_ 0 _∼_ _p_ ( _**x**_ _T |y_ ) _._ (13)
+2 _**[x]**_ _[t][ −∇]_ _**[x]**_ _[t]_ [ log] _[ p]_ [(] _**[x]**_ _[t][|][y]_ [)]
+
+In practice, the unknown ground truth conditional score _∇_ _**x**_ _t_ log _p_ ( _**x**_ _t|y_ ) needs to be estimated with
+score networks. Let such estimator denoted by _sθ_ ( _**x**_ _, y, t_ ), then the conditional sample generation is
+to simulate the following backward SDE:
+
+
+        - 1         d _**x**_ _t_ = d _t_ + d _**w**_ _t,_ _**x**_ 0 _∼N_ ( **0** _,_ _**I**_ ) _._ (14)
+2 _**[x]**_ _[t][ −]_ _[s][θ]_ [(] _**[x]**_ _[, y, t]_ [)]
+
+
+In Bayesian settings, we sample a score function _s_ - _θ_ ( _**x**_ _t, y, t_ ) from the probability distribution
+_p_ ( _sθ|_ _**x**_ _t, y, t, D_ ) = _N_ ( _sθ_ ( _**x**_ _t, y, t_ ) _,_ Σ _θ_ ( _**x**_ _t, y, t_ )) with expected value _sθ_ ( _**x**_ _t, y, t_ ), and diagonal covariance Σ _θ_ ( _**x**_ _t, y, t_ ).
+
+
+A.2 ESTIMATION OF UNCERTAINTY
+
+In this section, we quantify the uncertainty of a single conditional diffusion model in both discretetime and continuous-time reverse process for Theorem 1.
+
+
+A.2.1 UNCERTAINTY IN DISCRETE-TIME REVERSE PROCESS
+We first proof the first statement of Theorem 1. We consider the Euler discretization of Equation (14),
+which leads to:
+_**x**_ _t−_ 1 = [1] _[ϵ][ ∼N]_ [(] **[0]** _[,]_ _**[ I]**_ [)] _[.]_ (15)
+
+2 _**[x]**_ _[t]_ [ +] _[ s][θ]_ [(] _**[x]**_ _[, y, t]_ [) +] _**[ ϵ]**_ _[,]_
+
+We thus have,
+
+
+Here Cov ( _**x**_ _t, sθ_ ( _**x**_ _, y, t_ )) is the element-vise covariance between _**x**_ _t_ and _sθ_ ( _**x**_ _, y, t_ ). Note that we
+only need to consider the correlation between _**x**_ _t_ and _sθ_ ( _**x**_ _, y, t_ ) at the same time step. As a result, to
+estimate Cov ( _**x**_ _t, sθ_ ( _**x**_ _, y, t_ )), we have,
+
+
+                 Cov ( _**x**_ _t, sθ_ ( _**x**_ _, y, t_ )) = E ( _**x**_ _t −_ E[ _**x**_ _t_ ]) ( _sθ_ ( _**x**_ _, y, t_ ) _−_ E[ _sθ_ ( _**x**_ _, y, t_ )]) [T][�]
+
+
+= E [ _**x**_ _t ◦_ _sθ_ ( _**x**_ _, y, t_ )] _−_ E[ _**x**_ _t_ ] _◦_ E[ _sθ_ ( _**x**_ _, y, t_ )]
+= E _**x**_ _t_ [ _**x**_ _t ◦_ _sθ_ ( _**x**_ _, y, t_ )] _−_ E[ _**x**_ _t_ ] _◦_ E _**x**_ _t_ [ _sθ_ ( _**x**_ _t, y, t_ )] (18)
+
+where _◦_ is the Hadamard product and the third equality is by tower’s rule. Substituting Equation (18)
+back to Equation (16) completes the proof of the first part of Theorem 1.
+
+
+15
+
+
+Var( _**x**_ _t−_ 1) = [1]
+
+
+[1] [1]
+
+4 [Var(] _**[x]**_ _[t]_ [) + Var(] _[s][θ]_ [(] _**[x]**_ _[, y, t]_ [)) +] 2
+
+
+(16)
+2 [Cov (] _**[x]**_ _[t][, s][θ]_ [(] _**[x]**_ _[, y, t]_ [)) +] _[ I.]_
+
+
+E( _**x**_ _t−_ 1) = [1] (17)
+
+2 [E][(] _**[x]**_ _[t]_ [) +][ E][(] _[s][θ]_ [(] _**[x]**_ _[, y, t]_ [))] _[.]_
+
+
+A.2.2 UNCERTAINTY IN CONTINUOUS-TIME REVERSE PROCESS
+We now proof the second statement of Theorem 1. To perform the uncertainty quantification for the
+continuous-time reverse process, we posit the following assumption.
+
+
+**Assumption 1.** _For valid t ∈_ [0 _, T_ ] _, the generating process_ _**x**_ _t in Equation_ (13) _is integrable and has_
+_finite second-order moments._
+
+
+With Assumption 1, integrating Equation (13) with respect to _t_ yields:
+
+
+Combining all the above results together completes the proof of the second statement of Theorem 1.
+
+
+B ANALYSIS OF SUB-OPTIMALITY FOR BLACK-BOX FUNCTION
+
+
+In this section, we study the behavior of the sub-optimality gap of our algorithm by proving Theorem 2
+and Theorem 3. We first introduce the notation that is used throughout this section and the next
+section. Then we present the main lemmas along with their proofs. Finally, we combine the lemmas
+to prove our main results.
+
+At each iteration _k_ _∈_ [ _K_ ], let _yk_ _[∗]_ [be the target function value on which the diffusion model conditions,]
+and _pθ_ be the model learned by the conditional diffusion model. We define the performance metric
+for online BBO problem, which measures the sub-optimal performance gap between the function
+value achieved by sample _**x**_ _∼_ _pθ_ ( _·|yk_ _[∗][,][ D]_ [)][ and the target function value] _[ y]_ _k_ _[∗]_ [.] [Its formal definition is]
+described as follows:
+
+
+∆( _pθ, yk_ _[∗]_ [) =] _yk∗_ _[−]_ [max] _,_ where _**x**_ _j_ _∼_ _pθ_ ( _·|yk∗_ _[,][ D]_ [)] _[,]_ _[∀][j]_ _[∈]_ [[] _[N]_ []] _[.]_ (21)
+���� _j∈_ [ _N_ ] _[f]_ [(] _**[x]**_ _[j]_ [)] ����
+
+
+For simplicity of analysis, we consider _N_ = 1, and let the generated sample at the _k_ -th iteration be
+_**x**_ _k_ in the remaining text. We remark that all proofs go through smoothly for general _N_ with more
+nuanced notations, and do not affect the conclusions being drawn. To proceed with the proofs in this
+section, we first state the formal assumptions for the black-box function _f_ ( _·_ ) and sample _**x**_ .
+
+
+16
+
+
+     - _T_
+_**x**_ 0 = _**x**_ _T_ _−_
+
+_t_ =0
+
+
+- 1 - - _T_
+d _t_ + d _**w**_ _t._ (19)
+2 _**[x]**_ _[t]_ [ +] _[ ∇]_ _**[x]**_ _[t]_ [ log] _[ p]_ [(] _**[x]**_ _[t][|][y]_ [)] _t_ =0
+
+
+Applying the variance operator to both sides of
+
+
+�� _T_
+
+Var( _**x**_ 0) = Var( _**x**_ _T_ ) + Var
+
+_t_ =0
+
+
+- 1 - d _t_
+2 _**[x]**_ _[t]_ [ +] _[ ∇]_ _**[x]**_ _[t]_ [ log] _[ p]_ [(] _**[x]**_ _[t][|][y]_ [)]
+
+
++ Var
+
+
+�� _T_ 
+d _**w**_ _t_
+_t_ =0
+
+
+
+
+�� _T_
+
+
+�� _T_
+
+d _**w**_ _t_
+_t_ =0
+
+
+��2
+
+
+
+
+
+�2 []
+
+ _−_
+
+
+E
+
+
+= _I_ + Var
+
+
+�� _T_
+
+
+_t_ =0
+
+
+- 1 d _t_
+2 _**[x]**_ _[t]_ [ +] _[ ∇]_ _**[x]**_ _[t]_ [ log] _[ p]_ [(] _**[x]**_ _[t][|][y]_ [)]
+
+
++ E
+
+
+d _**w**_ _t_
+_t_ =0
+
+
+= ( _T_ + 1) _I_ + Var
+
+
+�� _T_
+
+
+_t_ =0
+
+
+- 1 - d _t_ _,_ (20)
+2 _**[x]**_ _[t]_ [ +] _[ ∇]_ _**[x]**_ _[t]_ [ log] _[ p]_ [(] _**[x]**_ _[t][|][y]_ [)]
+
+
+           - ��            _V_ 1
+
+
+where the last equality follows the properties of Itô Integral and rules of stochastic calculus such
+that (d _**w**_ ) [2] = d _t_, E[� _tT_ =0 [d] _**[w]**_ _[t]_ []] [=] [0][.] [Hence, to provide an uncertainty estimate for] _**[ x]**_ [0][, it remains]
+to estimate the term _V_ 1. Recall that the true score function _∇_ _**x**_ _t_ log _p_ ( _**x**_ _t|y_ ) is approximated by
+_sθ_ (( _**x**_ _t, y, t_ ) = _−_ _**ϵ**_ _θ_ ( _**x**_ _t, t, y_ ) _/σt_ . For ease of notation, let _sθ,t_ = _sθ_ ( _**x**_ _t, y, t_ ) and � _sθ,t_ = � _sθ_ ( _**x**_ _t, y, t_ ),
+which gives
+
+
+  - _T_
+_V_ 1 =
+
+_t_ =0
+
+
+- _T_
+
+
+_s_ =0
+
+
+- 1
+4 [Cov(] _**[x]**_ _[s][,]_ _**[ x]**_ _[t]_ [)] _[ −]_ [1] 2
+
+
+[1] - d _s_ d _t._
+
+2 [Cov(] _**[x]**_ _[t][, s][θ,s]_ [) + Cov(] _[s][θ,t][, s][θ,s]_ [)]
+
+
+[1]
+
+2 [Cov(] _**[x]**_ _[s][, s][θ,t]_ [)] _[ −]_ [1] 2
+
+
+When _s_ = _t_, score functions _sθ,t_ and _sθ,s_ are independent, and similarly, _**x**_ _t_ and _sθ,s_ are also
+independent. As a result, the above equation can be further simplified as
+
+
+_T_
+
+ 
+
+_s_ =0
+
+
+(Cov( _**x**_ _t, sθ,t_ ) + Cov( _sθ,t, sθ,t_ )) d _t._
+
+_t_ =0
+
+
+_T_
+
+
+_V_ 1 =
+
+
+_T_
+
+ 
+
+_t_ =0
+
+
+- 1
+4 [Cov(] _**[x]**_ _[s][,]_ _**[ x]**_ _[t]_ [)] _[ −]_ [1] 2
+
+
+[1] - d _s_ d _t −_
+
+2 [Cov(] _**[x]**_ _[s][, s][θ,t]_ [)]
+
+
+**Assumption 2.** _The scalar black-box function f_ _is L-Lipschitz in_ _**x**_ _:_
+
+
+_|f_ ( _**x**_ _[′]_ ) _−_ _f_ ( _**x**_ ) _| ≤_ _L∥_ _**x**_ _[′]_ _−_ _**x**_ _∥,_ _∀_ _**x**_ _[′]_ _,_ _**x**_ _∈_ R _[d]_ _._
+
+
+**Assumption 3.** _Each generated sample_ _**x**_ _∈_ R _[d]_ _is σ-subGaussian._ _That is, there exists σ_ _∈_ R _such_
+_that for any_ _**v**_ _∈_ R _[d]_ _with ∥_ _**v**_ _∥_ = 1 _,_ _**v**_ [T] ( _**x**_ _−_ E[ _**x**_ ]) _is σ-subGaussian,_ _and its moment generating_
+_function is bounded by:_
+
+
+Applying triangle inequality completes the step. In addition, it can be easily seen that
+
+E _**x**_ _k,_ _**x**_ _∗_ [ _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ ] _≥∥_ E[ _**x**_ _[∗]_ ] _−_ E[ _**x**_ _k_ ] _∥_ _._
+
+
+**Lemma B.2.** _At each iteration k_ _∈_ [ _K_ ] _,_ _under fixed parameters θ_ _and θ_ _[∗]_ _,_ _for_ _**x**_ _k_ _∼_ _pθ_ ( _·|yk_ _[∗][,][ D]_ [)] _[,]_
+_**x**_ _[∗]_ _∼_ _pθ∗_ ( _·|yk_ _[∗][,][ D]_ [)] _[, we have]_
+
+Var _**x**_ _k∼pθ_ ( _·|yk_ _[∗][,][D]_ [)] _[,]_ _**[x]**_ _[∗][∼][p][θ][∗]_ [(] _[·|][y]_ _k_ _[∗][,][D]_ [)][(] _[∥]_ _**[x]**_ _[∗]_ _[−]_ _**[x]**_ _[k][∥]_ [)] _[ ≤]_ _[c]_ [3] _[dσ]_ [2] _[.]_ (24)
+
+
+_Proof of Lemma B.2._ By definition of variance,
+
+Var _**x**_ _k,_ _**x**_ _∗_ ( _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ ) = E[ _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ [2] ] _−_ (E[ _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ ]) [2] _._ (25)
+
+
+Expanding the first term leads to
+
+
+E[ _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ [2] ] = E[( _**x**_ _[∗]_ _−_ _**x**_ _k_ ) [T] ( _**x**_ _[∗]_ _−_ _**x**_ _k_ )]
+
+= E[ _∥_ _**x**_ _[∗]_ _∥_ [2] ] + E[ _∥_ _**x**_ _k∥_ [2] ] _−_ 2E[( _**x**_ _k_ ) [T] _**x**_ _[∗]_ ]
+
+= E[ _∥_ _**x**_ _[∗]_ _∥_ [2] ] + E[ _∥_ _**x**_ _k∥_ [2] ] _−_ 2E[( _**x**_ _k_ )] [T] E[ _**x**_ _[∗]_ ] _,_ (26)
+
+where the last equality is due to the independece between _**x**_ _[∗]_ and _**x**_ _k_ .
+
+
+Under Assumption 3 and by Lemma B.4, we have
+
+
+E[ _∥_ _**x**_ _[∗]_ _∥_ [2] ] = E[ _∥_ _**x**_ _[∗]_ _−_ E[ _**x**_ _[∗]_ ] + E[ _**x**_ _[∗]_ ] _∥_ [2] ]
+
+= E[( _**x**_ _[∗]_ _−_ E[ _**x**_ _[∗]_ ]) [T] ( _**x**_ _[∗]_ _−_ E[ _**x**_ _[∗]_ ])] + _∥_ E[ _**x**_ _[∗]_ ] _∥_ [2]
+
+= tr(E[( _**x**_ _[∗]_ _−_ E[ _**x**_ _[∗]_ ])( _**x**_ _[∗]_ _−_ E[ _**x**_ _[∗]_ ])] [T] ) + _∥_ E[ _**x**_ _[∗]_ ] _∥_ [2]
+
+_≤_ _Cdσ_ [2] + _∥_ E[ _**x**_ _[∗]_ ] _∥_ [2] _._
+
+
+Here, the second equality holds as the cross terms vanish due to the fact that E[ _**x**_ _[∗]_ _−_ E[ _**x**_ _[∗]_ ]] = 0.
+Similarly,
+E[ _∥_ _**x**_ _k∥_ [2] ] _≤_ _Cdσ_ [2] + _∥_ E[ _**x**_ _k_ ] _∥_ [2] _._
+
+
+17
+
+
+E[exp - _λ_ _**v**_ [T] ( _**x**_ _−_ E[ _**x**_ ])�] _≤_ exp - _σ_ 2 _λ_ 2
+
+2
+
+
+_,_ _∀λ ∈_ R _,_ _**v**_ _∈_ S _[d][−]_ [1] _,_
+
+
+_where_ S := _{_ _**v**_ _∈_ R _[d]_ : _∥_ _**v**_ _∥_ = 1 _} is the_ ( _d −_ 1) _unit sphere._
+
+
+Before proceeding with the proofs of main theorems, we present our main lemmas.
+
+
+**Lemma B.1.** _At each iteration k_ _∈_ [ _K_ ] _,_ _under fixed parameters θ_ _and θ_ _[∗]_ _,_ _for_ _**x**_ _k_ _∼_ _pθ_ ( _·|yk_ _[∗][,][ D]_ [)] _[,]_
+_**x**_ _[∗]_ _∼_ _pθ_ _[∗]_ ( _·|yk_ _[∗][,][ D]_ [)] _[, we have]_
+
+
+_√_
+E _**x**_ _k∼pθ_ ( _·|yk_ _[∗][,][D]_ [)] _[,]_ _**[x]**_ _[∗][∼][p][θ][∗]_ [(] _[·|][y]_ _k_ _[∗][,][D]_ [)][ [] _[∥]_ _**[x]**_ _[∗]_ _[−]_ _**[x]**_ _[k][∥]_ []] _[ ≤]_ [8]
+
+
+_dσ_ + _∥_ E _**x**_ _∗_ [ _**x**_ _[∗]_ ] _−_ E _**x**_ _k_ [ _**x**_ _k_ ] _∥_ _,_ (22)
+
+
+E _**x**_ _k∼pθ_ ( _·|yk_ _[∗][,][D]_ [)] _[,]_ _**[x]**_ _[∗][∼][p][θ][∗]_ [(] _[·|][y]_ _k_ _[∗][,][D]_ [)][ [] _[∥]_ _**[x]**_ _[∗]_ _[−]_ _**[x]**_ _[k][∥]_ []] _[ ≥∥]_ [E] _**[x]**_ _[∗]_ [[] _**[x]**_ _[∗]_ []] _[ −]_ [E] _**[x]**_ _[k]_ [[] _**[x]**_ _[k]_ []] _[∥]_ _[.]_ (23)
+
+
+_Proof of Lemma B.1._ To bound E [ _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ ], by triangle inequality,
+
+E _**x**_ _k,_ _**x**_ _∗_ [ _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ ] = E [ _∥_ _**x**_ _[∗]_ _−_ E[ _**x**_ _[∗]_ ] + E[ _**x**_ _k_ ] _−_ _**x**_ _k_ + E[ _**x**_ _[∗]_ ] _−_ E[ _**x**_ _k_ ] _∥_ ]
+_≤_ E [ _∥_ _**x**_ _[∗]_ _−_ E[ _**x**_ _[∗]_ ] _∥_ ] + E [ _∥_ _**x**_ _k −_ E[ _**x**_ _k_ ] _∥_ ] + E [ _∥_ E[ _**x**_ _[∗]_ ] _−_ E[ _**x**_ _k_ ] _∥_ ] _._
+
+
+Under assumption 3, by Lemma B.3, we have,
+
+
+_√_
+E _**x**_ _k,_ _**x**_ _∗_ [ _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ ] _≤_ 8
+
+
+_dσ_ + _∥_ E[ _**x**_ _[∗]_ ] _−_ E[ _**x**_ _k_ ] _∥_ _._
+
+
+Substituting the above two results back to Equation (26),
+
+
+E[ _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ [2] ] _≤_ 2 _Cdσ_ [2] + _∥_ E[ _**x**_ _k_ ] _∥_ [2] + _∥_ E[ _**x**_ _[∗]_ ] _∥_ [2] _−_ 2E[( _**x**_ _k_ ) [T] _**x**_ _[∗]_ ]
+
+_≤_ 2 _Cdσ_ [2] + _∥_ E[ _**x**_ _k_ ] _−_ E[ _**x**_ _[∗]_ ] _∥_ [2] _._ (27)
+
+
+Substituting Equation (27) back to Equation (25) and applying Lemma B.1 leads to
+
+
+Var (∆( _pθ, yk_ _[∗]_ [)) = Var (] _[|][y]_ _k_ _[∗]_ _[−]_ _[f]_ [(] _**[x]**_ _[k]_ [)] _[|]_ [)]
+= Var ( _|f_ ( _**x**_ _[∗]_ ) _−_ _f_ ( _**x**_ _k_ ) _|_ )
+= E _θ,θ∗_ [Var _**x**_ _k,_ _**x**_ _∗_ ( _|f_ ( _**x**_ _[∗]_ ) _−_ _f_ ( _**x**_ _k_ ) _| | θ, θ_ _[∗]_ )]
+
+         - ��          _T_ 1
+
+
+18
+
+
++ Var _θ,θ∗_ (E _**x**_ _k,_ _**x**_ _∗_ [ _|f_ ( _**x**_ _[∗]_ ) _−_ _f_ ( _**x**_ _k_ ) _| | θ, θ_ _[∗]_ ])
+
+ - ��  _T_ 2
+
+
+_√_
+Var _**x**_ _k,_ _**x**_ _∗_ ( _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥_ ) _≤_ 2 _Cdσ_ [2] + _∥_ E[ _**x**_ _k_ ] _−_ E[ _**x**_ _[∗]_ ] _∥_ [2] _−_ (8 _dσ_ + _∥_ E[ _**x**_ _[∗]_ ] _−_ E[ _**x**_ _k_ ] _∥_ ) [2] _≤_ _c_ 3 _dσ_ [2] _._
+
+
+With the above results, we are ready to prove Theorem 2 and Theorem 3.
+
+
+**Theorem 2.** _At each iteration k_ _∈_ [ _K_ ] _, define the sub-optimality performance gap as_
+
+
+∆( _pθ, yk_ _[∗]_ [) =] _yk∗_ _[−]_ [max] _,_ where _**x**_ _j_ _∼_ _pθ_ ( _·|yk∗_ _[,][ D]_ [)] _[,]_ _[∀][j]_ _[∈]_ [[] _[N]_ []] _[.]_ (9)
+���� _j∈_ [ _N_ ] _[f]_ [(] _**[x]**_ _[j]_ [)] ����
+
+
+_Assume_ _that_ _there_ _exists_ _some_ _θ_ _[∗]_ _∼_ _p_ ( _θ|D_ ) _that_ _produces_ _a_ _probability_ _distribution_ _pθ∗_ ( _·_ _|_ _D_ )
+_such that it is able to generate a sample_ _**x**_ _[∗]_ _that perfectly reconstructs yk_ _[∗][.]_ _[Suppose function][ f]_ _[is]_
+_L-Lipschitz and each sample is σ-subGaussian, it can be shown that_
+
+
+_√_
+E [∆( _pθ, yk_ _[∗]_ [)]] _[ ≤]_ _[c]_ [1] _[L]_
+
+
+_dσ,_
+
+
+_where d is the dimensionality of the design space, c_ 1 _is some universal constant._
+
+
+_Proof of Theorem 2._ Recall that we consider the case where _N_ = 1, and denote _**x**_ _k_ the generated
+sample in the _k_ -th iteration, i.e. _**x**_ _k_ _∼_ _pθ_ ( _·|yk_ _[∗][,][ D]_ [)][, where] _[ θ]_ _[∼]_ _[p]_ [(] _[θ]_ _[|]_ _[D]_ [)][.] [In each iteration] _[ k]_ [, with]
+the existence of _θ_ _[∗]_ _∼_ _p_ ( _θ_ _|_ _D_ ), we have _yk_ _[∗]_ [=] _[f]_ [(] _**[x]**_ _[∗]_ [)][,] [where] _**[x]**_ _[∗]_ _[∼]_ _[p][θ][∗]_ [(] _[·|][y]_ _k_ _[∗][,][ D]_ [)][.] [Hence,] [under]
+Assumption 2,
+
+E [∆( _pθ, yk_ _[∗]_ [)] =][ E][ [] _[|][f]_ [(] _**[x]**_ _[∗]_ [)] _[ −]_ _[f]_ [(] _**[x]**_ _[k]_ [)] _[|]_ []] _[ ≤]_ _[L]_ [E][ [] _[∥]_ _**[x]**_ _[∗]_ _[−]_ _**[x]**_ _[k][∥]_ []] _[ .]_
+
+
+By Lemma B.1, tower rule and Lemma B.5, we have
+
+
+E [∆( _pθ, yk_ _[∗]_ [)]] _[ ≤]_ _[L]_ [E] _[θ,θ][∗]_ [[][E] _[x,x][∗]_ [[] _[∥]_ _**[x]**_ _[∗]_ _[−]_ _**[x]**_ _[k][∥]_ []] _[ |][θ, θ][∗]_ []]
+
+
+_√_
+_≤_ 8 _L_
+
+
+_dσ_ + E _θ,θ∗_ [ _∥_ E _**x**_ _∗_ [ _**x**_ _[∗]_ _|θ_ _[∗]_ ] _−_ E _**x**_ _k_ [ _**x**_ _k|θ_ ] _∥_ ]
+
+
+_√_
+_≤_ _c_ 1 _L_
+
+
+_dσ._
+
+
+**Theorem** **3.** _(Sub-optimality_ _bound)_ _At_ _each_ _iteration_ _k_ _∈_ [ _K_ ] _,_ _suppose_ _M_ _model_ _parameters_
+_{θi}_ _[M]_ _i_ =1 _[are generated from the ensemble model for some fixed dataset][ D][.]_ _[Suppose function][ f]_ _[is]_
+_L-Lipschitz, it can be shown that the variance of the sub-optimality performance gap of each model_
+_is bounded by the epidemic uncertainty:_
+
+Var (∆( _pθi, yk_ _[∗]_ [))] _[ ≤]_ _[c]_ [2] _[L]_ [2] _[dσ]_ [2][ +] _[ c]_ [2] _[L]_ [2][∆][epistemic][(] _[y]_ _k_ _[∗][,][ D]_ [)] _[,]_ _[∀][i][ ∈]_ _[M,]_ (10)
+
+
+_where c_ 2 _is some universal positive constant._
+
+
+_Proof of Theorem 3._ At every iteration _k_ _∈_ [ _K_ ], let the target function value on which the conditional
+diffusion model conditions be _yk_ _[∗]_ [.] [The statement needs to hold for each conditional diffusion model]
+in the ensemble, and thus for simplicity of notation, the subscript _i_ of _θi_ is dropped in the remaining
+proof. With the existence of _θ_ _[∗]_ _∼_ _p_ ( _θ_ _| D_ ), we have _yk_ _[∗]_ [=] _[ f]_ [(] _**[x]**_ _[∗]_ [)][, where] _**[ x]**_ _[∗]_ _[∼]_ _[p][θ][∗]_ [(] _[·|][y]_ _k_ _[∗][,][ D]_ [)][.] [Recall]
+that _f_ ( _**x**_ _k_ ) is achieved by _**x**_ _k_ _∼_ _pθ_ ( _·|yk_ _[∗][,][ D]_ [)][, where] _[ θ]_ _[∼]_ _[p]_ [(] _[θ]_ _[| D]_ [)][, and] _[ N]_ [= 1][.]
+
+Thus, by Eve’s law, the overall variance of ∆( _pθ, yk_ _[∗]_ [)][ can be decomposed as:]
+
+
+_._
+
+
+**1000**
+
+
+**1001**
+
+**1002**
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+
+**1007**
+
+**1008**
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+
+**1013**
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+
+**1019**
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+
+**1024**
+
+**1025**
+
+
+In particular, the first term _T_ 1 corresponds to the aleatoric component and the second term _T_ 2
+corresponds to the episdemic component. We then proceed to bound the above two terms separately.
+
+
+**Step 1:** **bound** _T_ 1 **.** Under Assumption 2,
+Var _**x**_ _k,_ _**x**_ _∗_ ( _|f_ ( _**x**_ _[∗]_ ) _−_ _f_ ( _**x**_ _k_ ) _| | θ, θ_ _[∗]_ ) _≤_ _L_ [2] Var _**x**_ _k,_ _**x**_ _∗_ ( _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥| | θ, θ_ _[∗]_ ) _._
+
+Under Assumption 3 and by Lemma B.2,
+_T_ 1 _≤_ _L_ [2] E _θ,θ∗_ [Var _**x**_ _k,_ _**x**_ _∗_ ( _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥| | θ, θ_ _[∗]_ )] _≤_ _c_ 3 _L_ [2] _dσ_ [2] _._ (28)
+**Step 2:** **bound** _T_ 2 **.** Under Assumption 2,
+_T_ 2 _≤_ _L_ [2] Var _θ,θ∗_ (E _**x**_ _k,_ _**x**_ _∗_ [ _∥_ _**x**_ _[∗]_ _−_ _**x**_ _k∥| | θ, θ_ _[∗]_ ]))
+
+
+This implies that the second moment in any direction _**u**_ satisfies:
+
+E          - _**u**_ [T] (( _**x**_ _−_ E[ _**x**_ ])( _**x**_ _−_ E[ _**x**_ ]) [T] )� _≤_ _σ_ [2] _._
+
+
+Therefore, the maximum eigenvalue of the covariance matrix is upper-bounded by _Cσ_ [2], where _C_ is
+some positive constant.
+
+Var[ _**x**_ ] = tr �E �( _**x**_ _−_ E[ _**x**_ ])( _**x**_ _−_ E[ _**x**_ ]) [T][��] _≤_ _Cdσ_ [2] _._
+
+
+19
+
+
+By Lemma B.1,
+
+                   -                   - _√_
+Var _θ,θ_ _[∗]_ (E _**x**_ _k,_ _**x**_ _[∗]_ [ _|f_ ( _**x**_ _[∗]_ ) _−_ _f_ ( _**x**_ _k_ ) _| | θ, θ_ _[∗]_ ]) _≤_ Var _θ,θ_ _[∗]_ E _θ,θ∗_ 8
+
+
+��
+_dσ_ + _∥_ E _**x**_ _[∗]_ [ _**x**_ _[∗]_ ] _−_ E _**x**_ _k_ [ _**x**_ _k_ ] _∥_
+
+
+_≤_ Var _θ,θ∗_ ( _∥_ E _**x**_ _∗_ [ _**x**_ _[∗]_ ] _−_ E _**x**_ _k_ [ _**x**_ _k_ ] _∥_ ) _._
+
+
+Then by property of variance, we have
+
+
+                  -                  -                  - ��2
+Var _θ,θ_ _[∗]_ ( _∥_ E _**x**_ _[∗]_ [ _**x**_ _[∗]_ ] _−_ E _**x**_ _k_ [ _**x**_ _k_ ] _∥_ ) = E _θ,θ_ _[∗]_ _∥_ E _**x**_ _∗_ [ _**x**_ _[∗]_ ] _−_ E _**x**_ _k_ [ _**x**_ _k_ ] _∥_ [2][�] _−_ E _θ,θ∗_ _∥_ E _**x**_ _∗_ [ _**x**_ _[∗]_ ] _−_ E _**x**_ _k_ [ _**x**_ _k_ ] _∥_ _._
+
+
+From the proof of Lemma B.2, we have
+
+
+       E _θ,θ∗_ _∥_ E _**x**_ _∗_ [ _**x**_ _[∗]_ _|θ_ _[∗]_ ] _−_ E _**x**_ _k_ [ _**x**_ _k|θ_ ] _∥_ [2][ �]
+
+= E _θ_ _[∗]_ [E _**x**_ _[∗]_ [ _∥_ _**x**_ _[∗]_ _∥_ [2] _|θ_ _[∗]_ ]] + E _θ_ [E _**x**_ _k_ [ _∥_ _**x**_ _k∥_ [2] _|θ_ ]] _−_ 2E _θ,θ∗_ [E _**x**_ _k_ [( _**x**_ _k|θ_ )] [T] E _**x**_ _∗_ [ _**x**_ _[∗]_ _|θ_ _[∗]_ ]]
+
+= 2(E _θ_ [E _**x**_ _k_ [ _∥_ _**x**_ _k∥_ [2] _|θ_ ]] _−_ E _θ,θ∗_ [E _**x**_ _k_ [( _**x**_ _k|θ_ )] [T] E _**x**_ _∗_ [ _**x**_ _[∗]_ _|θ_ _[∗]_ ]])
+
+= 2(E _θ_ [E _**x**_ _k_ [ _∥_ _**x**_ _k∥_ [2] _|θ_ ]] _−∥_ E _θ_ [E _**x**_ _k_ [ _**x**_ _k|θ_ ]] _∥_ [2] )
+= 2Var _θ_ (E _**x**_ _k_ [ _∥_ _**x**_ _k_ ] _∥_ ) _,_
+where the third equality is by the law of total expectation and the fact that E _θ_ [E _**x**_ _k_ [ _**x**_ _k|θ_ ]] =
+E _θ∗_ [E _**x**_ _∗_ [ _**x**_ _[∗]_ _|θ_ _[∗]_ ]]. Combining the above results, we have
+
+_T_ 2 _≤_ _L_ [2] Var _θ,θ_ _[∗]_ ( _∥_ E _**x**_ _[∗]_ [ _**x**_ _[∗]_ ] _−_ E _**x**_ _k_ [ _**x**_ _k_ ] _∥_ ) _≤_ 2 _L_ [2] Var _θ_ (E _**x**_ _k_ [ _∥_ _**x**_ _k_ ] _∥_ ) _._ (29)
+
+Combining Equation (28) and Equation (29) completes the proof:
+Var (∆( _pθ, yk_ _[∗]_ [))] _[ ≤]_ _[c]_ [3] _[L]_ [2] _[dσ]_ [2][ + 2] _[L]_ [2][Var] _[θ]_ [(][E] _**[x]**_ [[] _[∥]_ _**[x]**_ _[k][∥]_ [])] _[.]_
+
+
+B.1 SUPPORTING LEMMAS
+
+
+**Lemma B.3** (Wainwright (2019)) **.** _Let_ _**x**_ _∈_ R _[d]_ _be a σ-subGaussian ramdom vector, then_
+
+
+_√_
+E[ _∥_ _**x**_ _−_ E[ _**x**_ ] _∥_ ] _≤_ 4 _σ_
+
+
+_d._ (30)
+
+
+**Lemma B.4.** _Let_ _**x**_ _∈_ R _[d]_ _be a σ-subGaussian ramdom vector, then its variance satisfies:_
+_Var_ [ _**x**_ ] _≤_ _Cdσ_ [2] _,_ (31)
+
+_where C is some positive constant._
+
+
+_Proof of lemma B.4._ By definition of sub-Gaussian vector, for any direction _**u**_ _∈_ R _[d]_ with _∥_ _**u**_ _∥_ = 1,
+
+
+E �exp( _λ_ _**u**_ [T] ( _**x**_ _−_ E[ _**x**_ ]))� _≤_ exp - _λ_ 2 _σ_ 2
+
+2
+
+
+_,_ _∀λ ∈_ R _._
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+**Lemma B.5.** _In each iteration k_ _∈_ [ _K_ ] _, let D_ _be the collected dataset,_ _θ_ _and θ_ _[∗]_ _are parameters_
+_independently_ _drawn_ _from_ _posterior_ _p_ ( _θ|D_ ) _,_ _**x**_ _k_ _∼_ _pθ_ ( _·|yk_ _[∗][,][ D]_ [)] _[and]_ _**[x]**_ _[∗]_ _[∼]_ _[p][θ][∗]_ [(] _[·|][y]_ _k_ _[∗][,][ D]_ [)] _[.]_ _[For]_ _[any]_
+_measurable function f_ _, and σ_ ( _D_ ) _-measurable random variable_ _**xk**_ _,_
+
+E [ _f_ ( _**x**_ _k_ )] = E [ _f_ ( _**x**_ _[∗]_ )] _._
+
+
+_Proof of Lemma B.5._ Since the black-box function _f_ is measurable, and by the nature of Algorithm 1,
+in each iteration _k_, the generated sample _**xk**_, the target function value _yk_ _[∗]_ [, the predictive distribution]
+_pθ_ ( _·|yk_ _[∗][,][ D]_ [)][, the posterior distribution] _[ p]_ [(] _[θ]_ _[| D]_ [)][ are] _[ σ]_ [(] _[D]_ [)][-measurable at iteration] _[ k]_ [, the only random-]
+ness in _f_ ( _**x**_ ) comes from the random sampling in the algorithm. Thus, condition on the training data
+_D_ and target value _yk_ _[∗]_ [, by tower rule,]
+
+
+max
+_yk∈_ R
+
+
+_⇔_ max
+_yk∈_ R
+
+
+            E [ _f_ ( _**x**_ _k_ )] = E [E [ _f_ ( _**x**_ _k_ ) _|θ_ ]] =
+
+_θ_
+
+
+            =
+
+_θ_
+
+
+_f_ ( _**x**_ _k_ ) _pθ_ ( _**x**_ _k|yk_ _[∗][,][ D]_ [)] _[p]_ [(] _[θ][|D]_ [) d] _**[x]**_ _[k]_ [d] _[θ]_
+_**x**_ _k_
+
+
+_f_ ( _**x**_ _k_ ) _pθ_ ( _**x**_ _k|yk_ _[∗][,][ D]_ [) d] _**[x]**_ _[k]_ _[p]_ [(] _[θ][|D]_ [) d] _[θ.]_
+_**x**_ _k_
+
+
+Note that both the true parameter _θ_ _[∗]_ and the chosen parameter _θ_ are drawn from the same posterior
+distribution _p_ ( _θ_ _| D_ ), we have
+
+   -    -    -    
+
+
+_f_ ( _**x**_ ) _pθ∗_ ( _**x**_ _|yk_ _[∗][,][ D]_ [) d] _**[x]**_ _[ p]_ [(] _[θ][∗][|D]_ [) d] _[θ][∗][.]_
+_**x**_
+
+
+_θ_
+
+
+             _f_ ( _**x**_ ) _pθ_ ( _**x**_ _|yk_ _[∗][,][ D]_ [) d] _**[x]**_ _[ p]_ [(] _[θ][|D]_ [) d] _[θ]_ [=]
+_**x**_
+
+
+_θ_ _[∗]_
+
+
+As a result, we have
+
+
+      E [ _f_ ( _**x**_ _k_ )] =
+
+_θ_ _[∗]_
+
+
+_k_ _[,][ D]_ [) d] _**[x]**_ _[∗][p]_ [(] _[θ][∗][|D]_ [) d] _[θ][∗]_ [=][ E][ [][E][ [] _[f]_ [(] _**[x]**_ _[∗]_ [)] _[|][θ][∗]_ []] =][ E][ [] _[f]_ [(] _**[x]**_ _[∗]_ [)]] _[ .]_
+_**x**_ _[∗]_ _[f]_ [(] _**[x]**_ _[∗]_ [)] _[p][θ][∗]_ [(] _**[x]**_ _[∗][|][y][∗]_
+
+
+**Corollary 1.** _In each iteration k_ _∈_ [ _K_ ] _,_ _let D_ _be the collected dataset,_ _θ_ _and θ_ _[∗]_ _are parameters_
+_independently_ _drawn_ _from_ _posterior_ _p_ ( _θ|D_ ) _,_ _**x**_ _k_ _∼_ _pθ_ ( _·|yk_ _[∗][,][ D]_ [)] _[and]_ _**[x]**_ _[∗]_ _[∼]_ _[p][θ][∗]_ [(] _[·|][y]_ _k_ _[∗][,][ D]_ [)] _[.]_ _[For]_ _[any]_
+_measurable function f_ _, and σ_ ( _D_ ) _-measurable random variable_ _**xk**_ _,_
+
+E [ _∥_ _**x**_ _k∥_ ] = E [ _∥_ _**x**_ _[∗]_ _∥_ ] _._
+
+
+_Proof of Corollary 1._ Since the norm function is deterministic and _σ_ ( _D_ )-measurable, the proof
+directly follows that of Lemma B.5.
+
+
+C OPTIMALITY OF PROPOSED ACQUISITION FUNCTION
+
+
+**Theorem 4.** _Let Y_ _be the constructed candidate set at each iteration k_ _∈_ [ _K_ ] _in Algorithm 1._ _By_
+_adopting_ _UaE_ _as_ _the_ _acquisition_ _function_ _to_ _guide_ _the_ _sample_ _generation_ _process_ _in_ _conditional_
+_diffusion model, Diff-BBO (Algorithm 1) achieves a near-optimal solution for the online BBO problem_
+_defined in Equation_ (3) _:_
+
+
+_K_
+
+max - _f_ ( _**x**_ _k_ ) _,_ _**x**_ _k_ _∼_ _pθ_ ( _· | yk, D_ ) _,_ _θ_ _∈_ Θ _⇒_ max
+_yk∈_ R _yk∈Y_
+
+_k_ =1
+
+
+_K_
+
+- _α_ ( _yk, D_ ) _._
+
+
+_k_ =1
+
+
+_Proof of Theorem 4._ Following Theorem 3, we can express the function evaluation as follows,
+
+
+_f_ ( _**x**_ _k_ ) = _yk −_ ( _yk −_ _f_ ( _**x**_ _k_ )) _, ∀k_ _∈_ [ _K_ ] _._
+
+
+The overall objective of the optimization problem defined in Equation (3) can then be further
+decomposed as
+
+
+_K_
+
+- _f_ ( _**x**_ _k_ ) _,_ _**x**_ _k_ _∼_ _pθ_ ( _· | yk_ ) _,_ _θ_ _∈_ Θ
+
+
+_k_ =1
+
+
+_K_
+
+- _yk −_ ( _yk −_ _f_ ( _**x**_ _k_ )) _,_ _**x**_ _k_ _∼_ _pθ_ ( _· | yk_ ) _,_ _θ_ _∈_ Θ
+
+
+_k_ =1
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Essentially, our chosen acquisition function allows Diff-BBO to maximize the lower bound of the
+original optimization problem. Penalizing high uncertainty ensures that the model prioritizes more
+confident predictions (i.e. those with lower epistemic uncertainty), which are more likely to yield
+higher objective function values.
+
+
+D EXPERIMENT DETAILS
+
+
+D.1 DATASET DETAILS.
+
+**DesignBench** (Trabucco et al., 2022) is a benchmark for real-world black-box optimization tasks. For
+continuouse tasks, we use Superconductor, D’Kitty Morphology and Ant Morphology benchmarks.
+For discrete tasks, we utilize TFBind8 and TFBind10 benchmarks. We exclude Hopper due to the
+domain is known to be buggy, as explained in Appendix C in (Krishnamoorthy et al., 2023). We also
+exclude NAS due to the significant computational resource requirement. Additionally, we exclude
+the ChEMBL task because the oracle model exhibits non-trivial discrepancies when queried with the
+same design.
+
+
+    - **Superconductor (materials optimization).** This task involves searching for materials with
+high critical temperatures. The dataset comprises 17,014 vectors, each with 86 components
+that represent the number of atoms of each chemical element in the formula. The provided
+oracle function is a pre-trained random forest regression model.
+
+
+    - **D’Kitty Morphology (robot morphology optimization).** This task focuses on optimizing
+the parameters of a D’Kitty robot, including the size, orientation, and location of the limbs,
+to make it suitable for a specific navigation task. The dataset consists of 10,004 entries with
+a parameter dimension of 56. It utilizes MuJoCO (Todorov et al., 2012), a robot simulator,
+as the oracle function.
+
+
+    - **Ant Morphology (robot morphology optimization).** Similar to D’Kitty, this task aims to
+optimize the parameters of a quadruped robot to maximize its speed. It includes 10,004 data
+points with a parameter dimension of 60. It also uses MuJoCO as the oracle function.
+
+
+    - **TFBind8 (DNA sequence optimization).** This task seeks to identify the DNA sequence of
+length eight with the highest binding affinity to the transcription factor SIX6 REF R1. The
+design space comprises sequences of nucleotides represented as categorical variables. The
+dataset size is 32,898, with a dimension of 8. The ground truth is used as a direct oracle
+since the affinity for the entire design space is available.
+
+
+    - **TFBind10 (DNA sequence optimization).** Similar to TFBind8, this task aims to find the
+DNA sequence of length ten that exhibits the highest binding affinity with transcription
+factor SIX6 REF R1. The design space consists of all possible nucleotide sequences. The
+dataset size is 10,000, with a dimension of 10. The ground truth is used as a direct oracle
+since the affinity for the entire design space is available.
+
+
+**Molecular** **Discovery.** A key problem in drug discovery is the optimization of a compound’s
+activity against a biological target with therapeutic value. Similar to other papers (Eckmann et al.,
+2022; Jeon & Kim, 2020; Lee et al., 2023; Noh et al., 2022), we attempt to optimize the score from
+AutoDock4 (Morris et al., 2009), which is a physics-based estimator of binding affinity. The oracle is
+a feed-forward model as a surrogate to AutoDock4. The surrogate model is trained until convergence
+
+
+21
+
+
+_⇒_ max
+_yk∈Y_
+
+
+_K_
+
+- _yk −_ ∆( _pθ, yk_ ) _,_
+
+
+_k_ =1
+
+
+where the candidate set _Y_ is constructed based on the model’s predictions and is designed to explore
+the objective space efficiently. When considering an online maximization problem, adding a positive
+term would lead to overestimation, because the model would be overly optimistic about _f_ ( _**x**_ _k_ ).
+Therefore, we should only consider the case where we the uncertainty is being subtracted. By
+Theorem 3, which shows ∆( _pθ, yk_ _[∗]_ [)][ can be effectively upper bounded the epidemic uncertainty, we]
+therefore have
+
+
+_K_
+
+- _yk −_ ∆episdemic( _yk, D_ ) _._
+
+
+_k_ =1
+
+
+max
+_yk∈_ R
+
+
+_K_
+
+- _f_ ( _**x**_ _k_ ) _,_ _**x**_ _k_ _∼_ _pθ_ ( _· | yk_ ) _,_ _θ_ _∈_ Θ _⇒_ max
+
+_yk∈Y_
+_k_ =1
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+on 10,000 compounds randomly sampled from the latent space (using _N_ (0 _,_ 1)) and their computed
+objective values with AutoDock4. We construct our continuous design space by fixing a random
+protein embedding and randomly sampling 10,000 molecular embedding of dimension 32.
+
+
+For all the tasks, We sort the offline dataset based on the objective values and select data from the
+25% to 50% as the initial training dataset. We use data with lower objective scores to better observe
+performance differences across each baseline. The overview of all the task statistics is provided in
+Table 2.
+
+
+**Task** **Size** **Dimensions** **Task Max**
+
+
+TFBind8 32,898 8 1.0
+TFBind10 10,000 10 2.128
+D’Kitty 10,004 56 340.0
+Ant 10,004 60 590.0
+Superconductor 17,014 86 185.0
+Molecular Discovery 10,000 32 1.0
+
+
+Table 2: Data Statistics
+
+
+D.2 IMPLEMENTATION DETAILS.
+
+We train our model on NVIDIA A100 GPU and report the average performance over 3 random
+runs along with standard deviation for each task. For discrete tasks, we follow the procedure in
+Krishnamoorthy et al. (2023) where we convert the _d_ -dimensional vector to a _d × c_ one hot vector
+regarding _c_ classes. We then approximate logits by interpolating between a uniform distribution and
+the one hot distribution using a mixing factor of 0 _._ 6. We jointly train a conditional and unconditional
+model with the same model by randomly set the conditioning value to 0 with dropout probability of
+0 _._ 15.
+
+
+For each task, we fix the learning rate at 0 _._ 001 with batch size of 256. We use 5 ensemble models to
+estimate the uncertainty for our acquisition function. We set hidden dimensions to 1024 and gamma
+to 2. We use 10% of the available data at each iteration as validation set during training.
+
+
+E IMPACT STATEMENT
+
+
+Optimization techniques can address various real-world problems, including drug and material
+design. Our method enhances sample-efficient online black-box optimization, potentially accelerating
+solutions in these areas. However, caution is needed to prevent misuse, such as optimizing drugs to
+enhance harmful side effects.
+
+
+22

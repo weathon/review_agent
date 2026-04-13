@@ -1,0 +1,2936 @@
+# STOCHASTIC VARIANCE-REDUCED GAUSSIAN VARI- ATIONAL INFERENCE ON THE BURES–WASSERSTEIN
+
+## MANIFOLD
+
+
+**Hoang Phuc Hau Luu, Hanlin Yu, Bernardo Williams, Marcelo Hartmann, Arto Klami**
+Department of Computer Science
+University of Helsinki, Helsinki, Finland
+_{_ hoang-phuc-hau.luu,hanlin.yu,bernardo.williamsmoreno,
+marcelo.hartmann,arto.klami _}_ @helsinki.fi
+
+
+ABSTRACT
+
+
+Optimization in the Bures–Wasserstein space has been gaining popularity in the
+machine learning community since it draws connections between variational inference and Wasserstein gradient flows. The variational inference objective function
+of Kullback–Leibler divergence can be written as the sum of the negative entropy
+and the potential energy, making forward-backward Euler the method of choice.
+Notably, the backward step admits a closed-form solution in this case, facilitating
+the practicality of the scheme. However, the forward step is not exact since the
+Bures–Wasserstein gradient of the potential energy involves “intractable” expectations. Recent approaches propose using the Monte Carlo method – in practice a
+single-sample estimator     - to approximate these terms, resulting in high variance
+and poor performance. We propose a novel variance-reduced estimator based on
+the principle of control variates. We theoretically show that this estimator has
+a smaller variance than the Monte-Carlo estimator in scenarios of interest. We
+also prove that variance reduction helps improve the optimization bounds of the
+current analysis. We empirically demonstrate that the proposed estimator gains
+order-of-magnitude improvements over previous Bures–Wasserstein methods.
+
+
+1 INTRODUCTION
+
+
+Variational inference (VI) (Wainwright et al., 2008; Blei et al., 2017) provides a fast and scalable alternative to Markov chain Monte Carlo (MCMC), especially for inference tasks in high dimensions.
+The main principle of VI is to approximate a complicated distribution _π_, e.g., posterior distribution
+in Bayesian inference, by a simpler tractable family of distributions. The approximation _µ_ within
+the family is obtained by solving an optimization problem, providing a closed-form representation
+and e.g. efficient sampling by construction. The choice of the optimization method is heavily influenced by the assumptions made on the approximation family and the information about _π_ that
+can be obtained, ranging from classical coordinate ascent algorithms for mean-field approximations for targets with conditional conjugacy structure (Blei et al., 2017) to gradient methods using
+score-function approximations to avoid assumptions on the target density (Ranganath et al., 2014)
+or flexible approximations parameterized with neural networks (Rezende & Mohamed, 2015).
+
+
+We focus on Gaussian approximations (Honkela & Valpola, 2004; Opper & Archambeau, 2009; Xu
+& Campbell, 2022; Quiroz et al., 2023) but with a particular emphasis on the recent research line
+in the Wasserstein geometric viewpoint of this family (Lambert et al., 2022; Diao et al., 2023). Regarding the target _π_, we assume access to second order gradients, typically computed by automatic
+differentiation, similar to the above works. Gaussian VI offers strong statistical guarantees at the
+optimal solution (Katsevich & Rigollet, 2024), offers an easy way of modelling dependencies between the variables and, thanks to the Bernstein-von Mises theorem (Van der Vaart, 2000), becomes
+asymptotically exact for Bayesian inference at the limit of infinite observations.
+
+
+Recently, there has been emerging interest in Gaussian VI with a new geometric Riemannian optimization perspective (Lambert et al., 2022; Diao et al., 2023). The family of non-degenerate Gaus
+
+1
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+5
+
+
+10
+
+
+15
+
+
+SVRGVI (ours)
+
+
+SGVI
+
+
+BWGD
+
+
+10 [7]
+
+
+10 [5]
+
+
+10 [3]
+
+
+10 [1]
+
+
+10 1
+
+
+10 3
+
+
+time elapsed ( × #iters)
+
+
+20
+20 10 0 10
+
+
+20
+20 10 0 10
+
+
+20
+20 10 0 10
+
+
+Figure 1: **Left** : Optimization trajectories of our method compared to SGVI (Diao et al., 2023) and
+BWGD (Lambert et al., 2022). The target is a 50-dimensional Gaussian distribution, visualized
+here via the marginal distributions of the first two coordinates. Each ellipse represents a contour of
+a Gaussian: the black is the initial distribution, the red is the target, and the greys are intermediate
+steps. Our method is dramatically more stable and finds a more accurate final approximation. **Right** :
+the corresponding KL divergence, confirming our method is orders of magnitude more accurate.
+
+
+sian distributions can be parameterized by its mean and covariance matrix, _µθ_ with _θ_ = ( _m,_ Σ),
+henceforth denoted as Θ = R _[d]_ _× S_ ++ _[d]_ [where] _[ S]_ ++ _[d]_ [is the set of] _[ d][ ×][ d]_ [ symmetric, positive definite]
+matrices. Classical VI employs conventional optimization algorithms (Paisley et al., 2012; Titsias &
+L´azaro-Gredilla, 2014; Kucukelbir et al., 2017) to minimize the Kullback-Leibler (KL) divergence
+_D_ KL( _µθ∥π_ ) over the parameter space Θ equipped with the Euclidean geometry. Lambert et al.
+(2022) argue that because the optimization problem is over the space distributions, it is more natural
+to use the geometry of this space rather than the geometry of the parameter space. The space of
+Gaussian distributions has a rich, meaningful and tractable geometry known as Bures–Wasserstein
+(BW) geometry that benefits optimization. Lambert et al. (2022) subsequently established a theoretical framework for performing VI using the BW geometry, which we adopt in this paper.
+
+
+Let _π_ ( _x_ ) _∝_ exp( _−V_ ( _x_ )) be the target distribution and consider the VI problem
+
+
+_π_ ˆ _∈_ arg min _D_ KL( _µ∥π_ ) _,_ (1)
+_µ∈_ BW (R _[d]_ )
+
+
+where BW (R _[d]_ ) is the Bures–Wasserstein space of Gaussian distributions with non-degenerate covariance matrix. The BW space is a Riemannian manifold whose geodesic distance is the Bures–
+Wasserstein distance. This setting nicely interplays the theory of optimal transport, Wasserstein
+gradient flows, and variational inference. The optimization problem (1) can be reformulated as
+
+
+_π_ ˆ _∈_ arg min _F_ ( _µ_ ) _,_ where _F_ ( _µ_ ) := _EV_ ( _µ_ ) + _H_ ( _µ_ ) _._ (2)
+_µ∈_ BW(R _[d]_ )
+
+
+Here, _EV_ ( _µ_ ) = - _V_ ( _x_ ) _dµ_ ( _x_ ) is the potential energy and _H_ ( _µ_ ) = - log( _µ_ ( _x_ )) _dµ_ ( _x_ ) is the negative entropy. A conceptual and established idea to minimize a functional _F_ is to perform gradient flow on _F_ with respect to the geometry of BW(R _[d]_ ). To be implementable, the flow must be
+discretized. Lambert et al. (2022) use forward Euler discretization, resulting in a scheme named
+Bures–Wasserstein stochastic gradient descent (BWGD).
+
+
+Diao et al. (2023) remark that forward-backward (FB) Euler (Bauschke & Combettes, 2011) should
+be used instead due to the objective’s composite nature and the entropy’s non-smoothness. This
+method iteratively applies a forward step to the potential energy _EV_ and a backward step (proximal
+operator) to the negative entropy _H_ . They also observe that the backward step in the BW space has
+a closed-form solution (Wibisono, 2018). This is crucial because this step is known to be intractable
+(or computationally expensive) in the full Wasserstein space (Wibisono, 2018; Salim et al., 2020;
+Mokrov et al., 2021; Luu et al., 2024). Although the bottleneck of the FB Euler, which is the
+backward step, has been resolved in this case, the forward step becomes problematic where one
+has to compute the Bures–Wasserstein gradient of _EV_ instead of the “friendly” Wasserstein gradient
+that is just _∇V_ . The Bures–Wasserstein gradient is not always available in closed form, i.e., at
+_µ ∈_ BW(R _[d]_ ), it is given only implicitly by the map _x �→_ E _µ∇V_ + (E _µ∇_ [2] _V_ )( _x −_ _mµ_ ) where _mµ_
+
+
+2
+
+
+is the mean of _µ_ (Lambert et al., 2022). This is the orthogonal projection of the Wasserstein gradient
+onto a tangent space of the Bures–Wasserstein manifold (Chewi et al., 2024). For general _V_, these
+expectations are intractable even though the underlying distribution is a Gaussian. Diao et al. (2023)
+proposed using the Monte Carlo (MC) method with one sample to estimate these expectations at
+each iteration: sample _X_ _∼_ _µ_ and use _∇V_ ( _X_ ) and _∇_ [2] _V_ ( _X_ ) as unbiased estimators for E _µ∇V_ and
+E _µ∇_ [2] _V_, respectively. This scheme is called Stochastic Gaussian VI (SGVI).
+
+
+The problem with SGVI building on this principle is that the Monte Carlo estimates needed for
+the BW gradient are typically too noisy, particularly in high dimensions, as shown in our experiments (Sect. 5). In practice, high-variance estimators require small step sizes, leading to slow and
+inefficient convergence. We resolve this fundamental limitation by proposing a variance-reduced estimator with minimal computational overhead while providing robust theoretical guarantees. Fig. 1
+shows the improvement over SGVI and BWGD in practice. Bures–Wasserstein geometry offers a
+meaningful transition from the initial distribution to the target distribution, and our method follows
+the path smoothly and is particularly stable around the optimum.
+
+
+**Contributions.** We propose a novel variance-reduced estimator for E _µ∇V_ that does not use any
+extra samples, with minimal per-iteration computational overhead, using the control variates approach (Owen, 2013). Our idea is that the variational distribution _µ_ should be similar to the target
+distribution _π_ ( _x_ ) _∝_ exp( _−V_ ( _x_ )) as _µ_ gets closer and closer to _π_, so the density of _µ_ can be used
+to construct a correlated control variate for the Monte-Carlo estimator _∇V_ ( _X_ ). Sect. 3 presents the
+detailed construction and its rationale.
+
+
+On the theoretical side, we derive the following insights:
+
+
+Thm. 1 Under a mild smoothness assumption, we prove that there is a region around the optimal
+solution _π_ ˆ where our estimator has guaranteed smaller variance than the MC estimator.
+
+Thm. 2 If _V_ is strongly convex, we prove that the proposed estimator has a smaller variance than
+the MC estimator at every _µ_ _∈_ BW(R _[d]_ ) whenever _µ_ has sufficiently large (greater than a
+controllable threshold) variance.
+
+
+We further show in Thm. 3 and Thm. 4 that whenever variance reduction happens along the algorithm’s iterates, the effect will enter the convergence analysis and improve the optimization bounds
+derived in Diao et al. (2023). These theorems solidly back our proposed method.
+
+
+On the practical side, we show that reusing the Cholesky decomposition of the covariance matrix
+(needed to sample from a multivariate Gaussian) keeps the computational overhead of the control
+variable negligible. Despite being only a minimal modification to the Monte Carlo estimator, the
+proposed estimator achieves significant improvements in our experiments.
+
+
+2 BACKGROUND
+
+
+A function _f_ : R _[d]_ _→_ R is called L-smooth (or Lipschitz smooth) if _∥∇f_ ( _x_ ) _−∇f_ ( _y_ ) _∥≤_ _L∥x_ _−_ _y∥_
+for all _x, y_ _∈_ R _[d]_ . If _f_ is twice continuously differentiable, we define the Laplacian operator of _f_ as
+∆ _f_ = [�] _i_ _[d]_ =1 [(] _[∂]_ [2] _[/∂x]_ _i_ [2][)] _[f]_ [.] [For a random variable] _[ τ]_ [,] _[ ∥][τ]_ _[∥][∞]_ [:= inf] _[{][C]_ [:] _[ |][τ]_ _[| ≤]_ _[C]_ [almost surely] _[}][.]_
+
+
+2.1 BURES–WASSERSTEIN GEOMETRY
+
+
+We denote by _P_ 2(R _[d]_ ) the space of probability measures _µ_ over R _[d]_ with finite second-moment, i.e.,
+
+- _∥x∥_ [2] _dµ_ ( _x_ ) _<_ + _∞_ . Equipped with the Wasserstein distance
+
+
+_W_ 2 [2][(] _[µ, ν]_ [) =] inf
+_γ∈_ Γ( _µ,ν_ )
+
+
+_∥x −_ _y∥_ [2] _dγ_ ( _x, y_ ) (3)
+_X×X_
+
+
+where Γ( _µ, ν_ ) is the set of probability measures over _X ×_ _X_ whose marginals are _µ_ and _ν_, the space
+_P_ 2(R _[d]_ ) becomes the metric space called the Wasserstein space (Ambrosio et al., 2005). We call
+_γ_ _∈_ Γ( _µ, ν_ ) a (transport) plan and any _γ_ that achieves the optimal value in (3) an optimal plan. A
+pair of random variables whose joint distribution is an optimal plan is called an optimal coupling
+(between _µ_ and _ν_ ). When _µ_ is absolutely continuous with respect to the Lebesgue measure, Brenier
+theorem (Brenier, 1991) asserts that the optimal plan is unique and is given by ( _I, Tµ_ _[ν]_ [)][#] _[µ]_ [where]
+
+
+3
+
+
+_Tµ_ _[ν]_ [=] _[∇][g]_ [for] [some] [convex] [function] _[g]_ [.] [We] [call] _[T][ ν]_ _µ_ [the] [optimal] [transport] [map] [from] _[µ]_ [to] _[ν]_ [.] [Apart]
+from being a metric space, the Wasserstein space also enjoys some nice properties of Riemannian
+geometry. Otto’s calculus (Otto, 2001) endows the Wasserstein space with a formal Riemannian
+structure, facilitating gradient flows and optimization.
+
+
+We denote by BW(R _[d]_ ) the space of Gaussian distributions with non-degenerate covariance matrices. The Wasserstein distance between two Gaussian distributions _p_ 0 = _N_ ( _m_ 0 _,_ Σ0) and
+_p_ 1 = _N_ ( _m_ 1 _,_ Σ1) is given in the closed-form formula _W_ 2 [2][(] _[p]_ [0] _[, p]_ [1][)] [=] _[∥][m]_ [0] _[−]_ _[m]_ [1] _[∥]_ [2] [+] _[ B]_ [2][(Σ][0] _[,]_ [ Σ][1][)]
+
+
+where _B_ [2] (Σ0 _,_ Σ1) = Tr(Σ0 + Σ1 _−_ 2(Σ
+
+
+1
+2
+0 [Σ][1][Σ]
+
+
+012 [)] 12 ) is the Bures metric. The optimal transport map
+
+
+is also given in a closed form in this case: _Tp_ _[p]_ 0 [1][(] _[x]_ [) =] _[ m]_ [1] [+ Σ][0] _−_ [1] 2 �Σ0
+
+
+1
+2 Σ1Σ0
+
+
+21 - 2 [1] Σ0 _−_ [1] 2
+
+
+2 ( _x −_ _m_ 0).
+
+
+The BW space is a geodesically convex subset of the Wasserstein space, meaning that a geodesic
+curve joining two Gaussians lies entirely inside the BW space. The BW space is a Riemannian
+manifold in its own right. Let _µ_ = _N_ ( _m,_ Σ) _∈_ BW(R _[d]_ ), the tangent space of BW(R _[d]_ ) at _µ_
+is the space of symmetric affine maps denoted as _Tµ_ BW(R _[d]_ ) = _{x_ _�→_ _S_ ( _x_ _−_ _m_ ) + _a_ _|_ _a_ _∈_
+R _[d]_ _, S_ _∈S_ _[d]_ _}_ where _S_ _[d]_ is the space of symmetric _d × d_ matrices. The Riemannian metric defined
+using the inner product of elements in this tangent space is identified as the _L_ [2] ( _µ_ ) inner product
+restricted to this space. Given _U, V_ _∈_ _Tµ_ BW(R _[d]_ ), the metric is _⟨U, V ⟩µ_ := - _⟨U_ ( _x_ ) _, V_ ( _x_ ) _⟩dµ_ ( _x_ ).
+This Riemannian metric induces the geodesic distance in BW(R _[d]_ ) that is given by the Wasserstein
+distance. We refer to Altschuler et al. (2021) for further discussions on BW geometry.
+
+
+2.2 STOCHASTIC GAUSSIAN VI
+
+
+We refer to Diao et al. (2023) for a detailed discussion and relevant terminologies. We briefly explain
+stochastic Gaussian VI to motivate our proposed variance reduction. Recall from (2) that we aim to
+minimize _F_ ( _µ_ ) = _H_ ( _µ_ ) + _EV_ ( _µ_ ) over BW(R _[d]_ ). At the optimum of _F_, _π_ ˆ = _N_ ( ˆ _m,_ Σ) [ˆ], first-order
+optimality reads (Opper & Archambeau, 2009; Lambert et al., 2022; Diao et al., 2023)
+
+
+E _π_ ˆ _∇V_ = 0 and E _π_ ˆ _∇_ [2] _V_ = Σ [ˆ] _[−]_ [1] (4)
+
+
+which is derived by zeroing the Bures–Wasserstein gradient of the objective function.
+
+
+A natural idea to minimize _F_ over BW(R _[d]_ ) is to perform gradient flow on _F_ using the BW geometry of BW(R _[d]_ ). When the gradient flow is applied over the entire Wasserstein space _P_ 2(R _[d]_ ),
+it corresponds to the Langevin diffusion (Jordan et al., 1998), with one of its discretizations being
+an MCMC method called the unadjusted Langevin algorithm (Roberts & Tweedie, 1996). When
+restricted to BW(R _[d]_ ), the gradient flow can be formulated using Riemannian geometry (Do Carmo,
+1992), as BW(R _[d]_ ) forms a true Riemannian manifold. This flow is a curve of Gaussian distributions, characterized by the time-dependent evolution of their mean and covariance matrix. Recently,
+Lambert et al. (2022) showed that this evolution is governed by S¨arkk¨a’s ODEs developed in the
+context of variational Kalman filtering (S¨arkk¨a, 2007).
+
+
+The negative entropy _H_ is convex along generalized geodesics but it is a nonsmooth functional. If
+_V_ is smooth, it induces the smoothness of _EV_ . Therefore, it is natural to apply forward-backward
+Euler that alternates between two steps: at iteration _k_,
+
+_µk_ + 12 [= (] _[I]_ _[−]_ _[η][∇]_ [BW] _[E][V]_ [ (] _[µ][k]_ [))][#] _[µ][k]_ _◁_ forward step
+
+
+2
+
+
+_µk_ +1 = arg min
+_µ∈_ BW(R _[d]_ )
+
+
+_H_ ( _µ_ ) + [1]
+
+
+   2 _η_ _[W]_ [ 2] 2 _µ, µk_ + 12
+
+
+- [�]
+
+_◁_ backward step
+
+
+where _∇_ BW denotes the Bures–Wasserstein gradient. The backward step is also known as the proximal step in the optimization literature or the JKO (Jordan, Kinderlehrer, and Otto) step (with restriction in BW(R _[d]_ )) in the context of Wasserstein gradient flow (Jordan et al., 1998). The backward
+step is intractable in the full Wasserstein space and hence requires (oftentimes expensive) numerical approximations (Mokrov et al., 2021; Luu et al., 2024). On the other hand, if restricted to
+BW(R _[d]_ ), this step admits a closed-form solution (Wibisono, 2018): let _µk_ + 1 [=] _[ N]_ [(] _[m][k]_ [+] [1] _[,]_ [ Σ] _[k]_ [+] [1] [)][,]
+
+
+21 [=] _[ N]_ [(] _[m][k]_ [+] [1] 2
+
+
+BW(R ), this step admits a closed-form solution (Wibisono, 2018): let _µk_ + 21 [=] _[ N]_ [(] _[m][k]_ [+] [1] 2 _[,]_ [ Σ] _[k]_ [+] 2 [1] [)][,]
+
+then _µk_ +1 is a Gaussian distribution with mean _mk_ +1 = _mk_ + 21 [and] [variance] [matrix] [Σ] _[k]_ [+1] [=]
+
+21 �Σ _k_ + 12 [+ 2] _[ηI]_ [ + [Σ] _[k]_ [+] 2 [1] [(Σ] _[k]_ [+] [1] 2 [+ 4] _[ηI]_ [)]] 21 - _._ This tractability of the backward is the main motiva
+tion for Diao et al. (2023) to study and develop FB Euler in this scenario. The forward step, however,
+
+
+[1] 2 _[,]_ [ Σ] _[k]_ [+] 2 [1]
+
+
+1 2 Σ _k_ + 1
+
+
+2 [1] [(Σ] _[k]_ [+] [1] 2
+
+
+21 [and] [variance] [matrix] [Σ] _[k]_ [+1] [=]
+
+
+12 [+ 2] _[ηI]_ [ + [Σ] _[k]_ [+] 2 [1]
+
+
+4
+
+
+is not always analytically available since the BW gradient of _EV_, at iterate _k_,
+
+_∇_ BW _EV_ ( _µk_ ) : _x �→_ E _µk_ _∇V_ + (E _µk_ _∇_ [2] _V_ )( _x −_ _mk_ ) _,_
+
+
+involves intractable expectations. Diao et al. (2023) propose using Monte Carlo approximation for
+these expectations: sample _Xk_ _∼_ _µk_ and use _bk_ := _∇V_ ( _Xk_ ) and _Sk_ := _∇_ [2] _V_ ( _Xk_ ) as unbiased
+estimators for E _µk_ _∇V_ and E _µk_ _∇_ [2] _V_, respectively.
+
+
+3 STOCHASTIC VARIANCE-REDUCED GAUSSIAN VI
+
+
+We present our ideas on constructing stochastic variance-reduced estimators from first principles.
+We recall from Sect. 2.2 that stochastic Gaussian VI approximates, at iteration _k_,
+
+E _µk_ _∇V_ _≈_ _bk_ := _∇V_ ( _Xk_ ) and E _µk_ _∇_ [2] _V_ _≈_ _Sk_ := _∇_ [2] _V_ ( _Xk_ ) where _Xk_ _∼_ _µk._ (5)
+
+
+These estimators are typically noisy. Any number of MC samples can be used, but already one is
+unbiased and proposed by earlier works; we also focus on the single-sample case for computational
+efficiency. We aim to design better unbiased estimators for either E _µk_ _∇V_ or E _µk_ _∇_ [2] _V_ in the sense
+that their variances are smaller than those of _bk_ and _Sk_, building on the control variates approach
+(Owen, 2013); Also see the discussions in Defazio et al. (2014); Luu (2022).
+
+
+Let us first describe briefly the core idea of control variates in helping reduce the variance. Let _θ_
+be the quantity of interest and _X_ be an unbiased estimator for _θ_, i.e., E _X_ = _θ_ . A _control_ _variate_
+is a random variable _Y_ with a known mean so that _Y_ is correlated with _X_ . The random variable
+_Z_ = _X_ + _c_ (E _Y_ _−_ _Y_ ), where _c ∈_ R, is then an _unbiased estimator_ for _θ_ . The variance of _Z_ is
+
+Var _Z_ = Var _X_ + _c_ [2] Var _Y_ _−_ 2 _c_ Cov( _X, Y_ ) _._ (6)
+
+
+If _X, Y_ are highly correlated in the sense that 2Cov( _X, Y_ ) _>_ Var _Y_, we immediately get Var _Z_ _<_
+Var _X_ for any _c_ _∈_ (0 _,_ 1]. So, we achieve a reduction in variance by using _Z_ . On the other hand,
+if _X, Y_ are correlated (Cov( _X, Y_ ) _>_ 0) but not highly correlated, we can also obtain variance
+reduction effects whenever _c_ is positive and small enough. Furthermore, given the parabolic form
+with respect to _c_ in (6), one can pinpoint the optimal value of _c_ is _c_ _[∗]_ := Cov( _X, Y_ ) _/_ Var( _Y_ ),
+resulting in the maximal variance reduction Var _Z_ = (1 _−_ Corr( _X, Y_ ) [2] )Var _X_ _<_ Var _X_ where
+Corr( _X, Y_ ) denotes correlation between _X_ and _Y_ .
+
+
+We now return to our problem and seek variance-reduced estimators of the forms
+˜ _bk_ := _∇V_ ( _Xk_ ) + _c_ (E( _Zk_ ) _−_ _Zk_ ) and _S_ ˜ _k_ := _∇_ [2] _V_ ( _Xk_ ) + _d_ (E( _Wk_ ) _−_ _Wk_ )
+
+
+where _c, d_ _>_ 0 and _Zk, Wk_ are a random vector and a random matrix, respectively. Let us first
+focus on [˜] _bk_ . As discussed, _Zk_ should be (element-wise) highly correlated with _∇V_ ( _Xk_ ) while
+E( _Zk_ ) remains efficiently computable. We look for _Zk_ = _∇U_ ( _Xk_ ) so that _∇U_ is as close to _∇V_
+as possible. We are in the context of approximating _π_ ( _x_ ) by the VI distribution _µk_ = _N_ ( _mk,_ Σ _k_ ),
+so it is natural to expect that
+
+_−∇V_ ( _x_ ) = _∇_ log _π_ ( _x_ ) _≈∇_ log _f_ ( _x_ ; _mk,_ Σ _k_ ) = _−_ Σ _[−]_ _k_ [1][(] _[x][ −]_ _[m][k]_ [)] _[.]_
+
+where _f_ ( _x_ ; _mk,_ Σ _k_ ) _∝_ exp - _−_ [1] 2 [(] _[x][ −]_ _[m][k]_ [)] _[⊤]_ [Σ] _k_ _[−]_ [1][(] _[x][ −]_ _[m][k]_ [)] - is the PDF of _µk_ . Therefore, we pro
+pose using _Zk_ = Σ _[−]_ _k_ [1][(] _[X][k][ −]_ _[m][k]_ [)][ as a control variate.] [We have][ E][(] _[Z][k]_ [) = 0][ since][ E][(] _[X][k]_ [) =] _[ m][k]_ [.] [It is]
+worth noting that _Zk_ is known as the Stein/Hyv¨arinen score (Hyv¨arinen, 2005) of _µk_ . The estimator
+˜ _bk_ then becomes ˜ _bk_ := _∇V_ ( _Xk_ ) _−_ _c_ Σ _[−]_ _k_ [1][(] _[X][k][ −]_ _[m][k]_ [)][.] [By applying the same reasoning to] _[S]_ [˜] _[k]_ [, we can]
+immediately conclude that _Wk_ is deterministic and equals Σ _[−]_ _k_ [1][.] [Consequently,] [the] [control] [variate]
+does not affect _Sk_ ; we keep the standard estimator. We derive Stochastic variance-reduced Gaussian
+VI (SVRGVI) as in Alg. 1 (we will discuss more about the choice of _ck_ in Sect. 4). Note that the
+only difference between Alg. 1 and the SGVI in Diao et al. (2023) is the estimator [˜] _bk_, where the
+difference is highlighted in **blue** .
+
+
+Fig. 2 (left) demonstrates that our proposed estimator (with _c_ = 0 _._ 9) achieves lower variance compared to the standard MC estimator, while both remain unbiased estimators of E _µ∇V_ . In Fig. 2
+(right), we vary _c_ from 0 to 2 and calculate the empirical variance of our estimator, revealing a
+parabolic pattern. Note that when _c_ = 0, the estimator reduces to the standard estiator, and for all
+values of _c_ _∈_ (0 _,_ 2), our proposed estimator consistently exhibits lower variance, with an optimal
+value of _c_ around 1. At this optimal _c_, the variance is reduced roughly by a factor of 10. We provide
+theoretical justification for these empirical observations in Sect. 4.
+
+
+5
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+1.75
+
+1.50
+
+1.25
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+
+c
+
+
+Figure 2: **Left** : _π_ is a Gaussian, VI distribution _µ_ is in the neighborhood of _π_ . In this case, the
+true gradient, i.e., the expectation E _µ∇V_, can be computed exactly (in **navy blue** ). Our proposed
+estimator with _c_ = 0 _._ 9 ( **light** **blue** ) has a smaller variance than the Monte Carlo estimator ( **grey** ).
+These are 1,000 samples for each estimator, generated by drawing from _µ_ and substituting the values
+into the respective estimator formulas. **Right** : The empirical variance of our proposed estimator
+when _c_ varies from 0 to 2. Note that _c_ = 0 corresponds to the Monte Carlo estimator.
+
+
+**Minimal** **extra** **computational** **cost** Despite involving calculating the inverse of the covariance
+matrix, the computational overhead is small. Sampling from multivariate normal in step 1 in Alg. 1
+typically requires obtaining the Cholesky factor of the covariance matrix, which is _O_ ( _d_ [3] ) (Rasmussen & Williams, 2006) . With the Cholesky factor, obtaining the solution of the inverse of the
+matrix times a vector is _O_ ( _d_ [2] ) (Rasmussen & Williams, 2006). As such, we can reuse this obtained
+Cholesky factor in step 1 to compute the inverse in step 2, which implies that the estimator adds an
+overhead of _O_ ( _d_ [2] ), which is naturally dominated by the _O_ ( _d_ [3] ) complexity of the original algorithm.
+
+
+**Algorithm 1** Stochastic variance-reduced Gaussian Variational Inference (SVRGVI)
+
+
+**Input:** Target distribution _π_ ( _x_ ) _∝_ exp( _−V_ ( _x_ )), initial distribution _µ_ 0 = _N_ ( _m_ 0 _,_ Σ0), step
+size _η_ _>_ 0, number of steps _N_, sequence of control variate parameters _{ck}_ _[N]_ _k_ =0 _[−]_ [1] [where] _[c][k]_ _[∈]_
+(0 _,_ 1] _, ∀k_ _∈{_ 0 _,_ 1 _, . . ., N_ _−_ 1 _}_
+**for** _k_ = 0 to _N_ _−_ 1 **do**
+
+1. Draw one sample _Xk_ _∼N_ ( _mk,_ Σ _k_ )
+2. Compute estimators: [˜] _bk_ _←∇V_ ( _Xk_ ) _−_ _ck_ Σ _[−]_ _k_ [1][(] _[X][k][ −]_ _[m][k]_ [)][ and] _[ S][k]_ _[←∇]_ [2] _[V]_ [ (] _[X][k]_ [)]
+3. Update mean and covariance matrix:
+
+
+_mk_ +1 _←_ _mk −_ _η_ [˜] _bk_
+_Mk_ +1 _←_ _I_ _−_ _ηSk_
+Σ _k_ + 1 _[←]_ _[M][k]_ [+1][Σ] _[k]_
+
+
+1
+
+2 _[←]_ _[M][k]_ [+1][Σ] _[k][M][k]_ [+1]
+
+
+21 [(Σ] _[k]_ [+] [1] 2
+
+
+    - 2 [1] [�]
+
+[1] 2 [+ 4] _[ηI]_ [)]
+
+
+Σ _k_ +1 = 2 [1]
+
+
+Σ _k_ + 1
+
+
+     21 [+ 2] _[ηI]_ [ +] Σ _k_ + 21
+
+
+**end for**
+**Output:** _µN_ = _N_ ( _mN_ _,_ Σ _N_ )
+
+
+4 THEORY
+
+
+In Sect. 3, we argued that, in the context of variational inference, as _µk_ iteratively gets closer _π_,
+_∇V_ ( _Xk_ ) is then (highly) correlated to Σ _[−]_ _k_ [1][(] _[X][k]_ _[−]_ _[m][k]_ [)][,] [and hence we obtain a variance reduction]
+effect. This argument leads to the construction of the control variate in Alg. 1. One might question
+whether this approach remains effective when the target distribution _π_ is significantly distant from
+the BW space. Because we are constrained to the BW space, the best we can do is to get closer to
+_π_ ˆ which is the optimal solution to the problem (1). However, _π_ ˆ might still look very different from
+_π_ . Notably, in Thm. 1, we rigorously show that within a certain neighbourhood of _π_ ˆ (to be defined
+later), our proposed estimator consistently reduces variance, regardless of how different _π_ is to a
+Gaussian distribution. Let us first introduce Lem. 1 to pave the way for Thm. 1 and also to discuss
+
+
+6
+
+
+the optimal _c_ in the control variate. In Lem. 1, we compute the variance of the proposed estimator
+by leveraging multidimensional Stein’s lemma (Lin et al., 2019).
+
+
+**Lemma 1** _Assume that V_ _is continuously differentiable._ _Let µ_ = _N_ ( _m,_ Σ) _∈_ BW(R _[d]_ ) _._ _Then,_
+
+
+E _∥∇V_ ( _X_ ) _−_ _c_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _−_ E _∇V_ ( _X_ ) _∥_ [2]
+
+    - ��     _variance of our estimator_
+
+
+= E _∥∇V_ ( _X_ ) _−_ E _∇V_ ( _X_ ) _∥_ [2]
+
+  - ��  _variance of the Monte-Carlo estimator_
+
+
++ _c_ [2] Tr(Σ _[−]_ [1] ) _−_ 2 _c_ Tr(E _∇_ [2] _V_ ( _X_ )) _,_ _where X_ _∼_ _µ._
+
+ - ��  _extra term_
+
+
+Proof of Lem. 1 is given in Appendix A.1. Lem. 1 compares the variance of the proposed estimator
+and the Monte Carlo estimator at a given _µ_ _∈_ BW(R _[d]_ ). Recall that the first-order optimality
+condition (4) of _π_ ˆ reads E _π_ ˆ _∇_ [2] _V_ = Σ [ˆ] _[−]_ [1] . Consequently, at _π_ ˆ, the _extra term_ in Lem. 1 is simplified
+as _c_ ( _c −_ 2) Tr(Σ [ˆ] _[−]_ [1] ) which is negative whenever _c ∈_ (0 _,_ 2) and minimized for _c_ = 1. Therefore, at
+_π_ ˆ, our estimator is always better than the Monte Carlo estimator for _c ∈_ (0 _,_ 2).
+
+
+**Remark 1** _A_ _practical_ _merit_ _of_ _Lem._ _1_ _is_ _that_ _it_ _implies_ _the_ _optimal_ _value_ _for_ _c_ _to_ _get_ _maximum_
+_variance_ _reduction_ _at_ _µ_ _is_ _c_ _[∗]_ = Tr(E _µ∇_ [2] _V_ ) _/_ Tr(Σ _[−]_ [1] ) _._ _Applying_ _this_ _to_ _Alg._ _1,_ _we_ _can_ _pick_ _the_
+
+
+_adaptive sequence {ck} as c_ _[∗]_ _k_ [=] Tr(E _µk_ _[−]_ _∇_ [1][2] _V_ )
+
+
+E _µk_ _V_ ) _≈_ Tr( _Sk_ )
+
+Tr(Σ _[−]_ _k_ [1][)] Tr(Σ _[−]_ _k_ [1][)] [:=] _[ c][k][.][ Again, this computation of][ c][k][ incurs]_
+
+
+_a negligible extra cost to Alg._ _1._ _We also remark that around_ _π_ ˆ _, optimality condition (4) implies the_
+_optimal value c_ _[∗]_ _indeed is around_ 1 _._
+
+
+In Thm. 1, we further show that when the Laplacian ∆ _V_ is smooth, the proposed estimator has a
+smaller variance than the Monte Carlo estimator in a region around _π_ ˆ.
+
+
+**Theorem 1 (Variance reduction around the optimal solution)** _Assume that the Laplacian_ ∆ _V_ _is_
+_ℓ-smooth._ _For any control variate coefficient c ∈_ (0 _,_ 2) _, define the region around_ _π_ ˆ = _N_ ( ˆ _m,_ Σ) [ˆ] _:_
+
+
+_V_ (ˆ _π, r_ ) = _{µ_ = _N_ ( _m,_ Σ) : 2 _ℓW_ 2( _µ,_ ˆ _π_ ) + _c|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _| < r}_
+
+
+_where r_ = (2 _−_ _c_ ) Tr(Σ [ˆ] _[−]_ [1] ) _>_ 0 _is the region’s radius._ _For any µ ∈V_ (ˆ _π, r_ ) _, the proposed estimator_
+_has a smaller variance than the Monte Carlo estimator._
+
+
+Proof of Thm. 1 is given in Appendix A.2 with the main idea being that the smoothness of the
+Laplacian ∆ _V_ propagates the improvement of the proposed estimator at ˆ _π_ to its neighbourhood. We
+additionally observe that, for small _c_ _>_ 0, the region _V_ (ˆ _π, r_ ) effectively reduces to the Wasserstein
+ball _B_ (ˆ _π, ℓ_ _[−]_ [1] Tr(Σ [ˆ] _[−]_ [1] )).
+
+
+Thm. 1 applies to arbitrary _π_, only requiring a mild smoothness condition of its second derivative.
+In the next theorem, we show that when _π_ is strongly log-concave ( _π_ is now more similar to a
+Gaussian), variance reduction happens not only around _π_ ˆ but also in many regions of interest.
+
+
+**Theorem 2 (Variance reduction at large-variance distributions)** _If_ _V_ _is_ _α-strongly_ _convex_ _for_
+_some_ _α_ _>_ 0 _,_ _for_ _any_ _control_ _variate_ _c_ _>_ 0 _,_ _the_ _proposed_ _estimator_ _has_ _a_ _smaller_ _variance_ _than_
+_the Monte Carlo estimator at every µ_ = _N_ ( _m,_ Σ) _whenever_ Tr(Σ _[−]_ [1] ) _<_ [2] _[αd]_ _c_ _[.]_
+
+
+Proof of Thm. 2 is given in Appendix A.3.
+
+
+**Remark 2** _A consequence of Thm._ _2 is that for strongly convex V_ _we can obtain variance reduction_
+_at_ _each_ _iteration_ _in_ _Alg._ _1_ _by_ _setting_ _ck_ _∈_ (0 _,_ 2 _αd/_ Tr(Σ _[−]_ _k_ [1][))] _[.]_ _[We]_ _[can]_ _[extend]_ _[this]_ _[result]_ _[to]_ _[the]_
+_case_ _of_ _convex_ _but_ _non-strongly-convex_ _V,_ _i.e.,_ _α_ = 0 _._ _We_ _first_ _show_ _that:_ _for_ _any_ _Gaussian_
+_N_ ( _m,_ Σ) _,_ Tr(E _N_ ( _m,_ Σ) _∇_ [2] _V_ ) _>_ 0 _._ _We_ _can_ _then_ _obtain_ _variance_ _reduction_ _at_ _each_ _iteration_ _by_
+_setting ck_ _∈_ (0 _,_ 2 Tr(E _N_ ( _mk,_ Σ _k_ ) _∇_ [2] _V/_ Tr(Σ _[−]_ _k_ [1][))] _[.]_ _[Note that this upper bound of][ c][k]_ _[is less explicit]_
+_as the strongly convex case._ _However, the point is that variance reduction still happens in this case_
+_given that ck_ _is small enough._ _See Appendix A.3 for the proof._
+
+
+We further show in Thm. 3 and Thm. 4 that whenever variance reduction happens along the algorithm’s iterates, the effect will propagate to the convergence analyses of Diao et al. (2023) and
+
+
+7
+
+
+improve their theoretical bounds. Therefore, combining with Thm. 1 and Thm. 2, the overall theory
+strongly favours SVRGVI over SGVI.
+
+
+Let _Pk_ denote the information up to the beginning of iteration _k_, i.e., it is the _σ_ -algebra given by
+_Pk_ = _σ_ ( _X_ 0 _, X_ 1 _, . . ., Xk−_ 1) for _k_ _∈{_ 1 _,_ 2 _, . . ., N_ _−_ 1 _}_ and _P_ 0 is, by convention, the trivial _σ_ algebra with no information. Assuming variance reduction occurs along the algorithm’s iterates,
+i.e., for _k_ = 0 _,_ 1 _, . . ., N_ _−_ 1, it holds
+
+E - _∥∇V_ ( _Xk_ ) _−_ _ck_ Σ _[−]_ _k_ [1][(] _[X][k][ −]_ _[m][k]_ [)] _[ −]_ [E] _[µ]_ _k_ _[∇][V][ ∥]_ [2] _[|P][k]_ - _≤_ _τk_ E - _∥∇V_ ( _Xk_ ) _−_ E _µk_ _∇V ∥_ [2] _|Pk_ - (7)
+
+
+where _τk_ _<_ 1 almost surely. We recall from Remark 2 that for convex _V_, (7) holds such that _τk_ _<_ 1
+almost surely for all _k_ if _ck_ is well-chosen, and it follows that E _τk_ _<_ 1 and _∥τk∥∞_ _≤_ 1 for all _k_ . We
+can further guarantee _∥τk∥∞_ _<_ 1 for all _k_ under mild boundedness assumptions (Appendix A.4).
+
+
+Under condition 7, we now show the improved bounds. Similar to Diao et al. (2023), we consider log-concave and strongly-log-concave sampling, meaning that _V_ is assumed to be convex and
+strongly convex, respectively.
+
+
+**Theorem 3 (Convex case)** _Suppose that V_ _is convex and β-smooth and the step size_ 0 _<_ _η_ _≤_ 21 _β_ _[.]_
+_If variance reduction happens for k_ = 0 _,_ 1 _, . . ., N_ _−_ 1 _, then,_
+
+
+_W_ 2 [2][(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [) + 3] _[ηβd]_ [(1 +] _[ τ]_ [max] _[,E]_ [)]
+
+
+_e_
+E min
+_k_ =1 _,_ 2 _,...,N_ _[F]_ [(] _[µ][k]_ [)] _[ −F]_ [(ˆ] _[π]_ [)][ ≲] _[Cη]_ [2][(1]
+
+
+2
+
+
+1 + _[Cη]_ [2][(1] _[−][τ]_ [max] _[,][∞]_ [)]
+
+
+- 1 _[Cη]_
+2 _ηN_ [+] 2
+
+
+_where τ_ max _,∞_ := max _i_ =0 _,N_ _−_ 1 _∥τi∥∞, τ_ max _,E_ = max _i_ =0 _,N_ _−_ 1 E _τi, e_ _≈_ 2 _._ 718 _is the Euler’s num-_
+_ber, C_ = 24 _β_ [3] _λ_ max(Σ) [ˆ] _, and_ ≲ _is asymptotically at the limit of small η._
+
+
+Proof of Thm. 3 is given in Appendix A.5.
+
+
+**Theorem 4 (Strongly convex case)** _Suppose that V_ _is α-strongly-convex with α >_ 0 _, and_ 0 _< η_ _≤_
+_α_ [2]
+48 _β_ [3] _[.]_ _[If variance reduction happens for][ k]_ [= 0] _[,]_ [ 1] _[, . . ., N]_ _[−]_ [1] _[, then]_
+
+
+      E _W_ 2 [2][(] _[µ][N]_ _[,]_ [ ˆ] _[π]_ [)][ ≲] [exp] _−_ _[N]_ [(3] _[ −]_ _[τ]_ [max] _[,][∞]_ [)] _[ηα]_
+
+4
+
+
+_W_ 2 [2][(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [) +] [24(1 +] _[ τ]_ [max] _[,E]_ [)] _[βηd]_ (8)
+
+(3 _−_ _τ_ max _,∞_ ) _α_
+
+
+_where τ_ max _,∞_ _and τ_ max _,E_ _are defined in Theorem 3, and_ ≲ _is asymptotically at the limit of small η._
+
+
+Proof of Thm. 4 is given in Appendix A.6.
+
+
+**Remark 3** _We recall the corresponding bounds for SGVI in Diao et al. (2023, Thm 5.7, Thm._ _5.8)_
+
+
+    - _**Convex.**_ E (min _k_ =1 _,_ 2 _,...,N F_ ( _µk_ )) _−F_ (ˆ _π_ ) ≲ _[eW]_ [ 2] 22 _Nη_ [(] _[µ]_ [0] _[,][π]_ [ˆ][)] + _[eCη]_ 2 _[W]_ [ 2] 2 [(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [) + 6] _[βηd.]_ [1]
+
+
+              
+- _**Strongly convex.**_ E _W_ 2 [2][(] _[µ][N]_ _[,]_ [ ˆ] _[π]_ [)][ ≲] [exp] _−_ _[αNη]_ 2
+
+
+ 2 _W_ 2 [2][(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [) +] [24] _[βηd]_ _α_
+
+
+_α_ _._
+
+
+_Putting_ _side-by-side,_ _we_ _see_ _that_ _Thm._ _3_ _and_ _Thm._ _4_ _improve_ _all_ _coefficients_ _of_ _these_ _bounds._ _In_
+_particular, the scale-down involving d is expected to help in high dimensions._ _It is also worth noting_
+_that even when we set τ_ max _,∞_ = 0 _, the noise terms in the bounds of Thm._ _3 and Thm._ _4 would not_
+_disappear because of another source of randomness coming from Sk._
+
+
+5 EXPERIMENTS
+
+
+We demonstrate the method in a collection of controlled problems, comparing it against the recent
+methods for VI in the BW manifold, namely BWGD (Lambert et al., 2022) and SGVI (Diao et al.,
+2023) [2] . We set the step size to 1 for all algorithms (for an experiment on varying step size, see
+
+
+1With a minor correction to the coefficients in SGVI’s bound.
+[2Our code is available at https://github.com/MCS-hub/vr25](https://github.com/MCS-hub/vr25)
+
+
+8
+
+
+time elapsed ( × #iters)
+
+
+(b) _d_ = 50
+
+
+10 [5]
+
+10 [4]
+
+10 [3]
+
+10 [2]
+
+10 [1]
+
+10 [0]
+
+10 1
+
+10 2
+
+
+time elapsed ( × #iters)
+
+
+(c) _d_ = 200
+
+
+10 [1]
+
+
+10 1
+
+
+10 3
+
+
+10 5
+
+
+10 7
+
+
+time elapsed ( × #iters)
+
+
+(a) _d_ = 10
+
+
+10 [4]
+
+
+10 [2]
+
+
+10 [0]
+
+
+10 2
+
+
+10 4
+
+
+Figure 3: KL divergence for Gaussian targets of varying dimensionality.
+
+
+Appendix B.7), fix the covariate coefficient _c_ = 0 _._ 9 (for an experiment on the effect of _c_, see
+Appendix B.6), and show results for 10 runs, with bold line showing the average performance. The
+comparisons are shown as convergence curves, as the per-iteration cost of all methods is almost
+identical. We also compare against a full-rank Gaussian approximation optimised in the Euclidean
+geometry (denoted as EVI), using low-variance reparameterization gradients of Roeder et al. (2017)
+with ADAM optimizer, and Laplace approximation that does not optimize the KL divergence but
+fits a Gaussian distribution at the target mode; see Appendix B for details. As the per-iteration
+cost of these methods is different from the BW methods, we only report the final accuracy for
+carefully optimized approximations to show how the BW methods compare against commonly used
+algorithms. The Laplace approximation is omitted for Gaussian targets as it is optimal by definition.
+
+
+**Gaussian** **targets** We randomly generate the means and covariances for a multivariate Gaussian
+target distribution _π_, considering dimensions of _{_ 10 _,_ 50 _,_ 200 _}_ . Fig. 3 demonstrates consistent significant improvement over SGVI and BWGD. For example, for _d_ = 200, the the difference between
+SVRGVI and SGVI/BWGD is 5 orders of magnitude, 10 _[−]_ [2] versus 10 [3] . Fig. 1 shows visually the
+marginals for _d_ = 50, providing an interpretation of the improvement seen in KL-divergence. We
+also clearly outperform EVI in higher dimensions, unlike previous BW methods.
+
+
+**Student’s t targets** We consider a multivariate Student’s t target with a degree of freedom of 4 in
+200 dimensions. Fig. 4 (a) shows that our algorithm is again clearly the best. BWGD is not stable
+and, on average, performs worse than even the Laplace approximation.
+
+
+**Bayesian** **logistic** **regression** We consider a Bayesian logistic regression with a flat prior as in
+Diao et al. (2023): given a set of covariates _Xi_ _∼N_ (0 _, Id_ ) for _i_ = 1 _,_ 2 _, . . ., n_, consider
+
+
+_Yi|Xi, θ_ _∼_ Bernoulli( _σ_ ( _⟨θ, Xi⟩_ )) _,_ where _σ_ is the sigmoid function.
+
+The negative log posterior is _V_ ( _θ_ ) = [�] _i_ _[n]_ =1 �ln(1 + _e_ _[⟨][θ,X][i][⟩]_ ) _−_ _Yi⟨θ, Xi⟩_ �. The model consists of
+_n_ = 1000 data points ( _Xi, Yi_ ) with dimension _d_ = 200. The optimal solution is unknown in this
+case, so we cannot plot the KL divergence along the iterations. Instead, we estimate the objective
+function of the problem (2), _F_ ( _µk_ ), by drawing samples from _µk_ . We denote by _µ_ best the distribution
+that obtains the smallest _F_ among all iterations of all algorithms, comparing against that. Fig 4 (b)
+shows the proposed method is again the most accurate.
+
+
+We also measured the variance along iterations in Appendix B.4, showing that we achieved variance
+reduction empirically. We showed in Appendix B.5 that the proposed method is more efficient than
+minibatching (whether using i.i.d. or quasi Monte-Carlo samples).
+
+
+6 DISCUSSION
+
+
+Various variance reduction techniques have been broadly studied in the VI literature, but mainly
+for methods operating in the Euclidean parameter space. Our work resembles in nature the seminal work of Roeder et al. (2017) that demonstrated how the variance of gradient estimators for VI
+can be dramatically reduced by a single-line change in the algorithm: We also propose a minor
+
+
+9
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 [6]
+
+10 [5]
+
+10 [4]
+
+10 [3]
+
+10 [2]
+
+10 [1]
+
+
+time elapsed ( × #iters)
+
+
+(a) Student’s t
+
+
+(b) Bayesian logistic regression
+
+
+Figure 4: Performance of algorithms for Student’s t target and Bayesian logistic regression.
+
+
+modification that dramatically improves the accuracy, and should always be used. A high-level similarity lies in the heuristic that the VI distribution resembles the target distribution, allowing it to be
+used to construct control variates. Perhaps surprisingly, Yi & Liu (2023) recently showed that the
+continuous-time flow of Roeder et al. (2017) for Gaussian VI in the Euclidean geometry (by reparameterizing the covariance matrix as Σ = _SS_ _[⊤]_ ) also follows S¨arkk¨a’s ODEs. In other words, those
+BW methods and Roeder et al. (2017) are different discretizations of the same dynamics. Recent
+works (Kim et al., 2023; Domke et al., 2024) have advanced our understanding of variance reduction
+in Euclidean VI, demonstrating strong convergence and extending beyond traditional control variate
+approaches. Adopting these new techniques in the BW setting is a promising research direction.
+
+
+In the BW space, Diao (2023) considers variance reduction for large-sum structures based on the
+nested-loop idea by Johnson & Zhang (2013) to reduce the stochasticity of the minibatch sampling.
+In contrast, our method addresses the stochasticity arising from Gaussian sampling from the VI.
+
+
+Even though our experiments focused on synthetic targets, they expanded on the previous experimentation of VI optimized in the BW space. We confirm the finding of Diao et al. (2023) that
+BWGD and SGVI are effectively identical except for the instability of the former, but now show
+how their performance degrades in higher dimensions while our algorithm remains effective.
+
+
+With the exception of the vastly improved accuracy due to the significantly lower variance of the
+gradient estimators, our method retains all qualitative characteristics of the previous BW methods,
+both positive and negative. That is, we retain the theoretical convergence guarantees and asymptotic
+optimality for posterior inference, but also the cubic computational cost due to requiring the Hessian
+of the log-target and the limitation to Gaussian approximations by construction. As highlighted by
+Xu & Campbell (2022) and Quiroz et al. (2023), there are tasks for which Gaussian approximations
+are highly relevant due to efficiently capturing the correlations.
+
+
+7 CONCLUSION
+
+
+Our main result is showing that the methods learning a variational approximation by direct optimization of the approximating distribution in the Bures–Wasserstein space of Gaussians can be
+made practical. The previous works by Lambert et al. (2022) and Diao et al. (2023) introduced the
+key idea and the algorithms with strong theoretical guarantees. However, they are prone to high variance from Monte Carlo approximations, limiting the impact. Our variance reduction technique that
+requires only a minor modification for the SVGI algorithm completely resolves this issue, resulting
+in extremely stable learning.
+
+
+We demonstrated substantial variance reduction and showed that this reduction results in orders of
+magnitude improvement in final approximation accuracy, over both the previous BW methods and
+examples of parameter-space algorithms. This improvement comes with provable variance reduction
+in the neighborhood of the optimal solution and for all distributions with sufficiently large variance in
+the case of strong log-concave targets, and hence the proposed variance reduction technique should
+always be used.
+
+
+10
+
+
+ACKNOWLEDGMENTS
+
+
+This work is supported by the Research Council of Finland’s Flagship programme: Finnish Center for Artificial Intelligence (FCAI), and additionally by grants 363317, 345811 and 348952. We
+thank Kai Puolam¨aki for the discussions. The authors wish to acknowledge CSC – IT Center for Science, Finland, for computational resources. We thank the anonymous reviewers for their insightful
+comments and suggestions.
+
+
+REFERENCES
+
+
+Jason Altschuler, Sinho Chewi, Patrik R Gerber, and Austin Stromme. Averaging on the BuresWasserstein manifold: dimension-free convergence of gradient descent. _Advances in Neural In-_
+_formation Processing Systems_, 34:22132–22145, 2021.
+
+
+Luigi Ambrosio, Nicola Gigli, and Giuseppe Savar´e. _Gradient_ _flows:_ _in_ _metric_ _spaces_ _and_ _in_ _the_
+_space of probability measures_ . Springer Science & Business Media, 2005.
+
+
+Heinz Bauschke and Patrick Combettes. Convex analysis and monotone operator theory in Hilbert
+spaces, 2011.
+
+
+David M Blei, Alp Kucukelbir, and Jon D McAuliffe. Variational inference: A review for statisticians. _Journal of the American statistical Association_, 112(518):859–877, 2017.
+
+
+Yann Brenier. Polar factorization and monotone rearrangement of vector-valued functions. _Commu-_
+_nications on pure and applied mathematics_, 44(4):375–417, 1991.
+
+
+Alexander Buchholz, Florian Wenzel, and Stephan Mandt. Quasi-monte carlo variational inference.
+In _International Conference on Machine Learning_, pp. 668–677. PMLR, 2018.
+
+
+Sinho Chewi, Jonathan Niles-Weed, and Philippe Rigollet. Statistical optimal transport. _arXiv_
+_preprint arXiv:2407.18163_, 2024.
+
+
+Aaron Defazio, Francis Bach, and Simon Lacoste-Julien. SAGA: A fast incremental gradient
+method with support for non-strongly convex composite objectives. _Advances_ _in_ _neural_ _infor-_
+_mation processing systems_, 27, 2014.
+
+
+Michael Ziyang Diao. Proximal gradient algorithms for Gaussian variational inference: Optimization in the Bures–Wasserstein space. Master’s thesis, Massachusetts Institute of Technology,
+2023.
+
+
+Michael Ziyang Diao, Krishna Balasubramanian, Sinho Chewi, and Adil Salim. Forward-backward
+Gaussian variational inference via jko in the Bures-Wasserstein space. In _International Confer-_
+_ence on Machine Learning_, pp. 7960–7991. PMLR, 2023.
+
+
+Manfredo Perdigao Do Carmo. _Riemannian geometry_, volume 2. Birkh¨auser, 1992.
+
+
+Justin Domke, Robert Gower, and Guillaume Garrigos. Provable convergence guarantees for blackbox variational inference. _Advances in neural information processing systems_, 36, 2024.
+
+
+Antti Honkela and Harri Valpola. Unsupervised variational Bayesian learning of nonlinear models.
+_Advances in neural information processing systems_, 17, 2004.
+
+
+Aapo Hyv¨arinen. Estimation of non-normalized statistical models by score matching. _Journal_ _of_
+_Machine Learning Research_, 6(4), 2005.
+
+
+Rie Johnson and Tong Zhang. Accelerating stochastic gradient descent using predictive variance
+reduction. _Advances in neural information processing systems_, 26, 2013.
+
+
+Richard Jordan, David Kinderlehrer, and Felix Otto. The variational formulation of the Fokker–
+Planck equation. _SIAM journal on mathematical analysis_, 29(1):1–17, 1998.
+
+
+Anya Katsevich and Philippe Rigollet. On the approximation accuracy of Gaussian variational
+inference. _The Annals of Statistics_, 52(4):1384–1409, 2024.
+
+
+11
+
+
+Kyurae Kim, Kaiwen Wu, Jisu Oh, and Jacob R Gardner. Practical and matching gradient variance
+bounds for black-box variational bayesian inference. In _International_ _Conference_ _on_ _Machine_
+_Learning_, pp. 16853–16876. PMLR, 2023.
+
+
+Diederik P. Kingma and Jimmy Ba. Adam: A Method for Stochastic Optimization. In _3rd_ _Inter-_
+_national_ _Conference_ _on_ _Learning_ _Representations,_ _ICLR_ _2015,_ _San_ _Diego,_ _CA,_ _USA,_ _May_ _7-9,_
+_2015, Conference Track Proceedings_, 2015.
+
+
+Alp Kucukelbir, Dustin Tran, Rajesh Ranganath, Andrew Gelman, and David M Blei. Automatic
+differentiation variational inference. _Journal of machine learning research_, 18(14):1–45, 2017.
+
+
+Marc Lambert, Sinho Chewi, Francis Bach, Silv`ere Bonnabel, and Philippe Rigollet. Variational
+inference via Wasserstein gradient flows. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_,
+35:14434–14447, 2022.
+
+
+Wu Lin, Mohammad Emtiyaz Khan, and Mark Schmidt. Stein’s lemma for the reparameterization
+trick with exponential family mixtures. _arXiv preprint arXiv:1910.13398_, 2019.
+
+
+Hoang Phuc Hau Luu. _Advanced machine learning techniques based on DCA and applications to_
+_predictive maintenance_ . PhD thesis, Universit´e de Lorraine, 2022.
+
+
+Hoang Phuc Hau Luu, Hanlin Yu, Bernardo Williams, Petrus Mikkola, Marcelo Hartmann, Kai
+Puolam¨aki, and Arto Klami. Non-geodesically-convex optimization in the Wasserstein space.
+_Advances in Neural Information Processing Systems_, 37:16772–16809, 2024.
+
+
+Chirag Modi, Robert Gower, Charles Margossian, Yuling Yao, David Blei, and Lawrence Saul.
+Variational inference with Gaussian score matching. _Advances in Neural Information Processing_
+_Systems_, 36, 2024.
+
+
+Petr Mokrov, Alexander Korotin, Lingxiao Li, Aude Genevay, Justin M Solomon, and Evgeny Burnaev. Large-scale Wasserstein gradient flows. _Advances in Neural Information Processing Sys-_
+_tems_, 34:15243–15256, 2021.
+
+
+Jorge Nocedal and Stephen J. Wright. _Numerical Optimization_ . Spinger, 2 edition, 2006.
+
+
+Manfred Opper and C´edric Archambeau. The variational Gaussian approximation revisited. _Neural_
+_computation_, 21(3):786–792, 2009.
+
+
+Felix Otto. The geometry of dissipative evolution equations: The porous medium equation. _Com-_
+_munications in Partial Differential Equations_, 26(1-2):101–174, 2001.
+
+
+Art B Owen. Monte Carlo theory, methods and examples, 2013.
+
+
+John Paisley, David M. Blei, and Michael I. Jordan. Variational Bayesian inference with stochastic search. In _Proceedings_ _of_ _the_ _29th_ _International_ _Coference_ _on_ _International_ _Conference_ _on_
+_Machine Learning_, pp. 1363–1370, 2012.
+
+
+Matias Quiroz, David J Nott, and Robert Kohn. Gaussian variational approximations for highdimensional state space models. _Bayesian Analysis_, 18(3):989–1016, 2023.
+
+
+Rajesh Ranganath, Sean Gerrish, and David Blei. Black box variational inference. In _Artificial_
+_intelligence and statistics_, pp. 814–822. PMLR, 2014.
+
+
+Carl Edward Rasmussen and Christopher K. I. Williams. _Gaussian Processes for Machine Learning_ .
+Adaptive computation and machine learning. The MIT Press, Cambridge, MA, USA, 2006.
+
+
+Danilo Rezende and Shakir Mohamed. Variational inference with normalizing flows. In _Interna-_
+_tional conference on machine learning_, pp. 1530–1538. PMLR, 2015.
+
+
+Gareth O. Roberts and Richard L. Tweedie. Exponential convergence of Langevin distributions and
+their discrete approximations. _Bernoulli_, 2(4):341 – 363, 1996.
+
+
+Geoffrey Roeder, Yuhuai Wu, and David K Duvenaud. Sticking the landing: Simple, lower-variance
+gradient estimators for variational inference. _Advances in Neural Information Processing Systems_,
+30, 2017.
+
+
+12
+
+
+Adil Salim, Anna Korba, and Giulia Luise. The Wasserstein proximal gradient algorithm. _Advances_
+_in Neural Information Processing Systems_, 33:12356–12366, 2020.
+
+
+Simo S¨arkk¨a. On unscented Kalman filtering for state estimation of continuous-time nonlinear
+systems. _IEEE Transactions on automatic control_, 52(9):1631–1641, 2007.
+
+
+Michalis Titsias and Miguel L´azaro-Gredilla. Doubly stochastic variational Bayes for non-conjugate
+inference. In _International conference on machine learning_, pp. 1971–1979. PMLR, 2014.
+
+
+Aad W Van der Vaart. _Asymptotic statistics_, volume 3. Cambridge University Press, 2000.
+
+
+Pauli Virtanen, Ralf Gommers, Travis E. Oliphant, Matt Haberland, Tyler Reddy, David Cournapeau, Evgeni Burovski, Pearu Peterson, Warren Weckesser, Jonathan Bright, St´efan J. van der
+Walt, Matthew Brett, Joshua Wilson, K. Jarrod Millman, Nikolay Mayorov, Andrew R. J. Nelson, Eric Jones, Robert Kern, Eric Larson, C J Carey, [˙] Ilhan Polat, Yu Feng, Eric W. Moore,
+Jake VanderPlas, Denis Laxalde, Josef Perktold, Robert Cimrman, Ian Henriksen, E. A. Quintero,
+Charles R. Harris, Anne M. Archibald, Antˆonio H. Ribeiro, Fabian Pedregosa, Paul van Mulbregt, and SciPy 1.0 Contributors. SciPy 1.0: Fundamental Algorithms for Scientific Computing
+in Python. _Nature Methods_, 17:261–272, 2020.
+
+
+Martin J Wainwright, Michael I Jordan, et al. Graphical models, exponential families, and variational
+inference. _Foundations and Trends® in Machine Learning_, 1(1–2):1–305, 2008.
+
+
+Andre Wibisono. Sampling as optimization in the space of measures: The Langevin dynamics as
+a composite optimization problem. In _Conference on Learning Theory_, pp. 2093–3027. PMLR,
+2018.
+
+
+Zuheng Xu and Trevor Campbell. The computational asymptotics of Gaussian variational inference
+and the laplace approximation. _Statistics and Computing_, 32(4):63, 2022.
+
+
+Mingxuan Yi and Song Liu. Bridging the gap between variational inference and Wasserstein gradient flows. _arXiv preprint arXiv:2310.20090_, 2023.
+
+
+A THEORY
+
+
+A.1 PROOF OF LEMMA 1
+
+
+For each _µ_ = _N_ ( _m,_ Σ) _∈_ BW(R _[d]_ ) and _c >_ 0, we denote
+
+
+_Q_ ( _µ_ ) = E _∥∇V_ ( _X_ ) _−_ E _∇V_ ( _X_ ) _∥_ [2] _−_ E _∥∇V_ ( _X_ ) _−_ _c_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _−_ E _∇V_ ( _X_ ) _∥_ [2] _,_ _X_ _∼_ _µ,_
+
+
+which is the difference between the variances of the Monte Carlo estimator and our proposed estimator. We want _Q_ ( _µ_ ) _>_ 0. Simple algebras simplify _Q_ as
+
+
+_Q_ ( _µ_ ) = 2 _c_ E _⟨∇V_ ( _X_ ) _−_ E _∇V_ ( _X_ ) _,_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _⟩−_ _c_ [2] E _∥_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _∥_ [2] _._
+
+
+Recall a standard result: if _X_ _∼N_ ( _m,_ Σ), then its affine transformation _W_ = _AX_ + _b_ has the
+distribution _N_ ( _Am_ + _b, A_ Σ _A_ _[⊤]_ ). Applying this result, _W_ := Σ _[−]_ [1] ( _X−m_ ) _∼N_ (0 _,_ Σ _[−]_ [1] ). Therefore
+
+
+E _∥W_ _∥_ [2] =
+
+
+_d_
+
+
+E _Wi_ [2] [= Tr(Σ] _[−]_ [1][)] _[.]_
+_i_ =1
+
+
+On the other hand,
+
+
+E _⟨∇V_ ( _X_ ) _−_ E _∇V_ ( _X_ ) _,_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _⟩_
+
+= E _⟨∇V_ ( _X_ ) _,_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _⟩−_ E _⟨_ E _∇V_ ( _X_ ) _,_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _⟩_
+
+= E _⟨∇V_ ( _X_ ) _,_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _⟩−⟨_ E _∇V_ ( _X_ ) _,_ EΣ _[−]_ [1] ( _X_ _−_ _m_ ) _⟩_
+
+= E _⟨∇V_ ( _X_ ) _,_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _⟩−⟨_ E _∇V_ ( _X_ ) _,_ Σ _[−]_ [1] (E _X_ _−_ _m_ ) _⟩_
+
+= E _⟨∇V_ ( _X_ ) _,_ Σ _[−]_ [1] ( _X_ _−_ _m_ ) _⟩._
+
+
+13
+
+
+Let us denote _A_ = Σ _[−]_ [1] and compute E _⟨∇V_ ( _X_ ) _, A_ ( _X_ _−_ _m_ ) _⟩_ as follows
+
+
+E _⟨∇V_ ( _X_ ) _, A_ ( _X_ _−_ _m_ ) _⟩_ = E
+
+
+= E
+
+
+- _d_
+
+ 
+
+_i_ =1
+
+ _d_
+
+ 
+
+_i_ =1
+
+
+      
+_∂V_
+( _X_ )[ _A_ ( _X_ _−_ _m_ )] _i_
+_∂xi_
+
+
+_∂V_
+( _X_ )
+_∂xi_
+
+
+
+
+
+
+
+
+_d_
+
+
+[ _A_ ] _ij_ ( _Xj_ _−_ _mj_ )
+
+_j_ =1
+
+
+- _d_ - _∂V_ 
+[ _A_ ] _ij_ E ( _X_ )( _Xj_ _−_ _mj_ ) _._ (9)
+_∂xi_
+_j_ =1
+
+
+=
+
+
+_d_
+
+
+_i_ =1
+
+
+    - _∂V_     We compute E ( _X_ )( _Xj_ _−_ _mj_ ) by leveraging the following Stein’s lemma (Lin et al., 2019).
+_∂xi_
+
+
+**Lemma 2 (Stein’s lemma)** _Let X_ _∼N_ ( _m,_ Σ) _be an d-dimensional Gaussian random variable and_
+_g_ : R _[d]_ _→_ R _be continuously differentiable, then_
+
+
+E ( _g_ ( _X_ )( _X_ _−_ _m_ )) = ΣE( _∇g_ ( _X_ )) _._
+
+
+Applying Stein’s lemma with _g_ = ( _∂/∂xi_ ) _V_,
+
+
+   - _∂V_   -   -   E ( _X_ )( _X_ _−_ _m_ ) = ΣE _∇_ _[∂V]_ ( _X_ )
+_∂xi_ _∂xi_
+
+
+= ΣE
+
+
+�� _∂_ 2 _V_ _∂_ [2] _V_ _∂_ [2] _V_ - _⊤_ [�]
+( _X_ ) _,_ ( _X_ ) _, . . .,_ ( _X_ )
+_∂x_ 1 _∂xi_ _∂x_ 2 _∂xi_ _∂xd∂xi_
+
+
+_._
+
+
+By comparing the _j_ -th element of both sides, we get
+
+
+       - _∂V_       E ( _X_ )( _Xj_ _−_ _mj_ ) =
+_∂xi_
+
+
+Plugging this expression into (9),
+
+
+- _d_ - _∂_ 2 _V_ 
+Σ _jk_ E ( _X_ ) _._
+_∂xk∂xi_
+_k_ =1
+
+
+_d_
+
+- [ _A_ ] _ij_
+
+
+_j_ =1
+
+
+- _d_ - _∂_ 2 _V_ 
+E ( _X_ ) [ _I_ ] _ik_
+_∂xk∂xi_
+_k_ =1
+
+
+- _d_ - _∂_ 2 _V_ 
+Σ _jk_ E ( _X_ )
+_∂xk∂xi_
+_k_ =1
+
+
+E _⟨∇V_ ( _X_ ) _, A_ ( _X_ _−_ _m_ ) _⟩_ =
+
+
+=
+
+
+=
+
+
+=
+
+
+=
+
+
+=
+
+
+_d_
+
+
+_i_ =1
+
+
+_d_
+
+
+_i_ =1
+
+
+_d_
+
+
+_i_ =1
+
+
+_d_
+
+
+_i_ =1
+
+
+_d_
+
+
+_i_ =1
+
+
+- _d_ - _∂_ 2 _V_ 
+E ( _X_ )
+_i_ =1 _∂x_ [2] _i_
+
+
+_d_
+
+
+_j_ =1
+
+
+- _d_ - _∂_ 2 _V_ 
+[ _A_ ] _ij_ Σ _jk_ E ( _X_ )
+_∂xk∂xi_
+_k_ =1
+
+
+- _d_ - _∂_ 2 _V_ - - _d_
+
+E ( _X_ )
+_∂xk∂xi_
+_k_ =1 _j_ =1
+
+
+_d_
+
+
+[ _A_ ] _ij_ Σ _jk_
+
+_j_ =1
+
+
+- _d_ - _∂_ 2 _V_ 
+E ( _X_ ) [ _A_ Σ] _ik_
+_∂xk∂xi_
+_k_ =1
+
+
+Therefore,
+
+
+= Tr(E _∇_ [2] _V_ ( _X_ )) _._
+
+
+_Q_ ( _µ_ ) = 2 _c_ Tr(E _∇_ [2] _V_ ( _X_ )) _−_ _c_ [2] Tr(Σ _[−]_ [1] ) _,_ where _X_ _∼_ _µ._
+
+
+14
+
+
+A.2 PROOF OF THEOREM 1
+
+
+Recall that Lem. 1 and the optimality condition (4) imply _Q_ (ˆ _π_ ) = _c_ (2 _−_ _c_ ) Tr(Σ [ˆ] _[−]_ [1] ).
+
+
+Now let _µ_ = _N_ ( _m,_ Σ) _∈_ BW(R _[d]_ ), and let ( _X,_ _X_ [ˆ] ) be the optimal coupling between _µ_ and _π_ ˆ,
+
+
+_|Q_ ( _µ_ ) _−Q_ (ˆ _π_ ) _| ≤_ 2 _c|_ Tr(E _∇_ [2] _V_ ( _X_ )) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _|_ + _c_ [2] _|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _|_
+
+= 2 _c|_ Tr(E _∇_ [2] _V_ ( _X_ )) _−_ Tr(E _∇_ [2] _V_ ( _X_ [ˆ] )) _|_ + _c_ [2] _|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _|_
+
+_≤_ 2 _c_ E _|_ Tr( _∇_ [2] _V_ ( _X_ )) _−_ Tr( _∇_ [2] _V_ ( _X_ [ˆ] )) _|_ + _c_ [2] _|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _|_
+
+= 2 _c_ E _|_ ∆ _V_ ( _X_ ) _−_ ∆ _V_ ( _X_ [ˆ] ) _|_ + _c_ [2] _|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _|_
+
+_≤_ 2 _cℓ_ E _∥X_ _−_ _X_ [ˆ] _∥_ + _c_ [2] _|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _|_
+
+
+1
+_≤_ 2 _cℓ_ (E _∥X_ _−_ _X_ [ˆ] _∥_ [2] ) 2 + _c_ [2] _|_ Tr(Σ _[−]_ [1] ) _−_ Tr(ˆΣ _[−]_ [1] ) _|_
+
+= 2 _cℓW_ 2( _µ,_ ˆ _π_ ) + _c_ [2] _|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _|._
+
+
+Therefore
+
+
+_Q_ ( _µ_ ) _≥Q_ (ˆ _π_ ) _−_ 2 _cℓW_ 2( _µ,_ ˆ _π_ ) _−_ _c_ [2] _|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _|._
+
+
+So _Q_ ( _µ_ ) _>_ 0 if
+
+
+2 _cℓW_ 2( _µ,_ ˆ _π_ ) + _c_ [2] _|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _| < Q_ (ˆ _π_ )
+
+
+or
+
+
+2 _ℓW_ 2( _µ,_ ˆ _π_ ) + _c|_ Tr(Σ _[−]_ [1] ) _−_ Tr(Σ [ˆ] _[−]_ [1] ) _| <_ (2 _−_ _c_ ) Tr(Σ [ˆ] _[−]_ [1] ) _._
+
+
+A.3 PROOF OF THEOREM 2 AND REMARK 2
+
+
+_Proof of Theorem 2_
+
+
+Recall from Lem. 1: for any _µ_ = _N_ ( _m,_ Σ) _∈_ BW(R _[d]_ ),
+
+
+_Q_ ( _µ_ ) = 2 _c_ Tr(E _∇_ [2] _V_ ( _X_ )) _−_ _c_ [2] Tr(Σ _[−]_ [1] ) _,_ where _X_ _∼_ _µ._
+
+
+Since _V_ is _α_ -strongly convex, _∇_ [2] _V_ ( _x_ ) ≽ _αI_ for all _x_ _∈_ R _[d]_ . Therefore, E _∇_ [2] _V_ ( _X_ ) ≽ _αI_ . It
+follows that Tr(E _∇_ [2] _V_ ( _X_ )) _≥_ _dα_ . Therefore, whenever Tr(Σ _[−]_ [1] ) _<_ (2 _dα_ ) _/c_, _Q_ ( _µ_ ) _>_ 0 and we
+get reduced variance.
+
+
+_Proof of Remark 2_
+
+
+Assuming that _V_ is convex (not necessarily strongly convex) and twice continuously differentiable.
+We show that: for any Gaussian random variable _X_, Tr(E _∇_ [2] _V_ ( _X_ )) _>_ 0. By contradiction, suppose
+that Tr(E _∇_ [2] _V_ ( _X_ )) = 0, it follows that E _∇_ [2] _V_ ( _X_ ) = 0 since E _∇_ [2] _V_ ( _X_ ) is symmetric and positive
+semidefinite. Therefore, for all _z_ : _z_ _[⊤]_ (E _∇_ [2] _V_ ( _X_ )) _z_ = 0 or E( _z_ _[⊤]_ _∇_ [2] _V_ ( _X_ ) _z_ ) = 0. Let’s denote by
+_f_ the pdf of _X_, we have: given any fixed _z_ :
+
+             ( _z_ _[⊤]_ _∇_ [2] _V_ ( _x_ ) _z_ ) _f_ ( _x_ ) _dx_ = 0
+
+
+Since _V_ is convex, the function under the integral is non-negative. Therefore, the integral being
+zero implies that the function is zero almost everywhere. The continuity of _∇_ [2] _V_ further implies
+that the function under the integral has to be identically zero. Since _f_ ( _x_ ) _>_ 0 for all _x_, we deduce
+_z_ _[⊤]_ _∇_ [2] _V_ ( _x_ ) _z_ = 0 for all _x_ . Now pick _z_ = _ei_ where _ei_ is the i-th basis vector, i.e., [ _ei_ ] _j_ = 1 if _j_ = _i_,
+0 otherwise, we get _∂x_ [2][2] _i_ _[V]_ _[≡]_ [0][.] [For] _[ i]_ [=] _[j]_ [, we set] _[ z]_ [so that] _[ z][i]_ [=] _[z][j]_ [=] [1][,] _[ z][k]_ [=] [0][ for all] _[ k]_ [=] _[i, j]_ [, we]
+
+have _∂x_ [2][2] _i_ _[V]_ [+] _[ ∂]_ _x_ [2][2] _j_ _[V]_ [+ 2] _[∂]_ _x_ [2] _ixj_ _[V]_ _[≡]_ [0][, or] _[ ∂]_ _x_ [2] _ixj_ _[V]_ _[≡]_ [0][.] [We conclude that] _[ ∇]_ [2] _[V]_ _[≡]_ [0][, or] _[ V]_ [is an affine]
+
+function. This cannot happen since _π_ _∝_ _e_ _[−][V]_ is a proper distribution. This contradiction implies
+that Tr(E _∇_ [2] _V_ ( _X_ )) _>_ 0. Therefore, by picking _c_ _∈_ (0 _,_ 2 Tr(E _∇_ [2] _V_ ( _X_ )) _/_ Tr(Σ _[−]_ [1] )) we guarantee
+_Q_ ( _µ_ ) _>_ 0.
+
+
+15
+
+
+A.4 DISCUSSION ON CONDITION (7)
+
+
+For convex _V_, Remark 2 guarantees that we can pick _ck_ (that is _Pk_ -measurable) so that _τk_ _<_ 1
+almost surely. To ensure a slightly stronger condition _∥τk∥∞_ _<_ 1 we proceed as follows. Firstly,
+from Lemma 1, we can set
+
+_k_ [Tr(Σ] _k_ _[−]_ [1][)]
+_τk_ = 1 _−_ [2] _[c][k]_ [ Tr(][E] _[µ][k]_ _[∇]_ [2] _[V]_ [ )] _[ −]_ _[c]_ [2] _._
+E _µk_ _∥∇V_ _−_ E _µk_ _∇V ∥_ [2]
+
+
+On the other hand, it was shown in Diao et al. (2023, Appendix D) that we can control the eigenvalues of Σ _k_ +1 along the SGVI’s iterations as follows: if _V_ is _β_ -smooth and Σ0 is initialized such that
+_β_ _[−]_ [1] _I_ _⪯_ Σ0, and that the stepsize satisfies _η_ _≤_ _β_ [1] [, then] _[ β][−]_ [1] _[I]_ _[⪯]_ [Σ] _[k]_ [for all] _[ k]_ [.] [We note that this re-]
+
+sult also holds for SVRGVI since their computations only involve the update step of the covariance
+matrix. Now with Σ0 _⪰_ _β_ _[−]_ [1] _I_, it holds Σ _k_ _⪰_ _β_ _[−]_ [1] _I_ almost surely for all _k_ .
+
+Now let us consider _α >_ 0 (strongly convex _V_ ) and pick _ck_ = 2 _αdϵ_
+Tr(Σ _[−]_ _k_ [1][)] [where] _[ ϵ][ ∈]_ [(0] _[,]_ [ 1)][, we get]
+
+
+4 _α_ [2] _d_ [2] _ϵ_ (1 _−_ _ϵ_ )
+_τk_ _≤_ 1 _−_
+Tr(Σ _[−]_ _k_ [1][)][E] _[µ]_ _k_ _[∥∇][V]_ _[−]_ [E] _[µ]_ _k_ _[∇][V][ ∥]_ [2]
+
+4 _α_ [2] _dϵ_ (1 _−_ _ϵ_ )
+_≤_ 1 _−_ _β_ E _µk_ _∥∇V_ _−_ E _µk_ _∇V ∥_ [2] _[.]_
+
+
+Therefore, with the assumption that there exists a deterministic _Mk_ such that E _µk_ _∥∇V_ _−_
+E _µk_ _∇V ∥_ [2] _≤_ _Mk_ almost surely, it holds: almost surely
+
+_τk_ _≤_ 1 _−_ [4] _[α]_ [2] _[dϵ]_ [(1] _[ −]_ _[ϵ]_ [)]
+
+_βMk_
+
+
+which implies _∥τk∥∞_ _<_ 1 _._
+
+
+Now consider _α_ = 0 (convex but non-strongly-convex _V_ ) and let us pick _ck_ := 2 _ϵ_ Tr(E _µk_ _[−]_ _∇_ [1] [2] _V_ )
+
+
+_ϵ ∈_ (0 _,_ 1) _,_ we get
+
+
+_k_ where
+
+Tr(Σ _[−]_ _k_ [1][)]
+
+
+_τk_ = 1 _−_ [4] _[ϵ]_ [(1] _[ −]_ _[ϵ]_ [)(Tr(][E] _[µ][k]_ _[∇]_ [2] _[V]_ [ ))][2] _._
+
+_βdMk_
+
+
+If we further assume that _∥mk∥_ and the eigenvalues of Σ _k_ are also bounded above in this case, i.e.,
+there exists a deterministic _Bk, Ek_ such that _λ_ max(Σ _k_ ) _≤_ _Bk_ and _∥mk∥≤_ _Ek_ almost surely. Recall
+that Σ _k_ _⪰_ _β_ _[−]_ [1] _I_ .
+
+Since _V_ cannot be affine in the entire domain, there exist _x_ 0 _∈_ R _[d]_ and _i ∈{_ 1 _,_ 2 _, . . ., d}_ such that
+
+
+_∂_ [2] _V_
+
+( _x_ 0) _>_ 0 _._
+_∂x_ [2] _i_
+
+By the continuity of _∂_ [2] _V/∂x_ [2] _i_ [, there exists] _[ r]_ _[>]_ [ 0] _[, ϵ >]_ [ 0][ such that]
+
+_∂_ [2] _V_
+
+( _x_ ) _≥_ _ϵ,_ _∀x ∈_ _B_ ( _x_ 0 _, r_ ) _._
+_∂x_ [2] _i_
+
+
+By denoting by _f_ ( _x_ ; _m,_ Σ) the pdf of _N_ ( _m,_ Σ), we evaluate
+
+
+      Tr(E _µk_ _∇_ [2] _V_ ) _≥_
+
+_B_ ( _x_ 0 _,r_ )
+
+
+_∂_ [2] _V_
+
+( _x_ ) _f_ ( _x_ ; _mk,_ Σ _k_ ) _dx_
+_∂x_ [2] _i_
+
+
+[1] 2 [(] _[x][−][m][k]_ [)] _[⊤]_ [Σ] _k_ _[−]_ [1][(] _[x][−][m][k]_ [)] _dx_
+
+
+_≥_ _ϵ_ (2 _π_ ) _[−]_ _[d]_ 2
+
+
+_[d]_ 2 det(Σ _k_ ) _[−]_ 2 [1]
+
+
+ 
+[1] 2
+
+
+_e_ _[−]_ 2 [1]
+_B_ ( _x_ 0 _,r_ )
+
+
+_[d]_ 2 _B−_ _[d]_ 2
+
+
+_e_ _[−][β][∥][x][∥]_ [2] _dx._
+_B_ ( _x_ 0 _,r_ )
+
+
+_≥_ _ϵ_ (2 _π_ ) _[−]_ _[d]_ 2
+
+
+_k−_ _[d]_ 2 _e_ _[−][βE]_ _k_ [2] 
+
+
+16
+
+
+A.5 PROOF OF THEOREM 3
+
+
+Since Alg. 1 differs from SGVI (Diao et al., 2023) only at [˜] _bk_, we will largely leverage the convergence analysis of Diao et al. (2023) but will pay extra attention to the transition of the variance
+reduction effect to the final bounds.
+
+
+At the iteration _k_, the (deterministic) Bures–Wasserstein gradient of _EV_ at _µk_ is
+
+_∇_ BW _EV_ ( _µk_ ) : _x �→_ E _µk_ _∇V_ + (E _µk_ _∇_ [2] _V_ )( _x −_ _mk_ )
+
+
+and in Alg. 1 we approximate this gradient by
+
+
+_x �→_ [˜] _bk_ + _Sk_ ( _x −_ _mk_ )
+
+
+where [˜] _bk_ = _∇V_ ( _Xk_ ) _−_ _ck_ Σ _[−]_ _k_ [1][(] _[X][k][ −]_ _[m][k]_ [)][,] _[ S][k]_ [=] _[ ∇]_ [2] _[V]_ [ (] _[X][k]_ [)][, and] _[ X][k]_ _[∼]_ _[µ][k]_ [.]
+
+
+The error of this approximation is
+
+
+_e_ ˜ _k_ : _x �→_ ( _Sk −_ E _µk_ _∇_ [2] _V_ )( _x −_ _mk_ ) + ( [˜] _bk −_ E _µk_ _∇V_ ) _._
+
+
+Let _Pk_ denote _σ_ -algebra containing the information up to the beginning of iteration _k_, _Pk_ =
+_σ_ ( _X_ 0 _, X_ 1 _, . . ., Xk−_ 1) for _k_ _∈{_ 1 _,_ 2 _, . . ., N_ _−_ 1 _}_ and _P_ 0 is, by convention, the trivial _σ_ -algebra.
+Let us denote
+
+_σ_ ˜ _k_ [2] [:=][ E][(] _[∥][e]_ [˜] _[k][∥]_ _µ_ [2] _k_ _[|P][k]_ [) =][ E][(][E] _[x][∼][µ]_ _k_ _[∥]_ [(] _[S][k]_ _[−]_ [E] _[µ]_ _k_ _[∇]_ [2] _[V]_ [ )(] _[x][ −]_ _[m][k]_ [) + (˜] _[b][k]_ _[−]_ [E] _[µ]_ _k_ _[∇][V]_ [ )] _[∥]_ [2] _[|P][k]_ [)] _[.]_ (10)
+
+
+Bounding _σ_ ˜ _k_ : we show that
+
+
+_σ_ ˜ _k_ [2] _[≤]_ [3] _[dβ]_ [(1 +] _[ τ][k]_ [) + 6(1 +] _[ τ][k]_ [)] _[β]_ [3] _[λ]_ [max][(ˆΣ)] _[W]_ [ 2] 2 [(] _[µ][k][,]_ [ ˆ] _[π]_ [)] _[,]_ (11)
+
+
+The proof of (11) is a direct extension of Diao et al. (2023, Lem. 5.6), but let us partly include it
+here for completeness.
+
+
+First, let _µ_ = _N_ ( _m,_ Σ) and _X_ _∼_ _µ_, applying Stein’s lemma we get
+
+
+       - _∂V_       E ( _X_ )( _Xi −_ _mi_ ) =
+_∂xi_
+
+
+Summing up for _i_ = 1 _,_ 2 _, . . ., d_
+
+
+   - _d_   - _∂V_   
+E ( _X_ )( _Xi −_ _mi_ ) =
+_∂xi_
+_i_ =1
+
+
+which can be rewritten as
+
+
+- _d_ - _∂_ 2 _V_ 
+Σ _ik_ E ( _X_ ) _._
+_∂xk∂xi_
+_k_ =1
+
+
+_d_
+
+
+_i_ =1
+
+
+- _d_ - _∂_ 2 _V_ 
+Σ _ik_ E ( _X_ ) _,_
+_∂xk∂xi_
+_k_ =1
+
+
+E _⟨∇V_ ( _X_ ) _, X −_ _m⟩_ = E _⟨∇_ [2] _V_ ( _X_ ) _,_ Σ _⟩._
+
+
+We now recall the Brascamp-Lieb inequality: let _µ_ _∝_ exp( _−W_ ) where _W_ is strictly convex and
+twice continuously differentiable, then
+
+
+Var _µ_ ( _f_ ) _≤_ E _µ⟨∇f,_ ( _∇_ [2] _W_ ) _[−]_ [1] _∇f_ _⟩_
+
+
+for any smooth _f_ . By using _f_ = ( _∂/∂xi_ ) _V_ and _µ_ = _µk_, we obtain
+
+
+Var _µk_ (( _∂/∂xi_ ) _V_ ) _≤_ E _µk_ [ _∇_ [2] _V_ Σ _k∇_ [2] _V_ ] _ii._ (12)
+
+
+Summing (12) for _i_ from 1 to _d_
+
+
+E _µk_ _∥∇V_ _−_ E _µk_ _∇V ∥_ [2] _≤_ Tr �E _µk_ ( _∇_ [2] _V_ Σ _k∇_ [2] _V_ )� = E _µk_ _⟨∇_ [2] _V,_ Σ _k∇_ [2] _V ⟩._
+
+
+Since _Xk_ is the only source of randomness in _e_ ˜ _k_ given _Pk_, the conditional expectation in (10)
+becomes the expectation over the randomness of _Xk_, we can write
+
+_σ_ ˜ _k_ [2] [=][ E] _[∥]_ [(] _[∇]_ [2] _[V]_ [ (] _[X][k]_ [)] _[ −]_ [E] _[µ]_ _k_ _[∇]_ [2] _[V]_ [ )(] _[X]_ _[−]_ _[m][k]_ [) +] _[ ∇][V]_ [ (] _[X][k]_ [)] _[ −]_ _[c][k]_ [Σ] _[−]_ _k_ [1][(] _[X][k][ −]_ _[m][k]_ [)] _[ −]_ [E] _[µ]_ _k_ _[∇][V][ ∥]_ [2]
+
+
+17
+
+
+where _X, Xk_ _∼_ _µk_ and _X, Xk_ are independent. We evaluate
+
+
+1
+_k_ _[≤]_ [E] _[∥]_ [(] _[∇]_ [2] _[V]_ [ (] _[X][k]_ [)] _[ −]_ [E] _[µ]_ _k_ _[∇]_ [2] _[V]_ [ )(] _[X]_ _[−]_ _[m][k]_ [)] _[∥]_ [2][ +][ E] _[∥∇][V]_ [ (] _[X][k]_ [)] _[ −]_ _[c][k]_ [Σ] _[−]_ _k_ [1][(] _[X][k][ −]_ _[m][k]_ [)] _[ −]_ [E] _[µ]_ _k_ _[∇][V][ ∥]_ [2]
+2 _[σ]_ [˜][2]
+
+_≤_ E(( _X_ _−_ _mk_ ) _[⊤]_ ( _∇_ [2] _V_ ( _Xk_ ) _−_ E _µk_ _∇_ [2] _V_ ) [2] ( _X_ _−_ _mk_ )) + _τk_ E _µk_ _∥∇V_ _−_ E _µk_ _∇V ∥_ [2]
+
+= E _⟨_ ( _∇_ [2] _V_ ( _Xk_ ) _−_ E _µk_ _∇_ [2] _V_ ) [2] _,_ ( _X_ _−_ _mk_ )( _X_ _−_ _mk_ ) _[⊤]_ _⟩_ + _τk_ E _µk_ _∥∇V_ _−_ E _µk_ _∇V ∥_ [2]
+
+= _⟨_ E _µk_ ( _∇_ [2] _V_ _−_ E _µk_ _∇_ [2] _V_ ) [2] _,_ Σ _k⟩_ + _τk_ E _µk_ _∥∇V_ _−_ E _µk_ _∇V ∥_ [2]
+
+= E _µk_ _⟨∇_ [2] _V,_ Σ _k∇_ [2] _V ⟩−⟨_ (E _µk_ _∇_ [2] _V_ ) [2] _,_ Σ _k⟩_ + _τk_ E _µk_ _∥∇V_ _−_ E _µk_ _∇V ∥_ [2]
+
+_≤_ E _µk_ _⟨∇_ [2] _V,_ Σ _k∇_ [2] _V ⟩_ + _τk_ E _µk_ _∥∇V_ _−_ E _µk_ _∇V ∥_ [2]
+
+_≤_ (1 + _τk_ )E _µk_ _⟨∇_ [2] _V,_ Σ _k∇_ [2] _V ⟩_
+
+_≤_ _β_ (1 + _τk_ )E _µk_ _⟨∇_ [2] _V,_ Σ _k⟩_
+= _β_ (1 + _τk_ )E _⟨∇V_ ( _Xk_ ) _, Xk −_ _mk⟩._
+
+
+Now by using optimal coupling between _µk_ and _π_ ˆ, one can obtain (Diao et al., 2023, P.27, P.28)
+
+
+E _⟨∇V_ ( _Xk_ ) _, Xk −_ _m⟩≤_ [3] _[d]_
+
+2 [+]
+
+
+E _⟨∇V_ ( _Xk_ ) _, Xk −_ _m⟩≤_ [3] _[d]_
+
+
+2 _β_ + _[β]_ [2][ Tr(][Σ)][ˆ]
+
+
+_d_
+
+
+Therefore,
+
+
+_σ_ ˜ _k_ [2] _[≤]_ [3] _[dβ]_ [(1 +] _[ τ][k]_ [) + (1 +] _[ τ][k]_ [)]
+
+
+4 _β_ [2] + [2] _[β]_ [3][ Tr(][Σ)][ˆ]
+
+
+_d_
+
+
+_W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)]
+
+
+_W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)]
+
+
+_≤_ 3 _dβ_ (1 + _τk_ ) + 6(1 + _τk_ ) _β_ [3] _λ_ max(Σ) [ˆ] _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)] _[.]_
+
+
+Bound E(min _k_ =1 _,N_ _F_ ( _µk_ )) _−F_ (ˆ _π_ ):
+
+
+Lem. 5.1 in Diao et al. (2023) implies that
+
+
+E _W_ 2 [2][(] _[µ][k]_ [+1] _[,]_ [ ˆ] _[π]_ [)] _[ ≤]_ [(1] _[ −]_ _[αη]_ [)][E] _[W]_ [ 2] 2 [(] _[µ][k][,]_ [ ˆ] _[π]_ [)] _[ −]_ [2] _[η]_ [(][E] _[F]_ [(] _[µ][k]_ [+1][)] _[ −F]_ [(ˆ] _[π]_ [)) + 2] _[η]_ [2][E] _[σ]_ [˜] _k_ [2] (13)
+
+
+where _α ≥_ 0 is the strong convexity modulus of _V_ .
+
+
+Now using the bound (11) for _σ_ ˜ _k_,
+
+
+E _W_ 2 [2][(] _[µ][k]_ [+1] _[,]_ [ ˆ] _[π]_ [)] _[ ≤]_ [(1] _[ −]_ _[αη]_ [ + 12(1 +] _[ ∥][τ][k][∥][∞]_ [)] _[η]_ [2] _[β]_ [3] _[λ]_ [max][(ˆΣ))][E] _[W]_ [ 2] 2 [(] _[µ][k][,]_ [ ˆ] _[π]_ [)]
+
+_−_ 2 _η_ (E _F_ ( _µk_ +1) _−F_ (ˆ _π_ )) + 6(1 + E _τk_ ) _η_ [2] _βd_
+
+
+            -            _≤_ exp _−αη_ + 12(1 + _∥τk∥∞_ ) _η_ [2] _β_ [3] _λ_ max(Σ) [ˆ] E _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)]
+
+_−_ 2 _η_ (E _F_ ( _µk_ +1) _−F_ (ˆ _π_ )) + 6(1 + E _τk_ ) _η_ [2] _βd._
+
+
+Therefore
+
+
+             -              2 _η_ (E _F_ ( _µk_ +1) _−F_ (ˆ _π_ )) _≤_ exp _−αη_ + 12(1 + _∥τk∥∞_ ) _η_ [2] _β_ [3] _λ_ max(Σ) [ˆ] E _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)]
+
+_−_ E _W_ 2 [2][(] _[µ][k]_ [+1] _[,]_ [ ˆ] _[π]_ [) + 6(1 +][ E] _[τ][k]_ [)] _[η]_ [2] _[βd]_ (14)
+
+
+Since we are considering the convex case, set _α_ = 0 and denote _Ck_ = 12(1 + _∥τk∥∞_ ) _β_ [3] _λ_ max(Σ) [ˆ]
+and _D−_ 1 = 0 _, Dk_ = _−C_ 0 _−C_ 1 _−. . .−Ck_ for _k_ = 0 _,_ 1 _, . . ., N −_ 1. By definition, _Dk_ + _Ck_ = _Dk−_ 1
+for all _k_ = 0 _,_ 1 _, . . ., N_ _−_ 1. Rewrite (14) as
+
+
+2 _η_ (E _F_ ( _µk_ +1) _−F_ (ˆ _π_ )) _≤_ exp  - _Ckη_ [2][�] E _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)] _[ −]_ [E] _[W]_ [ 2] 2 [(] _[µ][k]_ [+1] _[,]_ [ ˆ] _[π]_ [) + 6(1 +][ E] _[τ][k]_ [)] _[η]_ [2] _[βd.]_
+
+
+Multiply both sides with exp( _Dkη_ [2] ) we get
+
+
+2 _η_ exp( _Dkη_ [2] )(E _F_ ( _µk_ +1) _−F_ (ˆ _π_ ))
+
+_≤_ exp �( _Dk_ + _Ck_ ) _η_ [2][�] E _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)] _[ −]_ [exp(] _[D][k][η]_ [2][)][E] _[W]_ [ 2] 2 [(] _[µ][k]_ [+1] _[,]_ [ ˆ] _[π]_ [) + 6(1 +][ E] _[τ][k]_ [)] _[η]_ [2] _[βd]_ [ exp(] _[D][k][η]_ [2][)]
+
+
+18
+
+
+and, by using the backward recursion _Dk_ + _Ck_ = _Dk−_ 1, can be rewritten as
+
+2 _η_ exp( _Dkη_ [2] )(E _F_ ( _µk_ +1) _−F_ (ˆ _π_ ))
+
+_≤_ exp  - _Dk−_ 1 _η_ [2][�] E _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)] _[ −]_ [exp(] _[D][k][η]_ [2][)][E] _[W]_ [ 2] 2 [(] _[µ][k]_ [+1] _[,]_ [ ˆ] _[π]_ [) + 6(1 +][ E] _[τ][k]_ [)] _[η]_ [2] _[βd]_ [ exp(] _[D][k][η]_ [2][)]
+
+Telescope for _k_ from 0 to _N_ _−_ 1
+
+
+2 _η_
+
+
+_N_ _−_ 1
+
+
+exp( _Dkη_ [2] )(E _F_ ( _µk_ +1) _−F_ (ˆ _π_ ))
+
+_k_ =0
+
+
+_N_ _−_ 1
+
+
+(1 + E _τk_ ) exp( _Dkη_ [2] )
+
+_k_ =0
+
+
+_N_ _−_ 1
+
+
+_≤_ _W_ 2 [2][(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [)] _[ −]_ [exp(] _[D][N]_ _[−]_ [1] _[η]_ [2][)][E] _[W]_ [ 2] 2 [(] _[µ][N]_ _[,]_ [ ˆ] _[π]_ [) + 6] _[η]_ [2] _[βd]_
+
+
+_N_ _−_ 1
+
+     
+_≤_ _W_ 2 [2][(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [) + 6] _[η]_ [2] _[βd]_ (1 + E _τk_ ) exp( _Dkη_ [2] ) _._
+
+_k_ =0
+
+
+We see that
+
+
+_k_
+
+- _∥τi∥∞_
+
+
+_i_ =0
+
+
+_Dk_ = _−_ _[C]_
+
+2
+
+
+_k_ + 1 +
+
+
+where _C_ = 24 _β_ [3] _λ_ max(Σ) [ˆ] .
+
+Let us denote _S_ [˜] _N_ ( _η_ ) = [�] _k_ _[N]_ =0 _[−]_ [1] [exp(] _[D][k][η]_ [2][)][.] [It holds]
+
+
+   -    E min _−F_ (ˆ _π_ ) _≤_ _[W]_ [ 2] 2 [(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [)] + 3 _ηβd_
+_k_ =1 _,_ 2 _,...,N_ _[F]_ [(] _[µ][k]_ [)] 2 _ηS_ [˜] _N_ ( _η_ )
+
+
+It holds
+
+
+_N_ _−_ 1
+
+
+_._
+_S_ ˜ _N_ ( _η_ )
+
+
+_k_ =0 (1 + E _τk_ ) [exp(] _S_ ˜ _N_ _[D]_ ( _η_ _[k][η]_ ) [2][)]
+
+
+_N_ _−_ 1
+
+
+_S_ ˜ _N_ ( _η_ ) _≤_ 1 + _τ_ max _,E_ (15)
+
+
+_k_ =0 (1 + E _τk_ ) [exp(] _S_ ˜ _N_ _[D]_ ( _η_ _[k][η]_ ) [2][)]
+
+
+and
+
+
+_S_ ˜ _N_ ( _η_ ) =
+
+
+=
+
+
+_≥_
+
+
+=
+
+
+_N_ _−_ 1
+
+- exp( _Dkη_ [2] )
+
+
+_k_ =0
+
+
+_N_ _−_ 1
+
+
+_k_ =0
+
+
+�exp - _−C_ ( _k_ + 1) _η_ [2][��] _[τ]_ [max] 2 _[,][∞]_ [+1] _._
+
+
+_N_ _−_ 1
+
+- exp
+
+
+_k_ =0
+
+
+_−_ _[C]_
+
+
+2 [(] _[k]_ [ + 1 +]
+
+
+_k_ 
+- _∥τi∥∞_ ) _η_ [2]
+
+
+_i_ =0
+
+
+_N_ _−_ 1
+
+
+        2 [(] _[k]_ [ + 1 + (] _[k]_ [ + 1)] _[τ]_ [max] _[,][∞]_ [)] _[η]_ [2]
+
+
+   
+- exp _−_ _[C]_
+
+2
+
+_k_ =0
+
+
+On the other hand, for any _b_ _>_ 0, the function _f_ ( _s_ ) = _b_ _[s]_ is convex. By tangent inequality _f_ ( _s_ ) _≥_
+_f_ (1) + _f_ _[′]_ (1)( _s −_ 1), we get
+
+_b_ _[s]_ _≥_ _b_ + _b_ ln( _b_ )( _s −_ 1) _._ (16)
+
+
+Applying the inequality (16) with _b_ = exp - _−C_ ( _k_ + 1) _η_ [2][�] and _s_ = ( _τ_ max _,∞_ + 1) _/_ 2
+
+
+_[,][∞]_ [+1]
+
+2 _≥_ exp - _−C_ ( _k_ + 1) _η_ [2][�] + _C_ ( _k_ + 1) _η_ [2] exp - _−C_ ( _k_ + 1) _η_ [2][��] [1] _[ −]_ _[τ]_ [max] _[,][∞]_
+
+
+�exp - _−C_ ( _k_ + 1) _η_ [2][��] _[τ]_ [max] 2 _[,][∞]_ [+1]
+
+
+2
+
+
+= exp - _−C_ ( _k_ + 1) _η_ [2][��] 1 + _Cη_ [2] ( _k_ + 1) - 1 _−_ _τ_ max _,∞_
+2
+
+
+��
+
+
+_≥_ exp - _−C_ ( _k_ + 1) _η_ [2][��] 1 + _Cη_ [2] - 1 _−_ _τ_ max _,∞_
+2
+
+
+19
+
+
+��
+_._
+
+
+Therefore,
+
+
+- _N_
+
+ - exp( _−Ckη_ [2] )
+
+
+_k_ =1
+
+
+- _N_
+
+ 
+
+
+   _S_ ˜ _N_ ( _η_ ) _≥_ 1 + _[Cη]_ [2][(1] _[ −]_ _[τ]_ [max] _[,][∞]_ [)]
+
+2
+
+
+min _{N,⌊_ ( _Cη_ [2] ) _[−]_ [1] _⌋}_
+
+
+ - exp( _−Ckη_ [2] )
+
+
+_k_ =1
+
+
+min _{N,⌊_ ( _Cη_ [2] ) _[−]_ [1] _⌋}_
+
+
+ 
+
+
+ _≥_ 1 + _[Cη]_ [2][(1] _[ −]_ _[τ]_ [max] _[,][∞]_ [)]
+
+2
+
+
+min _{N,⌊_ ( _Cη_ [2] ) _[−]_ [1] _⌋}_
+
+ - _≥_ 1 + _[Cη]_ [2][(1] _[ −]_ _[τ]_ [max] _[,][∞]_ [)] 
+2
+
+_k_ =1
+
+
+1
+
+_e_
+
+
+= [1]
+
+_e_
+
+
+1 + _[Cη]_ [2][(1] _[ −]_ _[τ]_ [max] _[,][∞]_ [)]
+
+2
+
+
+min _{N, ⌊_ ( _Cη_ [2] ) _[−]_ [1] _⌋}._
+
+
+By using the basic inequality 1 _/_ min( _a, b_ ) _≤_ 1 _/a_ + 1 _/b_, we get
+
+
+1 _e_
+_≤_
+_S_ ˜ _N_ ( _η_ )
+
+_[Cη]_ [2][(1]
+
+
+1 + _[Cη]_ [2][(1] _[ −]_ _[τ]_ [max] _[,][∞]_ [)]
+
+
+2
+
+
+_e_
+≲
+
+
+1 + _[Cη]_ [2][(1] _[ −]_ _[τ]_ [max] _[,][∞]_ [)]
+
+
+- 1 1
+_N_ [+] _⌊_ ( _Cη_ [2] ) _[−]_ [1] _⌋_
+
+
+- 1 _N_ [+] _[ Cη]_ [2]
+
+
+2
+
+
+asymptotically at small _η_ _>_ 0.
+
+
+Therefore,
+
+
+ - - _e_
+E min _−F_ (ˆ _π_ ) _≤_
+_k_ =1 _,_ 2 _,...,N_ _[F]_ [(] _[µ][k]_ [)]
+
+_[Cη]_ [2][(1]
+
+
+1 + _[Cη]_ [2][(1] _[ −]_ _[τ]_ [max] _[,][∞]_ [)]
+
+
+- 1 
+_[Cη]_ _W_ 2 [2][(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [) + 3] _[ηβd]_ [(1 +] _[ τ]_ [max] _[,E]_ [)] _[.]_
+2 _ηN_ [+] 2
+
+
+2
+
+
+A.6 PROOF OF THEOREM 4
+
+
+Since _V_ is _α_ -strongly convex with _α >_ 0, E _π_ ˆ( _∇_ [2] _V_ ) ≽ _αI_, so _λ_ min(E _π_ ˆ( _∇_ [2] _V_ )) _≥_ _α._
+
+
+It follows that
+
+
+1
+_λ_ max(Σ) = [ˆ]
+
+
+_α_ _[.]_
+
+
+1 1
+
+=
+_λ_ min(Σ [ˆ] _[−]_ [1] ) _λ_ min(E _π_ ˆ( _∇_ [2] _V_ )) _[≤]_ _α_ [1]
+
+
+Using this inequality in the bound for _σ_ ˜ _k_ in (11), we get
+
+_σ_ ˜ _k_ [2] _[≤]_ [3] _[dβ]_ [(1 +] _[ τ][k]_ [) +] [6(1 +] _[ τ][k]_ [)] _[β]_ [3] _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)] _[.]_
+
+_α_
+
+
+Using this bound for (13),
+
+
+E _W_ 2 [2][(] _[µ][k]_ [+1] _[,]_ [ ˆ] _[π]_ [)] _[ ≤]_ [(1] _[ −]_ _[αη]_ [)][E] _[W]_ [ 2] 2 [(] _[µ][k][,]_ [ ˆ] _[π]_ [)] _[ −]_ [2] _[η]_ [(][E] _[F]_ [(] _[µ][k]_ [+1][)] _[ −F]_ [(ˆ] _[π]_ [))]
+
+
+         -         + 2 _η_ [2] E 3 _dβ_ (1 + _τk_ ) + [6(1 +] _[ τ][k]_ [)] _[β]_ [3] _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [)]
+
+_α_
+
+
+ = 1 _−_ _αη_ + [12(1 +] _[ ∥][τ][k][∥][∞]_ [)] _[η]_ [2] _[β]_ [3]
+
+_α_
+
+
+E _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [) + 6] _[dβη]_ [2][(1 +][ E] _[τ][k]_ [)]
+
+
+  _≤_ exp _−αη_ + [12(1 +] _[ ∥][τ][k][∥][∞]_ [)] _[η]_ [2] _[β]_ [3]
+
+_α_
+
+
+E _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [) + 6] _[dβη]_ [2][(1 +][ E] _[τ][k]_ [)] _[.]_
+
+
+Now with _η_ _≤_ _α_ [2] _/_ (48 _β_ [3] ),
+
+
+12(1 + _∥τk∥∞_ ) _η_ [2] _β_ [3]
+
+
+_._
+4
+
+
+_k∥∞_ ) _η_ [2] _β_ [3]
+
+_≤_ [(1 +] _[ ∥][τ][k][∥][∞]_ [)] _[ηα]_
+_α_ 4
+
+
+20
+
+
+Therefore
+
+
+�� _−_ 3 + _∥τk∥∞_
+E _W_ 2 [2][(] _[µ][k]_ [+1] _[,]_ [ ˆ] _[π]_ [)] _[ ≤]_ [exp]
+4
+
+�� _−_ 3 + _τ_ max _,∞_
+_≤_ exp
+4
+
+
+Telescope this inequality, we get
+
+
+- _ηα_ E _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [) + 6] _[dβη]_ [2][(1 +][ E] _[τ][k]_ [)]
+
+
+- _ηα_ E _W_ 2 [2][(] _[µ][k][,]_ [ ˆ] _[π]_ [) + 6] _[dβη]_ [2][(1 +] _[ τ]_ [max] _[,E]_ [)] _[.]_
+
+
+      -      - 3 _−_ _τ_ max _,∞_
+E _W_ 2 [2][(] _[µ][N]_ _[,]_ [ ˆ] _[π]_ [)] _[ ≤]_ [exp] _−N_
+4
+
+
+- _ηα_ - _W_ 2 [2][(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [) +] 6(1 +� _τ_ max _,E_ ) _η_ [2] _βd_
+
+
+   1 _−_ exp _−_ [(3] _[ −]_ _[τ]_ [max] _[,][∞]_ [)] _[ηα]_
+
+
+4
+
+
+  ≲ exp _−_ _[N]_ [(3] _[ −]_ _[τ]_ [max] _[,][∞]_ [)] _[ηα]_
+
+4
+
+
+_W_ 2 [2][(] _[µ]_ [0] _[,]_ [ ˆ] _[π]_ [) +] [24(1 +] _[ τ]_ [max] _[,E]_ [)] _[βηd]_
+
+(3 _−_ _τ_ max _,∞_ ) _α_
+
+
+asymptotically at small _η_ _>_ 0.
+
+
+B ADDITIONAL EXPERIMENTAL DETAILS
+
+
+B.1 LAPLACE APPROXIMATION
+
+
+Laplace approximation fits a Gaussian approximation by finding the mode of the target (MAP estimate for infernece) and forming a second order approximation at that point. The approximation is
+given by
+
+_N_         - _x_ MAP _,_         - _∇_ [2] _V_ ( _x_ MAP)� _−_ 1 [�] _._
+
+
+We use BFGS optimizer (Nocedal & Wright, 2006) as implemented in SciPy (Virtanen et al., 2020)
+to find the (numerical) MAP estimate, and form the approximation according to the local curvature
+around the point. Convergence of the estimate was validated manually.
+
+
+B.2 VARIATIONAL INFERENCE IN THE EUCLIDEAN GEOMETRY
+
+
+The baseline method EVI optimizes for the approximation over its parameters _m_ and Σ in the Euclidean geometry of the parameter space, using Cholesky factorization for parameterizing the covariance. This is done by maximizing the Evidence Lower BOund (ELBO)
+
+
+_L_ ( _m,_ Σ) = E _qm,_ Σ( _z_ ) [log _p_ ( _x, z_ ) _−_ log _qm,_ Σ( _z_ )] _,_
+
+
+which is equivalent to minimizing the KL divergence. We use single-sample reparameterization
+estimates for the gradient. Furthermore, by stopping the gradient after sampling _z_, we remove the
+Fisher score from the gradient computation, giving an unbiased estimator of the gradient of the
+ELBO with potentially lower variance (Roeder et al., 2017). We use Adam (Kingma & Ba, 2015)
+optimizer and the learning rates and number of iterations found in Table 1, found to achieve good
+convergence. Our implementation is based on the code provided by Modi et al. (2024).
+
+
+**Experiment** **Dimension** **Learning Rate** **Iterations**
+
+
+Gaussian 10 0.01 5,000
+Gaussian 50 0.01 5,000
+Gaussian 200 0.001 10,000
+Student-t 200 0.001 8,000
+Logistic Regression 200 0.01 3,000
+
+
+Table 1: Optimization details for EVI.
+
+
+21
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [0]
+
+
+time elapsed ( × #iters)
+
+
+Figure 6: Student’s t experiment: variance along iterations
+
+
+B.3 STUDENT’S T DISTRIBUTION
+
+
+Consider a _d_ -dimensional Student-t distribution with location _µ_, scale matrix Σ and _ν_ degrees of
+freedom. Its negative log density (up to a constant), gradient and Hessian are given by:
+
+
+    
+[1] 1 + [1]
+
+2 [(] _[ν]_ [ +] _[ d]_ [) log] _ν_
+
+
+_V_ ( _x_ ) = [1]
+
+
+[1] - _,_
+
+_ν_ [(] _[x][ −]_ _[µ]_ [)] _[⊤]_ [Σ] _[−]_ [1][(] _[x][ −]_ _[µ]_ [)]
+
+
+( _ν_ + _d_ )
+_∇V_ ( _x_ ) =
+_ν_ + ( _x −_ _µ_ ) _[⊤]_ Σ _[−]_ [1] ( _x −_ _µ_ ) [Σ] _[−]_ [1][(] _[x][ −]_ _[µ]_ [)] _[,]_
+
+
+_ν_ + _d_ 2( _ν_ + _d_ )
+_∇_ [2] _V_ ( _x_ ) = _ν_ + ( _x −_ _µ_ ) _[⊤]_ Σ _[−]_ [1] ( _x −_ _µ_ ) [Σ] _[−]_ [1] _[ −]_ ( _ν_ + ( _x −_ _µ_ ) _[⊤]_ Σ _[−]_ [1] ( _x −_ _µ_ )) [2] [Σ] _[−]_ [1][(] _[x][ −]_ _[µ]_ [)(] _[x][ −]_ _[µ]_ [)] _[⊤]_ [Σ] _[−]_ [1] _[.]_
+
+
+B.4 VARIANCE ALONG ITERATIONS
+
+
+We further report in Figures 5 and 6 the variance of our proposed estimator and the Monte Carlo
+estimator along the SVRGVI’s iterates. The variance is computed empirically using 5000 i.i.d. samples at each iteration. The results demonstrate that our estimator consistently achieves a significantly
+smaller variance compared to the Monte Carlo estimator.
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+time elapsed ( × #iters)
+
+
+(a) _d_ = 10
+
+
+10 [0]
+
+
+10 1
+
+
+time elapsed ( × #iters)
+
+
+(c) _d_ = 200
+
+
+10 [1]
+
+
+10 [0]
+
+
+time elapsed ( × #iters)
+
+
+(b) _d_ = 50
+
+
+Figure 5: Gaussian experiment: variance along iterations.
+
+
+B.5 COMPARISONS AGAINST THE MINIBATCH APPROACH
+
+
+A straightforward approach to reduce the variance is to use more MC samples per iteration. In
+this experiment, we use _m_ samples for SGVI at each iteration, where _m_ _∈{_ 1 _,_ 10 _,_ 100 _}_ . Fig. 7
+illustrates that SGVI requires approximately 100 samples per iteration to achieve a performance
+level comparable to SVRGVI using only one sample per iteration.
+
+
+22
+
+
+time elapsed ( × #iters)
+
+
+(b) _d_ = 50
+
+
+10 [5]
+
+10 [4]
+
+10 [3]
+
+10 [2]
+
+10 [1]
+
+10 [0]
+
+10 1
+
+10 2
+
+
+time elapsed ( × #iters)
+
+
+(c) _d_ = 200
+
+
+10 [2]
+
+10 [1]
+
+10 [0]
+
+10 1
+
+10 2
+
+10 3
+
+10 4
+
+10 5
+
+
+time elapsed ( × #iters)
+
+
+(a) _d_ = 10
+
+
+10 [4]
+
+10 [3]
+
+10 [2]
+
+10 [1]
+
+10 [0]
+
+10 1
+
+10 2
+
+10 3
+
+
+Figure 7: Minibatch-SGVI with MC samples versus SVRGVI in the Gaussian experiment
+
+
+In Euclidean VI, Buchholz et al. (2018) showed that quasi-MC samples can result in a better estimator (with smaller variances) than standard MC samples. Since the idea is universal, we can
+use quasi-MC samples to improve the performance of SGVI as well. Fig. 8 confirms that using
+quasi-MC samples indeed leads to better performance in practice [3] . SGVI now needs around 50
+quasi-MC samples to reach our performance, and with 100 quasi-MC samples, SGVI surpasses our
+performance.
+
+
+time elapsed ( × #iters)
+
+
+(b) _d_ = 50
+
+
+10 [5]
+10 [4]
+10 [3]
+10 [2]
+10 [1]
+10 [0]
+10 1
+10 2
+10 3
+
+
+time elapsed ( × #iters)
+
+
+(c) _d_ = 200
+
+
+10 [2]
+10 [1]
+10 [0]
+10 1
+10 2
+10 3
+10 4
+10 5
+10 6
+
+
+time elapsed ( × #iters)
+
+
+(a) _d_ = 10
+
+
+10 [4]
+
+
+10 [2]
+
+
+10 [0]
+
+
+10 2
+
+
+10 4
+
+
+Figure 8: Minibatch-SGVI with quasi-MC samples versus SVRGVI in the Gaussian experiment
+
+
+B.6 EFFECT OF _c_
+
+
+In this experiment, we study the impact of _c_ on the performance of SVRGVI. In Figures 9, 10, 11,
+we report the performance of SVRGVI in the Gaussian, Student’t, and Bayesian logistic regression
+experiments when _c_ varies in _{_ 0 _._ 0 _,_ 0 _._ 5 _,_ 0 _._ 8 _,_ 1 _._ 0 _,_ 1 _._ 2 _,_ 1 _._ 5 _,_ 2 _._ 0 _}_ . The results indicate that performance
+improves as _c_ increases from 0 to 1, peaking around _c_ = 1, and then degrades as _c_ continues
+increasing to 2 _._ 0. Furthermore, the performance is somewhat symmetric around _c_ = 1, e.g., _c_ = 0 _._ 8
+and _c_ = 1 _._ 2 yield similar results. We therefore confirm that _c_ being around 1 works best in practice.
+
+
+B.7 EFFECT OF STEP SIZE
+
+
+We conduct an experiment to compare the performances of different algorithms with varying step
+sizes. We consider Gaussian targets with _D_ = 100. We fix the number of steps to 300, and vary the
+step size between [0 _._ 125 _,_ 0 _._ 25 _,_ 0 _._ 5 _,_ 1 _._ 0]. The results, as shown in Figure 12, indicates that while the
+previous method requires a relatively small step size to work relatively well, our algorithm is able to
+work robustly with large step sizes and achieves the best performances under all step sizes.
+
+
+3We exclude the case of using a single quasi-MC sample, as it coincides with the mean of the Gaussian
+variational distribution when employing a Scrambled Sobol sequence. In this specific experiment, this leads to
+an optimal—but misleading—result purely by coincidence.
+
+
+23
+
+
+10 [2]
+
+
+10 [0]
+
+
+time elapsed ( × #iters)
+
+
+10 [0]
+
+
+10 [3]
+
+
+10 [1]
+
+
+time elapsed ( × #iters)
+
+
+10 [1]
+
+10 [0]
+
+
+10 [4]
+
+|D( )|Col2|
+|---|---|
+|DKL(<br>k<br>)||
+|c=0.0<br>c=0.5<br>c=0.8<br>c=1.0<br>c=1.2<br>c=1.5<br>c=2.0|c=0.0<br>c=0.5<br>c=0.8<br>c=1.0<br>c=1.2<br>c=1.5<br>c=2.0|
+
+
+0 50 100 150 200 250 300
+time elapsed ( × #iters)
+
+
+10 [2]
+
+10 [1]
+
+10 [0]
+
+10 1
+
+10 2
+
+10 3
+
+10 4
+
+
+10 1
+
+10 2
+
+10 3
+
+10 4
+
+10 5
+
+10 6
+
+10 7
+
+
+c
+
+
+10 1
+
+10 2
+
+10 3
+
+10 4
+
+10 5
+
+10 6
+
+
+c
+
+
+c
+
+
+_d_ = 200
+
+
+_d_ = 10
+
+
+_d_ = 50
+
+
+Figure 9: Gaussian experiments: **Upper row.** KL divergence along iterations; **Lower row:** final KL
+divergence.
+
+
+c
+
+
+(b) Last KL divergence
+
+
+10 [5]
+
+
+10 [4]
+
+
+10 [3]
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [0]
+
+
+time elapsed ( × #iters)
+
+
+(a) KL divergence along iters
+
+
+time elapsed ( × #iters)
+
+
+(a) KL divergence along iters
+
+
+4 × 10 [0]
+
+
+3 × 10 [0]
+
+
+2 × 10 [0]
+
+
+10 [0]
+
+
+10 [2]
+
+
+10 [1]
+
+
+Figure 10: Student’s t experiment
+
+
+c
+
+
+(b) Last KL divergence
+
+
+Figure 11: Bayesian linear regression experiment
+
+
+24
+
+
+10 [4]
+
+10 [3]
+
+10 [2]
+
+10 [1]
+
+
+10 [0]
+
+10 1
+
+10 2
+
+10 3
+
+
+|DKL|L( )|
+|---|---|
+|DKL|(<br>k<br>)|
+|BWGD<br>SGVI<br>SVRGVI (ours)<br>EVI|BWGD<br>SGVI<br>SVRGVI (ours)<br>EVI|
+
+
+number of iterations
+
+
+10 [2]
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+10 2
+
+
+|DKL(<br>k|)|
+|---|---|
+|BWGD<br>SGVI<br>SVRGVI (ours)<br>EVI|BWGD<br>SGVI<br>SVRGVI (ours)<br>EVI|
+
+
+2 × 10 1 3 × 10 1 4 × 10 1 6 × 10 1 10 [0]
+
+step sizes
+
+
+(b) final results of the algorithms
+
+
+(a) evolution of results with varying
+step sizes
+
+
+Figure 12: Results of different algorithms with varying step sizes in the Gaussian experiment
+
+
+25

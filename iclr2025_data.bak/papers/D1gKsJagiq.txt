@@ -1,0 +1,1080 @@
+# DUAL-STREAM ADAPTERS FOR ANOMALY SEGMENTATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Anomaly segmentation aims to identify pixels of objects not present during the
+model’s training. Recent approaches address this task using mask-based architectures, but these methods have high training costs due to the large transformer
+backbones involved. While vision adapters can help reduce training costs, they
+are not specialized for this task, leading to inferior performance. In this work,
+we propose Dual-Stream Adapters (DSA), a vision adapter tailored for anomaly
+segmentation. DSA extracts both in-distribution and out-of-distribution features
+via (i) an anomaly prior module that produces separate initial embeddings for the
+two streams; and (ii) a dual-stream feature refinement that implicitly guides the
+separation of in-distribution from out-of-distribution features. We train DSA using a novel hyperbolic loss function that provides supervised guidance for differentiating in-distribution and out-of-distribution features. Experiments on various
+benchmarks show that dual-stream adapters achieve the best results while reducing training parameters by 38% w.r.t. the previous state-of-the-art.
+
+
+1 INTRODUCTION
+
+
+Anomaly segmentation of driving scenes is a task that aims at segmenting, with pixel-level granularity, objects in road scenes not belonging to any category from the training distribution (Ackermann
+et al., 2023; Blum et al., 2021; Gal & Ghahramani, 2016; Grci´c et al., 2022). This is crucial because,
+given an object category that is unseen during training (e.g., a cow), a standard semantic segmentation model would erroneously classify it as one of its known classes (e.g., car, road), being unable
+to flag a potential danger. On the other hand, an anomaly segmentation model should segment such
+unseen objects, identifying them as anomalies. Although this task requires making predictions at
+the pixel level (anomalous pixel / not anomalous pixel), few recent methods have demonstrated that
+it is advantageous to resort to mask-architectures to directly identify anomalies as whole masks (Rai
+et al., 2023a;b; Ackermann et al., 2023; Nayal et al., 2023). However, the improvements achieved by
+these architectures largely depend on training large visual transformer backbones (Liu et al., 2021;
+Dosovitskiy et al., 2021) with a significant number of training parameters and, consequently, a substantial training cost (cf. Fig. 1). Thus, we aim to develop an anomaly segmentation method that is
+more efficient at training time (with fewer trainable parameters).
+
+
+To achieve this goal, we take inspiration from vision transformer adapters (Chen et al., 2023),
+which have been shown to be effective for dense prediction tasks, while also being efficient in
+terms of training parameters. However, these adapters are meant for general computer vision tasks
+and are not specialized for anomaly segmentation, a task that not only requires dense predictions,
+but it also needs to model the concepts of in-distribution and out-of-distribution. Therefore, in
+this work, we present the _Dual-Stream Adapter_, a novel adapter tailored for anomaly segmentation. Its architecture consists of two key components: i) an _anomaly prior_ _module_ that initially
+learns in-distribution and out-of-distribution features through distinct feature-level encodings; ii) a
+_dual-stream feature refinement module_ that refines these features and combines them with the powerful representations of the frozen ViT backbone. This architecture is complemented by a novel hyperbolic loss function that guides the learning process, using void labels as supervision, to increase
+uncertainty for OOD pixels, while reducing uncertainty for ID pixels. We perform extensive experiments on standard anomaly segmentation benchmarks (Fishyscapes (Blum et al., 2021), Segment Me
+If You Can (Chan et al., 2021a), Road Anomaly Lis et al. (2019)), showing that Dual-Stream Adapter
+
+
+1
+
+
+requires training of large backbones, such as Swin-L (Liu et al., 2021), with huge number of trainable
+parameters. We propose a **Dual-Stream Adapter** having a frozen pre-trained backbone to perform
+anomaly segmentation and thus making the training parameter efficient. **Right:** We observe that
+our DSA-Large performs best among the recent state-of-the-art methods with 38% lower training
+parameters. Triplet of numbers shown for each method represents AuPRC, FPR95, and number of
+trainable parameters in millions, respectively. Best method have lowest FPR95 and highest AuPRC.
+
+
+achieves the best results among all anomaly segmentation methods with 38% lower training parameters, when compared to the best baseline method (cf. Fig. 1).
+
+
+**To summarize, our contribution** is the Dual-Stream Adapter, an adapter-based anomaly segmentation method that achieves state-of-the-art results, but with fewer training parameters than the competitors, while also maintaining higher accuracy on the in-distribution data. It consists of a symmetric architecture that allows to disentangle of in-distribution and out-of-distribution features, and
+it leverages a novel hyperbolic loss that uses the void/background labels in the training dataset as
+supervision to separate in-distribution and out-of-distribution features.
+
+
+2 RELATED WORK
+
+
+**Anomaly** **Segmentation** is synonymous with the problem of pixel-level anomaly detection. Hendrycks & Gimpel (2017) first delved into this problem by leveraging techniques originally developed for image-wide anomaly detection. Their solution, based on the softmax prediction
+probability, is still considered a standard baseline for anomaly segmentation. Since then, other techniques have been used to segment anomalies, such as deep ensembles (Fort et al., 2019), Bayesian
+deep learning (Mukhoti & Gal, 2018; Gal & Ghahramani, 2016; Tu et al., 2024), and class-logits reasoning (Jung et al., 2021; Hendrycks et al., 2021). Another strategy is to rely on image re-synthesis,
+by looking at the discrepancy of the generated data w.r.t the in-distribution training data (Lis et al.,
+2019).
+
+
+While all the methods discussed so far are completely unsupervised, recent methods improve results via outlier exposure (Bevandi´c et al., 2018; Di Biase et al., 2021; Zhang et al., 2023), i.e.,
+providing supervision to the model by training on mixed images that contain instances of novel
+categories ( _negative_ _crops_ ) pasted on them. These negative crops are generally sampled from the
+MS-COCO (Lin et al., 2014) or ADE-20K (Zhou et al., 2017) datasets, which contain objects absent
+in in-distribution datasets. Alternatively, when appropriate negative data may be unavailable, synthetic negatives may be used effectively, as demonstrated by Grci´c et al. (2021) which introduced a
+normalizing flow-based method. Afterward, Gudovskiy et al. (2023) improved the prior approach
+with an energy-based normalizing flow method. Concurrently, DaCUP Voj´ır & Matas (2023) proposed novel embedding bottleneck and image-conditioned distance features to improve anomaly
+segmentation.
+
+
+Current state-of-the-art for anomaly segmentation (Nayal et al., 2023; Yu et al., 2023; Grci´c et al.,
+2023; Ackermann et al., 2023; Rai et al., 2023b;a) leverage mask-based architectures (Cheng et al.,
+2021; 2022) that perform pixel-wise classification as a direct set prediction, outputting a set of binary
+masks with corresponding category labels. By using these architectures and by aggregating anomaly
+
+
+2
+
+
+scores on the predicted masks, rather than reasoning on individual pixels, RBA (Nayal et al., 2023),
+EAM (Grci´c et al., 2023), Mask2Anomaly (Rai et al., 2023b;a), and Maskomaly (Ackermann et al.,
+2023) obtain significant improvements in anomaly segmentation w.r.t. previous solutions. However,
+the state-of-the-art results rely on using large Transformer backbones, such as ViT (Dosovitskiy
+et al., 2021) and Swin (Liu et al., 2021), which have a significant number of training parameters,
+thereby incurring in a substantial training cost.
+
+
+To address this problem, we propose the Dual-Stream Adapter, an adapter tailored for anomaly segmentation, which directly leverages a large ViT backbone, pre-trained on a large dataset to give
+robust features without retraining. Our Dual-Stream Adapter retains the advantages of previous
+mask-based anomaly segmentation methods, while being more training efficient. Moreover, at deployment, this solution enables model reuse, since the same frozen pre-trained backbone can be
+utilized for other downstream tasks, eliminating the need for multiple specialized versions.
+
+
+**Adapters.** Learning universal representations that can be specialized to multiple tasks and domains is quintessential in deep learning. Among the techniques developed to transfer learned representations, adapters (Rebuffi et al., 2017; 2018) have emerged as an effective and parameter-efficient
+solution. The idea behind adapters is to get compact parametrizations of models by partitioning
+their parameters into two parts: a vector of fixed parameters that capture a universal representation,
+and a smaller vector of learnable parameters that are domain or task-specific. Adapters have recently gained a lot of traction in Natural Language Processing (NLP), where they have been used
+as a mechanism to adapt the large language models, such as BERT (Devlin et al., 2019), to many
+downstream tasks, while using a minimal number of trainable parameters (Houlsby et al., 2019).
+In computer vision, adapters have been utilized for incremental and multi-task/multi-domain learning (Rebuffi et al., 2017; Rosenfeld & Tsotsos, 2018; Rebuffi et al., 2018). More recently, with the
+success of vision-language models, a plethora of adapters (Zhang et al., 2022; Sung et al., 2022),
+for the CLIP architecture (Radford et al., 2021), were introduced to address zero-shot/few-shot classification or vision-language tasks. Similarly to NLP, in computer vision the emergence of large
+pre-trained models (Kirillov et al., 2023; Oquab et al., 2024) is making the utilization of adapters
+quite compelling. In fact, fine-tuning these models for possibly many downstream tasks is inefficient
+not only in terms of required training resources, but also in terms of deployed resources, as a device that must perform multiple tasks would require multiple specialized copies of the same model.
+Moreover, it was also demonstrated that fine-tuning these large vision models could distort the pretrained features (Kumar et al., 2022) and lead to poor generalization. This has inspired a few works
+to use a vanilla ViT architecture (Dosovitskiy et al., 2021) and adapt it to various vision tasks (Li
+et al., 2021; 2022). Along these lines, Chen et al. (2023) have introduced the ViT-Adapter, which
+integrates vision-specific inductive biases into the plain ViT, reaching comparable performance to
+recent vision-specific transformer variants on several tasks, but in a parameter-efficient way.
+
+
+Unlike the general-purpose ViT-Adapter (Chen et al., 2023), which is designed for multiple vision tasks, we introduce an adapter specifically for anomaly segmentation. Since the
+anomaly segmentation problem requires the classifier to identify ‘none-of-the-above’ scenarios, our
+Dual-Stream Adapter is built to reinforce the separation between in-distribution features and complementary features that represent unfamiliar or anomalous objects. To the best of our knowledge,
+this is the first adapter explicitly tailored for anomaly segmentation.
+
+
+3 PRELIMINARIES
+
+
+3.1 PROBLEM SETTING
+
+
+Anomaly segmentation aims to identify within an image those pixels containing objects not encountered during the model’s training. To formalize the task, let us consider a training dataset
+_D_ = _{_ ( _xi, yi_ ) _}_ _[D]_ _i_ =1 [,] [where] _[x][i]_ _[∈X]_ [represents] [an] [RGB] [image] [from] [the] [set] _[X]_ _[⊂]_ [R][3] _[×][H][×][W]_ [,] [and]
+_yi_ _∈Y_ _⊂_ N _[|Z|×][H][×][W]_ is the corresponding ground truth, assigning a semantic label from a predefined set of categories _Z_ to each pixel. Here, _H_ and _W_ denote the height and width, respectively,
+of each sample of _X_ and _Y_ .
+
+
+Traditionally, anomaly segmentation has been approached as a per-pixel classification task (Grci´c
+et al., 2022; Tian et al., 2022). This involves first learning a function _fθ_ : _X_ _→_ R _[|Z|×][H][×][W]_ that maps
+
+
+3
+
+
+an image to pixel-wise class scores from the pre-defined set _Z_, and then applying a non-parametric
+scoring function _s_ : R _[|Z|×][H][×][W]_ _→_ [0 _,_ 1] _[H][×][W]_, to convert these class scores into anomaly scores.
+Recent state-of-the-art approaches (Nayal et al., 2023; Ackermann et al., 2023; Rai et al., 2023b;
+Grci´c et al., 2023; Rai et al., 2023a; Yu et al., 2023) have reconsidered this pipeline, by leveraging
+the Mask2Former architecture (Cheng et al., 2022). These methods shift from per-pixel classification
+to mask-based classification. We briefly summarize this reformulation in the next paragraph, as it
+forms the foundation of our solution.
+
+
+3.2 MASK2FORMER-BASED ANOMALY SEGMENTATION
+
+
+Mask2Former (Cheng et al., 2022) is a universal architecture that approaches segmentation as a direct set prediction problem. It groups pixels into _N_ segments by predicting _N_ binary masks and their
+corresponding category labels (where _N_ is a hyper-parameter). The architecture consists of three
+main components: (i) an _encoder_ that extracts the features from the input image, (ii) a _pixel-decoder_
+that generates high-resolution per-pixel embeddings from the encoder’s low-resolution features, and
+(iii) a _transformer-decoder_ that operates on image features to process object queries. For brevity, we
+do not delve into a detailed description of these components. Interested readers can refer to Cheng
+et al. (2022) for a comprehensive explanation of the Mask2Former architecture. Additionally, for
+the sake of compactness and readability, we henceforth refer to the pixel decoder and transformer
+decoder collectively as the _decoder_ (see Fig. 1-left).
+
+
+Given this architecture, our aim is to learn the parameters _θ_ of a function _fθ_, composed of an encoding function _hθe_ and a decoding function _gθd_ with _θ_ = [ _θe, θd_ ], that maps an image to a set of binary
+masks _M_ _∈_ R _[N]_ _[×]_ [(] _[H][×][W]_ [ )], and category labels _C_ _∈_ R _[N]_ _[×|Z|]_ . Formally, we have
+
+_fθ_ : _X_ _→_ (R _[N]_ _[×]_ [(] _[H][×][W]_ [ )] _,_ R _[N]_ _[×|Z|]_ )
+(1)
+_x �→_ _gθd_ _◦_ _hθe_ ( _x_ ) = ( _M, C_ )
+
+
+The anomaly scores are finally obtained through a non-parametric scoring function _s_ :
+(R _[N]_ _[×]_ [(] _[H][×][W]_ [ )] _,_ R _[N]_ _[×|Z|]_ ) _→_ R _[H][×][W]_ that takes as inputs the binary masks _M_ and class scores _C_ .
+Following Rai et al. (2023b), we implement the scoring function _s_ by applying MSP (Hendrycks &
+Gimpel, 2017) on the decoder outputs _M_ and _C_, i.e.,
+
+_s_ ( _M, C_ ) = 1 _−_ max �softmax( _C_ ) _[T]_ _·_ sigmoid( _M_ )� (2)
+_Z_
+
+Without loss of generality, other scoring functions may be used, e.g., Nayal et al. (2023); Grci´c
+et al. (2023).
+
+
+This approach has been proven crucial for achieving new state-of-the-art results, especially when
+using large pre-trained encoders (Nayal et al., 2023; Ackermann et al., 2023; Rai et al., 2023b;
+Grci´c et al., 2023; Rai et al., 2023a; Yu et al., 2023). Despite their flexibility, fine-tuning these large
+vision encoders is generally a delicate process as it could distort the pre-trained features (Kumar
+et al., 2022), making them less general and ineffective for other downstream tasks. To alleviate this
+issue, while maintaining state-of-the-art performance, we propose freezing the pre-trained encoder
+and inserting an adapter module (Rebuffi et al., 2018; Houlsby et al., 2019) with learnable parameters
+_θa_, such that _∥θa∥_ _<< ∥θe∥_ (see Fig. 1-left). Namely, we now seek a map
+
+_fθ_ : _X_ _→_ (R _[N]_ _[×]_ [(] _[H][×][W]_ [ )] _,_ R _[N]_ _[×|Z|]_ )
+(3)
+_x �→_ _gθd_ _◦_ _hθ_ ¯ _e,θa_ ( _x_ ) = ( _M, C_ )
+
+where _θ_ [¯] _e_ denotes the frozen parameters. We model this adapter after the ViT-Adapter (Chen et al.,
+2023), as explained in the next section.
+
+
+4 DUAL STREAM ADAPTER
+
+
+The Dual-Stream Adapter (DSA) architecture is based upon the ViT-Adapter structure (Fig. 2). It
+incorporates an anomaly prior module to capture initial ID and OOD features and dual-stream feature refinement modules that refine these features through interaction with frozen ViT features. We
+guide the separation of ID and OOD features by training them with a novel hyperbolic loss function.
+In the following subsections, we discuss these technical novelties in detail. For clarity, we omit the
+dependency of the adapter modules from the parameters _θa_ .
+
+
+4
+
+
+Figure 2: **Dual-Stream** **Adapter:** Our model consists of a frozen ViT backbone, a decoder, and
+a dual-stream adapter that extracts two complementary features referring to the in-distribution objects and to the _rest of the objects_, respectively. The dual-stream adapter consists of two components:
+anomaly prior module (APM) (Sec. 4.1) and a dual-stream feature refinement module (Sec. 4.2).
+
+
+4.1 ANOMALY PRIOR MODULE
+
+
+With the anomaly prior module, the architecture can learn strong prior knowledge about the ID and
+OOD features evident from Tab. 5 (a).
+
+
+4.2 DUAL STREAM FEATURE REFINEMENT
+
+
+The original ViT-Adapter (Chen et al., 2023) uses an interaction module consisting of crossattentions to combine the spatial information from the prior module and the features from the frozen
+ViT. For our problem, we want to combine the frozen ViT features with the spatial in-distribution
+(ID) and out-of-distribution (OOD) information, while at the same time disentagling them. Therefore, we design a module based on cross-attention with a symmetric structure to handle the dual
+streams information.
+
+
+5
+
+
+The first part of the DSA is the anomaly prior module (see Fig. 3-left). Our module shares a
+similar foundation with the ViT-Adapter’s Spatial Prior Module, leveraging a ResNet convolutional stem (He et al., 2016) to extract _D_ -dimensional feature maps at different spatial resolutions:
+( _F_ 8 _∈_ R _[D][×]_ _[H]_ 8 _[×]_ _[W]_ 8, _F_ 16 _∈_ R _[D][×]_ 16 _[H]_ _[×]_ _[W]_ 16 and _F_ 32 _∈_ R _[D][×]_ 32 _[H]_ _[×]_ _[W]_ 32 ). The intuition of this design choice is
+
+
+8 _[×]_ _[W]_ 8
+
+
+8, _F_ 16 _∈_ R _[D][×]_ 16 _[H]_
+
+
+16 _[H]_ _[×]_ _[W]_ 16
+
+
+_[W]_ 16 and _F_ 32 _∈_ R _[D][×]_ 32 _[H]_
+
+
+32 _[H]_ _[×]_ _[W]_ 32
+
+
+( _F_ 8 _∈_ R _[D][×]_ 8 _[×]_ 8, _F_ 16 _∈_ R _[D][×]_ 16 _[×]_ 16 and _F_ 32 _∈_ R _[D][×]_ 32 _[×]_ 32 ). The intuition of this design choice is
+
+that convolutional operations improve the ability to extract spatial information in vision transformers by capturing local context and providing translation equivariance (Wang et al., 2021). Each of
+the three feature tensors is further augmented with an additive and learnable _level_ _encoding_ . Formally, for a generic feature scale _Fi_, it is given as _F_ [¯] _i_ = _Fi_ + _δi_ . Where, _δi_ _∈_ R _[D][×]_ _[H]_ _i_ _[×]_ _[W]_ _i_ is the
+
+
+_i_ _[×]_ _[W]_ _i_
+
+
+mally, for a generic feature scale _Fi_, it is given as _F_ [¯] _i_ = _Fi_ + _δi_ . Where, _δi_ _∈_ R _[D][×]_ _i_ _[×]_ _i_ is the
+
+corresponding level encoding. All these features are finally flattened and concatenated together.
+
+
+We diverge from ViT-Adapter by introducing an explicit specialization mechanism. Features are
+processed in two separate streams with distinct level encodings, enabling them to specialize on
+either ID or foreign object characteristics (see Fig. 3-left). Formally, for a generic feature scale _Fi_,
+we have
+_F_ ¯ _i,_ id = _Fi_ + _δi,_ id
+(4)
+_F_ ¯ _i,_ ood = _Fi_ + _δi,_ ood
+
+
+where _δi,_ id _, δi,_ ood _∈_ R _[D][×]_ _[H]_ _i_
+
+
+_[H]_ _i_ _[×]_ _[W]_ _i_
+
+
+where _δi,_ id _, δi,_ ood _∈_ R _[D][×]_ _i_ _[×]_ _i_ are the corresponding level encodings, each of them obtained as a
+
+distinct _D_ -dimensional learnable vector broadcasted along the spatial coordinates. Importantly, the
+level encoding here acts as a channel-wise bias individually learned for in-distribution and out-ofdistribution features, that are added into the features to retain information on their resolution level
+within the feature tokens.
+
+
+The feature tensors of the two streams are finally flattened and concatenated separately, yielding two
+arrays of _D_ -dimensional feature tokens, i.e.,
+
+
+_F_ ¯8 _,_ id _,_ _F_ ¯16 _,_ id _,_ _F_ ¯32 _,_ id _�→F_ id [1] _[∈]_ [R][(] _[HW]_ 8 [2]
+
+
+8 [2] [+] _[HW]_ 16 [2]
+
+
+_[HW]_ 16 [2] [+] _[HW]_ 32 [2]
+
+
+32 [2] [)] _[×][D]_
+
+
+8 [2] [+] _[HW]_ 16 [2]
+
+
+(5)
+
+_[HW]_ 32 [2] [)] _[×][D]_
+
+
+_F_ ¯8 _,_ ood _,_ _F_ ¯16 _,_ ood _,_ _F_ ¯32 _,_ ood _�→F_ ood [1] _[∈]_ [R][(] _[HW]_ 8 [2]
+
+
+_[HW]_ 16 [2] [+] _[HW]_ 32 [2]
+
+
+where Attention denotes the cross-attention block and FFN is a feed-forward network as in the
+original ViT-Adapter (Chen et al., 2023).
+
+
+Besides its dual structure, our module differs from ViT-Adapter’s interaction module also for its
+lack of an injector cross-attention (see Fig. 3) module. This design choice is empirically motivated,
+as we found that the anomaly segmentation results are similar with and without the injector (cf.
+Tab. 6 ). However, removing the injector cross-attention results in a more streamlined module, with
+fewer training parameters. In summary, dual-stream feature refinement helps to refine and specialize the features obtained from anomaly prior to improve anomaly segmentation while retaining a
+good performance on the in-distribution samples.
+
+
+4.3 UNCERTAINTY BASED HYPERBOLIC LOSS
+
+
+Although the adapter architecture described so far is designed to generate two streams of features,
+we need a way to guide the learning process so that these two streams capture characteristics of the
+
+
+6
+
+
+Figure 3: **Above:** Shows the spatial prior module and adapter architecture present in the existing vision adapters architecture (Chen et al., 2023). **Below:** We present novel components of
+our dual-stream adapter. _**(a)Anomaly**_ _**Prior**_ _**Module**_ _**(Sec.**_ _**4.1):**_ learn to extract the initial ID and
+OOD features from the input image. _**(b)Dual-Stream Feature Refinement (Sec. 4.2):**_ takes in the
+initial ID and OOD features from the anomaly prior module. The features are refined by passing it
+through a set of anomaly adapters and augmenting it with the ViT backbone features.
+
+
+Each of this modules, which we call dual-stream feature refinement, consists of two symmetric
+streams: one for the ID features and the other for the OOD features. Without loss of generality,
+let us consider the ID stream for the _i_ -th dual-stream feature refinement module. To combine the
+spatial ID prior with the ViT features, we use a cross-attention layer, where the keys and values are
+given from features produced by the ( _i_ + 1)-th ViT block, i.e., _F_ Vit _[i]_ [+1][.] [The] [spatial] [features] _[F]_ id _[i]_ [are]
+used as queries to reintegrate relevant multi-scale features from _F_ Vit _[i]_ [+1] into the tokens of _F_ id _[i]_ [+1] . The
+same sequence of operations is implemented for the OOD stream. Formally, the whole process is
+summarized as:
+
+
+_, F_ ViT _[i]_ [+1] ) (6)
+
+ - �� _V_
+
+
+_i.d._ _extractor_
+
+
+_o.o.d._ _extractor_
+
+
+_F_ id _[i]_ [+1] = _F_ [ˆ] id _[i]_ [+1] + FFN( _F_ [ˆ] id _[i]_ [+1] )
+_F_ ˆid _[i]_ [+1] = _F_ id _[i]_ [+][ Attention][(] _[ F]_ id _[i]_ _, F_ ViT _[i]_ [+1]
+���� ���              _Q_ _K_
+
+
+_F_ ood _[i]_ [+1] [=] _[F]_ [ˆ] ood _[i]_ [+1] [+][ FFN][( ˆ] _[F]_ ood _[i]_ [+1][)]
+_F_ ˆood _[i]_ [+1] [=] _[ F]_ ood _[i]_ [+][ Attention][(] _[F]_ ood _[i]_
+����
+_Q_
+
+
+) (7)
+
+
+_, F_ ViT _[i]_ [+1] _,_
+
+ - �� _K_
+
+
+_, F_ ViT _[i]_ [+1]
+����
+_V_
+
+
+in-distribution and out-of-distribution pixels, respectively. To provide this guidance without relying
+on extra data, we leverage the void/background class, considering those pixels as OOD whereas the
+labeled objects are ID, and we design a loss in hyperbolic space.
+
+
+The hyperbolic space formulation was demonstrated to be effective in a plethora of visual
+tasks (Atigh et al., 2022; Liu et al., 2020) over Euclidean space. Moreover, it was shown that it enables the use of low-dimensional embeddings without compromising representation power (Nickel
+& Kiela, 2017), which is particularly well-suited for adapters. Most importantly, Atigh et al. (2022)
+demonstrated that with hyperbolic embeddings in a Poincar´e ball the pixel uncertainty can be obtained by taking the _L_ 2 norm to the origin of the ball itself. We use this property to design a new
+loss function termed as uncertainty-based hyperbolic loss ( _Lubhl_ ), that maximizes the uncertainty
+for OOD pixels and minimizes uncertainty for ID pixels. In the following, we discuss _Lubhl_ in
+detail.
+
+
+To define this loss, we first take the final ID ( _F_ id) and OOD ( _F_ ood) features and project them to the
+Hyperoblic space using an exponential map (Atigh et al., 2022), i.e.,
+
+
+_x_ ¯
+E0(¯ _x_ ) = _tanh_ ( _[√]_ _c||x_ ¯ _||_ )( ~~_√_~~ ) (8)
+_c||x_ ¯ _||_
+
+
+Then, we calculate uncertainty by taking _L_ 2 norm to the origin of the Poincar´e ball of projected
+features. Finally, _Lubhl_ for a feature point _x_ ¯ _i_ can be formulated as:
+
+
+_Lubhl_ (¯ _xi_ ) =             - _||−||d_ (¯ _dx_ (¯ _ix,_ 0) _i,_ 0) _||_ 2 _||_ 2 ifotherwise, _x_ ¯ _i_ _∈F_ ood (9)
+
+
+_d_ (¯ _xi,_ 0) is the _L_ 2 norm distance to the origin of the Poincar´e ball. Intuitively, this loss pushes the ID
+features away from the origin of the ball, whereas the OOD features are pulled towards the origin.
+We add _Lubhl_ to the total training loss (that is the same as Mask2Former (Cheng et al., 2022))
+formulated as:
+
+
+_Ltotal_ = _λubhlLubhl_ + _Lmask_ + _λclassLclass_ (10)
+
+
+Here, _Lmask_ is the mask loss which is a combination of the binary cross entropy loss and dice loss,
+and _Lclass_ is the classification loss weighted by _λclass_ = 2. _λubhl_ is the weight of _Lubhl_ which is set
+to 0.1.
+
+|Methods|Road Anomaly|Col3|SMIYC RA-21|Col5|SMIYC RO-21|Col7|FS L&F|Col9|FS Static|Col11|Average|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Methods|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|
+|Fine-Tuned|28.4<br>85.4|28.4<br>85.4|57.4<br>82.2|57.4<br>82.2|63.6<br>2.6|63.6<br>2.6|44.1<br>33.1|44.1<br>33.1|29.5<br>88.6|29.5<br>88.6|44.6<br>58.3|44.6<br>58.3|
+|Side Adapters (Xu et al., 2023)<br>ViT Adapters (Chen et al., 2023)<br>DSA-Tiny (Ours)|23.1<br>85.2<br>26.0<br>88.3<br>**36.7**<br>**77.3**|23.1<br>85.2<br>26.0<br>88.3<br>**36.7**<br>**77.3**|**60.3**<br>**77.3**<br>57.1<br>90.7<br>58.3<br>80.4|**60.3**<br>**77.3**<br>57.1<br>90.7<br>58.3<br>80.4|29.3<br>12.1<br>**60.3**<br>7.5<br>59.6<br>**3.0**|29.3<br>12.1<br>**60.3**<br>7.5<br>59.6<br>**3.0**|**45.1**<br>23.6<br>42.5<br>27.0<br>44.0<br>**20.0**|**45.1**<br>23.6<br>42.5<br>27.0<br>44.0<br>**20.0**|25.2<br>88.3<br>31.5<br>33.1<br>**40.1**<br>**19.9**|25.2<br>88.3<br>31.5<br>33.1<br>**40.1**<br>**19.9**|36.6<br>57.3<br>43.4<br>49.3<br>**47.7**<br>**40.1**|36.6<br>57.3<br>43.4<br>49.3<br>**47.7**<br>**40.1**|
+
+
+Table 1: **Quantitative** **comparison** **of** **adapters:** We present the performance comparison of the
+baseline vision adapters (Side Adapters (Xu et al., 2023), ViT Adapters (Chen et al., 2023)) versus
+our proposed adapters DSA-Tiny. Best results are in **bold** .
+
+
+5 EXPERIMENTS
+
+
+**Dataset and Evaluation Metrics:** We train all the models on Cityscapes (Cordts et al., 2016) as an
+inlier dataset and evaluate its performance on: a) Road Anomaly (Lis et al., 2019), b) Fishyscapes
+(FS) (Blum et al., 2021) benchmark having FS Lost and Found (FS L&F) and FS Static datasets,
+and c) Segment Me If You Can (SMIYC) benchmark (Chan et al., 2021a) containing SMIYC Road
+Anomaly 21 (SMIYC RA-21) and SMIYC Road Obstacle 21 (SMIYC RO-21) datasets. We employ
+AuPRC and FPR95 as evaluation metrics. Please refer to appendix A.2 for further details.
+
+
+**Implementation** **Details:** Our implementation details of adapters are mainly derived from Cheng
+et al. (2022); Chen et al. (2023). We introduced two configurations of adapters: Dual-Stream
+Adapter Tiny (DSA-Tiny) and Dual-Stream Adapter Large (DSA-Large), consisting of ViT-Tiny
+and ViT-Large backbones, respectively. Please refer to the appendix A.1 for further details.
+
+
+7
+
+
+|Methods|Road Anomaly|Col3|SMIYC RA-21|Col5|SMIYC RO-21|Col7|FS L&F|Col9|FS Static|Col11|Average|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Methods|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|
+|Fine-Tuned|39.1<br>76.4|39.1<br>76.4|67.2<br>50.8|67.2<br>50.8|10.7<br>29.8|10.7<br>29.8|66.2<br>28.3|66.2<br>28.3|89.1<br>12.3|89.1<br>12.3|54.4<br>39.5|54.4<br>39.5|
+|Side Adapters (Xu et al., 2023)<br>ViT Adapters (Chen et al., 2023)<br>DSA-Tiny (Ours)|44.8<br>**62.1**<br>37.5<br>78.5<br>**52.3**<br>65.6|44.8<br>**62.1**<br>37.5<br>78.5<br>**52.3**<br>65.6|61.1<br>45.9<br>60.7<br>**24.9**<br>**72.1**<br>35.0|61.1<br>45.9<br>60.7<br>**24.9**<br>**72.1**<br>35.0|53.8<br>41.6<br>**79.5**<br>16.0<br>77.9<br>**2.6**|53.8<br>41.6<br>**79.5**<br>16.0<br>77.9<br>**2.6**|47.2<br>40.9<br>44.9<br>42.6<br>**49.5**<br>**17.4**|47.2<br>40.9<br>44.9<br>42.6<br>**49.5**<br>**17.4**|**88.9**<br>15.9<br>80.6<br>27.3<br>80.3<br>**8.6**|**88.9**<br>15.9<br>80.6<br>27.3<br>80.3<br>**8.6**|59.1<br>41.2<br>60.6<br>37.8<br>**66.4**<br>**25.8**|59.1<br>41.2<br>60.6<br>37.8<br>**66.4**<br>**25.8**|
+
+
+Table 2: **Quantitative** **comparison** **of** **adapters** **with** **outlier** **exposure:** Shows the performance
+comparison among the baseline adapter methods and our proposed adapter DSA-Tiny in an outlier
+supervision setting. Best results are in **bold** .
+
+
+Figure 4: **Qualitative comparison of adapters:** We observe that our proposed DSA-Tiny produces
+better anomaly segmentation with minimal false positive rates than other vision adapters. Anomalies
+are represented in white.
+
+|Methods|SMIYC RA-21|Col3|SMIYC RO-21|Col5|FS L&F|Col7|FS Static|Col9|Road Anomaly|Col11|Average|Col13|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Methods|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|
+|Max Softmax (Hendrycks & Gimpel, 2017)<br>Mahanalobis (Lee et al., 2018)<br>Image Resynthesis (Lis et al., 2019)<br>MC Dropout (Mukhoti & Gal, 2018)<br>Learning Embedding (Blum et al., 2021)<br>SML (Jung et al., 2021)<br>_♠_SynBoost (Di Biase et al., 2021)<br>Maximized Entropy (Chan et al., 2021b)<br>_♠_JSRNet (Vojir et al., 2021)<br>_♠_Dense Hybrid (Grci´c et al., 2022)<br>_♠_PEBEL (Tian et al., 2022)<br>_♣♠_EAM (Grci´c et al., 2023)<br>_♣_Maskomaly (Ackermann et al., 2023)<br>ATTA (Gao et al., 2024)<br>FlowEneDet (Gudovskiy et al., 2023)<br>_♣♠_Mask2Anomaly (Rai et al., 2023b)<br>_♣♠_RBA (Nayal et al., 2023)<br>_∇♣♠_DSA-Large (Ours)|27.9<br>72.0<br>20.0<br>86.9<br>52.2<br>25.9<br>28.8<br>69.4<br>37.5<br>70.7<br>46.8<br>39.5<br>56.4<br>61.8<br>85.4<br>15.0<br>33.6<br>43.8<br>77.9<br>9.8<br>49.1<br>40.8<br>76.3<br>93.9<br>**93.4**<br>**6.9**<br>67.0<br>31.5<br>36.7<br>77.8<br>90.5<br>9.8<br>92.3<br>7.2<br>86.1<br>7.7|27.9<br>72.0<br>20.0<br>86.9<br>52.2<br>25.9<br>28.8<br>69.4<br>37.5<br>70.7<br>46.8<br>39.5<br>56.4<br>61.8<br>85.4<br>15.0<br>33.6<br>43.8<br>77.9<br>9.8<br>49.1<br>40.8<br>76.3<br>93.9<br>**93.4**<br>**6.9**<br>67.0<br>31.5<br>36.7<br>77.8<br>90.5<br>9.8<br>92.3<br>7.2<br>86.1<br>7.7|15.7<br>16.6<br>20.9<br>13.0<br>37.7<br>4.7<br>4.8<br>50.3<br>0.8<br>46.3<br>3.4<br>36.8<br>81.7<br>4.6<br>85.0<br>0.7<br>28.0<br>18.5<br>87.0<br>0.2<br>4.9<br>12.6<br>66.9<br>17.9<br>-<br>-<br>76.4<br>2.8<br>73.7<br>0.9<br>72.6<br>8.0<br>**92.4**<br>**0.3**<br>74.1<br>0.5|15.7<br>16.6<br>20.9<br>13.0<br>37.7<br>4.7<br>4.8<br>50.3<br>0.8<br>46.3<br>3.4<br>36.8<br>81.7<br>4.6<br>85.0<br>0.7<br>28.0<br>18.5<br>87.0<br>0.2<br>4.9<br>12.6<br>66.9<br>17.9<br>-<br>-<br>76.4<br>2.8<br>73.7<br>0.9<br>72.6<br>8.0<br>**92.4**<br>**0.3**<br>74.1<br>0.5|4.5<br>40.5<br>56.3<br>11.2<br>5.7<br>47.7<br>12.2<br>32.8<br>4.1<br>22.3<br>36.5<br>14.5<br>40.9<br>34.4<br>40.8<br>37.2<br>0.2<br>69.3<br>63.8<br>6.1<br>59.8<br>6.4<br>52.0<br>20.5<br>-<br>-<br>65.5<br>4.4<br>56.1<br>**3.8**<br>66.8<br>4.6<br>50.4<br>10.8<br>**71.0**<br>9.4|4.5<br>40.5<br>56.3<br>11.2<br>5.7<br>47.7<br>12.2<br>32.8<br>4.1<br>22.3<br>36.5<br>14.5<br>40.9<br>34.4<br>40.8<br>37.2<br>0.2<br>69.3<br>63.8<br>6.1<br>59.8<br>6.4<br>52.0<br>20.5<br>-<br>-<br>65.5<br>4.4<br>56.1<br>**3.8**<br>66.8<br>4.6<br>50.4<br>10.8<br>**71.0**<br>9.4|19.0<br>23.9<br>27.3<br>11.7<br>8.0<br>62.7<br>42.1<br>13.2<br>43.5<br>16.8<br>48.6<br>16.7<br>48.4<br>47.7<br>72.4<br>12.9<br>1.4<br>60.4<br>60.0<br>4.9<br>82.7<br>6.8<br>87.3<br>2.1<br>69.5<br>14.4<br>**93.6**<br>**1.1**<br>66.6<br>8.9<br>91.2<br>6.0<br>69.5<br>6.0<br>85.4<br>10.6|19.0<br>23.9<br>27.3<br>11.7<br>8.0<br>62.7<br>42.1<br>13.2<br>43.5<br>16.8<br>48.6<br>16.7<br>48.4<br>47.7<br>72.4<br>12.9<br>1.4<br>60.4<br>60.0<br>4.9<br>82.7<br>6.8<br>87.3<br>2.1<br>69.5<br>14.4<br>**93.6**<br>**1.1**<br>66.6<br>8.9<br>91.2<br>6.0<br>69.5<br>6.0<br>85.4<br>10.6|15.7<br>71.3<br>14.3<br>81.0<br>-<br>-<br>-<br>-<br>-<br>-<br>17.5<br>70.7<br>38.2<br>64.7<br>48.8<br>31.7<br>**94.4**<br>**9.2**<br>31.3<br>63.9<br>45.1<br>44.5<br>29.8<br>54.9<br>16.3<br>73.1<br>59.0<br>33.4<br>-<br>-<br>75.4<br>9.8<br>83.5<br>18.7<br>89.1<br>9.8|15.7<br>71.3<br>14.3<br>81.0<br>-<br>-<br>-<br>-<br>-<br>-<br>17.5<br>70.7<br>38.2<br>64.7<br>48.8<br>31.7<br>**94.4**<br>**9.2**<br>31.3<br>63.9<br>45.1<br>44.5<br>29.8<br>54.9<br>16.3<br>73.1<br>59.0<br>33.4<br>-<br>-<br>75.4<br>9.8<br>83.5<br>18.7<br>89.1<br>9.8|16.6<br>44.9<br>27.8<br>40.8<br>25.9<br>35.3<br>22.0<br>41.4<br>53.1<br>42.6<br>22.0<br>41.4<br>21.5<br>39.0<br>66.5<br>19.5<br>31.5<br>40.2<br>64.0<br>17.0<br>48.3<br>22.2<br>62.5<br>37.9<br>59.7<br>31.5<br>72.3<br>14.6<br>58.3<br>22.9<br>79.3<br>7.7<br>77.6<br>8.6<br>**81.3**<br>**7.6**|16.6<br>44.9<br>27.8<br>40.8<br>25.9<br>35.3<br>22.0<br>41.4<br>53.1<br>42.6<br>22.0<br>41.4<br>21.5<br>39.0<br>66.5<br>19.5<br>31.5<br>40.2<br>64.0<br>17.0<br>48.3<br>22.2<br>62.5<br>37.9<br>59.7<br>31.5<br>72.3<br>14.6<br>58.3<br>22.9<br>79.3<br>7.7<br>77.6<br>8.6<br>**81.3**<br>**7.6**|
+
+
+Table 3: **Quantitative** **Results:** We observe that on average our DSA-Large model obtains the
+best results among the baseline anomaly segmentation methods. The best and second best results
+are **bold** and underlined, respectively. _♣_ shows the methods that are retrained. _♠_ represents the
+methods using outlier exposure. _∇_ method requires void labels while training.
+
+
+5.1 MAIN RESULTS
+
+
+We organize our results into two parts: (a) a comparative analysis of anomaly segmentation results
+between existing vision adapters and our dual-stream adapter, and (b) an evaluation that presents
+the efficacy of the dual-stream adapter by comparing it with all existing anomaly segmentation
+techniques.
+
+
+**Adapter Comparison**
+_Baseline setting:_ Each adapter model consists of ViT-Tiny as backbone and mask-decoder. During
+the outlier supervision stage, we train all the adapter models with mask-contrastive loss (Rai et al.,
+2023b). We keep all the other implementation details the same as DSA-Tiny. More details about
+outlier supervision can be found in appendix A.1.
+
+
+8
+
+
+|Method|without Outlier supervision|with Outlier supervision|
+|---|---|---|
+|Method|mIoU|mIoU|
+|Mask2Former (Cheng et al., 2022)<br>ViT-Adapter (Chen et al., 2023)<br>RbA (Nayal et al., 2023)<br>EAM (Grci´c et al., 2023)<br>DSA-Large (Ours)|83.37<br>83.30<br>82.85<br>83.27<br>**83.71**|-<br>-<br>82.25<br>82.16<br>**82.58**|
+
+
+Table 4: **In-distribution performance** : In-distribution results on the Cityscapes validation set, for
+the vanilla Mask2Former and the recent anomaly segmentation SOTA based on it. DSA-Large
+retains the best in-distribution performance among these models. Best results are in **bold** .
+
+
+Figure 5: **Qualitative** **Results** : DSA-Large provide better and crisper anomaly masks w.r.t. other
+baselined methods. Anomalies are represented in white. The samples are shown for SMIYC RA-21
+and SMIYC RO-21. Please refer to the appendix Fig. 8 for more results.
+
+
+_Results discussion:_ Table 1 and Table 2 display the performance of existing vision adapters and
+DSA-Tiny, with and without the outlier exposure setting, respectively. On average, DSA-Tiny shows
+significant performance improvement over existing vision transformer adapters by providing higher
+AuPRC values and lower FPR95 scores, highlighting the effectiveness of the anomaly prior and the
+dual stream refinement. In the qualitative comparison shown in Fig. 4, we note that the vision transformer adapters struggle to segment anomalies, whereas DSA-Tiny demonstrates strong anomaly
+segmentation performance with minimal false positive rate. Additionally, it is worth noting that
+fine-tuning the entire architecture resulted in lower performance compared to our approach. This is
+in line with the findings of Kumar et al. (2022), who noted that fine-tuning leads to distorting the
+pre-trained features, thus, reducing anomaly detection performance.
+
+
+**Evaluation with Anomaly Segmentation Methods**
+_Baseline setting:_ We establish consistency and fairness among all the anomaly segmentation methods by training them on Cityscapes (Cordts et al., 2016) as inlier dataset. For all the masktransformer based anomaly segmentation methods (Rai et al., 2023b; Nayal et al., 2023; Ackermann
+et al., 2023; Grci´c et al., 2023), we train them on Swin-L (Liu et al., 2021) without any additional
+inlier data as used in (Grci´c et al., 2023).
+
+
+_Results discussion:_ **Anomaly** **Segmentation** **Performance** : Table 3 displays the performance
+of per-pixel and masked-based anomaly segmentation methods. We observe that in average
+DSA-Large obtains the best results among the recent SOTA mask-based architectures such as
+Mask2Anomaly (Rai et al., 2023b) and RbA (Nayal et al., 2023), although it appears that the results of the various methods vary depending on the datasets. Visually, from Fig. 5, we notice that
+mask-based methods RbA (Nayal et al., 2023) and Mask2Anomaly (Rai et al., 2023b) struggle to
+segment the anomalies.
+**Semantic Segmentation Performance** : We also look at the performance of anomaly segmentation
+models on the in-distribution data. This is crucial, since some design choices made to boost the outof-distribution detection may reduce the performance on the original semantic segmentation task,
+which may be a tradeoff not acceptable in practice (it is not practical to have two specialized models, one for ID and one for OOD). Table 4 reports the results on the Cityscapes validation dataset
+of the vanilla Mask2Former, as well as, anomaly segmentation methods based upon it. Notably,
+DSA-Large is able to achieve the best in-distribution accuracy, both when trained with and without
+
+
+9
+
+
+Figure 6: **(a)** Demonstrate the anomaly segmentation performance on different curvature values
+_c_ . **(b)** Anomaly segmentation performances obtained by training DSA-Tiny on different loss functions. BCE, CL, and Ours refers to Binary Cross Entropy, Contrastive Loss, and _Lubhl_, respectively.
+
+
+(a) (b)
+Table 5: (a) **Component** **wise** **ablation:** We test the importance of each component by removing
+one at a time. We observe that presence of all components gives the best performance. (b) **Number**
+**of** **dual-stream adapter:** We observe that having number of dual-stream adapter as 4 and 6 gives
+the best AuPRC and FPR95, respectively. All the results in **bold** are best.
+
+
+outlier supervision, confirming that our dual-stream adapter design strikes a good tradeoff between
+the two tasks of semantic segmentation and anomaly segmentation.
+
+
+5.2 ABLATION STUDY
+
+
+We conduct all ablation experiments on the DSA-Tiny architecture.
+**Component-wise** **ablation:** Table 5(a) presents the component-wise ablation of the novel parts
+present in the dual-stream adapteron SMIYC RO-21. We find that removing the anomaly prior
+and dual-stream feature refinement modules shows a significant performance drop in anomaly segmentation. This is due to the reason that the network is not able to separate well ID and OOD
+features in the absence of the aforementioned components. Finally, using _Lubhl_ further reduces the
+false positive rate and improves the AuPRC score.
+**Number** **of** **dual-stream feature refinement:** In Tab. 5(b), we present the effect of the number
+of dual-stream feature refinement on anomaly segmentation performance on SMIYC RO-21. As
+observed from the table, setting the number of dual-stream feature refinement modules as 4 and 6
+gives the best AuPRC and FPR95 scores, respectively. We opt for 4 modules to have fewer trainable
+parameters.
+**Curvature size:** In Fig. 6(a), we discuss the anomaly segmentation performance with varying curvature size of the Poincar´e ball. Results shown are the average performance taken on all the datasets.
+We empirically find that setting the curvature to 0.01 yields overall better performance compared to
+other values.
+**Loss comparison:** Figure 6(b) shows the anomaly segmentation performance comparison when using our proposed loss _Lubhl_, and when replacing it with a binary cross-entropy loss or contrastive
+loss. The results are the average performance given by all datasets. We find that _Lubhl_ yields the best
+performance among all the losses, confirming the advantage of using the hyperbolic representation
+to separate the features.
+
+
+6 CONCLUSION
+
+
+In this work, we introduce a novel adapter architecture for anomaly segmentation.
+Our architecture incorporates two key architectural components: anomaly prior modules
+and dual-stream feature refinement tailored to improve anomaly segmentation. The anomaly prior
+module learns to extract the initial ID and OOD features that are refined and improved by passing
+through a set of dual-stream feature refinement blocks. We introduce an uncertainty-based hyperbolic loss to explicitly learn the ID and OOD features. We hope that our dual-stream adapter will
+pave new ways for developing efficient anomaly segmentation methods based on vision adapters.
+
+
+10
+
+
+REFERENCES
+
+
+Jan Ackermann, Christos Sakaridis, and Fisher Yu. Maskomaly: Zero-shot mask anomaly segmentation. In _34th British Machine Vision Conference 2022, BMVC 2022, Aberdeen, UK, November_
+_20-24, 2023_, pp. 329. BMVA Press, 2023.
+
+
+Mina Ghadimi Atigh, Julian Schoep, Erman Acar, Nanne van Noord, and Pascal Mettes. Hyperbolic
+image segmentation. In _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition,_
+_CVPR_ _2022,_ _New_ _Orleans,_ _LA,_ _USA,_ _June_ _18-24,_ _2022_, pp. 4443–4452. IEEE, 2022. doi: 10.
+1109/CVPR52688.2022.00441. [URL https://doi.org/10.1109/CVPR52688.2022.](https://doi.org/10.1109/CVPR52688.2022.00441)
+[00441.](https://doi.org/10.1109/CVPR52688.2022.00441)
+
+
+Petra Bevandi´c, Ivan Kreˇso, Marin Orˇsi´c, and Siniˇsa Segvi´c. [ˇ] Discriminative out-of-distribution
+detection for semantic segmentation. _arXiv preprint arXiv:1808.07703_, 2018.
+
+
+Hermann Blum, Paul-Edouard Sarlin, Juan Nieto, Roland Siegwart, and Cesar Cadena. The
+fishyscapes benchmark: Measuring blind spots in semantic segmentation. _International Journal_
+_of Computer Vision_, 129:3119–3135, 2021.
+
+
+Robin Chan, Krzysztof Lis, Svenja Uhlemeyer, Hermann Blum, Sina Honari, Roland Siegwart,
+Pascal Fua, Mathieu Salzmann, and Matthias Rottmann. Segmentmeifyoucan: A benchmark
+for anomaly segmentation. In Joaquin Vanschoren and Sai-Kit Yeung (eds.), _Proceedings of the_
+_Neural Information Processing Systems Track on Datasets and Benchmarks,_, 2021a.
+
+
+Robin Chan, Matthias Rottmann, and Hanno Gottschalk. Entropy maximization and meta classification for out-of-distribution detection in semantic segmentation. In _Proceedings of the ieee/cvf_
+_international conference on computer vision_, pp. 5128–5137, 2021b.
+
+
+Zhe Chen, Yuchen Duan, Wenhai Wang, Junjun He, Tong Lu, Jifeng Dai, and Yu Qiao. Vision transformer adapter for dense predictions. In _International Conference on Learning Representations_
+_(ICLR)_, 2023.
+
+
+Bowen Cheng, Alex Schwing, and Alexander Kirillov. Per-pixel classification is not all you need for
+semantic segmentation. _Advances_ _in Neural Information Processing Systems_, 34:17864–17875,
+2021.
+
+
+Bowen Cheng, Ishan Misra, Alexander G Schwing, Alexander Kirillov, and Rohit Girdhar. Maskedattention mask transformer for universal image segmentation. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_conference on computer vision and pattern recognition_, pp. 1290–1299, 2022.
+
+
+Marius Cordts, Mohamed Omran, Sebastian Ramos, Timo Rehfeld, Markus Enzweiler, Rodrigo
+Benenson, Uwe Franke, Stefan Roth, and Bernt Schiele. The cityscapes dataset for semantic urban
+scene understanding. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_
+_recognition_, pp. 3213–3223, 2016.
+
+
+Anja Deli´c, Matej Grci´c, and Siniˇsa Segvi´c. [ˇ] Outlier detection by ensembling uncertainty with negative objectness. _BMVC_, 2024.
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. BERT: pre-training of deep
+bidirectional transformers for language understanding. In Jill Burstein, Christy Doran, and
+Thamar Solorio (eds.), _Proceedings_ _of_ _the_ _2019_ _Conference_ _of_ _the_ _North_ _American_ _Chapter_ _of_
+_the Association for Computational Linguistics:_ _Human Language Technologies, 2019_, pp. 4171–
+4186. Association for Computational Linguistics, 2019.
+
+
+Giancarlo Di Biase, Hermann Blum, Roland Siegwart, and Cesar Cadena. Pixel-wise anomaly
+detection in complex driving scenes. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_
+_vision and pattern recognition_, pp. 16918–16927, 2021.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at
+scale. In _9th International Conference on Learning Representations, ICLR_, 2021.
+
+
+11
+
+
+Stanislav Fort, Huiyi Hu, and Balaji Lakshminarayanan. Deep ensembles: A loss landscape perspective. _arXiv preprint arXiv:1912.02757_, 2019.
+
+
+Yarin Gal and Zoubin Ghahramani. Dropout as a bayesian approximation: Representing model
+uncertainty in deep learning. In _international_ _conference_ _on_ _machine_ _learning_, pp. 1050–1059.
+PMLR, 2016.
+
+
+Zhitong Gao, Shipeng Yan, and Xuming He. Atta: Anomaly-aware test-time adaptation for out-ofdistribution detection in segmentation. _Advances in Neural Information Processing Systems_, 36,
+2024.
+
+
+Matej Grci´c, Petra Bevandi´c, Zoran Kalafati´c, and Siniˇsa Segvi´c. Dense anomaly detection by robust [ˇ]
+learning on synthetic negative data. _arXiv preprint arXiv:2112.12833_, 2021.
+
+
+Matej Grci´c, Petra Bevandi´c, and Siniˇsa Segvi´c. [ˇ] Densehybrid: Hybrid anomaly detection for dense
+open-set recognition. In _European Conference on Computer Vision_, pp. 500–517. Springer, 2022.
+
+
+Matej Grci´c, Josip Sari´c, [ˇ] and Siniˇsa Segvi´c. [ˇ] On advantages of mask-level recognition for outlieraware segmentation. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pat-_
+_tern Recognition_, pp. 2936–2946, 2023.
+
+
+Denis Gudovskiy, Tomoyuki Okuno, and Yohei Nakata. Concurrent misclassification and out-ofdistribution detection for semantic segmentation via energy-based normalizing flow. In _Proceed-_
+_ings of the Thirty-Ninth Conference on Uncertainty in Artificial Intelligence_, UAI ’23. JMLR.org,
+2023.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In _Proceedings_ _of_ _the_ _IEEE_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_, pp.
+770–778, 2016.
+
+
+Dan Hendrycks and Kevin Gimpel. A baseline for detecting misclassified and out-of-distribution
+examples in neural networks. In _5th International Conference on Learning Representations, ICLR_
+_2017, Toulon, France, April 24-26, 2017, Conference Track Proceedings_, 2017.
+
+
+Dan Hendrycks, Steven Basart, Mantas Mazeika, Andy Zou, Joseph Kwon, Mohammadreza Mostajabi, and Jacob Steinhardt. Improving and assessing anomaly detectors for large-scale settings.
+_OpenReview preprint_, 2021.
+
+
+Neil Houlsby, Andrei Giurgiu, Stanislaw Jastrzebski, Bruna Morrone, Quentin De Laroussilhe, Andrea Gesmundo, Mona Attariyan, and Sylvain Gelly. Parameter-efficient transfer learning for nlp.
+In _International Conference on Machine Learning_, pp. 2790–2799. PMLR, 2019.
+
+
+Sanghun Jung, Jungsoo Lee, Daehoon Gwak, Sungha Choi, and Jaegul Choo. Standardized max
+logits: A simple yet effective approach for identifying unexpected road obstacles in urban-scene
+segmentation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_ _Vision_,
+pp. 15425–15434, 2021.
+
+
+Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete
+Xiao, Spencer Whitehead, Alexander C. Berg, Wan-Yen Lo, Piotr Dollar, and Ross Girshick. Segment anything. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _International_ _Conference_ _on_ _Computer_ _Vision_
+_(ICCV)_, 2023.
+
+
+Ananya Kumar, Aditi Raghunathan, Robbie Matthew Jones, Tengyu Ma, and Percy Liang. Finetuning can distort pretrained features and underperform out-of-distribution. In _International Con-_
+_ference on Learning Representations_, 2022.
+
+
+Kimin Lee, Kibok Lee, Honglak Lee, and Jinwoo Shin. A simple unified framework for detecting
+out-of-distribution samples and adversarial attacks. _Advances_ _in_ _neural_ _information_ _processing_
+_systems_, 31, 2018.
+
+
+Yanghao Li, Saining Xie, Xinlei Chen, Piotr Dollar, Kaiming He, and Ross Girshick. Benchmarking
+detection transfer learning with vision transformers. _arXiv preprint arXiv:2111.11429_, 2021.
+
+
+12
+
+
+Yanghao Li, Hanzi Mao, Ross Girshick, and Kaiming He. Exploring plain vision transformer backbones for object detection. In _European Conference on Computer Vision_, pp. 280–296. Springer,
+2022.
+
+
+Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr
+Doll´ar, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In _Computer_
+_Vision–ECCV_ _2014:_ _13th_ _European_ _Conference,_ _Zurich,_ _Switzerland,_ _September_ _6-12,_ _2014,_
+_Proceedings, Part V 13_, pp. 740–755. Springer, 2014.
+
+
+Krzysztof Lis, Krishna Nakka, Pascal Fua, and Mathieu Salzmann. Detecting the unexpected via image resynthesis. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_,
+pp. 2152–2161, 2019.
+
+
+Shaoteng Liu, Jingjing Chen, Liangming Pan, Chong-Wah Ngo, Tat-Seng Chua, and YuGang Jiang. Hyperbolic visual embedding learning for zero-shot recognition. In _2020_
+_IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition,_ _CVPR_ _2020,_ _Seattle,_
+_WA,_ _USA,_ _June_ _13-19,_ _2020_, pp. 9270–9278. Computer Vision Foundation / IEEE, 2020.
+doi: 10.1109/CVPR42600.2020.00929. URL [https://openaccess.thecvf.com/](https://openaccess.thecvf.com/content_CVPR_2020/html/Liu_Hyperbolic_Visual_Embedding_Learning_for_Zero-Shot_Recognition_CVPR_2020_paper.html)
+[content_CVPR_2020/html/Liu_Hyperbolic_Visual_Embedding_Learning_](https://openaccess.thecvf.com/content_CVPR_2020/html/Liu_Hyperbolic_Visual_Embedding_Learning_for_Zero-Shot_Recognition_CVPR_2020_paper.html)
+[for_Zero-Shot_Recognition_CVPR_2020_paper.html.](https://openaccess.thecvf.com/content_CVPR_2020/html/Liu_Hyperbolic_Visual_Embedding_Learning_for_Zero-Shot_Recognition_CVPR_2020_paper.html)
+
+
+Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, and Baining Guo.
+Swin transformer: Hierarchical vision transformer using shifted windows. In _Proceedings of the_
+_IEEE/CVF international conference on computer vision_, pp. 10012–10022, 2021.
+
+
+Jishnu Mukhoti and Yarin Gal. Evaluating bayesian deep learning methods for semantic segmentation. _CoRR_, 2018.
+
+
+Nazir Nayal, Misra Yavuz, Joao F Henriques, and Fatma G¨uney. Rba: Segmenting unknown regions
+rejected by all. In _Proceedings of the IEEE/CVF International Conference on Computer Vision_,
+pp. 711–722, 2023.
+
+
+Maximilian Nickel and Douwe Kiela. Poincar´e embeddings for learning hierarchical
+representations. In Isabelle Guyon, Ulrike von Luxburg, Samy Bengio, Hanna M.
+Wallach, Rob Fergus, S. V. N. Vishwanathan, and Roman Garnett (eds.), _Advances_
+_in_ _Neural_ _Information_ _Processing_ _Systems_ _30:_ _Annual_ _Conference_ _on_ _Neural_ _Infor-_
+_mation_ _Processing_ _Systems_ _2017,_ _December_ _4-9,_ _2017,_ _Long_ _Beach,_ _CA,_ _USA_, pp.
+6338–6347, 2017. URL [https://proceedings.neurips.cc/paper/2017/hash/](https://proceedings.neurips.cc/paper/2017/hash/59dfa2df42d9e3d41f5b02bfc32229dd-Abstract.html)
+[59dfa2df42d9e3d41f5b02bfc32229dd-Abstract.html.](https://proceedings.neurips.cc/paper/2017/hash/59dfa2df42d9e3d41f5b02bfc32229dd-Abstract.html)
+
+
+Maxime Oquab, Timoth´ee Darcet, Th´eo Moutakanni, Huy V. Vo, Marc Szafraniec, Vasil Khalidov,
+Pierre Fernandez, Daniel HAZIZA, Francisco Massa, Alaaeldin El-Nouby, Mido Assran, Nicolas
+Ballas, Wojciech Galuba, Russell Howes, Po-Yao Huang, Shang-Wen Li, Ishan Misra, Michael
+Rabbat, Vasu Sharma, Gabriel Synnaeve, Hu Xu, Herve Jegou, Julien Mairal, Patrick Labatut,
+Armand Joulin, and Piotr Bojanowski. DINOv2: Learning robust visual features without supervision. _Transactions on Machine Learning Research_, 2024. ISSN 2835-8856.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International conference on machine learning_, pp.
+8748–8763. PMLR, 2021.
+
+
+Shyam Nandan Rai, Fabio Cermelli, Barbara Caputo, and Carlo Masone. Mask2anomaly: Mask
+transformer for universal open-set segmentation. _arXiv preprint arXiv:2309.04573_, 2023a.
+
+
+Shyam Nandan Rai, Fabio Cermelli, Dario Fontanel, Carlo Masone, and Barbara Caputo. Unmasking anomalies in road-scene segmentation. In _Proceedings_ _of_ _the IEEE/CVF_ _International_
+_Conference on Computer Vision_, pp. 4037–4046, 2023b.
+
+
+Sylvestre-Alvise Rebuffi, Hakan Bilen, and Andrea Vedaldi. Learning multiple visual domains
+with residual adapters. In I. Guyon, U. Von Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett (eds.), _Advances in Neural Information Processing Systems_, volume 30.
+Curran Associates, Inc., 2017.
+
+
+13
+
+
+Sylvestre-Alvise Rebuffi, Hakan Bilen, and Andrea Vedaldi. Efficient parametrization of multidomain deep neural networks. In _Proceedings of the IEEE Conference on Computer Vision and_
+_Pattern Recognition_, pp. 8119–8127, 2018.
+
+
+Amir Rosenfeld and John K Tsotsos. Incremental learning through deep adaptation. _IEEE transac-_
+_tions on pattern analysis and machine intelligence_, 42(3):651–663, 2018.
+
+
+Yi-Lin Sung, Jaemin Cho, and Mohit Bansal. Vl-adapter: Parameter-efficient transfer learning for
+vision-and-language tasks. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 5227–5237, 2022.
+
+
+Yu Tian, Yuyuan Liu, Guansong Pang, Fengbei Liu, Yuanhong Chen, and Gustavo Carneiro. Pixelwise energy-biased abstention learning for anomaly segmentation on complex urban driving
+scenes. In _European Conference on Computer Vision_, pp. 246–263. Springer, 2022.
+
+
+Yuanpeng Tu, Yuxi Li, Boshen Zhang, Liang Liu, Jiangning Zhang, Yabiao Wang, and Cairong
+Zhao. Self-supervised likelihood estimation with energy guidance for anomaly segmentation
+in urban scenes. In Michael J. Wooldridge, Jennifer G. Dy, and Sriraam Natarajan (eds.),
+_Thirty-Eighth_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence,_ _AAAI_ _2024,_ _Thirty-Sixth_ _Conference_
+_on_ _Innovative_ _Applications_ _of_ _Artificial_ _Intelligence,_ _IAAI_ _2024,_ _Fourteenth_ _Symposium_ _on_ _Ed-_
+_ucational_ _Advances_ _in_ _Artificial_ _Intelligence,_ _EAAI_ _2014,_ _February_ _20-27,_ _2024,_ _Vancouver,_
+_Canada_, pp. 21637–21645. AAAI Press, 2024. doi: 10.1609/AAAI.V38I19.30162. URL
+[https://doi.org/10.1609/aaai.v38i19.30162.](https://doi.org/10.1609/aaai.v38i19.30162)
+
+
+Tom´as Voj´ır and Jir´ı Matas. Image-consistent detection of road anomalies as unpredictable patches.
+In _IEEE/CVF Winter Conference on Applications of Computer Vision, WACV 2023, Waikoloa, HI,_
+_USA,_ _January_ _2-7,_ _2023_, pp. 5480–5489. IEEE, 2023. doi: 10.1109/WACV56688.2023.00545.
+[URL https://doi.org/10.1109/WACV56688.2023.00545.](https://doi.org/10.1109/WACV56688.2023.00545)
+
+
+Tomas Vojir, Tom´aˇs Sipka, Rahaf Aljundi, Nikolay Chumerin, Daniel Olmeda Reino, and Jiri Matas. [ˇ]
+Road anomaly detection by partial image reconstruction with segmentation coupling. In _Proceed-_
+_ings of the IEEE/CVF International Conference on Computer Vision_, pp. 15651–15660, 2021.
+
+
+Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan, Kaitao Song, Ding Liang, Tong Lu, Ping
+Luo, and Ling Shao. Pvtv2: Improved baselines with pyramid vision transformer. _CoRR_,
+abs/2106.13797, 2021. [URL https://arxiv.org/abs/2106.13797.](https://arxiv.org/abs/2106.13797)
+
+
+Mengde Xu, Zheng Zhang, Fangyun Wei, Han Hu, and Xiang Bai. Side adapter network for openvocabulary semantic segmentation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_
+_Vision and Pattern Recognition_, pp. 2945–2954, 2023.
+
+
+Xuanlong Yu, Yi Zuo, Zitao Wang, Xiaowen Zhang, Jiaxuan Zhao, Yuting Yang, Licheng Jiao, Rui
+Peng, Xinyi Wang, Junpei Zhang, et al. The robust semantic segmentation uncv2023 challenge
+results. In _2023 IEEE/CVF International Conference on Computer Vision Workshops (ICCVW)_,
+pp. 4620–4630. IEEE Computer Society, 2023.
+
+
+Dan Zhang, Kaspar Sakmann, William Beluch, Robin Hutmacher, and Yumeng Li. Anomaly-aware
+semantic segmentation via style-aligned ood augmentation. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_International Conference on Computer Vision_, pp. 4065–4073, 2023.
+
+
+Renrui Zhang, Wei Zhang, Rongyao Fang, Peng Gao, Kunchang Li, Jifeng Dai, Yu Qiao, and Hongsheng Li. Tip-adapter: Training-free adaption of clip for few-shot classification. In _European_
+_Conference on Computer Vision_, pp. 493–510. Springer, 2022.
+
+
+Bolei Zhou, Hang Zhao, Xavier Puig, Sanja Fidler, Adela Barriuso, and Antonio Torralba. Scene
+parsing through ade20k dataset. In _Proceedings of the IEEE conference on computer vision and_
+_pattern recognition_, pp. 633–641, 2017.
+
+
+14
+
+
+A APPENDIX
+
+
+A.1 IMPLEMENTATION DETAILS
+
+
+**DSA-Tiny:** The model architecture consists of a ViT-Tiny the backbone and a Mask2Former
+decoder, which includes 9 mask attention layers. The ViT backbone is pre-trained on ImageNet-1K.
+The number of dual-stream adapter blocks are kept 4. The FFN consists of two MLP layers
+having a GELU activation layer between them. We used deformable attention architecture as a
+cross-attention in our architecture. We used the AdamW optimizer with an initial learning rate
+of 12 _×_ 10 _[−]_ [5], a batch size of 32, and a weight decay of 0 _._ 01. Layer-wise learning rate decay of
+0 _._ 95 is used during training. The DSA-Tiny model was trained for 46000 iterations on Cityscapes,
+utilizing a batch size of 32 and an image crop size of 512 _×_ 512. The model contains a total of
+28 _._ 5M parameters, with 5 _._ 5M from the frozen ViT backbone. Of the remaining 23M trainable
+parameters dual-stream adapter has 2 _._ 4M parameters.
+
+
+**DSA-Large:** The architecture of DSA-Large consists of a ViT-Large backbone with BEiT architecture and a Mask2Former decoder, which includes two mask attention layers. The ViT backbone
+is pre-trained on ImageNet-22K dataset. The number of dual-stream adapter blocks is set to 4. We
+employed the AdamW optimizer with an initial learning rate of 2 _×_ 10 _[−]_ [5] and a weight decay of
+0 _._ 05. During training, we applied layer-wise learning rate decay of 0 _._ 9. The DSA-Large model
+was trained for 60 _,_ 000 iterations on Cityscapes, with a batch size of 8 and an image crop size of
+768 _×_ 768. The model has a total of 435 _._ 9M parameters, of which 303 _._ 3M are from the frozen
+ViT backbone. Out of the remaining 133M trainable parameters, dual-stream adapter accounts for
+27 _._ 7M parameters.
+**Outlier** **supervision** is a widely used technique to improve the performance of anomaly segmentation methods (Rai et al., 2023b; Nayal et al., 2023; Grci´c et al., 2022) by training models
+with synthetic anomaly images generated on the fly. In our approach, we create these synthetic
+images using AnomalyMix (Tian et al., 2022), which cut objects from the MS-COCO (Lin et al.,
+2014) dataset based on ground truth annotations and randomly pasting them onto Cityscapes
+images. This produces a binary mask, where the MS-COCO object area is labeled as 1 showing
+an anomalous region, and the Cityscapes background area is labeled as 0 for the non-anomalous
+region. For training, we employ a mask contrastive loss (Rai et al., 2023b). During this phase,
+only the mask decoder is trained, and the loss term _Lubhl_ is not applied since DSA is frozen. We
+train DSA-Tiny and DSA-Large for 2000 iterations, using batch sizes of 8 and 2, respectively.
+The probability of selecting an outlier in each training batch is set to 0 _._ 2. All other hyperparameters are kept consistent with previous settings. The margin for the mask contrastive loss is set to 1 _._ 0.
+
+
+A.2 DATASETS AND EVALUATION METRICS
+
+
+We evaluate all anomaly segmentation methods using the Area under the Precision-Recall Curve
+(AuPRC), which is well-suited for imbalanced datasets. This makes it particularly suited for
+anomaly segmentation, where datasets are highly skewed. Additionally, we use the False Positive
+Rate at a True Positive Rate of 95% (FPR95) as a key metric, especially important for safety-critical
+applications. Next, we use the Road Anomaly Lis et al. (2019), Fishyscapes Blum et al. (2021), and
+Segment Me If You Can (SMIYC) benchmarks Chan et al. (2021a) as evaluation dataset discribed
+below.
+
+
+    - Road Anomaly consists of 60 images containing anomalous objects on or near the road that
+are taken from the web.
+
+    - Fishyscapes (FS) includes two datasets: Fishyscapes Static (FS Static) and Fishyscapes
+Lost & Found (FS L&F). FS Static is created by blending Pascal VOC objects into
+Cityscapes images and contains 30 validation images. FS L&F is based on a subset of
+the Lost and Found dataset with 100 validation images.
+
+    - SMIYC consists of two datasets: RoadAnomaly21 (SMIYC-RA21) and RoadObstacle21
+(SMIYC-RO21). SMIYC-RA21 has 10 validation images and 100 test images with diverse anomalies. SMIYC-RO21 is focused on segmenting road anomalies and contains 30
+validation images and 327 test images.
+
+
+15
+
+
+Figure 7: **Qualitative** **Ablation:** We demonstrate the importance of DSA components by individually removing them one at a time. DSFI and APM stand
+for dual-stream feature refinement and anomaly prior, respectively. Anomalies are represented in
+white.
+
+
+A.3 ADDITIONAL DETAILS FOR ABLATION STUDY AND RESULTS
+
+|Col1|SMIYC RA-21|Col3|SMIYC RO-21|Col5|FS L&F|Col7|FS Static|Col9|Road Anomaly|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+||AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|
+|_with_ injector<br>_without_ injector|57.1<br>90.7<br>**62.9**<br>**76.4**|57.1<br>90.7<br>**62.9**<br>**76.4**|**60.3**<br>**7.5**<br>33.9<br>11.2|**60.3**<br>**7.5**<br>33.9<br>11.2|42.5<br>27.0<br>**46.7**<br>**21.1**|42.5<br>27.0<br>**46.7**<br>**21.1**|**31.5**<br>**33.1**<br>27.1<br>90.2|**31.5**<br>**33.1**<br>27.1<br>90.2|**26.0**<br>88.3<br>25.3<br>**81.7**|**26.0**<br>88.3<br>25.3<br>**81.7**|
+
+
+Table 6: Anomaly segmentation performance with and without injector. Best performance in **bold**
+
+
+**Role** **of** **injector:** The ViT Adapter Chen et al. (2023) includes an injector designed to integrate
+spatial priors into the ViT blocks. However, as demonstrated empirically in Tab. 6, the removal
+of the injector had no significant impact on anomaly segmentation performance. Based on this
+observation, we excluded the injector from our architecture, reducing the model’s complexity and
+saving parameters. For the experiment, we choose ViT tiny backbone of the adapter.
+
+|Curvature (c)|SMIYC RA-21|Col3|SMIYC RO-21|Col5|FS L&F|Col7|FS Static|Col9|Road Anomaly|Col11|
+|---|---|---|---|---|---|---|---|---|---|---|
+|Curvature (c)|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|AuPRC_ ↑_|FPR95 _↓_|
+|1.0<br>0.1<br>0.01<br>0.001|54.8<br>**77.4**<br>55.5<br>81.7<br>**58.3**<br>80.4<br>56.8<br>83.1|54.8<br>**77.4**<br>55.5<br>81.7<br>**58.3**<br>80.4<br>56.8<br>83.1|**64.4**<br>**2.8**<br>44.0<br>2.9<br>59.6<br>3.0<br>48.4<br>4.9|**64.4**<br>**2.8**<br>44.0<br>2.9<br>59.6<br>3.0<br>48.4<br>4.9|**50.6**<br>20.9<br>45.7<br>24.2<br>44.0<br>20.0<br>44.4<br>**19.3**|**50.6**<br>20.9<br>45.7<br>24.2<br>44.0<br>20.0<br>44.4<br>**19.3**|25.0<br>78.1<br>32.8<br>89.6<br>**40.1**<br>**19.9**<br>25.4<br>67.3|25.0<br>78.1<br>32.8<br>89.6<br>**40.1**<br>**19.9**<br>25.4<br>67.3|32.4<br>87.1<br>31.5<br>78.4<br>**36.7**<br>**77.3**<br>27.8<br>90.8|32.4<br>87.1<br>31.5<br>78.4<br>**36.7**<br>**77.3**<br>27.8<br>90.8|
+
+
+Table 7: Anomaly segmentation performance on varying curvature of poincar´e ball. Best performance in **bold**
+
+
+**Curvature** **of** **poincar´e** **(** _c_ **):** Table 7 presents the anomaly segmentation performance across
+different curvature values of the Poincar´e ball. Notably, no single curvature value consistently gives
+the best performance across all datasets. However, on average, a curvature of 0 _._ 01 yields the most
+favorable results. All experiments were conducted on DSA-Tiny, with _λubhl_ set to 0.1.
+
+
+Table 8: Loss Comparison among our proposed loss and euclidean losses. Best performance in **bold**
+
+
+**Loss comparison:** In Tab. 8, we show that _Lubhl_ achieves the best performance across all datasets.
+All experiments were conducted on DSA-Tiny. While using the contrastive loss a margin of 1.0 is
+kept. The loss weight in the total loss (10) was set to 0.1 for all comparisons.
+
+
+16
+
+
+Table 9: Variation in anomaly segmentation performance with different _λubhl_ . Best performance
+in **bold** .
+
+
+**Variation** **in** _λubhl_ **:** Table 9 shows the anomaly segmentation performance for different values of
+_λubhl_ as defined in (10). We observe no single value of _λubhl_ consistently outperforms across all
+datasets, but on average, a value of 0.1 yields the best results. All experiments were conducted on
+DSA-Tiny.
+
+
+**Qualitative ablation study:** In Tab. 5, we present the quantitative results of the component-wise ablation. The quantitative behavior can also be corroborated qualitatively from Fig. 7 where we observe
+significant increase in false positives rates when anomaly prior and dual-stream feature refinement
+are removed.
+
+
+**Comparision** **with** **UNO** : UNO Deli´c et al. (2024) uses Mapillary Vistas as additional inlier data
+to boost anomaly segmentation performance and ADE-20K as outlier exposure dataset. To ensure fairness and consistency, we use the same training protocol as in our draft. We trained UNO
+using Cityscapes as the inlier dataset and incorporated MS-COCO image objects during the outlierexposure phase. The table below presents the performance comparison across all validation datasets.
+We can observe that DSA-Large consistently outperform UNO across all datasets.
+
+|Col1|SMIYC RA-21|SMIYC RO-21|FS L&F|FS Static|Road Anomaly|
+|---|---|---|---|---|---|
+|Method|AuPRC<br>FPR95|AuPRC<br>FPR95|AuPRC<br>FPR95|AuPRC<br>FPR95|AuPRC<br>FPR95|
+|UNO<br>DSA-Large|62.7<br>33.1<br>73.3<br>45.3|12.5<br>25.6<br>92.6<br>0.72|35.0<br>42.8<br>71.0<br>9.4|82.3<br>12.2<br>85.4<br>10.6|54.1<br>17.0<br>89.1<br>9.8|
+
+
+Table 10: Performance metrics comparison across different methods and datasets.
+
+
+17
+
+
+Figure 8: **Additional** **qualitative** **results:** _Row_ _1_ _and_ _Row_ _4_ : Displays that DSA-large is able to
+segment anomalies with minimal false positives. _Row 2 and Row 3_ : shows that anomalies that are
+left unsegmented by Mask2Anomaly and RbA are well segmented by DSA-large as shown in red
+bounding box.
+
+
+18

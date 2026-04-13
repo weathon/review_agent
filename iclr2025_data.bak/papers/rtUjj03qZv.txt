@@ -1,0 +1,1386 @@
+# GROUNDING IS ALL YOU NEED? DUAL TEMPORAL GROUNDING FOR VIDEO DIALOG
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+In the realm of video dialog response generation, capturing both the essence of
+video content and the temporal nuances of conversation history is crucial. While
+some approaches rely on large-scale pretrained visual-language models, often
+neglecting temporal dynamics, others emphasize spatial-temporal relationships
+within videos but demand intricate object trajectory pre-extractions and overlook
+dialog temporal dynamics. This paper introduces the Dual Temporal Groundingenhanced Video Dialog model (DTGVD), designed to bridge the gap between
+these two approaches. DTGVD uniquely integrates the strengths of both by emphasizing dual temporal relationships. It achieves this by predicting dialog turnspecific temporal regions, selectively filtering video content, and grounding responses in both video and dialog contexts. A key innovation of DTGVD is its advanced handling of chronological interplay within dialogs. By effectively capturing and leveraging dependencies between dialog turns, it enables a more nuanced
+understanding of conversational dynamics. To further align video and dialog temporal dynamics, we introduce a list-wise contrastive learning strategy. In this
+framework, accurately grounded turn-clip pairings are treated as positive samples,
+while less precise pairings serve as negative samples. This refined classification
+is then seamlessly integrated into our end-to-end response generation mechanism.
+Evaluations using AVSD@DSTC-7 and AVSD@DSTC-8 datasets underscore the
+superiority of our methodology. Our code [1] will be made public later.
+
+
+1 INTRODUCTION
+
+
+Video dialog aims to generate a free-form response to a follow-up question based on both the video
+content and the history of multi-turn question-answer pairs, as illustrated in Fig. 1. This task shares
+similarities with other vision-and-language tasks, such as video sentence grounding (Xiao et al.,
+2021; Liu et al., 2020; 2021b;a), video question answering (Li et al., 2022; Xiao et al., 2022), and
+video relation detection (Shang et al., 2021; Gao et al., 2022). However, unlike image-grounded dialog (Murahari et al., 2020; Chen et al., 2020), video dialog demands a more hierarchical understanding and reasoning process, encompassing complex elements like actions, events, and interactions,
+which inherently carry far richer information than static images. The primary challenge of video
+dialog lies in accurately comprehending the dynamic content of the video while simultaneously
+leveraging the evolving dialog history between the user and the dialog agent. Effectively addressing
+these challenges is crucial for generating coherent, contextually relevant, and sensible responses.
+
+
+Recent advances in video dialog have leveraged large-scale pretrained models such as GPT (Radford
+et al., 2019), UniVL (Luo et al., 2020), and LLaMA (Touvron et al., 2023). These models, fine-tuned
+to accept video frames, dialog history, and questions, have shown significant promise in addressing
+video dialog challenges. Their strength lies in utilizing extensive pre-existing knowledge, which
+helps mitigate the limitations of relatively small video dialog datasets. However, despite their success in vision-and-language tasks, these models often struggle to capture temporal relationships in
+dialog history, resulting in inaccuracies by incorporating irrelevant video content (Le & Hoi, 2020;
+Li et al., 2021; Yamazaki et al., 2022), limiting their ability to exploit the temporal dynamics needed
+for coherent video dialog understanding. On the other hand, object-centric methods, such as those
+proposed by Geng et al. (2021), Kim et al. (2021), and Pham et al. (2022), attempt to capture temporal relationships by focusing on object trajectories extracted from video sequences using tools
+like Faster-RCNN and the DeepSort algorithm. These methods construct detailed spatial-temporal
+
+
+[1https://anonymous.4open.science/r/video_dialog-4EE6/](https://anonymous.4open.science/r/video_dialog-4EE6/)
+
+
+1
+
+
+graphs and alignment strategies, yet they face challenges when multiple objects in a single video
+clip correspond to diverse question-answer pairs. Moreover, their computational demands can be
+substantial, making them less efficient, especially for complex video dialog tasks.
+
+
+    - We propose a temporal grounding module to explicitly model the attention shift of each
+dialog turn over the video, and generate the temporal masks to filter out irrelevant video
+frames and irrelevant dialog history.
+
+
+    - Based on the predicted temporal region of each QA pair, we design a novel contrastive
+objective function to enhance the selection of related video clips.
+
+
+    - We achieve promising performance as compared with SOTA methods. Experiments on two
+popular benchmark datasets verified the effectiveness of our method. And experiments on
+various pretrained models verified the expandability of the method.
+
+
+2 RELATED WORK
+
+
+2.1 VIDEO DIALOG
+
+
+Recently, with AVSD@DSTC-7 (Yoshino et al., 2019), AVSD@DSTC-8 (Kim et al., 2019) and
+AVSD-@DSTC-10 (Hori et al., 2022) challenges, Video-grounded Dialog (VGD) has received a
+lot of attention. As a crucial component of multi-modal reasoning tasks, VGD requires the model
+to comprehensively consider dialogue history, current query and video scenes to facilitate response
+generation. Early works Alamri et al. (2019); Chao et al. (2019); Hori et al. (2019a); Le et al.
+
+
+2
+
+
+Given the dynamic nature of video dialog, it’s
+
+crucial to enhance the granularity of temporal localization for each question-answer pair,
+which can significantly improve response generation. By capturing the interplay of related
+dialog turns, models can achieve richer context
+comprehension. However, many existing approaches (Pham et al., 2022; Shah et al., 2022),
+as shown in Fig. 1, have either relied solely
+on recent dialog turns or processed dialog history linearly, overlooking the distinct temporal relevance of each pair to the video content,
+thus missing opportunities for more accurate
+response generation.
+
+
+➢ Video summary
+
+
+➢ Full Moment
+
+
+…
+
+
+~~0.0s~~ ~~-~~ ~~34.8s~~
+
+
+**(Historical) Conversations**
+
+
+**Timestamp**
+
+
+18.6s - 34.8s
+
+
+27.4s - 34.8s
+
+
+0.6s - 33.4s
+
+
+model. This innovative approach capitalizes
+
+both video sequences and dialog histories. At
+
+31.3s                                                                                                    - 34.8s
+
+its foundation, DTGVD employs the UniVL
+pretrained visual-language model (Luo et al.,
+
+Figure 1: Given a video clip and dialog history
+
+2020) to discern the critical temporal segments
+
+(Q1&A1-Q8&A8), video dialog model generates
+
+of each dialog interaction. This allows for a
+
+the corresponding answer (A9) to the current
+
+focused response generation that is rooted in
+
+question (Q9). Most previous methods merely ex
+contextually relevant video segments while si
+ploit the nearest several turns of question-answer
+
+multaneously leveraging pertinent dialog turns.
+
+pairs (e.g., Q7&A7, Q8&A8) and Full Moment.
+
+The model’s design exhibits a meticulous at
+In our method, we ground the temporal region of
+
+tention to the temporal intricacies of conver
+each QA pair in the video, and select Informative
+
+sations. To further enhance this alignment,
+
+Moment and informative QA pairs for generating
+
+we incorporate a list-wise contrastive learning
+
+the responses (e.g., Q4&A4, Q5&A5).
+
+paradigm: accurately grounded turn-clip pairings are treated as positive benchmarks, guiding the system away from less accurate predictions.
+This strategy culminates in a comprehensive end-to-end training mechanism that prioritizes reference response fidelity. Overall, our main contributions are summarized as follows:
+
+
+31.3s - 34.8s
+
+
+Figure 1: Given a video clip and dialog history
+(Q1&A1-Q8&A8), video dialog model generates
+the corresponding answer (A9) to the current
+question (Q9). Most previous methods merely exploit the nearest several turns of question-answer
+pairs (e.g., Q7&A7, Q8&A8) and Full Moment.
+In our method, we ground the temporal region of
+each QA pair in the video, and select Informative
+Moment and informative QA pairs for generating
+the responses (e.g., Q4&A4, Q5&A5).
+
+
+Figure 2: The pipeline of our proposed DTGVD is made up of four primary components including
+Basic Encoder, Temporal Grounding, Answer Generation and Contrastive Selection. The whole
+model is trained with a contrastive learning-based loss function and a text generation loss function.
+The symbol _⊕_ means concatenating multi-model features along the time/sequence dimension.
+
+
+(2019a); Nguyen et al. (2019); Sanabria et al. (2019) used recurrent neural network or multi attention to encode dialog and convolutional neural network to obtain video features, with simple
+concatenation for cross-modal fusion.
+
+
+Subsequent researches are mainly divided into two groups: one group opts to utilizing visuallanguage pre-trained models. For example, Le & Hoi (2020) and Li et al. (2021) embedded video
+into text space and fined turn a GPT-2 (Radford et al., 2019) model to generate the answers. Yamazaki et al. (2022) employed a pre-trained TimeSformer (Bertasius et al., 2021) model to obtain
+better visual representation. Huang et al. (2022) applied an UniVL (Luo et al., 2020) model to enhance multi modal representation and fusion capabilities. Zhang et al. (2023) leverages the powerful
+text generation capability of Large Language Model (LLM) to convert videos into embeddings that
+LLaMA (Touvron et al., 2023) can recognize using Q-former. However, researches in this group
+have an insufficient utilization of features and generally ignore the temporal relationships between
+various modalities. For example, they input the entire video or several recent dialogue history turns.
+This results in abundance of noise that undermines the advantage of pre-trained models and hinders
+their effectiveness. The other group is object-centered that focuses on extracting spatial-temporal
+information relevant to objects from the video or text. For example, Geng et al. (2021) and Kim
+et al. (2021) obtained object features by Faster R-CNN (Ren et al., 2015) and constructed scene
+graphs to perform object-centric cross-modal interactions. Pham et al. (2022) parsed the dynamic
+space-time visual content into object trajectories and leveraged questions. However, these methods require complex pre-extraction of object trajectories and mainly focus on cross-modal fusion
+between vision and text, without fully utilizing the temporal relationships in conversation history.
+Besides, in the era of large models, they still need to train complex networks from scratch, which
+may soon be surpassed by a simple fine-tuned multi-modal pre-trained model. Our work addresses
+the issues of both groups, by extracting more effective key information from video and text based
+on temporal dependencies. Besides, our framework can work with a variety of pre-trained models,
+which demonstrates significant superiority in this task.
+
+
+2.2 VIDEO TEMPORAL GROUNDING
+
+
+Video temporal grounding (VTG) aims to pinpoint the start and end times of a target segment within
+an untrimmed video in relation to a given query. Early research Chen et al. (2018); Chen & Jiang
+(2019); Xu et al. (2019) mostly adopted a two-stage process. This involved first obtaining candidate
+segments, either through a sliding window or generated proposals, and then separately learning the
+representations of textual and visual content. The final step involved identifying specific time seg
+
+3
+
+
+ments via classification and regression. Subsequent studies, however, shifted away from presenting
+candidates and instead directly determined the target start and end coordinates in an end-to-end fashion. Zhang et al. (2020a) and Yuan et al. (2019) utilized co-attention to fuse video and text features
+extracted from C3D and GloVe, and obtained the start and end timestamps through regression. Mun
+et al. (2020) obtained semantics-aware segment features based on the extracted phrase features via
+local-global video-text interactions. Zhang et al. (2020b) constructed a 2D temporal feature map to
+better retrieve video length candidates with different duration in an end-to-end manner.
+
+
+It is evident that combining VTG with video reasoning tasks can lead to more refined video understanding. However, not many studies have delved into this area. Lei et al. (2019) developed a
+dataset that includes time segments corresponding to each question and answer and introduced a
+locate-then-answer VQA model. Meanwhile, Li et al. (2022) enhanced video answer accuracy by
+eliminating video clips that were irrelevant to the query in focus. A possible reason for the limited
+exploration of this combination is that most existing grounding models possess distinctive designs,
+making them challenging to seamlessly integrate into downstream task models. To address this issue,
+our DTGVD model incorporates a temporal grounding component. This component is designed to
+share partial weights and can seamlessly execute both the grounding and reasoning processes within
+a singular model.
+
+
+3 METHOD
+
+
+We introduce a Dual Temporal Grounding-enhanced Video Dialog model, named DTGVD, as shown
+in Fig. 2. We first provide the problem definition in Sec. 3.1, and introduce four main components
+of DTGVD, namely Basic Encoder, Temporal Grounding, Answer Generation and Contrastive Selection, from Sec. 3.2 to Sec. 3.5.
+
+
+3.1 PROBLEM DEFINITION
+
+
+Given an untrimmed video _V_ = _{vt}_ _[T]_ _t_ =1 [and the dialog history of] _[ K]_ _[−]_ [1][ turns of question-answer]
+pairs _HK−_ 1 = ( _Q_ 1: _K−_ 1 _, A_ 1: _K−_ 1), where _T_ and _K_ are the number of frames and dialog turns,
+respectively, the goal of video dialog is to generate a free-form natural language answer _AK_ of the
+question _QK_, which can be summarized as:
+
+
+_A_ ˆ _K_ = arg max [(] _[A][ |][ V, H][K][−]_ [1] _[, Q][K]_ [;] _[ θ]_ [)] _[,]_ (1)
+_A_ _[P]_
+
+
+where _θ_ is the parameter of video dialog model.
+
+
+How to locate valuable information from the dialog history and video is a major challenge of this
+task, given the abundance of irrelevant and disruptive information present in the complete video
+and all previous turns. If we utilize _V_ to indicate a subset of _V_ that contains the significant video
+frames, and _H_ to indicate the set that includes effective history turns, the objective of the task can
+be simplified to:
+_A_ ˆ _K_ = arg max [(] _[A][ | V][,][ H][, Q][K]_ [;] _[ θ]_ [)] _[ .]_ (2)
+_A_ _[P]_
+
+
+Thus, the complicated task can be converted into two straightforward parts, which consist of _tempo-_
+_ral grounding_ to discover beneficial video clips with turns (i.e. _V_ and _H_ ), and _answer generation_ to
+obtain accurate answer.
+
+
+3.2 BASIC ENCODER
+
+
+We employ basic text and video encoder to embed dialog history and the video respectively, following the structure of Univl (Luo et al., 2020).
+
+
+**Text Encoder.** To process the input question and dialog history, we apply the BERT pre-processing
+procedure, resulting in a token sequence **t** = _{ti_ _| i ∈_ [1 _, n_ ] _}_, where _ti_ refers to the _i_ -th token and _n_
+denotes the sequence length. Subsequently, we employ the BERT-based uncased model to generate
+the text representation **T** _∈_ R _[n][×][d]_ by feeding the token sequence **t** into the model: **T** = BERT( **t** ),
+where _d_ represents the hidden size of the textual representation.
+
+
+4
+
+
+**Video** **Encoder.** We extract features from a frame sequence **v** = _{vj_ _|_ _j_ _∈_ [1 _, T_ ] _}_ for each
+video, where _vj_ represents the _j_ -th frame of the video and _T_ is the length of the frame sequence.
+A pretrained video feature extractor, S3D (Xie et al., 2018a), is used to generate the video feature
+**F** _v_ _∈_ R _[m][×][d][v]_, where _m_ refers to the length of the time dimension and _dv_ is the hidden size of the
+video features. We then apply a Transformer-based encoder to embed the contextual information of
+the video into **V** _∈_ R _[m][×][d]_, formulated as **V** = Transformer( **F** _v_ ).
+
+
+3.3 TEMPORAL GROUNDING
+
+
+In this section, we aim to identify specific useful dialog turns and video clips via temporal dependencies.
+
+
+**Cross-modal** **Encoder.** In order to facilitate full interaction between text and video, we utilize
+a Transformer-based cross-modal encoder to handle the concatenated feature. The cross-modal
+encoding feature **MT** _,_ **V** _∈_ R [(] _[n]_ [+] _[m]_ [)] _[×][d]_ can be expressed as follows:
+
+
+**MT** _,_ **V** = _CrossEncoder_ ( **T** _⊕_ **V** ) _,_ (3)
+
+
+where _⊕_ means concatenation operation. Note that the multi-modal features are concatenated along
+the time dimension of video and sequence dimension of text, which can be utilized easily to obtain
+the frame-level grounding results.
+
+
+**Video Mask.** We explore the temporal relation between each QA turn and video, by predicting the
+start and end timestamp ( _τi_ _[s]_ [,] _[ τ][ e]_ _i_ [) in the video corresponding to each question] _[ Q][i]_ [, where] _[ i]_ _[∈]_ [[1] _[, K]_ []]
+and ( _τi_ _[s]_ [,] _[ τ][ e]_ _i_ [) =] _[ f]_ [(] _[V, H][i][−]_ [1] _[, Q][i]_ [;] _[ θ]_ [)][.]
+
+
+Specifically, based on the cross-model representations **MT** _,_ **V**, we use the part corresponding to **V**
+to predict the time mask:
+
+
+_Vi_ _[mask]_ = _F_ ( **MV** ) _,_ (4)
+
+
+where _Vi_ _[mask]_ represents the predicted temporal mask for question _Qi_, _F_ represents the combination
+of a Conv1D layer and sigmoid activation function for mask prediction.
+
+
+As for frame level, the temporal mask can also be treated as the binary classification result on
+whether each frame is relevant to current question. We apply binary cross-entropy (BCE) loss to
+measure the difference of predicted result and ground truth:
+
+
+where _α_ is a threshold value. Then the video segment _V_ _[′]_ between ( _τi_ _[s]_ [,] _[ τ][ e]_ _i_ [) is the beneficial clip for]
+current query.
+
+
+5
+
+
+_L_ frame =
+
+
+_m_
+
+- _L_ bce( _Pi_ _[j][, Y]_ _i_ _[j]_ [)] _[,]_ (5)
+
+_j_ =1
+
+
+where _Yi_ _[j]_ [is the label on whether frame] _[ j]_ [is related to] _[ Q][i]_ [, and] _[ P][ j]_ _i_ [is the predicted result.]
+
+
+As for the segment level, we utilize cross-entropy (CE) loss to compare the predicted start and end
+timestamps with the label:
+
+_L_ clip = [1]          - _L_ ce( _p_ _[s]_ _i_ _[, t][s]_ _i_ [) +] _[ L]_ [ce][(] _[p][e]_ _i_ _[, t][e]_ _i_ [)]          - _,_ (6)
+
+2
+
+where _t_ _[s]_ _i_ [and] _[ t]_ _i_ _[e]_ [are the labels of the start and end boundaries, respectively.] _[ p]_ _i_ _[s]_ [and] _[ p]_ _i_ _[e]_ [are the predicted]
+values of the start and end timestamps. The final loss of temporal grounding can be represented as:
+
+
+_L_ grounding = _λL_ clip + _L_ frame _,_ (7)
+
+
+where _λ_ is a hyperparameter to control the ratio of the two losses.
+
+Then, we can generate the predicted timestamp ( _τi_ _[s]_ [,] _[ τ][ e]_ _i_ [) of each question:]
+
+
+_τi_ _[s]_ [=] [1]
+
+2
+
+_τi_ _[e]_ [=] [1]
+
+
+2 - _minIdx_ ( _Vi_ _[mask]_ _> α_ ) + _p_ _[s]_ _i_ - _,_
+
+
+(8)
+2 [1] - _maxIdx_ ( _Vi_ _[mask]_ _> α_ ) + _p_ _[e]_ _i_ - _,_
+
+
+**Turn** **Selection.** Based on ( _τi_ _[s]_ [,] _[τ][ e]_ _i_ [)][,] [the] [temporal] [relation] [between] [different] [QA] [turns] [can] [be] [ex-]
+plored. Since the attention of video dialog in different turns will shift, we consider the QA turns to
+be more relevant when they focus on close time regions. Therefore, we calculate the Intersection of
+Union (IoU) of timestamps between the current question and every history QA turns, and select the
+_k_ turns corresponding to the _k_ largest IoU:
+_H_ = top-k� _IoU_ [( _τ_ 1: _[s]_ _i−_ 1 _[, τ]_ 1: _[ e]_ _i−_ 1 [)] _[,]_ [ (] _[τ][ s]_ _i_ _[, τ]_ _i_ _[ e]_ [)]]       - _,_ (9)
+where _|H|_ = _k_ . When there are not enough QA turns or several QA turns have the same predicted
+timestamp, we preferentially choose the nearest QA pairs as the supplementary.
+
+
+3.4 ANSWER GENERATION
+
+
+Using the predicted _V_ and _H_, we can filter the irrelevant part of the whole video and the useless
+history turns. Specifically, we construct the video attention masks according to ( _τi_ _[s][, τ]_ _i_ _[ e]_ [)][ so that the]
+attention weight of irrelevant video clips always equals to zero. At the same time, we only embed
+the relevant turns based on _H_ . After the same encoders as Sec. 3.2, the single modal features **T** and
+**V** can be expressed as **Tuse** and **Vuse** . Then we utilize the same cross-modal encoder as Sec. 3.3
+to obtain the fused feature **Muse** = _CrossEncoder_ ( **Tuse** _⊕_ **Vuse** ), where **Muse** _∈_ R [(] _[n][′]_ [+] _[m][′]_ [)] _[×][d]_,
+_n_ _[′]_ _≤_ _n_ and _m_ _[′]_ _≤_ _m_ .
+
+
+Finally we adopt the decoder structure of Univl, which is a uni-directional attention model that
+generates the tokens one by one, to have the capability of learning from and benefiting the generation
+tasks. The decoded feature **D** _∈_ R _[l][×][d][t]_ can be expressed as:
+**D** = _Decoder_ ( **Muse** ) _,_ (10)
+where _l_ is the decoder length, from which a sequence of words is generated as the system response
+and _dt_ is the size of the token vocabulary. We employ the cross-entropy loss on the generated
+answers for model training:
+_L_ gengerate = _L_ ce( **D** _,_ **Dgt** ) _,_ (11)
+where **Dgt** is the one-hot feature obtained from the ground truth response _AK_ . During evaluation,
+we use beam search to enhance the ability of generation, similar to other video dialog models.
+
+
+3.5 CONTRASTIVE SELECTION
+
+
+The utilization of cross-modal information can be enhanced by locating specific video clips according to each turn, and then spotting useful turns. However, not all QA turns can be accurately
+grounded. To solve this problem, we design a method inspired by contrastive learning (Liu et al.,
+2021c) to enhance the grounding ability between QA turns and video clips. We try to make the
+video dialog model more discriminative by pulling close positive samples _v_ [+] and pushing away
+noisy negative samples _v_ _[−]_ .
+
+
+As shown in the right part of the **Contrastive** **Selection** in Fig. 2, for each video sample _v_, we
+nominate video clips between the range of ( _τi_ _[s]_ [,] _[ τ][ e]_ _i_ [) as groundtruth sample] _[ v][gt]_ [ and video clips slightly]
+larger than this range as poitive sample _v_ [+] . Correspondingly, video clips of other range are chosen
+as negative samples _v_ _[−]_ . Similar to Sec. 3.4, we also construct video attention masks to obtain the
+required video clips. The features of the three samples can be expressed as **Vuse**, **V** [+] and **V** _[−]_ .
+Then, a MSE loss function is utilized to make the distance between the positive samples closer in
+the embedding space:
+_L_ [+] = _MSE_       - **Muse** _, CrossEncoder_ ( **Tuse** _⊕_ **V** [+] )� _._
+
+
+We also utilize MSE loss function to make the distance between the positive samples and negative
+samples farther in the embedding space:
+_L_ _[−]_ = 1 _−_ _MSE_       - **Muse** _, CrossEncoder_ ( **Tuse** _⊕_ **V** _[−]_ )� _._
+
+
+Then we can get the contrastive loss:
+_L_ contrastive = _L_ [+] + _βL_ _[−]_ _,_ (12)
+where _β_ is a hyperparameter to control the ratio. Finally, we utilize another hyperparameter _δ_ and
+obtain the final loss of answer generation:
+_L_ final = _L_ generate + _δL_ contrastive _._ (13)
+
+
+6
+
+
+Table 1: Performance comparison (%) of DTGVD with SOTA methods on AVSD@DSTC-7 dataset.
+The best performance is marked in bold, and the second-best is underlined.
+
+|Methods|CIDEr BLEU-1 BLEU-2 BLEU-3 BLEU-4 METEOR ROUGE-L Avg|
+|---|---|
+|FA+HRED<br>MTN<br>Student-Teacher<br>VGD-GPT2<br>BiST<br>SCGA<br>JST<br>COST|0.843<br>0.648<br>0.505<br>0.399<br>0.323<br>0.231<br>0.510<br>0.494<br>0.985<br>0.688<br>0.550<br>0.444<br>0.363<br>0.260<br>0.541<br>0.547<br>1.005<br>0.686<br>0.557<br>0.458<br>0.382<br>0.254<br>0.537<br>0.554<br>1.052<br>0.694<br>0.570<br>0.476<br>0.402<br>0.254<br>0.544<br>0.570<br>1.050<br>0.711<br>0.578<br>0.475<br>0.394<br>0.261<br>0.550<br>0.574<br>1.059<br>0.702<br>0.588<br>0.481<br>0.398<br>0.256<br>0.541<br>0.575<br>1.079<br>-<br>-<br>-<br>0.406<br>0.262<br>0.554<br>-<br>1.085<br>0.723<br>0.589<br>0.483<br>0.400<br>0.266<br>0.561<br>0.587|
+|DTGVD (ours)|**1.152**<br>**0.732**<br>**0.604**<br>**0.508**<br>**0.423**<br>**0.271**<br>**0.571**<br>**0.606**|
+
+
+4 EXPERIMENT
+
+
+4.1 DATASETS
+
+
+To evaluate the performance of our proposed DTGVD model, we conduct experiments on the challenging video grounded dialog dataset: Audio-Visual Scene-Aware Dialog (AVSD). It contains dialogs based on the Charades dataset (Sigurdsson et al., 2016). Each annotated dialog consists of
+up to 10 dialog turns. Each turn contains the question-answer pairs about objects, actions, events,
+and so on, and the corresponding reasoning timestamps in the video. AVSD dataset also contains
+three different testing splits, i.e. AVSD@DSTC-7 (Yoshino et al., 2019), AVSD@DSTC-8 (Kim
+et al., 2019) and AVSD@DSTC-10 (Hori et al., 2022). The training and validation sets are identical
+across all three splits, with AVSD@DSTC-10 additionally providing timestamp labels for each dialog turn. However, the test set for AVSD@DSTC-10 remains unpublished. In line with Le & Hoi
+(2020); Pham et al. (2022), we compare our method against other state-of-the-art approaches using
+the AVSD@DSTC-7 and AVSD@DSTC-8 test splits.
+
+
+4.2 EVALUATION METRICS
+
+
+Following existing video dialog works, we evaluate the performance on four main metrics: BLEU,
+METEOR, ROUGE-L and CIDEr, which are widely used such as by Le & Hoi (2020); Pham et al.
+(2022) to evaluate the performance of the proposed methods. We also calculate the average of all
+metrics to assess the overall performance. Besides, we adopt “R@ _n,_ IoU = _µ_ ” to evaluate the
+temporal duration of each question-answer turn, following Gao et al. (2017). The “R@ _n,_ IoU = _µ_ ”
+represents the percentage of language queries having at least one result whose IoU between the top_n_ predictions with the ground-truth is larger than _µ_ . In our experiments, we reported the results of
+_n_ = 1 and _µ ∈{_ 0 _._ 3 _,_ 0 _._ 5 _,_ 0 _._ 7 _}_ .
+
+
+**Human** **Evaluation.** As Hori et al. (2022), we employed a 5-point Likert scale to gather human
+ratings for each system response. Human raters evaluated system responses under given dialogue
+context and video conditions, where a score of 5 indicated excellent, 4 denoted good, 3 represented
+acceptable, 2 signified poor, and 1 indicated very poor quality. Human raters were instructed to
+primarily focus on two aspects: the accuracy of answers considering the context and video, and the
+fluency of the responses.
+
+
+4.3 IMPLEMENTATION DETAILS
+
+
+For the structure of pretrained model, we follow the implementation of UniVL (Luo et al., 2020),
+which contains 12 Transformer layers for text encoder, 6 Transformer layers for visual encoder, 2
+Transformer layers for cross-modal encoder, and 3 Transformer layers for decoder part. A fineturned UniVL is used as baseline for comparison. All datasets are trained for 8 epochs till converge.
+We use Adam optimizer with a initial learning rate of 3e-5, and a batch size of 128 samples distributed on 2 Nvidia Tesla V100 GPUs with 32GB memory. For video features, we adopt the S3D
+model (Xie et al., 2018b) which outputs a 1024-dimensional vector. After obtaining embeddings of
+video and text, we concatenate three embeddings in the following sequence: video, current question
+
+
+7
+
+
+and dialog history, and limit the length of each embedding to 100, 20 and 60, respectively. For
+hyperparameters mentioned in Sec. 3, we set threshold _α_ = 0 _._ 5, maximum history turns _k_ = 3, loss
+control ratio _λ_ = 0 _._ 2, _β_ = 0 _._ 5 and _δ_ = 0 _._ 2 in our experiment. The whole system is implemented
+with PyTorch framework. More details can be found in our code.
+
+
+Table 2: Performance comparison (%) of DTGVD with SOTA methods on AVSD@DSTC-8 dataset.
+
+|Methods|CIDEr BLEU-1 BLEU-2 BLEU-3 BLEU-4 METEOR ROUGE-L Avg|
+|---|---|
+|MTN<br>VGD-GPT2<br>SCGA<br>JST<br>COST|0.912<br>0.643<br>0.523<br>0.427<br>0.356<br>0.245<br>0.525<br>0.519<br>1.022<br>0.677<br>0.556<br>0.462<br>0.387<br>0.249<br>0.544<br>0.557<br>1.024<br>0.675<br>0.559<br>0.459<br>0.377<br>0.269<br>0.555<br>0.560<br>0.997<br>-<br>-<br>-<br>0.394<br>0.250<br>0.545<br>-<br>1.051<br>0.695<br>0.559<br>0.465<br>0.382<br>**0.278**<br>**0.574**<br>0.572|
+|DTGVD (ours)|**1.076**<br>**0.705**<br>**0.582**<br>**0.482**<br>**0.402**<br>0.264<br>0.567<br>**0.583**|
+
+
+4.4 PERFORMANCE COMPARISON AGAINST SOTA
+
+
+Some SOTA methods utilize extra information of video, such as caption, subtitle, and so on. However, these additional data sources are not always accessible in real application. To make a fair
+comparison, we only take video content and dialog history as input.
+
+
+We mainly make the comparison with the following state-of-the-art methods: JST (Shah et al.,
+2022), VGD-GPT2 (Le & Hoi, 2020), SCGA (Kim et al., 2021), MTN (Le et al., 2019b), FA+HRED
+(Nguyen et al., 2019), Student-Teacher (Hori et al., 2019b), BiST (Le et al., 2020), and COST (Pham
+et al., 2022). Among them, Student-Teacher (Hori et al., 2019b) and JST (Shah et al., 2022) utilize
+teacher model to obtain additional information from summary. SCGA (Kim et al., 2021) and COST
+(Pham et al., 2022) employ extracted object features to interact with text. FA+HRED (Nguyen
+et al., 2019), MTN (Le et al., 2019b) and BiST (Le et al., 2020) use multiple attention for crossmodal fusion. VGD-GPT2 (Le & Hoi, 2020) inherits the embedding and text generation capabilities
+of pre-trained model. The performances of other SOTA methods are reported according to their
+respective papers or by running their released codes.
+
+
+As shown in Table 1, DTGVD achieves the best performance across all metrics on AVSD@DSTC7. Compared with the current SOTA method COST, DTGVD achieves 5.8% improvement (0.423
+vs 0.400) in BLEU-4, and 5.5% improvement (1.145 vs 1.085) in CIDEr. On AVSD@DSTC-8,
+results are reported in Table 2. DTGVD still shows performance improvement on 6 out of 8 metrics
+compared with other SOTA (1.076 vs 1.051 in CIDEr). Among these metrics, BLEU focuses on
+precision, ROUGE-L emphasizes recall, METEOR considers both, and CIDEr pays more attention
+to key information. Due to more accurate utilization of useful information in both video and history, the answers generated by DTGVD are more capable of filtering out irrelevant information and
+focusing on key information in relevant history. Therefore, it leads to a significant improvement in
+BLEU and CIDEr. For other existing SOTA methods, using the entire video and all history turns (or
+several recent history turns) often leads to the inclusion of interference information in the generated
+answers, resulting in significant deficiencies in BLEU and CIDEr.
+
+
+The removal of irrelevant information by DTGVD inevitably results in answers that focus more
+on key information, but lack some less useful words that can improve recall. This results in some
+“unreal” deficiencies in METEOR and ROUGE-L for DTGVD in AVSD@DSTC8. Therefore, we
+added Avg to represent the average of all metrics to reduce the impact of shortcoming of a single
+evaluation method. Avg results indicate that DTGVD has significant advantages on both datasets.
+
+
+Additionally, we conducted human evaluation comparing our model to the current SOTA model,
+COST (Pham et al., 2022), to further validate the evaluation results. In terms of fluency, DTGVD
+scored 4.221 while COST scored 4.109. In terms of accuracy, DTGVD scored 3.678 while COST
+scored 3.237. The greater enhancement in accuracy can be attributed to DTGVD’s refined emphasis
+on related segments within both text and video.
+
+
+8
+
+
+Table 3: Abaltion studies of different components in DTGVD model (UniVL) on AVSD@DSTC-7.
+
+
+Components
+CIDEr BLEU-4 METEOR ROUGE-L
+Turn Selection Video Mask Contrastive
+
+
+1.092 0.407 0.260 0.557
+✓ 1.113 0.406 0.264 0.558
+✓ ✓ 1.137 0.416 0.268 0.566
+✓ ✓ ✓ **1.145** **0.423** **0.271** **0.571**
+
+
+4.5 ABLATION STUDIES
+
+
+We design multiple ablation experiments to explore the impact of each component of the proposed
+method, including the pre-trained models, contrastive selection, video mask and history QA turns
+selection. The experiments show that each component has a positive impact on the final results, as
+shown in Table 3.
+
+
+**The** **effect** **of** **temporal** **grounding.** Our proposed temporal grounding mechanism includes two
+aspects: the selection of dialog history turns and the highlighted video features. For the former, if
+we choose the related history QA pairs according to the timestamps, the performance of baseline
+model will increase from 1.092 to 1.113 (1.9%) in CIDEr. For the later, if we block irrelevant clips,
+the performance will increase from 1.113 to 1.137 (2.2%) in CIDEr, compared with inputting visual
+feature with whole video sequence. Experimental results show that both the selection of dialog
+history turns and highlighted video features are beneficial to the final performance.
+
+
+**The effect of contrastive selection.** According to Table 3, contrastive selection brings a 0.7% boost
+in CIDEr (from 1.137 to 1.145). Note that this method is employed to highlight related video clips
+more accurately. Thus, the effectiveness of contrastive selection also demonstrates that DTGVD still
+has the potential for improvement, if the grounding model is more reliable.
+
+
+4.6 TEMPORAL GROUNDING PERFORMANCE
+
+
+Since the test set of AVSD@DSTC-10 includes timestamp labels but is not public, we cannot compare with existing results. Instead, we evaluate temporal accuracy on the AVSD@DSTC-10 validation set, where our DTGVD achieves competitive performance with 0.728 in R1@0.3, 0.652 in
+R1@0.5, and 0.544 in R1@0.7 for the video grounding task.
+
+
+4.7 PERFORMENCE ON VARIOUS PRETRAINED MODEL
+
+
+The experiments in the previous sections are all conducted using DTGVD with UniVL as the baseline. However, the methods used in DTGVD can also be transferred to various pretrained models,
+and yielding performance improvements. Table 4 shows the percentage increase in CIDEr after
+applying the proposed methods to GPT-2 (Radford et al., 2019), LLaMA (Touvron et al., 2023)
+and UniVL (Luo et al., 2020). We mimic the video processing methods from VGD-GPT2 (Le &
+Hoi, 2020) and Video-LLaMA (Zhang et al., 2023) for GPT-2 and LLaMA, respectively, serving as
+comparative baselines. Upon this foundation, we apply the principal methods proposed herein to
+them, i.e., Turn Selection, Video Mask, and Contrastive Selection. Then we calculate the percentage
+improvement in CIDEr scores relative to the baseline upon application of these methods.
+
+
+Table 4: Improvement of CIDEr of different pretrained models with the proposed method.
+
+
+Pretrained Model Pretraining Modalit Params (B) Improvement in CIDEr(%)
+
+
+GPT-2 Text 1.5 1.7
+LLaMA Text 7 4.2
+UniVL Text-Video 0.13 4.9
+
+
+It is observed that all three pretrained models show performance gains with the proposed approach,
+with UniVL demonstrating the largest improvement, likely due to its multimodal text-video pretraining, enhancing text-video interactions. GPT-2 and LLaMA, originally pretrained on text only
+
+
+9
+
+
+and adapted for video via an additional encoder, may have a less comprehensive understanding of
+video content. LLaMA, with its larger parameter set, exhibits greater improvement. Thus, further
+improvements in the DTGVD framework could be achieved by enhancing text-video interaction
+capabilities or using more powerful pretrained models.
+
+
+4.8 IN-DEPTH ANALYSIS
+
+
+**Q2:** **Is the history turn selection really useful?** Fig. 3 (a) shows the different CIDEr performance
+of DTGVD and baseline under various number of history turns. For example, if history turns are 6,
+it means the current question is the 7-th turn. In the case that we select three most related turns, the
+more history turns exist before current question, the performance difference between the two models
+would theoretically be larger. The results in the figure confirm our estimate. Besides, the closest
+three turns are chosen for baseline model. So when the number of history turns is less than three,
+there should be little difference in performance between the two models. Indeed, we can observe
+that there is a huge change when there are less or more than three history turns.
+
+
+**Q3:** **Is the video mask really useful?** Just like **Q2**, Fig. 3 (b) shows the different CIDEr performance of DTGVD and baseline under various length of predicted region. If the proportion of the
+predicted region to the video duration is smaller, it means that more irrelevant regions are blocked.
+We can notice that as the ratio gets smaller, the CIDEr improvement ratio gets higher between the
+two models. This further illustrates the effectiveness of the video mask, and all the experiments
+above prove that **Grounding is All You Need in Video Dialog** .
+
+
+5 CONCLUSION
+
+
+To enhance the filtering capability of both visual and textual information simultaneously for video
+dialog, this paper proposes a Dual Temporal Grounding-enhanced Video Dialog model (DTGVD),
+which utilizes the pre-trained visual-language model and excludes irrelevant video clips and dialogue history turns based on the predicted temporal area of each question-answer pairs, thus making
+the answers in video dialogue more accurate. We also choose accurately grounded turn-clip pairs
+as positive samples and gather other turn-clip pairs as negative samples in order to better illustrate
+the temporal relationship between the two modalities. The entire model is then trained using answer
+generation loss and contrastive learning loss. Experiments on two well-known benchmark datasets
+demonstrate the effectiveness of our proposed method. And experiments on various pretrained models verified the adaptability of the method.
+
+
+10
+
+
+**Q1:** **What** **if** **the** **predicted** **tem-**
+**poral** **region** **is** **inaccurate?** It is
+evident that not all question-answer
+pairs have an exact corresponding
+video clip. Particularly, for complicated questions that require multiple steps of reasoning, the predicted
+temporal region may not be entirely
+precise. In such cases, the grounding model often predicts more frames
+than necessary. To address this issue, we consider extended regions as
+positive samples to minimize the adverse effects of inaccurate grounding. As a result, even if the predicted
+region is longer than the actual region, their encoded features will remain relatively consistent.
+
+
+(a) Effect of history turns (b) Effect of region length
+
+
+Figure 3: The CIDEr performance of DTGVD and baseline
+(UniVL) with regard to different number of existing history
+turns and different length of predicted video region.
+
+
+REFERENCES
+
+
+Huda Alamri, Vincent Cartillier, Abhishek Das, Jue Wang, Anoop Cherian, Irfan Essa, Dhruv Batra,
+Tim K. Marks, Chiori Hori, Peter Anderson, Stefan Lee, and Devi Parikh. Audio visual sceneaware dialog. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_
+_Recognition (CVPR)_, June 2019.
+
+
+Gedas Bertasius, Heng Wang, and Lorenzo Torresani. Is space-time attention all you need for video
+understanding? In _ICML_, volume 2, pp. 4, 2021.
+
+
+Guan-Lin Chao, Abhinav Rastogi, Semih Yavuz, Dilek Hakkani-T¨ur, Jindong Chen, and Ian Lane.
+Learning question-guided video representation for multi-turn video question answering. _arXiv_
+_preprint arXiv:1907.13280_, 2019.
+
+
+Feilong Chen, Fandong Meng, Jiaming Xu, Peng Li, Bo Xu, and Jie Zhou. Dmrm: A dual-channel
+multi-hop reasoning model for visual dialog. In _Proceedings of the AAAI Conference on Artificial_
+_Intelligence_, volume 34, pp. 7504–7511, 2020.
+
+
+Jingyuan Chen, Xinpeng Chen, Lin Ma, Zequn Jie, and Tat-Seng Chua. Temporally grounding
+natural sentence in video. In _Proceedings of the 2018 conference on empirical methods in natural_
+_language processing_, pp. 162–171, 2018.
+
+
+Shaoxiang Chen and Yu-Gang Jiang. Semantic proposal for activity localization in videos via sentence query. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence_, volume 33, pp.
+8199–8206, 2019.
+
+
+Jiyang Gao, Chen Sun, Zhenheng Yang, and Ram Nevatia. Tall: Temporal activity localization via
+language query. In _Proceedings_ _of_ _the_ _IEEE_ _international_ _conference_ _on_ _computer_ _vision_, pp.
+5267–5275, 2017.
+
+
+Kaifeng Gao, Long Chen, Yulei Niu, Jian Shao, and Jun Xiao. Classification-then-grounding: Reformulating video scene graphs as temporal bipartite graphs. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition_, pp. 19497–19506, 2022.
+
+
+Shijie Geng, Peng Gao, Moitreya Chatterjee, Chiori Hori, Jonathan Le Roux, Yongfeng Zhang,
+Hongsheng Li, and Anoop Cherian. Dynamic graph representation learning for video dialog via
+multi-modal shuffled transformers. In _Proc. AAAI Conference on Artificial Intelligence_, 2021.
+
+
+Chiori Hori, Huda Alamri, Jue Wang, Gordon Wichern, Takaaki Hori, Anoop Cherian, Tim K.
+Marks, Vincent Cartillier, Raphael Gontijo Lopes, Abhishek Das, Irfan Essa, Dhruv Batra, and
+Devi Parikh. End-to-end audio visual scene-aware dialog using multimodal attention-based video
+features. In _ICASSP 2019 - 2019 IEEE International Conference on Acoustics, Speech and Signal_
+_Processing (ICASSP)_, pp. 2352–2356, 2019a. doi: 10.1109/ICASSP.2019.8682583.
+
+
+Chiori Hori, Anoop Cherian, Tim K Marks, and Takaaki Hori. Joint student-teacher learning for
+audio-visual scene-aware dialog. In _INTERSPEECH_, pp. 1886–1890, 2019b.
+
+
+Chiori Hori, Ankit Parag Shah, Shijie Geng, Peng Gao, Anoop Cherian, Takaaki Hori, Jonathan
+Le Roux, and Tim K Marks. Overview of audio visual sceneaware dialog with reasoning track
+for natural language generation in dstc10. In _Proc. DSTC10 Workshop at AAAI_, 2022.
+
+
+Xin Huang, Hui Li Tan, Mei Chee Leong, Ying Sun, Liyuan Li, Ridong Jiang, and Jung-jae Kim.
+Investigation on transformer-based multi-modal fusion for audio-visual scene-aware dialog. 2022.
+
+
+Junyeong Kim, Sunjae Yoon, Dahyun Kim, and Chang D Yoo. Structured co-reference graph attention for video-grounded dialogue. _AAAI_, 2021.
+
+
+Seokhwan Kim, Michel Galley, Chulaka Gunasekara, Sungjin Lee, Adam Atkinson, Baolin Peng,
+Hannes Schulz, Jianfeng Gao, Jinchao Li, Mahmoud Adada, et al. The eighth dialog system
+technology challenge. _arXiv preprint arXiv:1911.06394_, 2019.
+
+
+Hung Le and Steven CH Hoi. Video-grounded dialogues with pretrained generation language models. _arXiv preprint arXiv:2006.15319_, 2020.
+
+
+11
+
+
+Hung Le, S Hoi, Doyen Sahoo, and N Chen. End-to-end multimodal dialog systems with hierarchical multimodal attention on video features. In _DSTC7 at AAAI2019 workshop_, 2019a.
+
+
+Hung Le, Doyen Sahoo, Nancy Chen, and Steven Hoi. Multimodal transformer networks for endto-end video-grounded dialogue systems. In _Proceedings of the 57th Annual Meeting of the As-_
+_sociation for Computational Linguistics_, pp. 5612–5623, 2019b.
+
+
+Hung Le, Doyen Sahoo, Nancy Chen, and Steven CH Hoi. BiST: Bi-directional Spatio-Temporal
+Reasoning for Video-Grounded Dialogues. In _Proceedings of the 2020 Conference on Empirical_
+_Methods in Natural Language Processing (EMNLP)_, pp. 1846–1859, 2020.
+
+
+Jie Lei, Licheng Yu, Tamara L Berg, and Mohit Bansal. Tvqa+: Spatio-temporal grounding for
+video question answering. _arXiv preprint arXiv:1904.11574_, 2019.
+
+
+Yicong Li, Xiang Wang, Junbin Xiao, Wei Ji, and Tat-Seng Chua. Invariant grounding for video
+question answering. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern_
+_Recognition_, pp. 2928–2937, 2022.
+
+
+Zekang Li, Zongjia Li, Jinchao Zhang, Yang Feng, and Jie Zhou. Bridging text and video: A
+universal multimodal transformer for audio-visual scene-aware dialog. _IEEE/ACM Transactions_
+_on Audio, Speech, and Language Processing_, 29:2476–2483, 2021.
+
+
+Daizong Liu, Xiaoye Qu, Xiao-Yang Liu, Jianfeng Dong, Pan Zhou, and Zichuan Xu. Jointly
+cross-and self-modal graph attention network for query-based moment localization. In _ACM_
+_Multimedia_, pp. 4070–4078, 2020.
+
+
+Daizong Liu, Xiaoye Qu, Jianfeng Dong, and Pan Zhou. Adaptive proposal generation network for
+temporal sentence localization in videos. _EMNLP_, 2021a.
+
+
+Daizong Liu, Xiaoye Qu, Jianfeng Dong, Pan Zhou, Yu Cheng, Wei Wei, Zichuan Xu, and Yulai
+Xie. Context-aware biaffine localizing network for temporal sentence grounding. In _CVPR_, pp.
+11235–11244, 2021b.
+
+
+Xiao Liu, Fanjin Zhang, Zhenyu Hou, Li Mian, Zhaoyu Wang, Jing Zhang, and Jie Tang. Selfsupervised learning: Generative or contrastive. _IEEE Transactions on Knowledge and Data En-_
+_gineering_, 35(1):857–876, 2021c.
+
+
+Huaishao Luo, Lei Ji, Botian Shi, Haoyang Huang, Nan Duan, Tianrui Li, Jason Li, Taroon Bharti,
+and Ming Zhou. Univl: A unified video and language pre-training model for multimodal understanding and generation. _arXiv preprint arXiv:2002.06353_, 2020.
+
+
+Jonghwan Mun, Minsu Cho, and Bohyung Han. Local-global video-text interactions for temporal grounding. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_
+_Recognition_, pp. 10810–10819, 2020.
+
+
+Vishvak Murahari, Dhruv Batra, Devi Parikh, and Abhishek Das. Large-scale pretraining for visual
+dialog: A simple state-of-the-art baseline. In _European_ _Conference_ _on_ _Computer_ _Vision_, pp.
+336–352. Springer, 2020.
+
+
+Dat Tien Nguyen, Shikhar Sharma, Hannes Schulz, and Layla El Asri. From film to video: Multiturn question answering with multi-modal context. _DSTC7 workshop at AAAI 2019_, 2019.
+
+
+Hoang-Anh Pham, Thao Minh Le, Vuong Le, Tu Minh Phuong, and Truyen Tran. Video dialog as
+conversation about objects living in space-time. In _Computer_ _Vision–ECCV_ _2022:_ _17th_ _Euro-_
+_pean Conference, Tel Aviv, Israel, October 23–27, 2022, Proceedings, Part XXXIX_, pp. 710–726.
+Springer, 2022.
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019.
+
+
+Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. Faster r-cnn: Towards real-time object
+detection with region proposal networks. _Advances in neural information processing systems_, 28,
+2015.
+
+
+12
+
+
+Ramon Sanabria, Shruti Palaskar, and Florian Metze. CMU Sinbad’s submission for the DSTC7
+AVSD challenge. In _DSTC7 at AAAI2019 workshop_, volume 6, 2019.
+
+
+Ankit Shah, Shijie Geng, Peng Gao, Anoop Cherian, Takaaki Hori, Tim K. Marks, Jonathan
+Le Roux, and Chiori Hori. Audio-visual scene-aware dialog and reasoning using audio-visual
+transformers with joint student-teacher learning. In _ICASSP_ _2022_ _-_ _2022_ _IEEE_ _International_
+_Conference_ _on_ _Acoustics,_ _Speech_ _and_ _Signal_ _Processing_ _(ICASSP)_, pp. 7732–7736, 2022. doi:
+10.1109/ICASSP43922.2022.9746481.
+
+
+Xindi Shang, Yicong Li, Junbin Xiao, Wei Ji, and Tat-Seng Chua. Video visual relation detection
+via iterative inference. In _Proceedings of the 29th ACM international conference on Multimedia_,
+pp. 3654–3663, 2021.
+
+
+Gunnar A Sigurdsson, G¨ul Varol, Xiaolong Wang, Ali Farhadi, Ivan Laptev, and Abhinav Gupta.
+Hollywood in homes: Crowdsourcing data collection for activity understanding. In _ECCV_, pp.
+510–526. Springer, 2016.
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee
+Lacroix, Baptiste Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and
+efficient foundation language models. _arXiv preprint arXiv:2302.13971_, 2023.
+
+
+Junbin Xiao, Angela Yao, Zhiyuan Liu, Yicong Li, Wei Ji, and Tat-Seng Chua. Video as conditional
+graph hierarchy for multi-granular question answering. AAAI, 2022.
+
+
+Shaoning Xiao, Long Chen, Songyang Zhang, Wei Ji, Jian Shao, Lu Ye, and Jun Xiao. Boundary
+proposal network for two-stage natural language video localization. In _AAAI_, volume 35, pp.
+2986–2994, 2021.
+
+
+Saining Xie, Chen Sun, Jonathan Huang, Zhuowen Tu, and Kevin Murphy. Rethinking spatiotemporal feature learning: Speed-accuracy trade-offs in video classification. In _Proceedings_ _of_ _the_
+_European conference on computer vision (ECCV)_, pp. 305–321, 2018a.
+
+
+Saining Xie, Chen Sun, Jonathan Huang, Zhuowen Tu, and Kevin Murphy. Rethinking spatiotemporal feature learning: Speed-accuracy trade-offs in video classification. In _Proceedings_ _of_ _the_
+_European Conference on Computer Vision (ECCV)_, September 2018b.
+
+
+Huijuan Xu, Kun He, Bryan A Plummer, Leonid Sigal, Stan Sclaroff, and Kate Saenko. Multilevel
+language and vision integration for text-to-clip retrieval. In _Proceedings of the AAAI Conference_
+_on Artificial Intelligence_, volume 33, pp. 9062–9069, 2019.
+
+
+Yoshihiro Yamazaki, Shota Orihashi, Ryo Masumura, Mihiro Uchida, and Akihiko Takashima. Audio visual scene-aware dialog generation with transformer-based video representations. _arXiv_
+_preprint arXiv:2202.09979_, 2022.
+
+
+Koichiro Yoshino, Chiori Hori, Julien Perez, Luis Fernando D’Haro, Lazaros Polymenakos, Chulaka
+Gunasekara, Walter S Lasecki, Jonathan K Kummerfeld, Michel Galley, Chris Brockett, et al.
+Dialog system technology challenge 7. _arXiv preprint arXiv:1901.03461_, 2019.
+
+
+Yitian Yuan, Tao Mei, and Wenwu Zhu. To find where you talk: Temporal sentence localization
+in video with attention based location regression. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_
+_Artificial Intelligence_, volume 33, pp. 9159–9166, 2019.
+
+
+Hang Zhang, Xin Li, and Lidong Bing. Video-llama: An instruction-tuned audio-visual language
+model for video understanding. _arXiv preprint arXiv:2306.02858_, 2023.
+
+
+Hao Zhang, Aixin Sun, Wei Jing, and Joey Tianyi Zhou. Span-based localizing network for natural
+language video localization. _arXiv preprint arXiv:2004.13931_, 2020a.
+
+
+Songyang Zhang, Houwen Peng, Jianlong Fu, and Jiebo Luo. Learning 2d temporal adjacent networks for moment localization with natural language. In _Proceedings of the AAAI Conference on_
+_Artificial Intelligence_, volume 34, pp. 12870–12877, 2020b.
+
+
+13
+
+
+A APPENDIX
+
+
+B DATASET
+
+
+We conduct experiments on Audio-Visual Scene-Aware Dialog (AVSD) to evaluate the results. This
+dataset contains shared training/validation set, and two different test sets, namely AVSD@DSTC-7
+and AVSD@DSTC-7. Details of the dataset are shown in Table 5.
+
+
+C IN-DEPTH ANALYSIS
+
+
+C.1 TEMPORAL GROUNDING PERFORMANCE
+
+
+“R@ _n,_ IoU = _µ_ ” is a common metric for evaluating grounding performance. But IoU cannot fully
+demonstrate the validity of results in the task setting. For example, predicting full-length video as
+a positive region may also result in a relatively large IoU, but it cannot block irrelevant regions.
+Even if the indicators on the validation set are higher than those of other SOTA grounding models,
+it cannot fully demonstrate that our grounding results on the test set is good enough.
+
+
+Thus, in Figure 4, we compare the groundtruth of temporal regions in the training dataset with the
+predicted ones in the test set of AVSD@DSTC-7 and AVSD@DSTC-8. Specifically, the horizontal
+axis represents the ratio of timestamp to video duration, and the vertical axis represents the percentage of frames in this ratio. For example, if the whole video length is 10s, the useful region is between
+2s and 5s and the number of all frames is 10000, then the vertical coordinate value corresponding to
+the horizontal coordinates of 0.2 to 0.5 are added by 0.01%. As the test set does not have timestamp
+labels, if the predicted results are similar to the distribution of the groundtruth of training set, it
+signals that our grounding results are effective. As shown in Figure 4, the distributions of the two
+are indeed very similar.
+
+
+Figure 4: The distribution of temporal regions within the training set’s ground truth and the predicted
+regions from the test set.
+
+
+C.2 MODALITY OF CONTRASTIVE SELECTION
+
+
+Upon realizing that contrastive learning can have a positive impact, it is easy to consider creating
+positive and negative text samples. For instance, unselected turns could be used as negative samples.
+
+
+Training Validation DSTC7 Test DSTC8 Test
+# Video 7659 1787 1710 1710
+# Dialog turns 153180 35740 13490 18810
+
+
+Table 5: Statistics of the AVSD dataset.
+
+
+14
+
+
+Contrast pairs
+BLEU-4 METEOR ROUGE-L CIDEr
+**V** [+] _[/][−]_ **T** [+] _[/][−]_
+
+0.416 0.268 0.566 1.137
+✓ 0.423 0.271 0.571 1.145
+✓ 0.412 0.264 0.561 1.121
+✓ ✓ 0.417 0.266 0.562 1.133
+
+
+Table 6: Performance of DTGVD with different contrast pairs.
+
+
+However, this may not be beneficial for two reasons. Firstly, the aim in using contrastive learning
+is to improve temporal grounding accuracy. Nevertheless, incorrect positioning will only affect the
+selection of video clips, and the relationship between turns will remain unchanged. To put it simply,
+turns with high temporal overlap will still have a large IoU, even if the grounding is imprecise.
+Secondly, creating negative text examples may have an adverse effect on the results. In this task,
+only the relevant video clip, current question, and answer are highly correlated, not the history
+turns. In other words, relevant history turns improve the answer, but irrelevant turns should not be
+expected to make the answer worse. As shown in Table 6, we compare the performance of DTGVD
+with different contrast pairs, where **T** [+] _[/][−]_ means adding one more history turns as positive samples,
+i.e. _k_ = 4, and utilizing the remaining irrelevant history turns as negative examples. The results
+indicate that **V** [+] _[/][−]_ improves the performance while **T** [+] _[/][−]_ has a negative impact.
+
+
+D QUALITATIVE ANALYSIS
+
+
+We further perform qualitative analysis on the method to enable a better understanding of its
+strength. Figure 5 visualizes the working process of DTGVD with a sample from AVSD@DSTC-7
+dataset. Through temporal grounding model, the predicted timestamps of each turns are first obtained. The region corresponding to current question is 13.31s to 21.02s. After calculating IoU
+between timestamps of each turns and that of current question, the DTGVD model selects the three
+turns with highest IoU, i.e. Q2&A2, Q3&A3 and Q4&A4. Conversely, the baseline model UniVL
+selects the most recent three turns, i.e. Q4&A4, Q5&A5, and Q6&A6, and the whole video as input.
+The results indicate that the baseline answer is affected by irrelevant motion before the man looking
+at his phone and does not focus on the correct temporal position. Additionally, Q5&A5 and Q6&A6
+are not related to Q7 and only add noise to the answer generation. In contrast, DTGVD excludes
+video clips before the man looking at something to avoid ambiguity and utilizes Q3&A3 to confirm
+the information about the man walking to another room. The effectiveness of the selection of history
+turns and video clips is demonstrated by the quantitative results.
+
+
+In Figure 6 and Figure 7, we provide visualizations for different scenarios. Figure 6 mainly shows
+that when there are few history turns, the text input of DTGVD and the baseline are exactly the same.
+However, DTGVD blocks out irrelevant video clips, which has a positive impact on the answer.
+Figure 7 mainly shows that when the current question is difficult to be accurately grounded, DTGVD
+can still find relevant history turns, thereby obtaining more useful information when answering. The
+visualizations in both scenarios further demonstrate the effectiveness of DTGVD.
+
+
+15
+
+
+Figure 5: Qualitative results of DTGVD on AVSD@DSTC-7 dataset. The QA turns selected with
+green check marks are actually used by the model, which means DTGVD utilizes Q2&A2, Q3&A3
+and Q4&A4, and UniVL utilizes Q4&A4, Q5&A5 and Q6&A6. The video clips framed in green
+are actually used by DTGVD, while the whole video is used by UniVL.
+
+
+16
+
+
+~~➢ Full Moment~~
+
+
+~~0.0s~~ ~~-~~ ~~21.02s~~
+
+
+History dialogs
+
+
+Current question
+
+Answer
+
+
+~~➢ Grounded Moment by DTGVD~~ ~~13.31s - 21.02s~~
+
+
+**Baseline (UniVL)** **DTGVD (UniVL)**
+
+
+√
+
+
+√
+
+
+**Duration** 0.0s-28.96s
+
+
+**Grounded by DTGVD** 0.17s-3.54s
+
+
+Figure 6: Visualization with few history turns. The text input is identical between the two models,
+but DTGVD improves answer accuracy by selecting relevant video clips.
+
+
+17
+
+
+**Baseline (Univl)** **DTGVD (Univl)**
+
+
+**√** **√**
+
+
+**History Turns**
+
+
+**Current Question**
+
+
+**Answer**
+
+
+Q1: Is the girl eating something?
+A1: The girl appears to be eating bread.
+
+
+_Q2: Does she do anything before biting into the food?_
+
+
+A (Ground-truth): No that is the first thing she does. A: Yes, she is eating the sandwich. A: No she does not do anything.
+
+
+**Duration** 0.0s-28.31s
+
+
+**Baseline (Univl)** **DTGVD (Univl)**
+
+
+**√**
+
+
+**√**
+
+
+**History Turns**
+
+
+**Current Question**
+
+
+**Answer**
+
+
+**Grounded by DTGVD** 0.35s-5.18s
+
+
+Q1: How many people are in this video?
+A1: There is one person in the video.
+
+
+Q2: Is it a man?
+A2: Yes, it is a man in the video.
+
+
+_Q3: What does he do first?_
+
+
+A (Ground-truth): He comes into the room. A: He is looking at his phone. A: He walks into the room and sits down.
+
+
+**Grounded by DTGVD** 6.12s-18.79s
+
+
+**Baseline (Univl)** **DTGVD (Univl)**
+
+
+**√**
+
+
+**√**
+
+
+**√**
+
+
+**√**
+
+
+**History Turns**
+
+
+**Current Question**
+
+
+**Answer**
+
+
+Q1: How does the video start out?
+A1: Shows a man videoing himself and walking into kitchen.
+
+
+Q2: Does he speak at all in the video?
+A2: No he never speaks at all.
+
+
+**√**
+
+
+**√**
+
+
+Q3: What is the first thing that he does when he enters the kitchen?
+A3: He takes off his green blazer. **√** **√**
+
+
+_Q4: Does he set the green blazer down somewhere after taking it off?_
+
+
+A (Ground-truth): Yes he throws it on his bed. A: No he leaves it on the counter. A: Yes he sets it down on the bed.
+
+
+**Baseline (Univl)** **DTGVD (Univl)**
+
+
+**√**
+
+
+**√**
+
+
+**Duration** 0.0s-26.43s
+
+
+**Grounded by DTGVD** 0.21s-26.10s
+
+
+Q1: Is he holding something?
+A1: He is holding a blue object . it looks like that it may be hair clippers
+that he is holding .
+
+Q2: What is he doing with them?
+A2: It appears that the man is taking the clipperes apart then putting
+them back together and wrapping a wire around them.
+
+
+Q3: Does he lay on the floor the whole time?
+A3: Yes, he is laying on the floor for the whole clip. He does not stand up.
+
+
+Figure 7: Visualization when the timestamp corresponding to the current question cannot be found.
+Both models input the full-length video, but DTGVD improves answer accuracy by selecting relevant history turns.
+
+
+18
+
+
+**History Turns**
+
+
+**Current Question**
+
+
+**Answer**
+
+
+**History Turns**
+
+
+**Current Question**
+
+
+**Answer**
+
+
+Q4: Does he interact with anything else?
+A4: No, he only interacts with the clippers that he is holding.
+
+
+Q5: Does he have them at the beginning of the video?
+A5: Yes, at the start of the clip he is shown holding the clippers in his hands.
+
+
+Q6: Does he ever put them down?
+A6: No, he does not put them down at all. He is consistently holding them
+with two hands above his head.
+
+
+Q7: Does it look like he 's trying to fix them?
+A7: Yes, it appears that he is trying to fix the clippers and also clean them a
+little bit.
+
+
+_Q8: Is he alone?_
+
+
+**√**
+
+
+**√**
+
+
+**√**
+
+
+**√**
+
+
+A (Ground-truth): Yes, the man in the video is alone. A: No he is not alone. A: Yes, he is alone in the room.
+
+
+**Duration** 0.0s-31.03s
+
+
+**Grounded by DTGVD** 0.37s-30.90s
+
+
+**Baseline (Univl)** **DTGVD (Univl)**
+
+
+Q1: What room is this?
+A1: It is a bedroom he is in.
+
+
+Q2: What is he doing in there?
+A2: He opens a book and then opens a laptop.
+
+
+Q3: Is it clean?
+A3: Yes it is very clean there.
+
+
+Q4: What kind of book is it?
+A4: It is a regular looking book.
+
+
+Q5: What is on the laptop?
+A5: I do not see anything.
+
+
+Q6: Can you see the title?
+A6: There is no title in the video.
+
+
+_Q9: Is he in like a conference room?_
+
+
+**√**
+
+
+**√**
+
+
+**√**
+
+
+**√**
+
+
+**√**
+
+
+**√**
+
+
+A (Ground-truth): No, he appears to be in a bedroom. A: Yes he is in a conference room. A: No, he is in a bed room.

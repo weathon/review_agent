@@ -1,0 +1,977 @@
+# CONSISTENT ITERATIVE DENOISING FOR ROBOT MA
+## NIPULATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Robot manipulation in complex scenarios usually involves multiple successful actions, which requires generative models to estimate the distribution of various
+successful actions. In recent years, the diffusion model has been widely studied
+in many robot manipulation tasks. However, the diffusion model experiences inconsistent noise supervision across various action labels and denoising timesteps,
+which compromises accurate action prediction. On the one hand, CIDM designs
+new noise supervision to avoid interference between different successful actions,
+leading to consistent denoising directions. On the other hand, CIDM unifies all
+denoising timesteps, avoiding inconsistent predictions of the diffusion model over
+different timesteps. Moreover, we also designed a novel radial loss to make the
+model focus on denoising results rather than iterative process routes. Our method
+achieves a new state-of-the-art performance on RLBench with the highest success
+rate of 82.3% on a multi-view setup and 83.9% on a single-view setup.
+
+
+1 INTRODUCTION
+
+
+As an important research field of embodied intelligence, robot arm manipulation has a wide range
+of real-world application scenarios and attracts widespread attention. Robot manipulation mainly
+involves two steps, acquiring effective scene representation and predicting correct actions. Due to
+the complexity of action strategies in challenging scenarios, there is an increasing interest in the
+policy network, which predicts well-performed actions. Additionally, introducing more complex
+tasks with a diverse set of successful actions puts an extra burden on action predicting (Jia et al.,
+2024). Traditional regression models as policy networks can only predict a single action, making it
+difficult to understand scenes with multiple successful actions. Benefiting from the ability to model
+the distribution of multiple actions, generative models show superior performance in many robotic
+manipulation tasks.
+
+
+Among different generative models, the diffusion model achieves leading performance in many
+visual generation tasks. So far, a series of works inspired by the visual generation, make progress
+on robotic manipulation using the diffusion model. Diffusion Policy (Chi et al., 2023) finds that
+diffusion formulation has a strong advantage of robust manipulation and exhibits impressive training
+stability. Imitating Diffusion (Pearce et al., 2023) discover that diffusion models are suitable for
+learning from sequential robotic demonstrations. READ (Oba et al., 2024) designs an asymmetric
+denoising process motivated by Cold Diffusion (Bansal et al., 2024).
+
+
+However, different from the high sampling density in the visual generation task, robot manipulation
+has a high data acquisition cost (Cui et al., 2023). It is hard for the diffusion model to learn the
+accurate probability distribution with inadequate training data. Specifically, the above difficulty of
+learning an accurate diffusion model for action denoising mainly comes from two aspects:
+
+
+1) **Difficulty** **in** **clarifying** **an** **accurate** **denoising** **direction.** Since the diffusion model may produce the same noisy action over different successful actions (Ho et al., 2020), the diffusion model
+will be confused about the denoising directions, leading to inaccurate noise prediction. Especially
+in the initial denoising stage, the similar initial distributions of successful actions induce severe confusion in the denoising direction. For the sake of clarity, assuming a simple scenario containing
+two successful actions with equal prior probability, the denoising process of the diffusion model is
+shown in Figure 1(a). For the noisy action (black point) sampled from the initial noisy distribution,
+the diffusion model struggles to distinguish whether the denoising is aimed at the blue successful
+
+
+1
+
+
+(a) Direction Inconsistency (b) Timestep Inconsistency
+
+
+Figure 1: **Difficulties of the diffusion model.** (a) shows the confusion of different denoising directions in the scenario with two successful actions, and (b) shows the inconsistent noise supervision
+over different timesteps.
+
+
+action or the red successful action. As a result, the diffusion model faces the mutual interference of
+multiple successful actions, leading to inaccurate denoised actions.
+
+
+2) **Difficulty in learning a time-varying denoising model.** In the diffusion model, the time-varying
+
+
+2024) already samples the initial noisy action from a Gaussian distribution with a non-zero mean
+and achieves better training results. Based on the flexibility of initial action distributions, it becomes
+feasible to design a more consistent denoising process.
+
+
+In this paper, we propose a novel CIDM to predict more accurate denoised actions in multiple tasks.
+For a specific scenario, CIDM establishes a denoising field in the action space, which gives noise
+prediction for arbitrary noisy action. On the one hand, we design a more consistent denoising field
+in action space, which supplies noise supervision with clear directions during training. On the other
+hand, we train the CIDM in a time-invariant fashion to ensure the consistency of noise predictions
+over different timesteps, avoiding the difficulty of learning a time-varying representation. Additionally, We also propose a novel radial loss to pay more attention to the action samples with little noise,
+which enables the iterative denoising process to converge more accurately. Our contributions can be
+summarized as follows:
+
+
+    - Through theoretical analysis, we identify the shortcomings of the diffusion model in the
+action space and gain inspiration for iterative denoising.
+
+
+    - We design a consistent iterative denoising model for robot manipulation, which builds the
+denoising field with clear denoising directions and temporal consistency.
+
+
+    - We propose a new radial loss function to emphasize action samples with small noises and
+achieve a more robust iterative denoising process.
+
+
+    - We evaluate our method on RLBench tasks, it achieves state-of-the-art performance with
+the highest average success rate. We also verify the effectiveness of our components
+through ablation experiments.
+
+
+2
+
+
+2 RELATED WORK
+
+
+**Diffusion model.** Through the iterative denoising process, early diffusion models (Ho et al., 2020;
+Song et al., 2021a) enable diverse and high-quality visual generation. Since the diffusion process
+could be modeled as a stochastic differential equation (Song et al., 2021b), the continuous diffusion
+models (Dockhorn et al., 2022; Jolicoeur-Martineau et al., 2021) achieve more efficient generation
+with fewer steps. The widely-regarded stable diffusion adopts a latent space (Rombach et al., 2022;
+Vahdat et al., 2021) to achieve computational efficiency, while the lower bound on the dimension
+of the latent space is still limited by the need to decode images. In the last few years, more than
+speeding up the denoising process, recent work has also provided a more in-depth analysis of diffusion models. Cold Diffusion (Bansal et al., 2024) designs a more robust iteration to revert arbitrary
+degradation. Inversion by Direct Iteration (Delbracio & Milanfar, 2023) pursues a simpler form
+to get rid of the limitations of traditional diffusion. Some recent works Lin et al. (2024); Zhang
+et al. (2024) have noticed and attempted to address the subtle differences in sampling distributions
+between training and inference, which were previously ignored. Research on a few samples (Wu
+et al., 2024b) is done through fine-tuning rather than complete retraining, which also reflects the
+dependence of diffusion models on sufficient training data.
+
+
+**Diffusion model in robotic manipulation.** In recent years, a series of works have verified the potential of diffusion models in robot manipulation. Different from using diffusion models to generate
+more visual scene information (Wu et al., 2024a), the potential of diffusion models to predict actions
+has also been explored. Diffusion Policy (Chi et al., 2023) successfully models the probability of
+trajectory sequences in different tasks. 3D Diffusion Policy (Ze et al., 2024) incorporates the power
+of 3D visual representations into conditional diffusion models. DNActor (Yan et al., 2024) distill
+2D semantic features from foundation models, such as Stable Diffusion (Rombach et al., 2022) and
+state representation on NeRF (Driess et al., 2022), to a 3D space in its pretrain phase. With the
+continuous improvement of diffusion models in the field of visual generation, works are designing
+new diffusion paradigms in robotic manipulation. Hierarchical Diffusion Policy (Ma et al., 2024)
+adds a new robot kinematic constraint on the diffusion models. READ (Oba et al., 2024) preserves
+the kinematic feasibility of the generated action via forward diffusion in a low-dimensional latent
+space, while using cold diffusion to achieve high-resolution action via back diffusion in the original
+task space. These methods inspire us to enhance the diffusion model for generating actions that
+align with the characteristics of robot manipulation.
+
+
+3 ITERATIVE CONSISTENT DENOISING MODEL
+
+
+To provide a clearer explanation of the background and our method, this section is organized as
+follows: (1) We start by introducing notations and analyzing existing difficulties in the Preliminaries.
+(2) Then we introduce the Overview of the consistent iterative denoising model (CIDM). (3) Finally,
+we analyze the rationality of the two main components of CIDM: Consistent Denoising Field and
+Radial Loss Function.
+
+
+3.1 PRELIMINARIES
+
+
+**Robot manipulation** . The key-frame robot manipulation is described by a sparse sequence of the
+robot trajectory and corresponding scene information _x_, which contains multi-view RGB-D images,
+the text instruction, and the current robot state. As parallel gripper robot arms interact with the
+environment through the end effector, we use end-effort posture _y_ to guide the action of the robot
+arm, which includes the translation, the rotation, and the binary opening state of the gripper. Due
+to the opening state containing little location information, only the translations and the rotations are
+input as noisy actions. In the successful demonstrations for training, each scene _x_ corresponds to a
+label action _y_ ˆ, which is one of the successful actions _{y_ ˆ _[i]_ _}_ _[k]_ _i_ =1 [.]
+
+
+**Itervatively denoising process.** The diffusion model is a typical iterative denoising method, which
+has been widely used in robot manipulation. During the training of the diffusion model with timestep
+_t ∈{_ 1 _,_ 2 _, ..., N_ _}_, the noise addition is as the following formula:
+
+
+         _yt_ = _αty_ ˆ + 1 _−_ _α_ ~~[2]~~ _t_ _[ε,]_ _[ε][ ∼N]_ [(0] _[,][ I]_ [)] _[,]_ (1)
+
+
+3
+
+
+where the action noise _ε_ is predicted by the diffusion model _εθ_ ( _x, y, t_ ) with learnable parameters _θ_ .
+During inference, the diffusion model randomly samples a noisy action _yN_ . After denoising for _N_
+steps, the diffusion model produces the denoised action _y_ 0.
+
+**Difficulties of diffusion.** Since successful actions _{y_ ˆ _[i]_ _}_ _[k]_ _i_ =1 [usually have the same prior probability,]
+the noisy distribution can be expressed as:
+
+
+Furthermore, interference between successful actions will be more severe at the initial denoising
+stage, leading to a combination of all successful actions _k_ [1] - _ki_ =1 _[α][N]_ [ ˆ] _[y][i]_ [(Section A.2 in Appendix).]
+
+
+Another problem comes from the time-varying characteristic of the diffusion model. When a fixed
+scenario _x_ and successful action _y_ ˆ are selected, the ideal noise prediction for the same noisy action
+_y_ changes over timesteps _t_ :
+
+_εθ_ ( _x, y, t_ ) = ~~�~~ _[y][ −]_ 1 _−_ _[α][t]_ _α_ _[y]_ [ˆ] ~~[2]~~ _t_ _._ (7)
+
+This burden of simultaneously modeling probability distributions over all timesteps affects the accuracy of the diffusion model.
+
+
+3.2 OVERVIEW
+
+
+In text-guided robotic manipulation, the robot needs to interact with the environment according to
+the text instruction. Our framework consists of a multi-modal encoder and a time-invariant denoising
+network to predict noise in an iterative process.
+
+
+We adopt the CLIP image encoder and text encoder to extract features of visual observations and
+text instructions respectively. The scene features are obtained through the multi-modal encoder with
+pretrained parameters as follows:
+_Fx_ = Encoder( _x_ ) _,_ (8)
+
+
+4
+
+
+_pt_ ( _yt_ ) =
+
+
+_k_
+
+
+- _pt_ ( _yt|y_ ˆ _[i]_ ) _p_ (ˆ _y_ _[i]_ ) = [1]
+
+_k_
+
+_i_ =1
+
+
+_k_
+
+
+_k_
+
+- _N_ ( _yt_ ; _αty_ ˆ _[i]_ _,_ �1 _−_ _α_ ~~[2]~~ _t_ _[ε][t]_ [)] _[.]_ (2)
+
+
+_i_ =1
+
+
+When the scene information _x_ and denoising timestep _t_ are determined, the optimization of the
+diffusion model _εθ_ ( _x, y, t_ ) is as follows (Song & Ermon, 2019):
+
+_θ_ = arg min E _pt_ ( _yt|y_ ˆ) _p_ (ˆ _y_ )[ _λ_ ( _t_ ) _∥∇yt_ log _pt_ ( _yt|y_ ˆ) _−_ _εθ_ ( _x, yt, t_ ) _∥_ [2] 2 []] _[.]_ (3)
+_θ_
+
+
+After eliminating the effects of specific successful action ˆ _y_, the optimization process of the diffusion
+model can also be expressed as follows:
+
+_θ_ = arg min E _pt_ ( _yt_ )[ _λ_ ( _t_ ) _∥∇yt_ log _pt_ ( _yt_ ) _−_ _εθ_ ( _x, yt, t_ ) _∥_ [2] 2 []] _[.]_ (4)
+_θ_
+
+Therefore, _εθ_ ( _x, yt, t_ ) learns to represent the score function _∇yt_ log _pt_ ( _yt_ ), which is independent
+of specific successful action _y_ ˆ. For different noisy actions _yt_, the diffusion model constructs a
+denoising field in the action space, which is ideally equivalent to _∇yt_ log _pt_ ( _yt_ ).
+
+The first problem is that the score function _∇yt_ log _pt_ ( _yt_ ) is biased as a denoising field. The _t_ -th
+denoising is towards the actions with zero noise _∇yt_ log _pt_ ( _yt_ ) = 0, which has the local maximum
+probability in distribution _pt_ ( _y_ ) and satisfies the following condition:
+
+
+d _pt_ ( _yt_ )
+
+= _pt_ ( _yt_ ) _∇yt_ log _pt_ ( _yt_ ) = 0 _._ (5)
+d _yt_
+
+However, since _pt_ ( _yt_ ) is a mixed Gaussian distribution, the action _αty_ ˆ _[i]_ are not the local maximum
+probability in _pt_ ( _yt_ ):
+
+
+- _N_ ( _yt_ ; _αty_ ˆ _[i]_ _,_ �1 _−_ _α_ ~~[2]~~ _t_ _[ε][t]_ [)]
+
+
+_i_ =1
+
+
+_′_
+
+
+1
+
+_k_
+
+
+_k_
+
+
+d _pt_ ( _yt_ )
+
+d _yt_
+
+
+���� _yt_ = _αt_ ˆ _y_ _[j]_ [=]
+
+
+_yt_ = _αt_ ˆ _y_ _[j]_
+
+
+(6)
+
+
+= [1]
+
+_k_
+
+
+_k_
+
+
+_i_ =1
+_i_ = _j_
+
+
+- - - _′_
+_N_ ( _yt_ ; _αty_ ˆ _[i]_ _,_ 1 _−_ _α_ ~~[2]~~ _t_ _[ε][t]_ [)] [= 0] _[.]_
+
+_yt_ = _αt_ ˆ _y_ _[j]_
+
+
+Figure 2: **The pipeline of CIDM.** CIDM builds a time-invariant denoising field _ϵx_ ( _y_ ; ˆ _y_ ) for training.
+After training on multiple ( _x,_ ˆ _y_ ) pairs, the denoising network learns to construct a _y_ ˆ-independent
+denoising field _ϵx_ ( _y_ ) for inference.
+
+
+where _x_ denotes scene information. Then, the multi-modal feature _Fx_ together with a noisy action
+_y_ are fed into the time-invariant denoising network _ϵθ_ to predict the action noise _ϵ_ :
+
+
+_ϵ_ = _ϵθ_ ( _Fx, y_ ) _,_ (9)
+
+
+where _θ_ denotes the learnable parameters.
+
+
+**Training.** As shown in Figure 2(a), we design a time-invariant denoising field _ϵx_ ( _y_ ; ˆ _y_ ), which is
+conditioned on successful action _y_ ˆ in the scene _x_ . For noisy action _y_, we sample noisy supervisions
+from the denoised field _ϵx_ ( _y_ ; ˆ _y_ ). The input of the denoising network _ϵθ_ contains the encoded features
+_Fx_ and the noisy action _y_ . For specific training data pair ( _x,_ ˆ _y_ ), the denoising network _ϵθ_ ( _Fx, y_ ) are
+optimized towards _ϵx_ ( _y_ ; ˆ _y_ ). Through the guidance of overall loss on all training pairs, the denoising
+network learns to represent different scenes _x_ as the following denoising field:
+
+
+_ϵθ_ ( _Fx, y_ ) _→_ _ϵx_ ( _y_ ) _,_ (10)
+
+
+where the denoising field _ϵx_ ( _y_ ) is independent with specific successful action _y_ ˆ and could achieve a
+correct denoising.
+
+
+**Inference.** The iterative denoising process of CIDM is shown in Figure 2(b), where the scene
+encoding is omitted. First, we randomly sample the initial action _yN_ from the action space. Then,
+we iteratively denoise the action through the denoising network as follows:
+
+
+_yt−_ 1 = _yt −_ _ϵθ_ ( _Fx, yt_ ) _,_ _t ∈{_ 1 _,_ 2 _, ..., N_ _},_ (11)
+
+
+where _ϵθ_ ( _Fx, yt_ ) learns to represent the denoising field _ϵx_ ( _y_ ). After iterative denoising for _N_ steps,
+our CIDM gains accurate action prediction _y_ 0.
+
+
+3.3 CONSISTENT DENOISING FIELD
+
+
+As CIDM relies on the denoising network _ϵθ_ ( _Fx, y_ ) for iterative denoising, it is very important to
+learn from a reasonable denoising field _ϵx_ ( _y_ ). In an ideal time-invariant denoising field, arbitrary
+actions _y_ in the action space can reach a successful action within finite steps of denoising. Since
+iterative denoising results in different successful actions, we divide the action space into distinct
+regions, each region corresponding to a specific successful action. The reasonable denoising field
+_ϵx_ ( _y_ ) as described above complies with two conditions:
+
+
+(1) Since the reasonable denoising field always makes noisy action closer to its target successful
+action, there must be a neighborhood of _y_ ˆ where actions reach _y_ ˆ through a single-step denoising,
+expressed as follows:
+_∃_ _c<_ 0 _, ∀∥y −_ _y_ ˆ _∥_ 2 _<c,_ _ϵx_ ( _y_ ) = _y −_ _y._ ˆ (12)
+
+(2) On the boundaries that separate different regions in the action space, the noise prediction cannot
+point to either side. To achieve the best symmetry, we set _ϵx_ ( _y_ ) = 0 with _y_ on the boundaries.
+
+
+5
+
+
+(a) Training
+
+
+(b) Inference
+
+
+Actually, the noise supervision of the denoising network is _ϵx_ ( _y_ ; ˆ _y_ ) during training. To finally learn
+a reasonable denoising field _ϵx_ ( _y_ ), we design a consistent _ϵx_ ( _y_ ; ˆ _y_ ). In the scenario with a single
+successful action, _ϵx_ ( _y_ ; ˆ _y_ ) equals to _ϵx_ ( _y_ ). Therefore, the denoising field during training has a
+similar requirement to Equ. (12):
+
+
+_∃_ _c<_ 0 _, ∀∥y −_ _y_ ˆ _∥_ 2 _<c,_ _ϵx_ ( _y_ ; ˆ _y_ ) = _y −_ _y._ ˆ (13)
+
+
+In the scenario with multiple successful actions, _ϵx_ ( _y_ ; ˆ _y_ _[j]_ ) is supposed to have a small difference
+from _ϵx_ ( _y_ ) in regions corresponding to _{y_ ˆ _[i]_ _}i_ = _j_ . To satisfy _ϵx_ ( _y_ ) = 0 on the boundaries, a simple
+idea is to have limited _∥ϵx_ ( _y_ ; ˆ _y_ _[j]_ ) _∥_ 2 as _y_ moves away from _y_ ˆ _[j]_ . Considering the above requirements,
+we design a new denoising field during training as follows:
+
+_ϵx_ ( _y_ ; ˆ _y_ ) =           - _c_ ( _y −_ _y_ ˆ _y_ ) _−/∥yy_ ˆ _−_ _y_ ˆ _∥_ 2 forfor _∥ ∥yy − −_ _yy_ ˆˆ _∥∥_ 22 _≥< c,c,_ (14)
+
+
+where hyperparameter _c_ is smaller than the distance between two successful actions.
+
+
+By training on all ( _x,_ ˆ _y_ ) pairs, the denoising network _ϵθ_ ( _Fx, y_ ) learns to predict noise without dependence on specific ˆ _y_ . Unlike the diffusion model, which converges to _αty_ ˆ at timestep _t_, our CIDM
+converges to _y_ ˆ consistently over all timesteps. Due to the unification of our denoising fields over
+different timesteps, the denoised field _ϵx_ ( _y_ ) could be more accurately predicted by the denoising
+network _ϵθ_ ( _Fx, y_ ). Consequently, we achieve accurate iterative denoising during inference based on
+better noise prediction.
+
+
+3.4 RADIAL LOSS FUNCTION
+
+
+As the design of the _ϵx_ ( _y_ ; ˆ _y_ ) during training is only necessary but not sufficient to learn a reasonable
+_ϵx_ ( _y_ ), we design the radial loss function L to optimize the denoising network _ϵθ_ ( _Fx, y_ ). Essentially,
+the optimization of the denoising network on all training data is as follows:
+
+
+_θ_ = arg min E _p_ ( _y|y_ ˆ) _p_ ( _x,y_ ˆ)L� _ϵθ_ ( _Fx, y_ ) _, ϵx_ ( _y_ ; ˆ _y_ )� _._ (15)
+_θ_
+
+
+Assuming that the denoising network has sufficient fitting ability, _ϵθ_ ( _Fx, y_ ) is supposed to represent
+the target denoising field _ϵx_ ( _y_ ) expressed as follows:
+
+
+_ϵx_ ( _y_ ) = arg min E _p_ ( _y|y_ ˆ) _p_ ( _x,y_ ˆ)L� _ϵ, ϵx_ ( _y_ ; ˆ _y_ )� _._ (16)
+_ϵ_
+
+
+Our radial loss function L should make _ϵx_ ( _y_ ) close to _ϵx_ ( _y_ ; ˆ _y_ _[j]_ ) when _y_ is close to _y_ ˆ _[j]_ . In addition,
+a small noise prediction error is acceptable for actions requiring multi-step denoising. Therefore,
+when noisy action _y_ gets closer to successful actions _{y_ ˆ _[i]_ _}_ _[k]_ _i_ =1 [,] [the] [loss] [function] [should] [pay] [more]
+attention to it. Based on the above perceptions, we designed a radial loss function as follows:
+
+
+L( _y,_ ˆ _y_ ) = _δ_ ( _∥y −_ _y_ ˆ _∥_ 2) _L_ 1� _ϵθ_ ( _Fx, y_ ) _, ϵx_ ( _y_ ; ˆ _y_ )� _,_ (17)
+
+
+where _L_ 1 denotes the _L_ 1 loss function and _δ_ ( _·_ ) denotes the radial weight as follows:
+
+_δ_ ( _r_ ) = min(1 _/_ _[√]_ _r,_ 10) _._ (18)
+
+
+The _δ_ ( _r_ ) ensures that small radial distance _r_ = _∥y −_ _y_ ˆ _∥_ 2 corresponds to a large weight in the overall
+loss. We set an upper bound of 10 for _δ_ to avoid excessive loss, which leads to unstable training.
+Compared with _L_ 2 loss, the gradient of _L_ 1 loss does not increase with a larger prediction error. The
+_L_ 1 loss makes the target denoising field _ϵx_ ( _y_ ) focus on specific successful action corresponding to
+_y_, instead of being affected by all successful actions.
+
+
+The target denoised field _ϵx_ ( _y_ ) obtains good properties through the radial loss function. On the
+one hand, _ϵx_ ( _y_ ) can also accurately denoise in a single step when _y_ is close to a successful action
+_y_ ˆ (Section A.3 in Appendix). On the other hand, _ϵx_ ( _y_ ) enables the correct denoising of noisy
+actions that are far from successful actions. Therefore, our radial loss helps to learn an accurate and
+consistent denoising process.
+
+
+6
+
+
+**Place Cups** **Stack Cups** **Slide Block** **Meat off Grill** **Open Drawer** **Close Jar** **Stack Blocks**
+
+
+**Sort Shape** **Push Buttons** **Place Wine** **Screw Bulb** **Put in Drawer** **Put in Safe** **Put in Cupboard**
+
+
+Figure 3: **List of 14 tasks.** These challenging tasks are highly representative.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Dataset** **and** **simulation.** We evaluate our CIDM on a multi-task manipulation benchmark developed in RLBench (James et al., 2020). We use 18 distinct tasks, each comprising 150 demonstrations, with 14 of them illustrated in Figure 3. Each task includes various text instructions, which
+feature between 2 to 60 variations. These variations consist of several types, such as variations in
+position and color. The demonstrations are collected in a simulation environment built by CoppeliaSim (Rohmer et al., 2013). The 256 _×_ 256 RGB-D images in demonstrations are captured by
+four noiseless cameras positioned at the front, left shoulder, right shoulder, and wrist of the robot.
+In addition, we verify our performance in the simulation environment.
+
+
+**Training and evaluation details.** Our CIDM is trained on 4 NVIDIA 3090Ti 10GB GPUs for 60K
+steps with a cosine learning rate decay schedule. We adopt a batch size of 32 and initialize the
+learning rate to 10 _[−]_ [4] . Among the 150 pre-generated demonstrations, 100 are used for training, 25
+for validation, and 25 for testing. During training, we prefer to sample points close to successful
+actions. We evaluate CIDM in both multi-view and single-view settings. As the action planner in
+the simulation environment has a certain degree of randomness, we evaluate each task four times
+and take the average success probability as the performance metric.
+
+
+**Baselines.** In text-guided robot manipulation, we compare CIDM with the existing baselines, which
+have made significant advancements and achieved excellent performance. The following work has
+improved scene representation methods in robotic manipulation: PolarNet (Chen et al., 2023), HiveFormer (Guhur et al., 2023), PerAct (Shridhar et al., 2023), Act3D (Gervet et al., 2023), RVT (Goyal
+et al., 2023). Additionally, RVT2 (Goyal et al., 2024) using action-value graphs and 3D Diffuser Actor Ke et al. (2024) using the diffusion model make progress in modeling multiple successful actions.
+
+
+4.2 MAIN RESULTS
+
+
+Following the setting of PerAct (Shridhar et al., 2023), we conduct experiments on 18 tasks with
+4 camera views. As shown in Table 1, our CIDM achieves the sota performance among existing
+methods, boasting the highest average success rate of 82.3% and the best average ranking of 2.0
+across all tasks. Specifically, our CIDM secures the best performance on 7 tasks and the suboptimal
+performance on 7 tasks. Moreover, compared with the diffusion-based model 3D Diffuser Actor,
+CIDM improves performance on tasks with multiple successful actions. Performance degradation
+on some tasks is caused by multi-task training, where success rates fluctuate to some extent.
+
+
+Following the setting of GNFactor (Ze et al., 2023), we also conduct experiments on 10 tasks (a
+subset of the 18 tasks) with a single view. As shown in Table 2, our CIDM achieves the highest
+average success rate of 83.9%. Significant performance improvements are achieved by CIDM on 5
+tasks, including _meat off grill, turn tap, put in drawer, push buttons, stack blocks_ . In particular, we
+significantly improved performance on the most difficult task _stack blocks_ .
+
+
+7
+
+
+Table 1: **Evaluation on RLBench with multiple camera views** . Our approach achieved the highest
+average task success rate. Black bold fonts indicate the best performance and underline indicate
+suboptimal performance for each column.
+
+|Models|Avg. Avg.<br>Success. Rank.|Place Stack Sort Push Stack Put in Slide Meat off<br>Cups Cups Shape Buttons Blocks Cupboard Block Grill|
+|---|---|---|
+|PolarNet<br>PerAct<br>HiveFormer<br>Act3D<br>RVT<br>RVT2<br>3D Diffuser Actor<br>**CIDM (Ours)**|46.4<br>6.4<br>49.4<br>6.2<br>45<br>6.6<br>65<br>4.4<br>62.9<br>4.6<br>81.4<br>2.4<br>81.3<br>2.4<br>**82.3**<br>**2.0**|0<br>8<br>12<br>96<br>4<br>12<br>56<br><br>2.4<br>2.4<br>16.8<br>92.8<br>26.4<br>28<br>74<br>70.4<br>0<br>0<br>8<br>84<br>8<br>68<br>64<br><br>3<br>9<br>8<br>99<br>12<br>51<br>93<br>94<br>4<br>26.4<br>36<br><br>28.8<br>49.6<br>81.6<br>88<br>**38**<br>**69**<br>35<br><br>**80**<br>66<br>92<br>99<br>24<br>47.2<br>44<br>98.4<br>68.3<br>**85.6**<br>97.6<br>96.8<br>32<br>53<br>**48**<br>98<br>69<br>76<br><br>98|
+|Models|Open<br>Drawer<br>Close<br>Jar<br>Place<br>Wine<br>Screw<br>Bulb<br>Put in<br>Drawer<br>Put in<br>Safe<br>Drag<br>Stick<br>Insert<br>Peg<br>Sweep to<br>Dustpan<br>Turn<br>Tap|Open<br>Drawer<br>Close<br>Jar<br>Place<br>Wine<br>Screw<br>Bulb<br>Put in<br>Drawer<br>Put in<br>Safe<br>Drag<br>Stick<br>Insert<br>Peg<br>Sweep to<br>Dustpan<br>Turn<br>Tap|
+|PolarNet<br>PerAct<br>HiveFormer<br>Act3D<br>RVT<br>RVT2<br>3D Diffuser Actor<br>**CIDM (Ours)**|84<br>36<br>40<br>44<br>32<br>84<br>92<br>4<br>52<br>80<br>88<br>55.2<br>44.8<br>17.6<br>51.2<br>84<br>89.6<br>5.6<br>52<br>88<br>52<br>52<br>80<br>8<br>68<br>76<br>76<br>0<br>28<br>80<br>93<br>92<br>80<br>47<br>90<br>95<br>92<br>27<br>92<br>94<br>71.2<br>52<br>91<br>48<br>88<br>91.2<br>99.8<br>11.2<br>72<br>93.6<br>74<br><br>95<br>**88**<br>**96**<br>96<br>99<br>40<br><br>99<br>89.6<br>96<br>93.6<br>82.4<br>**96**<br>97.6<br><br>**65.6**<br>84<br>**99.2**<br>**93**<br>96<br>**96**<br>80<br>**96**<br><br><br>54<br>97<br>97|84<br>36<br>40<br>44<br>32<br>84<br>92<br>4<br>52<br>80<br>88<br>55.2<br>44.8<br>17.6<br>51.2<br>84<br>89.6<br>5.6<br>52<br>88<br>52<br>52<br>80<br>8<br>68<br>76<br>76<br>0<br>28<br>80<br>93<br>92<br>80<br>47<br>90<br>95<br>92<br>27<br>92<br>94<br>71.2<br>52<br>91<br>48<br>88<br>91.2<br>99.8<br>11.2<br>72<br>93.6<br>74<br><br>95<br>**88**<br>**96**<br>96<br>99<br>40<br><br>99<br>89.6<br>96<br>93.6<br>82.4<br>**96**<br>97.6<br><br>**65.6**<br>84<br>**99.2**<br>**93**<br>96<br>**96**<br>80<br>**96**<br><br><br>54<br>97<br>97|
+
+
+Table 2: **Evaluation** **on** **RLBench** **with** **single** **camera** **view.** We report success rates on 10 RLBench with only the _front_ camera view.
+
+|Models|Avg.<br>Success.|close open sweep to meat off turn slide put in drag push stack<br>jar drawer dustpan grill tap block drawer stick buttons blocks|
+|---|---|---|
+|GNFactor<br>Act3D<br>3D Diffuser Actor<br>**CIDM (Ours)**|31.7<br>65.3<br>78.4<br>**83.9**|25.3<br>76.0<br>28.0<br>57.3<br>50.7<br>20.0<br>0.0<br>37.3<br>18.7<br>4.0<br>52.0<br>84.0<br>80<br>66.7<br>64.0<br>100.0<br>54.7<br>86.7<br>64.0<br>0.0<br>**82.7**<br>**89.3**<br>94.7<br>88.0<br>80.0<br>**92.0**<br>77.3<br>98.7<br>69.3<br>12.0<br>78<br>88<br>**98**<br>**92**<br>**85**<br>90<br>**91**<br><br>**96**<br>**21**|
+
+
+To illustrate the advantages of our method more vividly, we visualize the iterative denoising process
+in a specific scenario. As shown in Figure 4, the robot arm was ordered to _stack two red blocks_, and
+the coordinates of red blocks are marked with red triangles in the desktop coordinate system. We
+sample initial actions in the desktop flat and visualize their positions during iterative denoising. By
+comparing the coordinates of the denoised actions and the red triangles, we divide the noisy actions
+into correct denoising (blue points) and incorrect denoising (gray points). Although many initial
+actions are incorrectly denoised through the diffusion-based model (Ke et al., 2024), our CIDM
+exhibits greater robustness to different initial actions, owing to the spatial and temporal consistency
+of the designed denoising field. The robot actions are visualized in Appendix A.4.
+
+
+4.3 ABLATIONS AND ANALYSES
+
+
+In this section, We conduct a series of ablation studies to assess the effectiveness of the different
+components in our proposed method. Based on the results of the ablation experiments, we provide
+a brief analysis of the underlying reasons.
+
+
+**Ablation on sampling strategy.** Similar to the diffusion model, we use a central sampling manner
+to get noisy actions during training, where noisy actions _y_ close to successful action have a higher
+probability of being sampled. In row 2, we utilize the uniform distribution in action space to sample
+noisy actions. Since central sampling focuses more on successful actions, it gains an improvement
+of 7.3% success rate, emphasizing the importance of small noise actions.
+
+
+8
+
+
+Figure 4: **Visualization of the task to stack two red blocks.** Red triangles denote red blocks. Blue
+points are denoised into successful actions and gray points are denoised into wrong actions.
+
+
+|Row<br>ID|Central Consistent Radial<br>Sampling Denoising Field Loss|Avg. Avg. Success.<br>Success. diff. wrt. base|
+|---|---|---|
+|1<br>2<br>3<br>4|✓<br>✓<br>✓<br>✗<br>✓<br>✓<br>✓<br>✗<br>✓<br>✓<br>✓<br>✗|82.3<br>0<br>75.0<br>-7.3<br>79.5<br>-2.8<br>79.3<br>-3.0|
+
+
+**Ablation** **on** **denoising** **field.** To variation the efficiency of our denoising field during training,
+we use the denoising field _εx_ ( _y_ ; ˆ _y_ ) = _y_ _−_ _y_ ˆ of the diffusion model in row 3, comparing with
+the consistent denoising field _ϵx_ ( _y_ ; ˆ _y_ ) in row 1. From row 1 and row 3, our proposed consistent
+denoising field achieves a success rate improvement of 2.8% in multiple tasks.
+
+
+**Ablation on loss function.** As shown in Table 3, we conduct the ablation experiment to verify the
+effect of the radial loss function. In row 1, the radial loss sets higher weights to noisy actions with
+smaller noise. In row 4, we use the _L_ 2 loss function, the same as the diffusion model. From row
+1 and row 4, the radial loss obtains a success rate improvement of 3 _._ 0% by focusing more on the
+neighborhood of successful actions.
+
+
+Table 4: Ablation on temporal consistency
+
+|Time Coefficient α<br>N|0.01 0.5 1|
+|---|---|
+|Avg. Success Rate|74.8<br>80.8<br>**82.0**|
+
+
+**Ablation on time variability.** To analyze the importance of temporal consistency, we used a timevariable denoising field _ϵx_ ( _y_ ; _αty_ ˆ) during training with the time coefficient _αt_ . Following the timevarying denoising process of the diffusion method, time coefficient _αt_ decreases from _α_ 0 = 1 _[−]_ to
+_αN_ . With the same steps _N_ = 100, the smaller _αN_ corresponds to the larger time variation, which
+is more difficult for the denoising network to represent. As shown in Table 4, the effectiveness of
+temporal consistency with _αN_ = 1 has been verified by its leading performance.
+
+
+5 CONCLUSION
+
+
+In this paper, we propose the consistent iterative denoising model (CIDM) for text-guided robot
+manipulation. We build a more consistent denoising field than the diffusion model, by designing
+noise supervision and unifying the timesteps during training. Moreover, utilizing the radial loss,
+CIDM avoids interference from other successful actions and obtains accurate denoised actions. On
+diverse simulated robot manipulation tasks, CIDM achieves state-of-the-art performance in both
+multi-view and single-view settings. Ablation studies are conducted on various components within
+CIDM, providing further clarity on their efficiency.
+
+
+9
+
+
+Table 3: Some Ablations on RLBench
+
+
+REFERENCES
+
+
+Arpit Bansal, Eitan Borgnia, Hong-Min Chu, Jie Li, Hamid Kazemi, Furong Huang, Micah Goldblum, Jonas Geiping, and Tom Goldstein. Cold diffusion: Inverting arbitrary image transforms
+without noise. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Shizhe Chen, Ricardo Garcia, Cordelia Schmid, and Ivan Laptev. Polarnet: 3d point clouds for
+language-guided robotic manipulation. 2023.
+
+
+Cheng Chi, Siyuan Feng, Yilun Du, Zhenjia Xu, Eric Cousineau, Benjamin Burchfiel, and Shuran
+Song. Diffusion policy: Visuomotor policy learning via action diffusion. _CoRR_, abs/2303.04137,
+2023.
+
+
+Zichen Jeff Cui, Yibin Wang, Nur Muhammad Mahi Shafiullah, and Lerrel Pinto. From play to
+policy: Conditional behavior generation from uncurated robot data. In _The Eleventh International_
+_Conference on Learning Representations_, 2023.
+
+
+Mauricio Delbracio and Peyman Milanfar. Inversion by direct iteration: An alternative to denoising
+diffusion for image restoration. _CoRR_, abs/2303.11435, 2023.
+
+
+Tim Dockhorn, Arash Vahdat, and Karsten Kreis. Score-based generative modeling with criticallydamped langevin diffusion. In _International Conference on Learning Representations_, 2022.
+
+
+Danny Driess, Ingmar Schubert, Pete Florence, Yunzhu Li, and Marc Toussaint. Reinforcement
+learning with neural radiance fields. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 35:
+16931–16945, 2022.
+
+
+Theophile Gervet, Zhou Xian, Nikolaos Gkanatsios, and Katerina Fragkiadaki. Act3d: 3d feature
+field transformers for multi-task robotic manipulation. In _7th Annual Conference on Robot Learn-_
+_ing_, 2023.
+
+
+Ankit Goyal, Jie Xu, Yijie Guo, Valts Blukis, Yu-Wei Chao, and Dieter Fox. Rvt: Robotic view
+transformer for 3d object manipulation. In _Conference on Robot Learning_, pp. 694–710. PMLR,
+2023.
+
+
+Ankit Goyal, Valts Blukis, Jie Xu, Yijie Guo, Yu-Wei Chao, and Dieter Fox. Rvt-2: Learning precise
+manipulation from few demonstrations. _CoRR_, abs/2406.08545, 2024.
+
+
+Pierre-Louis Guhur, Shizhe Chen, Ricardo Garcia Pinel, Makarand Tapaswi, Ivan Laptev, and
+Cordelia Schmid. Instruction-driven history-aware policies for robotic manipulations. In _Con-_
+_ference on Robot Learning_, pp. 175–187. PMLR, 2023.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Stephen James, Zicong Ma, David Rovick Arrojo, and Andrew J Davison. Rlbench: The robot
+learning benchmark & learning environment. _IEEE Robotics and Automation Letters_, 5(2):3019–
+3026, 2020.
+
+
+Xiaogang Jia, Denis Blessing, Xinkai Jiang, Moritz Reuss, Atalay Donat, Rudolf Lioutikov, and
+Gerhard Neumann. Towards diverse behaviors: A benchmark for imitation learning with human
+demonstrations. In _The Twelfth International Conference on Learning Representations_, 2024.
+
+
+Alexia Jolicoeur-Martineau, Ke Li, R´emi Pich´e-Taillefer, Tal Kachman, and Ioannis Mitliagkas.
+Gotta go fast when generating data with score-based models. _arXiv preprint arXiv:2105.14080_,
+2021.
+
+
+Tsung-Wei Ke, Nikolaos Gkanatsios, and Katerina Fragkiadaki. 3d diffuser actor: Policy diffusion
+with 3d scene representations. In _First Workshop on Vision-Language Models for Navigation and_
+_Manipulation at ICRA 2024_, 2024.
+
+
+Shanchuan Lin, Bingchen Liu, Jiashi Li, and Xiao Yang. Common diffusion noise schedules and
+sample steps are flawed. In _Proceedings of the IEEE/CVF winter conference on applications of_
+_computer vision_, pp. 5404–5411, 2024.
+
+
+10
+
+
+Xiao Ma, Sumit Patidar, Iain Haughton, and Stephen James. Hierarchical diffusion policy for
+kinematics-aware multi-task robotic manipulation. In _Proceedings of the IEEE/CVF Conference_
+_on Computer Vision and Pattern Recognition_, pp. 18081–18090, 2024.
+
+
+Takeru Oba, Matthew Walter, and Norimichi Ukita. Read: Retrieval-enhanced asymmetric diffusion for motion planning. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 17974–17984, 2024.
+
+
+Tim Pearce, Tabish Rashid, Anssi Kanervisto, Dave Bignell, Mingfei Sun, Raluca Georgescu, Sergio Valcarcel Macua, Shan Zheng Tan, Ida Momennejad, Katja Hofmann, and Sam Devlin. Imitating human behaviour with diffusion models. In _The_ _Eleventh_ _International_ _Conference_ _on_
+_Learning Representations_, 2023.
+
+
+Eric Rohmer, Surya PN Singh, and Marc Freese. V-rep: A versatile and scalable robot simulation
+framework. In _2013_ _IEEE/RSJ_ _international_ _conference_ _on_ _intelligent_ _robots_ _and_ _systems_, pp.
+1321–1326. IEEE, 2013.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨orn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+Mohit Shridhar, Lucas Manuelli, and Dieter Fox. Perceiver-actor: A multi-task transformer for
+robotic manipulation. In _Conference on Robot Learning_, pp. 785–799. PMLR, 2023.
+
+
+Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. In _Interna-_
+_tional Conference on Learning Representations_, 2021a.
+
+
+Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribution.
+_Advances in neural information processing systems_, 32, 2019.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. In _Interna-_
+_tional Conference on Learning Representations_, 2021b.
+
+
+Arash Vahdat, Karsten Kreis, and Jan Kautz. Score-based generative modeling in latent space.
+_Advances in neural information processing systems_, 34:11287–11302, 2021.
+
+
+Hongtao Wu, Ya Jing, Chilam Cheang, Guangzeng Chen, Jiafeng Xu, Xinghang Li, Minghuan Liu,
+Hang Li, and Tao Kong. Unleashing large-scale video generative pre-training for visual robot
+manipulation. In _The Twelfth International Conference on Learning Representations_, 2024a.
+
+
+Xiaoyu Wu, Yang Hua, Chumeng Liang, Jiaru Zhang, Hao Wang, Tao Song, and Haibing Guan.
+Cgi-dm: Digital copyright authentication for diffusion models via contrasting gradient inversion.
+In _2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)_, pp. 10812–
+10821. IEEE Computer Society, 2024b.
+
+
+Ge Yan, Yueh-Hua Wu, and Xiaolong Wang. Dnact: Diffusion guided multi-task 3d policy learning.
+_arXiv preprint arXiv:2403.04115_, 2024.
+
+
+Yanjie Ze, Ge Yan, Yueh-Hua Wu, Annabella Macaluso, Yuying Ge, Jianglong Ye, Nicklas Hansen,
+Li Erran Li, and Xiaolong Wang. Gnfactor: Multi-task real robot learning with generalizable
+neural feature fields. In _Conference on Robot Learning_, pp. 284–301. PMLR, 2023.
+
+
+Yanjie Ze, Gu Zhang, Kangning Zhang, Chenyuan Hu, Muhan Wang, and Huazhe Xu. 3d diffusion
+policy: Generalizable visuomotor policy learning via simple 3d representations. In _ICRA_ _2024_
+_Workshop on 3D Visual Representations for Robot Manipulation_, 2024.
+
+
+Pengze Zhang, Hubery Yin, Chen Li, and Xiaohua Xie. Tackling the singularities at the endpoints
+of time intervals in diffusion models. In _Proceedings of the IEEE/CVF Conference on Computer_
+_Vision and Pattern Recognition_, pp. 6945–6954, 2024.
+
+
+11
+
+
+A APPENDIX
+
+
+A.1 GAP BETWEEN ROBOT MANIPULATION AND IMAGE GENERATION
+
+
+In the iterative denoising process for robot manipulation and image generation, the denoising network needs to denoise the samples in an Euclidean space. Due to the powerful representation ability
+of deep networks, we need a large number of discrete samples during training. If the Euclidean
+space is discretized into a point set with a sufficiently small distance _ν_, the continuity of the network
+ensures that represent on the discrete point set _{x}_ could be approximately interpolated into the
+continuous space:
+_f_ ( _x_ + _γν_ ) = (1 _−_ _γ_ ) _f_ ( _x_ ) + _γf_ ( _x_ + _ν_ ) + _o_ ( _ν_ ) _,_ (19)
+where _x, x_ + _ν_ _∈{x}_, and _o_ ( _ν_ ) denotes the higher-order infinitesimals and 0 _< γ_ _<_ 1. As _ν_ takes a
+sufficiently small value, _o_ ( _ν_ ) becomes negligible. Since the value range of images and robot actions
+is bounded, their space can be normalized as follows:
+
+
+**x** = [ _x_ [(1)] _, x_ [(2)] _, ..., x_ [(] _[n]_ [)] ] _∈_ R _[n]_ _, ∥x_ [(] _[i]_ [)] _∥≤_ 1 _._ (20)
+
+
+By gridding we can cover the sampling space with as few points as possible, the approximate number
+of points is estimated as - _ν_ 2 - _n_ . Since common image spaces correspond to _n_ _>_ 104, the denoising
+network can’t fit the denoising field at so many points simultaneously. Thanks to the low-dimension
+action space with _n_ = 9, we can train the denoising network on the entire action space.
+
+
+A.2 DENOISING ON INITIAL NOISY ACTIONS
+
+
+During the training of the diffusion model, it is necessary to sample successful actions _y_ ˆ, denoising
+timesteps _t_, and noise _ε_ . The complete loss function in terms of conditional probability is expressed
+as follows:
+_loss_ = E _t,pt_ ( _y|y_ ˆ) _,p_ ( _x,y_ ˆ)[ _λ_ ( _t_ ) _∥∇x_ log _pt_ ( _y|y_ ˆ) _−_ _εθ_ ( _x, y, t_ ) _∥_ [2] 2 []] _[.]_ (21)
+When the network _εθ_ ( _y, t_ ) can well fit the score function at all times, it can be considered that there
+is no significant conflict between the optimization of model parameters at different times. So that
+we can break down the parameter optimization at a specific timestep _t_ and scene _x_ :
+
+_loss_ ( _t,x_ ) = _λ_ ( _t_ )E _pt_ ( _y|y_ ˆ) _,px_ (ˆ _y_ ) _∥∇x_ log _pt_ ( _y|y_ ˆ) _−_ _εθ_ ( _x, y, t_ ) _∥_ [2] 2 _[.]_ (22)
+
+
+According to the DDPM noise addition in Equ. (1)and the discrete prior distribution of successful
+actions _px_ (ˆ _y_ _[i]_ ) = _k_ [1] _[, i][ ∈{]_ [1] _[,]_ [ 2] _[, ..., k][}]_ [, we can further obtain :]
+
+
+_εθ_ ˆ( _x, yj, N_ ) = _k_ [1]
+
+
+_loss_ ( _t,x_ ) = _[λ]_ [(] _k_ _[t]_ [)]
+
+
+_k_
+
+
+_i_ =1
+
+
+_pt_ ( _y|y_ ˆ _[i]_ ) _∥∇x_ log _pt_ ( _y|y_ ˆ _[i]_ ) _−_ _εθ_ ( _x, y, t_ ) _∥_ [2] 2 _[dy]_ (23)
+_y_
+
+
+In actual training, we will discretely sample noisy action _{yj}, j_ _∈{_ 1 _,_ 2 _, ..., M_ _}_ on distribution
+_pt_ ( _y|y_ ˆ _[i]_ ). In particular, when _t_ _→_ _N_, all conditional distributions _pt_ ( _y|y_ ˆ _[i]_ ) are approximately the
+same, leading to following formula with _t_ = _N_ :
+
+
+_M_
+
+- _∥∇x_ log _pN_ ( _yj|y_ ˆ _[i]_ ) _−_ _εθ_ ( _x, yj, N_ ) _∥_ [2] 2 (24)
+
+
+_j_ =1
+
+
+_k_
+
+
+- _∥∇x_ log _pN_ ( _yj|y_ ˆ _[i]_ ) _−_ _εθ_ ( _x, yj, N_ ) _∥_ [2] 2 [)] _[.]_ (25)
+
+
+_i_ =1
+
+
+_loss_ ( _N,x_ ) = _[λ]_ [(] _k_ _[N]_ [)]
+
+
+= _[λ]_ [(] _[N]_ [)]
+
+_k_
+
+
+_k_
+
+
+_i_ =1
+
+
+_M_
+
+
+(
+
+_j_ =1
+
+
+Assuming the model fitting ability is strong enough, we can get the following formula:
+
+if _θ_ [ˆ] = arg min _loss_ ( _N,x_ ) _,_ (26)
+_θ_
+
+
+s.t. _εθ_ ˆ( _x, yj, N_ ) = arg min
+_ε_
+
+
+_k_
+
+- _∥∇x_ log _pN_ ( _yj|y_ ˆ _[i]_ ) _−_ _ε∥_ [2] 2 _[.]_ (27)
+
+
+_i_ =1
+
+
+The result of minimizing the loss function of the model is shown below:
+
+
+_k_
+
+- _∇x_ log _pN_ ( _yj|y_ ˆ _[i]_ ) _._ (28)
+
+
+_i_ =1
+
+
+12
+
+
+A.3 FURTHER ANALYSIS OF RADIAL LOSS
+
+
+Combine the Equ. (16) and Equ. (17), we can get the ideal target denoising field _ϵx_ ( _y_ ) as follows:
+
+
+_ϵx_ ( _y_ ) = arg min E _p_ ( _y|y_ ˆ) _p_ ( _x,y_ ˆ)� _δ_ ( _∥y −_ _y_ ˆ _∥_ 2) _L_ 1� _ϵ, ϵx_ ( _y_ ; ˆ _y_ )��
+_ϵ_
+
+(29)
+= arg min E _p_ ( _y|y_ ˆ) _p_ ( _x_ )� _p_ (ˆ _y|x_ ) _δ_ ( _∥y −_ _y_ ˆ _∥_ 2) _L_ 1� _ϵ, ϵx_ ( _y_ ; ˆ _y_ )�� _._
+_ϵ_
+
+
+When scene information _x_ and noisy action _y_ are determined, _ϵx_ ( _y_ ) could be simplified with
+_p_ (ˆ _y|x_ ) = _k_ [1] [as follows:]
+
+
+neighborhood of _y_ ˆ _[j]_ as follows:
+
+
+ure 5, some initial noisy actions lead to incorrect denoised action in the 3D Diffuser Actor with the
+diffusion model. The diffusion-based model picks a blue block when requires red blocks, and an
+olive block when requires green blocks. The modeling of time-varying complex noise causes the
+diffusion model to ignore color differences to a certain extent.
+
+
+“ _Stack two red blocks_ ”
+
+
+“ _Stack two green blocks_ ”
+
+
+Figure 5: **Visualization of action sequence.** CIDM is less likely to denoise to wrong actions compared with the diffusion-based method.
+
+
+13
+
+
+1
+_ϵx_ ( _y_ ) = arg min
+_ϵ_ _k_
+
+
+_k_
+
+
+_i_ =1

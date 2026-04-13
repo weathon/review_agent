@@ -1,0 +1,795 @@
+# SPATIALLY-AWARE PHOTO-REALISTIC FACE RELIGHT## ING USING JOINT EMBEDDING OF LIGHT PROPERTIES
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Single image face relighting is the challenging problem of estimating the illumination cast on images by a point light source varying in position, intensity and
+possibly colour. Learning the relationship between the light source properties
+and the face location is critical to the photo-realism of the estimated relit image. Prior works do not explicitly model this relationship which adversely affects
+the accuracy and photo-realism of the estimated relit image. We present a novel
+framework that explicitly models this relationship by integrating a novel light feature embedding with self-attention and cross attention layers in a custom image
+relighting network. Our proposed method estimates more photo-realistic relit images with accurate shadows and outperforms prior works despite being trained
+only on synthetic data. Our method is able to generalize to out-of-training light
+source positions and also achieves unsupervised adaptation from synthetic to real
+images.
+
+
+1 INTRODUCTION
+
+
+Single image face relighting is the complex problem of changing the illumination in the source
+image according to a given target light direction. It is an active area of research in computer vision
+and has applications in various domains such as face recognition (Le & Kakadiaris, 2019; Huang
+et al., 2020; Qing et al., 2004), background lighting transfer (Nestmeyer et al., 2020; Pandey et al.,
+2021) and image editing Li et al. (2018); Luan et al. (2017); Shih et al. (2014).
+
+
+Two crucial aspects of face relighting are accurate rendering of shadows and preserving of facial
+details. A popular approach for single image face relighting is to rely on the estimated image intrinsics such as albedo and surface normal for relighting the image (Zhou et al., 2019; Hou et al., 2021;
+2022). Additional information such as shadow masks (Hou et al., 2021) or face geometry (Hou
+et al., 2022) can be used to improve accuracy of estimated shadows. While these methods work
+well, the estimated relit images are not photo-realistic since the models have been trained on the
+inexact ground truth images in the DPR dataset (Zhou et al., 2019), and they estimate only the luminance channel & append colour channels from the input image. Some have tried to address these
+limitations by training on a new relighting dataset in a two-stage pipeline (Pidaparthy et al., 2024).
+While the shadows are sharp, they are often not photo-realistic.
+
+
+None of the prior works explicitly addressed the fundamental challenge of image relighting, which is
+learning the complex relationship between light source information and face location & orientation.
+Ponglertnapakorn et al. (2023) tried to implicitly learn this relationship using the prior knowledge
+of large diffusion models, however their approach significantly increased the computation cost and
+inference time. Further, prior works only explore relighting with white colour light and lack a
+method to incorporate light colour.
+
+
+To address these limitations, we designed a novel lighting embedding that allows joint modelling of
+the light source properties, which are the position, colour and intensity. We propose a novel lighting
+network that enables the model to learn the relationship between light source position, intensity and
+colour. This representative light feature is then combined with image features in a residual convolutional autoencoder. By integrating self-attention and cross-attention layers at multiple resolutions,
+the network allows for learning the relationship between light features and image features. These
+combined features are passed to a residual decoder which estimates the relit image. The pipeline
+
+
+1
+
+
+of our proposed image relighting network is shown in Fig 1. Through extensive experimental validation, we show that our method outperforms other SOTA methods and that our model generalizes
+very well to out-of-training light source properties. Additionally, we are able to achieve unsupervised adaptation from synthetic to real images.
+
+
+Figure 1: The proposed image relighting network architecture for face relighting is shown. The
+target light source properties are input to a lighting network which extracts light features. The RGB
+image and luminance channel are input to a residual encoder which learns the image features and
+combines them with the light features in a residual decoder to estimate the relit image. Multi-head
+attention layers are used to explicitly model the relationship between the light source and input
+image (face). Figure is best viewed in colour.
+
+
+In summary, our contributions are:
+
+
+    - A novel light feature embedding that allows for joint modelling of the light properties
+(position, intensity and colour). This embedding provides an approach that can be easily
+extended to any other light properties.
+
+    - A novel lighting network that enables the network to explicitly learn the relationship between the light source position, intensity and colour.
+
+    - A novel image relighting network that explicitly models the relationship between the light
+source properties and face location & orientation.
+
+
+2 PRIOR WORK
+
+
+There are broadly four types of approaches explored for face relighting: 1) intrinsic image decomposition and rendering (Barron & Malik, 2014; Egger et al., 2018; Genova et al., 2018; Le &
+Kakadiaris, 2019; Lee & Lee, 2020; Lee et al., 2005; Li et al., 2014; Lin et al., 2020; Nestmeyer
+et al., 2020; Sengupta et al., 2018; Shahlaei & Blanz, 2015; Shu et al., 2017; Tewari et al., 2017;
+Tran et al., 2019; Tran & Liu, 2018; 2019; Wang et al., 2008; Yamaguchi et al., 2018), 2) image-toimage translation (Atoum et al., 2020; Tewari et al., 2021; Liu et al., 2021; Sun et al., 2019), 3) style
+transfer (Li et al., 2018; Luan et al., 2017; Shih et al., 2014; Shu et al., 2017; Pandey et al., 2021;
+Ponglertnapakorn et al., 2023; Yeh et al., 2022) and 4) ratio image estimation (Peers et al., 2007;
+Shashua & Riklin-Raviv, 2001; Wen et al., 2003; Stoschek, 2000).
+
+
+Given an input image and light source position, the intrinsic image decomposition methods aim to
+estimate components such as albedo, surface normal, reflectance and lighting. These components
+are then used to render a relit image based on the light source position. The effectiveness of these
+methods heavily depends on the accuracy of each intrinsic map and a cascading of the estimation
+errors results in relit images that lack high frequency details and may contain artefacts.
+
+
+To address the issue of cascading errors, some approaches have framed relighting as an image-toimage translation task. Although these methods can estimate relit images with varying accuracy (Sun
+et al., 2019; Zhou et al., 2019), they struggle with inaccurate shadow predictions and adapting to
+
+
+2
+
+
+different light intensities. Another approach to relighting is image style transfer (Li et al., 2018;
+Luan et al., 2017), where both source and references images are provided as inputs and the lighting
+of the reference image is transferred to the source image. Some have explored using environment
+lighting maps of a reference image to transfer lighting to a source image (Pandey et al., 2021;
+Ponglertnapakorn et al., 2023; Yeh et al., 2022). However, these approaches require high-quality
+non-occluded source and reference image pairs with diverse lighting variations, and ground truth
+environment lighting maps which can be expensive to obtain. In contrast, our method does not
+require any reference images or environment maps and can relight an image for any given light
+source position.
+
+
+Some approaches have focused on learning a per-pixel multiplier map by estimating the ratio between the source and target images. However, these approaches require multiple input images (Peers
+et al., 2007; Shashua & Riklin-Raviv, 2001) or both source and target images (Stoschek, 2000) at
+inference, which limits their suitability for real-world applications.
+
+
+Accurate estimation of shadows is critical to face relighting. Towards this end, some methods learn
+a weightage function on the estimated shadow mask (Hou et al., 2021), while some others have used
+ray-tracing to estimate the shadows approaches have explored the utility of a shadow pixels (Hou
+et al., 2022). While these methods estimate shadows with reasonable accuracy, the relit images
+often lack photo-realism due to hard boundaries in the shadow regions, whereas real shadows are
+softer and have diffused edges. Some have tried to overcome these limitations by improving the
+quality of the training dataset and combing attention features at multiple scales (Pidaparthy et al.,
+2024), however the estimated relit images has colour artefact issues and the performance suffers on
+input images with existing shadows. Another approach tried to leveraged the knowledge of large
+diffusion models (Ponglertnapakorn et al., 2023), but this method comes at a significant increase
+in computational costs and inference time. Also, several pre-processing blocks further increase the
+inference time.
+
+
+We address several limitations of the prior work and propose a lightweight network architecture for
+fast inference on edge devices. We believe that incorporating light colour can improve the model performance. Hence, we design a novel light embedding that allows the model to learn the correlation
+between light source position, intensity and colour. Next, we design a novel network architecture
+that explicitly learns the relationship between the light source information and face location & orientation. This enables the model to accurately learn the face illumination and shadow strength, and
+thus, estimate a photo-realistic relit image.
+
+
+3 DATASET
+
+
+We obtained training and test datasets from Pidaparthy et al. (2024). We made a few important modifications to their dataset preparation strategy that significantly improved the quality of the ground
+truth dataset.
+
+
+We believe that incorporating light colour information during training can improve the illumination
+on the face and reduce the colour artefacts in estimated relit images. Since there are no publicly
+available relighting datasets with coloured lighting, we generated our own dataset using the synthetic OLAT lighting rig in Blender software (Pidaparthy et al., 2024). Our dataset consisted of 7
+maximally separated light colours: White (255 _,_ 255 _,_ 255), Red (255 _,_ 0 _,_ 0), Green (0 _,_ 255 _,_ 0), Blue
+(0 _,_ 0 _,_ 255), Yellow (255 _,_ 255 _,_ 0), Magenta (255 _,_ 0 _,_ 255) and Cyan (0 _,_ 255 _,_ 255). Sample images
+from the training dataset are seen in Fig 2.
+
+
+Next, we manually corrected the offset of the 3D models and aligned the face location all of models
+to be the same in the synthetic lighting rig. This ensured uniformity when augmenting the training
+dataset through rotation or displacement of the subject positions (3D models), which made it easier
+for the model to learn the relationship between light source information and face location & orientation. Additionally, we also modified the 3D models to have less reflective surfaces and cast sharper
+shadows. This significantly improved the photo-realism of the ground truth relit images.
+
+
+The light source properties are represented as a 7D tuple of ( _x, y, z, i, r, g, b_ ) where ( _x, y, z_ ), _i_ and
+( _r, g, b_ ) refers to the light position, intensity and colour, respectively. Using the same strategy as that
+in Pidaparthy et al. (2024), we sample the light position from a unit volume such that _x ∈_ [ _−_ 1 _,_ +1],
+_y_ _∈_ [0 _._ 4 _,_ 1] and _z_ _∈_ [ _−_ 1 _,_ +1]. The intensity ( _i_ ) is varied such that _i_ _∈_ [0 _._ 4 _,_ 1]. The _X_ - _Z_ plane
+
+
+3
+
+
+is in the front of the 3D human model (face) and _Y_ -direction indicates the frontal distance of the
+3D human model from the light source. We generated 3,000 input-relit image pairs for each 3D
+human model while randomly varying the light source position, intensity and colour. We augmented
+the training dataset through left-right rotation of the 3D human models and changing the relative
+position between the 3D model and the camera.
+
+
+Figure 2: Sample images from the ground truth dataset. Top row: Input images; Middle row: Light
+source position; Bottom row: Ground truth relit images. Figure best viewed in colour.
+
+
+4 IMAGE RELIGHTING NETWORK
+
+
+A key challenge in face relighting is precisely estimating the illumination and shadows cast on the
+face by a light source. This involves learning the complex relationship between the face location &
+orientation and the light source properties. In this section, we describe our novel lightweight image
+relighting network (Fig1) that achieves two goals: 1) accurate estimation of shadows and illumination on the face and 2) efficient inference on edge devices. To achieve this, we propose a novel light
+embedding that jointly models the light source properties. We train a lighting network that learns the
+correlation between the light source position, intensity and colour. These embeddings are combined
+with image features, learnt using a residual convolutional autoencoder, in cross-attention blocks that
+capture the relationship between light and face information. The combined features are then passed
+to a decoder to generate a photo-realistic relit image.
+
+
+4.1 LIGHTING NETWORK
+
+
+Most prior work encoded only the light source position using a 9-dimensional Spherical Harmonics
+(SH) vector, which captures the maximum variance of the light source position moving along a unit
+sphere (Zhou et al., 2019; Hou et al., 2021; 2022; Ponglertnapakorn et al., 2023). More recent works
+have appended light source intensity to obtain a 10-D SH vector (Pidaparthy et al., 2024). The SH
+vector is passed to a lighting network to obtain the light features.
+
+
+Although SH vectors are helpful for handling variations in the light positions across a sphere, they
+have some limitations. The SH vector models only the light source position. Even when intensity
+is appended, they fail to capture the correlation between the light source position and intensity. The
+illumination on an image depends on both position and intensity since a high-intensity light farther
+from the face and low-intensity light closer to the face might cast similar illuminations. Our initial
+experiments showed that the SH vector might not be adequate to model the wider range of variations
+in light source positions and intensities. Additionally, SH vector does not account for light colour,
+which we believe is crucial for improving the accuracy of illumination on the face and reducing the
+colour artefacts. This necessitates a more comprehensive light embedding that jointly models the
+light source properties and provides a rich representation of the correlation between them.
+
+
+4
+
+
+Towards this end, we propose a more complex representation for the 7D light source tuple that
+can be easily extended to any other properties of the light source. Our proposed encoding for the
+position, intensity and colour of the light is inspired by the positional encoding used in vision transformers (Dosovitskiy et al., 2020; Vaswani et al., 2017).
+
+
+Let _l_ = ( _x, y, z, i, r, g, b_ ) be the target light source 7D tuple. The _x_ -position is encoded by a vector
+of dimension _d_ = 128, which we denote as _Lx_ . The components of _Lx_ are
+
+_Lx_ (2 _j_ ) = sin� _x_       - and _Lx_ (2 _j_ + 1) = cos� _x_       - (1)
+_n_ [2] _[j/d]_ _n_ [2] _[j/d]_
+
+
+where _n_ = 10 _,_ 000 is a scaling factor and _j_ is the index position of the array _Lx_ such that 0 _≤_ _j_ _≤_
+_d/_ 2 _−_ 1. Odd positions are represented by a sine function and even positions by cosine function.
+
+
+In a similar manner, we compute the embeddings for the other 6 components which we denote as _Ly_,
+_Lz_, _Li_, _Lr_, _Lg_ and _Lb_ (Fig 3a). We concatenate the seven embeddings to obtain an 896-dimensional
+light embedding, _L_ _[∗]_ = [ _Lx_ _Ly_ _Lz_ _Li_ _Lr_ _Lg_ _Lb_ ]. Instead of using a Multi Layer Perceptron (MLP)
+for computing the light features like prior works have done, we use a convolutional network that
+reduces the number of computations and optimizes the inference time on edge devices. We zero-pad
+the light embedding ( _L_ _[∗]_ ) and reshape them to a 1 _×_ 32 _×_ 32 image. This image is passed to a lighting
+network (Fig 3(b)) which consists of an encoder and decoder module both having three convolution
+layers with 32, 128 and 512 channels. After each convolution layer, Multi DConv Head Attention
+(MDHA) modules ((Pidaparthy et al., 2024)) with self-attention layers [1] are used. This enables the
+network to learn the correlation between the light source position, intensity and colour. The output
+of the encoder is a 128 _×_ 16 _×_ 16 image which is passed through an MDHA module to obtain the
+light features ( _XL_ ) that are combined with image features in a residual convolutional autoencoder.
+
+
+(a) (b)
+
+
+Figure 3: (a) For each component of target light 7D tuple, we compute a novel light embedding
+which is then concatenated and reshaped to obtain the target light embedding ( _L_ _[∗]_ ). (b) The proposed
+light network consists of an encoder and decoder, each having three convolutional layers (indicated
+in blue) with a MDHA module is used after each convolutional layer. The light features ( _XL_ ) is
+computed on the output of the encoder module.
+
+
+4.2 RESIDUAL CONVOLUTIONAL AUTOENCODER
+
+
+We trained a modified ResNet-34 based residual convolutional autoencoder to estimate the relit
+image (Fig 4). The input data ( _ID_ ) has 4 channels: RGB image ( _IRGB_ ) and luminance channel
+( _IL_ ). The input data is passed to the encoder which consists of four ResNet blocks having 16, 32,
+64 and 128 channels, respectively. The feature maps are downscaled by half after each block. The
+128-D image features ( _XI_ ) output by the encoder are added with the light features ( _XL_ ) as seen in
+Fig 4. The combined output is then passed through a decoder that estimates the relit image. The
+decoder is a mirror of the encoder and consists of four ResNet blocks having 128, 64, 32 and 16
+channels, respectively, and the feature maps are upscaled by a factor of 2 after each block. Multi
+DConv Head Attention (MDHA) modules (Pidaparthy et al., 2024) have been used at each level of
+the skip connection since they help preserve fine-grained facial details.
+
+
+The two main goals of the residual convolutional autoencoder are: 1) learn the relationship between
+face location & orientation and light source information; and 2) estimate accurate and photo-realistic
+relit images. None of the prior works tried to explicitly learn the rich and dense relationship between
+the light source information and the face location & orientation. We propose to use cross-attention
+
+
+1These modules are indicated as MDHA-S4, S5, S6, S7 and S8.
+
+
+5
+
+
+Figure 4: The architecture of the proposed residual convolutional autoencoder is shown. The encoder and decoder consists of four ResNet blocks each (indicated in blue). Five MDHA modules
+are used at each level of the skip connections between the encoder and decoder. The light features
+are passed to the cross-attention layers of two MDHA modules (indicated with grey lines).
+
+
+layers in the MDHA modules to learn the relationship between the light source information and face
+location, and then leverage this understanding at higher resolutions of the decoder to improve the
+accuracy and photo-realism of the estimated relit image.
+
+
+Recall that the deeper layers in a deep neural network (lower resolution layers) learn high-level
+image features, while the earlier layers in the network (high resolution layers) learn low-level images
+features. Thus, to explicitly learn the complex relationship between light source properties and face
+location & orientation, we propose to use cross-attention layers in the MDHA modules at lower
+resolutions as seen in Fig 4 [2] . The output of these MDHA modules are the composite features
+(obtained by combining the image and light features) which are computed as
+
+
+where _Q_, _K_, _V_ denote the query, key and value matrices, respectively (Vaswani et al., 2017; Dosovitskiy et al., 2020). _Wq_, _Wk_, _Wv_ denote the learned weight matrices and _XI_, _XL_ denote the image
+and light features. _XC_ denotes the composite feature representation obtained by combining the light
+and image features. We estimate the query from the image features and the key-value pairs from the
+light features.
+
+
+The output features of the “MDHA-C1” and “MDHA-C2” layers are the passed to the higher resolution layers for refining the fine-grained facial details. Hence, self-attention layers are used in the
+MDHA modules at higher resolution (see “MDHA-S1” and “MDHA-S2” in Fig 4). This ensures
+that the decoder estimates a more photo-realistic image with accurate shadows and illumination.
+
+
+4.3 TRAINING LOSSES
+
+
+We used three different losses for training the image relighting network: 1) lighting loss, 2) image
+reconstruction loss and 3) VGG loss.
+
+
+All prior works have trained the lighting network to optimize the MSE loss on the 9-D or 10-D SH
+vector. However, MSE is sensitive to the magnitude of the vectors and hence, it can be misleading
+when calculating the distance between two vectors. Further, changes in components of the light
+vector have more effect on the output results than other components. MSE might not be able to
+accurately capture this. Hence, we used the cosine dissimilarity metric to measure the distance
+between the estimated and ground truth light embeddings.
+
+
+Let _L_ _[∗]_ be the light embedding for the target light source 7D tuple (ground truth). Let _L_ [ˆ] = _NL_ ( _L_ _[∗]_ )
+be the estimated light embedding, where _NL_ refers to the lighting network. We define the light loss
+
+
+2“MDHA  - S1’ and “MDHA  - C1” denote to the MDHA modules with self-attention layers and crossattention layers.
+
+
+6
+
+
+                  - _QK_ _T_
+_Q_ = _Wq_ _XI_ _K_ = _Wk_ _XL_ _V_ = _Wv_ _XL_ _XC_ = softmax ~~_√_~~
+_dk_
+
+
+_V_ (2)
+
+
+where _R_ _[∗]_ and _R_ [ˆ] = _NR_ ( _ID_ ) are the ground truth and estimated relit images, respectively. _NR_ and
+_ID_ refer to the residual convolutional autoencoder and the 4-channel input data, respectively. To
+compute the loss at local scales, we divided the image into 128 _×_ 128 pixel patches, overlapping
+by 50%. Let _P_ _[∗]_ and _P_ [ˆ] be the image patches from the ground truth and estimated relit images,
+respectively. We define the global and local image reconstruction losses as
+
+
+_Lglobal_ = _λ_ 1 _Lsmooth_ ( _R_ _[∗]_ _,_ _R_ [ˆ] ) + _λ_ 2 _Ldssim_ ( _R_ _[∗]_ _,_ _R_ [ˆ] ) (5)
+
+_Llocal_ =           - _λ_ 3 _Lsmooth_ ( _P_ _[∗]_ _,_ _P_ [ˆ] 1) + _λ_ 4 _Ldssim_ ( _P_ _[∗]_ _,_ _P_ [ˆ] ) (6)
+
+
+_k_
+
+
+where _k_ is the total number of patches.
+
+
+We also computed the VGG loss ( _Lvgg_ ) using the output of the first three convolutional blocks of
+the pre-trained VGG-19 network (Simonyan & Zisserman, 2014) ( _Nvgg_ ). The VGG loss is defined
+as
+
+_Lvgg_ = 1 _._ 0 _∗||Nvggb_ 1( _R_ _[∗]_ ) _−Nvggb_ 1( _R_ [ˆ] ) _||_ [2] 2 [+] [0] _[.]_ [8] _[ ∗||N][vgg]_ _b_ 2 [(] _[R][∗]_ [)] _[ −N][vgg]_ _b_ 2 [( ˆ] _[R]_ [)] _[||]_ [2] 2
++ 0 _._ 6 _∗||Nvggb_ 3( _R_ _[∗]_ ) _−Nvggb_ 3( _R_ [ˆ] ) _||_ [2] 2 (7)
+
+
+where _Nvggb_ 1, _Nvggb_ 2 and _Nvggb_ 3 are the output of the first, second and third convolutional blocks.
+
+
+Thus, the final loss used for training the image relighting network was
+
+
+_Lfinal_ = _Lglobal_ + _Llocal_ + _λ_ 5 _Llight_ + _λ_ 6 _Lvgg_ (8)
+
+
+where _λ_ 1 = _λ_ 5 = 1, _λ_ 2 = _λ_ 3 = _λ_ 6 = 10 and _λ_ 4 = 100 are the weights for each loss term.
+
+
+4.4 TRAINING DETAILS
+
+
+Unlike prior works, we do not estimate any image instrinsic map nor do we use any additional
+networks during training. Our single-stage pipeline is able to estimate photo-realistic relit images
+with high accuracy and achieve unsupervised domain adaptation from synthetic to real images. We
+achieve this using specific data augmentation techniques while preparing the training dataset.
+
+
+We generating the training dataset, we randomly apply left-right rotation on the 3D model of
+_r_ _∈_ [ _−_ 60 _,_ +60] degrees. We also vary the position of the 3D model w.r.t the camera by a displacement of _dx_ _∈_ [ _−_ 0 _._ 3 _,_ +0 _._ 3] and _dz_ _∈_ [ _−_ 0 _._ 3 _,_ +0 _._ 3] along _X_ and _Z_ directions, respectively.
+Further, we used two different types of data augmentation during training: 1) image flipping and 2)
+brightness and contrast jitter. The image is flipped horizontally (left-right mirroring) and the light
+source position is appropriately updated. The brightness and contrast of the RGB image are adjusted
+by an additive factor of _b_ and multiplicative factor of _c_, where _b_ _∈_ [ _−_ 20 _,_ +20] and _c_ _∈_ [0 _._ 8 _,_ 1 _._ 2].
+These augmentations result in a training dataset that captures multiple different variations of the
+input images and thus, improves the generalization of the model to real images.
+
+
+The image relighting network was trained on a dataset of 21,000 images and validated on 3,000
+images. The input data to the residual convolutional autoencoder consisted of 4-channels - RGB
+image ( _IRGB_ ) and luminance channel ( _IL_ ), which were resized to 512 _×_ 512 pixels. The input to
+the lighting network was the light features embedding computed on the target light source 4D tuple.
+
+
+7
+
+
+as
+
+
+_L_ _[∗]_ _._ _L_ [ˆ]
+_Llight_ = 1 _._ 0 _−_ (3)
+
+_||L_ _[∗]_ _|| ||L_ [ˆ] _||_
+
+
+We measured the image reconstruction loss at both global ( _Lglobal_ ) and local ( _Llocal_ ) scales. The
+image reconstruction loss had two components: 1) structural dissimilarity (DSSIM) loss ( _Ldssim_ )
+and 2) smooth L1 loss ( _Lsmooth_ ). We define DSSIM loss as _Ldssim_ = [1] _[−][SSIM]_ 2, where _SSIM_
+
+score is computed using the built-in PyTorch function to compute the _SSIM_ score.
+
+
+We define the smooth L1 loss as
+
+
+_Lsmooth_ ( _R_ _[∗]_ _,_ _R_ [ˆ] ) =
+
+
+( _R_ _[∗]_ _−_ _R_ [ˆ] ) [2] if _|R_ _[∗]_ _−_ _R_ [ˆ] 1 _| <_ 0 _._ 5 _,_
+(4)
+_|R_ _[∗]_ _−_ _R_ [ˆ] _| −_ 0 _._ 25 otherwise
+
+
+The training loss was optimized using Adam optimizer (Kingma & Ba, 2014) with L2 regularization
+of 0 _._ 01. The initial learning rate of 1 _e −_ 5 was decayed by a factor of 0 _._ 9 after each epoch and the
+network was trained for 30 epochs with a batch size of 8. In a manner similar to all prior works, we
+also work with the segmented foreground region. We used the segmentation masks obtained using
+the pre-trained Mask R-CNN (He et al., 2017) model in PyTorch.
+
+
+5 RESULTS
+
+
+We discuss the quantitative and qualitative performance of our model in this section. We evaluated
+the quantitative performance of the model on two real image test datasets provided by Pidaparthy
+et al. (2024): 1) Multi-Pie (MP) test dataset and 2) Real Human (RH) test dataset. The Multi-pie
+dataset (Gross et al., 2010) has 6,474 images, captured using 249 subjects with 2 different expressions and 13 different light source positions. The Real human dataset consisted of 432 images with
+6 different subjects and 72 images per subject. This dataset consisted of significantly different outof-training light source positions, which tested the generalization capabilities of the models. For a
+fair comparison with prior works, we evaluated our model on these datasets that used white coloured
+light.
+
+
+We compared the performance of our model against four prior works (Zhou et al., 2019; Hou et al.,
+2021; 2022; Pidaparthy et al., 2024). All these methods estimated the relit image given a single input
+image and the target light source position [3] . Additionally, they are also lightweight for fast inference
+on edge devices. We quantified the performance using three metrics: 1) MSE, 2) DSSIM [4] and 3)
+LPIPS (Zhang et al., 2018). Both DSSIM and LPIPS have been shown to be highly correlated with
+the perceptual quality of the images (Nestmeyer et al., 2020; Zhang et al., 2018). The quantitative
+results can be seen in Table 1.
+
+
+|Model|Trained on<br>real images|# training<br>examples|Dataset|MSE ↓|DSSIM ↓|LPIPS ↓|
+|---|---|---|---|---|---|---|
+|Zhou et al. (2019)|✓|135,000|RH|0.0716|0.2988|0.3736|
+|Hou et al. (2021)|✓|180,000|RH|0.0090|0.1906|0.2650|
+|Hou et al. (2022)|✓|180,000|RH|0.0152|0.0787|0.1522|
+|Pidaparthy et al. (2024)|✗|21,000|RH|0.0049|0.0336|0.0741|
+|Ours|✗|21,000|RH|**0.0043**|**0.0307**|**0.0701**|
+|Zhou et al. (2019)|✓|135,000|MP|0.0845|0.3548|0.4389|
+|Hou et al. (2021)|✓|180,000|MP|0.0125|0.2801|0.2538|
+|Hou et al. (2022)|✓|180,000|MP|0.0118|0.2850|0.2607|
+|Pidaparthy et al. (2024)|✗|21,000|MP|0.0096|0.0639|0.1361|
+|Ours|✗|21,000|MP|**0.0079**|**0.0587**|**0.1323**|
+
+
+Table 1: Performance comparison of our model against prior works on two real image test datasets:
+1) Real Human test dataset (RH) and 2) Multi-Pie dataset (MP).
+
+
+Our model outperforms all the prior works on both real image test datasets. All the metrics are
+substantially lower than the prior works, indicating that our estimated relit images are much more
+accurate and photo-realistic. Despite training on multiple different light colours as compared to
+prior work, our method is able to outperform all prior works on white light. We used a similar
+training dataset to that used by Pidaparthy et al. (2024) [5], and our model significantly outperforms
+their work, especially on the challenging Multi-pie (MP) dataset. This shows the benefits of our
+design choices which include a novel light embedding and a network architecture that explicitly
+learns the relationship between the light source information and face location & orientation. As the
+real human (RH) test dataset consists of out-of-training light source positions, the metrics indicate
+that our model generalizes significantly better than prior works to these new light positions.
+
+
+The qualitative results shown in Fig 5 backs up the findings in Table 1. We observed that the
+illumination on the face and accuracy of the shadows are significantly better than prior works. In
+
+
+3All prior works used only ( _x, y, z_ ) except Pidaparthy et al. (2024) who used ( _x, y, z, i_ ).
+4We compute DSSIM as DSSIM = 1 _−SSIM_ 2 where SSIM measures the structural similarity.
+
+5We mainly added the light colour as an additional component.
+
+
+8
+
+
+Figure 5: Qualitative comparison of our model against other methods on the real human test dataset
+(RH) (columns 1, 2), Celeb-FFHQ dataset (columns 3-5) and Multi-pie dataset (MP) (last column).
+Rows 1 and 2 are the input image and light source position; rows 3-6 are the results from Zhou et al.
+(2019), Hou et al. (2021), Hou et al. (2022) and Pidaparthy et al. (2024); rows 7 and 8 are our results
+and ground truth relit images. We do not have ground truth relit images on the Celeb-FFHQ dataset.
+Images are best viewed in colour.
+
+
+many of the prior works, the shadows are incorrectly cast across the forehead. Our method is able
+to illuminate the face correctly. We also observed that the estimated relit images from our method
+have significantly improved the colour artefacts issues observed in prior works (see Fig 5 columns
+3,4,6). This shows the benefits of modelling the light colour in addition to position and intensity.
+Our method is also able to handle directional lighting and shadows on the input images much better
+than prior works (see Fig 5 column 3, 5) since we specifically learn the relationship between input
+features and light features.
+
+
+9
+
+
+Fig 6 shows the generalization of our model across different light source colours. We observe that the
+model is able to apply light colour appropriately and generate accurate shadows (see Fig 6 columns 1
+and 2). Our method is able to generalize across a variety of input images that have different ambient
+lighting and directional shadows, and different facial structures & ethnicities.
+
+
+Figure 6: Qualitative results from our model for different colours of target light source. Top row:
+input images; middle row; light source position and last row: predicted results.
+
+
+6 LIMITATIONS FUTURE WORK
+
+
+We have shown the effectiveness of our methods for accurately modelling shadows and generating
+photo-realistic relit images. However, there are some limitations of the model. Currently, a segmentation mask is used at inference to segment the foreground object (human) which is passed as
+input to the model. One possible future extension of this work is to automatically localize the face
+in the input image and relight the image without using any foreground segmentation mask. Another
+possible extension is to capture the effect of multiple light sources by modelling their effect as a
+single composite light source.
+
+
+7 CONCLUSION
+
+
+We proposed a novel approach for face relighting given a single image and a light source position.
+We used a novel light embedding that jointly modelled the light source position, intensity and colour.
+The network enables learning the correlation between these parameters. We used cross-attention
+layers in the convolutional autoencoder to explicitly learn the relationship between the light source
+properties and the face location. Qualitative results show the benefit of various design choices and
+our model generates photo-realistic relit images. Our model is also able to easily generalize across
+multiple different coloured lighting. Quantitative analysis showed that our model outperforms SOTA
+methods on two challenging real image datasets. Our model is lightweight and has only 9.4M
+parameters.
+
+
+REFERENCES
+
+
+[https://renderpeople.com/free-3d-people/.](https://renderpeople.com/free-3d-people/)
+
+
+Yousef Atoum, Mao Ye, Liu Ren, Ying Tai, and Xiaoming Liu. Color-wise attention network for low-light
+image enhancement. In _Proceedings of Computer Vision and Pattern Recognition Workshops (CVPRW)_, pp.
+506–507, 2020.
+
+
+Jonathan T Barron and Jitendra Malik. Shape, illumination, and reflectance from shading. _IEEE Transactions_
+_on Pattern Analysis and Machine Intelligence_, 37(8):1670–1687, 2014.
+
+
+10
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An image is worth
+16x16 words: Transformers for image recognition at scale. _arXiv preprint arXiv:2010.11929_, 2020.
+
+
+Bernhard Egger, Sandro Sch¨onborn, Andreas Schneider, Adam Kortylewski, Andreas Morel-Forster, Clemens
+Blumer, and Thomas Vetter. Occlusion-aware 3d morphable models and an illumination prior for face image
+analysis. _International Journal of Computer Vision (IJCV)_, 126:1269–1287, 2018.
+
+
+Kyle Genova, Forrester Cole, Aaron Maschinot, Aaron Sarna, Daniel Vlasic, and William T Freeman. Unsupervised training for 3d morphable model regression. In _Proceedings_ _of_ _Computer_ _Vision_ _and_ _Pattern_
+_Recognition (CVPR)_, pp. 8377–8386, 2018.
+
+
+Ralph Gross, Iain Matthews, Jeffrey Cohn, Takeo Kanade, and Simon Baker. Multi-pie. _Image_ _and_ _vision_
+_computing_, 28(5):807–813, 2010.
+
+
+Kaiming He, Georgia Gkioxari, Piotr Doll´ar, and Ross Girshick. Mask R-CNN. In _Proceedings of International_
+_Conference on Computer Vision_, pp. 2961–2969, 2017.
+
+
+Andrew Hou, Ze Zhang, Michel Sarkis, Ning Bi, Yiying Tong, and Xiaoming Liu. Towards high fidelity face
+relighting with realistic shadows. In _Proceedings of Computer Vision and Pattern Recognition (CVPR)_, pp.
+14719–14728, 2021.
+
+
+Andrew Hou, Michel Sarkis, Ning Bi, Yiying Tong, and Xiaoming Liu. Face relighting with geometrically
+consistent shadows. In _Proceedings of Computer Vision and Pattern Recognition (CVPR)_, pp. 4217–4226,
+2022.
+
+
+Yuge Huang, Pengcheng Shen, Ying Tai, Shaoxin Li, Xiaoming Liu, Jilin Li, Feiyue Huang, and Rongrong Ji.
+Improving face recognition from hard samples via distribution distillation loss. In _Proceedings of European_
+_Conference on Computer Vision (ECCV)_, pp. 138–154. Springer, 2020.
+
+
+Tero Karras, Timo Aila, Samuli Laine, and Jaakko Lehtinen. Progressive growing of gans for improved quality,
+stability, and variation. _arXiv preprint arXiv:1710.10196_, 2017.
+
+
+Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. _arXiv_ _preprint_
+_arXiv:1412.6980_, 2014.
+
+
+Ha A Le and Ioannis A Kakadiaris. Illumination-invariant face recognition with deep relit face images. In
+_Winter Conference on Applications of Computer Vision (WACV)_, pp. 2146–2155. IEEE, 2019.
+
+
+Gun-Hee Lee and Seong-Whan Lee. Uncertainty-aware mesh decoder for high fidelity 3d face reconstruction.
+In _Proceedings of Computer Vision and Pattern Recognition (CVPR)_, pp. 6100–6109, 2020.
+
+
+Jinho Lee, Hanspeter Pfister, Baback Moghaddam, and Raghu Machiraju. Estimation of 3d faces and illumination from single photographs using a bilinear illumination model. In _Rendering_ _Techniques_, pp. 73–82,
+2005.
+
+
+Chen Li, Kun Zhou, and Stephen Lin. Intrinsic face image decomposition with human face priors. In _Proceed-_
+_ings of European Conference on Computer Vision(ECCV)_, pp. 218–233. Springer, 2014.
+
+
+Yijun Li, Ming-Yu Liu, Xueting Li, Ming-Hsuan Yang, and Jan Kautz. A closed-form solution to photorealistic
+image stylization. In _Proceedings of European Conference on Computer Vision (ECCV)_, pp. 453–468, 2018.
+
+
+Jiangke Lin, Yi Yuan, Tianjia Shao, and Kun Zhou. Towards high-fidelity 3d face reconstruction from in-thewild images using graph convolutional networks. In _Proceedings of Computer Vision and Pattern Recogni-_
+_tion (CVPR)_, pp. 5891–5900, 2020.
+
+
+Feng Liu, Luan Tran, and Xiaoming Liu. Fully understanding generic objects: Modeling, segmentation, and
+reconstruction. In _Proceedings of Computer Vision and Pattern Recognition (CVPR)_, pp. 7423–7433, 2021.
+
+
+Fujun Luan, Sylvain Paris, Eli Shechtman, and Kavita Bala. Deep photo style transfer. In _Proceedings_ _of_
+_Computer Vision and Pattern Recognition (CVPR)_, pp. 4990–4998, 2017.
+
+
+Thomas Nestmeyer, Jean-Franc¸ois Lalonde, Iain Matthews, and Andreas Lehrmann. Learning physics-guided
+face relighting under directional light. In _Proceedings of Computer Vision and Pattern Recognition (CVPR)_,
+pp. 5124–5133, 2020.
+
+
+Rohit Pandey, Sergio Orts Escolano, Chloe Legendre, Christian Haene, Sofien Bouaziz, Christoph Rhemann,
+Paul Debevec, and Sean Fanello. Total relighting: learning to relight portraits for background replacement.
+_ACM Transactions on Graphics (TOG)_, 40(4):1–21, 2021.
+
+
+11
+
+
+Pieter Peers, Naoki Tamura, Wojciech Matusik, and Paul Debevec. Post-production facial performance relighting using reflectance transfer. _ACM Transactions on Graphics (TOG)_, 26(3):52–es, 2007.
+
+
+Hemanth Pidaparthy, Abhay Chauhan, and Pavan Sudheendra. Multi-level attention aggregation for aesthetic
+face relighting. In _Proceedings_ _of_ _Winter_ _Conference_ _on_ _Applications_ _of_ _Computer_ _Vision_ _(WACV)_, pp.
+4057–4066, 2024.
+
+
+Puntawat Ponglertnapakorn, Nontawat Tritrong, and Supasorn Suwajanakorn. Difareli: Diffusion face relighting. _arXiv preprint arXiv:2304.09479_, 2023.
+
+
+Laiyun Qing, Shiguang Shan, and Xilin Chen. Face relighting for face recognition under generic illumination.
+In _International Conference on Acoustics, Speech, and Signal Processing_ . IEEE, 2004.
+
+
+Soumyadip Sengupta, Angjoo Kanazawa, Carlos D Castillo, and David W Jacobs. Sfsnet: Learning shape,
+reflectance and illuminance of facesin the wild’. In _Proceedings of Computer Vision and Pattern Recognition_
+_(CVPR)_, pp. 6296–6305, 2018.
+
+
+Davoud Shahlaei and Volker Blanz. Realistic inverse lighting from a single 2d image of a face, taken under
+unknown and complex lighting. In _International Conference and Workshops on Automatic Face and Gesture_
+_Recognition_, volume 1, pp. 1–8. IEEE, 2015.
+
+
+Amnon Shashua and Tammy Riklin-Raviv. The quotient image: Class-based re-rendering and recognition with
+varying illuminations. _Transactions on Pattern Analysis and Machine Intelligence_, 23(2):129–139, 2001.
+
+
+YiChang Shih, Sylvain Paris, Connelly Barnes, William T Freeman, and Fr´edo Durand. Style transfer for
+headshot portraits. 2014.
+
+
+Zhixin Shu, Ersin Yumer, Sunil Hadap, Kalyan Sunkavalli, Eli Shechtman, and Dimitris Samaras. Neural
+face editing with intrinsic image disentangling. In _Proceedings of Computer Vision and Pattern Recognition_
+_(CVPR)_, pp. 5541–5550, 2017.
+
+
+Karen Simonyan and Andrew Zisserman. Very deep convolutional networks for large-scale image recognition.
+_arXiv preprint arXiv:1409.1556_, 2014.
+
+
+David R So, Wojciech Ma´nke, Hanxiao Liu, Zihang Dai, Noam Shazeer, and Quoc V Le. Primer: Searching
+for efficient transformers for language modeling. _arXiv preprint arXiv:2109.08668_, 2021.
+
+
+Arne Stoschek. Image-based re-rendering of faces for continuous pose and illumination directions. In _Proceed-_
+_ings of Computer Vision and Pattern Recognition (CVPR)_, volume 1, pp. 582–587. IEEE, 2000.
+
+
+Tiancheng Sun, Jonathan T Barron, Yun-Ta Tsai, Zexiang Xu, Xueming Yu, Graham Fyffe, Christoph Rhemann, Jay Busch, Paul E Debevec, and Ravi Ramamoorthi. Single image portrait relighting. _ACM Transac-_
+_tions on Graphics (TOG)_, 38(4):79–1, 2019.
+
+
+Ayush Tewari, Michael Zollhofer, Hyeongwoo Kim, Pablo Garrido, Florian Bernard, Patrick Perez, and Christian Theobalt. Mofa: Model-based deep convolutional face autoencoder for unsupervised monocular reconstruction. In _Proceedings_ _of_ _International_ _Conference_ _on_ _Computer_ _Vision_ _Workshops_ _(ICCVW)_, pp.
+1274–1283, 2017.
+
+
+Ayush Tewari, Tae-Hyun Oh, Tim Weyrich, Bernd Bickel, Hans-Peter Seidel, Hanspeter Pfister, Wojciech
+Matusik, Mohamed Elgharib, Christian Theobalt, et al. Monocular reconstruction of neural face reflectance
+fields. In _Proceedings of Computer Vision and Pattern Recognition (CVPR)_, pp. 4791–4800, 2021.
+
+
+Luan Tran and Xiaoming Liu. Nonlinear 3d face morphable model. In _Proceedings of_ _Computer Vision and_
+_Pattern Recognition (CVPR)_, pp. 7346–7355, 2018.
+
+
+Luan Tran and Xiaoming Liu. On learning 3d face morphable model from in-the-wild images. _Transactions_
+_on Pattern Analysis and Machine Intelligence_, 43(1):157–171, 2019.
+
+
+Luan Tran, Feng Liu, and Xiaoming Liu. Towards high-fidelity nonlinear 3d face morphable model. In _Pro-_
+_ceedings of Computer Vision and Pattern Recognition (CVPR)_, pp. 1126–1135, 2019.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser,
+and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 30,
+2017.
+
+
+Yang Wang, Lei Zhang, Zicheng Liu, Gang Hua, Zhen Wen, Zhengyou Zhang, and Dimitris Samaras. Face
+relighting from a single image under arbitrary unknown lighting conditions. _Transactions on Pattern Analysis_
+_and Machine Intelligence_, 31(11):1968–1984, 2008.
+
+
+12
+
+
+Zhen Wen, Zicheng Liu, and Thomas S Huang. Face relighting with radiance environment maps. In _Proceed-_
+_ings of Computer Vision and Pattern Recognition (CVPR)_, volume 2, pp. II–158. IEEE, 2003.
+
+
+Shugo Yamaguchi, Shunsuke Saito, Koki Nagano, Yajie Zhao, Weikai Chen, Kyle Olszewski, Shigeo Morishima, and Hao Li. High-fidelity facial reflectance and geometry inference from an unconstrained image.
+_ACM Transactions on Graphics (TOG)_, 37(4):1–14, 2018.
+
+
+Yu-Ying Yeh, Koki Nagano, Sameh Khamis, Jan Kautz, Ming-Yu Liu, and Ting-Chun Wang. Learning to relight
+portrait images via a virtual light stage and synthetic-to-real adaptation. _ACM_ _Transactions_ _on_ _Graphics_
+_(TOG)_, 41(6):1–21, 2022.
+
+
+Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. The unreasonable effectiveness
+of deep features as a perceptual metric. In _Proceedings of Computer Vision and Pattern Recognition (CVPR)_,
+pp. 586–595, 2018.
+
+
+Hao Zhou, Sunil Hadap, Kalyan Sunkavalli, and David W Jacobs. Deep single-image portrait relighting. In
+_Proceedings of International Conference on Computer Vision (ICCV)_, pp. 7194–7202, 2019.
+
+
+13

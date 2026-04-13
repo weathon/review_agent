@@ -1,0 +1,1544 @@
+# REPRESENTATIVE GUIDANCE: DIFFUSION SAMPLING
+## WITH COHERENCE
+
+
+**Anh-Dung Dinh**
+School of Computer Science
+The University of Sydney
+anh-dung.dinh@sydney.edu.au
+
+
+**Chang Xu** _[∗]_
+School of Computer Science
+The University of Sydney
+c.xu@sydney.edu.au
+
+
+**Daochang Liu**
+School of Physics, Mathematics and Computing
+The University of Western Australia
+daochang.liu@uwa.edu.au
+
+
+ABSTRACT
+
+
+The diffusion sampling process faces a persistent challenge stemming from its
+incoherence, attributable to varying noise directions across different timesteps.
+Our Representative Guidance (RepG) offers a new perspective to address this
+issue by reformulating the sampling process with a coherent direction toward a
+representative target. From this perspective, classic classifier guidance reveals
+its drawback in lacking meaningful representative information, as the features it
+relies on are optimized for discrimination and tend to highlight only a narrow
+set of class-specific cues. This focus often sacrifices diversity and increases the
+risk of adversarial generation. In contrast, we leverage self-supervised representations as the coherent target and treat sampling as a downstream task—one that
+focuses on refining image details and correcting generation errors, rather than
+settling for oversimplified outputs. Our Representative Guidance achieves superior performance and demonstrates the potential of pre-trained self-supervised
+models in guiding diffusion sampling. Our findings show that RepG not only
+significantly improves vanilla diffusion sampling, but also surpasses state-ofthe-art benchmarks when combined with classifier-free guidance. source code:
+[https://github.com/dungdinhanh/rep-guidance.](https://github.com/dungdinhanh/rep-guidance)
+
+
+1 INTRODUCTION
+
+
+In diffusion sampling processes Ho et al. (2020), a persistent challenge arises from incoherence due
+to uncontrollable noise introduced at each timestep. As illustrated in Figure 1, at each timestep, **x** _t_
+is used to predict the original image, which then aids in generating **x** _t−_ 1 in the next step. During
+training, the original images are sampled from the dataset, ensuring a consistent image distribution
+across all timesteps. However, during inference, the real dataset distribution is unavailable. Instead,
+the diffusion model draws from varying distributions at each timestep, incorporating different types
+of information, as shown in the bottom row of Figure 1. This distributional shift between timesteps
+introduces incoherent features into the generated images. This paper addresses incoherence by
+framing it as a discrepancy between the predicted image distributions across successive timesteps.
+Such discrepancies allow noise information to persist, leading to undesired artifacts in the generated
+images. For instance, an image of a Leonberger may exhibit bizarre or inconsistent features in
+consecutive timesteps, hindering its transformation into a realistic depiction as the sampling process
+progresses, as illustrated in Figure 2. Moreover, the generated images often lack crucial details, such
+as background elements and fine object features. While efforts such as DDIM Song et al. (2020a)
+have attempted to alleviate incoherence by removing random noise during sampling, they often do
+so at the cost of sample quality. As a result, many recent diffusion models continue to rely on the
+mechanisms of conventional DDPMs Ho et al. (2020).
+
+
+_∗_ Corresponding Author
+
+
+1
+
+
+Figure 1: _The top row is the real sampling process during training, where at every timestep, real_
+_images are picked from a coherent distribution._ _Nevertheless, during the inference phase, as in the_
+_row below,_ _the predicted images at every time step have different distributions._ _The images with_
+_earlier timesteps are more blurred than the images in the later stage of the sampling._ _This results in_
+_the incoherence between intermediate distributions._
+
+
+Under our formulation of the incoherence, we propose a solution that involves tuning image features at
+each timestep to rectify incoherent features. We introduce a guidance scheme termed Representative
+Guidance (RepG), which leverages information from representative vectors to steer the sampling
+process towards a coherent direction. Moreover, unlike the traditional classifier guidance, where
+one-hot vectors represent classes, RepG represents each class through a set of representative vectors
+containing features specific to that class. To harness the optimal representative information, we
+employ self-supervised models prevalent in representative learning as our guidance model. The
+gradients derived using the pre-trained self-supervised model are directly integrated into the sampling
+process to facilitate feature tuning in generated images. In this sense, the sampling process can be
+viewed as a downstream task of the self-supervised models.
+
+
+In comparison to the classifier guidance, which is a popular method for enhancing the performance
+of the diffusion model, RepG offers multiple advantages. Firstly, our method provides a better
+representative target than the classifier guidance. The utilization of representative vectors for each
+class inherently contains valuable information for generative tasks. In contrast, the classifier guidance
+relies on one-hot vectors representing each class, which offer limited information. This overly
+compact target leads to reliance on discriminative features within the classifier, which often proves
+insufficient for generative tasks and raises concerns about potential adversarial effects that could
+degrade the quality of generated images Dinh et al. (2023b).
+
+
+Secondly, self-supervised models are trained to generalize well across datasets rather than being
+tailored to a single task like classifiers. This characteristic helps mitigate the need for noise-aware
+training of the guidance model, which can be prohibitively expensive, particularly for high-resolution
+images. Additionally, unlike noise-aware classifiers, self-supervised networks do not require memorizing noise patterns, making the guidance model more lightweight. For instance, our RepG, which
+leverages ResNet50, achieves efficiency in reducing computational time during sampling.
+
+
+Thirdly, RepG does not compromise diversity, unlike the classifier guidance approach. While the
+classifier guidance alters images at the class level to enforce diversity, RepG fine-tunes images at the
+feature level. Consequently, while the former method encourages the generation of images only with
+the popular features for each class, RepG preserves most of the image content while modifying faulty
+features and details.
+
+
+In summary, our proposed RepG operates distinctively compared to the classifier guidance. As for
+the classifier-free guidance, while the classifier-free guidance offers a trade-off between quality and
+diversity, our method focuses on upgrading details or fine-tuning features, as depicted in Figure
+
+
+2
+
+
+w/o RepG
+
+
+**RepG**
+
+
+Figure 2: _condition:Leonberg._ _The top row is the vanilla diffusion sampling process, and the bottom_
+_row is the sampling process with our Representative Guidance._ _From timestep 250 to timestep 185,_
+_both of the processes are similar._ _However, inconsistent features appeared in the vanilla sampling_
+_process as the black bubble exists at the head and the tail of the Leonberg at timestep 160._ _Without_
+_RepG, the process struggles to fix inconsistent features for the rest of the process._ _In contrast, RepG_
+_handles the case by removing the inconsistent features and making the image very clear from the_
+_time step 130._ _The RepG sampling process later focuses on improving other details such as hair,_
+_background, and surrounding objects._ _(Dataset:_ _ImageNet256x256/ Diffusion Model:_ _ADM)_
+
+
+3. Consequently, our RepG can complement the classifier-free guidance to enhance the generation
+quality further. Combining our method with the classifier-free guidance demonstrates superior
+performance compared to several SOTA baselines. The contributions of this paper are three-fold:
+
+
+    - Model the incoherence of the diffusion sampling process and introduce a suitable guidance
+scheme.
+
+    - Propose the representative guidance target based on self-supervised pre-trained models.
+
+    - Validate the results against a number of state-of-the-art baselines.
+
+
+2 RELATED WORKS
+
+
+Denoising Diffusion Probabilistic Models (DDPMs) Ho et al. (2020) and their score-based counterparts Song & Ermon (2019); Song et al. (2020b) have become one of the most popular generative
+models recently and replacing Generative Adversarial Networks (GANs) Odena et al. (2017); Kang
+et al. (2021); Sauer et al. (2022). The following works Song et al. (2020a); Nichol & Dhariwal
+(2021); Dhariwal & Nichol (2021); Bao et al. (2022); Lam et al. (2022) improve the models in
+different perspectives such as time reduction or sampling quality improvement. Recent trends in
+developing the Diffusion model leveraging the latent space for diffusion and denoising processes
+such as DiT Peebles & Xie (2023), and Stable Diffusion Rombach et al. (2022) also offer diffusion
+models with less sampling time with good quality images.
+
+
+Exposure bias Ning et al. (2023); Yu et al. (2023); Li et al. (2023) is when the noise is accumulated
+through timesteps due to the lack of ground truth. However, the incoherence problem in this paper has
+different meanings. Incoherence means a mismatch between two distributions of predicted images
+at two timesteps that should share the same information. This mismatch results in a gap, allowing
+incoherent features to be added to the images.
+
+
+Guidance methods also emerge as essential techniques to boost the performance of generated samples
+Dhariwal & Nichol (2021); Nichol et al. (2021); Zheng et al. (2022); Dinh et al. (2023a;b); Liu et al.
+(2023); Bansal et al. (2023). In general, the noise-aware or off-the-shelf classifier/CLIP gradient is
+utilized to guide the diffusion sampling process to improve its performance in terms of FID. Classifierfree guidance Ho & Salimans (2022) offers a different way to trade off quality with diversity by
+combining conditional and unconditional diffusion models in the same framework. In Dinh et al.
+(2023b), the author points out that classifier guidance utilizes the most discriminative features only to
+do sampling, reducing the generated images’ robustness and diversity. However, to achieve superior
+performance, these methods all give up diversity by significantly modifying details of the image
+to be close the the most common features of the conditional class. In this manuscript, we propose
+a guidance method that fixes the details of the image instead of generating another one based on
+feature-level guidance.
+
+
+3
+
+
+Although ProG Dinh et al. (2023b) solves the problem of diversity suppression by including other
+classes’ features, it still cannot avoid the fact that ProG is still based on discriminative features from
+a classifier that are not diverse enough for a generative task. Thus, our work utilizes self-supervised
+models that contain more general information. Self-supervised models Chen et al. (2020b); He et al.
+(2020); Chen & He (2021); Grill et al. (2020); Chen et al. (2020a) aim to learn representative vectors
+that contain helpful information about data. While the applications of these models on generative
+tasks are still limited, this work shows that the pre-trained backbone from a self-supervised model is
+helpful without any training or fine-tuning. Other self-supervised learning in diffusion models works
+all aim to fine-tune the diffusion model in a self-supervised manner or utilize the diffusion model as a
+self-supervised model Hu et al. (2023); Zhang et al. (2024).
+
+
+3 BACKGROUND
+
+
+**DDPM** : _pθ_ ( **x** 0) := - _pθ_ ( **x** 0: _T_ ) _d_ **x** 1: _T_ with **x** 1 _,_ **x** 2 _, ...,_ **x** _T_ are latent variables sharing the same dimensionality with the data **x** 0 _∼_ _q_ ( **x** 0) as the main formulation of DDPMs with _p_ ( **x** _T_ ) = _N_ ( **x** _T_ ; **0** _,_ **I** ).
+The main aim of DDPMs training is to obtain the _pθ_ ( **x** 0: _T_ ) is the _reverse process_ following the Markovian property _pθ_ := _p_ ( **x** _T_ ) [�] _t_ _[T]_ =1 _[p][θ]_ [(] **[x]** _[t][−]_ [1] _[|]_ **[x]** _[t]_ [)] _[,]_ [ where] _[ p][θ]_ [(] **[x]** _[t][−]_ [1] _[|]_ **[x]** _[t]_ [) :=] _[ N]_ [(] **[x]** _[t][−]_ [1][;] _[ µ][θ]_ [(] _[x][t][, t]_ [)] _[,]_ [ Σ] _[θ]_ [(] _[x][t][, t]_ [))][.]
+The _reverse process_ moves from a total noise image to a clear image. Hence, it is used as a generator
+in the inference process.
+
+
+The _forward process_ corrupts the original data **x** 0 to **x** _T_ with Gaussian noise to train the _θ_ for serving
+the reverse purpose. This process is a fixed Markov chain _q_ ( **x** 1: _T |_ **x** 0) := [�] _t_ _[T]_ =1 _[q]_ [(] **[x]** _[t][|]_ **[x]** _[t][−]_ [1][)] _[j,]_ [ where]
+_q_ ( **x** _t|_ **x** _t−_ 1) := _N_ ( **x** _t_ ; _[√]_ 1 _−_ _β_ **x** _t−_ 1 _, βt_ **I** ). _βt_ is the fixed variance scheduled from the start of the
+process.
+
+
+From the given schedule, distribution of **x** _t_ given **x** 0 can be derived as:
+
+_q_ ( **x** _t|_ **x** 0) = _N_ ( **x** _t_ ; _[√]_ _α_ ¯ _t_ **x** 0 _,_ (1 _−_ _α_ ¯ _t_ ) **I** ) (1)
+
+
+Denote _αt_ = 1 _−_ _βt_ and _α_ ¯ = [�] _s_ _[t]_ =1 _[α][s]_ [.] [Reverse from] **[ x]** _[t]_ [ given] **[ x]** [0][,] **[ x]** _[t][−]_ [1][ distribution is derived as:]
+
+_q_ ( **x** _t−_ 1 _|_ **x** _t,_ **x** 0) = _N_ ( **x** _t−_ 1; _**µ**_ ˜ _t_ ( **x** _t,_ **x** 0) _,_ _β_ [˜] _t_ **I** ) (2)
+
+
+~~_√_~~
+Where mean value _**µ**_ ˜ _t_ ( **x** _t,_ **x** 0) := _α_ ¯ _t−_ 1 _βt_
+
+
+1(1 _−−α_ ¯ _α_ ¯ _tt−_ 1) **x** _t_ and variance _B_ [˜] _t_ := [1] _[−]_ 1 _−_ _[α]_ [¯] _α_ _[t]_ ¯ _[−]_ _t_ [1]
+
+
+~~_√_~~
+1 _α_ ¯ _−t−α_ ¯1 _tβt_ **x** 0 + _αt_ 1(1 _−−α_ ¯ _α_ ¯ _tt−_ 1)
+
+
+Where mean value _**µ**_ ˜ _t_ ( **x** _t,_ **x** 0) := 1 _−t−α_ ¯1 _t_ _t_ **x** 0 + _t_ 1 _−α_ ¯ _tt_ 1 **x** _t_ and variance _Bt_ := 1 _−α_ _[t]_ ¯ _[−]_ _t_ [1] _[β][t]_ [.] [with]
+
+reparameterization trick, we can sample the **x** _t−_ 1 as:
+
+
+_[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+**x** 0 + [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+**x** _t−_ 1 = [(1] _[ −]_ _[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+
+**x** _t_ + _σtz_ (3)
+1 _−_ _α_ ¯ _t_
+
+
+Similar to a Variational AutoEncoder Kingma & Welling (2013), the optimization of _θ_ will be
+conducted via negative log-likelihood variational bound:
+
+E[ _−_ log _pθ_ ( **x** 0)] _≤_ E _[p][θ]_ [(] **[x]** _[t][−]_ [1] _[|]_ **[x]** _[t]_ [)] (4)
+_q_ [[] _[−]_ [log] _[ p]_ [(] **[x]** _[T]_ [ )] _[ −]_ [Σ] _[t][≥]_ [1][ log] _q_ ( **x** _t|_ **x** _t−_ 1) []]
+
+
+We re-write the Eq. 4 as:
+
+
+       E[ _−_ log _pθ_ ( **x** 0)] _≤_ E _DKL_ ( _q_ ( **x** _t−_ 1 _|_ **x** _t,_ **x** 0) _||pθ_ ( **x** _t−_ 1 _|_ **x** _t_ )) _−_ log _pθ_ ( **x** 0 _|_ **x** 1)]
+_q_ [[] _[D][KL]_ [(] _[q]_ [(] **[x]** _[T][ |]_ **[x]** [0][)] _[||][p]_ [(] **[x]** _[T]_ [ ))+]
+
+_t>_ 1
+
+
+In detail implementation, the _θ_ is chosen to be parameters of the noise predictor _ϵθ_ ( **x** _t, t_ ). The
+well-trained _θ_ using Eq. 4 can be used for sampling equation:
+
+
+1
+**x** _t−_ 1 = ~~_√_~~ ( **x** _t −_ ~~_√_~~ [1] _[ −]_ _[α][t]_ _ϵθ_ ( **x** _t, t_ )) + _σt_ **z** (5)
+_αt_ 1 _−_ _α_ ¯ _t_
+
+
+4 METHODOLOGY
+
+
+In this section, we first reformulate the sampling process to analyze the coherence issue. From Eq. 5,
+we first re-write the formulation of the sampling process as:
+
+
+_√_
+
+[1)] _[√][α]_ [¯] _[t][−]_ [1] ( ~~_√_~~ _[−]_ **[x]** _[t]_ + 1 _−_ _α_ ~~_√_~~ ¯ _tϵθ_ ( **x** _t, t_ ) ) + [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+
+1 _−_ _α_ ¯ _t_ _α_ ¯ _t_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+**x** _t−_ 1 = [(] _[α][t][ −]_ [1)] _[√][α]_ [¯] _[t][−]_ [1]
+
+
+**x** _t_ + _σtz_ (6)
+1 _−_ _α_ ¯ _t_
+
+
+4
+
+
+The complete derivation of Eq.6 can be found in Eq.24 ~~_√_~~ in Appendix. Denote **x** ˜ _[t]_ 0 [as the prediction]
+of **x** 0 at time step _t_ . From Eq.1, we have **x** ˜ _[t]_ 0 [= (] ~~_√_~~ **[x]** _α_ ¯ _[t]_ _t_ _−_ 1 _−α_ ¯ ~~_√_~~ _tαϵ_ ¯ _θt_ ( **x** _t,t_ ) ) as the prediction of **x** ˜0 at the
+sampling step _t_ . This results in a new form of sampling equation:
+
+
+**x** _t−_ 1 = [(1] _[ −]_ _[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+
+**x** _t_ + _σtz_ (7)
+1 _−_ _α_ ¯ _t_
+
+
+_[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+**x** ˜ _[t]_ 0 [+] [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+The Eq.7 is the sampling from the distribution of _q_ ( **x** _t−_ 1 _|_ **x** _t,_ ˜ **x** 0) with _**µ**_ ˜ _t_ ( **x** _t,_ ˜ **x** 0) = [(1] _[−][α][t]_ [)] ~~_[√]_~~ _[α]_ [¯] _[t][−]_ [1]
+
+
+(1 _−α_ ¯ _t−_ 1) ~~_[√]_~~ _αt_
+
+
+1 _[t]_ _−α_ ¯ _t_ _[t][−]_ [1] **x** ˜ _[t]_ 0 [+]
+
+
+1 _t−−α_ ¯1 _t_ ) _αt_ **x** _t_ and _σt_ = _β_ [˜] which is matched with Eq.2 and Eq.3 in the training of the DDPMs.
+
+
+In the training reverse phase in Eq.3, there is a small assumption that **x** 0 _∼_ _q_ ( **x** 0). This results
+in information being passed from timestep _t_ into timestep _t −_ 1, or the data distribution _q_ ( **x** 0) is
+consistent throughout all timesteps. However, this assumption is no longer valid during the sampling
+step. By assuming _ϵθ_ ( **x** _t, t_ ) _∼_ _ϵ_, we have:
+
+_√_
+**x** ˜ _[t]_ 0 _[∼]_ _[q]_ [(˜] **[x]** 0 _[t]_ _[|]_ **[x]** _[t]_ [) =] _[ N]_ [(˜] **[x]** _[t]_ 0 [;] _[−]_ ~~_√_~~ **[x]** _[t]_ _,_ 1 ~~_√_~~ _−_ _α_ ¯ _t_ ) (8)
+_α_ ¯ _α_ ¯ _t_
+
+
+However, the _q_ (˜ **x** _[t]_ 0 _[|]_ **[x]** _[t]_ [)][ at two different timesteps] _[ t]_ [ are not the same,] [although they are both used]
+for sampling **x** ˜ _[t]_ 0 [which is later used for sampling in Eq.7.] [The illustration of the difference between]
+these distributions can be found in Figure 6 in the Appendix. The assumption that **x** 0 _∼_ _q_ ( **x** 0) at all
+timestep is not correct anymore and sample **x** _t−_ 1 from Eq. 7 can not hold. We define the incoherence
+problem as below:
+
+**Definition 4.1.** _Incoherence_ is the mismatch between predicted **x** ˜ _[t]_ 0 [distributions at different timestep]
+_t_ and mismatch between predicted **x** ˜0 distributions with real data distribution _q_ ( **x** 0).
+
+
+_q_ (˜ **x** _[t]_ 0 [1] _[|]_ **[x]** _[t]_ 1 [)] _[ ̸]_ [=] _[ q]_ [(˜] **[x]** _[t]_ 0 [2] _[|]_ **[x]** _[t]_ 2 [)] _[ ̸]_ [=] _[ q]_ [(] **[x]** [0][)] _[ ∀][t]_ [1] _[, t]_ [2] _[>]_ [ 1] _[, t]_ [1] [=] _[ t]_ [2] (9)
+
+
+The incoherence in the sampling process leaves the gap for the inconsistent features resulting from
+random noise appearing inside the image at some stage of the process. For example, in the top
+row of Figure 2, we observe the black bubbles at the head and tail of the dog at the 160 _[th]_ timestep.
+The consequence is that the generated samples contain many blur details, inconsistent features, or
+unnecessary features.
+
+
+4.1 REPRESENTATIVE GUIDANCE
+
+
+From definition 4.1, gaps of inconsistent features result in poor-quality images. Thus, to solve the
+incoherence, we need to make the distribution of intermediate samples _q_ (˜ **x** _[t]_ 0 _[|]_ **[x]** _[t]_ [)][ as close as possible]
+to _q_ ( **x** 0). However, the _q_ ( **x** 0) is intractable during the sampling process. The intractability would
+make calculating any distance between these two distributions impossible.
+
+
+Instead of calculating the direct distance between _q_ (˜ **x** _[t]_ 0 _[|]_ **[x]** _[t]_ [)][ and] _[ q]_ [(] **[x]** [0][)][, we inject features information]
+of **x** 0 during the sampling process in Eq.7 to force the sampling of **x** ˜ _[t]_ 0 [to mimic the features of] **[ x]** [0] [at]
+every timestep. First, we denote the _fϕ_ ( **x** 0) as features extractor, parameterized by _ϕ_, for **x** 0. Our
+design aims to force **x** ˜ _[t]_ 0 [to have similar features] _[ f][ϕ]_ [(˜] **[x]** 0 _[t]_ [)][ as] **[ x]** [0][.] [We denote] _[ d]_ [(] _[f][ϕ]_ [(] **[x]** [0][)] _[, f][ϕ]_ [(˜] **[x]** _[t]_ 0 [))][ as the]
+distance between two features.
+
+
+Once again, since _q_ ( **x** 0) is intractable, _fϕ_ ( **x** 0) is also intractable. To address this, instead of representing _fϕ_ ( **x** 0) at an instance-wise level, we encode the features of the entire dataset at a class-wise
+level using _g_ ( **x** 0 _|c_ ). Here, _g_ ( **x** 0 _|c_ ) is defined as an operation on the set of _fϕ_ ( **x** _[∗]_ 0 [)] _[ |]_ **[x]** _[∗]_ 0 _[∼]_ _[q]_ [(] **[x]** [0] _[|][c]_ [)][,]
+where _c ∈_ _C_ denotes the class. The feature distance is then transformed into _d_ ( _g_ ( **x** 0 _|c_ ) _, fϕ_ (˜ **x** _[t]_ 0 [))][.]
+
+
+Given class _c_ and data **x** 0, _g_ ( **x** 0 _|c_ ) results in the set of vectors representing the features of class _c_ .
+Specifically, _g_ ( **x** 0 _|c_ ) = _{r_ 1 _[c][, r]_ 2 _[c][, . . ., r]_ _n_ _[c]_ _[}]_ [, where] _[ n]_ [ denotes the number of vectors required to represent]
+class _c_ . With _C_ classes, the entire dataset is encoded as _V_ = _{g_ ( **x** 0 _|_ 1) _, g_ ( **x** 0 _|_ 2) _, . . ., g_ ( **x** 0 _|C_ ) _}_ . This
+representation encoding enables the model to store a compact set of representation vectors _g_ ( **x** 0 _|c_ ) for
+each class _c_, rather than storing the representative vectors _fϕ_ ( **x** 0) for the entire dataset. The selection
+of _g_ and _f_ will be discussed in Section 4.2.
+
+
+5
+
+
+As a result, at each time step, given class _c_, we refine the predicted **x** ˜0 through the equation below:
+
+**x** ˜ _[t]_ 0 [:=] **[x]** [˜] _[t]_ 0 _[−]_ _[γ][∇]_ **x** ˜ _[t]_ 0 _[d]_ [(] _[g]_ [(] **[x]** [0] _[|][c]_ [)] _[, f][ϕ]_ [(˜] **[x]** 0 _[t]_ [))] _[,]_ (10)
+
+
+where _γ_ is the guidance scale.
+
+
+From Eq.10 and 7, given class _c_, the new sampling process with coherence is demonstrated in Eq. 11:
+
+
+**x** _t−_ 1 = [(1] _[ −]_ _[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+
+_[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+
+**x** _t_ + _σtz −_ [(1] _[ −]_ _[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+_[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+**x** ˜ _[t]_ 0 [+] [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+_[t]_ _[t]_ [1]
+
+_γ∇_ **x** ˜ _t_ 0 _[d]_ [(] _[g]_ [(] **[x]** [0] _[|][c]_ [)] _[, f][ϕ]_ [(˜] **[x]** 0 _[t]_ [))]
+1 _−_ _α_ ¯ _t_
+
+
+~~_√_~~ (11)
+with **x** ˜ _[t]_ 0 [= (] ~~_√_~~ **[x]** _α_ ¯ _[t]_ _t_ _−_ 1 _−α_ ¯ ~~_√_~~ _tϵαθ_ ¯( _t_ **x** _t,c,t_ ) ). The guidance features from **x** 0 provide a consistent and reliable
+target for **x** ˜0 to avoid the incoherence problem. We will discuss the similarity between Eq.11 and a
+Stochastic Gradient Descent process in Appendix D.
+
+
+The choice of distance _d_ can be varied. The rest of this section 4.1 mainly discusses the options of _d_ .
+
+**Negative Cosine similarity:** At each timestep, we sample a vector _rt_ _[c]_ _[∼]_ _[g]_ [(] **[x]** [0] _[|][c]_ [)][.] [The two vectors]
+_fϕ_ (˜ **x** _[t]_ 0 [)][ and] _[ r]_ _t_ _[c]_ [can be matched via a negative cosine similarity loss as below:]
+
+0 [)] _[ ×][ r]_ _t_ _[c]_
+_L_ cs( _fϕ_ (˜ **x** _[t]_ 0 [)] _[, r]_ _t_ _[c]_ [) =] _[ −]_ _[f][ϕ]_ [(˜] **[x]** _[t]_ (12)
+_∥fϕ_ (˜ **x** _[t]_ 0 [)] _[∥∥][r]_ _t_ _[c][∥]_
+
+
+**Contrastive loss:** Apart from negative cosine similarity, the contrastive loss has also been used in
+many works on representative learning have presented He et al. (2020); Chen et al. (2020b;a). The
+contrastive loss in our work is more toward the supervised contrastive rather than instance contrastive.
+We can define a positive pair as two vectors with the same classes and a negative pair as two vectors
+with different classes. When sampling the image in class _c_, the loss for contrastive matching is:
+
+
+0 [)] _[×][r]_ _t_ _[c]_
+_L_ ct( _fϕ_ (˜ **x** _[t]_ 0 [)] _[, V]_ [ ) =]         - _Ci_ =1exp _,i_ = _c_ _[f]_ [exp] _[ϕ]_ [(˜] **[x]** _H_ _[t]_ _[f][ϕ]_ [(˜] **[x]** _H_ 0 _[t]_ [)] _[×][r]_ _t_ _[i]_ (13)
+
+
+where _H_ is the softmax temperature.
+
+
+Replacing the matching equation in Eq.12 and Eq.13 into Eq.11 as _L_, we have the final sampling
+guidance equation:
+
+
+**x** _t−_ 1 = [(1] _[ −]_ _[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+
+_[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+**x** ˜ _[t]_ 0 [+] [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+_[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+
+**x** _t_ + _σtz −_ [(1] _[ −]_ _[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+_[t]_ _[t]_ [1]
+
+_γ∇_ **x** ˜ _t_ 0 _[L]_ [(] _[f][ϕ]_ [(˜] **[x]** 0 _[t]_ [)] _[, V]_ [ )]
+1 _−_ _α_ ¯ _t_
+
+
+(14)
+
+
+4.2 REPRESENTATIVE TARGETS
+
+
+In section 4.1, we have discussed a coherent guidance method given representative information from
+a class _c_ . This section will discuss the choice of the mapping function _fθ_ and the representative
+information for each class.
+
+
+The most straightforward way is to use naive classification for the guidance, where a network
+such as ResNet He et al. (2016) or a noise-aware classifier Dhariwal & Nichol (2021) is selected
+to be a classifier. This is the case of the classic classifier guidance. The representative vector
+_g_ ( **x** 0 _|c_ ) _∈{_ 0 _,_ 1 _}C_ reduces to a one-hot vector, with C as the number of classes. However, the use of
+classification as representative information has many shortages. Firstly, the guidance reveals very
+little detail about the generated images. Since the classifier only processes the discriminative features,
+many details that are less discriminative for a class are missed when using the classifier gradient to
+construct the image Dinh et al. (2023b). Secondly, the motivation for using a classifier to construct
+images in diffusion models is becoming weaker than the use of the classifier-free guidance. Since a
+conditional diffusion model already had class-conditioned information, the reason for using additional
+classification information to improve the performance of a conditioned diffusion model seems to be
+not strong enough to convince the community. As a result, the research community often opts for
+classifier-free guidance Rombach et al. (2022); Peebles & Xie (2023). Thirdly, the use of classifier
+guidance is often associated with the very expensive training cost of noisy classifiers.
+
+
+6
+
+
+Self-supervised models are known to be very good at generalizing data agnostic to augmentation/noise
+and separating image samples on representative spaces according to features He et al. (2020); Chen
+& He (2021); Jing et al. (2021). Thus, we choose the self-supervised model to be our guidance model.
+The self-supervised models are pre-trained and we consider the sampling process as a downstream
+task of the model. Given a real dataset **x** 0 and a pre-trained self-supervised model _fϕ_, an instance
+_x_ _[c]_ _i_ _[∈]_ **[x]** [0][ is the] _[ i][th]_ [ instance in class] _[ c]_ [ of the dataset.] [We have] _[ r]_ _i_ _[c]_ [=] _[ f][θ]_ [(] _[x]_ _i_ _[c]_ [)][.] [The centre of each class]
+on the representative space has the form _r_ [¯] _[c]_ = E _ri_ _[c]_ [.] [We assume that the representative instances that]
+are closer to the mean values represent the most important features of the classes. We represent the
+whole class _c_ via the representative information _g_ ( **x** 0 _|c_ ) as below:
+
+
+_g_ ( **x** 0 _|c_ ) = _{rk_ _[c]_ _[}][×][K][, k]_ _[∈]_ _[S][c][|]_ 
+_k∈Sc_
+
+
+_rk_ _[c]_ _[r]_ [¯] _[c]_
+
+(15)
+_∥rk_ _[c]_ _[∥∥][r]_ [¯] _[c][∥→]_ [min]
+
+
+Where _Sc_ is the list of indexes of _K_ representative vectors that are selected to be the closest to the
+class mean representative vector _r_ [¯] _[c]_ . We will discuss in section 5 the value of _K_ and different schemes
+to select representative vectors _g_ ( **x** 0 _|c_ ) in addition to the ”closest” scheme.
+
+
+Given Eq.15, we have _V_ = _{g_ ( **x** 0 _|_ 1) _, g_ ( **x** 0 _|c_ ) _, ..., g_ ( **x** 0 _|c_ ) _}_ as a set of representative class vectors
+representing the whole dataset to enable diffusion sampling with coherence using Eq.14. Before the
+sampling process starts, _V_ will be calculated in advance and stored as the network parameters for
+sampling.
+
+
+5 EXPERIMENTAL RESULTS
+
+
+Experiments are conducted to evaluate on ImageNet Deng et al. (2009) dataset with two resolutions
+64x64 and 256x256 with 50000 generated samples. We first verify our claims that our proposed
+RepG helped to improve the details and fix the faulty information in the images qualitatively in
+section5.1 and quantitatively in section5.2. After that, we will compare quantitatively with other
+state-of-the-art methods such as BigGAN Brock et al. (2018), ADM Dhariwal & Nichol (2021),
+PxP Dinh et al. (2023a), ProG Dinh et al. (2023b), EDS Zheng et al. (2022), IDDPM Nichol &
+Dhariwal (2021), VAQ-VAE-2 Razavi et al. (2019) and Classifier-free guidance (CLSFree) Ho &
+Salimans (2022). Three baseline diffusion models are leveraged to evaluate the improvement of the
+proposed Representative Guidance method are ADM Dhariwal & Nichol (2021), IDDPM Nichol &
+Dhariwal (2021) and DiT Peebles & Xie (2023).
+
+
+We denote that _ADM_ or _IDDPM_ as the ADM or IDDPM diffusion model without guidance. _ADM-_
+_G_ is denoted for ADM with classifier guidance. _PxP,_ _ProG,_ _EDS_ are advanced techniques to
+improve classifier guidance going after “+” sign. _ADM-CLSFree_ and _DiT-CLSFree_ are denoted
+for the application of classifier-free guidance on ADM and DiT respectively. _ADM-CLSFree-G_ or
+_DiT-CLSFree-G_ are denoted for applying the combination of classifier-free guidance and classifier
+guidance on ADM and DiT correspondingly.
+
+
+5.1 INCOHERENT FEATURES ALLEVIATION
+
+
+As discussed in section 4, we observe incoherent features during the sampling process due to
+the incoherence of **x** ˜ _[t]_ 0 [at each timestep.] [This section shows that RepG successfully alleviates the]
+inconsistent features in the generated images following three categories as in Figure 3. In detail, RepG
+helps to improve the diffusion sampling process by fixing faulty features, removing unnecessary
+features, and upgrading details.
+
+
+5.2 QUANTITATIVE IMPROVEMENT
+
+
+This section compares the performance of our proposed RepG guidance with other state-of-the-art
+baselines as in Table 1.
+
+
+Firstly, the use of RepG helps to improve the performance of vanilla baselines such as ADM or
+IDDPM. Apart from the observation in section 5.1 with qualitative improvement, we see a significant
+improvement in FID/sFID and precision when applying RepG on ADM or IDDPM. Secondly, given
+the same ADM diffusion model, _ADM + RepG_ has a significantly better Recall value than other
+guidance methods such as _ADM-G, ADM-CLSFree, ADM-G (+PxP, +ProG, +EDS+ProG)_ which
+
+
+7
+
+
+Table 1: _Comparison with state-of-the-art_
+_generative_ _baselines_ _on_ _ImageNet64x64_
+_and_ _ImageNet256x26._ _†_ _denotes_ _the_ _ob-_
+_tained score evaluated from generated im-_
+_ages from the published repo._ _[‡]_ _represents_
+_the number taken directly from the paper_
+_due to the lack of the source code or gen-_
+_erated_ _samples._ _Other_ _values_ _are_ _repro-_
+_duced from the published source code._ _The_
+_proposed RepG is shown to achieve better_
+_results than other state-of-the-art._
+
+
+Model FID sFID Prec Rec
+
+
+**ImageNet 64x64**
+
+
+BigGAN _[†]_ 4.06 3.96 0.79 0.48
+IDDPM 2.90 3.78 0.73 0.62
+IDDPM + RepG **2.53** **3.44** **0.75** 0.60
+ADM 2.07 4.29 0.73 0.63
+
+
+**ImageNet 256x256**
+
+
+BigGAN _[†]_ 7.03 7.29 0.87 0.27
+DCTrans _[‡]_ 36.51 8.24 0.36 0.67
+VQ-VAE-2 _[‡]_ 31.11 17.38 0.36 0.57
+IDDPM _[‡]_ 12.26 5.42 0.70 0.62
+ADM 10.94 6.02 0.69 0.63
+
+
+DiT-CLSFree 2.27 4.80 0.82 0.58
+DiT-CLSFree-G + ProG 2.25 **4.56** 0.82 0.58
+
+
+Table 2: _We_ _compare_ _the_ _use_ _of_ _different_ _self-supervised_
+_models for our representative guidance._
+
+
+Self-sup Model FID sFID Prec Rec
+
+
+**ImageNet 64x64**
+
+
+W/o Guidance 2.07 4.29 0.73 0.63
+MoCo-v2 **1.69** **3.42** 0.75 0.62
+SimSiam 1.88 3.80 0.74 0.62
+Moco-v3 1.81 3.93 **0.76** 0.62
+
+
+Table 3: _Different K_ _values for our representative guidance_
+_with several possible values K_ = _{_ 1 _,_ 5 _,_ 10 _,_ 15 _}._
+
+
+FID sFID Prec Rec
+
+
+**ImageNet64x64**
+
+
+ADM 2.07 4.29 0.73 0.63
+ADM + RepG (K=1) 1.77 3.44 0.75 0.60
+ADM + RepG (K=5) **1.69** **3.42** 0.75 0.62
+ADM + RepG (K=10) 1.73 3.43 0.75 0.62
+ADM + RepG (K=15) 1.82 3.45 0.75 0.62
+
+
+Table 4: _We compare the use of two different representative_
+_vector selection schemes._
+
+
+FID sFID Prec Rec
+
+
+**ImageNet64x64**
+
+
+ADM 2.07 4.29 0.73 0.63
+ADM + RepG **1.69** **3.42** 0.75 0.62
+ADM + RepG Rand 2.04 4.17 0.74 0.62
+
+
+Table 5: _The use of two matching losses used in sampling as_
+_mentioned in section 4 affects the performance of the diffusion_
+_sampling process._ _The result indicates the superiority of both_
+_of_ _the_ _losses’_ _performances_ _compared_ _to_ _without_ _guidance._
+_The contrastive achieves slightly better than negative cosine_
+_similarity loss._
+
+
+Loss FID sFID Prec Rec
+
+
+**ImageNet 64x64**
+
+
+W/o Guidance 2.07 4.29 0.73 0.63
+Contrastive **1.69** **3.42** **0.75** **0.62**
+Cosine Similarity 1.75 3.57 **0.75** 0.60
+
+
+indicates that _RepG_ helps to keep the diversity better than other guidance methods (As highlight in
+pink column) Finally, The combination of _RepG_ and _CLSFree_ guidance outperforms other state-ofthe-art guidance methods such as PxP Dinh et al. (2023a), ProG Dinh et al. (2023b), EDS Zheng
+et al. (2022) or CLSFree Ho & Salimans (2022).
+
+
+_Note:_ On ImageNet256x256, the RepG improves baseline ADM significantly but lags behind other
+guidance methods. This is expected as RepG only improves details and keeps diversity while other
+methods sacrifice diversity to achieve better quality. On ImageNet64x64, RepG outperforms all other
+guidance methods due to the information in ImageNet64x64 is less than its 256 counterpart and
+focuses on foreground objects. Improving objects’ features is enough to beat other methods.
+
+
+Classifier guidance failed to improve the performance of classifier-free guidance significantly ( _ADM-_
+_CLSFree-G+ProG_ and _DiT-CLSFree-G+ProG_ in Table 1). This is due to the overlapping trade-off
+essence of the two methods. These two methods do the same thing: trade-off quality with diversity,
+which offers less improvement when combined. However, RepG successfully improves classifier-free
+guidance since RepG does a different task: tune the details of the images.
+
+
+5.3 ABLATION STUDY
+
+
+Section 5.1 and 5.2 have shown qualitative and quantitative improvement compared to previous
+state-of-the-art baselines. In the Ablation study, we discuss different choices for our models, such
+as the choice of self-supervised models, the performance of the proposed methods on different
+
+
+8
+
+
+Figure 3: _RepG_ _enhances_ _diffusion_ _sampling_ _in_ _three_ _key_ _ways:_ _(1)_ _correcting_ _faulty_ _features_ _to_
+_improve realism (row 1), (2) refining object and background details, such as sharpening the dog’s_
+_hair and enhancing grass, trees, and fences (row 2), and (3) removing unnecessary elements like a_
+_human figure or an incorrect body structure (row 3)._ _**ImageNet256x256**_
+
+
+guidance scales, the number of representative targets utilized, and the performance comparison
+between contrastive matching loss (Eq.13) and cosine similarity matching loss (Eq.12).
+
+
+5.3.1 DIFFERENT SELF-SUPERVISED MODELS
+
+
+In all of the RepG results in Table 1, we use MoCo-v2 Chen et al. (2020b) as the backbone for
+guidance. This section compares different choices of pretrained self-supervised models in Table 2.
+In detail, three popular pre-trained self-supervised models are utilized, which are MoCo-v2 Chen
+et al. (2020b), SimSiam Chen & He (2021), and Moco-v3 Chen et al.. The performance shows that
+MoCo-v2 achieves the best among the three models. The outperformance of Moco-v2 could be due
+to the representative information obtained by MoCo-v2 having contrastive information compared
+to SimSiam, hence obtaining more information about data than just clustering it. Moco-v3 delivers
+better FID than SimSiam but is still not as good as Moco-v2, yet Moco-v3 offers better Precision.
+
+
+5.3.2 GUIDANCE SCALES EFFECTS
+
+
+Similar to the classifier guidance Dhariwal &
+
+
+5.0
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+|Cla<br>Re|ssifier gu<br>presenta|idance<br>ive guid|nce||
+
+
+Guidance scale Guidance scale the trend of FID and Recall when increasing the
+
+Figure 4: _We_ _compare_ _the_ _Recall_ _trend_ _between_ guidance scale. The generation quality of RepG
+_the classifier and representative guidance (RepG)._ is improved steadily without trading off diversity
+_RepG shows a much more stable trend in diversity_ compared to classifier guidance. Improvement
+_than classifier guidance._ without trading off with diversity is expected
+
+since our method mostly keeps the content of
+the generated images while upgrading the details or fixing faulty features. The effects of increasing
+the guidance scale can be observed in Figure 5.
+
+
+15.0
+
+
+12.5
+
+
+10.0
+
+
+7.5
+
+
+5.0
+
+
+2.5
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+Guidance scale
+
+
+Guidance scale
+
+
+Figure 4: _We_ _compare_ _the_ _Recall_ _trend_ _between_
+_the classifier and representative guidance (RepG)._
+_RepG shows a much more stable trend in diversity_
+_than classifier guidance._
+
+
+5.3.3 REPRESENTATIVE TARGETS
+
+
+This section shows the effect of selecting representative targets for each class.
+
+
+9
+
+
+0 50 80
+Figure 5: _Ablation study on the RepG guidance scale._ _Unlike classifier guidance, where increasing_
+_the guidance scale shifts the image toward a simpler region (as shown in Figure 7), increasing the_
+_RepG guidance scale enhances image details._
+
+
+**The** _K_ **values** : The different choices of _K_ value in Eq.15 affects the performance. The experiment
+is conducted on ImageNet64x64 as shown in Table 3. As we can see, given K=1, there is only one
+representative vector for one class, reducing the generated samples’ quality and diversity. However,
+more than five representative vectors per class will confuse the sampling process and downgrade
+the performance. Understandably, including more representative vectors brings more features to be
+excluded due to the contrastive loss. The excluded features might include the shared features between
+classes, which have become common due to the inclusion of more information.
+
+
+**Selection strategy:** In the previous experiments, representative vectors are selected closest to the
+mean vector of all vectors belonging to a class. We compare our selection scheme with the random
+selection scheme in Table 4. RepG ~~R~~ and denotes the random selection scheme. From the results, we
+show that our proposed selection of representative vectors is essential and verify our hypothesis that
+the vector is close to the mean values of one class bearing crucial features of that class.
+
+
+5.3.4 CONTRASTIVE MATCHING VS COSINE SIMILARITY MATCHING
+
+
+In section 4.2, we discussed the two losses: the contrastive loss and the cosine similarity loss. Table 5
+shows the comparison between the two losses, which show that both of them improve the performance
+significantly compared to the baseline ADM in Dhariwal & Nichol (2021).
+
+
+6 CONCLUSION
+
+
+In this work, we formulate the problem of incoherence in the diffusion sampling process, defined
+as the mismatch between predicted image distribution at two different timesteps. After that, we
+propose a guidance method named Representative Guidance (RegG). RepG is based on representative
+information of a class and pre-trained self-supervised models to guide the sampling process. The
+representative information offers a number of advantages compared to one-hot representation as in
+classifier guidance, such as rich information and information to avoid incoherence problems.
+
+
+10
+
+
+REFERENCES
+
+
+Arpit Bansal, Hong-Min Chu, Avi Schwarzschild, Soumyadip Sengupta, Micah Goldblum, Jonas
+Geiping, and Tom Goldstein. Universal guidance for diffusion models. In _Proceedings of the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 843–852, 2023.
+
+
+Fan Bao, Chongxuan Li, Jun Zhu, and Bo Zhang. Analytic-dpm: an analytic estimate of the optimal
+reverse variance in diffusion probabilistic models. _arXiv preprint arXiv:2201.06503_, 2022.
+
+
+Andrew Brock, Jeff Donahue, and Karen Simonyan. Large scale gan training for high fidelity natural
+image synthesis. _arXiv preprint arXiv:1809.11096_, 2018.
+
+
+Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework for
+contrastive learning of visual representations. In _International conference on machine learning_, pp.
+1597–1607. PMLR, 2020a.
+
+
+X Chen, S Xie, and K He. An empirical study of training self-supervised vision transformers. in 2021
+ieee. In _CVF International Conference on Computer Vision (ICCV)_, pp. 9620–9629.
+
+
+Xinlei Chen and Kaiming He. Exploring simple siamese representation learning. In _Proceedings of_
+_the IEEE/CVF conference on computer vision and pattern recognition_, pp. 15750–15758, 2021.
+
+
+Xinlei Chen, Haoqi Fan, Ross Girshick, and Kaiming He. Improved baselines with momentum
+contrastive learning. _arXiv preprint arXiv:2003.04297_, 2020b.
+
+
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale
+hierarchical image database. In _2009 IEEE conference on computer vision and pattern recognition_,
+pp. 248–255. Ieee, 2009.
+
+
+Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. _Advances_
+_in neural information processing systems_, 34:8780–8794, 2021.
+
+
+Anh-Dung Dinh, Daochang Liu, and Chang Xu. Pixelasparam: a gradient view on diffusion sampling
+with guidance. In _International Conference on Machine Learning_, pp. 8120–8137. PMLR, 2023a.
+
+
+Anh-Dung Dinh, Daochang Liu, and Chang Xu. Rethinking conditional diffusion sampling with
+progressive guidance. In _Thirty-seventh Conference on Neural Information Processing Systems_,
+2023b.
+
+
+Jean-Bastien Grill, Florian Strub, Florent Altche,´ Corentin Tallec, Pierre Richemond, Elena
+Buchatskaya, Carl Doersch, Bernardo Avila Pires, Zhaohan Guo, Mohammad Gheshlaghi Azar,
+et al. Bootstrap your own latent-a new approach to self-supervised learning. _Advances in neural_
+_information processing systems_, 33:21271–21284, 2020.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image
+recognition. In _Proceedings of the IEEE conference on computer vision and pattern recognition_,
+pp. 770–778, 2016.
+
+
+Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, and Ross Girshick. Momentum contrast for
+unsupervised visual representation learning. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_
+_computer vision and pattern recognition_, pp. 9729–9738, 2020.
+
+
+Jonathan Ho and Tim Salimans. Classifier-free diffusion guidance. _arXiv preprint arXiv:2207.12598_,
+2022.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Vincent Tao Hu, Yunlu Chen, Mathilde Caron, Yuki M Asano, Cees GM Snoek, and Bjorn Ommer.
+Guided diffusion from self-supervised diffusion features. _arXiv preprint arXiv:2312.08825_, 2023.
+
+
+Li Jing, Pascal Vincent, Yann LeCun, and Yuandong Tian. Understanding dimensional collapse in
+contrastive self-supervised learning. _arXiv preprint arXiv:2110.09348_, 2021.
+
+
+11
+
+
+Minguk Kang, Woohyeon Shim, Minsu Cho, and Jaesik Park. Rebooting acgan: Auxiliary classifier
+gans with stable training. _Advances in neural information processing systems_, 34:23505–23518,
+2021.
+
+
+Diederik P Kingma and Max Welling. Auto-encoding variational bayes. _arXiv_ _preprint_
+_arXiv:1312.6114_, 2013.
+
+
+Max WY Lam, Jun Wang, Dan Su, and Dong Yu. Bddm: Bilateral denoising diffusion models for
+fast and high-quality speech synthesis. _arXiv preprint arXiv:2203.13508_, 2022.
+
+
+Mingxiao Li, Tingyu Qu, Wei Sun, and Marie-Francine Moens. Alleviating exposure bias in diffusion
+models through sampling with shifted time steps. _arXiv preprint arXiv:2305.15583_, 2023.
+
+
+Xihui Liu, Dong Huk Park, Samaneh Azadi, Gong Zhang, Arman Chopikyan, Yuxiao Hu, Humphrey
+Shi, Anna Rohrbach, and Trevor Darrell. More control for free! image synthesis with semantic
+diffusion guidance. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Winter_ _Conference_ _on_ _Applications_ _of_
+_Computer Vision_, pp. 289–299, 2023.
+
+
+Alex Nichol, Prafulla Dhariwal, Aditya Ramesh, Pranav Shyam, Pamela Mishkin, Bob McGrew,
+Ilya Sutskever, and Mark Chen. Glide: Towards photorealistic image generation and editing with
+text-guided diffusion models. _arXiv preprint arXiv:2112.10741_, 2021.
+
+
+Alexander Quinn Nichol and Prafulla Dhariwal. Improved denoising diffusion probabilistic models.
+In _International Conference on Machine Learning_, pp. 8162–8171. PMLR, 2021.
+
+
+Mang Ning, Enver Sangineto, Angelo Porrello, Simone Calderara, and Rita Cucchiara. Input
+perturbation reduces exposure bias in diffusion models. _arXiv preprint arXiv:2301.11706_, 2023.
+
+
+Augustus Odena, Christopher Olah, and Jonathon Shlens. Conditional image synthesis with auxiliary
+classifier gans. In _International conference on machine learning_, pp. 2642–2651. PMLR, 2017.
+
+
+William Peebles and Saining Xie. Scalable diffusion models with transformers. In _Proceedings of_
+_the IEEE/CVF International Conference on Computer Vision_, pp. 4195–4205, 2023.
+
+
+Ali Razavi, Aaron Van den Oord, and Oriol Vinyals. Generating diverse high-fidelity images with
+vq-vae-2. _Advances in neural information processing systems_, 32, 2019.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bjorn¨ Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+Axel Sauer, Katja Schwarz, and Andreas Geiger. Stylegan-xl: Scaling stylegan to large diverse
+datasets. In _ACM SIGGRAPH 2022 conference proceedings_, pp. 1–10, 2022.
+
+
+Jiaming Song, Chenlin Meng, and Stefano Ermon. Denoising diffusion implicit models. _arXiv_
+_preprint arXiv:2010.02502_, 2020a.
+
+
+Yang Song and Stefano Ermon. Generative modeling by estimating gradients of the data distribution.
+_Advances in neural information processing systems_, 32, 2019.
+
+
+Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben
+Poole. Score-based generative modeling through stochastic differential equations. _arXiv preprint_
+_arXiv:2011.13456_, 2020b.
+
+
+Hu Yu, Li Shen, Jie Huang, Man Zhou, Hongsheng Li, and Feng Zhao. Debias the training of
+diffusion models. _arXiv preprint arXiv:2310.08442_, 2023.
+
+
+Junyu Zhang, Daochang Liu, Shichao Zhang, and Chang Xu. Contrastive sampling chains in diffusion
+models. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Guangcong Zheng, Shengming Li, Hui Wang, Taiping Yao, Yang Chen, Shouhong Ding, and Xi Li.
+Entropy-driven sampling and training scheme for conditional diffusion generation. In _European_
+_Conference on Computer Vision_, pp. 754–769. Springer, 2022.
+
+
+12
+
+
+**Algorithm 1** DDPM denoising process with representative guidance
+
+
+**Input:** class labels _y_, classification scale _s_, _V_ = _{g_ ( **x** 0 _|_ 1) _, g_ ( **x** 0 _|_ 2) _, ..., g_ ( **x** 0 _|c_ ) _}_ according to
+Eq.15
+**x** _T_ _∼N_ ( **0** _,_ **I** )
+pick class _c_ and _g_ ( **x** 0 _|c_ ) _∈_ _V_
+**for** _t_ = _T, ...,_ 1 **do**
+
+
+_z_ _∼N_ ( **0** _,_ **I** )
+
+
+~~_√_~~
+**x** ˜0 _←_ ( ~~_√_~~ **[x]** _α_ ¯ _[t]_ _t_ _−_ 1 _−α_ ¯ ~~_√_~~ _tϵαθ_ ¯( _t_ **x** _t,t,c_ ) )
+
+
+_t_
+
+_g_ _←_ [(1] _[−][α][t]_ [)] ~~_[√]_~~ _[α]_ [¯] _[t][−]_ [1]
+
+
+_[t]_ _[t][−]_ [1]
+_g_ _←_ 1 _−α_ ¯ _t_ _γ∇_ **x** ˜ _t_ 0 _[L]_ [(] _[f][ϕ]_ [(˜] **[x]** 0 _[t]_ [)] _[, V]_ [ )][ according to Eq.14]
+
+**x** _t−_ 1 _←_ ~~_√_~~ 1 _αt_ ( **x** _t −_ ~~_√_~~ 11 _−−αα_ ¯ _tt_ _ϵθ_ ( **x** _t, t, c_ )) + _σt_ [2] _[g]_ [ +] _[ σ][t][z][ −]_ _[g]_
+**end for**
+
+
+A SAMPLING ALGORITHMS
+
+
+Like DDPMs, our sampling only updates **x** ˜ _[t]_ 0 [at every time step] _[ t]_ [.] [We have the set of representative]
+vectors _V_ obtained in advance and stored as the model parameters used for sampling.
+
+The mechanism is the same for latent diffusion, but we will decode the latent vector to **x** ˜ _[t]_ 0 [first.] [After]
+that, the process is similar to Algorithm 1.
+
+
+B EXPERIMENTAL DETAILS
+
+
+All the experiments in this paper are conducted on A100 GPUs 40GB.
+
+
+We have three hyperparameters in the paper, which are the number of representative vectors _K_ in
+Eq.15, temperature _H_ in Eq.13 and scale guidance _γ_ in Eq.14.
+
+
+Table 6: _All hyperparameters for producing the results are shown in this table._
+
+
+Model Datasets _K_ _H_ _γ_
+
+
+Table 1
+
+
+IDDPM + RepG ImageNet64x64 5 1 10.0
+ADM + RepG ImageNet64x64 5 1 10.0
+ADM-CLSFree + RepG ImageNet64x64 5 1 8.0
+ADM + RepG ImageNet256x256 10 2 20.0
+ADM-CLSFree + RepG ImageNet256x256 10 2 20.0
+DiT-CLSFree + RepG ImageNet256x256 10 2 15.0
+
+
+Table 2
+W/o Guidance ImageNet64x64 - - 0.0
+Moco-v2/SimSiam/Moco-v3 ImageNet64x64 5 1 10.0
+
+
+Table 3
+ADM + RepG ImageNet64x64 1,5,10,15 1 10.0
+
+
+Table 4
+ADM + RepG /ADM+RepG RAND ImageNet64x64 5 1 10.0
+
+
+Figure 1,2,3,5,6,7
+ADM + RepG ImageNet256x256 10 2 0.0,20.0, 50.0,80.0
+
+
+Figure 4
+ADM + RepG ImageNet64x64 5 1 2.0,4.0, 6.0, 8.0, 10.0
+
+
+13
+
+
+Table 7: GPU hours on 1 GPU are needed to generate 50,000 images with 256x256 resolutions.
+Diffusion Model: ADM/ Datasets: ImageNet256x256
+
+|Model|Computational Cost (GPU hours)|
+|---|---|
+|No guidance|171.22|
+|Representative Guidance|182.36|
+|Classifer Guidance|247.84|
+|Classifer-free Guidance|352.89|
+
+
+Table 8: GPU hours on 1 GPU are needed to generate 50,000 images with 64x64 resolutions.
+Diffusion Model: ADM/ Datasets: ImageNet64x64
+
+|Model|Computational Cost (GPU hours)|
+|---|---|
+|No guidance|16.71|
+|Representative Guidance|17.55|
+|Classifer Guidance|31.52|
+|Classifer-free Guidance|32.64|
+
+
+C RUNNING TIME OF REPG COMPARED TO CLASSIFIER GUIDANCE
+
+
+RepG utilizes a much lighter model compared to noise-aware used in classifier guidance Dhariwal &
+Nichol (2021). As a result, the calculation of gradients using this model is much lighter compared to
+the noise-ware classifiers. We have the running time comparison as in Table 7 and 8.
+
+
+D FULL DERIVATION OF EQUATIONS
+
+
+**Similarity between Eq.** **11 and Stochastic Gradient Descent** : We start from Eq.11 as below:
+
+
+**x** _t−_ 1 = [(1] _[ −]_ _[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+
+_[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+**x** ˜ _[t]_ 0 [+] [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+_−_ [(1] _[ −]_ _[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+
+**x** _t_ + _σtz_
+1 _−_ _α_ ¯ _t_
+
+
+_[t]_ _[t]_ [1]
+
+_γ∇_ **x** ˜ _t_ 0 _[d]_ [(] _[g]_ [(] **[x]** [0] _[|][c]_ [)] _[, f][ϕ]_ [(˜] **[x]** 0 _[t]_ [))] (16)
+1 _−_ _α_ ¯ _t_
+
+
+with _√_ **x** ˜ _[t]_ 0 = ( ~~_√_~~ **[x]** _α_ ¯ _[t]_ _t_ _−_ ~~_√_~~ 1 _−α_ ¯ ~~_√_~~ _tϵαθ_ ¯( _t_ **x** _t,c,t_ ) ). Similarly we have **x** _t−_ 1 = _√α_ ¯ _t−_ 1 **x** ˜ _t_ 0 _−_ 1 +
+1 _−_ _α_ ¯ _t−_ 1 _ϵθ_ ( **x** _t−_ 1 _, c, t −_ 1). Thus, we have Eq.16 is equivalent to Eq.17:
+
+
+_√_
+1 _−_ _α_ ¯ _t−_ 1
+
+[(1] _[ −]_ _[α][t]_ [)] 0 _[−]_ ~~_√_~~ _ϵθ_ ( **x** _t−_ 1 _, c, t −_ 1) + [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+
+(1 _−_ _α_ ¯ _t_ ) **[x]** [˜] _[t]_ _α_ ¯ _t−_ 1 (1 _−_ _α_ ¯ _t_ ) ~~_[√]_~~ _α_ ¯ _t−_ 1
+
+
+**x** ˜ _[t]_ 0 _[−]_ [1] = [(1] _[ −]_ _[α][t]_ [)]
+
+
+**x** _t_ + _σtz_
+(1 _−_ _α_ ¯ _t_ ) ~~_[√]_~~ _α_ ¯ _t−_ 1
+
+
+_−_ [(1] _[ −]_ _[α][t]_ [)]
+
+
+_[t]_
+
+_γ∇_ **x** ˜ _t_ 0 _[d]_ [(] _[g]_ [(] **[x]** [0] _[|][c]_ [)] _[, f][ϕ]_ [(˜] **[x]** 0 _[t]_ [))]
+1 _−_ _α_ ¯ _t_
+
+
+_√_
+
+_[t][ −]_ _[α]_ [¯] _[t]_ 1 _−_ _α_ ¯ _t−_ 1
+
+**x** ˜ _[t]_ 0 [+] ~~_√_~~ _ϵθ_ ( **x** _t−_ 1 _, c, t −_ 1) _−_ [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+1 _−_ _α_ ¯ _t_ _α_ ¯ _t−_ 1 (1 _−_ _α_ ¯ _t_ ) ~~_[√]_~~ _α_ ¯ _t−_ 1
+
+
+=˜ **x** _[t]_ 0 _[−]_ [(] _[α][t][ −]_ _[α]_ [¯] _[t]_
+
+
+**x** _t −_ _σtz_ )
+(1 _−_ _α_ ¯ _t_ ) ~~_[√]_~~ _α_ ¯ _t−_ 1
+
+
+_−_ [(1] _[ −]_ _[α][t]_ [)] _γ∇_ **x** ˜ _t_ 0 _[d]_ [(] _[g]_ [(] **[x]** [0] _[|][c]_ [)] _[, f][ϕ]_ [(˜] **[x]** 0 _[t]_ [))] (17)
+
+1 _−_ _α_ ¯ _t_
+
+
+with **x** _t−_ 1 is obtained from Eq.16.
+
+
+The Eq.17 has a very close form with a Stoch _√_ astic Gradient Descent optimization with **x** ˜ _[t]_ 0 [as]
+
+
+_√_
+
+_[t][−][α]_ [¯] _[t]_
+
+1 _−α_ ¯ _t_ **[x]** [˜] 0 _[t]_ [+]
+
+
+_[t][−]_ [1] _[t]_
+
+(1 _−α_ ¯ _t_ ) ~~_[√]_~~ _α_ ¯ _t−_ 1 **[x]** _[t][ −]_ _[σ][t][z]_
+
+
+parameters and two gradients _∇_ 1 = _[α][t][−][α]_ [¯] _[t]_
+
+
+~~_√_~~ 1 _−α_ ¯ _tα_ ¯ _−t_ 1 _−_ 1 _ϵθ_ ( **x** _t−_ 1 _, c, t −_ 1) _−_ (1 [(1] _−_ _[−]_ _α_ _[α]_ ¯ [¯] _t_ _[t][−]_ ) ~~_[√]_~~ [1][)] _α_ ¯ ~~_[√]_~~ _t−_ _[α]_ 1 _[t]_
+
+
+and _∇_ 2 = [(1] 1 _[−]_ _−_ _[α]_ _α_ ¯ _[t]_ _t_ [)] _[γ][∇]_ **[x]** [˜] 0 _[t]_ _[d]_ [(] _[g]_ [(] **[x]** [0] _[|][c]_ [)] _[, f][ϕ]_ [(˜] **[x]** 0 _[t]_ [))][.] [We will show that this Eq.17 has a consistent objective]
+
+function. From Eq.1 and two timesteps _t_ 1 _< t_ 2, we have:
+
+
+**x** _t_ 1 =            - _α_ ¯ _t_ 1 **x** 0 + ~~�~~ 1 _−_ _α_ ¯ _t_ 1 _ϵ_ 1 (18)
+
+**x** _t_ 2 =            - _α_ ¯ _t_ 2 **x** 0 + ~~�~~ 1 _−_ _α_ ¯ _t_ 2 _ϵ_ 2 (19)
+
+
+14
+
+
+From **x** _t_ 1 and **x** _t_ 2, we have the prediction of **x** 0 at _t_ 1 is **x** [(] 0 _[t]_ [1][)] and _t_ 2 is **x** [(] 0 _[t]_ [2][)] . We have:
+
+_[−]_ _[√]_ [1] _[ −]_ _[α]_ [¯] _[t]_ [1] _[ϵ][θ]_ [(] **[x]** _[t]_ [1] _[, t]_ [1][)]
+**x** ˜ [(] 0 _[t]_ [1][)] = **[x]** _[t]_ [1] ~~_√_~~ _α_ ¯ _t_ 1 (20)
+
+_[−]_ _[√]_ [1] _[ −]_ _[α]_ [¯] _[t]_ [2] _[ϵ][θ]_ [(] **[x]** _[t]_ [2] _[, t]_ [2][)]
+**x** ˜ [(] 0 _[t]_ [2][)] = **[x]** _[t]_ [2] ~~_√_~~ _α_ ¯ _t_ 2 (21)
+
+
+Replace Eq.18 and 19 into Eq.20 and 21, we have:
+
+
+_√_
+**x** ˜ [(] 0 _[t]_ [1][)] = **x** 0 + _√_ 1 _−_ _α_ ¯ _t_ 1( _ϵ_ ~~_√_~~ 1 _−α_ ¯ _t_ 1 _ϵθ_ ( **x** _t_ 1 _, t_ 1)) (22)
+
+**x** ˜ [(] 0 _[t]_ [2][)] = **x** 0 + 1 _−_ _α_ ¯ _t_ 2( _ϵ_ ~~_√_~~ 2 _−α_ ¯ _t_ 2 _ϵθ_ ( **x** _t_ 2 _, t_ 2)) (23)
+
+
+_√_
+From Eq.22 and 23, we have at any timestep _t_, the distance between **x** ˜ _[t]_ 0 _[−]_ **[x]** [0] [=]
+
+
+From Eq.22 and 23, we have at any timestep _√_ _t_, the distance between **x** ˜ _[t]_ 0 _[−]_ **[x]** [0] [=] 1 _−α_ ¯ _t_ 1 ~~_√_~~ ( _ϵα_ ¯ _−tϵθ_ ( **x** _t,t_ ))
+
+which means _||_ **x** ˜ _[t]_ 0 _[−]_ **[x]** [0] _[||]_ [=] 1 _−α_ ¯ _t_ 1 _||_ ~~_√_~~ _ϵ−α_ ¯ _ϵθ_ ( **x** _t,t_ )) _||_ . Assuming that _ϵθ_ is trained to converge, we
+
+
+which means _||_ **x** ˜ _[t]_ 0 _[−]_ **[x]** [0] _[||]_ [=] 1 _−α_ ¯ _t_ 1 _||_ ~~_√_~~ _ϵ−α_ ¯ _tϵθ_ ( **x** _t,t_ )) _||_ . Assuming that _ϵθ_ is trained to converge, we
+
+assume _||ϵθ_ ( **x** _t_ 1 _, t_ 1) _−_ _ϵ_ 1 _|| ≤||ϵθ_ ( **x** _t_ 2 _, t_ 2) _−_ _ϵ_ 2 _||_, because when image is clearer, we also expect the
+error should be smaller. The extreme case is _||ϵ_ 1 _−_ _ϵθ_ ( **x** _t_ 1 _, t_ 1) _||_ _≈||ϵ_ 2 _−_ _ϵθ_ ( **x** _t_ 2 _, t_ 2) _||_ _≈_ ∆. As a
+
+
+_√_
+result _||_ **x** ˜ _[t]_ 0 [1] _[−]_ **[x]** [0] _[||]_ [=]
+
+
+1 _√_
+
+_α_ ¯ _α_ ¯ _tt_ 11 ∆ and _||_ **x** ˜ _[t]_ 0 [2] _[−]_ **[x]** [0] _[||]_ [=]
+
+
+_t_ 1 1 2 _θ_ _√t_ 2
+
+_α_ ¯ _t_ 2 ∆ . Since _t_ 1 _<_ _t_ 2,
+
+_α_ ¯ _t_ 2
+
+
+2 _√_
+
+_−α_ ¯ _t_ 1 _<_
+
+_α_ ¯ _t_ 1
+
+
+1 ~~_√_~~ _−α_ ¯ _t_ 1 ∆
+
+
+1 ~~_√_~~ _−α_ ¯ _t_ 2 ∆
+
+
+~~_√_~~ 1 _−α_ ¯ _t_ 1
+
+
+~~_√_~~ 1 _−α_ ¯ _t_ 2
+
+
+_α_ ¯ _t_ 1 _α_ ¯ _t_ 2 _α_ ¯ _t_ 1 _α_ ¯ _t_ 2
+
+which means _||_ **x** ˜ [(] 0 _[t]_ [1][)] _−_ **x** 0 _|| < ||_ **x** ˜ [(] 0 _[t]_ [2][)] _−_ **x** 0 _||∀t_ 1 _< t_ 2. Which means that from _T_ to 0, the sampling
+process will update _√_ **x** ˜ _[t]_ 0 [so] [t][hat] _[||]_ **[x]** [˜] _[t]_ 0 _[−]_ **[x]** [0] _[||]_ _[→]_ [min][.] [We] [have] [the] [first] [gradient] [of] [the] [Eq.17] [is]
+
+
+_√_
+
+_[t][−][α]_ [¯] _[t]_
+
+1 _−α_ ¯ _t_ **[x]** [˜] 0 _[t]_ [+]
+
+
+_[t][−]_ [1] _[t]_
+
+(1 _−α_ ¯ _t_ ) ~~_[√]_~~ _α_ ¯ _t−_ 1 **[x]** _[t][ −]_ _[σ][t][z]_ [.]
+
+
+_∇_ 1 = _[α][t][−][α]_ [¯] _[t]_
+
+
+~~_√_~~ 1 _−α_ ¯ _tα_ ¯ _−t_ 1 _−_ 1 _ϵθ_ ( **x** _t−_ 1 _, c, t −_ 1) _−_ [(1] (1 _[−]_ _−_ _[α]_ _α_ [¯] ¯ _[t]_ _t_ _[−]_ ) ~~_[√]_~~ [1][)] _α_ ¯ ~~_[√]_~~ _t−_ _[α]_ 1 _[t]_
+
+
+We can easily see the second gradient is the _∇_ 2 = [(1] 1 _−_ _[−]_ _α_ _[α]_ ¯ _t_ _[t]_ [)] _[γ][∇]_ **[x]** [˜] 0 _[t]_ _[d]_ [(] _[g]_ [(] **[x]** [0] _[|][c]_ [)] _[, f][ϕ]_ [(˜] **[x]** 0 _[t]_ [))][ to minimize the]
+
+distance _d_ ( _g_ ( **x** 0 _|c_ ) _, fϕ_ (˜ **x** _[t]_ 0 [))][.]
+
+
+Thus, we can conclude that the sampling process as Eq.11 is a process of Stochastic Gradient Descent
+to optimize two objectives. The first objective is min **x** ˜ _t_ 0 _[||]_ **[x]** [˜] 0 _[t]_ _[−]_ **[x]** [0] _[||]_ [and] [the] [second] [objective] [is]
+min **x** ˜ _t_ 0 _[d]_ [(] _[g]_ [(] **[x]** [0] _[|][c]_ [)] _[, f][ϕ]_ [(˜] **[x]** 0 _[t]_ [))][.]
+
+
+**Full derivation of Eq.6:** Eq.6 can be fully derived as below:
+
+
+1
+**x** _t−_ 1 = ~~_√_~~ **x** _t −_ ~~_√_~~ [1] _[ −]_ _[α][t]_ _ϵθ_ ( **x** _t, t_ ) + _σtz_
+_αt_ 1 _−_ _α_ ¯ _t_
+
+
+1 _−_ _αt_
+= ( **x** _t_ + [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+(1 _−_ _α_ ¯) ~~_[√]_~~ _αt_ 1 _−_ _α_ ¯ _t_
+
+
+_[α][t]_
+
+_[α]_ [¯] _[t][−]_ [1][)]
+
+**x** _t_ ) _−_ ~~_√_~~ [1] _[ −]_ _[α][t]_ _ϵθ_ ( **x** _t, t_ ) + _σtz_
+1 _−_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+_√_
+1 _−_ _α_ ¯ _t_
+
+[1] _[ −]_ _[α][t]_ ( ~~_√_~~ **[x]** _[t]_ _−_ ~~_√_~~ _ϵθ_ ( **x** _t, t_ )) + [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+
+1 _−_ _α_ ¯ _t_ _αt_ _αt_ 1 _−_ _α_ ¯ _t_
+
+
+= [1] _[ −]_ _[α][t]_
+
+
+_√_
+
+_[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1] ( ~~_√_~~ **[x]** _[t]_ _−_ 1 _−_ _α_ ~~_√_~~ ¯ _tϵθ_ ( **x** _t, t_ ) ) + [(1] _[ −]_ _[α]_ [¯] _[t][−]_ [1][)] _[√][α][t]_
+
+1 _−_ _α_ ¯ _t_ _α_ ¯ _t_ _α_ ¯ _t_ 1 _−_ _α_ ¯ _t_
+
+
+= [(1] _[ −]_ _[α][t]_ [)] _[√][α]_ [¯] _[t][−]_ [1]
+
+
+**x** _t_ + _σtz_
+1 _−_ _α_ ¯ _t_
+
+
+**x** _t_ + _σtz_ (24)
+1 _−_ _α_ ¯ _t_
+
+
+E **x** ˜0 DISTRIBUTION
+
+
+Figure 6 shows the difference in the distributions of **x** ˜ _[t]_ 0 [at different timesteps.]
+
+
+F CLASSIFER GUIDANCE DIVERSITY SUPPRESSION
+
+
+Similar to Dinh et al. (2023b), we reproduce the diversity suppression of classifier guidance as in
+Figure 8, 9 and 10.
+
+
+G MORE QUALITATIVE RESULTS COMPARISON FOR REPG
+
+
+Figure 11, 12, 13 and 14 shows more examples of how RepG can help to fix details in the generated
+images
+
+
+15
+
+
+250 200 150 50
+
+
+timesteps
+Figure 6: _Visualization of_ **x** ˜ _[t]_ 0 _[at different timesteps.]_ **[x]** [˜] _[t]_ 0 _[has different distributions when][ t][ varies.]_ _[The]_
+_earlier timesteps have less information, while the later stage has clearer views of the images._
+
+
+Figure 7: _RepG edit details in the image while Classifier Guidance (CLSG) generates another image_
+_with a good discriminative feature. However, sometimes, the over-exploiting of discriminative features_
+_results in the lack of robustness features in the output._
+
+
+H MORE SAMPLES WITH REPG
+
+
+Figure 15 shows several samples by DiT combined with RepG.
+
+
+16
+
+
+Figure 8: _Classifier guidance utilizes the same style to repeat features to all generated images._ _This_
+_is due to the overexploitation of discriminative features (front-face features) reducing the diversity of_
+_the diffusion model_
+
+
+Figure 9: _Classifier guidance utilizes the same style to repeat features to all generated images._ _This_
+_is due to the overexploitation of discriminative features (front-face features) reducing the diversity of_
+_the diffusion model_
+
+
+17
+
+
+Figure 10: _Classifier guidance utilizes the same style to repeat features to all generated images._ _This_
+_is due to the overexploitation of discriminative features (lie-in-bed features) reducing the diversity of_
+_the diffusion model_
+
+
+Figure 11: _ImageNet256x256/class:_ _tiger shark._ _The images on the left, shown before the arrow, are_
+_the erroneous outputs generated by ADM, while the images on the right, after the arrow, depict the_
+_corrections made using RepG. The examples show that RepG can improve the details and fix the_
+_erroneous features._
+
+
+18
+
+
+Figure 12: _ImageNet256x256/class:_ _green lizard._ _The images on the left, shown before the arrow,_
+_are the erroneous outputs generated by ADM, while the images on the right, after the arrow, depict_
+_the corrections made using RepG. The examples show that RepG can improve details/background,_
+_remove unnecessary features and fix erroneous features._
+
+
+Figure 13: _ImageNet256x256/class:_ _crane._ _The_ _images_ _on_ _the_ _left,_ _shown_ _before_ _the_ _arrow,_ _are_
+_the_ _erroneous_ _outputs_ _generated_ _by_ _ADM,_ _while_ _the_ _images_ _on_ _the_ _right,_ _after_ _the_ _arrow,_ _depict_
+_the corrections made using RepG.The examples show that RepG can upgrade details, modify faulty_
+_features._
+
+
+19
+
+
+Figure 14: _ImageNet256x256/class:_ _English springer._ _The images on the left, shown before the arrow,_
+_are the erroneous outputs generated by ADM, while the images on the right, after the arrow, depict_
+_the corrections made using RepG. The examples show that RepG can improve details/background,_
+_remove unnecessary features and fix erroneous features._
+
+
+20
+
+
+**Goldfish**
+
+
+**Crampfish**
+
+
+**Jellyfish**
+
+
+**Snail**
+
+
+**Red fox**
+
+
+**Polar**
+
+**bear**
+
+
+21

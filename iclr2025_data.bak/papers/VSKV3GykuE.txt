@@ -1,0 +1,6874 @@
+## RAC-LORA: A THEORETICAL OPTIMIZATION FRAMEWORK FOR LOW-RANK ADAPTATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Fine-tuning has become a popular approach to adapting large foundational models to specific tasks. As the size of models and datasets grows, parameter-efficient
+fine-tuning techniques are increasingly important. One of the most widely used
+methods is Low-Rank Adaptation (LoRA), with adaptation update expressed as the
+product of two low-rank matrices. While LoRA was shown to possess strong performance in fine-tuning, it often underperforms when compared to full-parameter
+fine-tuning (FPFT). Although many variants of LoRA have been extensively studied empirically, their theoretical optimization analysis is heavily under-explored.
+The starting point of our work is a demonstration that LoRA and its two extensions,
+Asymmetric LoRA and Chain of LoRA, indeed encounter convergence issues. To
+address these issues, we propose a general optimization framework that rigorously
+analyzes the convergence rates of LoRA-based methods. Our approach inherits the
+empirical benefits of LoRA-style heuristics, but introduces several small but important algorithmic modifications which turn it into a provably convergent method.
+Our framework serves as a bridge between FPFT and low-rank adaptation. We
+provide provable guarantees of convergence to the same solution as FPFT, along
+with the rate of convergence. Additionally, we present a convergence analysis for
+smooth, non-convex loss functions, covering gradient descent, stochastic gradient
+descent, and federated learning settings. Our theoretical findings are supported by
+experimental results.
+
+
+1 INTRODUCTION
+
+
+Many real-world Deep Learning (DL) applications require adapting a large pre-trained model to
+specific tasks in order to improve its performance (Church et al., 2021). This process, known as
+fine-tuning, involves adjusting the model from its pre-trained state to better handle the nuances of
+particular tasks or domains. Fine-tuning is a specialized form of transfer learning, where knowledge
+gained during pre-training is adapted for new, specific applications (Vrbanˇciˇc & Podgorelec, 2020).
+
+
+**Parameter-Efficient Fine-Tuning.** While fine-tuning all model parameters has been effective, modern models with billions of parameters pose significant challenges due to their scale. Full-parameter
+fine-tuning is often computationally impractical with standard resources. To address this challenge,
+Parameter-Efficient Fine-Tuning (PEFT) (He et al., 2021) has emerged as a solution, focusing on updating a subset of parameters only (Richt´arik & Tak´aˇc, 2016), or adding task-specific modules (Xu
+et al., 2023). PEFT reduces computational costs by modifying fewer parameters or adding external
+modules, enabling more efficient resource use and lowering storage requirements. This approach
+significantly reduces both training time and computational demands, making it a practical solution
+for adapting large models to new tasks (Han et al., 2024).
+
+
+1.1 LOW-RANK ADAPTATION (LORA)
+
+
+One of the most popular PEFT methods is Low-Rank Adaptation (LoRA) (Hu et al., 2021). The core
+idea behind LoRA is that fine-tuning large pre-trained models can be effectively achieved by utilizing
+lower-dimensional parameter spaces (Li et al., 2018; Aghajanyan et al., 2020). Instead of updating
+all parameters of a large and potentially dense matrix associated with the weights of a linear layer,
+LoRA works with the product of two trainable low-rank matrices, which significantly reduces the
+
+
+1
+
+
+number of parameters updated during fine-tuning. These matrices are trained such that their product
+is added to the pre-trained model weights.
+
+
+In LoRA (Hu et al., 2021), the weight adaptation is represented as the product of two low-rank
+matrices (and a scalar multiplier), resulting in the final model
+
+_W_ = _W_ [0] + _[α]_
+
+_r_ _[BA,]_
+
+where _W_ [0] _∈_ R _[m][×][n]_, _B_ _∈_ R _[m][×][r]_, and _A_ _∈_ R _[r][×][n]_ . Here, _r_ and _α_ respectively denote the LoRA
+rank and its scaling factor. Typically, since the dimensions of (particularly deep learning) models
+are enormous, we have rank _r_ _≪_ min _{m, n}_ . This approach saves computational resources and
+minimizes the risk of overfitting or catastrophic forgetting (Biderman et al., 2024). Hence, LoRA has
+become a lightweight and efficient technique for adapting large models to various tasks, particularly
+in resource-constrained environments (Sun et al., 2022). It is important to note that _W_ [0] remains
+fixed and does not receive updates, while _A_ and _B_ are optimized during the training process. The
+scaling factor _α_ serves as a “step size” for the adaptation, and it is normalized by rank _r_ . The matrix
+_A_ is typically initialized with random Gaussian values, while the matrix _B_ is set to zero, ensuring
+∆ _W_ = 0 at the start of training. Alternative initialization strategies were explored by Zhu et al.
+(2024).
+
+
+1.2 CHAIN OF LORA (COLA)
+
+
+While LoRA offers significant computational advantages in practice, it remains less effective than
+full-parameter fine-tuning (FPFT) if efficiency is not a major concern (Biderman et al., 2024). To
+balance efficiency and performance, Xia et al. (2024) proposed an iterative method called Chain of
+LoRA (COLA). Essentially, COLA simply means the successive application of several LoRA updates.
+
+
+Chain of LoRA (COLA) constructs a sequence of LoRA modules through an iterative process of
+parameter fine-tuning, merging, and extending. The chain length is defined by the number of optimized LoRA modules. COLA’s central concept involves applying LoRA adaptations iteratively _T_
+times. COLA can be summarized as training a LoRA module, merging the updates with the fixed parameters, reinitializing the LoRA matrices, and repeating the process (Xia et al., 2024). The resulting
+model can be represented by:
+
+
+where _A_ _[t]_ and _B_ _[t]_ indicate the low-rank matrices in the _t_ -th block in the chain, which are typically
+initialized in the same manner as in standard LoRA. The motivation behind COLA is that standard
+LoRA may clearly fail to find the optimal adaptation since such an adaptation may not in general
+be of a low rank. To address this, COLA proposes using a sequence of low-rank matrix decompositions to approximate a middle-to-high-rank update. The hypothesis is that this sequence of updates
+can provide a better approximation than a single LoRA adaptation and may be easier to optimize
+compared to learning the optimal adaptation from scratch.
+
+
+2 PROBLEM FORMULATION AND SUMMARY OF CONTRIBUTIONS
+
+
+2.1 PROBLEM FORMULATION
+
+
+The primary approach for training supervised machine learning models is to formulate the task as an
+optimization problem where the goal is to minimize a loss function, which measures the discrepancy
+between the model’s predictions and the actual outcomes. In this work, we explore this optimization
+problem in the specific context of fine-tuning, where a pre-trained model is adapted to a new task or
+dataset, requiring efficient adjustments to its parameters to achieve better performance on the target
+task. In particular, we consider the model-agnostic problem formulation
+
+
+min (1)
+∆ _W ∈_ R _[m][×][n][ f]_ [(] _[W]_ [ 0][ + ∆] _[W]_ [)] _[,]_
+
+
+where _W_ [0] _∈_ R _[m][×][n]_ represents the parameters of a pre-trained model (or of a single linear layer,
+with the others being fixed), and ∆ _W_ _∈_ R _[m][×][n]_ denotes the adaptation term. The function _f_ :
+
+
+2
+
+
+_W_ = _W_ [0] + _[α]_
+
+_r_
+
+
+_T −_ 1
+
+- _B_ _[t]_ _A_ _[t]_ _,_
+
+
+_t_ =0
+
+
+Table 1: Sections where we conduct a theoretical convergence analysis of RAC-LoRA for solving
+Problem (1) when using a specific optimizer for approximately solving the subproblem in Step 4.
+The results for the RAC-LoRA + GD combination are described in Section 5, while the proofs can
+be founded in Appendix C. The results and proofs for all other combinations can be found in the
+indicated appendices.
+
+
+**Problem** **Fine-tuner** **Subproblem Optimizer** **Non-convex** **PL**
+
+
+(1) RAC-LoRA Gradient Descent (GD) C.1 C.2
+(1) RAC-LoRA Random Reshuffling (RR) D.1 D.2
+(1) RAC-LoRA Stochastic Gradient Descent (SGD) E.1 E.2
+(15) Fed-RAC-LoRA Random Reshuffling (RR) F.1 F.2
+
+
+R _[m][×][n]_ _→_ R corresponds to the empirical loss over the adaptation dataset, or any other loss function
+of interest. As the total dimensionality _m × n_ is typically very large for deep learning models, the
+adaptation term ∆ _W_ needs to have a specific structure to be feasible in real-world applications.
+
+
+2.2 NO REASONABLE THEORY FOR LOW-RANK ADAPTATION
+
+
+We claim that a satisfying theoretical understanding of prevalent fine-tuning methods based on lowrank updates, such as LoRA and COLA, is lacking.
+
+
+    - First, as already noted by Sun et al. (2024), the LoRA re-parameterization of the domain
+effectively transforms a _smooth_ Lipschitz loss into a _non-smooth_ Lipschitz loss, which
+poses _additional_ theoretical challenges to those related to proper handling of the low-rank
+structure of the updates. While this hints at a possible source of issues with providing a
+good theory for methods based on low-rank adaptation, this observation does not on its
+own mean that a good theory is impossible to obtain.
+
+    - More importantly, the existing theoretical analysis of COLA (Xia et al., 2024) replaces lowrank optimization over matrices _A_ and _B_ with full-rank matrix optimization (∆ _W_ ). This
+makes the theoretical analysis irrelevant at worst and unsatisfactory at best as it completely
+ignores to model and to explain the key component of LoRA: low-rank updates.
+
+    - Third, it is known that LoRA can be highly sensitive to the choice of the hyper-parameters
+(Khodak et al., 2021; Kuang et al., 2024). A good theory should be able to explain or
+remove this issue. No such theory exists, to the best of our knowledge.
+
+    - Finally, and this is the true starting point of our exploration in this work, we observe that
+COLA may simply _fail to converge_ to the optimal solution. We give a simple example (with
+3 _×_ 3 matrices) of this divergence behavior in Section 3. Hence, COLA is merely a _heuristic_ .
+Providing a fix is an open problem – the problem we address in this work.
+
+
+While clearly LoRA and COLA are enormously useful in practice, these methods remain mere _heuris-_
+_tics_ since they do not come with solid theoretical backing. This is problematic and raises valid
+concerns about the robustness and reliability of LoRA-type methods in scenarios _beyond_ current
+datasets, models and practice.
+
+
+2.3 CONTRIBUTIONS
+
+
+To address the aforementioned fundamental issues of LoRA-type heuristics, and to firmly ground the
+fine-tuning-via-low-rank adaptation line of work in a theoretically sound algorithmic framework,
+we propose a new generic low-rank adaptation framework for which we coin the name Randomized
+Asymmetric Chain of LoRA (RAC-LoRA); see Algorithm 1.
+
+
+    - Similarly to COLA (Xia et al., 2024), our method is iterative: we perform a chain of lowrank updates (see Step 2 in Algorithm 1). In each step of the chain, one matrix (e.g., _A_ )
+is chosen randomly from a pre-defined distribution, and the other (e.g., _B_ ) is trainable (see
+Step 3 in Algorithm 1). Which of these two update matrices is chosen randomly and which
+one is trainable is decided a-priori, and hence our method is asymmetric in nature, similarly
+to AsymmLoRA (Zhu et al., 2024). We propose two options, depending on which matrix is
+
+
+3
+
+
+trainable and which one is chosen randomly: in Option 1, _A_ is trainable, and in Option 2,
+_B_ is trainable.
+
+    - In order to make our framework flexible, we offer a variety of strategies for updating the
+trainable matrix in each step of the chain. This is possible since in each such step we
+formulate an auxiliary optimization subproblem in the trainable matrix, and once can thus
+chose essentially _any_ _optimizer_ for approximately solving it (see Step 4 in Algorithm 1).
+We theoretically analyze several such optimizers within our RAC-LoRA framework, including Gradient Descent (GD) in Appendix C (however, we include and describe the theorems
+in Section 5.2), Random Reshuffling RR in Appendix D, and Stochastic Gradient Descent
+(SGD) in Appendix E. See Table 1 for a quick overview. Our analysis applies to the smooth
+nonconvex regime, in which we prove fast sublinear (i.e., _O_ (1 _/T_ )) convergence rates to a
+stationary point, and fast linear (i.e., _O_ ( _e_ _[−][T]_ )) rates to the globally optimal solution under
+the Polyak-Łojasiewicz (PL) condition.
+
+    - The update is applied (see Step 5 in Algorithm 1), and the method moves on to the next
+step of the chain.
+
+
+**Experiments.** We apply our method to several machine learning tasks. We start from convex
+problems with traditional models, such as logistic and linear regression, to provide clear illustrations
+of our theoretical findings. In addition, we present empirical analyses for multilayer perception
+(MLP) on MNIST and RoBERTa on the GLUE benchmark tasks (Wang, 2018). See Appendix 6.
+
+
+**Federated Learning.** Furthermore, we extend our findings from the simple problem (1) to the more
+challenging distributed/federated problem (15), where we consider solving a distributed optimization problem via our new Fed-RAC-LoRA method (Algorithm 2). These additional results can be
+found in Section F. For illustrative purposes, we provide an analysis for RR as the optimizer for the
+subproblem; see also Table 1. Previous research (Sun et al., 2024) has shown that using a single
+learnable matrix in this context provides several key advantages, particularly in terms of preserving
+privacy, ensuring the correctness of model aggregation, and maintaining stability when adjusting the
+scaling factor (Sun et al., 2024). These benefits are crucial in Federated Learning (Koneˇcn´y et al.,
+2016), where data is distributed across multiple clients, and privacy constraints must be upheld
+while performing model updates. Building on this asymmetric approach, we integrate the concept
+of chained updates to develop Fed-RAC-LoRA, a more robust and scalable distributed method. Our
+approach maintains the computational efficiency of the original RAC-LoRA while ensuring rigorous
+convergence properties in the distributed setting, offering a theoretically sound method for largescale Federated Learning scenarios.
+
+
+3 SHINING SOME LIGHT ON LORA’S CONVERGENCE ISSUES
+
+
+In contemporary machine learning, loss function minimization is primarily accomplished using
+gradient-based (first-order) optimization techniques (Ruder, 2016). Most advanced methods build
+on the vanilla Gradient Descent (GD) in various ways, e.g., by adding support for stochastic approximation, momentum, adaptive stepsizes and more (Shapiro & Wardi, 1996; Gower et al., 2019).
+
+
+It is therefore meaningful to start our exploration of LoRA-style methods in connection with GD
+steps. In particular, we analyze the update process of LoRA matrices through a GD step, focusing
+on the application of the chain rule of differentiation. The gradient with respect to the low-rank
+matrices _B_ and _A_ consists of two components,
+
+
+where _η_ _>_ 0 is a step size, and _A_ [+] and _B_ [+] are the updated matrices. Since both _A_ and _B_ are trainable, the gradients are multiplied by _B_ _[⊤]_ and _A_ _[⊤]_, which adds complexity to the optimization process
+and complicates the interpretation of its evolution. This interaction between low-rank matrices and
+gradients creates a non-trivial structure that challenges rigorous analysis and may disrupt Lipschitz
+
+
+4
+
+
+_._
+
+
+   - _∇Af_ ( _W_ + _[α]_ _r_
+
+_[α]_
+
+_r_ _[BA]_ [) =] _∇Bf_ ( _W_ + _[α]_ _r_
+
+
+- _∇B_ _[⊤]_ _f_ ( _W_ + _[α]_
+
+
+_∇B,Af_ ( _W_ + _[α]_
+
+
+_∇Af_ ( _W_ + _r_ _[BA]_ [)]
+
+_∇Bf_ ( _W_ + _[α]_ _[BA]_ [)]
+
+
+_r_ _[BA]_ [)]
+
+
+= _[α]_
+
+
+_r_
+
+
+_∇B_ _f_ ( _W_ + _r_ _[BA]_ [)]
+
+_∇f_ ( _W_ + _[α]_ _[BA]_ [)] _[A][⊤]_
+
+
+_[α]_
+
+_r_ _[BA]_ [)] _[A][⊤]_
+
+
+and hence the update rules for the matrices _A_ and _B_ are given by
+
+
+_A_ [+] = _A −_ _η_ _[α]_
+
+
+_[α]_ [+] _[α]_
+
+_r_ _[B][⊤][∇][f]_ [(] _[W]_ _r_
+
+
+_[α]_ _B_ [+] = _B −_ _η_ _[α]_
+
+_r_ _[BA]_ [)] _[,]_ _r_
+
+
+_[α]_ [+] _[α]_
+
+_r_ _[∇][f]_ [(] _[W]_ _r_
+
+
+_r_ _[BA]_ [)] _[A][⊤][,]_
+
+
+|Col1|Col2|Col3|
+|---|---|---|
+||||
+||RAC-LoRA, lr = 1<br>~~LoRA, lr = 1/L~~||
+||RAC-LoRA, lr = 1<br>~~LoRA, lr = 1/L~~|/L|
+||<br>LoRA, lr = 1/(10<br>LoRA, lr = 1/(20<br>LoRA, lr = 1/(50<br>LoRA, lr = 1/(10|L)<br>  L)<br>  L)<br>  0L)|
+|0<br>50<br>100<br>150<br>200<br>250<br>300<br># of gradients<br>e 1: Convergence of LoRA<br> roposed Randomized Asym<br>nuity, raising concerns abo<br>daptation, a deeper unders<br>me is theoretically sound.|0<br>50<br>100<br>150<br>200<br>250<br>300<br># of gradients<br>e 1: Convergence of LoRA<br> roposed Randomized Asym<br>nuity, raising concerns abo<br>daptation, a deeper unders<br>me is theoretically sound.|0<br>50<br>100<br>150<br>200<br>250<br>300<br># of gradients<br>e 1: Convergence of LoRA<br> roposed Randomized Asym<br>nuity, raising concerns abo<br>daptation, a deeper unders<br>me is theoretically sound.|
+
+
+|Col1|RAC-LoRA, lr = 1/L<br>AsymmLoRA, lr = 1/L<br>AsymmLoRA, lr = 1/(2L)<br>AsymmLoRA, lr = 1/(5L)<br>AsymmLoRA, lr = 1/(10L)|
+|---|---|
+|||
+|||
+|||
+|0<br>50<br>100<br>#<br> mmetric Lo<br>  c Chain of<br>|150<br>200<br>250<br>300<br> of gradients<br> RA (AsymmLo<br>   LoRA (RAC-Lo<br>|
+
+
+|Col1|Col2|
+|---|---|
+|||
+|RAC<br>COL<br>COL<br>CO|-LoRA, lr = 1/L, iters per block = 1|
+|RAC<br>COL<br>COL<br>CO|<br>A, lr = 1/L, iters per block = 1<br>A, lr = 1/L, iters per block = 2<br>A, lr = 1/L, iters per block = 1|
+|<br>COL<br>COL<br>COL|<br>A, lr = 1/L, iters per block = 4<br>A, lr = 1/L, iters per block = 5<br>A, lr = 1/L, iters per block = 10|
+|0<br>50<br>100<br># of<br> hain of LoR<br> the problem<br> is effective<br>nsure that t<br> is a commo|150<br>200<br>250<br>300<br> gradients<br>  A (COLA), and<br>  in Equation 2<br>  for deep learn<br>he optimization<br>nly invoked as|
+
+
+sumption in the theoretical analysis of gradient-based optimization methods (Zhou, 2018; Khaled &
+Richt´arik, 2020; Demidovich et al., 2023). This property ensures that the gradient does not change
+too rapidly, which in turn guarantees a controlled behavior of the optimization process, and plays
+a key role in establishing convergence rates and in providing stability guarantees for various optimization algorithms (Nesterov, 2004; Sun, 2020). A formal definition follows.
+
+**Assumption 3.1** (Lipschitz Gradient) **.** _Function f_ _is differentiable, and there exists L >_ 0 _such that_
+
+_∥∇f_ ( _W_ ) _−∇f_ ( _V_ ) _∥≤_ _L∥W_ _−_ _V ∥,_ _∀W, V_ _∈_ R _[m][×][n]_ _,_
+
+
+_where ∥·∥_ _denotes the Frobenius matrix norm, the gradient is computed w.r.t. the trace inner product._
+
+
+However, the property of Lipschitz smoothness does not necessarily hold when applying LoRA adaptation. Specifically, even if the original function _f_ ( _W_ ) is Lipschitz smooth, meaning that the gradient of _f_ ( _W_ ) satisfies the Lipschitz continuity condition (as stated in Assumption 3.1), this smoothness property is generally lost when the function is expressed in the adapted form _f_ ( _W_ [0] + _BA_ ).
+In particular, the function _f_ ( _W_ [0] + _BA_ ) is not Lipschitz smooth with respect to the set of variables
+_{B, A}_ for any constant. This breakdown of smoothness is a significant limitation, as it complicates
+the theoretical analysis of optimization algorithms when using LoRA. The formal proof of this result
+is provided in Theorem 2 of the work by Sun et al. (2024), highlighting the challenges in extending
+standard gradient-based methods to such adaptations.
+
+
+**Numerical** **counterexample.** We present a clear and illustrative example demonstrating that the
+LoRA and COLA methods may not converge to the solution of the optimization problem. To illustrate
+this, let us consider a quadratic function of the following form:
+
+
+_f_ ( _x_ ) = _x_ _[⊤]_ _Mx_ + _b_ _[⊤]_ _x,_ (2)
+
+
+where _x_ _∈_ R _[d]_ is a vector of parameters, _M_ _∈_ R _[d][×][d]_ is a positive definite matrix, and _b_ _∈_ R _[d]_
+is a vector corresponding to the linear term. In our numerical example, we consider _d_ = 9,
+_M_ = Diag(10 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1), and _b_ = (1 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1 _,_ 1) _[⊤]_ . This function has a Lipschitz
+gradient (Assumption 3.1) with _L_ = 10. We represent the vector _x ∈_ R [9] as a matrix _W_ _∈_ R [3] _[×]_ [3] . In
+the LoRA adaptation, we use a rank _r_ = 1 and set _α_ = _r_ .
+
+
+Figure 1 shows experiments on LoRA, AsymmLoRA, our RAC-LoRA, and COLA. In the case of
+COLA, we varied the step sizes and the number of gradients per block. Our results indicate that, when
+using the theoretical step size _L_ [1] [, both][ LoRA][ and][ COLA][ may diverge, while][ AsymmLoRA][ converges]
+
+to a different stationary point. When smaller step sizes are applied to LoRA and COLA, these methods
+do converge, but to a stationary point that is significantly distant from the optimal solution. In
+contrast, our RAC-LoRA converges linearly to the optimal solution without such issues. These results
+provide clear evidence that the choice of LoRA-type updates has a significant impact on both the
+convergence and the quality of the final solution. The divergence, convergence to suboptimal points,
+
+
+5
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+10 2
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+10 2
+
+
+10 3
+
+
+10 [1]
+
+
+10 [0]
+
+
+10 1
+
+
+**Algorithm 1** Randomized Asymmetric Chain of LoRA (RAC-LoRA)
+
+1: **Parameters:** pre-trained model _W_ [0] _∈_ R _[m][×][n]_, rank _r_ _≪_ min _{m, n}_, learning rate _γ_ _>_ 0,
+scaling factor _α >_ 0, chain length _T_, sketch distribution _DS_ _[B]_ [(Option 1) or] _[ D]_ _S_ _[A]_ [(Option 2).]
+2: **for** _t_ = 0 _,_ 1 _, . . ., T_ _−_ 1 **do**
+3: Sample a sketch matrix
+
+
+(Option 1) _BS_ _[t]_ _[∼D]_ _S_ _[B]_ (Option 2) _A_ _[t]_ _S_ _[∼D]_ _S_ _[A]_
+
+
+4: Using some iterative solver, approximately solve the subproblem
+
+
+Similarly to COLA, _t_ identifies the block in the chain. Next, we incorporate the product of the
+trained matrix and the sampled matrix into the current model. The merging process involves adding
+
+
+6
+
+
+(Option 1) _A_ ˆ _[t]_ _≈_ min _[α]_
+_A_ _[f]_ [(] _[W][ t]_ [ +] _r_
+
+
+_[α]_ _S_ _[A]_ [)] (Option 2) _B_ ˆ _[t]_ _≈_ min _[α]_
+
+_r_ _[B][t]_ _B_ _[f]_ [(] _[W][ t]_ [ +] _r_
+
+
+_S_ [)]
+_r_ _[BA][t]_
+
+
+5: Apply the update
+
+
+(Option 1) _W_ _[t]_ [+1] = _W_ _[t]_ + _[α]_
+
+
+_[α]_ _S_ _[A]_ [ˆ] _[t]_ (Option 2) _W_ _[t]_ [+1] = _W_ _[t]_ + _[α]_
+
+_r_ _[B][t]_ _r_
+
+
+_r_ _B_ ˆ _[t]_ _A_ _[t]_ _S_
+
+
+6: **end for**
+
+
+and sensitivity to step sizes in traditional methods underscore the need for careful selection and
+design of update mechanisms. Our findings suggest that RAC-LoRA offers a more reliable approach
+for achieving optimal solutions in the context of LoRA-based adaptations.
+
+
+4 RANDOMIZED ASYMMETRIC CHAIN OF LORA (RAC-LORA)
+
+
+To address the convergence issues in LoRA updates, we propose Randomized Asymmetric Chain of
+LoRA (RAC-LoRA). This method introduces an asymmetric LoRA mechanism with a chain-based
+structure to enhance convergence while preserving model flexibility and efficiency. The method is
+summarized in Algorithm 1.
+
+
+**Description of the algorithm.** At the start of each iteration (or block), one matrix is randomly initialized and fixed throughout training, while the other remains fully trainable. This strategy prevents
+optimization within a restricted subspace, reducing the risk of convergence to suboptimal points.
+There are two configurations: freeze matrix _B_ and train _A_, or freeze _A_ and train _B_ . We now formally define the sampling/sketch schemes.
+
+**Definition 4.1** (Left Sketch) **.** _By a “left sketch” (of rank r) we refer to the update rule_
+
+∆ _W_ = _[α]_ _[A,]_ [ˆ]
+
+_r_ _[B][S]_
+
+_where_ _BS_ _∼DB_ _is_ _sampled_ _from_ _some_ _fixed_ _distribution_ _over_ _matrices_ _of_ _dimensions_ _n × r,_ _and_
+_only the matrix_ _A_ [ˆ] _is adjustable._
+
+**Definition 4.2** (Right Sketch) **.** _By a “right sketch” (of rank r) we refer to the update rule_
+
+∆ _W_ = _[α]_ _BA_ ˆ _S,_
+
+_r_
+
+_where AS_ _∼DA_ _is sampled from some fixed distribution over matrices of dimensions r × m,_ _and_
+_only the matrix_ _B_ [ˆ] _is adjustable._
+
+
+In both sampling schemes, we update the trainable matrix over several epochs. This step effectively corresponds to training a LoRA block within the chain, following the standard LoRA approach.
+While this procedure mirrors the conventional LoRA method, we can formally characterize it as an
+approximate optimization problem, allowing for a structured analysis of the training process. These
+procedures for both matrices can be formally expressed via
+
+
+(Option 1) _A_ ˆ _[t]_ _≈_ min _[α]_
+_A_ _[f]_ [(] _[W][ t]_ [ +] _r_
+
+
+_[α]_ _S_ _[A]_ [)] (Option 2) _B_ ˆ _[t]_ _≈_ min _[α]_
+
+_r_ _[B][t]_ _B_ _[f]_ [(] _[W][ t]_ [ +] _r_
+
+
+_S_ [)] _[.]_
+_r_ _[BA][t]_
+
+
+the product of the two matrices—one sampled and the other trained. This addition is scaled by a
+factor of _[α]_ _r_ [, ensuring the appropriate weighting of the update within the model:]
+
+
+where _HB_ _[t]_ [=] _[ B]_ _S_ _[t]_ �( _BS_ _[t]_ [)] _[⊤]_ [(] _[B]_ _S_ _[t]_ [)] - _†_ ( _BSt_ [)] _[⊤]_ [is projection matrix and] _[α]_ _r_ _[η]_ [=] _[ γ]_ [.] [Similarly, we can obtain]
+
+the update for Right Sketch scheme (Definition 4.2):
+
+_W_ _[t]_ [+1] = _W_ _[t]_ _−_ _γ∇f_ ( _W_ _[t]_ )( _A_ _[t]_ _S_ [)] _[⊤]_ [�] _A_ _[t]_ _S_ [(] _[A][t]_ _S_ [)] _[⊤]_ [�] _[†][ A]_ _S_ _[t]_ [=] _[ W][ t][ −]_ _[γ][∇][f]_ [(] _[W][ t]_ [)] _[H]_ _A_ _[t]_ _[,]_ (4)
+
+where _HA_ _[t]_ [=] [(] _[A][t]_ _S_ [)] _[⊤]_ [�] _A_ _[t]_ _S_ [(] _[A][t]_ _S_ [)] _[⊤]_ [�] _[†][ A][t]_ _S_ [is] [also] [projection] [matrix.] [Notably,] [the] [scaling] [factor] _[α]_ _r_ [is]
+
+combined with the parameter _η_, allowing us to work with the effective step size _γ_ . This simplifies
+the learning process by unifying the scaling and learning rate. Using this type of update, we provide
+convergence results for both standard and stochastic gradient descent methods.
+
+
+5.2 CONVERGENCE RESULTS
+
+
+To derive the convergence results, a key factor in our analysis is the smallest eigenvalue of the expected value of the projection matrix introduced in Section 5.1. This eigenvalue plays a critical role
+in shaping the optimization process. As we will show, a well-conditioned projection matrix—with a
+sufficiently large smallest eigenvalue—ensures more efficient and reliable convergence. Therefore,
+we make an important assumption that this smallest eigenvalue must remain strictly positive.
+
+**Assumption 5.1.** _Consider a projection matrix H_ _generated by Left Sketch 4.1 or Right Sketch 4.2._
+_Assume_ _that_ _the_ _sampling_ _distributions_ _DS_ _[B]_ _[and]_ _[D]_ _S_ _[A]_ _[are]_ _[such]_ _[that]_ _[the]_ _[smallest]_ _[eigenvalue]_ _[of]_ _[the]_
+_expected projection matrix H_ _generated by sampled matrix is positive:_
+
+_λ_ _[H]_ min [=] _[ λ]_ [min] [[][E][ [] _[H]_ []]] _[ >]_ [ 0] _[.]_
+
+1The dagger notation refers to the Moore-Penrose pseudoinverse.
+
+
+7
+
+
+(Option 1) _W_ _[t]_ [+1] = _W_ _[t]_ + _[α]_
+
+
+_[α]_ _S_ _[A]_ [ˆ] _[t]_ (Option 2) _W_ _[t]_ [+1] = _W_ _[t]_ + _[α]_
+
+_r_ _[B][t]_ _r_
+
+
+_B_ ˆ _[t]_ _A_ _[t]_ _S_ _[.]_
+_r_
+
+
+5 THEORY
+
+
+5.1 DERIVATION OF THE UPDATE STEP
+
+
+Without loss of generality, let us focus on the Left Sketch scheme (Definition 4.1). Specifically, for
+each model in the chain, the update rule is given as follows:
+
+_W_ _[t]_ [+1] = _W_ _[t]_ + _[α]_ _S_ _[A]_ [ˆ] _[t][.]_
+
+_r_ _[B][t]_
+
+
+Next, we apply the Lipschitz gradient condition (Assumption 3.1) to the loss function _f_ :
+
+_f_ ( _U_ ) _≤_ _f_ ( _V_ ) + _⟨∇f_ ( _V_ ) _, U_ _−_ _V ⟩_ + _[L]_ _[−]_ _[V][ ∥]_ [2] _F_ _[,]_ _∀U, V_ _∈_ R _[m][×][n]_
+
+2 _[∥][U]_
+
+Applying this with _U_ = _W_ _[t]_, _V_ = _BS_ _[t]_ _[A]_ [ˆ] _[t]_ [ and] _[ η]_ _[≤]_ _L_ [1] [leads to]
+
+_f_ ( _W_ _[t]_ [+1] ) _≤_ _f_ ( _W_ _[t]_ ) + _⟨∇f_ ( _W_ _[t]_ ) _, BS_ _[t]_ _[A]_ [ˆ] _[t][⟩]_ [+] _[L]_ _S_ _[A]_ [ˆ] _[t][∥]_ _F_ [2]
+
+2 _[∥][B][t]_
+
+_≤_ _f_ ( _W_ _[t]_ ) + _⟨_ ( _BS_ _[t]_ [)] _[⊤][∇][f]_ [(] _[W][ t]_ [)] _[,]_ _[A]_ [ˆ] _[t][⟩]_ [+] [1] _S_ [)] _[⊤][B]_ _S_ _[t]_ _[A]_ [ˆ] _[t][,]_ _[A]_ [ˆ] _[t][⟩][.]_
+
+2 _η_ _[⟨]_ [(] _[B][t]_
+
+
+Let us minimize the left hand side term in _A_ [ˆ] _[t]_, when the gradient vanishes: ( _BS_ _[t]_ [)] _[⊤][∇][f]_ [(] _[W][ t]_ [)] [+]
+_η_ 1 [(] _[B]_ _S_ _[t]_ [)] _[⊤]_ [(] _[B]_ _S_ _[t]_ [) ˆ] _[A][t]_ [= 0] _[.]_ [ One such solution is given by][1]
+
+_A_ ˆ _[t]_ = _−η_ �( _BS_ _[t]_ [)] _[⊤]_ [(] _[B]_ _S_ _[t]_ [)]        - _†_ ( _BSt_ [)] _[⊤][∇][f]_ [(] _[W][ t]_ [)] _[,]_
+
+
+and his leads to the following gradient update:
+
+
+_W_ _[t]_ [+1] = _W_ _[t]_ + _[α]_
+
+
+_[α]_ _S_ _[A]_ [ˆ] _[t]_ [=] _[ W][ t][ −]_ _[α]_
+
+_r_ _[B][t]_ _r_
+
+
+   -    - _†_ _t_
+
+_[α]_ _S_ ( _BS_ _[t]_ [)] _[⊤]_ [(] _[B]_ _S_ _[t]_ [)] ( _BS_ [)] _[⊤][∇][f]_ [(] _[W][ t]_ [)]
+
+_r_ _[ηB][t]_
+
+
+= _W_ _[t]_ _−_ _γHB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)] _[,]_ (3)
+
+
+_where the output_ _W_ _[T]_ _is chosen uniformly at random from W_ [0] _, W_ [1] _, . . ., W_ _[T][ −]_ [1] _._
+
+[�]
+
+
+We obtain a sub-linear convergence rate, as is expected in general non-convex settings. To achieve
+a stronger convergence result, we employ an additional assumption: the Polyak-Lojasiewicz (PL)
+condition. This assumption generalizes strong convexity but applies to certain non-convex functions.
+
+**Assumption** **5.4** (PL-condition) **.** _Function_ _f_ _satisfies_ _the_ _Polyak-Łojasiewicz_ _(PL)_ _condition_ _with_
+_parameter µ >_ 0 _if_
+
+1
+
+_[≥]_ _[µ]_ [ (] _[f]_ [(] _[W]_ [)] _[ −]_ _[f][ ⋆]_ [)]
+2 _[∥∇][f]_ [(] _[W]_ [)] _[∥]_ [2]
+
+_for all W_ _∈_ R _[m][×][n]_ _, where f_ _[⋆]_ = inf _f_ _, assumed to be finite._
+
+
+Next, we establish a convergence rate for RAC-LoRA in the Polyak-Łojasiewicz setting.
+**Theorem 5.5.** _Let Assumptions 3.1, 5.1 and 5.4 hold, and let the stepsize satisfy_ 0 _< γ_ _≤_ _L_ [1] _[.]_ _[Then,]_
+
+_for each T_ _≥_ 0 _, the iterates of_ RAC-LoRA _(Algorithm 1) with_ GD _updates (Equation 3 or 4) satisfy_
+
+E        - _f_ ( _W_ _[T]_ )� _−_ _f_ _[⋆]_ _≤_ �1 _−_ _γµλ_ _[H]_ min� _T_        - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�] _._
+
+
+We achieved a linear convergence rate, which is significantly better than previous results; however,
+this improvement applies to a more limited class of functions. Importantly, we can recover the
+classical results of GD by setting _λ_ _[H]_ min [= 1][, which corresponds to the full-rank scenario.]
+
+
+The comprehensive analysis of different optimizers and their performance across various settings is
+provided in the appendix, as summarized in Table 1.
+
+
+6 EXPERIMENTS
+
+
+In this section, we explore the performance of RAC-LoRA as an optimization algorithm in machine
+learning applications. In Section 6.1 we validate the theoretical results in convex problems, while
+in Section 6.2 we evaluate the method applied to neural networks.
+
+
+6.1 CONVEX OPTIMIZATION PROBLEMS
+
+
+**Linear** **Regression.** We conducted our analysis in a controlled setting involving linear regression
+with quadratic regularization applied to synthetic data. Specifically, we utilized 3,000 samples for
+pre-training the model and 1,000 samples for fine-tuning. In this setup, we have _d_ = 100 with weight
+matrices of size 10 _×_ 10, and the regularization term is set to 0 _._ 0001. As illustrated in Figure 2, the
+method converges for various ranks and the convergence speed is proportional to _[n]_ _r_ [,] [and when the]
+
+rank is set to the full rank, we observe convergence identical to that of FPFT. We remark that COLA
+would suffer from the same divergence behavior as in Figure 1 on this quadratic problem.
+
+
+**Logistic Regression.** Analogous results for logistic regression are shown in Appendix A.
+
+
+8
+
+
+In particular, it is important to observe that the eigenvalues of the projection matrix are either zero or
+one, with the smallest eigenvalue being zero. However, the smallest eigenvalue of the expected value
+of the projection matrix can be strictly greater than zero. Additionally, it is essential to establish a
+lower bound for the loss function.
+
+**Remark.** _Assumption 5.1 is easily satisfied._ _Let H_ _be the projection matrix as defined below Equa-_
+_tion_ (4) _and assume that the A matrices are drawn from an isotropic distribution (the rows of A are_
+_isotropic)._ _Then_ _H_ _is_ _the_ _projection_ _onto_ _the_ _rank_ _of_ _A,_ _which_ _is_ _a_ _subspace_ _of_ _dimension_ _r_ _dis-_
+_tributed isotropically in_ R _[n]_ _._ _The matrix_ E[ _H_ ] _is then invariant under rotations, so must be a scalar_
+_multiple of the identity._ _By taking traces, one finds that_ E[ _H_ ] = _[r]_ _[I]_ _[so][ λ][H]_ [=] _[r]_ _[.]_
+
+
+_n_ _[r]_ _[I]_ _[so][ λ][H]_ min [=] _n_ _[r]_
+
+
+_multiple of the identity._ _By taking traces, one finds that_ E[ _H_ ] = _n_ _[I]_ _[so][ λ]_ min [=] _n_ _[.]_
+
+**Assumption 5.2.** _Function f_ _is bounded from below by an infimum f_ _[⋆]_ _∈_ R _._
+
+
+We now present the convergence result for RAC-LoRA with Gradient Descent (GD) updates.
+**Theorem 5.3.** _Let Assumptions 3.1 and 5.1 hold, and let the stepsize satisfy_ 0 _<_ _γ_ _≤_ _L_ [1] _[.]_ _[Then, the]_
+
+_iterates of_ RAC-LoRA _(Algorithm 1) with_ GD _updates (Equation 3 or 4) satisfy_
+
+
+2 [�]
+E _∇f_ ( _W_ - _[T]_ ) _≤_ [2(] _[f]_ [(] _[W]_ [ 0][)] _[ −]_ _[f][ ⋆]_ [)] _,_
+���� ��� _λ_ _[H]_ min _[γT]_
+
+
+10 [1]
+
+10 [0]
+
+10 1
+
+10 2
+
+10 3
+
+10 4
+
+10 5
+
+10 6
+
+
+10 [1]
+
+
+10 2
+
+
+|Col1|Col2|
+|---|---|
+|||
+|F<br>|ull fine-tuning (GD)<br>|
+|<br>~~R~~<br>R<br>R<br>R|AC-LoRA: rank = 1<br>~~AC-LoRA: rank = 3~~<br>AC-LoRA: rank = 5<br>AC-LoRA: rank = 7<br>AC-LoRA: rank = 10|
+|0<br>200<br>400<br>600<br>80<br># of gradients<br>RAC-LoRA convergence wit<br>CONVEX OPTIMIZATIO<br> erimental results are pro<br>SULTS OF ROBERTA ON<br>  work (Zhu et al., 2024;<br> the GLUE dataset (Wan<br>**gy.** We fne-tuned the ro<br>dy the behavior of low-r<br>  nge of values for the nu<br> we used rank 2 for the a<br> _β_ parameters 0.9 and 0<br> d a training batch size 8.<br> The results are present<br> ow-rank adaptation meth<br>acity. We expect RAC-L<br> to the additional capacit<br> Asymmetric LoRA. The <br>s do not provide such a <br>erformance close to that<br> .2.2 where we intentiona<br> ocedure.|0<br>200<br>400<br>600<br>80<br># of gradients<br>RAC-LoRA convergence wit<br>CONVEX OPTIMIZATIO<br> erimental results are pro<br>SULTS OF ROBERTA ON<br>  work (Zhu et al., 2024;<br> the GLUE dataset (Wan<br>**gy.** We fne-tuned the ro<br>dy the behavior of low-r<br>  nge of values for the nu<br> we used rank 2 for the a<br> _β_ parameters 0.9 and 0<br> d a training batch size 8.<br> The results are present<br> ow-rank adaptation meth<br>acity. We expect RAC-L<br> to the additional capacit<br> Asymmetric LoRA. The <br>s do not provide such a <br>erformance close to that<br> .2.2 where we intentiona<br> ocedure.|
+|**# Chains**<br>**# E**|**# Chains**<br>**# E**|
+|1<br>30, 80|1<br>30, 80|
+|1<br>1<br>RA<br>10<br><br>A<br>10<br>|1<br>1<br>RA<br>10<br><br>A<br>10<br>|
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||RAC-LoRA:<br>RAC-LoRA:<br>|lr = 1/L<br> lr = 1/(2L)<br>|||
+||~~RAC-LoRA:~~<br>RAC-LoRA:<br>RAC-LoRA:|~~ lr = 1/(5L)~~<br> lr = 1/(10L)<br> lr = 1/(20L)|||
+||||||
+|0<br>200<br>400<br>600<br>800<br>10<br># of gradients<br>|0<br>200<br>400<br>600<br>800<br>10<br># of gradients<br>|0<br>200<br>400<br>600<br>800<br>10<br># of gradients<br>|0<br>200<br>400<br>600<br>800<br>10<br># of gradients<br>|0<br>200<br>400<br>600<br>800<br>10<br># of gradients<br>|
+
+
+Table 2: Results with RoBERTa-base for rank 2 on tasks from the GLUE benchmark. *: results taken
+from the work of Hu et al. (2021). We report Matthews correlation coefficient for COLA, Pearson
+correlation coefficient for STS-B, and accuracy for the remaining tasks. Results are averaged over 3
+seeds and standard deviations are given in the subscript.
+
+
+6.2.2 RESULTS OF MLPS ON MNIST
+
+
+In this section, we seek to isolate the effect of the chaining procedure on generalisation performance
+by restricting the capacity of the low-rank adaptations. This ensures that a single adaptation is
+not sufficient to reach performance comparable with FPFT, allowing us to explore how chaining
+adaptations can bridge this gap.
+
+
+9
+
+
+10 5
+
+
+10 8
+
+
+10 11
+
+
+10 14
+
+
+**Discussion.** Table 3 shows results AsymmLoRA Zero Gaussian 81.6 912
+for MNIST with different ranks and RAC-LoRA Zero Gaussian 96.1 912
+initialization. LoRA reaches around
+90% of the accuracy of FPFT leaving some margin for improvement when using the chains. COLA constructs a sequence of LoRA
+modules, delivering significant accuracy improvements over LoRA due to the chaining procedure.
+The chaining allows COLA to capture richer features (at the cost of training more parameters). However, both LoRA and COLA lack rigorous convergence guarantees. AsymmLoRA has been shown empirically to approximate the performance of LoRA in Sun et al. (2024) — but again no convergence
+result is provided. Our proposed method (RAC-LoRA) enjoys significant accuracy improvements
+over AsymmLoRA, again due to the chaining procedure. RAC-LoRA leverages a diverse learning
+process across different LoRA blocks, which intuitively allows the model to capture a broader range
+of features. Crucially, RAC-LoRA comes with convergence guarantees (Theorem 5.3 and Theorem
+5.5). Finally, we note that each iteration of RAC-LoRA requires training only one matrix per LoRA
+block, while COLA needs training two matrices. This reduction in trainable parameters may offer
+advantages in resource-constrained settings, such as Federated Learning, where minimizing communication costs is critical.
+
+
+7 CONCLUSION
+
+
+In this work, we introduced RAC-LoRA, a framework for parameter-efficient fine-tuning that enables
+interpolation between low-rank adaptation and full parameter fine-tuning. Motivated by the convergence challenges of LoRA, we propose the iterative algorithm RAC-LoRA and provide convergence
+guarantees across various settings, including gradient descent, stochastic gradient descent, and random reshuffling. We extended this framework to the federated learning setup, where RAC-LoRA has
+advantages over competing algorithms in terms of communication efficiency. Finally, we validate
+our theoretical results empirically in both convex problems, such as linear and logistic regression,
+and non-convex problems, such as MLPs and LLMs, finding that its chaining procedure is advantageous in settings where standard low-rank adaptation approaches (such as LoRA and AsymmLoRA)
+fail to capture the richness of a full-parameter fine-tuning.
+
+
+REFERENCES
+
+
+Armen Aghajanyan, Luke Zettlemoyer, and Sonal Gupta. Intrinsic dimensionality explains the effectiveness of language model fine-tuning. _arXiv preprint arXiv:2012.13255_, 2020.
+
+
+Kwangjun Ahn, Chulhee Yun, and Suvrit Sra. SGD with shuffling: Optimal rates without component
+convexity and large epoch requirements. _Advances in Neural Information Processing Systems_, 33:
+17526–17535, 2020.
+
+
+Dimitri P Bertsekas. Incremental proximal methods for large scale convex optimization. _Mathemat-_
+_ical Programming_, 129(2):163–195, 2011.
+
+
+[2The setup is inspired by https://github.com/sunildkumar/lora_from_scratch/.](https://github.com/sunildkumar/lora_from_scratch/)
+
+
+10
+
+
+**Methodology.** We first pre-train a 3layer MLP on the first five classes
+(digits 0-4) and then adapt the network using LoRA-based methods for
+recognizing the remaining five unseen classes (digits 5-9). The model
+is evaluated solely on these unseen classes [2] . we used rank 1 for
+the adaptations and trained using
+the AdamW optimiser (Loshchilov,
+2017) with _β_ parameters 0.9 and
+0.999, _ϵ_ = 1 _×_ 10 _[−]_ [8], a constant
+learning rate of 2 _×_ 10 _[−]_ [4] and a training batch size 128.
+
+
+Table 3: MLP results on MNIST with rank _r_ and _α_ set to 1.
+In the case of AsymmLoRA and RAC-LoRA, only the zeroinitialized matrix is trained.
+
+**Method** _DA_ _DB_ **Acc** **Train Params**
+
+
+FPFT - - 98.0 54,700
+
+
+LoRA Gaussian Zero 83.8 1K
+COLA Gaussian Zero 92.6 1K
+
+
+LoRA Zero Gaussian 87.0 1K
+COLA Zero Gaussian 96.2 1K
+
+
+AsymmLoRA Gaussian Zero 62.3 133
+RAC-LoRA Gaussian Zero 92.0 133
+
+
+Dan Biderman, Jose Gonzalez Ortiz, Jacob Portes, Mansheej Paul, Philip Greengard, Connor Jennings, Daniel King, Sam Havens, Vitaliy Chiley, Jonathan Frankle, et al. LoRA learns less and
+forgets less. _arXiv preprint arXiv:2405.09673_, 2024.
+
+
+Jaeyoung Cha, Jaewook Lee, and Chulhee Yun. Tighter lower bounds for shuffling sgd: Random
+permutations and beyond. In _International_ _Conference_ _on_ _Machine_ _Learning_, pp. 3855–3912.
+PMLR, 2023.
+
+
+Zachary Charles and Jakub Koneˇcn`y. On the outsized importance of learning rates in local update
+methods. _arXiv preprint arXiv:2007.00878_, 2020.
+
+
+Yae Jee Cho, Pranay Sharma, Gauri Joshi, Zheng Xu, Satyen Kale, and Tong Zhang. On the convergence of federated averaging with cyclic client participation. In _International Conference on_
+_Machine Learning_, pp. 5677–5721. PMLR, 2023.
+
+
+Kenneth Ward Church, Zeyu Chen, and Yanjun Ma. Emerging trends: A gentle introduction to
+fine-tuning. _Natural Language Engineering_, 27(6):763–778, 2021.
+
+
+Laurent Condat and Peter Richt´arik. Randprox: Primal-dual optimization algorithms with randomized proximal updates. _arXiv preprint arXiv:2207.12891_, 2022.
+
+
+Laurent Condat, Ivan Agarsk`y, Grigory Malinovsky, and Peter Richt´arik. Tamuna: Doubly accelerated federated learning with local training, compression, and partial participation. _arXiv preprint_
+_arXiv:2302.09832_, 2023.
+
+
+Marina Danilova, Pavel Dvurechensky, Alexander Gasnikov, Eduard Gorbunov, Sergey Guminov,
+Dmitry Kamzolov, and Innokentiy Shibaev. Recent theoretical advances in non-convex optimization. In _High-Dimensional Optimization and Probability: With a View Towards Data Science_, pp.
+79–163. Springer, 2022.
+
+
+Yury Demidovich, Grigory Malinovsky, Igor Sokolov, and Peter Richt´arik. A guide through the zoo
+of biased SGD. _Advances in Neural Information Processing Systems_, 36:23158–23171, 2023.
+
+
+Margalit R Glasgow, Honglin Yuan, and Tengyu Ma. Sharp bounds for federated averaging (local sgd) and continuous perspective. In _International_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_
+_Statistics_, pp. 9050–9090. PMLR, 2022.
+
+
+Eduard Gorbunov, Filip Hanzely, and Peter Richt´arik. Local sgd: Unified theory and new efficient
+methods. In _International_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_ _Statistics_, pp. 3556–3564.
+PMLR, 2021.
+
+
+Robert Mansel Gower, Nicolas Loizou, Xun Qian, Alibek Sailanbayev, Egor Shulgin, and Peter
+Richt´arik. SGD: General analysis and improved rates. In _International Conference on Machine_
+_Learning_, pp. 5200–5209. PMLR, 2019.
+
+
+Michał Grudzie´n, Grigory Malinovsky, and Peter Richt´arik. Can 5th generation local training methods support client sampling? yes! In _International_ _Conference_ _on_ _Artificial_ _Intelligence_ _and_
+_Statistics_, pp. 1055–1092. PMLR, 2023a.
+
+
+Michał Grudzie´n, Grigory Malinovsky, and Peter Richt´arik. Improving accelerated federated learning with compression and importance sampling. _arXiv preprint arXiv:2306.03240_, 2023b.
+
+
+Zeyu Han, Chao Gao, Jinyang Liu, Sai Qian Zhang, et al. Parameter-efficient fine-tuning for large
+models: A comprehensive survey. _arXiv preprint arXiv:2403.14608_, 2024.
+
+
+Junxian He, Chunting Zhou, Xuezhe Ma, Taylor Berg-Kirkpatrick, and Graham Neubig. Towards a
+unified view of parameter-efficient transfer learning. _arXiv preprint arXiv:2110.04366_, 2021.
+
+
+Samuel Horv´ath, Maziar Sanjabi, Lin Xiao, Peter Richt´arik, and Michael Rabbat. FedShuffle:
+Recipes for better use of local work in federated learning. _arXiv_ _preprint_ _arXiv:2204.13169_,
+2022.
+
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,
+and Weizhu Chen. LoRA: Low-rank adaptation of large language models. _arXiv_ _preprint_
+_arXiv:2106.09685_, 2021.
+
+
+11
+
+
+Prateek Jain, Dheeraj Nagaraj, and Praneeth Netrapalli. SGD without replacement: Sharper rates
+for general smooth convex functions. _arXiv preprint arXiv:1903.01463_, 2019.
+
+
+Peter Kairouz, H Brendan McMahan, Brendan Avent, Aur´elien Bellet, Mehdi Bennis, Arjun Nitin
+Bhagoji, Kallista Bonawitz, Zachary Charles, Graham Cormode, Rachel Cummings, et al. Advances and open problems in federated learning. _Foundations and trends® in machine learning_,
+14(1–2):1–210, 2021.
+
+
+Sai Praneeth Karimireddy, Satyen Kale, Mehryar Mohri, Sashank Reddi, Sebastian Stich, and
+Ananda Theertha Suresh. Scaffold: Stochastic controlled averaging for federated learning. In
+_International conference on machine learning_, pp. 5132–5143. PMLR, 2020.
+
+
+Ahmed Khaled and Peter Richt´arik. Better theory for SGD in the nonconvex world. _arXiv preprint_
+_arXiv:2002.03329_, 2020.
+
+
+Ahmed Khaled, Konstantin Mishchenko, and Peter Richt´arik. First analysis of local gd on heterogeneous data. _arXiv preprint arXiv:1909.04715_, 2019.
+
+
+Ahmed Khaled, Konstantin Mishchenko, and Peter Richt´arik. Tighter theory for local sgd on identical and heterogeneous data. In _International Conference on Artificial Intelligence and Statistics_,
+pp. 4519–4529. PMLR, 2020.
+
+
+Ahmed Khaled, Othmane Sebbouh, Nicolas Loizou, Robert M Gower, and Peter Richt´arik. Unified
+analysis of stochastic gradient methods for composite convex and smooth optimization. _Journal_
+_of Optimization Theory and Applications_, 199(2):499–540, 2023.
+
+
+Mikhail Khodak, Renbo Tu, Tian Li, Liam Li, Maria-Florina F Balcan, Virginia Smith, and Ameet
+Talwalkar. Federated hyperparameter tuning: Challenges, baselines, and connections to weightsharing. _Advances in Neural Information Processing Systems_, 34:19184–19197, 2021.
+
+
+Anastasia Koloskova, Nicolas Loizou, Sadra Boreiri, Martin Jaggi, and Sebastian Stich. A unified
+theory of decentralized sgd with changing topology and local updates. In _International Confer-_
+_ence on Machine Learning_, pp. 5381–5393. PMLR, 2020.
+
+
+Jakub Koneˇcn´y, H. Brendan McMahan, Felix X. Yu, Peter Richt´arik, Ananda Theertha Suresh,
+and Dave Bacon. Federated learning: Strategies for improving communication efficiency. _arXiv_
+_preprint arXiv:1610.05492_, 2016.
+
+
+Weirui Kuang, Bingchen Qian, Zitao Li, Daoyuan Chen, Dawei Gao, Xuchen Pan, Yuexiang Xie,
+Yaliang Li, Bolin Ding, and Jingren Zhou. FederatedScope-LLM: A comprehensive package
+for fine-tuning large language models in federated learning. In _Proceedings_ _of_ _the_ _30th_ _ACM_
+_SIGKDD Conference on Knowledge Discovery and Data Mining_, pp. 5260–5271, 2024.
+
+
+Chunyuan Li, Heerad Farkhoor, Rosanne Liu, and Jason Yosinski. Measuring the intrinsic dimension
+of objective landscapes. _arXiv preprint arXiv:1804.08838_, 2018.
+
+
+Yinhan Liu. RoBERTa: A robustly optimized BERT pretraining approach. _arXiv_ _preprint_
+_arXiv:1907.11692_, 2019.
+
+
+I Loshchilov. Decoupled weight decay regularization. _arXiv preprint arXiv:1711.05101_, 2017.
+
+
+Yucheng Lu, Si Yi Meng, and Christopher De Sa. A general analysis of example-selection for
+stochastic gradient descent. In _International_ _Conference_ _on_ _Learning_ _Representations_ _(ICLR)_,
+volume 10, 2022.
+
+
+Grigory Malinovskiy, Dmitry Kovalev, Elnur Gasanov, Laurent Condat, and Peter Richtarik. From
+local sgd to local fixed-point methods for federated learning. In _International_ _Conference_ _on_
+_Machine Learning_, pp. 6692–6701. PMLR, 2020.
+
+
+Grigory Malinovsky and Peter Richt´arik. Federated random reshuffling with compression and variance reduction. _arXiv preprint arXiv:2205.03914_, 2022.
+
+
+Grigory Malinovsky, Kai Yi, and Peter Richt´arik. Variance reduced proxskip: Algorithm, theory
+and application to federated learning. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 35:
+15176–15189, 2022.
+
+
+12
+
+
+Grigory Malinovsky, Samuel Horv´ath, Konstantin Burlachenko, and Peter Richt´arik. Federated
+learning with regularized client participation. _arXiv preprint arXiv:2302.03662_, 2023a.
+
+
+Grigory Malinovsky, Konstantin Mishchenko, and Peter Richt´arik. Server-side stepsizes and sampling without replacement provably help in federated optimization. In _Proceedings_ _of_ _the_ _4th_
+_International Workshop on Distributed Machine Learning_, pp. 85–104, 2023b.
+
+
+Grigory Malinovsky, Alibek Sailanbayev, and Peter Richt´arik. Random reshuffling with variance
+reduction: New analysis and better rates. In _Uncertainty in Artificial Intelligence_, pp. 1347–1357.
+PMLR, 2023c.
+
+
+Artavazd Maranjyan, Mher Safaryan, and Peter Richt´arik. Gradskip: Communication-accelerated
+local gradient methods with better computational complexity. _arXiv preprint arXiv:2210.16402_,
+2022.
+
+
+Konstantin Mishchenko, Ahmed Khaled, and Peter Richt´arik. Random reshuffling: Simple analysis
+with vast improvements. _Advances in Neural Information Processing Systems_, 33:17309–17320,
+2020.
+
+
+Konstantin Mishchenko, Ahmed Khaled, and Peter Richt´arik. Proximal and federated random
+reshuffling. In _International Conference on Machine Learning_, pp. 15718–15749. PMLR, 2022a.
+
+
+Konstantin Mishchenko, Grigory Malinovsky, Sebastian Stich, and Peter Richt´arik. Proxskip: Yes!
+local gradient steps provably lead to communication acceleration! finally! In _International Con-_
+_ference on Machine Learning_, pp. 15750–15769. PMLR, 2022b.
+
+
+Angelia Nedi´c and Dimitri Bertsekas. Convergence rate of incremental subgradient algorithms.
+_Stochastic optimization:_ _algorithms and applications_, pp. 223–264, 2001.
+
+
+Yu E Nesterov. Introductory lectures on convex optimization. a basic course. 2004.
+
+
+Lam M Nguyen, Quoc Tran-Dinh, Dzung T Phan, Phuong Ha Nguyen, and Marten Van Dijk. A
+unified convergence analysis for shuffling-type gradient methods. _Journal of Machine Learning_
+_Research_, 22(207):1–44, 2021.
+
+
+Benjamin Recht and Christopher R´e. Toward a noncommutative arithmetic-geometric mean inequality: Conjectures, case-studies, and consequences. In _Conference on Learning Theory_, pp. 11–1.
+JMLR Workshop and Conference Proceedings, 2012.
+
+
+Peter Richt´arik and Martin Tak´aˇc. Parallel coordinate descent methods for big data optimization.
+_Mathematical Programming_, 156(1-2):433–484, 2016.
+
+
+Sebastian Ruder. An overview of gradient descent optimization algorithms. _arXiv_ _preprint_
+_arXiv:1609.04747_, 2016.
+
+
+Abdurakhmon Sadiev, Dmitry Kovalev, and Peter Richt´arik. Communication acceleration of local
+gradient methods via an accelerated primal-dual algorithm with an inexact prox. _Advances_ _in_
+_Neural Information Processing Systems_, 35:21777–21791, 2022a.
+
+
+Abdurakhmon Sadiev, Grigory Malinovsky, Eduard Gorbunov, Igor Sokolov, Ahmed Khaled, Konstantin Burlachenko, and Peter Richt´arik. Federated optimization algorithms with random reshuffling and gradient compression. _arXiv preprint arXiv:2206.07021_, 2022b.
+
+
+Itay Safran and Ohad Shamir. Random shuffling beats SGD only after many epochs on illconditioned problems. _Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, 34:15151–15161,
+2021.
+
+
+A Shapiro and Y Wardi. Convergence analysis of gradient descent stochastic algorithms. _Journal of_
+_Optimization Theory and Applications_, 91:439–454, 1996.
+
+
+Ruo-Yu Sun. Optimization for deep learning: An overview. _Journal_ _of_ _the_ _Operations_ _Research_
+_Society of China_, 8(2):249–294, 2020.
+
+
+Youbang Sun, Zitao Li, Yaliang Li, and Bolin Ding. Improving LoRA in privacy-preserving federated learning. _arXiv preprint arXiv:2403.12313_, 2024.
+
+
+13
+
+
+Zehua Sun, Huanqi Yang, Kai Liu, Zhimeng Yin, Zhenjiang Li, and Weitao Xu. Recent advances in
+LoRa: A comprehensive survey. _ACM Transactions on Sensor Networks_, 18(4):1–44, 2022.
+
+
+Grega Vrbanˇciˇc and Vili Podgorelec. Transfer learning with adaptive fine-tuning. _IEEE Access_, 8:
+196197–196211, 2020.
+
+
+Alex Wang. Glue: A multi-task benchmark and analysis platform for natural language understanding. _arXiv preprint arXiv:1804.07461_, 2018.
+
+
+Blake Woodworth, Kumar Kshitij Patel, Sebastian Stich, Zhen Dai, Brian Bullins, Brendan Mcmahan, Ohad Shamir, and Nathan Srebro. Is local sgd better than minibatch sgd? In _International_
+_Conference on Machine Learning_, pp. 10334–10343. PMLR, 2020a.
+
+
+Blake E Woodworth, Kumar Kshitij Patel, and Nati Srebro. Minibatch vs local sgd for heterogeneous
+distributed learning. _Advances in Neural Information Processing Systems_, 33:6281–6292, 2020b.
+
+
+Wenhan Xia, Chengwei Qin, and Elad Hazan. Chain of LoRA: Efficient fine-tuning of language
+models via residual learning. _arXiv preprint arXiv:2401.04151_, 2024.
+
+
+Lingling Xu, Haoran Xie, Si-Zhao Joe Qin, Xiaohui Tao, and Fu Lee Wang. Parameter-efficient
+fine-tuning methods for pretrained language models: A critical review and assessment. _arXiv_
+_preprint arXiv:2312.12148_, 2023.
+
+
+Chulhee Yun, Shashank Rajput, and Suvrit Sra. Minibatch vs local sgd with shuffling: Tight convergence bounds and beyond. _arXiv preprint arXiv:2110.10342_, 2021.
+
+
+Xingyu Zhou. On the fenchel duality between strong convexity and lipschitz continuous gradient.
+_arXiv preprint arXiv:1803.06573_, 2018.
+
+
+Jiacheng Zhu, Kristjan Greenewald, Kimia Nadjahi, Haitz S´aez de Oc´ariz Borde, Rickard Br¨uel
+Gabrielsson, Leshem Choshen, Marzyeh Ghassemi, Mikhail Yurochkin, and Justin Solomon.
+Asymmetry in low-rank adapters of foundation models. _arXiv preprint arXiv:2402.16842_, 2024.
+
+
+14
+
+
+# **Appendix**
+
+
+A RESULTS ON CONVEX OPTIMIZATION PROBLEMS
+
+
+A.1 LOGISTIC REGRESSION
+
+
+We performed our analysis in a controlled environment using logistic regression with quadratic
+regularization on synthetic data. In this configuration, we set _d_ = 100, employed weight matrices
+of size 10 _×_ 10, and used 2,000 samples, with the regularization term fixed at 0 _._ 1. As shown in
+Figure 3, the method demonstrates convergence across different ranks, and when the rank is set to
+full rank, we observe convergence that mirrors that of FPFT.
+
+
+Figure 3: RAC-LoRA convergence with varying ranks and step sizes on a logistic regression problem.
+
+
+B RESULTS ON NON-CONVEX OPTIMIZATION PROBLEMS
+
+
+B.1 ADDITIONAL RESULTS OF ROBERTA ON NLP TASKS
+
+
+Table 4 reports additional configurations of the number of epochs per chain and the number of chains
+on the GLUE benchmark. These results further corroborate the discussion in Section 6.2.
+
+
+B.2 ABLATION ON NUMBER OF EPOCHS PER BLOCK IN THE CHAINS
+
+
+Convergence proof for RAC-LoRA (Corollary D.2.1 and Corollary D.3.1) states that each LoRA
+module shall be optimized for one epoch only. However, good approximations can also be obtained
+using more epochs per block and hence fewer blocks (i.e., fewer parameters), as we show in Table 5
+for the case of MLP on MNIST.
+
+
+Similarly, we plot the training loss curves for RoBERTa-base on the RTE dataset in Figure 4. We
+observe that all setups reach the same value at convergence with similar speed.
+
+
+15
+
+
+10 [1]
+
+
+10 2
+
+
+10 5
+
+
+10 8
+
+
+10 11
+
+
+10 14
+
+
+Method # Chains # Epochs MRPC CoLA RTE STS-B Avg
+
+FPFT * 1 30, 80, 80, 40 90.2 _±_ 0.0 63.6 _±_ 0.0 78.7 _±_ 0.0 91.2 _±_ 0.0 80.9
+LoRA * 89.7 _±_ 0.7 63.4 _±_ 1.2 86.6 _±_ 0.7 91.5 _±_ 0.2 82.8
+
+LoRA 1 20 86.8 _±_ 0.8 58.0 _±_ 0.4 71.4 _±_ 0.7 90.3 _±_ 0.1 76.6
+AsymmLoRA 85.5 _±_ 0.5 56.5 _±_ 1.5 69.2 _±_ 0.2 89.6 _±_ 0.1 75.2
+
+COLA 2 10 87.1 _±_ 0.2 58.4 _±_ 1.5 69.9 _±_ 0.9 90.3 _±_ 0.2 76.4
+10 2 84.2 _±_ 1.1 54.2 _±_ 0.4 64.6 _±_ 1.3 89.1 _±_ 0.1 73.0
+
+RAC-LoRA 2 10 85.6 _±_ 1.7 55.3 _±_ 1.2 68.6 _±_ 1.0 89.4 _±_ 0.2 74.7
+10 2 85.4 _±_ 0.4 55.1 _±_ 1.2 65.5 _±_ 0.9 89.3 _±_ 0.1 73.8
+
+LoRA 1 50 88.2 _±_ 0.3 60.1 _±_ 0.4 74.4 _±_ 0.9 90.6 _±_ 0.1 78.3
+AsymmLoRA 86.4 _±_ 1.0 57.4 _±_ 0.3 69.9 _±_ 1.8 90.3 _±_ 0.1 76.0
+
+COLA 5 10 87.8 _±_ 1.1 59.3 _±_ 2.1 71.2 _±_ 1.2 90.6 _±_ 0.2 77.2
+10 5 87.7 _±_ 0.5 58.1 _±_ 1.2 70.9 _±_ 0.5 90.2 _±_ 0.2 76.7
+
+RAC-LoRA 5 10 87.2 _±_ 0.6 57.6 _±_ 0.5 70.6 _±_ 0.7 90.2 _±_ 0.1 76.4
+10 5 87.5 _±_ 0.4 57.8 _±_ 1.0 70.3 _±_ 1.2 90.2 _±_ 0.2 76.5
+
+LoRA 1 100 87.7 _±_ 0.2 60.8 _±_ 0.2 75.2 _±_ 1.5 90.2 _±_ 0.1 78.5
+AsymmLoRA 86.9 _±_ 0.3 58.7 _±_ 1.0 71.0 _±_ 3.3 90.4 _±_ 0.0 76.8
+COLA 10 10 88.0 _±_ 0.8 59.5 _±_ 1.0 72.1 _±_ 0.9 90.7 _±_ 0.2 77.6
+RAC-LoRA 10 10 87.0 _±_ 0.7 58.5 _±_ 0.1 72.3 _±_ 1.5 90.3 _±_ 0.0 77.0
+
+
+Table 4: Performance of the methods using RoBERTa-base for rank 2. The experiments are based
+on 4 tasks from the GLUE benchmark. - denotes the results reported in Hu et al. (2021). We report
+Matthews correlation coefficient for the CoLA dataset, Pearson correlation coefficient for STS-B,
+and accuracy for the remaining tasks, with the standard deviations given in the subscript. The results
+are obtained using 3 random seeds.
+
+
+**Number of epochs per block**
+
+
+**1** **2** **3** **4** **5** **10**
+
+
+COLA 96.2 95.8 95.9 95.1 95.4 94.5
+RAC-LORA 96.1 95.6 95.6 94.9 94.7 93.9
+
+
+Table 5: Accuracy at varying epochs for each block in the chained methods (COLA and RAC-LORA).
+The setup is the same as in Table 3, with a zero-initialized _A_ matrix and a Gaussian-initialized _B_
+matrix. To ensure a fair comparison, the product of the number of epochs per block and the number
+of blocks is kept constant at 50. The number of trainable parameters for COLA and RAC-LORA are
+1K and 912, respectively.
+
+
+16
+
+
+0.7
+
+
+0.6
+
+
+0.5
+
+
+0.4
+
+
+0.3
+
+
+0.2
+
+
+0.1
+
+
+0.0
+
+
+0 50 100 150 200 250 300
+Epochs
+
+
+Figure 4: RAC-LORA training loss curves at a fixed computational budget for varying epochs for
+each block in the chain. RoBERTa-base with rank 2.
+
+
+17
+
+
+C ANALYSIS OF RAC-LORA WITH GRADIENT DESCENT
+
+
+C.1 PROOF OF THEOREM 5.3
+
+
+**Theorem.** _Suppose_ _that Assumption 3.1 and Assumption 5.1 hold._ _Suppose that a stepsize γ_ _>_ 0
+_is_ _chosen_ _such_ _that_ _γ_ _≤_ _L_ 1 _[.]_ _[We]_ _[choose]_ _[the]_ _[output]_ _[of]_ _[the]_ _[method]_ _W_ [�] _[T]_ _uniformly_ _at_ _random_ _from_
+_W_ [0] _, W_ [1] _, . . ., W_ _[T][ −]_ [1] _Then,_ _the_ _iterate_ _W_ _[T]_ _of_ RAC-LoRA _method_ _(Algorithm_ _1)_ _with_ GD _updates_
+
+[�]
+_(Equation 3 or Equation 4) satisfy_
+
+
+2 [�]
+E _∇f_ ( _W_          - _[T]_ ) _≤_ [2] _[f]_ [(] _[W]_ [ 0][)] _[ −]_ _[f][ ⋆]_ _._
+���� ��� _λ_ _[H]_ min _[γT]_
+
+
+The proof is provided for Left Sketch (Definition 4.1). The result for Right Sketch (Definition 4.2)
+can be derived by following the same steps.
+
+
+_Proof._ We begin by examining the implications of Assumption 3.1. The relationships between
+various conditions associated with Assumption 3.1 are discussed in detail in Nesterov (2004).
+
+
+Subtracting _f_ _[⋆]_ from both sides we get
+
+E      - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _[γ]_ 2 _[λ]_ min _[H][B]_ �� _∇f_ ( _W t_ )��2 _._ (5)
+
+
+Now we can rewrite as
+_γ_ 2 _[λ]_ min _[H][B]_ �� _∇f_ ( _W t_ )��2 _≤_       - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [�] _−_ �E       - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�]
+
+
+18
+
+
+_f_ ( _W_ _[t]_ [+1] ) _≤f_ ( _W_ _[t]_ ) +       - _∇f_ ( _W_ _[t]_ ) _, W_ _[t]_ [+1] _−_ _W_ _[t]_ [�] + _[L]_
+
+2
+
+Using the update rule _W_ _[t]_ [+1] = _W_ _[t]_ _−_ _γHB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)][ we get]
+
+
+�� _W t_ +1 _−_ _W t_ ��2
+
+
+_f_ ( _W_ _[t]_ [+1] ) _≤f_ ( _W_ _[t]_ ) + - _∇f_ ( _W_ _[t]_ ) _, −γHB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)] - + _[L]_
+
+2
+
+
+�� _−γHBt_ _[∇][f]_ [(] _[W][ t]_ [)] ��2
+
+
+_≤f_ ( _W_ _[t]_ ) _−_ _γ_     - _∇f_ ( _W_ _[t]_ ) _, HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]     - + _[L]_ _B_ _[∇][f]_ [(] _[W][ t]_ [)] ��2
+
+2 _[γ]_ [2][ ��] _[H]_ _[t]_
+
+_≤f_ ( _W_ _[t]_ ) _−_ _γ_     - _∇f_ ( _W_ _[t]_ ) _, HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]     - + _[L]_ _HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)] _[, H]_ _B_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]     
+2 _[γ]_ [2][ �]
+
+_≤f_ ( _W_ _[t]_ ) _−_ _γ_     - _∇f_ ( _W_ _[t]_ ) _, HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]     - + _[L]_ _∇f_ ( _W_ _[t]_ ) _,_ ( _HB_ _[t]_ [)] _[⊤][H]_ _B_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]     - _._
+
+2 _[γ]_ [2][ �]
+
+Since matrix _HB_ _[t]_ [is projection matrix, we have][ (] _[H]_ _B_ _[t]_ [)] _[⊤][H]_ _B_ _[t]_ [= (] _[H]_ _B_ _[t]_ [)][2] [=] _[ H]_ _B_ _[t]_ [:]
+
+_f_ ( _W_ _[t]_ [+1] ) _≤f_ ( _W_ _[t]_ ) _−_ _γ_    - _∇f_ ( _W_ _[t]_ ) _, HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]    - + _[L]_ _∇f_ ( _W_ _[t]_ ) _, HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]    - _._
+
+2 _[γ]_ [2][ �]
+
+Using the fact that _γ_ _≤_ _L_ [1] [we have]
+
+_f_ ( _W_ _[t]_ [+1] ) _≤f_ ( _W_ _[t]_ ) _−_ _[γ]_           - _∇f_ ( _W_ _[t]_ ) _, HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]           - _._
+
+2
+
+
+Taking expectation we get
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤_ E - _f_ ( _W_ _[t]_ ) _−_ _[γ]_
+
+
+_≤f_ ( _W_ _[t]_ ) _−_ _[γ]_
+
+
+ - _∇f_ ( _W_ _[t]_ ) _, HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]  - _| W_ _[t]_ [�]
+2
+
+
+2 - _∇f_ ( _W_ _[t]_ ) _,_ E - _HB_ _[t]_ - _∇f_ ( _W_ _[t]_ )�
+
+
+Using an Assumption 5.1 we have
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤_ E - _f_ ( _W_ _[t]_ ) _−_ _[γ]_
+
+
+_≤f_ ( _W_ _[t]_ ) _−_ _[γ]_
+
+
+ - _∇f_ ( _W_ _[t]_ ) _, HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)]  - _| W_ _[t]_ [�]
+2
+
+
+_[γ]_ 2 _[λ]_ min _[H][B]_ �� _∇f_ ( _W t_ )��2 _._
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Taking expectation and using tower property we obtain
+_γ_ min [E] ��� _∇f_ ( _W t_ )��2 [�] _≤_ _e_ _[t]_ _−_ _e_ _[t]_ [+1] _,_
+2 _[λ][H][B]_
+
+where _e_ _[t]_ = E [ _f_ ( _W_ _[t]_ )] _−_ _f_ _[⋆]_ . Now we can sum these inequalities together and get
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+_γ_ min [E] ��� _∇f_ ( _W t_ )��2 [�] _≤_
+2 _[λ][H][B]_
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+- _e_ _[t]_ _−_ _e_ _[t]_ [+1][�] _,_
+
+
+Using telescoping property of _e_ _[t]_ _−_ _e_ _[t]_ [+1] we get
+
+
+_T −_ 1
+
+    
+
+_t_ =0
+
+
+Once we divide by _T_ we obtain
+
+
+_γ_ min [E] ��� _∇f_ ( _W t_ )��2 [�] _≤_ _e_ [0] _−_ _e_ _[T]_ _._
+2 _[λ][H][B]_
+
+
+_γ_ min [E] ��� _∇f_ ( _W t_ )��2 [�] _≤_ _[e]_ [0] _[ −]_ _[e][T]_
+2 _[λ][H][B]_ _T_
+
+_≤_ _[e]_ [0]
+
+_T_ _[.]_
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+Finally, we get
+
+
+1
+
+_T_
+
+
+1
+
+_T_
+
+
+_T −_ 1
+
+
+_._
+_λ_ _[H]_ min _[B]_ _[γT]_
+
+
+- 2 [�]
+
+E ��� _∇f_ ( _W t_ )�� _≤_ [2(] _[f]_ [(] _[W]_ [ 0][)] _[ −]_ _[f][ ⋆]_ [)]
+_t_ =0 _λ_ _[H]_ min _[B]_ _[γT]_
+
+
+Applying argument from Danilova et al. (2022) we obtain the result for uniformly chosen point.
+
+
+C.2 PROOF OF THEOREM 5.5
+
+
+**Theorem.** _Suppose that Assumption 3.1, Assumption 5.4 and Assumption 5.1 hold._ _Suppose that a_
+_stepsize γ_ _≥_ 0 _is chosen such that γ_ _≤_ _L_ [1] _[.]_ _[Then,]_ _[the iterates of]_ [RAC-LoRA] _[ method (Algorithm 1)]_
+
+_with_ GD _updates (Equation 3 or Equation 4) satisfy_
+
+E        - _f_ ( _W_ _[T]_ )� _−_ _f_ _[⋆]_ _≤_ �1 _−_ _γµλ_ _[H]_ min� _T_        - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�] _._
+
+
+The proof is provided for Left Sketch (Definition 4.1). The result for Right Sketch (Definition 4.2)
+can be derived by following the same steps.
+
+
+_Proof._ We start from the inequality 5:
+
+E      - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _[γ]_ 2 _[λ]_ min _[H][B]_ �� _∇f_ ( _W t_ )��2 _._
+
+Using PL condition _∥∇f_ ( _W_ _[t]_ ) _∥_ [2] _≥_ 2 _µ_ ( _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ ) we have
+
+E      - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _γµλ_ _[H]_ min _[B]_      - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [�]
+
+_≤_ �1 _−_ _γµλ_ _[H]_ min _[B]_ �� _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [�] _._
+
+
+Once we unroll the recursion we get
+
+E       - _f_ ( _W_ _[T]_ )� _−_ _f_ _[⋆]_ _≤_ �1 _−_ _γµλ_ _[H]_ min _[B]_       - _T_       - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�] _._
+
+
+In order to obtain _ε_ solution we need to take
+
+
+_T_ _≥O_
+
+
+_L_ 1
+log [1]
+_µ_ _λ_ _[H]_ min _[B]_ _ε_
+
+
+19
+
+
+_L_ 1
+log [1]
+_µ_ _λ_ _[H]_ min _[B]_ _ε_
+
+
+_._
+
+
+**1026**
+
+
+**1027**
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+
+**1032**
+
+**1033**
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+
+**1038**
+
+**1039**
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+
+**1044**
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+
+**1050**
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+
+**1055**
+
+**1056**
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+
+**1061**
+
+**1062**
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+
+**1067**
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+
+**1073**
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+
+**1078**
+
+**1079**
+
+
+D ANALYSIS OF RAC-LORA WITH RANDOM RESHUFFLING
+
+
+The previous results were obtained using full gradients. However, this approach is impractical in
+deep learning settings, where calculating full gradients is often infeasible. To analyze stochastic
+methods, we assume a finite sum structure for the loss function:
+
+
+_W_ _[t]_ [+1] = _W_ _[t]_ _−_ _γHB_ _[t]_
+
+
+where ˆ _g_ _[t]_ = _N_ [1] - _Ni_ =0 _−_ 1 _[∇][f]_ [(] _[W][ t]_ _i_ [)] _[.]_
+
+
+_f_ ( _W_ [0] + ∆ _W_ ) = [1]
+
+_N_
+
+
+_,_ (6)
+
+
+_N_
+
+
+- _fi_ ( _W_ [0] + ∆ _W_ )
+
+
+_i_ =1
+
+
+min
+∆ _W ∈_ R _[m][×][n]_
+
+
+where each function _fi_ represents the individual loss function for one sample and _N_ is total number
+of datapoints. Next, we analyze a practical variant of stochastic gradient descent (SGD) known
+as Random Reshuffling (RR), which involves sampling without replacement. In this method, the
+dataset is shuffled according to a permutation, ensuring that each training sample is used exactly
+once during each epoch.
+
+
+RR is a variant of SGD in which each data point is used exactly once per epoch, also known as SGD
+with sampling without replacement. Many efforts have been made to explain why gradient methods
+with reshuffling perform so well in practice, across different types of problems. The convergence
+rates for incremental gradient methods with random reshuffling in convex optimization were first
+explored by Nedi´c & Bertsekas (2001) and later by Bertsekas (2011). In recent years, a lot of focus
+has shifted toward strongly convex problems, with studies showing that RR can outperform SGD.
+For example, Recht & R´e (2012) were among the first to analyze this for quadratic least squares
+problems.
+
+
+Researchers have also managed to improve results and remove some of the earlier assumptions,
+such as second-order smoothness, as seen in works by Jain et al. (2019), Safran & Shamir (2021)
+and Mishchenko et al. (2020). These studies introduced a new way to account for the random
+permutation’s variance, making it easier to analyze both convex and strongly convex cases. There
+have even been extensions into non-convex settings, with results under the PL condition (Ahn et al.,
+2020; Nguyen et al., 2021) and general non-convex smooth cases (Lu et al., 2022; Mishchenko et al.,
+2020; Malinovsky et al., 2023c). More recently, tighter lower bounds for strongly convex and PL
+functions have been developed (Cha et al., 2023).
+
+
+In recent years, there’s also been growing interest in applying these reshuffling techniques to distributed and federated learning, which is crucial for training large-scale, decentralized models (Yun
+et al., 2021; Malinovsky et al., 2023b; Sadiev et al., 2022b; Mishchenko et al., 2022a; Cho et al.,
+2023; Malinovsky & Richt´arik, 2022; Malinovsky et al., 2023a; Horv´ath et al., 2022)
+
+
+To analyze stochastic methods, we need to make assumptions about the variance. The standard
+assumption is that the variance is bounded:
+**Assumption D.1.** _There exist nonnegative constants σ_ _≥_ 0 _such that for any W_ _[t]_ _∈_ R _[m][×][n]_ _we have,_
+
+
+1
+
+_N_
+
+
+_n_
+
+
+_i_ =1
+
+
+�� _∇fi_ - _W_ _[t]_ [�] _−∇f_ - _W_ _[t]_ [���][2] _≤_ _σ_ [2] _._
+
+
+The proof is provided for Left Sketch (Definition 4.1). The result for Right Sketch (Definition 4.2)
+can be derived by following the same steps.
+
+
+We consider a method belonging to the class of data permutation methods which is the RR algorithm. In each epoch _t_ of RR, we sample indices _π_ 0 _, π_ 1 _, . . ., πN_ _−_ 1 without replacement from
+_{_ 1 _,_ 2 _, . . ., N_ _}_, i.e., _{π_ 0 _, π_ 1 _, . . ., πN_ _−_ 1 _}_ is a random permutation of the set _{_ 1 _,_ 2 _. . . N_ _}_ and proceed
+with _N_ iterates of the form:
+_Wi_ _[t]_ +1 [=] _[ W][ t]_ _i_ _[−]_ _[γH]_ _B_ _[t]_ _[∇][f]_ [(] _[W][ t]_ _i_ [)] _[.]_
+
+We then set _W_ _[t]_ [+1] = _WN_ _[t]_ [, and repeat the process for a total of] _[ T]_ [LoRA][ blocks.] [We can derive the]
+effective step:
+
+
+_N_ _−_ 1
+
+- _∇f_ ( _Wi_ _[t]_ [) =] _[ W][ t][ −]_ _[γH]_ _B_ _[t]_ _[N]_ _[g]_ [ˆ] _[t][,]_ (7)
+
+_i_ =0
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+D.1 ANALYSIS OF GENERAL NON-CONVEX SETTING
+
+
+**Theorem D.2.** _Suppose that Assumption 3.1 and Assumption 5.1 hold. Suppose that a stepsize γ_ _>_ 0
+_is chosen such that γ_ _≤_ 2 _LN_ 1 _[.]_ _[We choose the output of the method]_ _W_ [�] _[T]_ _uniformly at random from_
+_W_ [0] _, W_ [1] _, . . ., W_ _[T][ −]_ [1] _Then,_ _the_ _iterate_ _W_ _[T]_ _of_ RAC-LoRA _method_ _(Algorithm_ _1)_ _with_ RR _updates_
+
+[�]
+_(Equation 7) satisfy_
+
+
+2 [�] 2 _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_
+E ���� _∇f_ ( _W_      - _[T]_ )��� _≤_ _γNT_ �1 _−_ _λ_ max [E [ _I_ _−_ _H_ _[t]_ ]] _−_ [1] 4 _[λ]_ max _[H]_      
+_L_ [2] _γ_ [2] _λ_ _[H]_ max _[Nσ]_ [2]
++ _._
+�1 _−_ _λ_ max [E [ _I_ _−_ _H_ _[t]_ ]] _−_ [1] 4 _[λ]_ max _[H]_                   
+
+_Proof._ In this context, and in subsequent discussions, the notation _∥·∥_ refers to the Frobenius norm,
+while _⟨·⟩_ denotes the inner product associated with the Frobenius norm.
+
+
+Now we can apply the _L_ -smoothness:
+
+
+_f_ ( _W_ _[t]_ [+1] ) _≤_ _f_ ( _W_ _[t]_ ) + - _∇f_ ( _W_ _[t]_ ) _, W_ _[t]_ [+1] _−_ _W_ _[t]_ [�] + _[L]_
+
+2
+
+
+�� _W t_ +1 _−_ _W t_ ��2
+
+
+= _f_ ( _W_ _[t]_ ) + - _∇f_ ( _W_ _[t]_ ) _, −γHB_ _[t]_ _[N]_ _[g]_ [ˆ] _[t]_ [�] + _[L]_
+
+2
+
+
+�� _γHBt_ _[N]_ _[g]_ [ˆ] _[t]_ [��][2]
+
+
+= _f_ ( _W_ _[t]_ ) _−_ _γN_ - _∇f_ ( _W_ _[t]_ ) _, HB_ _[t]_ _[g]_ [ˆ] _[t]_ [�] + _[L]_ _B_ _[g]_ [ˆ] _[t]_ [��][2]
+
+2 _[γ]_ [2] _[N]_ [ 2][ ��] _[H]_ _[t]_
+
+
+= _f_ ( _W_ _[t]_ ) _−_ _[γN]_
+
+2
+
+
+= _f_ ( _W_ _[t]_ ) _−_ _[γN]_
+
+2
+
+= _f_ ( _W_ _[t]_ ) _−_ _[γN]_
+
+2
+
+
+= _f_ ( _W_ _[t]_ ) _−_ _[γN]_
+
+2
+
+= _f_ ( _W_ _[t]_ ) _−_ _[γN]_
+
+2
+
+
+��� _∇f_ ( _W t_ )��2 + �� _HBt_ _[g]_ [ˆ] _[t]_ [��][2] _[ −]_ �� _∇f_ ( _W t_ ) _−_ _HBt_ _[g]_ [ˆ] _[t]_ [��][2][�] + _[L]_ _B_ _[g]_ [ˆ] _[t]_ [��][2]
+
+2 _[γ]_ [2] _[N]_ [ 2][ ��] _[H]_ _[t]_
+
+��� _∇f_ ( _W t_ )��2 + �� _HBt_ _[g]_ [ˆ] _[t]_ [��][2] _[ −]_ �� _∇f_ ( _W t_ ) _−_ _HBt_ _[g]_ [ˆ] _[t]_ [��][2][�] + _[L]_ _B_ _[g]_ [ˆ] _[t]_ [��][2]
+
+2 _[γ]_ [2] _[N]_ [ 2][ ��] _[H]_ _[t]_
+
+
+= _f_ ( _W_ _[t]_ ) _−_ _[γN]_
+
+
+�� _∇f_ ( _W t_ )��2 _−_ _γN_
+2
+
+
+�� _∇f_ ( _W t_ ) _−_ _HBt_ _[g]_ [ˆ] _[t]_ [��][2] _[ .]_
+
+
+_t_
+�� _HB_ _[g]_ [ˆ] _[t]_ [��][2][ (1] _[ −]_ _[γLN]_ [) +] _[γN]_
+
+2
+
+
+Using _γ_ _≤_ _LN_ 1 [we get]
+
+_f_ ( _W_ _[t]_ [+1] ) _≤_ _f_ ( _W_ _[t]_ ) _−_ _[γN]_
+
+2
+
+Let us take expectation and subtract _f_ _[⋆]_ :
+
+
+�� _∇f_ ( _W t_ )��2 + _γN_
+2
+
+
+�� _∇f_ ( _W t_ ) _−_ _HBt_ _[g]_ [ˆ] _[t]_ [��][2] _[ .]_
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤_ _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _[γN]_
+
+2
+
+Let us consider the last term:
+
+E ��� _∇f_ ( _W t_ ) _−_ _HBt_ _[g]_ [ˆ] _[t]_ [��][2] _[|][ W][ t]_ [�]
+
+
+�� _∇f_ ( _W t_ )��2 + _γN_ ��� _∇f_ ( _W t_ ) _−_ _HBt_ _[g]_ [ˆ] _[t]_ [��][2] _[|][ W][ t]_ [�] _._
+2 [E]
+
+
+
+
+_| W_ _[t]_ 
+
+
+
+
+
+_N_ _−_ 1
+
+- _∇fπi_ ( _W_ _[t]_ ) + _HB_ _[t]_ _N_ 1
+
+_i_ =0
+
+
+_N_ _−_ 1
+
+
+- _∇fπi_ ( _Wi_ _[t]_ [)]
+
+_i_ =0
+
+
+�����
+
+
+2
+
+
+= E
+
+
+= E
+
+
+
+
+
+1
+
+_N_
+�����
+
+
+1
+
+_N_
+�����
+
+
+
+
+
+_N_ _−_ 1
+
+- _∇fπi_ ( _W_ _[t]_ ) _−_ _HB_ _[t]_ _N_ 1
+
+_i_ =0
+
+
+
+
+
+_N_ _−_ 1
+
+- _∇fπi_ ( _W_ _[t]_ ) _−_ _HB_ _[t]_ _N_ 1
+
+_i_ =0
+
+
+_N_ _−_ 1
+
+- _∇fπi_ ( _W_ _[t]_ ) _−_ _HB_ _[t]_ _N_ 1
+
+_i_ =0
+
+
+_N_ _−_ 1
+
+
+- _∇fπi_ ( _Wi_ _[t]_ [)]
+
+_i_ =0
+
+
+�����
+
+
+2
+
+
+_| W_ _[t]_
+
+
+
+
+
+
+
+
+Since _I_ _−_ _HB_ _[t]_ [and] _[ H]_ _B_ _[t]_ [are projection matrices generating perpendicular subspaces we have]
+
+E ��� _∇f_ ( _W t_ ) _−_ _HBt_ _[g]_ [ˆ] _[t]_ [��][2] _[|][ W][ t]_ [�]
+
+
+_HBt_ _N_ 1
+�����
+
+
+_n−_ 1
+
+
+_i_ =0
+
+
+2
+
+- _∇fπi_ ( _W_ _[t]_ ) _−_ _fπi_ ( _Wi_ _[t]_ [)] �����
+
+
+
+
+
+
+
+
+= E
+
+
+= E
+
+
+
+
+� [�][�] _I_ _−_ _HB_ _[t]_ - _∇f_ ( _W_ _[t]_ )��2 +
+
+
+
+
+
+ [��] _I_ _−_ _HB_ _[t]_ - _∇f_ ( _W_ _[t]_ ) _,_ - _I_ _−_ _HB_ _[t]_ - _∇f_ ( _W_ _[t]_ )� +
+
+
+21
+
+
+_HBt_ _n_ 1
+�����
+
+
+_| W_ _[t]_
+
+
+_N_ _−_ 1
+
+
+_i_ =0
+
+
+2
+
+- _∇fπi_ ( _W_ _[t]_ ) _−_ _fπi_ ( _Wi_ _[t]_ [)] �����
+
+
+_| W_ _[t]_
+
+
+
+
+
+ _._
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+Using the property that _HB_ _[t]_ [and] _[ I]_ _[−]_ _[H]_ _B_ _[t]_ [are projection matrices we obtain]
+
+
+E ��� _∇f_ ( _W t_ ) _−_ _H_ _tg_ ˆ _t_ ��2 _| W t_   
+
+
+_≤_ _γ_ [2] _n_ [3] _λ_ _[H]_ max _[B]_ �� _∇f_ ( _W t_ )��2 + _γ_ 2 _λH_ max _B_ _[N]_ [ 2] _[σ]_ [2]
+
+
+Plugging to the previous bound we obtain:
+
+
+E ��� _∇f_ ( _W t_ ) _−_ _H_ _tg_ ˆ _t_ ��2 _| W t_ - _≤_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ ���� _∇f_ ( _W t_ )��2 + _L_ 2 _γ_ 2 _N_ 2 _λH_ max _B_ �� _∇f_ ( _W t_ )��2
+
+
++ _L_ [2] _γ_ [2] _λ_ _[H]_ max _[B]_ _[Nσ]_ [2] _[.]_
+
+
+22
+
+
+[1]
+_λ_ max[ _H_ _[t]_ ] _L_ [2]
+
+_N_
+
+
+_N_ _−_ 1
+
+
+_i_ =0
+
+
+     �� _W t −_ _W ti_ ��2
+
+
+_≤_ _λ_ max �E    - _I_ _−_ _H_ _[t]_ [����] _∇f_ ( _W_ _[t]_ )��2 + E
+
+
+Since _λ_ max[ _H_ _[t]_ ] = 1 for projections matrix we get
+
+
+_._
+
+
+E ��� _∇f_ ( _W t_ ) _−_ _HBt_ _[g]_ [ˆ] _[t]_ [��][2] _[|][ W][ t]_ [�] _≤_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ ���� _∇f_ ( _W t_ )��2 + _L_ 2 _N_ 1
+
+
+Now let us consider the last term:
+
+
+_N_ _−_ 1
+
+- 2
+
+E ��� _W t −_ _W ti_ �� _| W t_ [�] _._
+
+_i_ =0
+
+
+
+
+
+_k−_ 1
+
+
+�����
+
+
+2
+
+
+_| W_ _[t]_
+
+
+2 [�]
+E ��� _W t −_ _W tk_ �� = _γ_ [2] E
+
+
+= _γ_ [2] E
+
+
+
+
+
+�����
+
+�����
+
+
+
+
+
+
+
+
+
+
+
+- _HB_ _[t]_ _[∇][f][π]_ _i_ [(] _[W][ t]_ _i_ [)]
+
+_i_ =0
+
+
+
+
+
+_k−_ 1
+
+
+�����
+
+
+2
+
+
+_k−_ 1
+
+
+- _HB_ _[t]_ _[∇][f][π]_ _i_ [(] _[W][ t]_ [)]
+
+
+_i_ =0
+
+
+
+
+
+
+
+
+_| W_ _[t]_
+
+
+- _HB_ _[t]_ - _∇fπi_ ( _Wi_ _[t]_ [)] _[ −∇][f][π]_ _i_ [(] _[W][ t]_ [)] - +
+
+_i_ =0
+
+
+_≤_ 2 _γ_ [2] _k_ E
+
+
+_≤_ 2 _γ_ [2] _k_ E
+
+
+_≤_ 2 _γ_ [2] _k_ E
+
+
+- _k−_ 1
+
+
+_i_ =0
+
+
+- _k−_ 1
+
+
+_i_ =0
+
+
+- _k−_ 1
+
+
+_i_ =0
+
+
+                         ��� _HBt_ - _∇fπi_ ( _Wi_ _[t]_ [)] _[ −∇][f][π]_ _i_ [(] _[W][ t]_ [)] ���2 + 2 _γ_ 2 _k_ 2 �� _HBt_ _[∇][f][π]_ _i_ [(] _[W][ t]_ [)] ��2 [�] _| W_ _[t]_
+
+
+                      
+- _λ_ max - _H_ _[t]_ [���] _Wi_ _[t]_ _[−]_ _[W][ t]_ [��][2][ + 2] _[γ]_ [2] _[k]_ [2][ ��] _[H]_ _B_ _[t]_ _[∇][f][π]_ _i_ [(] _[W][ t]_ [)] ��2 [�] _| W_ _[t]_
+
+
+                      ��� _W ti_ _[−]_ _[W][ t]_ [��][2][ + 2] _[γ]_ [2] _[k]_ [2] _[λ]_ [max] �E - _HB_ _[t]_ ���� _∇fπi_ ( _W t_ )��2 [�] _| W_ _[t]_
+
+
+_._
+
+
+Now, we are ready to sum the inequalities. By using _λ_ max [E [ _H_ _[t]_ ]] = _λ_ _[H]_ max _[B]_ [and applying Lemma 1]
+from Mishchenko et al. (2020) with Assumption D.1, we obtain:
+
+
+_n−_ 1
+
+- 2 [�]
+
+E ��� _W t −_ _W ti_ �� _≤_ E
+
+_i_ =0
+
+
+_n−_ 1
+
+
+- _N_ _−_ 1
+
+ 
+
+_i_ =0
+
+
+2 _γ_ [2] _k_
+
+
+  _| W_ _[t]_
+
+
+_k−_ 1
+
+
+_i_ =0
+
+
+           �� _W ti_ _[−]_ _[W][ t]_ [��][2][ + 2] _[γ]_ [2] _[k]_ [2] _[λ]_ max _[H][B]_ �� _∇fπi_ ( _W t_ )��2
+
+
+_N_ _−_ 1
+
+- 2 [�]
+
+E ��� _W t −_ _W tk_ ��
+
+_i_ =0
+
+
+_N_ _−_ 1
+
+
+_≤γ_ [2] _L_ [2] _N_ ( _N_ _−_ 1)
+
+
++ [1] _[−]_ [1)] _[N]_ [(2] _[N]_ _[−]_ [1)] _[λ][H]_ max _[B]_ �� _∇f_ ( _W t_ )��2 + 1 max _[γ]_ [2] _[N]_ [(] _[N]_ [+ 1)] _[σ]_ [2] _[.]_
+
+3 _[γ]_ [2][(] _[N]_ 3 _[λ][H][B]_
+
+
+Using _γ_ _≤_ 2 _LN_ 1 [we get]
+
+
+_n−_ 1
+
+
+ -  - _[N]_  - _[−]_ [1]
+
+[4] 1 _−_ _γ_ [2] _L_ [2] _N_ ( _N_ _−_ 1)
+
+3
+
+
+- 2 [�]
+
+E ��� _W t −_ _W ti_ �� _≤_ [4] 3
+_i_ =0
+
+
+- 2 [�]
+
+E ��� _W t −_ _W ti_ ��
+
+_i_ =0
+
+
+- 1 _[−]_ [1)] _[N]_ [(2] _[N]_ _[−]_ [1)] _[λ][H]_ max _[B]_ �� _∇f_ ( _W t_ )��2 + 1 max _[γ]_ [2] _[N]_ [(] _[N]_ [+ 1)] _[σ]_ [2] 3 _[γ]_ [2][(] _[N]_ 3 _[λ][H][B]_
+
+
+_≤_ [4]
+
+3
+
+
+_≤_ [4]
+
+
+**1188**
+
+
+**1189**
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+
+**1194**
+
+**1195**
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+
+**1200**
+
+**1201**
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+
+**1206**
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+
+**1212**
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+
+**1217**
+
+**1218**
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+
+**1223**
+
+**1224**
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+
+**1229**
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+
+**1235**
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+
+**1240**
+
+**1241**
+
+
+Now we have the following
+
+
+Applying argument from Danilova et al. (2022) we obtain the result for uniformly chosen point.
+
+
+**Corollary** **D.2.1.** _Suppose_ _that_ _Assumption_ _3.1_ _and_ _Assumption_ _5.1_ _hold._ _Suppose_ _that_ _a_ _stepsize_
+_γ_ _>_ 0 _is chosen such that γ_ _≤_ 2 _LN_ 1 _[.]_ _[Let the updates have a form of several gradient steps (variance]_
+_σ_ [2] = 0 _) We choose the output of the method_ _W_ _[T]_ _uniformly at random from W_ [0] _, W_ [1] _, . . ., W_ _[T][ −]_ [1]
+
+[�]
+
+_Then,_ _the_ _iterate_ _W_ _[T]_ _of_ RAC-LoRA _method_ _(Algorithm_ _1)_ _with_ _several_ GD _updates_ _(Equation_ _3)_
+
+[�]
+_satisfy_
+
+
+2 [�] 2 _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_
+E ���� _∇f_ ( _W_      - _[T]_ )��� _≤_ _γNT_ �1 _−_ _λ_ max [E [ _I_ _−_ _H_ _[t]_ ]] _−_ 4 [1] _[λ]_ max _[H]_      - _._
+
+
+Given that the step size is divided by the number of gradient steps allocated for each LoRA block,
+employing multiple gradient steps for a single LoRA block does not provide any significant benefits. This observation suggests that a single gradient step is adequate for each LoRA block. Therefore, in practical applications, it is more advantageous to utilize only one epoch per LoRA block
+within the training chain. This approach not only streamlines the training process but also optimizes
+computational efficiency, allowing for more effective resource allocation without compromising the
+performance of the model.
+
+
+23
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _[γN]_
+
+2
+
+
+�� _∇f_ ( _W t_ )��2
+
+
++ _[γN]_
+
+2
+
+
+- _λ_ max �E - _I_ _−_ _HB_ _[t]_ ���� _∇f_ ( _W t_ )��2 + _L_ 2 _γ_ 2 _N_ 2 _λH_ max _B_ �� _∇f_ ( _W t_ )��2 [�]
+
+
++ _[γN]_ max _[Nσ]_ [2] _[.]_
+
+2 _[L]_ [2] _[γ]_ [2] _[λ][H][B]_
+
+
+Using _γ_ _≤_ 2 _LN_ 1 [we get]
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _[γN]_
+
+2
+
+
+    �� _∇f_ ( _W t_ )��2 1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ 4 [1] _[λ]_ max _[H][B]_
+
+
+(8)
+
++ _[γN]_ max _[Nσ]_ [2] _[.]_ (9)
+
+2 _[L]_ [2] _[γ]_ [2] _[λ][H][B]_
+
+
+After rearranging the terms, we have
+
+
+_≤_ - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [�] _−_ �E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�]
+
+
+_γN_
+
+
+2
+
+
+    �� _∇f_ ( _W t_ )��2 1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ [1] 4 _[λ]_ max _[H][B]_
+
+
++ _[γN]_ max _[Nσ]_ [2] _[.]_
+
+2 _[L]_ [2] _[γ]_ [2] _[λ][H][B]_
+
+
+Next, we have
+�� _∇f_ ( _W t_ )��2 _≤_ 2 - 1 - [��] _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [�] _−_ �E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ [��]
+_γN_ 1 _−_ _λ_ max [E [ _I_ _−_ _HB_ _[t]_ []]] _[ −]_ [1] 4 _[λ]_ max _[H][B]_
+
+
+2 1
++ - - _[γN]_ max _[Nσ]_ [2] _[.]_
+_γN_ 1 _−_ _λ_ max [E [ _I_ _−_ _HB_ _[t]_ []]] _[ −]_ [1] 4 _[λ]_ max _[H][B]_ 2 _[L]_ [2] _[γ]_ [2] _[λ][H][B]_
+
+
+Using telescoping property and taking expectation we get
+
+
+�� _∇f_ ( _W t_ )��2 _≤_ _γNT_ 2 �1 _−_ _λ_ max [ _f_ E( [ _WI_ [0] _−_ ) _−HB_ _[t]_ _f_ []]] _[⋆][ −]_ 4 [1] _[λ]_ max _[H][B]_ 
+
+
+1
+
+_T_
+
+
+_T −_ 1
+
+
+_t_ =0
+
+
+_L_ [2] _γ_ [2] _λ_ _[H]_ max _[B]_ _[Nσ]_ [2]
++ _._
+
+ -  1 _−_ _λ_ max [E [ _I_ _−_ _HB_ _[t]_ []]] _[ −]_ 4 [1] _[λ]_ max _[H][B]_
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+D.2 ANALYSIS OF POLYAK-ŁOJASIEWICZ SETTING
+
+
+Next, we establish the convergence rate for the Polyak-Łojasiewicz setting (Assumption 5.4).
+
+
+**Theorem** **D.3.** _Suppose_ _that_ _Assumption_ _3.1,_ _Assumption_ _5.4_ _and_ _Assumption_ _5.1_ _hold._ _Suppose_
+_that_ _a_ _stepsize_ _γ_ _≥_ 0 _is_ _chosen_ _such_ _that_ _γ_ _≤_ 2 _NL_ 1 _[.]_ _[Then,]_ _[the]_ _[iterates]_ _[of]_ [RAC-LoRA] _[method]_
+_(Algorithm 1) with_ RR _updates (Equation 7) satisfy_
+
+
+Since the step size is divided by the number of gradient steps for each LoRA block, using multiple
+gradient steps does not offer significant advantages. Thus, a single gradient step per LoRA block is
+sufficient. Practically, it is more efficient to use only one epoch per LoRA block in the training chain.
+
+
+24
+
+
+      -       E - _f_ ( _W_ _[T]_ ) _−_ _f_ _[⋆]_ [�] _≤_ 1 _−_ _γNµ_ 1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ 4 [1] _[λ]_ max _[H][B]_
+
+
+      -       E - _f_ ( _W_ _[T]_ ) _−_ _f_ _[⋆]_ [�] _≤_ 1 _−_ _γNµ_ 1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ [1]
+
+
+�� _T_
+E   - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�]
+
+
+_L_ [2] _γ_ [2] _λ_ _[H]_ max _[B]_ _[Nσ]_ [2]
++
+
+
+_._
+4 [1] _[λ]_ max _[H][B]_ 
+
+
+ 2 1 _−_ _λ_ max [E [ _I_ _−_ _HB_ _[t]_ []]] _[ −]_ 4 [1]
+
+
+_Proof._ We start from Equation 8:
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _[γN]_
+
+2
+
+
+    �� _∇f_ ( _W t_ )��2 1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ 4 [1] _[λ]_ max _[H][B]_
+
+
++ _[γN]_ max _[Nσ]_ [2] _[.]_
+
+2 _[L]_ [2] _[γ]_ [2] _[λ][H][B]_
+
+Using PL condition _∥∇f_ ( _W_ _[t]_ ) _∥_ [2] _≥_ 2 _µ_ ( _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ ) we have
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _γNµ_ - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [��] 1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ 4 [1] _[λ]_ max _[H][B]_
+
++ _[γN]_ max _[Nσ]_ [2] _[.]_
+
+2 _[L]_ [2] _[γ]_ [2] _[λ][H][B]_
+
+
+Taking full expectation we obtain:
+
+
+       -        E  - _f_ ( _W_ _[t]_ [+1] ) _−_ _f_ _[⋆]_ [�] _≤_ 1 _−_ _γNµ_ 1 _−_ _λ_ max �E  - _I_ _−_ _HB_ _[t]_ �� _−_ 4 [1] _[λ]_ max _[H][B]_
+
++ _[γN]_ max _[Nσ]_ [2] _[.]_
+
+2 _[L]_ [2] _[γ]_ [2] _[λ][H][B]_
+
+
+After unrolling the recursion we obtain
+
+
+��
+E  - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [�]
+
+
+      -       - �� _T_
+E - _f_ ( _W_ _[T]_ ) _−_ _f_ _[⋆]_ [�] _≤_ 1 _−_ _γNµ_ 1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ 4 [1] _[λ]_ max _[H][B]_ E - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�]
+
+
+_L_ [2] _γ_ [2] _λ_ _[H]_ max _[B]_ _[Nσ]_ [2]
++
+
+
+_._
+4 [1] _[λ]_ max _[H][B]_ 
+
+
+ 2 1 _−_ _λ_ max [E [ _I_ _−_ _HB_ _[t]_ []]] _[ −]_ 4 [1]
+
+
+This finishes the proof.
+
+
+**Corollary D.3.1.** _Suppose that Assumption 3.1,_ _Assumption 5.4 and Assumption 5.1 hold._ _Let the_
+_updates have a form of several gradient steps (variance σ_ [2] = 0 _) Suppose that a stepsize γ_ _≥_ 0 _is_
+_chosen such that γ_ _≤_ 2 _NL_ 1 _[.]_ _[Then, the iterates of]_ [ RAC-LoRA] _[ method (Algorithm 1) with several]_ [ GD]
+_updates (Equation 3) satisfy_
+
+
+      -      E - _f_ ( _W_ _[T]_ ) _−_ _f_ _[⋆]_ [�] _≤_ 1 _−_ _γNµ_ 1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ 4 [1] _[λ]_ max _[H][B]_
+
+
+      -      E - _f_ ( _W_ _[T]_ ) _−_ _f_ _[⋆]_ [�] _≤_ 1 _−_ _γNµ_ 1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ [1]
+
+
+�� _T_
+E  - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�] _._
+
+
+**1296**
+
+**1297**
+
+
+**1298**
+
+**1299**
+
+**1300**
+
+**1301**
+
+**1302**
+
+**1303**
+
+
+**1304**
+
+**1305**
+
+**1306**
+
+**1307**
+
+**1308**
+
+**1309**
+
+
+**1310**
+
+**1311**
+
+**1312**
+
+**1313**
+
+**1314**
+
+
+**1315**
+
+**1316**
+
+**1317**
+
+**1318**
+
+**1319**
+
+**1320**
+
+
+**1321**
+
+**1322**
+
+**1323**
+
+**1324**
+
+**1325**
+
+**1326**
+
+
+**1327**
+
+**1328**
+
+**1329**
+
+**1330**
+
+**1331**
+
+**1332**
+
+
+**1333**
+
+**1334**
+
+**1335**
+
+**1336**
+
+**1337**
+
+
+**1338**
+
+**1339**
+
+**1340**
+
+**1341**
+
+**1342**
+
+**1343**
+
+
+**1344**
+
+**1345**
+
+**1346**
+
+**1347**
+
+**1348**
+
+**1349**
+
+
+E ANALYSIS OF RAC-LORA WITH SGD UNDER THE ARBITRARY DATA
+
+SAMPLING PARADIGM
+
+
+In the previous section, we introduced the Random Reshuffling (RR) method, where each data point
+is used exactly once during each epoch, also known as sampling without replacement. This method
+has demonstrated strong empirical performance across various optimization tasks. However, in this
+section, we shift our focus to the RAC-LoRA framework, where Stochastic Gradient Descent (SGD)
+is applied with a more general, arbitrary data sampling procedure, allowing for broader flexibility in
+how data is selected and used during training.
+
+
+The analysis of general sampling schemes in SGD has garnered significant attention in the literature, particularly in understanding its impact on convergence rates and optimization performance
+across different problem classes. For strongly convex functions, general sampling methods have
+been rigorously studied in works such as Gower et al. (2019), which provide detailed convergence
+guarantees and bounds. In the case of general convex optimization problems, Khaled et al. (2023)
+offer a thorough analysis of the performance of SGD under various sampling strategies. Furthermore, for non-convex settings, both Khaled & Richt´arik (2020) and Demidovich et al. (2023) have
+explored how general sampling procedures influence the convergence behavior and optimization
+efficiency of SGD, shedding light on its applicability to a wide range of machine learning tasks.
+
+
+In the following sections, we build on these foundational studies to examine how the flexibility of
+general sampling in the RAC-LoRA framework can lead to improved convergence in certain scenarios, while also maintaining robust performance across different convexity settings.
+
+
+To conduct this analysis, we introduce a general assumption that extends the standard assumptions
+presented in Khaled & Richt´arik (2020).
+
+
+The proof is provided for Right Sketch (Definition 4.2). The result for Left Sketch (Definition 4.1)
+can be derived by following the same steps.
+
+
+**Assumption E.1** ( Expected smoothness) **.** _The second moment of the stochastic gradient satisfies_
+
+
+E      - _∥g_ ( _W_ ) _∥_ [2][�] _≤_ 2 _A_ 1      - _f_ ( _W_ ) _−_ _f_ [inf] [�] + _B_ 1 _· ∥∇f_ ( _W_ ) _∥_ [2] + _C_ 1
+
+
+_for some A, B, C_ _≥_ 0 _and all W_ _∈_ R _[m][×][n]_ _._
+
+
+Now we can also do stochastic analysis. Let us consider the SGD update for LoRA method:
+
+∆ _W_ = _[α]_ _BA_ ˆ _S,_
+
+_r_
+
+
+2 [�] 6
+0 _≤_ min _t≤T −_ 1 [E] ��� _∇f_ ( _W T_ )�� _≤_ _λ_ _[H]_ min _[A]_ _[γT]_
+
+
+25
+
+
+_W_ _[t]_ [+1] = _W_ _[t]_ + _[α]_ _B_ ˆ _[t]_ _A_ _[t]_ _S_ _B_ ˆ _[t]_ = _−γg_ ( _W_ _[t]_ )( _A_ _[t]_ _S_ [)] _[⊤]_ [�] _A_ _[t]_ _S_ [(] _[A][t]_ _S_ [)] _[⊤]_ [�] _[†]_
+
+_r_
+
+
+Now we have
+
+_W_ _[t]_ [+1] = _W_ _[t]_ _−_ _γg_ ( _W_ _[t]_ )( _A_ _[t]_ _S_ [)] _[⊤]_ [�] _A_ _[t]_ _S_ [(] _[A][t]_ _S_ [)] _[⊤]_ [�] _[†][ A][t]_ _S_ (10)
+
+= _W_ _[t]_ _−_ _γg_ ( _W_ _[t]_ ) _HA_ _[t]_ _[.]_ (11)
+
+
+E.1 ANALYSIS OF GENERAL NON-CONVEX SETTING
+
+
+**Theorem** **E.2.** _Suppose_ _that_ _Assumption_ _3.1_ _and_ _Assumption_ _5.1_ _hold._ _Suppose_ _that_ _a_ _stepsize_
+
+
+_γ_ _>_ 0 _is chosen such that γ_ _≤_ min �1 _/_ ~~�~~ _LA_ 1 _λ_ _[H]_ max _[T,]_ [ 1] _[/]_ - _LB_ 1 _λλHA_ max _HA_ min
+
+
+��
+_._ _Then, the iterate W_ _[T]_ _of_
+
+
+RAC-LoRA _method (Algorithm 1) with_ SGD _updates (Equation 10) satisfy_
+
+
+- _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�] + _LC_ 1 _γ_ _[λ]_ max _[H][A]_ _._
+_λ_ _[H]_ min _[A]_
+
+
+**1350**
+
+**1351**
+
+
+**1352**
+
+**1353**
+
+**1354**
+
+**1355**
+
+**1356**
+
+**1357**
+
+
+**1358**
+
+**1359**
+
+**1360**
+
+**1361**
+
+**1362**
+
+**1363**
+
+
+**1364**
+
+**1365**
+
+**1366**
+
+**1367**
+
+**1368**
+
+
+**1369**
+
+**1370**
+
+**1371**
+
+**1372**
+
+**1373**
+
+**1374**
+
+
+**1375**
+
+**1376**
+
+**1377**
+
+**1378**
+
+**1379**
+
+**1380**
+
+
+**1381**
+
+**1382**
+
+**1383**
+
+**1384**
+
+**1385**
+
+**1386**
+
+
+**1387**
+
+**1388**
+
+**1389**
+
+**1390**
+
+**1391**
+
+
+**1392**
+
+**1393**
+
+**1394**
+
+**1395**
+
+**1396**
+
+**1397**
+
+
+**1398**
+
+**1399**
+
+**1400**
+
+**1401**
+
+**1402**
+
+**1403**
+
+
+_Proof._ We start from _L_ -smoothness:
+
+_f_ ( _W_ _[t]_ [+1] ) _≤f_ ( _W_ _[t]_ ) +      - _∇f_ ( _W_ _[t]_ ) _, W_ _[t]_ [+1] _−_ _W_ _[t]_ [�] + _[L]_
+
+2
+
+
+E     - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤_     - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [��] 1 + _γ_ [2] _A_ 1 _Lλ_ max �E     - _HA_ _[t]_ ���
+
+_−_ 2 [1] _[γλ]_ [min] �E           - _HA_ _[t]_ ���� _∇f_ ( _W t_ )��2
+
++ _γ_ [2] _[ L]_ 2 _[λ]_ [max] �E           - _HA_ _[t]_ �� _C_ 1 _._
+
+
+Using tower property of expectation we obtain
+
+E     - _f_ ( _W_ _[t]_ [+1] ) _−_ _f_ _[⋆]_ [�] _≤_ E     - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [��] 1 + _γ_ [2] _A_ 1 _Lλ_ max �E     - _HA_ _[t]_ ���
+
+_−_ [1] 2 _[γλ]_ [min] �E          - _HA_ _[t]_ �� E ��� _∇f_ ( _W t_ )��2 [�]
+
++ _γ_ [2] _[ L]_ 2 _[λ]_ [max] �E          - _HA_ _[t]_ �� _C_ 1 _._
+
+
+26
+
+
+�� _W t_ +1 _−_ _W t_ ��2
+
+
+= _f_ ( _W_ _[t]_ ) + - _∇f_ ( _W_ _[t]_ ) _, −γg_ ( _W_ _[t]_ ) _HA_ _[t]_ - + _[L]_ 2
+
+
+�� _−γg_ ( _W t_ ) _HAt_ ��2
+
+
+= _f_ ( _W_ _[t]_ ) _−_ _γ_ - _∇f_ ( _W_ _[t]_ ) _, g_ ( _W_ _[t]_ ) _HA_ _[t]_ - + _[L]_ 2
+
+
+�� _−γg_ ( _W t_ ) _HAt_ ��2 _._
+
+
+Let us take conditional expectation:
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _γ_ E �� _∇f_ ( _W_ _[t]_ ) _, g_ ( _W_ _[t]_ ) _HA_ _[t]_ - _| W_ _[t]_ [�] + _[L]_ 2 [E] ��� _−γg_ ( _W t_ ) _HAt_ ��2 _| W t_ [�] _._
+
+Using that _g_ ( _W_ _[t]_ ) and _HA_ _[t]_ [are independent, so we have]
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _γ_ - _∇f_ ( _W_ _[t]_ ) _,_ E - _g_ ( _W_ _[t]_ )� E - _HA_ _[t]_ �� + _[L]_ 2 [E] ��� _−γg_ ( _W t_ ) _HAt_ ��2 _| W t_ [�]
+
+_≤f_ ( _W_ _[t]_ ) _−_ _γ_       - _∇f_ ( _W_ _[t]_ ) _,_ E       - _g_ ( _W_ _[t]_ )� E       - _HA_ _[t]_ �� + _γ_ [2] _[L]_ 2 [E] �� _g_ ( _W_ _[t]_ ) _HA_ _[t]_ _[, g]_ [(] _[W][ t]_ [)] _[H]_ _A_ _[t]_       - _| W_ _[t]_ [�]
+
+_≤f_ ( _W_ _[t]_ ) _−_ _γλ_ min �E       - _HA_ _[t]_ ���� _∇f_ ( _W t_ )��2 + _γ_ 2 _L_ �� _g_ ( _W_ _[t]_ ) _HA_ _[t]_ _[, g]_ [(] _[W][ t]_ [)] _[H]_ _A_ _[t]_       - _| W_ _[t]_ [�] _._
+2 [E]
+
+Using the property of projection matrix _HA_ _[t]_ [, we have]
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _γλ_ min �E - _HA_ _[t]_ ���� _∇f_ ( _W t_ )��2 + _γ_ 2 _L_ 2 _[λ]_ [max] �E - _HA_ _[t]_ �� E ��� _g_ ( _W t_ )��2 [�] _._
+
+
+Now we need to use assumption on stochastic gradients. We will use the most general assumption:
+ABC – assumption:
+
+E      - _∥g_ ( _W_ _[t]_ ) _∥_ [2][�] _≤_ 2 _A_ 1( _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ ) + _B_ 1 �� _∇f_ ( _W t_ )��2 + _C_ 1 _._
+
+
+Now we have
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _γλ_ min �E - _HA_ _[t]_ ���� _∇f_ ( _W t_ )��2
+
++ _γ_ [2] _[ L]_ 2 _[λ]_ [max] �E        - _HA_ _[t]_ �� [�] 2 _A_ 1( _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ ) + _B_ 1 �� _∇f_ ( _W t_ )��2 + _C_ 1 _._        - _._
+
+
+Combining these terms together we get
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤_ - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [��] 1 + _γ_ [2] _A_ 1 _Lλ_ max �E - _HA_ _[t]_ ��� (12)
+
+
+_−_ _γλ_ min �E - _HA_ _[t]_ ���� _∇f_ ( _W t_ )��2 �1 _−_ _γ_ _[L]_ _λ_ max [E [ _HA_ _[t]_ []]]
+
+2 _λ_ min [E [ _HA_ _[t]_ []]] _[B]_ [1]
+
+
+(13)
+
+
++ _γ_ [2] _[L]_ 2 _[λ]_ [max] �E - _HA_ _[t]_ �� _C_ 1 _._ (14)
+
+
+[1] _λ_ max[E[ _HA_ _[t]_ []]]
+
+2 _λ_ min[E[ _HA_ _[t]_ []]] _[≥]_ 2 [1]
+
+
+Using condition on stepsize: 1 _−_ _γ_ _[LB]_ [1]
+
+
+2 [we get]
+
+
+**1404**
+
+**1405**
+
+
+**1406**
+
+**1407**
+
+**1408**
+
+**1409**
+
+**1410**
+
+**1411**
+
+
+**1412**
+
+**1413**
+
+**1414**
+
+**1415**
+
+**1416**
+
+**1417**
+
+
+**1418**
+
+**1419**
+
+**1420**
+
+**1421**
+
+**1422**
+
+
+**1423**
+
+**1424**
+
+**1425**
+
+**1426**
+
+**1427**
+
+**1428**
+
+
+**1429**
+
+**1430**
+
+**1431**
+
+**1432**
+
+**1433**
+
+**1434**
+
+
+**1435**
+
+**1436**
+
+**1437**
+
+**1438**
+
+**1439**
+
+**1440**
+
+
+**1441**
+
+**1442**
+
+**1443**
+
+**1444**
+
+**1445**
+
+
+**1446**
+
+**1447**
+
+**1448**
+
+**1449**
+
+**1450**
+
+**1451**
+
+
+**1452**
+
+**1453**
+
+**1454**
+
+**1455**
+
+**1456**
+
+**1457**
+
+
+Let us define _δ_ _[t]_ = E [ _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ ] and _r_ _[t]_ = E _∥∇f_ ( _W_ _[t]_ ) _∥_ [2][�], after reshuffling of terms we obtain
+
+12 _[γλ]_ [min] �E - _HA_ _[t]_ �� E ��� _∇f_ ( _W t_ )��2 [�] _≤_ �1 + _γ_ [2] _A_ 1 _Lλ_ max �E - _HA_ _[t]_ ��� _δ_ _[t]_ _−_ _δ_ _[t]_ [+1] + _γ_ [2] _[ LC]_ 2 [1] _[λ]_ [max] �E - _HA_ _[t]_ �� _._
+
+
+RAC-LoRA _method (Algorithm 1) with_ SGD _updates (Equation 10) satisfy_
+
+E        - _f_ ( _W_ _[T]_ )� _−_ _f_ _[⋆]_ _≤_ �1 _−_ _γµλ_ _[H]_ min� _T_        - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�] _._
+
+
+27
+
+
+_w_ _[t][−]_ [1]
+Let use fix _w_ _[−]_ [1] _>_ 0 and define _w_ _[t]_ =
+
+
+_γ_ [,]
+
+
+1+ _Lγ_ [2] _Aλw_ _[t]_ max _[−]_ [1] [E[ _HA_ _[t]_ []]] [for all] _[ t][ ≥]_ [0][.] [Multiplying by] _[w]_ _γ_ _[t]_
+
+
+21 _[w][t][r][t][λ]_ [min] �E - _HA_ _[t]_ �� _≤_ _[w]_ _γ_ _[t]_
+
+
+_γ_ _[t]_ �1 + _γ_ [2] _A_ 1 _Lλ_ max �E - _HA_ _[t]_ ��� _δ_ _[t]_ _−_ _[w]_ _γ_ _[t]_
+
+
+_[LC]_ [1]
+_γ_ _[δ][t]_ [+1][ +] _[ γ]_ 2
+
+
+2 [1] _[λ]_ [max] �E - _HA_ _[t]_ �� _._
+
+
+Now we obtain
+21 _[w][t][r][t][λ]_ [min] �E            - _HA_ _[t]_ �� _≤_ _[w][t]_ _γ_ _[−]_ [1]
+
+
+_[LC]_ [1]
+_γ_ _[δ][t]_ [+1][ +] _[ γ]_ 2
+
+
+_[t][−]_ [1]
+
+_δ_ _[t]_ _−_ _[w][t]_
+_γ_ _γ_
+
+
+2 [1] _[λ]_ [max] �E - _HA_ _[t]_ �� _w_ _[t]_ _._
+
+
+Summing up both sides as _t_ = 0 _,_ 1 _, . . ., T_ _−_ 1 we have,
+
+
+_[−]_ [1]
+
+_γ_ _[δ]_ [0] _[ −]_ _[w][T]_ _γ_ _[ −]_ [1]
+
+
+_δ_ _[T]_ + _γ_ _[LC]_ [1]
+_γ_ 2
+
+
+2 [1] _[λ]_ [max] �E - _HA_ _[t]_ �� _[T]_ - _[ −]_ [1]
+
+
+- _w_ _[t]_
+
+
+_t_ =0
+
+
+1
+
+2
+
+
+_T −_ 1
+
+
+- _w_ _[t]_ _r_ _[t]_ _λ_ min �E - _HA_ _[t]_ �� _≤_ _[w]_ _γ_ _[−]_ [1]
+
+_t_ =0
+
+
+_≤_ _[w][−]_ [1]
+
+
+2 [1] _[λ]_ [max] �E - _HA_ _[t]_ �� _[T]_ - _[ −]_ [1]
+
+
+_[LC]_ [1]
+_γ_ _[δ]_ [0][ +] _[ γ]_ 2
+
+
+- _w_ _[t]_ _._
+
+
+_t_ =0
+
+
+Let us define _W_ _[T]_ = [�] _t_ _[T]_ =0 _[ −]_ [1] _[w][t]_ [.] [Dividing both sides by] _[ W][ T]_ [we have,]
+
+
+_[w][−]_ [1] _δ_ [0]
+
+_W_ _[T]_ _γ_
+
+
+_δ_ 1 _[LC]_ [1] _[γ]_
+
+_γ_ _λ_ min [E [ _HA_ _[t]_ []]] [+] 2
+
+
+[1] _[γ]_ _λ_ max [E [ _HA_ _[t]_ []]]
+
+2 _λ_ min [E [ _HA_ _[t]_ []]] _[.]_
+
+
+1 1
+min _[≤]_
+2 0 _≤t≤T −_ 1 _[r][t]_ _W_ _[T]_
+
+
+Note that,
+
+
+_T −_ 1
+
+
+- _w_ _[t]_ _r_ _[t]_ _≤_ _[w][−]_ [1]
+
+_W_ _[T]_
+
+_t_ =0
+
+
+_T −_ 1
+
+
+- min [=] _[ Tw][T][ −]_ [1] [=] _Tw_ _[−]_ [1]
+
+_t_ =0 0 _≤i≤T −_ 1 _[w][i]_ (1 + _Lγ_ [2] _Aλ_ max
+
+
+_[.]_
+(1 + _Lγ_ [2] _Aλ_ max [E [ _HA_ _[t]_ []])] _[T]_
+
+
+_W_ _[T]_ =
+
+
+Using this we get
+
+
+_T −_ 1
+
+- _w_ _[t]_ _≥_
+
+
+_t_ =0
+
+
+[1] _[γ]_ _λ_ max [E [ _HA_ _[t]_ []]]
+
+2 _λ_ min [E [ _HA_ _[t]_ []]] _[.]_
+
+
+1
+min _[≤]_
+2 0 _≤t≤T −_ 1 _[r][t]_
+
+
+�1 + _Lγ_ [2] _A_ 1 _λ_ max [E [ _HA_ _[t]_ []]] - _T_
+
+
+_A_ 1 _λ_ max [E [ _HA_ []]]
+
+_δ_ [0] + _[LC]_ [1] _[γ]_
+_λ_ min [E [ _HA_ _[t]_ []]] _[ γT]_ 2
+
+
+Using the fact that 1 + _x ≤_ exp( _x_ ), we have that
+
+
+�1 + _Lγ_ [2] _A_ 1 _λ_ max �E     - _HA_ _[t]_ ��� _T_ _≤_ exp     - _Lγ_ [2] _A_ 1 _λ_ max �E     - _HA_ _[t]_ �� _T_     - _≤_ exp(1) _≤_ 3
+
+
+where the second inequality holds because _γ_ _≤_ 1 _/_ ~~�~~ _LA_ 1 _λ_ max [E [ _HA_ _[t]_ []]] _[ T]_ [by assumption.] [Substi-]
+tuting we get,
+
+
+min _[≤]_ 6        - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�] + _LC_ 1 _γ_ _[λ]_ max _[H][A]_ _._
+0 _≤t≤T −_ 1 _[r][t]_ _λ_ min [E [ _HA_ _[t]_ []]] _[ γT]_ _λ_ _[H]_ min _[A]_
+
+
+E.2 ANALYSIS OF POLYAK-ŁOJASIEWICZ SETTING
+
+
+In this section we provide analysis of RAC-LoRA method with general SGD update under PolyakŁojasiewicz condition (Assumption 5.4).
+
+**Theorem E.3.** _Suppose that Assumption 3.1, Assumption 5.4 and Assumption 5.1 hold. Suppose that_
+
+
+
+
+
+- []
+
+ _._ _Then, the iterates of_
+
+
+_a stepsize γ_ _≥_ 0 _is chosen such that γ_ _≤_ min
+
+
+_µ_
+
+
+
+2 _A_ 1 _L_ _[λ]_ max _[HA]_
+
+
+_λ_ _[HA]_ min
+
+
+_,_ 1 _/_ - _LB_ 1 _λλHA_ max _HA_ min
+
+
+**1458**
+
+**1459**
+
+
+**1460**
+
+**1461**
+
+**1462**
+
+**1463**
+
+**1464**
+
+**1465**
+
+
+**1466**
+
+**1467**
+
+**1468**
+
+**1469**
+
+**1470**
+
+**1471**
+
+
+**1472**
+
+**1473**
+
+**1474**
+
+**1475**
+
+**1476**
+
+
+**1477**
+
+**1478**
+
+**1479**
+
+**1480**
+
+**1481**
+
+**1482**
+
+
+**1483**
+
+**1484**
+
+**1485**
+
+**1486**
+
+**1487**
+
+**1488**
+
+
+**1489**
+
+**1490**
+
+**1491**
+
+**1492**
+
+**1493**
+
+**1494**
+
+
+**1495**
+
+**1496**
+
+**1497**
+
+**1498**
+
+**1499**
+
+
+**1500**
+
+**1501**
+
+**1502**
+
+**1503**
+
+**1504**
+
+**1505**
+
+
+**1506**
+
+**1507**
+
+**1508**
+
+**1509**
+
+**1510**
+
+**1511**
+
+
+_Proof._ We start from 12:
+
+
+E  - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤_  - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [��] 1 + _γ_ [2] _A_ 1 _Lλ_ max �E  - _HA_ _[t]_ ���
+
+_−_ _γλ_ min �E         - _HA_ _[t]_ ���� _∇f_ ( _W t_ )��2 �1 _−_ _γ_ _[L]_ _λ_ max [E [ _HA_ _[t]_ []]]
+
+2 _λ_ min [E [ _HA_ _[t]_ []]] _[B]_ [1]
+
++ _γ_ [2] _[ L]_ 2 _[λ]_ [max] �E         - _HA_ _[t]_ �� _C_ 1 _._
+
+
+Taking full expectation and using tower property we obtain:
+
+E  - _f_ ( _W_ _[t]_ [+1] ) _−_ _f_ _[⋆]_ [�] _≤_ E  - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [��] 1 _−_ _γµλ_ min �E  - _HA_ _[t]_ ��� + _γ_ [2] _[ L]_ 2 _[λ]_ [max] �E  - _HA_ _[t]_ �� _C_ 1 _._
+
+
+Once we unroll the recursion we obtain
+
+E    - _f_ ( _W_ _[T]_ ) _−_ _f_ _[⋆]_ [�] _≤_ E    - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [��] 1 _−_ _γµλ_ _[H]_ min _[A]_    - _T_ + _γ_ _L_ _λ_ _[H]_ max _[A]_ _[C]_ [1] _[.]_
+2 _µλ_ _[H]_ min _[A]_
+
+
+28
+
+
+  - _λ_ max[E[ _HA_ _[t]_ []]]
+Using 1 _−_ _γ_ _[L]_ 2 _λ_ min[E[ _HA_ _[t]_ []]] _[B]_ [1]
+
+
+_≥_ 4 [3] [and PL condition we have]
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤_ - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [��] 1 _−_ 2 [3] _[γµλ]_ [min] �E - _HA_ _[t]_ �� + _γ_ [2] _A_ 1 _Lλ_ max �E - _HA_ _[t]_ �� [�]
+
+
++ _γ_ [2] _[ L]_ 2 _[λ]_ [max] �E - _HA_ _[t]_ �� _C_ 1 _._
+
+
+Using that _LA_ 1 _γλ_ max [E [ _HA_ _[t]_ []]] _[ ≤]_ _[µ]_ 2 _[λ]_ [min][ [][E][ [] _[H]_ _A_ _[t]_ []]][ we obtain]
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤_ - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [��] 1 _−_ _γµλ_ min �E - _HA_ _[t]_ ��� + _γ_ [2] _[ L]_ 2 _[λ]_ [max] �E - _HA_ _[t]_ �� _C_ 1 _._
+
+
+**1512**
+
+**1513**
+
+
+**1514**
+
+**1515**
+
+**1516**
+
+**1517**
+
+**1518**
+
+**1519**
+
+
+**1520**
+
+**1521**
+
+**1522**
+
+**1523**
+
+**1524**
+
+**1525**
+
+
+**1526**
+
+**1527**
+
+**1528**
+
+**1529**
+
+**1530**
+
+
+**1531**
+
+**1532**
+
+**1533**
+
+**1534**
+
+**1535**
+
+**1536**
+
+
+**1537**
+
+**1538**
+
+**1539**
+
+**1540**
+
+**1541**
+
+**1542**
+
+
+**1543**
+
+**1544**
+
+**1545**
+
+**1546**
+
+**1547**
+
+**1548**
+
+
+**1549**
+
+**1550**
+
+**1551**
+
+**1552**
+
+**1553**
+
+
+**1554**
+
+**1555**
+
+**1556**
+
+**1557**
+
+**1558**
+
+**1559**
+
+
+**1560**
+
+**1561**
+
+**1562**
+
+**1563**
+
+**1564**
+
+**1565**
+
+
+**Algorithm 2** Federated Randomized Asymmetric Chain of LoRA (Fed-RAC-LoRA)
+
+1: **Parameters:** initial pre-trained model _W_ [0], rank _r_, learning rate _γ_ _>_ 0, scaling factor _α_, server
+stepsize _β_ _>_ 0 number of modules in chain _T_, sample distribution _DS_ _[B]_ [or] _[ D]_ _S_ _[A]_ [.]
+2: **for** _t_ = 0 _,_ 1 _, . . ., T_ _−_ 1 **do**
+3: Sample a subset (cohort) of clients _S_ _[t]_
+
+4: (Option 1) Sample a matrix _BS_ _[t]_ (Option 2) Sample a matrix _A_ _[t]_ _S_
+5: Send the model _W_ _[t]_ and fixed matrix (Option 1) _BS_ _[t]_ [or (Option 2)] _[ A]_ _S_ _[t]_ [to clients]
+6: **for** _m ∈_ _S_ _[t]_ **do**
+7: Solve subproblem
+
+
+where _M_ is the total number of clients and _N_ is the number of data points on each client. In
+the context of Federated Learning, each client maintains its own local loss function _fm_, which
+also follows a finite-sum structure, reflecting the client’s local data. This formulation captures the
+decentralized nature of the learning process, where each client performs computations based on their
+local dataset.
+
+
+Federated Learning (FL) (Koneˇcn´y et al., 2016; Kairouz et al., 2021) is a distributed machine learning framework that enables multiple devices or clients to collaboratively train a shared model without
+sending their raw data to a central server. In contrast to traditional machine learning, where data is
+centralized for model training, Federated Learning allows each client to train a local model using its
+own data. The clients then share only the updated model parameters with a central server or aggregator. The server aggregates these updates to form a new global model, which is then redistributed
+to the clients for further iterations of the process (Koneˇcn´y et al., 2016). Local Training (LT) is a
+key component of Federated Learning (FL), in which each participating client conducts several local
+optimization steps before synchronizing their model parameters with the central server.
+
+
+The analysis of LT marked a significant advancement by eliminating the need for data homogeneity
+assumptions, as demonstrated by Khaled et al. (2019; 2020). However, later studies by Woodworth
+et al. (2020b) and Glasgow et al. (2022) revealed that LocalSGD (also known as FedAvg) has no
+communication complexity advantage over minibatch SGD in heterogeneous data settings. Additionally, Malinovskiy et al. (2020) analyzed LT methods for general fixed-point problems, while
+Koloskova et al. (2020) explored decentralized aspects of LT.
+
+
+Although removing the data homogeneity requirement was a major breakthrough, the results were
+somewhat discouraging, as they indicated that LT-enhanced GD, or LocalGD, exhibits a sublinear
+convergence rate, which is worse than the linear convergence rate of vanilla GD (Woodworth et al.,
+
+
+29
+
+
+(Option 1) _A_ [ˆ] _[t]_ _m_ _[≈]_ [min] _[α]_
+_A_ _[f][m]_ [(] _[W][ t]_ [ +] _r_
+
+
+_[α]_ _S_ _[A]_ [)] (Option 2) _B_ [ˆ] _m_ _[t]_ _[≈]_ [min] _[α]_
+
+_r_ _[B][t]_ _B_ _[f][m]_ [(] _[W][ t]_ [ +] _r_
+
+
+_S_ [)]
+_r_ _[BA][t]_
+
+
+8: Send the updates to server (Option 1) _A_ [ˆ] _[t]_ _m_ [or (Option 2)] _[B]_ [ˆ] _m_ _[t]_
+9: **end for**
+10: Merge the updates
+11:
+
+
+(Option 1) _W_ _[t]_ [+1] = _W_ _[t]_ + _β_ _[α]_
+
+
+_[α]_ _r_ _[B]_ _S_ _[t]_ _C_ 1
+
+
+- _A_ ˆ _[t]_ _m_
+
+_m∈S_ _[t]_
+
+
+12:
+
+
+13: **end for**
+
+
+1
+
+(Option 2) _W_ _[t]_ [+1] = _W_ _[t]_ + _β_ _[α]_
+
+_r_ _C_
+
+
+- _B_ ˆ _m_ _[t]_ _[A]_ _S_ _[t]_
+
+_m∈S_ _[t]_
+
+
+F FEDERATED LEARNING SETTING
+
+
+We consider the following optimization problem with a double finite-sum structure:
+
+
+min [1]
+∆ _W ∈_ R _[m][×][n][ f]_ [(] _[W]_ [ 0][ + ∆] _[W]_ [) =] _M_
+
+
+_M_
+
+
+_m_ =1
+
+
+1
+
+_N_
+
+
+_N_
+
+- _fm,i_ ( _W_ [0] + ∆ _W_ ) _,_ (15)
+
+
+_i_ =1
+
+
+**1566**
+
+
+**1567**
+
+**1568**
+
+**1569**
+
+**1570**
+
+**1571**
+
+
+**1572**
+
+**1573**
+
+**1574**
+
+**1575**
+
+**1576**
+
+**1577**
+
+
+**1578**
+
+**1579**
+
+**1580**
+
+**1581**
+
+**1582**
+
+**1583**
+
+
+**1584**
+
+**1585**
+
+**1586**
+
+**1587**
+
+**1588**
+
+**1589**
+
+
+**1590**
+
+**1591**
+
+**1592**
+
+**1593**
+
+**1594**
+
+
+**1595**
+
+**1596**
+
+**1597**
+
+**1598**
+
+**1599**
+
+**1600**
+
+
+**1601**
+
+**1602**
+
+**1603**
+
+**1604**
+
+**1605**
+
+**1606**
+
+
+**1607**
+
+**1608**
+
+**1609**
+
+**1610**
+
+**1611**
+
+**1612**
+
+
+**1613**
+
+**1614**
+
+**1615**
+
+**1616**
+
+**1617**
+
+
+**1618**
+
+**1619**
+
+
+2020a). The impact of server-side step sizes was further explored by Malinovsky et al. (2023b) and
+Charles & Koneˇcn`y (2020).
+
+
+Subsequent LT methods aimed to achieve linear convergence by addressing client drift, which had
+hindered earlier approaches. Scaffold, introduced by Karimireddy et al. (2020), was the first to
+successfully mitigate client drift and achieve a linear convergence rate. Similar methods were later
+proposed by Gorbunov et al. (2021). Although this was a significant breakthrough, these methods
+still have slightly higher or equal communication complexity compared to vanilla GD.
+
+
+Mishchenko et al. (2022b) recently introduced the ProxSkip method, a simple yet effective approach
+to Local Training that achieves provable communication acceleration in the smooth strongly convex
+regime, even with heterogeneous data. In a follow-up article, Malinovsky et al. (2022) expanded
+on ProxSkip, presenting a broad variance reduction framework. Condat & Richt´arik (2022) further
+applied ProxSkip to complex splitting schemes involving the sum of three operators in a forwardbackward setting. Additionally, Sadiev et al. (2022a) and Maranjyan et al. (2022) improved the
+computational complexity of ProxSkip while preserving its communication efficiency. Condat et al.
+(2023) introduced accelerated Local Training methods allowing client sampling based on ProxSkip,
+while Grudzie´n et al. (2023a;b) proposed an accelerated method using the RandProx approach with
+primal and dual updates.
+
+
+In practice, Federated Learning faces a fundamental challenge: it is often infeasible for all clients to
+communicate and aggregate updates with the central server simultaneously due to limitations such
+as network bandwidth, client availability, or resource constraints. Therefore, rather than requiring
+all clients to participate in every round of communication, we adopt a strategy in which only a
+randomly selected subset of clients is involved in each aggregation step. This approach relies on
+uniform sampling of the clients, ensuring that the selection process is unbiased over time.
+
+
+The method operates as follows: in each communication round, the central server sends the current
+global model, denoted by _W_ _[t]_, along with the sampled matrix, to the clients chosen to participate in
+the current cohort. Each client in this cohort trains a local learnable matrix using an optimization
+algorithm (e.g., stochastic gradient descent) based on their local data. After completing the local
+updates, the clients send their computed updates (i.e., changes in model parameters) back to the
+central server.
+
+
+Once the server receives these updates, it aggregates them (e.g., by averaging the updates) to produce
+an updated global model. In addition to the aggregation, the server may perform an additional serverside update step to further refine the model before broadcasting it in the next round. This iterative
+process of local training, communication, and aggregation continues until convergence is achieved
+or a predefined stopping criterion is met.
+
+
+The proof is provided for Left Sketch (Definition 4.1). The result for Right Sketch (Definition 4.2)
+can be derived by following the same steps.
+
+
+For local optimzier we use Random Reshuffling, where the effective step has a form:
+
+
+_Wm,i_ _[t]_ +1 [=] _[ W][ t]_ _m,i_ _[−]_ _[γH]_ _B_ _[t]_ _[∇][f][m,i]_ [(] _[W][ t]_ _m,i_ [)] (16)
+
+
+The server-side step looks like _W_ _[t]_ [+1] = _W_ _[t]_ _−_ _ηH_ ˜ _B_ _[t]_ _C_ 1 - _m∈S_ _[t]_ _[A]_ [ˆ] _[t]_ _m_ _[.]_
+
+
+Let us formulate nesesary assumptions
+
+
+**Assumption F.1** (Functional dissimilarity) **.** _The variance at the optimum in the non-convex regime_
+_is defined as_
+
+
+_where fm,i_ _[⋆]_ [= inf] _[W]_ _[f][m,i]_ [(] _[W]_ [)]
+
+
+∆ _[⋆]_ _[def]_ = _f_ _[⋆]_ _−_ [1]
+
+_M_
+
+
+_M_
+
+- _fm_ _[⋆]_
+
+_m_ =1
+
+
+_where fm_ _[⋆]_ [= inf] _[W]_ _[f][m]_ [(] _[W]_ [)] _[ and][ f][ ⋆]_ [= inf] _[W]_ _[f]_ [(] _[W]_ [)] _[.]_ _[For each device][ m][, the variance at the optimum]_
+_is defined as_
+
+
+_n_
+
+- _fm,i_ _[⋆]_
+
+
+_i_ =1
+
+
+∆ _[⋆]_ _m_ _def_ = _f_ _[⋆]_ _−_ _n_ [1]
+
+
+30
+
+
+**1620**
+
+**1621**
+
+
+**1622**
+
+**1623**
+
+**1624**
+
+**1625**
+
+**1626**
+
+**1627**
+
+
+**1628**
+
+**1629**
+
+**1630**
+
+**1631**
+
+**1632**
+
+**1633**
+
+
+**1634**
+
+**1635**
+
+**1636**
+
+**1637**
+
+**1638**
+
+
+**1639**
+
+**1640**
+
+**1641**
+
+**1642**
+
+**1643**
+
+**1644**
+
+
+**1645**
+
+**1646**
+
+**1647**
+
+**1648**
+
+**1649**
+
+**1650**
+
+
+**1651**
+
+**1652**
+
+**1653**
+
+**1654**
+
+**1655**
+
+**1656**
+
+
+**1657**
+
+**1658**
+
+**1659**
+
+**1660**
+
+**1661**
+
+
+**1662**
+
+**1663**
+
+**1664**
+
+**1665**
+
+**1666**
+
+**1667**
+
+
+**1668**
+
+**1669**
+
+**1670**
+
+**1671**
+
+**1672**
+
+**1673**
+
+
+F.1 ANALYSIS OF GENERAL NON-CONVEX SETTING
+
+
+**Theorem** **F.2.** _Suppose_ _that_ _Assumption_ _3.1_ _and_ _Assumption_ _5.1_ _hold._ _Suppose_ _that_ _stepsizes_
+
+_HB_
+_γ,_ ˜ _η_ _>_ 0 _is chosen such that γn_ _≤_ _η_ ˜ _≤_ [1] _[−]_ 4 _[λ]_ _L_ min _._ _Then,_ _the iterate W_ _[T]_ _of_ Fed-RAC-LoRA _method_
+_(Algorithm 2) with_ RR _updates (Equation 16) satisfy_
+
+
+4 �1 + 4˜ _ηL_ [3] _γ_ [2] _N_ [2] + 2 _L_ [2] _η_ ˜ [2] _C_ max _M{−MC−_ 1 _,_ 1 _}_               - _T_
+_t_ =0min _,...,T −_ 1 [E] ��� _∇f_   - _W_ _[t]_ [���][2][�] _≤_ _λ_ max [E [ _I_ _−_ _HB_ _[t]_ []] ˜] _[ηT]_   - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�]
+
+
+_≤f_ ( _W_ _[t]_ ) _−_ _η_ ˜
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E] _[S][t]_
+
+
+_M_ 
+- ∆ _[∗]_ _m_ [+] _[ N]_ [∆] _[∗]_
+
+_m_ =1
+
+
+8 _γ_ [2] _NL_ [3]
++
+
+_λ_ max [E [ _I_ _−_ _HB_ _[t]_ []]]
+
+
+1
+
+_M_
+
+
+8 _L_ [2] _η_ ˜ _M_ _−_ _C_
++
+_λ_ max [E [ _I_ _−_ _HB_ _[t]_ []]] _C_ max _{M_ _−_ 1 _,_ 1 _}_ [∆] _[∗][.]_
+
+
+_Proof._ We start from _L_ -smoothness:
+
+
+_f_ ( _W_ _[t]_ [+1] ) _≤f_ ( _W_ _[t]_ ) + - _∇f_ ( _W_ _[t]_ ) _, W_ _[t]_ [+1] _−_ _W_ _[t]_ [�] + _[L]_
+
+2
+
+
+�� _W t_ +1 _−_ _W t_ ��2
+
+
+_≤f_ ( _W_ _[t]_ ) _−_
+
+
+_∇f_ ( _W_ _[t]_ ) _,_ ˜ _η_ [1]
+
+
+_CN_
+
+
+_N_ _−_ 1   
+- - _H_ _[t]_ _∇fmπm,i_ _[t]_ - _Wm,i_ _[t]_ 
+_m∈S_ _[t]_ _i_ =0
+
+
+�����
+
+
+2
+
+
+_._
+
+
++ _[L]_
+
+2
+
+
+_η_ ˜ 1 _CN_
+����� _m∈S_ _[t]_
+
+
+_N_ _−_ 1
+
+
+- _H_ _[t]_ _∇fmπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+Now we take expectation with respect to sampling:
+
+
+_m∈S_ _[t]_
+
+
+_N_ _−_ 1 ��
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ - _Wm,i_ _[t]_ 
+
+_i_ =0
+
+
+E _St_ [�] _f_ ( _W_ _[t]_ [+1] )� _≤f_ ( _W_ _[t]_ ) _−_ _η_ ˜E _St_
+
+
+��
+
+1
+_∇f_ ( _W_ _[t]_ ) _,_
+_CN_
+
+
+
+
+
+_m∈S_ _[t]_
+
+
+�����
+
+
+2 []
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E] _[S][t]_
+
+
+1
+
+_CN_
+�����
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+
+
+
+
+
+
+_M_
+
+
+_m_ =1
+
+
+_N_ _−_ 1 
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ - _Wm,i_ _[t]_ 
+
+_i_ =0
+
+
+_N_ _−_ 1
+
+
+1
+_∇f_ ( _W_ _[t]_ ) _,_
+_MN_
+
+
+1
+
+_CN_
+�����
+
+
+
+
+
+_N_ _−_ 1
+
+
+_m∈S_ _[t]_
+
+
+31
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+�����
+
+
+2 []
+
+
+ _._
+
+
+
+
+
+**1674**
+
+**1675**
+
+
+**1676**
+
+**1677**
+
+**1678**
+
+**1679**
+
+**1680**
+
+**1681**
+
+
+**1682**
+
+**1683**
+
+**1684**
+
+**1685**
+
+**1686**
+
+**1687**
+
+
+**1688**
+
+**1689**
+
+**1690**
+
+**1691**
+
+**1692**
+
+
+**1693**
+
+**1694**
+
+**1695**
+
+**1696**
+
+**1697**
+
+**1698**
+
+
+**1699**
+
+**1700**
+
+**1701**
+
+**1702**
+
+**1703**
+
+**1704**
+
+
+**1705**
+
+**1706**
+
+**1707**
+
+**1708**
+
+**1709**
+
+**1710**
+
+
+**1711**
+
+**1712**
+
+**1713**
+
+**1714**
+
+**1715**
+
+
+**1716**
+
+**1717**
+
+**1718**
+
+**1719**
+
+**1720**
+
+**1721**
+
+
+**1722**
+
+**1723**
+
+**1724**
+
+**1725**
+
+**1726**
+
+**1727**
+
+
+Using 2 _⟨a, b⟩_ = _∥a_ + _b∥_ [2] _−∥a∥_ [2] _−∥b∥_ [2], we have
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E] _[S][t]_
+
+
+_M_
+
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+E _St_ [�] _f_ ( _W_ _[t]_ [+1] )� _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+
+2
+
+
+_[η]_ [˜]
+
+2 _[∥∇][f]_ [(] _[W][ t]_ [)] _[∥]_ [2] _[ −]_ _[η]_ 2 [˜]
+
+
+1
+
+_MN_
+�����
+
+
+_M_
+
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
++ _[η]_ [˜]
+
+2
+
+
+1
+_∇f_ ( _W t_ ) _−_
+_MN_
+�����
+
+
+
+
+
+_m∈S_ _[t]_
+
+
+�����
+
+
+2 []
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E] _[S][t]_
+
+
+1
+
+_CN_
+�����
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+
+
+
+
+
+
+_M_
+
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+_≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+
+_[η]_ [˜] _[η]_ [˜]
+
+2 _[∥∇][f]_ [(] _[W][ t]_ [)] _[∥]_ [2][ +] 2
+
+
+2
+
+
+1
+_∇f_ ( _W t_ ) _−_
+_MN_
+�����
+
+
+
+
+
+_m∈S_ _[t]_
+
+
+�����
+
+
+2 []
+
+
+ _._
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E] _[S][t]_
+
+
+1
+
+_CN_
+�����
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+
+
+
+Now we need to add and subtract _HB_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)][:]
+
+E _St_ [�] _f_ ( _W_ _[t]_ [+1] )� _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2 _[∥∇][f]_ [(] _[W][ t]_ [)] _[∥]_ [2]
+
+
+_M_
+
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
++ _[η]_ [˜]
+
+2
+
+
+_∇f_ ( _W t_ ) _−_ _HBt_ _[∇][f]_ [(] _[W][ t]_ [) +] _[ H]_ _B_ _[t]_ _[∇][f]_ [(] _[W][ t]_ [)] _[ −]_ 1
+_MN_
+�����
+
+
+
+
+
+_m∈S_ _[t]_
+
+
+�����
+
+
+2 []
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E] _[S][t]_
+
+
+1
+
+_CN_
+�����
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+
+
+
+
+
+
+_≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2 _[∥∇][f]_ [(] _[W][ t]_ [)] _[∥]_ [2]
+
+
+_M_
+
+
+_m_ =1
+
+
+�����
+
+
+2
+
+
+_N_ _−_ 1
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _W_ _[t]_ ) _−_ 1
+
+_MN_
+_i_ =0
+
+
+_M_
+
+
+_m_ =1
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
++ _[η]_ [˜]
+
+2
+
+
+_∇f_ ( _W t_ ) - _I_ _−_ _HB_ _[t]_ - + _MN_ 1
+�����
+
+
+
+
+
+_m∈S_ _[t]_
+
+
+�����
+
+
+2 []
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E] _[S][t]_
+
+
+1
+
+_CN_
+�����
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+
+
+
+
+
+
+_≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2 _[∥∇][f]_ [(] _[W][ t]_ [)] _[∥]_ [2]
+
+
+_M_
+
+
+_m_ =1
+
+
+2
+
+- - [�]
+_∇fmπm,i_ _[t]_ ( _W_ _[t]_ ) _−∇fmπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+����
+
+
+_N_ _−_ 1
+
+- _HB_ _[t]_
+
+
+_i_ =0
+
+
++ _[η]_ [˜]
+
+2
+
+
+_∇f_ ( _W t_ ) - _I_ _−_ _HB_ _[t]_ - + _MN_ 1
+�����
+
+
+
+
+
+_m∈S_ _[t]_
+
+
+�����
+
+
+2 []
+
+
+ _._
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E] _[S][t]_
+
+
+1
+
+_CN_
+�����
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+
+
+
+Since _HB_ _[t]_ [(] _[I]_ _[−]_ _[H]_ _B_ _[t]_ [) = 0][ we obtain]
+
+E _St_ [�] _f_ ( _W_ _[t]_ [+1] )� _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2 _[∥∇][f]_ [(] _[W][ t]_ [)] _[∥]_ [2]
+
+
+_M_
+
+
+_m_ =1
+
+
+2
+
+- - [�]
+_∇fmπm,i_ _[t]_ ( _W_ _[t]_ ) _−∇fmπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+����
+
+
+_N_ _−_ 1
+
+- _HB_ _[t]_
+
+
+_i_ =0
+
+
++ _[η]_ [˜]
+
+2
+
+
+�� _∇f_ ( _W t_ ) - _I_ _−_ _HB_ _[t]_ ���2 + _η_ 2˜
+
+
+1
+
+_MN_
+�����
+
+
+
+
+
+_m∈S_ _[t]_
+
+
+�����
+
+
+2 []
+
+
+ _._
+
+
+1
+
+_CN_
+�����
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+
+
+
+32
+
+
+**1728**
+
+**1729**
+
+
+**1730**
+
+**1731**
+
+**1732**
+
+**1733**
+
+**1734**
+
+**1735**
+
+
+**1736**
+
+**1737**
+
+**1738**
+
+**1739**
+
+**1740**
+
+**1741**
+
+
+**1742**
+
+**1743**
+
+**1744**
+
+**1745**
+
+**1746**
+
+
+**1747**
+
+**1748**
+
+**1749**
+
+**1750**
+
+**1751**
+
+**1752**
+
+
+**1753**
+
+**1754**
+
+**1755**
+
+**1756**
+
+**1757**
+
+**1758**
+
+
+**1759**
+
+**1760**
+
+**1761**
+
+**1762**
+
+**1763**
+
+**1764**
+
+
+**1765**
+
+**1766**
+
+**1767**
+
+**1768**
+
+**1769**
+
+
+**1770**
+
+**1771**
+
+**1772**
+
+**1773**
+
+**1774**
+
+**1775**
+
+
+**1776**
+
+**1777**
+
+**1778**
+
+**1779**
+
+**1780**
+
+**1781**
+
+
+Now we take conditional expectation and use tower property:
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�]
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+33
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ 2 [˜] �� _∇f_ ( _W t_ )��2 + _η_ 2˜ [E] - _∥∇f_ ( _W_ _[t]_ ) - _I_ _−_ _HB_ _[t]_ - _∥_ [2] _| W_ _[t]_ [�]
+
+
+
+
+
+_M_
+
+
+_m_ =1
+
+
+2
+
+- - [�]
+_∇fmπm,i_ _[t]_ ( _W_ _[t]_ ) _−∇fmπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+����
+
+
+_N_ _−_ 1
+
+- _HB_ _[t]_
+
+
+_i_ =0
+
+
++ _[η]_ [˜]
+
+2 [E]
+
+
++ _[η]_ [˜]
+
+
+
+
+
+1
+
+_MN_
+�����
+
+
+
+
+
+
+
+
+
+
+
+_| W_ _[t]_
+
+
+
+
+
+ _._
+
+
+
+
+
+
+
+
+1
+
+_CN_
+�����
+
+
+_m∈S_ _[t]_
+
+
+�����
+
+
+2 []
+
+
+ _| W_ _[t]_
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E]
+
+
++ _[L]_
+
+
+
+
+
+E _St_
+
+
+_N_ _−_ 1
+
+
+- _HB_ _[t]_ _[∇][f]_ _mπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+Next, we use eigenvalues to obtain bounds:
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2
+
+
+�� _∇f_ ( _W t_ )��2 + _η_ 2˜ _[λ]_ [max] �E - _I_ _−_ _HB_ _[t]_ �� _∥∇f_ ( _W_ _[t]_ ) _∥_ [2]
+
+
+
+
+
+_M_
+
+
+_m_ =1
+
+
+2
+
+
+_|_ _W_ _[t]_ 
+
+
+_N_ _−_ 1
+
+
+_i_ =0
+
+
+- - [�]
+_∇fmπm,i_ _[t]_ ( _W_ _[t]_ ) _−∇fmπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+����
+
+
++ _[η]_ [˜]
+
+
+ _λ_ max� _HB_ _[t]_ - _MN_ 1
+�����
+
+
+2 [E]
+
+
+_m∈S_ _[t]_
+
+
+
+
+ _λ_ max - _HB_ _[t]_ - _Cn_ 1
+�����
+
+
+�����
+
+
+2 []
+
+
+ _| W_ _[t]_
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E]
+
+
++ _[L]_
+
+
+
+
+
+E _St_
+
+
+_N_ _−_ 1
+
+
+- _∇fmπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+Since _λ_ max [ _HB_ _[t]_ [] = 1][ we have]
+
+E  - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2
+
+
+�� _∇f_ ( _W t_ )��2 + _η_ 2˜ _[λ]_ [max] �E - _I_ _−_ _HB_ _[t]_ �� _∥∇f_ ( _W_ _[t]_ ) _∥_ [2]
+
+
+
+
+
+ _._
+
+
+
+
+
+
+
+
+_N_ _−_ 1
+
+
+_i_ =0
+
+
+2
+
+- - [�]
+_∇fmπm,i_ _[t]_ ( _W_ _[t]_ ) _−∇fmπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+����
+
+
++ _[η]_ [˜]
+
+2 [E]
+
+
++ _[η]_ [˜]
+
+
+
+
+
+1
+
+_MN_
+�����
+
+
+
+
+
+_M_
+
+
+_m_ =1
+
+
+_| W_ _[t]_
+
+
+
+
+
+ _._
+
+
+
+
+
+1
+
+_CN_
+�����
+
+
+_m∈S_ _[t]_
+
+
+�����
+
+
+2 []
+
+
+ _| W_ _[t]_
+
+
++ _[L]_
+
+2 _[η]_ [˜][2][E]
+
+
++ _[L]_
+
+
+
+
+
+E _St_
+
+
+
+
+
+_N_ _−_ 1
+
+
+- _∇fmπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+Using Lemma 5 from Malinovsky et al. (2023b) we have
+
+
+
+
+
+
+
+
+
+
+
+1
+
+_CN_
+�����
+
+
+_N_ _−_ 1
+
+
+�����
+
+
+2 []
+
+
+ _| W_ _[t]_
+
+
+_L_
+
+2 _[η]_ [˜][2][E]
+
+
+
+
+
+E _St_
+
+
+- _∇fmπm,i_ _[t]_ ( _Wm,i_ _[t]_ [)]
+
+
+_i_ =0
+
+
+
+
+
+_m∈S_ _[t]_
+
+
+    1
+
+_≤_ _L_ [3] _η_ ˜ [2] E
+
+_Mn_
+
+
+_M_
+
+
+_m_ =1
+
+
+_N_ _−_ 1 
+- �� _W tm,i_ _[−]_ _[W][ t]_ [��][2] _[|][ W][ t]_
+
+_i_ =0
+
+
++ _Lη_ ˜ [2][ ��] _∇f_        - _W_ _[t]_ [���][2]
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_        - _f_        - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�]
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+Using this bound and _L_ -smoothness for the term in second line we obtain:
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2
+
+
+�� _∇f_ ( _W t_ )��2 + _η_ 2˜ _[λ]_ [max] �E - _I_ _−_ _HB_ _[t]_ �� _∥∇f_ ( _W_ _[t]_ ) _∥_ [2]
+
+
+_M_
+
+
+_m_ =1
+
+
+_M_
+
+
+_n−_ 1
+
+
+_i_ =0
+
+
+_n−_ 1
+
+
+_i_ =0
+
+
+        �� _W t −_ _W tm,i_ ��2 _| W t_
+
+
+        �� _W t −_ _W tm,i_ ��2 _| W t_
+
+
++ _Lη_ ˜ [2][ ��] _∇f_ - _W_ _[t]_ [���][2]
+
+
++ _[η]_ [˜]
+
+2 _[L]_ [2][E]
+
+
++ _[η]_ [˜]
+
+
+1
+
+_Mn_
+
+
+    1
+
++ _L_ [3] _η_ ˜ [2] E
+
+_Mn_
+
+
+_m_ =1
+
+
+**1782**
+
+**1783**
+
+
+**1784**
+
+**1785**
+
+**1786**
+
+**1787**
+
+**1788**
+
+**1789**
+
+
+**1790**
+
+**1791**
+
+**1792**
+
+**1793**
+
+**1794**
+
+**1795**
+
+
+**1796**
+
+**1797**
+
+**1798**
+
+**1799**
+
+**1800**
+
+
+**1801**
+
+**1802**
+
+**1803**
+
+**1804**
+
+**1805**
+
+**1806**
+
+
+**1807**
+
+**1808**
+
+**1809**
+
+**1810**
+
+**1811**
+
+**1812**
+
+
+**1813**
+
+**1814**
+
+**1815**
+
+**1816**
+
+**1817**
+
+**1818**
+
+
+**1819**
+
+**1820**
+
+**1821**
+
+**1822**
+
+**1823**
+
+
+**1824**
+
+**1825**
+
+**1826**
+
+**1827**
+
+**1828**
+
+**1829**
+
+
+**1830**
+
+**1831**
+
+**1832**
+
+**1833**
+
+**1834**
+
+**1835**
+
+
+Since _η_ ˜ _≤_ 21 _L_ [we get]
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+34
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤_ _f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2
+
+
+�� _∇f_ ( _W t_ )��2 + _η_ 2˜ _[λ]_ [max] �E - _I_ _−_ _HB_ _[t]_ �� _∥∇f_ ( _W_ _[t]_ ) _∥_ [2]
+
+
+_M_
+
+
+_m_ =1
+
+
+_N_ _−_ 1 
+- �� _W t −_ _W tm,i_ ��2 _| W t_
+
+
+_i_ =0
+
+
++ ˜ _ηL_ [2] E
+
+
+1
+
+_MN_
+
+
++ _Lη_ ˜ [2][ ��] _∇f_ - _W_ _[t]_ [���][2]
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_   - _f_   - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+Using lemma 6 from (cite) we obtain
+
+
+_N_ _−_ 1
+
+- E ��� _W t −_ _W tm,i_ ��2 _| W t_ [�] _≤_ 4 _γ_ [2] _N_ [2] _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[∗]_ [�]
+
+
+_i_ =0
+
+
+1
+
+_MN_
+
+
+_M_
+
+
+_m_ =1
+
+
++2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+_M_
+
+
+_M_
+
+- ∆ _[∗]_ _m_ _[.]_
+
+_m_ =1
+
+
+Plugging this bound we obtain
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2
+
+
+�� _∇f_ ( _W t_ )��2 + _η_ 2˜ _[λ]_ [max] �E - _I_ _−_ _HB_ _[t]_ �� _∥∇f_ ( _W_ _[t]_ ) _∥_ [2]
+
+
+  + ˜ _ηL_ [2]
+
+
+_M_
+
+
+4 _γ_ [2] _N_ [2] _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[∗]_ [�] + 2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1
+
+
++ _Lη_ ˜ [2][ ��] _∇f_ - _W_ _[t]_ [���][2]
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+Next, we have
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+2
+
+
+�� _∇f_ ( _W t_ )��2 �1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ �� _−_ 2 _Lη_ ˜�
+
+
+  + ˜ _ηL_ [2]
+
+
+_M_
+
+
+4 _γ_ [2] _N_ [2] _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[∗]_ [�] + 2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_       - _f_       - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+1 _−λ_ max[E[ _HB_ _[t]_ []]]
+Using _η_ ˜ _≤_ 4 _L_ we get
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜]
+
+4
+
+
+�� _∇f_ ( _W t_ )��2 �1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ ���
+
+
+  + ˜ _ηL_ [2]
+
+
+_M_
+
+
+4 _γ_ [2] _N_ [2] _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[∗]_ [�] + 2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_       - _f_       - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+Next, we subtract _f_ _[⋆]_ from both sides:
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _−_ _f_ _[⋆]_ _≤f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ _−_ _[η]_ [˜]
+
+4
+
+
+�� _∇f_ ( _W t_ )��2 �1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ ���
+
+
+  + ˜ _ηL_ [2]
+
+
+_M_
+
+
+4 _γ_ [2] _N_ [2] _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[∗]_ [�] + 2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1
+
+
+**1836**
+
+**1837**
+
+
+**1838**
+
+**1839**
+
+**1840**
+
+**1841**
+
+**1842**
+
+**1843**
+
+
+**1844**
+
+**1845**
+
+**1846**
+
+**1847**
+
+**1848**
+
+**1849**
+
+
+**1850**
+
+**1851**
+
+**1852**
+
+**1853**
+
+**1854**
+
+
+**1855**
+
+**1856**
+
+**1857**
+
+**1858**
+
+**1859**
+
+**1860**
+
+
+**1861**
+
+**1862**
+
+**1863**
+
+**1864**
+
+**1865**
+
+**1866**
+
+
+**1867**
+
+**1868**
+
+**1869**
+
+**1870**
+
+**1871**
+
+**1872**
+
+
+**1873**
+
+**1874**
+
+**1875**
+
+**1876**
+
+**1877**
+
+
+**1878**
+
+**1879**
+
+**1880**
+
+**1881**
+
+**1882**
+
+**1883**
+
+
+**1884**
+
+**1885**
+
+**1886**
+
+**1887**
+
+**1888**
+
+**1889**
+
+
+Taking full expectation we obtain
+
+
+E  - _f_ ( _W_ _[t]_ [+1] ) _−_ _f_ _[⋆]_ [�] _≤_ E  - _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [��] 1 + 4˜ _ηL_ [3] _γ_ [2] _N_ [2] + 2 _L_ [2] _η_ ˜ [2] _M_ _−_ _C_
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_       - _f_       - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+Using the stepsize _γ_ _≤_ 4 _nL_ 1 [we have]
+
+
+35
+
+
+_−_ _[η]_ [˜]
+
+4
+
+
+�� _∇f_ ( _W t_ )��2 �1 _−_ _λ_ max �E - _I_ _−_ _HB_ _[t]_ ���
+
+
+  + ˜ _ηL_ [2]
+
+
+_M_
+
+
+_M_ _−_ _C_
++ 2 _L_ [2] _η_ ˜ [2]
+_C_ max _{M_ _−_ 1 _,_ 1 _}_ [∆] _[∗][.]_
+
+
+2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1
+
+
+Next, we apply lemma from Khaled & Richt´arik (2020) and obtain
+
+4 �1 + 4˜ _ηL_ [3] _γ_ [2] _N_ [2] + 2 _L_ [2] _η_ ˜ [2] _C_ max _M{−MC−_ 1 _,_ 1 _}_               - _T_
+_t_ =0min _,...,T −_ 1 [E] ��� _∇f_   - _W_ _[t]_ [���][2][�] _≤_ _λ_ max [E [ _I_ _−_ _HB_ _[t]_ []] ˜] _[ηT]_   - _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ [�]
+
+
+_M_ 
+- ∆ _[∗]_ _m_ [+] _[ N]_ [∆] _[∗]_
+
+_m_ =1
+
+
+8 _γ_ [2] _NL_ [3]
++
+
+_λ_ max [E [ _I_ _−_ _HB_ _[t]_ []]]
+
+
+1
+
+_M_
+
+
+8 _L_ [2] _η_ ˜ _M_ _−_ _C_
++
+_λ_ max [E [ _I_ _−_ _HB_ _[t]_ []]] _C_ max _{M_ _−_ 1 _,_ 1 _}_ [∆] _[∗][.]_
+
+
+F.2 ANALYSIS OF POLYAK-ŁOJASIEWICZ SETTING
+
+
+**Theorem F.3.** _Suppose that Assumption 3.1, Assumption 5.4 and Assumption 5.1 hold. Suppose that_
+
+_HB_
+_stepsizes γ,_ ˜ _η_ _>_ 0 _is chosen such that γn_ _≤_ _η_ ˜ _≤_ [1] _[−]_ 4 _[λ]_ _L_ min _._ _Then, the iterate W_ _[T]_ _of_ Fed-RAC-LoRA
+_method (Algorithm 2) with_ RR _updates (Equation 16) satisfy_
+
+
+E  - _f_ ( _W_ _[t]_ [+1] ) _−_ _f_ _[⋆]_ [�] _≤_ ( _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ ) �1 _−_ _ηµ_ ˜ �1 _−_ _λ_ max �E  - _I_ _−_ _H_ _[t]_ [��] _−_ 3 _Lη_ ˜�� _T_
+
+
+_ηL_ ˜ [2]
++
+
+_ηµ_ ˜ (1 _−_ _λ_ max [E [ _I_ _−_ _H_ _[t]_ ]] _−_ 3 _Lη_ ˜)
+
+
+2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+
+_ηµ_ ˜ (1 _−_ _λ_ max [E [ _I_ _−_ _H_ _[t]_ ]] _−_ 3 _Lη_ ˜) _C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+_Proof._ We start from
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _[η]_ [˜] �� _∇f_ ( _W t_ )��2 �1 _−_ _λ_ max �E - _I_ _−_ _H_ _[t]_ [��] _−_ 2 _Lη_ ˜�
+
+2
+
+
+  + ˜ _ηL_ [2]
+
+
+_M_
+
+
+4 _γ_ [2] _N_ [2] _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[∗]_ [�] + 2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_       - _f_       - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+Using Assumption5.4 we have
+
+
+E - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _ηµ_ ˜ �� _∇f_ ( _W t_ )��2 �1 _−_ _λ_ max �E - _I_ _−_ _H_ _[t]_ [��] _−_ 2 _Lη_ ˜�� _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [�]
+
+
+  + ˜ _ηL_ [2]
+
+
+_M_
+
+
+4 _γ_ [2] _n_ [2] _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[∗]_ [�] + 2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1
+
+
+**1890**
+
+**1891**
+
+
+**1892**
+
+**1893**
+
+**1894**
+
+**1895**
+
+**1896**
+
+**1897**
+
+
+**1898**
+
+**1899**
+
+**1900**
+
+**1901**
+
+**1902**
+
+**1903**
+
+
+**1904**
+
+**1905**
+
+**1906**
+
+**1907**
+
+**1908**
+
+
+**1909**
+
+**1910**
+
+**1911**
+
+**1912**
+
+**1913**
+
+**1914**
+
+
+**1915**
+
+**1916**
+
+**1917**
+
+**1918**
+
+**1919**
+
+**1920**
+
+
+**1921**
+
+**1922**
+
+**1923**
+
+**1924**
+
+**1925**
+
+**1926**
+
+
+**1927**
+
+**1928**
+
+**1929**
+
+**1930**
+
+**1931**
+
+
+**1932**
+
+**1933**
+
+**1934**
+
+**1935**
+
+**1936**
+
+**1937**
+
+
+**1938**
+
+**1939**
+
+**1940**
+
+**1941**
+
+**1942**
+
+**1943**
+
+
+E   - _f_ ( _W_ _[t]_ [+1] ) _| W_ _[t]_ [�] _≤f_ ( _W_ _[t]_ ) _−_ _ηµ_ ˜ �1 _−_ _λ_ max �E   - _I_ _−_ _H_ _[t]_ [��] _−_ 3 _Lη_ ˜�� _f_ ( _W_ _[t]_ ) _−_ _f_ _[⋆]_ [�]
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_ - _f_ - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+
+_ηµ_ ˜ (1 _−_ _λ_ max [E [ _I_ _−_ _H_ _[t]_ ]] _−_ 3 _Lη_ ˜) _C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+36
+
+
+  + ˜ _ηL_ [2]
+
+
+_M_
+
+
+2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1
+
+
++ _Lη_ ˜ [2] _M_ _−_ _C_ �2 _L_         - _f_         - _W_ _[t]_ [�] _−_ _f_ _[⋆]_ [�] + 2 _L_ ∆ _[∗]_ [�] _._
+_C_ max _{M_ _−_ 1 _,_ 1 _}_
+
+
+After unrolling the recursion we obtain
+
+
+E  - _f_ ( _W_ _[t]_ [+1] ) _−_ _f_ _[⋆]_ [�] _≤_ ( _f_ ( _W_ [0] ) _−_ _f_ _[⋆]_ ) �1 _−_ _ηµ_ ˜ �1 _−_ _λ_ max �E  - _I_ _−_ _H_ _[t]_ [��] _−_ 3 _Lη_ ˜�� _T_
+
+
+_ηL_ ˜ [2]
++
+
+_ηµ_ ˜ (1 _−_ _λ_ max [E [ _I_ _−_ _H_ _[t]_ ]] _−_ 3 _Lη_ ˜)
+
+
+2 _γ_ [2] _N_ [2] _L_ ∆ _[∗]_ + 2 _γ_ [2] _NL_ [1]
+
+
+_M_
+
+
+_M_
+
+- ∆ _[∗]_ _m_
+
+_m_ =1

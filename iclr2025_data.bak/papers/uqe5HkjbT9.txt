@@ -1,0 +1,1776 @@
+# TRAJECTORY-CLASS-AWARE MULTI-AGENT REIN## FORCEMENT LEARNING
+
+
+**Hyungho Na** [1] **, Kwanghyeon Lee** [1] **, Sumin Lee** [1] **, Il-Chul Moon** [1,2]
+
+1Korea Advanced Institute of Science and Technology (KAIST), 2summary.ai
+_{_ gudgh723 _}_ @gmail.com, _{_ rhkdgus0414,sumlee,icmoon _}_ @kaist.ac.kr
+
+
+ABSTRACT
+
+
+In the context of multi-agent reinforcement learning, _generalization_ is a challenge
+to solve various tasks that may require different joint policies or coordination without relying on policies specialized for each task. We refer to this type of problem
+as a _multi-task_, and we train agents to be versatile in this multi-task setting through
+a single training process. To address this challenge, we introduce **TR** ajectoryclass- **A** ware **M** ulti- **A** gent reinforcement learning ( **TRAMA** ). In TRAMA, agents
+recognize a task type by identifying the class of trajectories they are experiencing through partial observations, and the agents use this trajectory awareness or
+prediction as additional information for action policy. To this end, we introduce
+three primary objectives in TRAMA: (a) constructing a quantized latent space to
+generate trajectory embeddings that reflect key similarities among them; (b) conducting trajectory clustering using these trajectory embeddings; and (c) building a
+trajectory-class-aware policy. Specifically for (c), we introduce a trajectory-class
+predictor that performs agent-wise predictions on the trajectory class; and we design a trajectory-class representation model for each trajectory class. Each agent
+takes actions based on this trajectory-class representation along with its partial
+observation for task-aware execution. The proposed method is evaluated on various tasks, including multi-task problems built upon StarCraft II. Empirical results
+show further performance improvements over state-of-the-art baselines.
+
+
+1 INTRODUCTION
+
+
+The value factorization framework (Sunehag et al., 2017; Rashid et al., 2018; Wang et al., 2020a)
+under Centralized Training with Decentralized Execution (CTDE) paradigm (Oliehoek et al., 2008;
+Gupta et al., 2017) has demonstrated its effectiveness across a range of cooperative multi-agent tasks
+(Lowe et al., 2017; Samvelyan et al., 2019). However, learning optimal policy often takes a long
+training time in more complex tasks, and the trained model often falls into suboptimal policies.
+These suboptimal results are often observed in complex tasks, which require agents to search large
+joint action-observation spaces.
+
+
+Researchers have introduced task division methods in diverse frameworks to overcome this limitation. Although previous works have used different terminologies, such as skills (Yang et al., 2019;
+Liu et al., 2022), subtasks (Yang et al., 2022), and roles (Wang et al., 2020b; 2021); they have shared
+the major objective, such as reducing the search space of each agent during training or encouraging
+committed behavior for coordination among agents. For this purpose, agents first determine its role,
+skill, or subtask often by upper-tier policies (Wang et al., 2021; Liu et al., 2022; Yang et al., 2022);
+and the agents determine actions by this additional condition along with their partial observations.
+Compared to common MARL approaches, these task division methods show a strong performance
+in some complex tasks.
+
+
+Recently, _multi-agent_ _multi-tasks_ have become new challenges in generalizing the learned policy
+to be effective in diverse settings. These tasks require agents to learn versatile policies for solving
+distinct problems, which may demand different joint policies or coordination among agents through
+a single MARL training process. For example, in SMACv2 (Ellis et al., 2024), agents need to learn
+policies neutralizing enemies in different initial positions and even with different unit combinations
+unlike the original SMAC (Samvelyan et al., 2019). In this new challenge, the previous task division
+
+
+1
+
+
+class
+
+
+(c) Trajectory-Class-Aware Policy
+
+
+observation
+
+
+|Col1|…|Clustering|
+|---|---|---|
+||…|⇒|
+
+
+# 𝑖 -th agent
+
+
+(b) Trajectory-Class Prediction
+
+
+𝑀 trajectories
+
+
+Trajectoryclass labels
+
+
+(a) Trajectory Clustering
+
+
+Figure 1: Illustration of the overall procedure for trajectory-class-aware policy learning: (a) through
+trajectory clustering, each trajectory is labeled. (b) Each agent predicts which trajectory class it
+is experiencing based on its partial observation. (c) After identifying the trajectory class, agents
+perform trajectory-class-dependent decision-making. In (c), each agent succeeds in identifying the
+same trajectory class based on its partial observations denoted with different colors.
+
+
+approaches show unsatisfactory performance because a specialized policy for a single task will not
+work under different settings.
+
+
+Motivated by this new challenge and the limitations of state-of-the-art MARL algorithms, we develop a framework that enables agents to recognize task types during task execution. The agents
+then use these task-type predictions or conditions in decision-making for versatile policy learning.
+
+
+**Contribution.** This paper presents **TR** ajectory-class- **A** ware **M** ulti- **A** gent reinforcement learning
+( **TRAMA** ) to perform the newly suggested functionality described below.
+
+
+    - **Constructing a quantized latent space for trajectory embedding:** To generate trajectory
+embeddings that reflect key similarities among them, we adopt the quantized latent space
+via Vector Quantized-Variational Autoencoder (VQ-VAE) (Van Den Oord et al., 2017).
+However, the naive adaptation of VQ-VAE for state embedding in MARL results in sparse
+usage of quantized vectors highlighted by (Na & Moon, 2024). To address this problem
+in multi-task settings, we introduce modified _coverage loss_ considering trajectory class in
+VQ-VAE training to spread quantized vectors evenly throughout the embedding space of
+feasible states.
+
+
+    - **Trajectory** **clustering:** In TRAMA, we conduct trajectory clustering based on trajectory
+embeddings in the quantized latent space to identify trajectories that share key similarities.
+Since we cannot conduct trajectory clustering at every MARL training step, we introduce
+a classifier to determine the class of the newly obtained trajectories from the environment.
+
+
+    - **Trajectory-class-aware policy:** After identifying the trajectory class, we train the agentwise trajectory-class predictor, which predicts a trajectory class using agents’ partial observations. Using this prediction, the trajectory-class representation model generates a
+trajectory-class-dependent representation. This task type or trajectory-class representation
+is then provided to an action policy along with local observations. In this way, agents can
+learn trajectory-class-dependent policy.
+
+
+Figure 1 illustrates the conceptual process of TRAMA by enumerating key functionalities on integrating the trajectory-class information in decision-making.
+
+
+2 PRELIMINARIES
+
+
+2.1 DECENTRALIZED POMDP
+
+
+Decentralized Partially Observable Markov Decision Process (Dec-POMDP) (Oliehoek & Amato,
+2016) is a widely adopted formalism for general cooperative multi-agent reinforcement learning
+(MARL) tasks. In Dec-POMDP, we define the tuple _G_ = _⟨I, S,_ _**A**_ _, P, R,_ **Ω** _, O, n, γ⟩_, where _I_ is
+the finite set of _n_ agents; _s_ _∈_ _S_ is the true state of the global state space _S_ ; _**A**_ = _×iA_ _[i]_ is the joint
+action space and the joint action _**a**_ is formed by each agent’s action _a_ _[i]_ _∈A_ _[i]_ ; _P_ ( _s_ _[′]_ _|s,_ _**a**_ ) is the state
+transition function to new state _s_ _[′]_ _∈_ _S_ given _s_ and _**a**_ ; a reward function _R_ provides a scalar reward
+_r_ = _R_ ( _s,_ _**a**_ _, s_ _[′]_ ) _∈_ R to a given transition _⟨s, a⟩→_ _s_ _[′]_ ; _O_ is the observation function generating each
+
+
+2
+
+
+agent’s observation _o_ _[i]_ _∈_ Ω _[i]_ from the joint observation space **Ω** = _×i_ Ω _[i]_ ; and finally, _γ_ is a discount
+factor. At each timestep, an agent receives a local observation _o_ _[i]_ and takes an action _a_ _[i]_ _∈A_ _[i]_ given
+
+_o_ _[i]_ . Given the global state _s_ and joint action _**a**_, state transition function _P_ ( _s_ _[′]_ _|s,_ _**a**_ ) determines the
+next state _s_ _[′]_ . Then, _R_ provides a common reward _r_ = _R_ ( _s,_ _**a**_ _, s_ _[′]_ ) to all agents. For MARL training,
+we follow the conventional value factorization approaches under the CTDE framework. Please refer
+to Appendix A.3 for details.
+
+
+2.2 MULTI-AGENT MULTI-TASK
+
+
+This section introduces a formal definition of a multi-agent multi-task _**T**_, under dec-POMDP settings. In this paper, we omit the term multi-agent and denote _multi-task_ for conciseness.
+
+
+**Definition 2.1** _(Multi-agent_ _multi-task_ _**T**_ _)_ _A_ _partially_ _observable_ _multi-agent_ _multi-task_ _**T**_ _is_ _de-_
+_fined by a tuple ⟨I, S,_ _**A**_ _, P, R,_ **Ω** _, O, n, γ, K⟩, where K is a set of tasks, S_ = _∪kSk_ _and_ **Ω** = _∪k_ **Ω** _k_
+_for task-specific state space Sk and joint observation space_ Ω _k. Then, a partially-observable single-_
+_task_ _Tk_ _for_ _k_ _∈K_ _is_ _defined_ _by_ _a_ _tuple_ _of_ _⟨I, Sk,_ _**A**_ _, P, R,_ **Ω** _k, O, n, γ⟩,_ _such_ _that_ _∀k_ 1 _, k_ 2 _∈K,_
+_Sk_ 1 _∩_ _Sk_ _[c]_ 2 [=] _[ ∅]_ _[and]_ **[ Ω]** _[k]_ 1 _[∩]_ **[Ω]** _k_ _[c]_ 2 [=] _[ ∅][.]_
+
+
+**Support** **Difference** Although each task _Tk_ shares the governing transition _P_, reward _R_, and observation _O_ functions, Definition 2.1 implies that _∀k_ 1 _, k_ 2 _∈_ _K_, dom( _P_ ) _k_ 1 _∩_ dom( _P_ ) _[c]_ _k_ 2 [=] _[∅]_ [,]
+dom( _R_ ) _k_ 1 _∩_ dom( _R_ ) _[c]_ _k_ 2 [=] _[∅]_ [and] [dom][(] _[O]_ [)] _[k]_ 1 _[∩]_ [dom][(] _[O]_ [)] _k_ _[c]_ 2 [=] _[∅]_ [,] [where] [subscript] _[k]_ [1] [and] _[k]_ [2] [repre-]
+sent task specific values. For example, two tasks with different unit combinations in SMACv2 (Ellis
+et al., 2024) satisfy this condition. Figure 2 illustrates the state diagram of multi-task settings. Thus,
+agents need to learn generalizable policies to maximize the expected return obtained from _**T**_ .
+
+
+**Unsupervised Multi-Task** Importantly, in multi-task setting in this paper, _task_ _ID_ _k_ _is_ _unknown_ _in_ _both_ _training_ _and_ _execution_ . This differs
+from general multi-task learning, where task ID is generally given during
+training (Omidshafiei et al., 2017; Hansen et al., 2024; Yu et al., 2020;
+Tassa et al., 2018). This unsupervised multi-task setting is practical for
+multi-agent tasks. For example, in a football game, allied teammates
+predict opponents’ strategies based on their observations during competition to respond appropriately. In such cases, a task label indicating the
+opponents’ strategy (or task type) is not provided to the allied team or
+cooperating agents.
+
+
+Figure 2: State Diagram
+of multi-task setting
+
+
+This setting can also be viewed as a formal definition of SMACv2 task (Ellis et al., 2024). To address
+this challenging multi-task problem, TRAMA begins by identifying which task a given trajectory
+belongs to through clustering, assuming that trajectories from the same task are more similar than
+those from different tasks.
+
+
+2.3 QUANTIZED LATENT SPACE GENERATION WITH VQ-VAE
+
+
+In this paper, we utilize VQ-VAE (Van Den Oord et al., 2017) to generate trajectory embeddings in
+a discretized latent space. We follow VQ-VAE adoption in MARL introduced by LAGMA (Na &
+Moon, 2024). The VQ-VAE for state embedding in MARL contains an encoder network _fϕ_ _[e]_ [:] _[S]_ _[→]_
+R _[d]_, a decoder network _fϕ_ _[d]_ [:] [R] _[d]_ _[→]_ _[S]_ [, and trainable embedding vectors used as codebook with size]
+_nc_ denoted by _**e**_ = _{e_ 1 _, e_ 2 _, ...enc_ _}_ where _ej_ _∈_ R _[d]_ for all _j_ = _{_ 1 _,_ 2 _, ..., nc}_ . An encoder output
+_x_ = _fϕ_ _[e]_ [(] _[s]_ [)] _[∈]_ [R] _[d]_ [is replaced to discretized latent] _[ x][q]_ [by] _[ quantization process]_ [ [] _[·]_ []] _[q]_ [, which maps] _[ x]_ [ to]
+the nearest embedding vector in codebook _**e**_ as follows.
+
+
+_xq_ = [ _x_ ] _q_ = _ez,_ where _z_ = argmin _j||x −_ _ej||_ 2 (1)
+
+Then, a decoder _fϕ_ _[d]_ [reconstructs the original state] _[ s]_ [ given quantized vector input] _[ x][q]_ [.] [We follow the]
+objective presented by LAGMA to train an encoder _fϕ_ _[e]_ [, a decoder] _[ f]_ _ϕ_ _[ d]_ [, and codebook] _**[ e]**_ [.]
+
+
+1
+_L_ _[tot]_ _V Q_ [(] _[ϕ,]_ _**[ e]**_ [) =] _[ L][V Q]_ [(] _[ϕ,]_ _**[ e]**_ [) +] _[ λ]_ [cvr] _|J_ ( _t_ ) _|_
+
+
+- _||_ sg[ _fϕ_ _[e]_ [(] _[s]_ [)]] _[ −]_ _[e][j][||]_ [2] 2 (2)
+
+_j∈J_ ( _t_ )
+
+
+_LV Q_ ( _ϕ,_ _**e**_ ) = _||fϕ_ _[d]_ [([] _[f]_ _ϕ_ _[ e]_ [(] _[s]_ [)]] _[q]_ [)] _[ −]_ _[s][||]_ [2] 2 [+] _[ λ]_ [vq] _[||]_ [sg[] _[f]_ _ϕ_ _[ e]_ [(] _[s]_ [)]] _[ −]_ _[x][q][||]_ [2] 2 [+] _[ λ]_ [commit] _[||][f]_ _ϕ_ _[ e]_ [(] _[s]_ [)] _[ −]_ [sg[] _[x][q]_ []] _[||]_ [2] 2 (3)
+
+
+3
+
+
+Here, sg[ _·_ ] represents a stop gradient. _λ_ vq, _λ_ commit, and _λ_ cvr are scale factors for corresponding
+terms. We follow a straight-through estimator to approximate the gradient signal for an encoder
+(Bengio et al., 2013). The last term in Eq. (2) is a _coverage_ _loss_ to spread the quantized vectors
+throughout the embedding space. _J_ ( _t_ ) is a timestep-dependent index, which designates some portion of quantized vectors to a given timestep. Although the previous coverage loss works well in
+general MARL tasks, it is observed that such _J_ ( _t_ ) has limitations in multiple tasks. We modify this
+_J_ ( _t_ ) by identifying types of trajectories during the training. As a result, we expand the index to
+include timestep and task type, and thus the indexing function is now _J_ ( _t, k_ ), incorporating both
+timestep _t_ and trajectory class _k_ .
+
+
+3 METHODOLOGY
+
+
+This section presents **TR** ajectory-class- **A** ware **M** ulti- **A** gent reinforcement learning ( **TRAMA** ). To
+learn trajectory-class-dependent policy, we first generate trajectory embeddings before performing
+trajectory clustering. To this end, we construct a **(1)** **quantized** **latent** **space** using modified VQVAE. With the trajectory embeddings in quantized latent space, we then describe the process for **(2)**
+**trajectory** **clustering** **and** **trajectory** **classifier** **learning** . Finally, we present the **(3)** **trajectory-**
+**class-aware policy**, which consists of a trajectory-class predictor and a trajectory-class representation model, in addition to the action policy network.
+
+
+|Col1|ഥ𝐾⇔|𝑓 ෡𝐾|
+|---|---|---|
+||ഥ𝐾⇔<br>~|𝑓𝜓<br>෡𝐾|
+|CE Loss on𝜓|CE Loss on𝜓|CE Loss on𝜓|
+
+
+Figure 3: Overview of TRAMA framework. The purple dashed line represents a gradient flow.
+
+
+3.1 QUANTIZED LATENT SPACE GENERATION WITH MODIFIED VQ-VAE
+
+
+This paper adopts VQ-VAE (Van Den Oord et al., 2017) for trajectory embedding in quantized latent
+space. In this way, trajectory embedding can be represented by the sequence of quantized vectors. As
+illustrated in Section 2.3, LAGMA (Na & Moon, 2024) presents the coverage loss utilizing timestep
+dependent indexing _J_ ( _t_ ) to distribute quantized vector evenly throughout the embedding space of
+states stored in the current replay buffer _D_, denoted as _χ_ = _{x ∈_ R _[d]_ : _x_ = _fϕ_ _[e]_ [(] _[s]_ [)] _[, s][ ∈D}]_ [. However,]
+in multi-task settings, state distributions are different according to tasks, so _L_ cvr with _J_ ( _t_ ) does not
+guarantee quantized vectors evenly distributed over _χ_ . To resolve this, we additionally consider
+the trajectory class _k_ in the coverage loss through a modified indexing function, _J_ ( _t, k_ ), which
+designates specific quantized vectors in the codebook, according to ( _t, k_ ) pair. When the class of a
+given trajectory _τst_ =0 = _{st_ =0 _, st_ =1 _, · · ·_ _, st_ = _T }_ is identified as _k_, we consider a state _st_ _∈_ _τst_ to
+belong to the _k_ -th class and denote this state as _s_ _[k]_ _t_ [.] [Then,] [the modified coverage loss,] [considering]
+both timestep _t_ and the trajectory class _k_, is expressed as follows.
+
+
+1
+_L_ cvr( _**e**_ ) = _|J_ ( _t, k_ ) _|_
+
+
+ - _||_ sg[ _fϕ_ _[e]_ [(] _[s][k]_ _t_ [)]] _[ −]_ _[e][j][||]_ 2 [2] (4)
+
+_j∈J_ ( _t,k_ )
+
+
+Eq. (4) adjusts quantized vectors assigned to the _k_ -th class towards embedding of _s_ _[k]_ . The details
+
+
+4
+
+
+(a) Training with _J_ ( _t_ ) (b) Training with _J_ ( _t, k_ ) (c) Clustering of (a) (d) Clustering of (b)
+
+
+Figure 4: PCA of sampled embedding _x_ _∈D_ . Colors from red to purple (rainbow) represent early
+to late timestep in (a) and (b). (a) and (b) are the results of sample multi-tasks with three different
+unit combinations with various initial positions. (c) and (d) are the clustering results of (a) and (b),
+respectively, and each color (red, green, and blue) represents each class.
+Here, the class number _ncl_ = 3 is assumed.
+
+
+of _J_ ( _t, k_ ) are presented in Appendix C. Then, with a given _s_ _[k]_ _t_ [, the final loss function] _[ L]_ _V Q_ _[tot]_ [to train]
+VQ-VAE becomes
+
+
+1
+_L_ _[tot]_ _V Q_ [(] _[ϕ,]_ _**[ e]**_ [) =] _[ L][V Q]_ [(] _[ϕ,]_ _**[ e]**_ [) +] _[ λ]_ [cvr] _|J_ ( _t, k_ ) _|_
+
+
+ - _||_ sg[ _fϕ_ _[e]_ [(] _[s]_ _t_ _[k]_ [)]] _[ −]_ _[e][j][||]_ 2 [2] _[.]_ (5)
+
+_j∈J_ ( _t,k_ )
+
+
+Figure 4 illustrates the embedding results with the proposed coverage loss compared to the original
+_J_ ( _t_ ). As in Figure 4 (b), the proposed coverage loss _J_ ( _t, k_ ) distributes quantized vectors more
+evenly throughout _χ_ in multiple tasks compared to the cases with _J_ ( _t_ ) in (a). Notably, we assumed
+the number of classes as _ncl_ = 6 in (b). Still, our model successfully captured three distinct initial
+unit combinations in the task, as illustrated by the three red branches in Figure 4 (b). However,
+to adopt this modified coverage loss, we need to determine which trajectory class a given state
+belongs to. Thus, we conduct clustering to annotate the trajectory class. Then, we use pseudo-class
+_k_ ¯ obtained from clustering for Eq. (5).
+
+
+3.2 TRAJECTORY CLUSTERING AND CLASSIFIER LEARNING
+
+
+**Trajectory Clustering** With a given trajectory _τst_ =0, we get a quantized latent sequence with VQVAE as _τχt_ =0 = [ _fϕ_ _[e]_ [(] _[τ][s]_ _t_ [)]] _[q]_ [=] _[{][x][q,t]_ [=0] _[, x][q,t]_ [=1] _[,][ · · ·]_ _[, x][q,t]_ [=] _[T][ }]_ [.] [Here,] [only] [the] [indices] [of] [quantized]
+vectors, i.e., _τZt_ =0 = _{zt_ =0 _, zt_ =1 _, · · ·_ _, zt_ = _T }_, are required to express _τχt_ =0. Thus, we can efficiently
+store the quantized sequence _τZt_ =0 to _D_ along with the given trajectory, _τst_ =0. In addition to MARL
+training, we sample _M_ trajectory sequences [ _τZ_ _[m]_ _t_ =0 []] _m_ _[M]_ =1 [from] _[D]_ [and] [conduct] _[K-means]_ _[clustering]_
+(Lloyd, 1982; Arthur & Vassilvitskii, 2006) periodically.
+
+With the _m_ -th index sequence _τZ_ _[m]_ _t_ =0 [, we compute a trajectory em-]
+bedding ¯ _e_ _[m]_ using quantized vectors _**e**_ in the codebook.
+
+
+_e_ ¯ _[m]_ =
+
+
+_T_
+
+- _e_ _[m]_ _j_ = _zt_ (6)
+
+_t_ =0
+
+
+Then, with trajectory embeddings [¯ _e_ _[m]_ ] _[M]_ _m_ =1 [,] [we] [conduct] [K-means]
+clustering with the predetermined number of class _ncl_ . In this paper, the class labels are denoted as _K_ [¯] = _{k_ [¯] _m_ =1 _,_ _k_ [¯] _m_ =2 _, ...,_ _k_ [¯] _m_ = _M_ _}_ . Figure 5: Preserved Labels
+Figures 4 (c) and (d) illustrate the clustering results with trajectory
+embedding constructed by Eq. 6 based on quantized vectors of (a) and (b), respectively. The visual
+results and their silhouette score emphasize the importance of the distribution of quantized vectors.
+Appendix D.4 provides further analysis. However, the problem is that the class labels may change
+whenever the clustering is updated. Consistent class labels are important because we update the
+agent-wise predictor based on these labels. To resolve this, we conduct _centroid initialization_ with
+the previous centroid results. Figure 5 shows the ratio of preserved labels after clustering with and
+without considering centroid initialization.
+
+**Trajectory Classifier Training** Even though we determine trajectory-class labels _K_ [¯] stored in _D_ at
+a specific training time, we do not have labels for new trajectories obtained by interacting with the
+
+
+5
+
+
+environment. To determine the labels for such trajectories before additional clustering update, we
+develop a classifier _fψ_ ( _·|e_ ¯ _[m]_ ) to predict a trajectory-class _k_ [ˆ] _m_ based on _e_ ¯ _[m]_ . We train _fψ_ whenever
+clustering is updated in parallel to MARL training through cross-entropy loss, _Lψ_ with _M_ samples.
+
+
+_L_ ( _ψ_ ) = _−_ [1]
+
+_M_
+
+
+_M_
+
+- **1** _k_ ¯ _m_ =ˆ _km_ log( _fψ_ ( _k_ [ˆ] _m|e_ ¯ _[m]_ )) (7)
+
+_m_ =1
+
+
+Here, **1** is an indicator function. Figure 6 illustrates the loss classifier as training proceeds. With
+centroid initialization, the classifier learns trajectory embedding patterns more coherently than the
+case without it.
+
+
+3.3 TRAJECTORY-CLASS-AWARE POLICY
+
+
+**Trajectory-Class Predictor** After obtaining the class labels _K_ [¯] for
+sampled trajectories either determined by clustering or a classifier _fψ_, we can train a _trajectory-class_ _predictor_ _πζ_ shared by all
+agents. Unlike the trajectory classifier _fψ_, a trajectory-class predictor _πζ_ only utilizes partial observation given to each agent. In
+other words, each agent makes a prediction on which trajectory
+type or class it is experiencing based on its partial observation, such
+as _k_ [ˆ] _t_ _[i]_ _[∼]_ _[π][ζ]_ [(] _[·|][h]_ _g,t_ _[i]_ [)][.] [Here,] _[h][i]_ _g,t_ [represents] [the] [observation] [history]
+computed by GRUs in _πζ_ . With predetermined trajectory labels for
+sampled batches size of _B_, we train _πζ_ with the following loss.
+
+
+Figure 6: Classifier Loss
+
+
+_n_
+
+- 
+**1** _k_ ¯=ˆ _kti_ [log][(] _[π][ζ]_ [(ˆ] _[k]_ _t_ _[i][|][o]_ _t_ _[i][, h]_ _g,t_ _[i]_ [))]]
+_i_ =1
+
+
+_T −_ 1
+
+�[�
+
+
+_t_ =0
+
+
+_L_ ( _ζ_ ) = _−_ [1]
+
+_B_
+
+
+_B_
+
+
+_b_ =1
+
+
+(8)
+_b_
+
+
+**Trajectory-Class** **Representation** **Learning** Base on _πζ_, each agent predicts _k_ [ˆ] _t_ _[i]_ [at] [each] [timestep]
+_t_ . Then, the _i_ -th agent utilizes one-hot encoding of _k_ [ˆ] _t_ _[i]_ [as] [an] [additional] [condition] [or] [prior] [when]
+determining its action. Instead of directly utilizing this one-hot vector, we train a _trajectory-class_
+_representation model fθ_ _[g]_ [(] _[·|][k]_ [ˆ] _t_ _[i]_ [)][ to generate a more informative representation,] _[ g]_ _t_ _[i]_ [.] [The purpose of] _[ g]_ _t_ _[i]_
+is to generate coherent information for decision-making and to enable agents to learn a trajectoryclass-dependent policy. As illustrated in Figure 3, we directly train _fθ_ _[g]_ [through MARL training.] [In]
+addition, we use a separate network for action policy _πθ_ and utilize the additional class representation _gt_ _[i]_ [along with partial observation] _[ o]_ _t_ _[i]_ [for decision-making.]
+
+
+3.4 OVERALL LEARNING OBJECTIVE
+
+
+This paper adopts value function factorization methods (Rashid et al., 2018; Wang et al., 2020a;
+Rashid et al., 2020; Zheng et al., 2021) presented in Section A.3 to train individual _Q_ _[i]_ _θ_ [via] _[ Q]_ _θ_ _[tot]_ [.] [For]
+a mixer structure, we mainly adopt QPLEX (Wang et al., 2020a), which guarantees the complete
+Individual-Global-Max (IGM) condition (Son et al., 2019). The loss function for the action policy
+_Q_ _[i]_ _θ_ [and] _[ f]_ _θ_ _[ g]_ [can be expressed as]
+
+_L_ ( _θ_ ) = E _k∼p_ ( _k_ )�E _⟨_ _**o**_ _,_ _**a**_ _,r,_ _**o**_ _′⟩k∼D,k_ ˆ _∼πζ_ ( _·|o_ ) _,g∼f gθ_ [(] _[·|][k]_ [ˆ][)][[] - _r_ + _γ_ max _**a**_ _′Q_ _[tot]_ _θ_ _[−]_ [(] _**[o]**_ _[′][,]_ _**[ g]**_ _[′][,]_ _**[ a]**_ _[′]_ [)] _[ −]_ _[Q]_ _θ_ _[tot]_ [(] _**[o]**_ _[,]_ _**[ g]**_ _[,]_ _**[ a]**_ [)] �2]� _._
+
+= E _**o**_ _,_ _**a**_ _,r,_ _**o**_ _′∼D,k_ ˆ _∼πζ_ ( _·|o_ ) _,g∼f gθ_ [(] _[·|][k]_ [ˆ][)][[]   - _r_ + _γ_ max _**a**_ _′Q_ _[tot]_ _θ_ _[−]_ [(] _**[o]**_ _[′][,]_ _**[ g]**_ _[′][,]_ _**[ a]**_ _[′]_ [)] _[ −]_ _[Q]_ _θ_ _[tot]_ [(] _**[o]**_ _[,]_ _**[ g]**_ _[,]_ _**[ a]**_ [)] �2] _._
+(9)
+Here, _p_ ( _k_ ) is the portion of samples _⟨_ _**o**_ _,_ _**a**_ _, r,_ _**o**_ _[′]_ _⟩k_ generated by _Tk_ within _D_ . However, since we
+randomly sample a tuple from _D_, the expectation over _k_ can be omitted. In addition, _**g**_ represents
+the joint trajectory-class representation. With this loss function, we train _Q_ _[i]_ _θ_ [,] _[f]_ _θ_ _[ g]_ [,] [and] _[π][ζ]_ [together]
+with the following learning objective:
+
+
+_L_ ( _θ, ζ_ ) = _L_ ( _θ_ ) + _λζL_ ( _ζ_ ) _._ (10)
+
+
+Here, _λζ_ is a scale factor. Note that _θ_ denotes neural network parameters contained in both _Qθ_ and
+_fθ_ _[g]_ [.] [Algorithm] [2] [in] [Appendix] [C] [specifies] [the] [learning] [procedure] [with] [loss] [functions] [specified] [by]
+Eqs. (5), (7), (8) and (10).
+
+
+6
+
+
+4 RELATED WORKS
+
+
+4.1 TASK DIVISION METHODS IN MARL
+
+
+In the field of MARL, task division methods are introduced in diverse frameworks. Although previous works use different terminology, such as a subtask (Yang et al., 2022), role (Wang et al.,
+2020b; 2021) or skill (Yang et al., 2019; Liu et al., 2022), they share the primary objective, such as
+reducing search space during training or encouraging committed behaviors among agents utilizing
+conditioned policies. HSD (Yang et al., 2019), RODE (Wang et al., 2020b), LDSA (Yang et al.,
+2022) and HSL (Liu et al., 2022) adopt a hierarchical structure where upper-tier policy network
+first determines agents’ roles, skills, or subtasks, and then agents determine actions based on these
+additional conditions along with their partial observations. These approaches share a commonality
+with goal-conditioned RL in single-agent tasks; however, the major difference is that the goal is not
+explicitly defined in MARL. MASER (Jeon et al., 2022) adopts a subgoal generation scheme from
+goal-conditioned RL when it generates an intrinsic reward. On the other hand, TRAMA first clusters
+trajectories considering their commonality among multi-tasks. Then, agents predict task types by
+identifying the trajectory class and use this prediction as additional information for action policy. In
+this way, agents utilize trajectory-class-dependent or task-specific policies.
+
+
+Appendix A presents additional related works regarding state space abstraction and some prediction
+methods developed for MARL.
+
+
+5 EXPERIMENTS
+
+
+In this section, we evaluate TRAMA through multi-task problems built upon SMACv2 (Ellis et al.,
+2024) and conventional MARL benchmark problems (Samvelyan et al., 2019; Ellis et al., 2024). We
+have designed the experiments to observe the following aspects.
+
+
+    - Q1. The performance of TRAMA in multi-task problems and conventional benchmark
+problems compared to state-of-the-art MARL frameworks
+
+
+    - Q2. The impact of the major components of TRAMA on agent-wise trajectory-class prediction and overall performance
+
+
+    - Q3. Trajectory-class distribution in the embedding space
+
+
+To compare the performance of TRAMA, we consider various baseline methods: popular baseline
+methods such as QMIX (Rashid et al., 2018) and QPLEX (Wang et al., 2020a); subtask-based methods such as RODE (Wang et al., 2021), LDSA (Yang et al., 2022), and MASER (Jeon et al., 2022);
+memory-based approach such as EMC (Zheng et al., 2021) and LAGMA (Na & Moon, 2024). For
+the baseline methods, we follow the hyperparameter settings presented in their original paper and
+implementation. For TRAMA, the details of hyperparameter settings are presented in Appendix B.
+
+
+5.1 COMPARATIVE EVALUATION ON BENCHMARK PROBLEMS
+
+
+We first evaluate TRAMA on the
+conventional SMACv2 tasks (multitasks) such as p5 vs ~~5~~ and t5 ~~v~~ s ~~5~~
+in (Ellis et al., 2024). In Figure 7,
+TRAMA shows better learning efficiency and performance compared
+to other baseline methods, including
+a memory-based approach such as
+EMC (Zheng et al., 2021), utilizing
+an additional memory buffer. Besides
+
+Figure 7: Performance comparison of TRAMA against
+
+multi-task problems, we conduct ad
+baseline algorithms on p5 ~~v~~ s ~~5~~ and t5 ~~v~~ s ~~5~~ in SMACv2
+
+ditional experiments on the original
+
+(multi-tasks). Here, _ncl_ =8 is assumed.
+
+SMAC (Samvelyan et al., 2019) tasks
+to see how TRAMA works in single-task settings. Figure 8 illustrates the results, and TRAMA
+shows comparable or better performance compared to other methods. Notably, TRAMA succeeds
+
+
+7
+
+
+in learning the best policy at the end in super hard tasks such as MMM2 and 6h ~~v~~ s ~~8~~ z. In the following section, we present a parametric study on _ncl_ and explain how we determine the appropriate
+value based on the tasks.
+
+
+Figure 8: Performance comparison of TRAMA compared to baseline algorithms on SMAC task
+(single-task).
+
+
+5.2 COMPARATIVE EVALUATION ON VARIOUS MULTI-TASK PROBLEMS
+
+
+To test MARL algorithms on additional multi-task problems, we introduce the four modified tasks
+built upon SMACv2 as presented in Table 1. In these new tasks, two types of initial position distributions are considered, and initial unit combinations are randomly selected from the designated sets.
+In addition, agents get rewards only when each enemy unit is fully neutralized, similar to sparse
+reward settings in (Jeon et al., 2022; Na & Moon, 2024). Appendix B provides further details of
+multi-task problems and SMACv2.
+
+
+Table 1: Task configuration of multi-task problems
+
+
+Name Initial Position Type Unit Combinations ( _ncomb_ )
+
+
+SurComb3 Surrounded _{_ 3s2z, 2c3z, 2c3s _}_
+reSurComb3 Surrounded and Reflected _{_ 3s2z, 2c3z, 2c3s _}_
+SurComb4 Surrounded _{_ 1c2s2z, 3s2z, 2c3z, 2c3s _}_
+reSurComb4 Surrounded and Reflected _{_ 1c2s2z, 3s2z, 2c3z, 2c3s _}_
+
+
+To evaluate performance, we consider the overall return value instead of the win-rate, as the learned
+policy may be specialized for specific tasks while being less effective for others among multiple
+tasks. Figure 9 illustrates the overall return values for multi-task problems. As illustrated in Figure
+9, TRAMA consistently demonstrates better performance compared to other baseline methods.
+
+
+Figure 9: The mean return of TRAMA compared to baseline algorithms on four multi-task problems
+presented in Table 1.
+
+
+To see how well each agent predicts the trajectory class, we present the learning loss of _Lζ_ and the
+overall accuracy of the prediction on reSurComb4 task in Figure 10. Appendix D.7 presents an
+additional analysis for a trajectory-class prediction made by agents. Notably, the agents accurately
+identify which types of trajectory classes they are experiencing based on their partial information
+throughout the episodes. In this case, agents can coherently generate trajectory-class representation
+_g_ through _fθ_ _[g]_ [and condition on this additional prior information for decision-making.] [With this extra]
+information, agents can learn distinct policies based on trajectory class and execute different joint
+policies specialized for each task, resulting in improved performance. In Section 5.5, we will discuss
+how trajectories are divided into different classes and represented in the embedding space.
+
+
+8
+
+
+5.3 PARAMETRIC STUDY
+
+
+In this study, we check the performance variation according to key parameter _ncl_ to evaluate the impact of
+the number of trajectory classes on the general performance. We considered _ncl_ = _{_ 2 _,_ 4 _,_ 8 _,_ 16 _}_ for multitask problems SurComb3 and SurComb4, and _ncl_ =
+_{_ 4 _,_ 6 _,_ 8 _,_ 16 _}_ for the original SMACv2 task p5 ~~v~~ s ~~5~~ . Figure 11 presents the overall return according to different _ncl_ . To evaluate the efficiency of training and per- (a) _Lζ_ (b) Accuracy [%]
+formance together, we compare _cumulative_ _return_, _µ_ ¯ _R_,
+which measures the area below the mean return curve. Figure 10: With _ncl_ =4, learning loss
+The high value of _µ_ ¯ _R_ represents better performance. In of _πζ_ and the mean accuracy of
+
+the trajectory-class prediction made by
+
+Figure 11 (d), _µ_ ¯ _R_ is normalized by its possible maximum
+
+agents in (reSurComb4).
+
+value. From Figure 11 (d), we can see that peaks of _µ_ ¯ _R_
+occur around _ncl_ = 4 for SurComb3 and SurComb4, and _ncl_ = 8 for p5 ~~v~~ s ~~5~~, respectively.
+Interestingly, these numbers seem highly related to variations in unit combinations. In SurComb3
+
+
+(a) _Lζ_ (b) Accuracy [%]
+
+
+Figure 10: With _ncl_ =4, learning loss
+of _πζ_ and the mean accuracy of
+the trajectory-class prediction made by
+agents in (reSurComb4).
+
+
+(a) SurComb3 (b) SurComb4 (c) p5 ~~v~~ s ~~5~~ (d) Normalized _µ_ ¯ _R_
+
+
+Figure 11: Parametric study of _ncl_ on surComb3, surComb4 and p5 ~~v~~ s ~~5~~ .
+
+
+and SurComb4, 3 and 4 unit combinations are possible, and thus _ncl_ = 4 well captures the trajectory diversity. Therefore, it is recommended to determine _ncl_ considering the diversity of unit
+combinations of multi-tasks. When a larger _ncl_ is selected, the agent-wise prediction accuracy may
+degrade because the number of options increases. However, _some classes share key similarities even_
+_though_ _they_ _are_ _labeled_ _as_ _different_ _classes_ . Trajectory embedding in quantized embedding space
+can efficiently capture these similarities. Thus, agents can still learn coherent policies specialized on
+each task in multi-task settings even with different trajectory class labels. We will further elaborate
+on this in Section 5.5.
+
+
+5.4 ABLATION STUDY
+
+
+In this subsection, we conduct the ablation study to see the effect of major components of TRAMA.
+First, to see the importance of coherent label generation in class clustering, we consider **No-Init**
+representing clustering without centroid initialization presented in Section 3.2. In addition, we ablate the proposed coverage loss _J_ ( _t, k_ ) and consider _J_ ( _t_ ) instead when constructing quantized
+embedding space. Figure 12 illustrates the corresponding results.
+
+
+(a) Preserved Label Ratio (b) _Lζ_ (c) _t_ =10 (d) Mean Return
+
+
+Figure 12: Ablation study on SurComb4.
+
+
+In Figure 12 (a), without centroid initialization, the trajectory class labels change frequently, and the
+loss for _πζ_ fluctuates as illustrated in (b). As a result, _πζ_ in both TRAMA (No-Init) and TRAMA
+(No-Init & _J_ ( _t_ )) predicts trajectory class labels almost randomly as illustrated in Figure 12 (c), leading to degraded performance as shown in Figure 12 (d). In the case of TRAMA ( _J_ ( _t_ )), coherent
+
+
+9
+
+
+Figure 13: Visualization of embedding results and test episodes for SurComb4. Here, _ncl_ =8 is
+assumed, and gray dots represent quantized vectors in the VQ codebook. Solid lines represent each
+test episode, while colored dots represent the majority opinion on the trajectory class predictions
+made by agents. Each color denotes a different class.
+
+
+labels are generated due to centroid initialization. However, prediction accuracy is lower and fluctuates compared to the full version of TRAMA, as the quantized vectors are not evenly distributed
+over _χ_ as described in Figure 4. Therefore, TRAMA without _J_ ( _t, k_ ) cannot sufficiently capture the
+key differences in trajectories. In Appendix D, we present additional ablation studies regarding the
+class representation model _fθ_ _[g]_ [.]
+
+
+5.5 QUALITATIVE ANALYSIS
+
+
+In this section, we evaluate how the trajectory classes are identified in the quantized embedding
+space. We consider SurComb4 task as a test case and assume _ncl_ = 8 for this test. Figure 13 illustrates the visualization of embedding results and test episodes. Notably, four branches are developed
+in quantized embedding space after training, and each branch is highly related to the initial unit combinations. The result implies that the initial unit combinations significantly influence the trajectories
+of agents. Although the larger number of _ncl_ is chosen compared to the number of possible unit
+combinations ( _ncomb_ = 4) in SurComb4, two classes are assigned to each branch in the quantized
+embedding space, making the model less sensitive to misclassification within each pair. In Figure
+13, classes 4 and 8 are assigned to 3s2z; classes 2 and 3 to 1c2s2z; classes 5 and 6 to 2c3z;
+and classes 1 and 7 to 2c3s. By identifying the trajectory class, agents can generate additional
+prior information and utilize trajectory-class-dependent policies conditioned on this prediction. As
+we can see, this trajectory-class identification is important in solving multi-task problems _**T**_ . Thus,
+it would be interesting to see how TRAMA predicts trajectory classes in out-of-distribution tasks.
+As TRAMA learns to identify trajectory class in an unsupervised manner, without task ID, agents
+can identify similar tasks among in-distribution tasks. Then, agents rely on these predictions during
+decision-making, thereby promoting a joint policy that benefits OOD tasks. Appendix D.6 presents
+OOD experiments and their corresponding qualitative analysis, demonstrating TRAMA’s generalizability across various OOD tasks.
+
+
+6 CONCLUSION
+
+
+This paper presents TRAMA, a new framework that enables agents to recognize task types by identifying the class of trajectories and to use this information for action policy. TRAMA introduces
+three major components: 1) construction of quantized latent space for trajectory embedding, 2)
+trajectory clustering, and 3) trajectory-class-aware policy. The constructed quantized latent space
+allows trajectory embeddings to share the key commonality between trajectories. With these trajectory embeddings, TRAMA successfully divides trajectories into clusters with similar task types
+in multi-tasks. Then, with a trajectory-class predictor, each agent predicts which trajectory types
+agents are experiencing and uses this prediction to generate trajectory-class representation. Finally,
+agents learn trajectory-class-aware policy with this additional information. Experiments validate the
+effectiveness of TRAMA in identifying task types in multi-tasks and in overall performance.
+
+
+10
+
+
+ACKNOWLEDGEMENT
+
+
+This work was supported by the IITP(Institute of Information & Communications Technology Planning & Evaluation)-ITRC(Information Technology Research Center) grant funded by the Korea
+government(Ministry of Science and ICT)(IITP-2025-RS-2024-00437268).
+
+
+REFERENCES
+
+
+David Arthur and Sergei Vassilvitskii. k-means++: The advantages of careful seeding. Technical
+report, Stanford, 2006.
+
+
+Yoshua Bengio, Nicholas L´eonard, and Aaron Courville. Estimating or propagating gradients
+through stochastic neurons for conditional computation. _arXiv preprint arXiv:1308.3432_, 2013.
+
+
+Nicolas Carion, Nicolas Usunier, Gabriel Synnaeve, and Alessandro Lazaric. A structured prediction approach for generalization in cooperative multi-agent reinforcement learning. In
+H. Wallach, H. Larochelle, A. Beygelzimer, F. d'Alch´e-Buc, E. Fox, and R. Garnett (eds.),
+_Advances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 32. Curran Associates, Inc.,
+2019. URL [https://proceedings.neurips.cc/paper_files/paper/2019/](https://proceedings.neurips.cc/paper_files/paper/2019/file/3c3c139bd8467c1587a41081ad78045e-Paper.pdf)
+[file/3c3c139bd8467c1587a41081ad78045e-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2019/file/3c3c139bd8467c1587a41081ad78045e-Paper.pdf)
+
+
+Filippos Christianos, Georgios Papoudakis, Muhammad A Rahman, and Stefano V Albrecht. Scaling multi-agent reinforcement learning with selective parameter sharing. In _International Confer-_
+_ence on Machine Learning_, pp. 1989–1998. PMLR, 2021.
+
+
+Sanjoy Dasgupta. Experiments with random projection. _arXiv preprint arXiv:1301.3849_, 2013.
+
+
+Benjamin Ellis, Jonathan Cook, Skander Moalla, Mikayel Samvelyan, Mingfei Sun, Anuj Mahajan,
+Jakob Foerster, and Shimon Whiteson. Smacv2: An improved benchmark for cooperative multiagent reinforcement learning. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Aditya Grover, Maruan Al-Shedivat, Jayesh Gupta, Yuri Burda, and Harrison Edwards. Learning
+policy representations in multiagent systems. In _International_ _conference_ _on_ _machine_ _learning_,
+pp. 1802–1811. PMLR, 2018.
+
+
+Marek Grze´s and Daniel Kudenko. Multigrid reinforcement learning with reward shaping. In _Inter-_
+_national Conference on Artificial Neural Networks_, pp. 357–366. Springer, 2008.
+
+
+Jayesh K Gupta, Maxim Egorov, and Mykel Kochenderfer. Cooperative multi-agent control using
+deep reinforcement learning. In _International conference on autonomous agents and multiagent_
+_systems_, pp. 66–83. Springer, 2017.
+
+
+Danijar Hafner, Timothy Lillicrap, Mohammad Norouzi, and Jimmy Ba. Mastering atari with discrete world models. _arXiv preprint arXiv:2010.02193_, 2020.
+
+
+Nicklas Hansen, Hao Su, and Xiaolong Wang. TD-MPC2: Scalable, robust world models for continuous control. In _The Twelfth International Conference on Learning Representations_, 2024. URL
+[https://openreview.net/forum?id=Oxh5CstDJU.](https://openreview.net/forum?id=Oxh5CstDJU)
+
+
+Hado Hasselt. Double q-learning. _Advances in neural information processing systems_, 23, 2010.
+
+
+He He, Jordan Boyd-Graber, Kevin Kwok, and Hal Daum´e III. Opponent modeling in deep reinforcement learning. In _International_ _conference_ _on_ _machine_ _learning_, pp. 1804–1813. PMLR,
+2016.
+
+
+Siyi Hu, Fengda Zhu, Xiaojun Chang, and Xiaodan Liang. Updet: Universal multi-agent reinforcement learning via policy decoupling with transformers. _arXiv preprint arXiv:2101.08001_, 2021.
+
+
+Jeewon Jeon, Woojun Kim, Whiyoung Jung, and Youngchul Sung. Maser: Multi-agent reinforcement learning with subgoals generated from experience replay buffer. In _International Conference_
+_on Machine Learning_, pp. 10041–10052. PMLR, 2022.
+
+
+11
+
+
+Nan Jiang, Alex Kulesza, and Satinder Singh. Abstraction selection in model-based reinforcement
+learning. In _International Conference on Machine Learning_, pp. 179–188. PMLR, 2015.
+
+
+Guangyu Li, Bo Jiang, Hao Zhu, Zhengping Che, and Yan Liu. Generative attention networks for
+multi-agent behavioral modeling. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelli-_
+_gence_, volume 34, pp. 7195–7202, 2020.
+
+
+Zhuo Li, Derui Zhu, Yujing Hu, Xiaofei Xie, Lei Ma, Yan Zheng, Yan Song, Yingfeng Chen, and
+Jianjun Zhao. Neural episodic control with state abstraction. _arXiv preprint arXiv:2301.11490_,
+2023.
+
+
+Yuntao Liu, Yuan Li, Xinhai Xu, Yong Dou, and Donghong Liu. Heterogeneous skill learning for
+multi-agent tasks. _Advances in Neural Information Processing Systems_, 35:37011–37023, 2022.
+
+
+Stuart Lloyd. Least squares quantization in pcm. _IEEE transactions on information theory_, 28(2):
+129–137, 1982.
+
+
+Ryan Lowe, Yi Wu, Aviv Tamar, Jean Harb, Pieter Abbeel, and Igor Mordatch. Multi-agent actorcritic for mixed cooperative-competitive environments. _Neural_ _Information_ _Processing_ _Systems_
+_(NIPS)_, 2017.
+
+
+Hyungho Na and Il-chul Moon. Lagma: Latent goal-guided multi-agent reinforcement learning.
+_arXiv preprint arXiv:2405.19998_, 2024.
+
+
+Hyungho Na, Yunkyeong Seo, and Il-chul Moon. Efficient episodic memory utilization of cooperative multi-agent reinforcement learning. _arXiv preprint arXiv:2403.01112_, 2024.
+
+
+Frans A Oliehoek and Christopher Amato. _A_ _concise_ _introduction_ _to_ _decentralized_ _POMDPs_ .
+Springer, 2016.
+
+
+Frans A Oliehoek, Matthijs TJ Spaan, and Nikos Vlassis. Optimal and approximate q-value functions for decentralized pomdps. _Journal of Artificial Intelligence Research_, 32:289–353, 2008.
+
+
+Shayegan Omidshafiei, Jason Pazis, Christopher Amato, Jonathan P How, and John Vian. Deep
+decentralized multi-task multi-agent reinforcement learning under partial observability. In _Inter-_
+_national Conference on Machine Learning_, pp. 2681–2690. PMLR, 2017.
+
+
+Georgios Papoudakis and Stefano V Albrecht. Variational autoencoders for opponent modeling in
+multi-agent systems. _arXiv preprint arXiv:2001.10829_, 2020.
+
+
+Georgios Papoudakis, Filippos Christianos, and Stefano Albrecht. Agent modelling under partial observability for deep reinforcement learning. _Advances in Neural Information Processing Systems_,
+34:19210–19222, 2021.
+
+
+Roberta Raileanu, Emily Denton, Arthur Szlam, and Rob Fergus. Modeling others using oneself in
+multi-agent reinforcement learning. In _International conference on machine learning_, pp. 4257–
+4266. PMLR, 2018.
+
+
+Tabish Rashid, Mikayel Samvelyan, Christian Schroeder, Gregory Farquhar, Jakob Foerster, and
+Shimon Whiteson. Qmix: Monotonic value function factorisation for deep multi-agent reinforcement learning. In _International conference on machine learning_, pp. 4295–4304. PMLR, 2018.
+
+
+Tabish Rashid, Gregory Farquhar, Bei Peng, and Shimon Whiteson. Weighted qmix: Expanding
+monotonic value function factorisation for deep multi-agent reinforcement learning. _Advances in_
+_neural information processing systems_, 33:10199–10210, 2020.
+
+
+Mikayel Samvelyan, Tabish Rashid, Christian Schroeder De Witt, Gregory Farquhar, Nantas
+Nardelli, Tim GJ Rudner, Chia-Man Hung, Philip HS Torr, Jakob Foerster, and Shimon Whiteson.
+The starcraft multi-agent challenge. _arXiv preprint arXiv:1902.04043_, 2019.
+
+
+Siqi Shen, Chennan Ma, Chao Li, Weiquan Liu, Yongquan Fu, Songzhu Mei, Xinwang Liu, and
+Cheng Wang. Riskq: risk-sensitive multi-agent reinforcement learning value factorization. _Ad-_
+_vances in Neural Information Processing Systems_, 36:34791–34825, 2023.
+
+
+12
+
+
+Kyunghwan Son, Daewoo Kim, Wan Ju Kang, David Earl Hostallero, and Yung Yi. Qtran: Learning
+to factorize with transformation for cooperative multi-agent reinforcement learning. In _Interna-_
+_tional conference on machine learning_, pp. 5887–5896. PMLR, 2019.
+
+
+Peter Sunehag, Guy Lever, Audrunas Gruslys, Wojciech Marian Czarnecki, Vinicius Zambaldi, Max
+Jaderberg, Marc Lanctot, Nicolas Sonnerat, Joel Z Leibo, Karl Tuyls, et al. Value-decomposition
+networks for cooperative multi-agent learning. _arXiv preprint arXiv:1706.05296_, 2017.
+
+
+Yunhao Tang and Shipra Agrawal. Discretizing continuous action space for on-policy optimization.
+In _Proceedings of the aaai conference on artificial intelligence_, volume 34, pp. 5981–5988, 2020.
+
+
+Yuval Tassa, Yotam Doron, Alistair Muldal, Tom Erez, Yazhe Li, Diego de Las Casas, David Budden, Abbas Abdolmaleki, Josh Merel, Andrew Lefrancq, et al. Deepmind control suite. _arXiv_
+_preprint arXiv:1801.00690_, 2018.
+
+
+Aaron Van Den Oord, Oriol Vinyals, et al. Neural discrete representation learning. _Advances_ _in_
+_neural information processing systems_, 30, 2017.
+
+
+Hado Van Hasselt, Arthur Guez, and David Silver. Deep reinforcement learning with double qlearning. In _Proceedings of the AAAI conference on artificial intelligence_, volume 30, 2016.
+
+
+Jianhao Wang, Zhizhou Ren, Terry Liu, Yang Yu, and Chongjie Zhang. Qplex: Duplex dueling
+multi-agent q-learning. _arXiv preprint arXiv:2008.01062_, 2020a.
+
+
+Tonghan Wang, Heng Dong, Victor Lesser, and Chongjie Zhang. Roma: Multi-agent reinforcement
+learning with emergent roles. _arXiv preprint arXiv:2003.08039_, 2020b.
+
+
+Tonghan Wang, Tarun Gupta, Anuj Mahajan, Bei Peng, Shimon Whiteson, and Chongjie Zhang.
+Rode: Learning roles to decompose multi-agent tasks. _In Proceedings of the International Con-_
+_ference on Learning Representations (ICLR)_, 2021.
+
+
+Jiachen Yang, Igor Borovikov, and Hongyuan Zha. Hierarchical cooperative multi-agent reinforcement learning with skill discovery. _arXiv preprint arXiv:1912.03558_, 2019.
+
+
+Mingyu Yang, Jian Zhao, Xunhan Hu, Wengang Zhou, Jiangcheng Zhu, and Houqiang Li. Ldsa:
+Learning dynamic subtask assignment in cooperative multi-agent reinforcement learning. _Ad-_
+_vances in Neural Information Processing Systems_, 35:1698–1710, 2022.
+
+
+Tianhe Yu, Deirdre Quillen, Zhanpeng He, Ryan Julian, Karol Hausman, Chelsea Finn, and Sergey
+Levine. Meta-world: A benchmark and evaluation for multi-task and meta reinforcement learning.
+In _Conference on robot learning_, pp. 1094–1100. PMLR, 2020.
+
+
+Xiaopeng Yu, Jiechuan Jiang, Wanpeng Zhang, Haobin Jiang, and Zongqing Lu. Model-based opponent modeling. _Advances in Neural Information Processing Systems_, 35:28208–28221, 2022.
+
+
+Chongjie Zhang and Victor Lesser. Multi-agent learning with policy prediction. In _Proceedings of_
+_the AAAI Conference on Artificial Intelligence_, volume 24, pp. 927–934, 2010.
+
+
+Lulu Zheng, Jiarui Chen, Jianhao Wang, Jiamin He, Yujing Hu, Yingfeng Chen, Changjie Fan, Yang
+Gao, and Chongjie Zhang. Episodic multi-agent reinforcement learning with curiosity-driven
+exploration. _Advances in Neural Information Processing Systems_, 34:3757–3769, 2021.
+
+
+Derui Zhu, Jinfu Chen, Weiyi Shang, Xuebing Zhou, Jens Grossklags, and Ahmed E Hassan. Deepmemory: model-based memorization analysis of deep neural language models. In _2021_ _36th_
+_IEEE/ACM International Conference on Automated Software Engineering (ASE)_, pp. 1003–1015.
+IEEE, 2021.
+
+
+13
+
+
+A ADDITIONAL RELATED WORKS AND PRELIMINARIES
+
+
+A.1 STATE SPACE ABSTRACTION
+
+
+It has been effective in grouping similar characteristics into a single cluster, which is called _state_
+_space abstraction_, in various settings such as model-based RL (Jiang et al., 2015; Zhu et al., 2021;
+Hafner et al., 2020) and model-free settings (Grze´s & Kudenko, 2008; Tang & Agrawal, 2020).
+NECSA, introduced by (Li et al., 2023), is the model that facilitates the abstraction of grid-based
+state-action pairs for episodic control, achieving state-of-the-art (SOTA) performance in a general
+single-reinforcement learning task. The approach could alleviate the usage of inefficient memory
+in conventional episodic control. However, an additional dimensionality reduction process is inevitable, such as random projection in high-dimensional tasks in (Dasgupta, 2013). In (Na et al.,
+2024), EMU utilizes a state-based semantic embedding for efficient memory utilization. LAGMA
+(Na & Moon, 2024) employs VQ-VAE for state embedding and estimates the overall value of abstracted states to generate incentive structure encouraging transitions toward goal-reaching trajectories. Unlike previous works, we use state-space abstraction to generate trajectory embedding in
+quantized latent space, ensuring that these embeddings share key similarities. We then cluster the
+trajectories into several classes based on task commonality. In this way, TRAMA can learn a taskaware policy by identifying trajectory classes in multi-tasks.
+
+
+A.2 PREDICTIONS IN MARL
+
+
+Predictions in MARL are generally used to model the actions of agents (Zhang & Lesser, 2010; He
+et al., 2016; Grover et al., 2018; Raileanu et al., 2018; Papoudakis et al., 2021; Yu et al., 2022).
+In (Carion et al., 2019; Li et al., 2020; Christianos et al., 2021), models also include groups or
+agents’ tasks for their prediction. The authors in (He et al., 2016) utilize the Q-value to predict
+opponents’ actions, assuming varying opponents’ policies. On the other hand, Raileanu et al. (2018)
+presents the model to predict other agents’ actions by updating hidden states. Papoudakis & Albrecht (2020) introduce the opponent modeling adopting variational autoencoder (VAE) and A2C
+without accessibility to opponents’ information. LIAM (Papoudakis et al., 2021) learns the trajectories of the modeled agent using those of the controlled agent. On the other hand, in our approach,
+agents predict which trajectory class they are experiencing to generate additional inductive bias for
+decision-making based on this prediction.
+
+
+A.3 CENTRALIZED TRAINING WITH DECENTRALIZED EXECUTION (CTDE)
+
+
+Under Centralized Training with Decentralized Execution (CTDE) framework, value factorization
+approaches have been introduced by (Sunehag et al., 2017; Rashid et al., 2018; Son et al., 2019;
+Rashid et al., 2020; Wang et al., 2020a) to solve fully cooperative multi-agent reinforcement learning
+(MARL) tasks, and these approaches achieved state-of-the-art performance in challenging benchmark problems such as SMAC (Samvelyan et al., 2019). Value factorization approaches utilize the
+joint action-value function _Q_ _[tot]_ _θ_ with learnable parameter _θ_ . Then, the training objective _L_ ( _θ_ ) can
+be expressed as
+
+
+_L_ ( _θ_ ) = E _**o**_ _,_ _**a**_ _,r,_ _**o**_ _′∼D_ [� _r_ + _γ_ max _**a**_ _′Q_ _[tot]_ _θ_ _[−]_ [(] _**[o]**_ _[′][,]_ _**[ a]**_ _[′]_ [)] _[ −]_ _[Q]_ _θ_ _[tot]_ [(] _**[o]**_ _[,]_ _**[ a]**_ [)] �2] _,_ (11)
+
+
+where _D_ is a replay buffer; _**o**_ is the joint observation; _Q_ _[tot]_ _θ_ _[−]_ [is a target network with online parameter]
+_θ_ _[−]_ for double Q-learning (Hasselt, 2010; Van Hasselt et al., 2016); and _Q_ _[tot]_ _θ_ and _Q_ _[tot]_ _θ_ _[−]_ [include both]
+mixer and individual policy network.
+
+
+B EXPERIMENT DETAILS
+
+
+B.1 EXPERIMENT DESCRIPTION
+
+
+In this section, we present details of SMAC (Samvelyan et al., 2019), SMACv2 (Ellis et al., 2024)
+and multi-task problems presented in Table 1 built upon StarCraft II. To test the generalization of
+policy, SMACv2 contains highly varying initial positions and different unit combinations within one
+_map_, unlike the original SMAC tasks. In new tasks, agents may require different strategies against
+
+
+14
+
+
+enemies with different unit combinations and initial positions. TRAMA makes agents recognize
+which task they are solving and then utilize these predictions as additional conditions for action
+policy. Figure 14 compares the different characteristics between single-task and multi-tasks.
+
+
+Fixed
+Init. distribution Init. distribution
+
+
+Varying
+
+
+|Col1|Col2|
+|---|---|
+|||
+
+
+|⋯<br>Reflected Surrounded Reflected|Col2|Col3|Col4|
+|---|---|---|---|
+|Refle|cted|Refl|ected|
+
+
+Single-Task
+
+
+Multi-Task
+
+
+Figure 14: Comparison between single-task and multi-tasks.
+
+
+In SMACv2, unit combinations for agents are randomly selected from a set of given units based on
+the predefined selection probability for each unit. For example, in t5 ~~v~~ s ~~5~~, five units are drawn
+from three possible units, such as Marine, Marauder and Medivac, according to predetermined
+probabilities. Initial unit positions are randomly selected between Surrounded and Reflected.
+
+
+On the other hand, in our multi-tasks presented in Table 1, initial unit combinations are selected from
+the predefined sets. For example, three unit combinations are possible among _{_ 3s2z, 2c3z, 2c3s _}_
+in SurComb3. Here, s, z, and c represent Stalker, Zealot, and Colossus, respectively. In
+addition, in our multi-tasks, we adopt **sparse** **reward** **settings** similar to (Jeon et al., 2022; Na &
+Moon, 2024) unlike SMACv2. Table 2 presents the reward structure of the multi-tasks we presented.
+
+
+Table 2: Reward settings for multi-tasks.
+
+
+Condition Sparse reward
+
+
+All enemies die (Win) +200
+Each enemy dies +10
+Each ally dies -5
+
+
+Note that both SMAC (Samvelyan et al., 2019) and SMACv2 (Ellis et al., 2024) normalize the reward
+output by the maximum reward agents can get so that the maximum return (without considering
+discount factor) becomes 20. Due to this setting, the maximum return in our multi-tasks becomes
+around 3.5. Table 3 presents details of tasks evaluated in the experiment section.
+
+
+Table 3: Task Specification
+
+
+Task _n_ agent Dim. of state space Dim. of action space Episodic length
+
+
+Multi-task
+
+
+SurComb3 5 130 11 200
+reSurComb3 5 130 11 200
+SurComb4 5 130 11 200
+reSurComb4 5 130 11 200
+
+
+p5 ~~v~~ s ~~p~~ 5 5 130 11 200
+SMACv2
+t5 ~~v~~ s ~~t~~ 5 5 120 11 200
+
+
+SMAC
+
+
+1c3s5z 9 270 15 180
+5m ~~v~~ s ~~6~~ m 5 120 11 70
+MMM2 10 322 18 180
+6h ~~v~~ s ~~8~~ z 6 140 14 150
+
+
+15
+
+
+B.2 EXPERIMENT SETTINGS
+
+
+For the performance evaluation, we measure the mean return computed with 128 samples: 32
+episodes for four different random seeds. For baseline methods, we follow the settings presented
+in the original papers or their original codes. We use almost the same hyperparameters throughout
+the various tasks except for _ncl_ . For VQ-VAE training, we use the fixed hyperparameters for all
+tasks, such as _λ_ vq=0.25, _λ_ commit=0.125, _λ_ cvr=0.125 in Eq. (5), _nψ_ =500, and _n_ _[vq]_ freq [=10.] [Here,] _[n][ψ]_
+is the update interval for clustering and classifier learning, and _n_ _[vq]_ freq [represents] [the] [update] [interval]
+of VQ-VAE. Algorithm 2 presents details of TRAMA training and the parameters used in overall
+training. Table 4 summarizes the task-dependent hyperparameter settings for TRAMA. Here, the
+dimension of latent space is denoted as _d_ .
+
+
+Table 4: Hyperparameter settings for TRAMA experiments.
+
+
+Task _nc_ _d_ _ncl_ _ϵT_
+
+
+SurComb3
+
+
+4
+
+
+Multi-task
+
+
+reSurComb3 6
+
+256 4 50K
+
+SurComb4 4
+reSurComb4 8
+
+
+p5 ~~v~~ s ~~p~~ 5 8
+SMACv2 256 4 50K
+t5 ~~v~~ s ~~t~~ 5 8
+
+
+1c3s5z
+
+
+SMAC
+
+
+1c3s5z 3
+
+5m ~~v~~ s ~~6~~ m 3 50K
+
+256 4
+
+MMM2 3
+6h ~~v~~ s ~~8~~ z 4 200K
+
+
+256 4
+
+
+B.3 INFRASTRUCTURE AND CODE IMPLEMENTATION
+
+
+For experiments, we mainly use GeForce RTX 3090 and GeForce RTX 4090 GPUs. Our code is
+built on PyMARL (Samvelyan et al., 2019) and the open-sourced code from LAGMA (Na & Moon,
+2024). Our official code is available at: https://github.com/aailab-kaist/TRAMA.
+
+
+B.4 TRAINING AND COMPUTATIONAL TIME ANALYSIS
+
+
+This section presents the total training time required for each model to learn each task. Before that,
+we present the computational costs of newly introduced modules in TRAMA. Table 5 presents the
+results. In Table 5, the MARL training module includes training for prediction and VQ-VAE modules. The computational cost is about 20% increased compared to the model without a prediction
+and VQ-VAE modules, overall training time does not increase much compared to other complex
+baseline methods as illustrated in Table 6. This is because most computational load in MARL often comes from rolling out sample episodes by interacting with the environment. In addition, as
+VQ-VAE module is periodically updated, we measure the mean computational time with VQ-VAE
+updates. Clustering and classifier training are called sparsely compared to MARL training; overall, additional computational costs are not burdensome. In addition, we can expedite computational
+costs for classifier training, as a classifier already converges to optimal one after sufficient training,
+as illustrated in Figure 6.
+
+
+Table 5: Computational costs of TRAMA modules.
+
+
+Module Computing time per call [s]
+
+
+MARL training module 0.83
+Clustering 0.13 _∼_ 0.3
+Classifier training 2 _∼_ 15
+
+
+16
+
+
+Training times of all models are measured in GeForce RTX 3090 or RTX 4090. In Table 6, marker
+(*) represents the training time measured by GeForce RTX 4090. Others are measured by RTX 3090.
+As in Table 6, TRAMA does not take much training time compared to other baseline methods, even
+with a periodic update for trajectory clustering, classifier learning, and VQ-VAE training. Again, as
+a classifier already converges to optimal one after sufficient training as illustrated in Figure 6, we
+can further expedite training speed by reducing the frequency of updating the classifier, _fψ_ .
+
+
+Table 6: Training time for each model in various tasks (in hours).
+
+
+Model 5m ~~v~~ s ~~6~~ m (2M) 1c3s5z (2M) p5 ~~v~~ s ~~5~~ (5M) SurComb3 (5M)
+
+
+EMC 8.6 23.1 23.2 21.6*
+MASER 12.7 12.9 21.8 23.5
+RODE 6.0 10.5 15.0 20.6
+TRAMA 9.1 10.5 12.8* 15.1
+
+
+C IMPLEMENTATION DETAILS
+
+
+In this section, we present the implementation details of TRAMA. In TRAMA, we additionally
+consider the trajectory class _k_ as an additional condition along with timestep _t_ for selecting indices of
+quantized vectors during VQ-VAE training. We denote this indexing function as _J_ ( _t, k_ ). Algorithm
+1 presents details of _J_ ( _t, k_ ).
+
+
+**Algorithm 1** Compute _J_ ( _t, k_ )
+
+
+1: **Input:** For given the number of codebook _nc_, the maximum batch time _T_, the current timestep
+_t_, the number of trajectory class _ncl_, and the index of trajectory class _k_
+2: **if** _t_ == 0 **then**
+3: _nK_ = _⌊nc/ncl⌋_
+4: _d_ = _nK/T_
+5: Keep the values of _nK, d_ until the end of the episode
+6: **end if**
+7: _is_ = _nK_ _×_ ( _k −_ 1)
+8: **if** _d ≥_ 1 **then**
+9: _J_ ( _t, k_ ) = _is_ + _⌊d × t⌋_ : 1 : _is_ + _⌊d ×_ ( _t_ + 1) _⌋_
+10: **else**
+11: _J_ ( _t, k_ ) = _is_ + _⌊d × t⌋_
+12: **end if**
+13: Return _J_ ( _t, k_ )
+
+
+The computed _J_ ( _t, k_ ) for a given ( _t, k_ ) pair is then used for coverage loss in Eq. (5) to spread the
+quantized vectors throughout the embedding space of feasible states, _χ_ . Since Eq. (5) is expressed
+for a given _s_ _[k]_ _t_ [, we further elaborate on the expression considering batch samples. Modified VQ-VAE]
+loss objective for given state _st_, nearest vector _xt,q_ = [ _fϕ_ _[e]_ [(] _[s][t]_ [)]] _[q]_ [and] [given] [class] _[k]_ [is] [expressed] [as]
+follows.
+
+
+1
+_L_ _[tot]_ _V Q_ [(] _[ϕ,]_ _**[ e]**_ _[, s][t][, k]_ [) =] _[ L][V Q]_ [(] _[ϕ,]_ _**[ e]**_ _[, s][t]_ [) +] _[ λ]_ [cvr] _|J_ ( _t, k_ ) _|_
+
+
+ - _||_ sg[ _fϕ_ _[e]_ [(] _[s][t]_ [)]] _[ −]_ _[e][j][||]_ [2] 2 (12)
+
+_j∈J_ ( _t,k_ )
+
+
+_LV Q_ ( _ϕ,_ _**e**_ _, st_ ) =
+
+(13)
+_||fϕ_ _[d]_ [([] _[f]_ _ϕ_ _[ e]_ [(] _[s][t]_ [)]] _[q]_ [)] _[ −]_ _[s][t][||]_ [2] 2 [+] _[ λ]_ [vq] _[||]_ [sg[] _[f]_ _ϕ_ _[ e]_ [(] _[s][t]_ [)]] _[ −]_ _[x][t,q][||]_ [2] 2 [+] _[ λ]_ [commit] _[||][f]_ _ϕ_ _[ e]_ [(] _[s][t]_ [)] _[ −]_ [sg[] _[x][t,q]_ []] _[||]_ [2] 2
+
+
+For batch-wise training for VQ-VAE, we train VQ-VAE with the following learning objective:
+
+
+_T −_ 1
+
+- _L_ _[tot]_ _V Q_ [(] _[ϕ,]_ _**[ e]**_ _[, s][t,b][,]_ _[k]_ [¯] _[b]_ [)] (14)
+
+_t_ =0
+
+
+_L_ _[batch]_ _V Q_ [(] _[ϕ,]_ _**[ e]**_ [) =] [1]
+
+_B_
+
+
+_B_
+
+
+_b_ =1
+
+
+17
+
+
+Algorithm 2 presents the overall training algorithm for all learning components of TRAMA, including _fϕ_ _[e]_ [,] _[ f]_ _ϕ_ _[ d]_ [,] _**[ e]**_ [ in VQ-VAE; trajectory classifier] _[ f][ψ]_ [; trajectory-class predictor] _[ π][ζ]_ [; trajectory-class]
+representation model _fθ_ _[g]_ [; action policy] _[ Q]_ _θ_ _[i]_ [for] _[ i][ ∈]_ _[I]_ [; and] _[ Q]_ _θ_ _[tot]_ for mixer network.
+
+
+**Algorithm 2** Training algorithm for TRAMA
+
+
+1: **Parameter:** Batch size _B_ for MARL training, batch size _M_ for classifier training, classifier
+update interval _nψ_, VQ-VAE update interval _nϕ_, and the maximum training time _Tenv_
+2: **Input:** Individual Q-network _Q_ _[i]_ _θ_ [for] _[n]_ [agents,] [trajectory-class] [representation] [model] _[f]_ _θ_ _[ g]_ [,] [VQ-]
+VAE encoder _fϕ_ _[e]_ [,] [VQ-VAE] [decoder] _[f]_ _ϕ_ _[ d]_ [,] [VQ-VAE] [codebook] _**[e]**_ [,] [trajectory-class] [predictor] _[π][ζ]_ [,]
+replay buffer _D_, trajectory classifier _fψ_
+3: Initialize network parameter _θ, ϕ, ψ,_ _**e**_
+4: _tenv_ = 0
+5: _nepisode_ = 0
+6: **while** _tenv_ _≤_ _Tenv_ **do**
+7: Interact with the environment via _ϵ_ -greedy policy with [ _Q_ _[i]_ _θ_ []] _i_ _[n]_ =1 [and get a trajectory] _[ τ][s]_ _t_ =0
+8: _tenv_ = _tenv_ + _tepisode_
+9: _nepisode_ = _nepisode_ + 1
+10: Encode _τst_ =0 by _fϕ_ _[e]_ [and get a quantized latent sequence] _[ τ][χ]_ _t_ =0 [= [] _[f]_ _ϕ_ _[ e]_ [(] _[τ][s]_ _t_ [)]] _[q]_ [by Eq.] [(1)]
+11: Get indices sequence _τZt_ =0 from _τχt_ =0
+12: Append _{τst_ =0 _, τZt_ =0 _}_ to _D_
+13: Get _B_ sample trajectories [ _{τst_ =0 _, τZt_ =0 _,_ _k_ [¯] _}_ ] _[B]_ _b_ =1 _[∼D]_
+14: **for** _b ≤_ _B_ **do**
+15: **if** _k_ [¯] _b_ is None **then**
+16: Get trajectory-class label _k_ [¯] _b_ via _fψ_
+17: **end if**
+18: **end for**
+19: **if** mod( _nepisode, nϕ_ ) **then**
+20: Compute Loss _L_ _[batch]_ _V Q_ [(] _[ϕ,]_ _**[ e]**_ [)][ by Eq.] [(14) with][ [] _[{][τ][s]_ _t_ =0 _[, τ][Z]_ _t_ =0 _[,]_ [ ¯] _[k][}]_ []] _[B]_ _b_ =1
+21: Update _ϕ_, _**e**_
+22: **end if**
+23: Compute Loss _L_ ( _θ, ζ_ ) by Eq. (10) with [ _{τst_ =0 _, τZt_ =0 _,_ _k_ [¯] _}_ ] _[B]_ _b_ =1
+24: Update _θ_, _ζ_
+25: **if** mod( _nepisode, nψ_ ) **then**
+26: Get _M_ sample trajectories [ _τZt_ =0] _[M]_ _m_ =1 _[∼D]_
+27: Compute a trajectory embedding [¯ _e_ _[m]_ ] _[M]_ _m_ =1
+28: Get class labels _K_ [¯] by K-means clustering of [¯ _e_ _[m]_ ] _[M]_ _m_ =1
+29: Compute Loss _L_ ( _ψ_ ) by Eq. (7) with [¯ _e_ _[m]_ ] _[M]_ _m_ =1 [and] _[K]_ [¯]
+30: Update _ψ_
+31: **end if**
+32: **end while**
+
+
+18
+
+
+D ADDITIONAL EXPERIMENTS
+
+
+D.1 OMITTED EXPERIMENT RESULTS
+
+
+In Section 5, we evaluate the various methods based on their mean return values instead of the
+mean win-rate. In single-task settings, both win-rate and return values show similar trends since
+agents learn policy to defeat enemies with a fixed unit combination under marginally perturbed initial
+positions. On the other hand, in multi-task settings, agents’ policies may converge to suboptimality
+specialized on specific tasks, preventing them from gaining rewards in other tasks. In such a case,
+a high win-rate derived by specializing in certain tasks does not guarantee the generalization of
+policies in multi-task problems. Thus, we measure the mean return values instead. In the following,
+we present the omitted win-rate performance of experiments presented in Section 5.
+
+
+In Figures 15 and 16, TRAMA shows the best or comparable performance compared to other baseline methods. However, the performance gap between TRAMA and other methods is not distinctively observed in these win-rate curves due to the aforementioned reason. Thus, measuring the
+mean return value is more suitable for multi-task problems.
+
+
+Figure 15: The mean win-rate of TRAMA compared to baseline algorithms on four multi-task
+problems presented in Table 1.
+
+
+Figure 16: Performance comparison of TRAMA with win-rate against baseline algorithms on
+p5 ~~v~~ s ~~5~~ and t5 ~~v~~ s ~~5~~ in SMACv2. Here, _ncl_ =8 is assumed.
+
+
+On the other hand, in Figure 17, similar performance trends are observed, illustrating the better
+performance of TRAMA in some tasks.
+
+
+D.2 PERFORMANCE COMPARISON WITH ADDITIONAL BASELINE METHODS
+
+
+In this section, we present additional performance comparison with some omitted baseline methods,
+such as Updet (Hu et al., 2021) and RiskQ (Shen et al., 2023). Updet utilizes transformer architecture
+for agent policy based on the entity-wise input structure. Please note that this input structure is
+different from the conventional input settings of a single feature vector, which are widely adopted in
+MARL baseline methods (Rashid et al., 2018; Wang et al., 2020a; Zheng et al., 2021; Na & Moon,
+2024). Therefore, we modified the input structure provided by the environment to evaluate Updet
+in SMACv2 tasks. RiskQ introduces the Risk-sensitive Individual-Global-Max (RIGM) to consider
+the common risk metrics such as the Value at Risk (VaR) metric or distorted risk measurements.
+
+
+19
+
+
+Figure 17: The mean win-rate of TRAMA compared to baseline algorithms on SMAC task.
+
+
+For evaluation, we consider four multi-task problems presented in Table 1 and the conventional
+SMACv2 tasks, such as p5 vs ~~5~~ and t5 ~~v~~ s ~~5~~ . We use the default settings presented in their codes
+for evaluation.
+
+
+Figure 18: The mean return comparison of various models multi-task problems.
+
+
+Figure 19: The mean win-rate comparison of various models on multi-task problems.
+
+
+Figure 20: The mean return comparison of various models on SMACv2 p5 ~~v~~ s ~~5~~ and t5 ~~v~~ s ~~5~~ .
+
+
+In Figures 18 - 21, TRAMA shows the best performance compared to additional baseline methods,
+in terms of both return and win-rate in all multi-task problems.
+
+
+20
+
+
+Figure 21: The mean win-rate comparison of various models on SMACv2 p5 ~~v~~ s ~~5~~ and t5 ~~v~~ s ~~5~~ .
+
+
+D.3 ADDITIONAL ABLATION STUDY
+
+
+In this subsection, we present additional ablation studies on multi-task problems, such as
+SurComb3 and reSurComb4 to evaluate the impact of trajectory-class representation _g_ generated by _fθ_ _[g]_ [.] [To] [this] [end,] [we] [ablate] _[f]_ _θ_ _[ g]_ [in] [TRAMA] [and] [consider] [the] [one-hot] [vector,] [instead] [of] _[g][i]_ [,]
+as an additional condition to individual policies. We denote this model as **TRAMA (one-hot)** . In
+addition, we also ablate _J_ ( _t, k_ ) and consider _J_ ( _t_ ) to understand further the role of _J_ ( _t, k_ ). Figure
+22 illustrates the results.
+
+
+(a) SurComb3 (b) reSurComb4
+
+
+Figure 22: Ablation studies on SurComb3 and reSurComb4.
+
+
+Similar to the results in Figure 12, _J_ ( _t, k_ ) improves the performance as the quantized vectors are
+evenly distributed throughout _χ_, yielding the clusters of trajectories with task similarities. On the
+other hand, the one-hot vector also gives additional information to the policy network as agents
+predict the trajectory class labels accurately, generating consistent signals to the policy for a given
+trajectory class. However, trajectory-class representation signifies this impact and further improves
+the performance of TRAMA.
+
+
+We also conduct an additional ablation study on the conventional SMACv2 tasks (Ellis et al., 2024)
+to see the effectiveness of the trajectory-class representation. Figure 23 illustrates the result.
+
+
+(a) p5 ~~v~~ s ~~5~~ task. (b) t5 ~~v~~ s ~~5~~ task.
+
+
+Figure 23: Additional ablation tests on trajectory-class representation, _g_ .
+
+
+21
+
+
+In Figure 23, we can see that one-hot vector as an additional conditional information for decisionmaking also benefits the general performance. However, the trajectory-class representation signifies
+this gain, illustrated by the comparison between TRAMA (our) and TRAMA (one-hot).
+
+
+D.4 ADDITIONAL ABLATION STUDY ON CLUSTERING MODULE
+
+
+In this section, we study the effect of the distribution of quantized vector throughout the embedding
+space, _χ_ = _{x_ _∈_ R _[d]_ : _x_ = _fϕ_ _[e]_ [(] _[s]_ [)] _[, s]_ _[∈D}]_ [.] [We utilize VQ-VAE embeddings to generate trajectory]
+embeddings via Eq. 6, so that it can capture the commonality among trajectories. Although we do
+not have prior knowledge of _|K|_, we can identify some tasks sharing similarity based on trajectory
+embeddings by assuming _ncl_ . In addition, we can utilize some adaptive algorithm to determine
+optimized _ncl_ . Please see Appendix D.5 for an adaptive clustering method.
+
+
+In addition, even though _k_ 1 and _k_ 2 are actually different tasks if their differences are marginal, then
+they can be clustered into the same trajectory class. This mechanism is important since similar
+tasks may require a similar joint policy. Thus, having the exact trajectory class representation as
+an additional condition can be more beneficial in decision-making than having a vastly different
+trajectory-class representation, which could encourage different policies.
+
+
+If quantized embedding vectors are not evenly distributed through the embedding space, the semantically dissimilar trajectories may share the same quantized vectors, which is unwanted. Without
+well-distributed quantized vectors, it becomes hard to construct distinct and meaningful clustering
+results. To see the importance of the distribution of embedding vectors in VQ-VAE, we ablate the
+coverage loss: (1) training with _λ_ cvr considering _J_ ( _t_ ) only, and (2) TRAMA model, i.e., training
+with _λ_ cvr considering _J_ ( _t, k_ ). In addition to Figure 4 in Section 3.1, Figure 24 presents additional
+ablation results on SMACv2 task _p5_ ~~_v_~~ _s_ ~~_5_~~ .
+
+
+(a) Training with _J_ ( _t_ ) (b) Training with _J_ ( _t, k_ ) (c) Clustering of (a) (d) Clustering of (b)
+
+
+Figure 24: PCA of sampled trajectory embedding and VQ-VAE embedding vectors (gray circles).
+Colors from red to purple (rainbow) represent early to late timestep in (a) and (b). In (c) and (d), five
+clusters are assumed ( _ncl_ = 5), and each trajectory embedding is colored with a designated class
+(red, green, blue, purple and yellow). p5 ~~v~~ s ~~5~~ task is used for testing, and we ablate components
+related to coverage loss.
+
+From Figures 4 and 24, we can see that having evenly distributed VQ-VAE embedding vectors is
+critical in clustering, which is highlighted by Silhouette score and the result of visualization. Since
+tasks in p5 ~~v~~ s ~~5~~ can have marginal differences, the clustering results are unclear compared to the
+results from the customized multi-task problems in Figure 4.
+
+
+D.5 IMPLEMENTATION DETAILS OF CLUSTERING AND ADAPTIVE CLUSTERING METHOD
+
+
+This section presents some details of the K-means++ clustering we adopt and a possible adaptive
+clustering method based on the Silhouette score. For centroid initialization, centroids are initially
+selected randomly from the data points. Then next centroid is selected probabilistically, where the
+probability of selecting a point is proportional to the square of its distance from the nearest existing
+centroid. At first, we iterate K-means with 10 different initial centroids. However, as we discussed
+in Section 3.2, generating coherent labels is also important. Thus, once we get the previous centroid
+value, we use this prior value as an initial guess for the centroid and run K-means just once with it.
+
+
+As discussed in Section 5.3, we may select _ncl_ large enough so that TRAMA can capture the possible
+diversity of unit combinations in multi-task problems. To consider some automatic update for _ncl_,
+
+
+22
+
+
+we implement a possible adaptive clustering algorithm by adjusting _ncl_ based on the Silhouette
+scores of candidate _ncl_ values. We test this on multi-task problems and Figure 25 presents the result.
+We maintain other components in TRAMA the same. We initially assume _ncl_ = 2 and _ncl_ = 6 for
+adaptive methods. In Figure 25, the adaptive clustering method succeeded in finding optimal _ncl_ = 3
+or _ncl_ = 4, in terms of Silhouette score. When an initial value _ncl_ = 2 is close to the optimal value,
+the overall performance in terms of return shows better performance as it quickly converges to the
+value _ncl_ = 3 and generates coherent label information for trajectory-class predictor.
+
+
+(a) _ncl_ variation (b) Return value
+
+
+Figure 25: Test of adaptive clustering method on SurComb4 multi-task problem.
+
+
+Interestingly, the presented adaptive method converges to _ncl_ = 3 instead of _ncl_ = 4. In Figure
+13, the clusters for 1c2s2z and 3s2z are close and share common units, such as 2s2z. Thus, in
+terms of Silhouette score, _ncl_ = 3 has a marginally higher score and thus adaptive method, which
+converged to _ncl_ = 3, yields a similar performance in the case of fixed _ncl_ = 4.
+
+
+23
+
+
+D.6 EXPERIMENTS ON OUT-OF-DISTRIBUTION (OOD) TASKS
+
+
+In this section, we present additional experiments on Out-Of-Distribution (OOD) tasks. Here, for
+_ko_ _∈Kood_, we define OOD tasks as _Tko_ such that _Tko_ _∈/_ _**T**_ train according to Definition 2.1. In other
+words, _∀ko_ _∈Kood_ and _∀ki_ _∈K_ train, _Sko_ _∩_ _Sk_ _[c]_ _i_ [=] _[∅]_ [and] **[ Ω]** _[k]_ _o_ _[∩]_ **[Ω]** _k_ _[c]_ _i_ [=] _[∅]_ [should be satisfied.] [Thus,]
+we can view _OOD tasks as unseen tasks._
+
+
+For this test, we use four models trained under different seeds for each method, and the corresponding win-rate and return curves are presented in Figure 26.
+
+
+(a) Winrate (b) Return
+
+
+Figure 26: Performance comparison of various models on SurComb4.
+
+
+In this test, we construct OOD tasks by differentiating either the unit combination or initial position
+distribution so that agents experience different observation distributions throughout the episode.
+Table 7 presents details of OOD tasks. We set two different types of unit combinations in OOD
+tasks, in addition to in-distribution (ID) unit combinations, (1) one similar to ID unit distribution
+and (2) the other largely different unit combinations. For example, unit combinations in OOD (#1)
+or OOD (#4) share some units with ID unit distribution. Specifically, 1c2s1z are common units in
+both the ID task with 1c2s2z and the OOD task with 1c3s1z. On the other hand, OOD (#2) or
+OOD (#5) accompanies largely different unit combinations.
+
+
+In addition, we also construct OOD via largely different initial positions in OOD (#3) _∼_ OOD (#5).
+Thus, we can expect that OOD (#5) is the most out-of-distributed task among various task settings
+in Table 7.
+
+
+Table 7: Task configuration of OOD tests
+
+
+Name Initial Position Type Unit Combinations ( _ncomb_ )
+
+
+ID (SurComb4) Surrounded _{_ 1c2s2z, 3s2z, 2c3z, 2c3s _}_
+OOD (#1) Surrounded _{_ 1c4s, 1c3s1z, 2s3z _}_
+OOD (#2) Surrounded _{_ 5s, 5z, 5c _}_
+OOD (#3) Surrounded and Reflected _{_ 1c2s2z, 3s2z, 2c3z, 2c3s _}_
+OOD (#4) Surrounded and Reflected _{_ 1c4s, 1c3s1z, 2s3z _}_
+OOD (#5) Surrounded and Reflected _{_ 5s, 5z, 5c _}_
+
+
+Based on four models of each method trained with different seeds, we evaluate them across six
+different task settings, as shown in Table 7. For the evaluation, we run 50 test episodes per each
+trained model, resulting in a total of 4 _×_ 50 = 200 runs per method. Tables 9 and 8 present test
+results. In the tables, the star marker (*) represents the best performance for a given task among
+various methods.
+
+
+In Tables 9 and 8, TRAMA shows the better or comparable performance, in terms of both win-rate
+and return, in all cases including OOD tasks. In the OOD (#2) task, the differences in the win-rate are
+not evident compared to other baseline methods. This is reasonable because TRAMA cannot gain
+significant benefits from identifying similar task classes and encouraging similar policies through
+trajectory-class representations when there is no clear task similarity. In addition, TRAMA also
+shows the best performance in OOD tasks with highly perturbed initial positions, as in OOD (#3) _∼_
+OOD (#5).
+
+
+24
+
+
+Table 8: Return of OOD tests
+
+
+TRAMA QMIX QPLEX EMC
+
+ID (SurComb4) **3** _**.**_ _[∗]_ ±0.489 2.201±0.398 2.323±0.119 2.348±0.406
+OOD (#1) **2** _**.**_ _[∗]_ ±0.461 2.077±0.422 2.248±0.471 1.661±0.220
+OOD (#2) **1** _**.**_ _[∗]_ ±0.148 0.939±0.463 1.049±0.240 0.774±0.326
+OOD (#3) **2** _**.**_ _[∗]_ ±0.488 1.899±0.299 2.025±0.221 2.153±0.557
+OOD (#4) **2** _**.**_ _[∗]_ ±0.280 1.484±0.219 1.993±0.199 1.457±0.127
+OOD (#5) **0** _**.**_ _[∗]_ ±0.679 0.532±0.200 0.792±0.282 0.605±0.295
+
+
+Table 9: Win-rate of OOD tests
+
+
+TRAMA QMIX QPLEX EMC
+
+ID (SurComb4) **0** _**.**_ _[∗]_ ±0.025 0.540±0.059 0.667±0.034 0.613±0.025
+OOD (#1) **0** _**.**_ _[∗]_ ±0.057 0.475±0.062 0.525±0.073 0.430±0.057
+OOD (#2) **0** _**.**_ _[∗]_ ±0.020 0.270±0.057 0.265±0.017 0.275±0.057
+OOD (#3) **0** _**.**_ _[∗]_ ±0.111 0.465±0.050 0.545±0.050 0.525±0.084
+OOD (#4) **0** _**.**_ _[∗]_ ±0.052 0.355±0.071 0.475±0.059 0.365±0.033
+OOD (#5) **0** _**.**_ _[∗]_ ±0.141 0.160±0.037 0.215±0.050 0.205±0.062
+
+
+**Discrepancy between return and win-rate in multi-task problems** In Tables 8 and 9, the win-rate
+difference (in ratio) between TRAMA and QPLEX is about 6% while the return difference (in ratio)
+is about 32%.
+
+
+This discrepancy can be observed in multi-task problems since a trained model can be specialized
+on some tasks yet less effective in other tasks, making not much reward. For example, both models
+A and B succeed in solving task 1 while failing on task 2 at the same frequency. However, if model
+A nearly succeeds in solving task 2 but ultimately fails, while model B completely fails in solving
+task 2, this scenario results in a similar win-rate for A and B but a different return.
+
+
+In another case, both models A and B become specialized in one of the tasks, but the total return
+from tasks 1 and 2 can differ. If task 1 yields a larger return compared to task 2 for success, and
+model A overfits to task 1 while model B overfits to task 2, this scenario results in a similar win rate
+for A and B but a different return, i.e., a larger return for model A.
+
+
+In both cases, model A is preferred over model B. This highlights why it is important to focus on
+the return difference when evaluating model performance in multi-task problems.
+
+
+**Qualitative** **analysis** **on** **trajectory** **class** **prediction** **in** **OOD** **tasks** To understand how TRAMA
+predicts trajectory classes in OOD tasks, we first evaluate how accurately agents in TRAMA predict
+trajectory classes in in-distribution (ID) tasks.
+
+
+(a) Clustering Results (b) Episode instances (ID)
+
+Figure 27: Qualitative analysis on in-distribution task (SurComb4).
+
+
+Figure 27(a) presents the clustering results of the ID task to determine which cluster corresponds
+to which type of task. From this result, we identify types of task denoted by each trajectory class
+
+
+25
+
+
+in Figure 27(b) and present some test episodes #A _∼_ #D. We also present the overall prediction
+made by agents across all timesteps in each test episode by the conventional box plot. The box plot
+denotes 1st (Q1) and 3rd (Q3) quartiles with a color box and median value with a yellow line within
+the color box.
+
+
+(a) Case #A (b) Case #B (c) Case #C (d) Case #D
+
+
+Figure 28: Overall prediction on trajectory class made by agents (ID task). Please refer to Figure 27
+for each episode case.
+
+
+In Figure 28, agents are confident in predicting trajectory class. In Case #A, agents predict a possibility that the given task belongs to class 4 instead of class 3, as their unit combinations can be quite
+similar, such as 1c2z, when some units are lost.
+
+
+(a) Episode instances (OOD#1) (b) Episode instances (OOD#2)
+
+Figure 29: Qualitative analysis on out-of-distribution tasks (OOD #1 and OOD #2).
+
+
+Figures 29 present qualitative analysis results of out-of-distribution tasks, OOD#1 and OOD#2 and
+Figures 30 and 31 illustrate the predictions made by agents for each test case. In Figure 30, agents
+predict the class of a given out-of-distribution task as the closest class experienced during training.
+Some tasks in OOD#1 share some portion of unit combinations, yielding strong predictions on Case
+#B and Case #C. This may yield _OOD task adaptation_, as a predicted trajectory class representation
+can encourage a joint policy that is effective in tasks sharing some units with ID tasks.
+
+
+On the other hand, when there is no evident similarity between OOD tasks and ID tasks, agents
+make weak predictions on trajectory class as presented in Figure 31(c). In this case, we can _detect_
+_highly OOD tasks_ by setting a certain threshold of confidence level, such as 50%.
+
+
+(a) Case #A (b) Case #B (c) Case #C
+
+
+Figure 30: Overall prediction on trajectory class made by agents (OOD#1 task). Please refer to
+Figure 29(a) for each episode case.
+
+
+26
+
+
+(a) Case #A (b) Case #B (c) Case #C
+
+
+Figure 31: Overall prediction on trajectory class made by agents (OOD#2 task). Please refer to
+Figure 29(b) for each episode case.
+
+
+D.7 TRAJECTORY CLASS PREDICTION
+
+
+In this section, we present the omitted results of trajectory class predictions made by agents. We
+present the accuracy of predictions in ratio. Tables 10, 11, and 12 demonstrate the prediction accuracy of each training time ( _tenv_ ). Columns of each Table represent each timestep ( _tepisode_ ) within
+episodes. Throughout various multi-task problems, agents accurately predict the trajectory class. In
+the results, agents predict more accurately as the timestep proceeds since they get more information
+for prediction through their observations.
+
+
+Table 10: The accuracy of trajectory class prediction (1M)
+
+
+_tenv_ =1M _tepisode_ =0 _tepisode_ =10 _tepisode_ =20 _tepisode_ =30
+
+
+SurComb3 0.841±0.062 0.855±0.044 0.861±0.044 0.886±0.043
+SurComb4 0.766±0.085 0.791±0.104 0.848±0.096 0.876±0.088
+reSurComb3 0.980±0.014 0.991±0.011 0.997±0.004 0.997±0.004
+reSurComb4 0.838±0.092 0.900±0.044 0.920±0.055 0.934±0.046
+
+
+Table 11: The accuracy of trajectory class prediction (3M)
+
+
+_tenv_ =3M _tepisode_ =0 _tepisode_ =10 _tepisode_ =20 _tepisode_ =30
+
+
+SurComb3 0.880±0.038 0.909±0.062 0.925±0.041 0.930±0.04
+SurComb4 0.908±0.063 0.939±0.025 0.941±0.023 0.947±0.022
+reSurComb3 0.947±0.046 0.961±0.029 0.975±0.017 0.968±0.023
+reSurComb4 0.889±0.062 0.927±0.037 0.933±0.045 0.931±0.042
+
+
+Table 12: The accuracy of trajectory class prediction (5M)
+
+
+_tenv_ =5M _tepisode_ =0 _tepisode_ =10 _tepisode_ =20 _tepisode_ =30
+
+
+SurComb3 0.853±0.034 0.902±0.046 0.933±0.052 0.945±0.044
+SurComb4 0.925±0.084 0.939±0.070 0.963±0.049 0.957±0.045
+reSurComb3 0.963±0.071 0.953±0.094 0.967±0.066 0.972±0.056
+reSurComb4 0.886±0.024 0.913±0.017 0.917±0.035 0.930±0.027
+
+
+27

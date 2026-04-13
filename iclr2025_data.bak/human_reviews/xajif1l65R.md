@@ -1,0 +1,161 @@
+## Human Reviewer 1
+
+### Summary
+This paper proposes Dataset Quantization V2 (DQ V2), an enhanced version of the original Dataset Quantization (DQ) method, focusing on efficient coreset selection without relying on large pre-trained models like MAE. Instead, DQ V2 integrates a new data augmentation strategy called Tobias, which uses randomly initialized CNNs to preserve the semantic regions of images while replacing background areas, mimicking the effect of pixel quantization. Extensive experiments demonstrate that DQ V2 achieves improved performance and training stability across multiple datasets, while also reducing computational complexity. The results suggest that DQ V2 provides a practical solution for data compression and coreset selection, paving the way for further enhancements in semantic-aware data augmentation and broader applications in complex visual tasks.
+
+### Strengths
+- The overall writing of the paper is smooth and easy to understand.
+- DQ V2 replaces MAE-based quantization with a simple augmentation strategy, achieving better performance without pre-trained models.
+
+### Weaknesses
+- The paper claims good scalability for the proposed method, but the experiments are still focused on smaller datasets and do not include evaluations on mainstream large-scale datasets like ImageNet-1k.
+- The coreset selection methods chosen for comparison, such as GraNd, Grad-Match, and GC, are from 2021. The paper should include comparisons with more recent coreset selection and dataset quantization methods.
+
+### Questions
+The goal of DQ is to reduce training data volume and improve data efficiency. Since the proposed method uses data augmentation, does it significantly increase the dataset size, potentially resulting in similar training costs as regular training?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+### Rating
+5
+
+### Confidence
+4
+
+---
+
+## Human Reviewer 2
+
+### Summary
+This work proposes DQ_v2, a corset selection method. To remove the pre-trained MAE in DQ, the authors investigate a data augmentation scheme, which can simulate the steps of pixel compression and reconstruction in DQ. Finally, the authors show the performance on several benchmark datasets, including CUB-200, Food-101, and ImageNet. The idea of using data augmentation to replace pre-trained MAE in DQ is somewhat novel to me. However, some critical concerns remain, please see weakness.
+
+### Strengths
+1. Using semantical-aware data augmentation to remove the pre-trained MAE model in DQ is interesting.
+2. The paper is well-organized.
+3. Experimental results show that the proposed DQ_v2 eliminates the drawbacks of DQ's dependence on pre-trained.
+4. The proposed method achieves performance improvement on multiple datasets.
+
+### Weaknesses
+1. In line 278, the authors say that the corset contains both original and augmented images. However, as far as I know, most existing corset selections only select original images from the datasets, meaning that there are no augmented images in corsets. So is this a fair comparison between DQ_v2 and other corset selection methods?
+2. The literature review section lacks comprehensiveness. Numerous recent studies closely related to the topic have not been studied, such as [1-5], which may affect the context and clarity of the proposed approach.
+[1] Tan, Haoru, et al. "Data pruning via moving-one-sample-out." Advances in Neural Information Processing Systems 36 (2024).
+[2] Xia, Xiaobo, et al. "Moderate coreset: A universal method of data selection for real-world data-efficient deep learning." The Eleventh International Conference on Learning Representations. 2022.
+[3] Yang, Shuo, et al. "Dataset pruning: Reducing training data by examining generalization influence." arXiv preprint arXiv:2205.09329 (2022).
+[4] Maharana, Adyasha, Prateek Yadav, and Mohit Bansal. "D2 pruning: Message passing for balancing diversity and difficulty in data pruning." arXiv preprint arXiv:2310.07931 (2023).
+[5] Yang, Suorong, et al. "Not All Data Matters: An End-to-End Adaptive Dataset Pruning Framework for Enhancing Model Performance and Efficiency." arXiv preprint arXiv:2312.05599 (2023).
+3. In the semantic data augmentation section, the authors enhance diversity by replacing image backgrounds. However, it’s unclear if the potential for semantic ambiguity was considered—for instance, whether the new backgrounds might inadvertently introduce other objects, which could affect the intended semantics.
+4. The authors report only storage costs, but I recommend adding a comparison of training costs as well. This would provide a more comprehensive assessment of the method’s efficiency and practical applicability.
+5. The practical significance of the proposed method is unconvincing due to limited experimental validation. In the experimental section, all benchmark comparisons are with methods published before 2021. The compared baselines are outdated. While authors claim the comparison with state-of-the-art, many existing SOTA methods [1-5] are not compared. This weakens the method’s practical performance and significance.
+
+### Questions
+Please see weakness.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+3
+
+### Rating
+5
+
+### Confidence
+5
+
+---
+
+## Human Reviewer 3
+
+### Summary
+This paper examines the limitations of the DQ method and proposes corresponding improvements. The authors believe that using a pretrained MAE in DQ may cause issues, so they conducted experiments to see the impact on DQ when MAE is removed. The experiments, in a way, demonstrate the importance of MAE. The authors suggest using Tobias data augmentation as a substitute for MAE. According to their results, it is possible to achieve accuracy comparable to or even better than the previous DQ without using MAE.
+
+### Strengths
+1. The method proposed by the authors does indeed achieve comparable or even higher results without using MAE.
+
+2. The authors conducted extensive ablation studies on the parameters of the method itself, including experiments on patch size and data selection methods.
+
+### Weaknesses
+1. The motivation of this paper is somewhat unclear. From my understanding, the main value of DQ lies in reducing dataset size and storage requirements. However, as shown in Table 1, this method actually increases the storage usage of DQ. The problem it addresses is the need for a pretrained MAE in the original DQ, yet the authors' experiments do not highlight any obvious issues caused by using MAE. In my view, the authors have optimized a relatively minor aspect while losing sight of one of DQ’s key contributions. It would be beneficial for the authors to further elaborate on the advantages of this method.
+
+2. The logic of the proposed method is unclear. The authors first apply Tobias data augmentation, followed by dataset selection—what is the advantage of this sequence? What would the outcome be if Tobias data augmentation were added directly at the end based on DQ?
+
+3. The conclusions regarding line 210 may have some bias, as MAE was pretrained on ImageNet, which likely results in better reconstruction performance on ImageNette. The variables here are not limited to dataset size, so the effectiveness may not necessarily be due to the dataset size alone. It could also be influenced by the effectiveness of MAE itself.
+
+### Questions
+The biggest question is what specific negative effects MAE actually introduces, as the authors' experiments and analysis do not clearly convey any significant drawbacks to using MAE.
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+### Rating
+5
+
+### Confidence
+4
+
+---
+
+## Human Reviewer 4
+
+### Summary
+This paper addresses the high computational cost of Dataset Quantization (DQ) due to its reliance on large pre-trained models like MAE and ResNet. They propose DQ V2, which removes pre-trained models by using a random CNN-based data augmentation that retains semantic structure by masking objects and replacing backgrounds, enhancing diversity without costly models. The goal of data augmentation (synthesizing) in their pipeline is to enhance data diversity and representation without relying on costly pre-trained models. 
+
+Evaluation: Evaluated on ImageNette, CUB-200-2011, Food-101, and ImageNet-30, DQ v2’s performance is compared with DQ’s. DQ v2 achieves comparable or better performance than the original DQ method, showing an average improvement of about 1.57%.
+
+### Strengths
+1. Computational Efficiency: By removing the reliance on large pre-trained models, DQ V2 lowers computational costs.
+
+2. Good insight for data augmentation: The pre-trained MAE model is equivalent to a data augmentation method (in introducing prior knowledge and implicit regularization into the training process)
+
+3. The writing is clear and easy to follow.
+
+### Weaknesses
+1. Lack of Quantitative Analysis on Computational Gains: While the paper claims computational benefits from replacing the MAE model with a CNN-based data augmentation strategy, it lacks specific measurements or comparisons to substantiate these gains. A quantitative analysis—such as GPU hours, memory usage, or training time—would provide stronger evidence of the efficiency improvements in DQ V2.
+
+2. Missing Baselines: I noticed that some recent coreset selection baselines for deep learning are missing: D2 Pruning[1], CCS[2], Moderate[3]. Those baselines seem to have a stronger performance than the proposed methods.
+
+3. Missing evaluation on ImageNet-1k: the paper argues that DQ-V2 is more efficient than DQ, but the method is only evaluated on the ImageNet subset. Previous methods including DQ all conducted evaluation on ImageNet-1k. It will be good to include an ImageNet-1k evaluation to demonstrate the scalability of the proposed methods.
+
+4. The data augmentation part is confusing: the goal of data quantization and coreset selection is to reduce the size of the training dataset, but the data augmentation method proposed in the paper expands the datasets -- the final expanded training dataset can be even larger, which is contradicted to the goal of coreset selection.
+
+5. Ablation study on data augmentation: The paper would benefit from a more detailed ablation study to assess the effectiveness of the data augmentation method used in DQ V2. Testing different data augmentation configurations (e.g., no augmentation, alternate augmentation techniques) would clarify its impact and help refine the methodology.
+
+[1] Maharana, Adyasha, Prateek Yadav, and Mohit Bansal. "D2 pruning: Message passing for balancing diversity and difficulty in data pruning." ICLR 2024
+
+[2] Zheng, Haizhong, Rui Liu, Fan Lai, and Atul Prakash. "Coverage-centric coreset selection for high pruning rates." ICLR 2023
+
+[3] Xia, Xiaobo, Jiale Liu, Jun Yu, Xu Shen, Bo Han, and Tongliang Liu. "Moderate coreset: A universal method of data selection for real-world data-efficient deep learning."  ICLR 2023
+
+### Questions
+See weakness
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2
+
+### Rating
+5
+
+### Confidence
+4

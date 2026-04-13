@@ -1,0 +1,1513 @@
+# NEUROLIFTING: NEURAL INFERENCE ON MARKOV RANDOM FIELDS AT SCALE
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Inference in large-scale Markov Random Fields (MRFs) is a critical yet challenging task, traditionally approached through approximate methods like belief propagation and mean field, or exact methods such as the Toulbar2 solver. These
+strategies often fail to strike an optimal balance between efficiency and solution
+quality, particularly as the problem scale increases. This paper introduces NEUROLIFTING, a novel technique that leverages Graph Neural Networks (GNNs) to
+reparameterize decision variables in MRFs, facilitating the use of standard gradient descent optimization. By extending traditional lifting techniques into a nonparametric neural network framework, NEUROLIFTING benefits from the smooth
+loss landscape of neural networks, enabling efficient and parallelizable optimization. Empirical results demonstrate that, on moderate scales, NEUROLIFTING performs very close to the exact solver Toulbar2 in terms of solution quality, significantly surpassing existing approximate methods. Notably, on large-scale MRFs,
+NEUROLIFTING delivers superior solution quality against all baselines, as well as
+exhibiting linear computational complexity growth. This work presents a significant advancement in MRF inference, offering a scalable and effective solution for
+large-scale problems.
+
+
+1 INTRODUCTION
+
+
+Markov Random Fields (MRFs) stand as a fundamental computational paradigm for modeling complex dependencies among a large collection of variables, permeating a variety of domains such
+as computer vision (Wang et al., 2013; Su et al., 2021), natural language processing (Almutiri &
+Nadeem, 2022; Ammar et al., 2014; Lin et al., 2020), and network analysis (Wu et al., 2020; Yunfei Ma & Razavi, 2022). MRF’s capacity to encode intricate probabilistic interactions underscores
+its widespread utility. However, unraveling the optimal configurations in high-dimensional settings
+remains a formidable task owing to the inherent computational complexity involved.
+
+
+Traditional inference methodologies for MRFs bifurcate into approximate and exact strategies, each
+with its own set of advantages and limitations. Approximate inference techniques, such as belief
+propagation (Pearl, 2022; Wainwright et al., 2005) and mean field (Saito et al., 2012; Zhang, 1993)
+approximations, strive for computational efficiency but often at the expense of solution quality,
+particularly as the scale of the problem escalates. Conversely, exact inference methods, epitomized
+by the Toulbar2 solver (De Givry, 2023; Hurley et al., 2016), aspire to optimality but are frequently
+hampered by exponential time complexities that render them infeasible for large-scale MRFs.
+
+
+Despite significant advances, achieving a harmonious balance between efficiency and solution quality in large-scale MRF inference remains a largely unmet challenge. This paper addresses this
+pivotal issue through the introduction of “NEUROLIFTING” - a neural-network-driven paradigm
+that extends traditional lifting technique in the context of optimization (Albersmeyer & Diehl, 2010;
+Balas & Perregaard, 2002; Bauermeister et al., 2022). NEUROLIFTING is a novel approach that
+reimagines MRF inference by leveraging the potency of Graph Neural Networks (GNNs) alongside
+gradient-based optimization techniques.
+
+
+The core innovation of NEUROLIFTING lies in the reparameterization of the decision variables
+within MRFs utilizing a randomly initialized GNN. While some recent heuristics succeeded in utilizing GNNs for solving combinatorial problems (Cappart et al., 2023; Schuetz et al., 2022), an
+effective adaptation to MRF inference remains opaque. Besides, they generally lack an in-depth
+
+
+1
+
+
+understanding of how GNNs facilitate downstream computation. In this paper, we for the first time
+bridge such practice to traditional lifting techniques, and further demonstrate that by harnessing the
+continuous and smooth loss landscape intrinsic to neural networks, NEUROLIFTING simplifies the
+optimization process for large-scale MRFs, enabling enhanced parallelization and performance on
+GPU devices.
+
+
+Empirical evaluations substantiate the efficacy of NEUROLIFTING, showcasing its ability to deliver
+high-quality solutions across diverse MRF datasets. Notably, it outperforms all existing approximate inference strategies in terms of solution quality without sacrificing computational efficiency.
+When juxtaposed with exact strategies, NEUROLIFTING demonstrates comparable solution fidelity
+while markedly enhancing efficiency. For particularly large-scale MRF problems, encapsulating
+instances with over 50,000 nodes, NEUROLIFTING exhibits a linear computational complexity increase, paired with superior solution quality relative to exact methods.
+
+
+In summary, the contributions of this paper are threefold. 1) **Methodical design** : we present NEUROLIFTING as an innovative and practical solution to the enduring challenge of efficient and highquality inference in large-scale MRFs; 2) **Non-parametric lifting** : we extend the concept of lifting
+from traditional optimization practices into a modern neural network framework, thereby offering
+a fresh lens through which to tackle large-scale inference problems; 3) **Significant** **performance** :
+NEUROLIFTING achieved significant performance improvement over existing methods, showing
+remarkable scalability and efficiency in real-world scenarios.
+
+
+2 PRELIMINARY
+
+
+**Markov Random Field** . An MRF is defined over a undirected graph _G_ = ( _V, C_ ), where _V_ represents the index set of random variables and _C_ _⊆_ 2 _[V]_ is the clique set representing the (high-order)
+dependencies among random variables. Throughout this paper, we associate a node index _i_ with a
+random variable _xi_ _∈X_, where _X_ is a finite alphabet. Thus, given graph _G_, the joint probability of
+a configuration of _X_ = _{xi}i∈V_ can be expressed as
+
+
+where _Z_ is the partition function, _θi_ ( _·_ ) denotes the unary energy functions, _θC_ ( _·_ ) represent the
+clique energy functions. In this sense, MRF provides a compact representation of probability by
+introducing conditional dependencies:
+
+
+P( _xi|X\{xi}_ ) = P( _xi|{xj}_ for _i, j_ _∈_ _Ck_ for _Ck_ _∈C_ ) _._ (2)
+
+
+In this paper, we consider the Maximize a Posterior (MAP) estimate of Equation 1, which requests
+optimizing Equation 1 via _X_ _[∗]_ = min _X E_ ( _X_ ). One can consult Koller & Friedman (2009) for more
+details.
+
+
+**Graph Neural Networks** . GNNs represent a distinct class of neural network architectures specifically engineered to process graph-structured data (Kipf & Welling, 2017; Hamilton et al., 2017;
+Xu et al., 2019; Veliˇckovi´c et al., 2018). In general, when addressing a problem involving a graph
+_G_ = ( _V, E_ ), where _E_ is the edge set, GNNs utilize both the graph _G_ and the initial node representations _{h_ [(0)] _i_ _∈_ R _[d]_ _|∀i ∈V}_ as inputs, where _d_ is the dimension of initial features. Assuming the total
+number of GNN layers to be _K_, at the _k_ -th layer the graph convolutions typically read:
+
+
+         - ���
+_h_ [(] _i_ _[k]_ [)] = _σ_ _Wk ·_ AGGREGATE [(] _[k]_ [)][ ��] _h_ [(] _j_ _[k][−]_ [1)] : _j_ _∈N_ ( _i_ ) _∪{i}_ (3)
+
+
+where AGGREGATE [(] _[k]_ [)] is defined by the specific model, _Wk_ is a trainable weight matrix, _N_ ( _i_ ) is
+the neighborhood of node _i_, and _σ_ is a non-linear activation function, e.g., ReLU.
+
+
+**Optimization** **with** **Lifting** . Lifting is a sophisticated technique employed in the field of optimization to address and solve complex problems by transforming them into higher-dimensional
+spaces (Balas, 2005; Papadimitriou & Steiglitz, 1982). By introducing auxiliary variables or constraints, lifting serves to reformulate an original optimization problem into a more tractable or elucidated form, often making the exploration of optimal solutions more accessible. In the context of
+MRFs, lifting can be utilized to transform inference problems into higher dimensions where certain
+
+
+2
+
+
+P( _X_ ) = [1]
+
+
+_Z_ [exp]
+
+
+[1] [1]
+
+_Z_ [exp(] _[−][E]_ [(] _[X]_ [)) =] _Z_
+
+
+_θCk_ ( _{xl|∀xl_ _∈_ _Ck}_ )
+_Ck∈C_
+
+
+(1)
+
+
+_−_ 
+
+
+- _θi_ ( _xi_ ) _−_ 
+
+_i∈V_ _Ck_
+
+
+_E_ ( _X_ ) = _✓C_ 1 ( _x_ 1 _, x_ 2 _, x_ 3) + _✓C_ 2 ( _x_ 3 _, x_ 4 _, x_ 5) + _✓C_ 3 ( _x_ 2 _, x_ 3 _, x_ 5 _, x_ 6)
+
+
+Figure 1: An overview of NEUROLIFTING.
+
+
+properties or symmetries associated with specific MRF problems are more easily exploitable (Wainwright et al., 2005; Globerson & Jaakkola, 2007; Bauermeister et al., 2022). However, a principled
+lifting technique is still lacking for generalized MRFs.
+
+
+3 METHODOLOGY
+
+
+3.1 OVERVIEW
+
+
+An overview of NEUROLIFTING is in Figure 1, with an exemplary scenario involving an energy
+function devoid of unary terms, yet comprising three clique terms. Initially, the clique-based representation of this function (depicted in the leftmost shaded diagram) undergoes a transformation to
+a graph-based perspective, which subsequently integrates into the network architecture. To address
+the absence of inherent node feature information in the original problem, we elevate the dimensionality of decision variables within this framework. This transformation facilitates a paradigm shift
+from the identification of optimal state values to the learning of optimal parameters for encoding and
+classification of these variables. Furthermore, we devised a novel approach to circumvent the absence of a traditional loss function, thereby extending the applicability of our framework to Markov
+Random Fields (MRFs) of arbitrary order.
+
+
+3.2 PREPOSSESSING
+
+
+We discuss several necessary preprocessing steps to adapt standard MRF to a GNN style.
+
+
+**Topology** **construction** **for** **GNNs.** In an MRF instance, the high-order graph structure consists
+of nodes and cliques, diverging from typical GNNs allowing only pairwise edges (2nd-order). To
+facilitate the power of GNNs, we need to convert high-order graph into a pairwise one. By the very
+definition of a clique, any two nodes that appear within the same clique are directly related. Thus,
+for any two nodes _i, j_ _∈_ _Ck_ in a clique _Ck_, we add a pairwise edge ( _i, j_ ) to its GNN-oriented graph.
+An example can be observed in Figure 1. It is worth noting that an edge may appear in multiple
+cliques; however, we add each edge only once to the graph.
+
+
+**Initial feature for GNNs.** As there is no initial features associated to MRF instances, we initialize
+feature vectors to GNNs _randomly_ with a predefined dimension _d_ . Detailed information on how we
+will handle these artificial features to ensure they effectively capture the underlying information of
+the problem will be provided in Section 3.3.
+
+
+**Vectorizing** **the** **energy** **function.** The transformed energy function _E_ ( _X_ ) will serve as the loss
+function guiding the training of the neural networks. In Section 3.4, we will detail the transformation
+process and discuss how to effectively utilize it. Note the values of these functions can be preevaluated and repeatedly used during the training process. Therefore, we employ a look-up table
+to memorize all function values with discrete inputs. For unary energies, we denote the vectorized
+unary energy of variable _xi_ as _ϕ_ ( _xi_ ), where the _n_ -th element corresponds to _θi_ ( _xi_ = _n_ ). Similarly,
+we represent the clique energy for clique _Ck_ using the tensor _ψ_ ( _{xl|∀xl_ _∈_ _Ck}_ ). This tensor can
+be derived using the same conceptual framework; for instance, the element _ψ_ ( _xi, xj, xk_ ) at position
+(0 _,_ 2 _,_ 4) corresponds to the value of _θ{i,j,k}_ ( _xi_ = 0 _, xj_ = 2 _, xk_ = 4) .
+
+
+**Padding** **node** **embeddings** **&** **energy** **terms.** GNNs typically require all node embeddings to be
+of the same dimension, meaning that the embeddings _h_ [(] _[K]_ [)] at _K_ -th layer must share the same size.
+However, in general MRFs, the variables often exhibit different numbers of states. While traditional
+
+
+3
+
+
+6
+
+
+_H_ _2 P_ ( _X_ )
+
+
+min _E_ ( _H_ )
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+||||||||
+|||**1**|**1**|**3**|**3**|**3**|
+
+
+Figure 2: This illustrates the padding procedure for unary loss terms _ϕ_ ( _x_ ) and clique loss terms
+_ψ_ ( _xi, xj, xk_ ), with _|X|_ = 5. _xmax_ denotes the variable that has the maximum value range. The
+elements shown in purple represent the energy values in the original _ϕ_ and _ψ_ . After padding, the
+dimension of vector _ϕ_, as well as each dimension of the energy tensor _ψ_ ( _xi, xj, xk_ ), will be 5. The
+padded portion is indicated in orange, with values either max( _ϕ_ ) or max( _ψ_ ).
+
+
+belief-propagation-based methods can easily manage such variability, adapting GNNs to handle
+these discrepancies is less straightforward.
+
+
+To address this mismatch, we employ padding strategy – a common technique used to handle varying
+data lengths. This strategy is applied to both the node embeddings and the unary and pairwise (or
+clique) energies, to ensure consistent embedding dimensions. Concretely, we assign virtual states
+to the nodes whose state number is less than _|X|_ . Then, we assign energies to those padded labels
+with the _largest value of the original energy term_ . The schematic diagram of the padding procedure
+is in Fig. 2. In this example, we consider the case where _|X|_ = 5. We start with the unary energy
+vector for _xi_ denoted as _ϕ_ ( _xi_ ) = _{_ 1 _,_ 1 _,_ 3 _}_, which has three states. Before padding, the highest value
+in this vector is 3, highlighted in red, and this value will be used for padding. The padded vector
+is shown on the right-hand side of the figure, with the padded portion indicated in orange. For the
+clique terms, we will apply padding similarly to the unary terms. The original energy matrix for the
+clique involving nodes _i, j, l_ has a dimension of 3 _×_ 3 _×_ 4. Given that _|X|_ = 5, we need to pad the
+matrix so that _ψ_ ( _xi, xj, xl_ ) _∈_ _R_ [5] _[×]_ [5] _[×]_ [5] . In this case, the largest value in the original energy matrix
+is 4. As depicted in the figure, all padded values in the orange area are filled with 4. This approach
+of assigning high energies to the padded labels serves to discourage the model from selecting these
+padded states, thereby incentivizing it to choose the original, non-padded states with lower energies.
+
+_Remark._ Other strategies are also being considered. If the padded energies are set to the largest
+element among all original energies or to a significantly larger value compared to the original values,
+this approach can dramatically alter the loss landscape. As a result, the model may converge to
+an infeasible point in the original problem, leading it to select padded states instead. A similar
+issue arises when we mask the padded regions during loss calculation. This masking operation can
+introduce significant interference in the optimization process, preventing the model from achieving
+a high-quality feasible solution.
+
+
+3.3 GNNS AS NON-PARAMETRIC LIFTING
+
+
+In this section, we detail how NEUROLIFTING generates features that capture the hidden information of the given MRF and solves the original MAP problem by optimizing in a high-dimensional
+parameter space. As mentioned in Section 3.2, we initially generate _learnable_ feature vectors randomly using an encoder that embeds all nodes, transforming the integer decision variables into _dl_ dimension vectors _h_ [(0)] _i_ _∈_ R _[d][l]_ for node _i_, where _dl_ is a hyperparameter representing the dimension
+after lifting.
+
+
+The intuition for utilizing GNNs in the implementation of lifting techniques is inspired by Loopy
+Belief Propagation (LBP) (Weiss & Freeman, 2001). When applying LBP for inference on MRFs,
+the incoming message _Mji_ to node _i_ from node _j_ is propagated along the edges connecting them.
+
+
+4
+
+
+Node _i_ can then update its marginal distributions according to the formula in Eq. 4.
+
+
+_E_ ( _{vi|i ∈V}_ ) = - _⟨vi_ ( _θ_ ) _, ϕ_ ( _xi_ ) _⟩_
+
+
+_i∈V_
+
+
+         - ��         Unary Term
+
+
+5
+
+
++ - _⟨ψ_ ( _CK_ ) _, Vk⟩_
+
+
+_Ck∈C_
+
+
+ - ��  Clique Term
+
+
+_p_ **[posterior]** ( _xi|X\{xi}_ ) = _p_ [prior] ( _xi|X\{xi}_ ) 
+
+( _i,j_ ) _∈E_
+
+
+- _Mji_ (4)
+
+
+_xj_
+
+
+Importantly, the incoming messages are not limited to information solely about the directly connected nodes; they also encompass information from sub-graphs that node _i_ cannot access directly
+without assistance from its neighbors. This allows a more comprehensive aggregation of information, enabling node _i_ to merge these incoming messages with its existing information. This process
+of message aggregation bears resemblance to the message-passing procedure used in GNNs, where
+nodes iteratively update their states based on the information received from their neighbors.
+
+
+Graph convolutions should intuitively treat adjacent nodes equally, consistent with the principle in
+MRFs, where the information collected from neighbors is processed equally. Typical GNNs are
+summarized in the followings:
+
+
+Graph Convolutions Neighbor Infuence
+
+             -              GCN _h_ [(] _i_ _[k]_ [)] = _σ_ _Wk ·_ [�] _j∈N_ ( _i_ ) _∪{i}_ [(deg(] _[i]_ [) deg(] _[j]_ [))] _[−]_ [1] _[/]_ [2] _[h]_ [(] _j_ _[k][−]_ [1)] **Unequal**
+
+GAT _h_ [(] _i_ _[k]_ [)] = _σ_ �� _j∈N_ ( _i_ ) _∪{i}_ _[α][i,j][W][k][h]_ _j_ [(] _[k][−]_ [1)]      - **Unequal**
+
+             -              GraphSAGE _h_ [(] _i_ _[k]_ [)] = _σ_ _Wk · hi_ + _Wk ·_ ( _|N_ ( _i_ ) _|_ ) _[−]_ [1][ �] _j∈N_ ( _i_ ) _[h]_ _j_ [(] _[k][−]_ [1)] **Equal**
+
+
+where deg( _i_ ) is the degree of node _i_, _αi,j_ is the attention coefficients, and _|N_ ( _i_ ) _|_ is the neighborhood size of node _i_ . According to the influence of neighbors, they can be classified into three
+categories: 1) neighborhood aggregation with normalizations (e.g., GCN (Kipf & Welling, 2017)
+normalize the influence by node degrees), 2) neighborhood aggregation with directional biases (e.g.,
+GAT (Veliˇckovi´c et al., 2018) learn to select the important neighbors via an attention mechanism),
+and 3) neighborhood aggregation without bias (e.g., GraphSAGE (Hamilton et al., 2017) directly
+aggregate neighborhood messages with the same weight). Therefore, we select the aggregator in
+GraphSAGE as our backbone for graph convolutions. The performance of these GNN backbones on
+our MRF datasets is shown in Fig. 3.
+
+
+Another primary characteristic of MRFs is its ability to facilitate information propagation across the
+graph through local connections. This means that even though the interactions are defined locally
+between neighboring nodes, the influence of a node can extend far beyond its immediate vicinity.
+As a result, MRFs can effectively capture global structure and dependencies within the data. We
+thus use Jumping Knowledge (Xu et al., 2018) to leverage different neighborhood ranges. By doing
+so, features representing local properties can utilize information from nearby neighbors, while those
+indicating global states may benefit from features derived from higher layers.
+
+
+At each round of iterations, we optimize both the GNN parameters and those of the encoder. At the
+start of the next iteration, we obtain a new set of feature vectors, _Ht_ [(0)] = _{h_ [(0)] _i,t_ _[∈]_ [R] _[d][l]_ _[|∀][i]_ _[∈V}]_ [,]
+where _t_ indicates the _t_ -th iteration. This process enables us to accurately approximate the latent
+features of the nodes in a higher-dimensional space.
+
+
+3.4 ENERGY MINIMIZATION WITH GNN
+
+
+As indicated by Equation 1, the energy function can serve as the loss function to guide network training since minimizing this energy function aligns with our primary objective. Typically, the energy
+function for a new problem instance takes the form of a look-up table, rendering the computation
+process non-differentiable. To facilitate effective training in a fully unsupervised setting, it is crucial
+to transform this computation into a differentiable loss aligning with the original energy function.
+
+
+The initial step involves transforming the decision variable from _xi_ _∈{_ 1 _, ..., si}_, where _si_ is the
+number of states of variable _xi_, to _vi_ _∈{_ 0 _,_ 1 _}_ _[s][i]_ . At any given time, exactly one element of the
+vector _vi_ can be one, while all other elements must be zero; the position of the 1 indicates the current
+state of the variable _xi_ . Define _Vk_ = _⊗i∈Ck_ _vi_, where _⊗_ is the tensor product. The corresponding
+energy function would be Equation 5. Subsequently, we relax the vector _vi_ to _pi_ ( _θ_ ) _∈_ [0 _,_ 1] _[s][i]_, where
+_pi_ ( _θ_ ) represents the output of our network and _θ_ denotes the network parameters. This output can
+be interpreted as the probabilities of each state that the variable _xi_ might assume.
+
+
+(5)
+
+
++ - _⟨ψ_ ( _CK_ ) _, Pk⟩_
+
+
+_Ck∈C_
+
+
+ - ��  Clique Term
+
+
+_L_ ( _θ_ ) =        - _⟨pi_ ( _θ_ ) _, ϕ_ ( _xi_ ) _⟩_
+
+
+_i∈V_
+
+
+                - ��                Unary Term
+
+
+where _⟨·, ·⟩_ refers to the tensor inner product. The applied loss function is defined in Equation 6,
+here _Pk_ = _⊗i∈Ck_ _pi_ . The rationale behind our loss function closely resembles that of the crossentropy loss function commonly used in supervised learning. Let _P_ represent the true distribution
+and _Q_ denote the predicted distribution. A lower value of cross-entropy _H_ ( _P, Q_ ) indicates greater
+similarity between these two distributions. However, our approach differs in that we are not seeking
+a predicted distribution that closely approximates the true distribution. Instead, for each variable,
+we aim to obtain a probability distribution that is highly concentrated, with the concentrated points
+corresponding to the states that minimize the overall energy.
+
+
+Once the network outputs are available, we can easily determine the assignments by _rounding_ the
+probabilities _p_ ( _θ_ ) to obtain binary vectors _v_ . Using these rounded results, the actual energy can
+be calculated using Equation 5. It is observed that after the network converges, the discrepancy
+between _L_ ( _θ_ ) and _E_ ( _{vi|i ∈V}_ ) is minor and we won’t see any multi-assignment issue in decision
+variables. We choose Adam (Kingma & Ba, 2015) as the optimizer, and employ simulated annealing
+during the training process, allowing for better exploring the loss landscape to prevent sub-optima.
+
+
+3.5 ANALYSIS AND DISCUSSION
+
+
+**Relation to lifting.** In this innovative framework of using GNNs for inference on MRFs, a natural
+and sophisticated parallel emerges with the classical concept of lifting in optimization (Balas et al.,
+1993). By mapping each unary term of an MRF to a node within a GNN and translating clique
+terms into densely connected subgraphs, the traditional MRF energy minimization transforms into
+optimizing a multi-layer GNN with extra dimensionality. This procedure aligns with the lifting technique where the problem space is expanded to facilitate more efficient computation. Akin to the principle of standard lifting to ease optimization, the GNN-based reparameterization can leverage the
+gradient descent optimization paradigm inherent in the smooth neural network landscape (Dauphin
+et al., 2014; Choromanska et al., 2015), ensuring efficient computation and convergence. Therefore,
+while offering an enhanced approach to inference, the GNN reparameterization mirrors the core
+principles of lifting by transforming and extending the solution space into a computation-friendly
+one to achieve computational efficacy and scalability. More empirical evidence is in Sec. 4.4.
+
+
+**Complexity analysis.** The primary computations in this model arise from both the loss calculation
+and the operations within the GNN. For the loss function, let _cmax_ denote the maximum clique
+size. The time complexity for the loss calculation is given by _O_ ( _|V||X|_ + _cmax|C||X|_ ). For the
+GNN component, let _Nv_ denote the average number of neighbors per node in the graph. The time
+complexity for neighbor aggregation in each layer is _O_ ( _Nv|V|_ ), and merging the results for all nodes
+requires _O_ ( _|V|d_ ) where _d_ is the feature dimension. Thus, for a _K_ -layer GraphSAGE model with
+the custom loss function, the overall time complexity can be expressed as _O_ ( _|X|_ ( _|V|_ + _cmax|C|_ ) +
+_K|V|_ ( _Nv_ + _d_ )). This analysis highlights the efficiency of the framework in managing large-scale
+graphs by leveraging neighborhood sampling and aggregation techniques. The derived complexity
+indicates that the model scales linearly with respect to the number of nodes, the number of layers,
+and the dimensionality of the feature vectors, making it well-suited for large-scale instances.
+
+
+4 EXPERIMENT
+
+
+**Evaluation** **metric.** For all instances used in the experiments, we utilize the final value of the
+overall energy function _E_ ( _X_ ) as defined in Equation 1. Without loss of generality, all problems are
+formulated as minimization problems.
+
+
+**Baselines.** We compare our approach against several well-established baselines: Loopy Belief Propagation (LBP), Tree-reweighted Belief Propagation (TRBP) (Wainwright et al., 2005), and Toulbar2 (Brouard et al., 2020). LBP is a widely used approximate inference algorithm that iteratively
+passes messages between nodes. TRBP improves upon LBP by introducing tree-based reweighting
+to achieve better approximations, particularly in complex graph structures. Toulbar2 is an exact optimization tool based on constraint programming and branch-and-bound methods Notably, Toulbar2
+
+
+6
+
+
+(6)
+
+
+is the winner on **all** MPE and MMAP task categories of UAI 2022 Inference Competition [1] . These
+baselines allow us to evaluate the performance of our proposed solution under fair settings.
+
+
+**MRF format and transformation.** The MRF data files are in UAI format and we interpret the data
+files in the same way as Toulbar2. Detailed information about unary and clique terms will be treated
+as unnormalized (joint) distributions, and the energies are calculated as _θi_ ( _xi_ = _a_ ) = _−log_ ( _P_ ( _xi_ =
+_a_ )), where _P_ ( _xi_ = _a_ ) represents the probability provided by the data file. Note that we use the
+unnormalized values during the transformation process. The transformation for the clique energy
+terms will follow the same procedure. More details are in Appendix E.
+
+
+4.1 SYNTHETIC PROBLEMS
+
+
+We first conduct experiments on synthetic problems generated randomly based on Erd˝os–R´enyi
+graphs (Erd¨os & R´enyi, 1959). The experiments are divided into pairwise cases and higher-order
+cases. We will compare the performance of NEUROLIFTING with LBP, TRBP, and Toulbar2 on
+pairwise MRFs. For the higher-order MRF cases, we will compare NEUROLIFTING exclusively
+with Toulbar2, as LBP and TRBP are not well-suited for handling the complexities inherent in highorder MRFs. The raw probabilities (energies) on the edges/cliques are randomly generated using
+the Potts function (Equation 7), representing two typical types found in the UAI 2022 dataset. The
+parameters _α_ and _β_ serve as constant penalty terms and I is the indicator function.
+
+
+_θij_ = _α_ I( _xi_ = _xj_ ) + _β_ (7)
+
+
+For all the random cases, all the probabilities values of the unary terms and pairwise (clique) terms
+are generated randomly range from 0.2 to 3.0. For the Potts models, _α, β_ _∈_ [0 _._ 00001 _,_ 1000]. Each
+random node can select from 2 to 6 possible discrete labels, and the values of the unary terms are
+also generated randomly, ranging from 0.2 to 3.0. LBP and TRBP are allowed up to 60 iterations,
+with a damping factor 0.1 to mitigate potential oscillations. Toulbar2 operates in the default mode
+with time limit 18000s. We employ a 5-layer GNN to model all instances. The learning rate is set
+to 1 _e_ _[−]_ [4], and the model is trained for up to 150 iterations for each instance, utilizing a simple early
+stopping rule with an absolute tolerance of 1 _e_ _[−]_ [4] and a patience of 10. The data generation method
+and the parameter settings are the same for both pairwise cases and high order cases.
+
+
+**Pairwise** **instances.** The inference results on pairwise cases are summarized in Table 1. Prefix
+“P potts ~~”~~ and “P ~~r~~ andom ~~”~~ indicate instances generated with Potts energy and random energy, respectively. It is evident that as the problem size scales up, NEUROLIFTING outperforms the baseline
+approaches; meanwhile, it also achieves comparable solution quality even when the problem sizes
+are small. This trend is consistent across both energy models.
+
+
+**Higher-order instances.** The inference results on high oreder cases are summarized in Table 2. The
+“H” in the prefix stands for High-order and all the instances are generated using Potts model. The
+number of cliques in the table encompasses both the cliques themselves and the edges connecting
+them. The relationships between nodes are based on either pairwise interactions or clique relationships. We conduct tests on both a dense graph with a small size (H ~~I~~ nstances ~~1~~, H ~~I~~ nstances ~~2~~ )
+and a sparse graph with a larger size. The results indicate that NEUROLIFTING outperforms Toulbar2 in both settings, demonstrating its ability to effectively handle not only large graphs but also
+dense graphs. This versatility highlights the robustness and effectiveness of NEUROLIFTING across
+different graph structures.
+
+
+4.2 UAI 2022 INFERENCE COMPETITION DATASETS
+
+
+We then evaluate our algorithm using instances from the UAI 2022 Inference Competition datasets,
+including both pairwise cases and high-order cases. The time settings will align with those established in the UAI 2022 Inference Competition, specifically 1200 seconds and 3600 seconds. LBP
+and TRBP algorithms are set to run for 30 iterations with a damping factor of 0.1, and the time
+limit for Toulbar2 is configured to 1200 seconds, which is generally sufficient for convergence. For
+NEUROLIFTING, we utilize an 8-layer GNN to model all instances, with the model trained for up
+to 100 iterations for each instance; other settings remain consistent with those used in the synthetic
+problems. We also experimented with lifting dimensions of 64, 512, 1024, 4096, and 8192.
+
+
+[1https://www.auai.org/uai2022/uai2022_competition](https://www.auai.org/uai2022/uai2022_competition)
+
+
+7
+
+
+Table 1: Results on ER graphs with state numbers range from 2 to 6. Numbers out of the bracket
+correspond to the obtained energy values, the number in the brackets is the final loss given by the
+loss function. Best in bold.
+
+|Graph #nodes/#edges|LBP TRBP Toulbar2 NEUROLLIFTING|
+|---|---|
+|P potts ~~1~~<br>1k/7591<br>P potts ~~2~~<br>5k/37439<br>P potts ~~3~~<br>10k/75098<br>P potts ~~4~~<br>50k/248695<br>P potts ~~5~~<br>50k/249624<br>P potts ~~6~~<br>50k/300181<br>P potts ~~7~~<br>50k/299735<br>P potts ~~8~~<br>50k/374169<br>P potts ~~9~~<br>50k/375603|-22215.700<br>-21365.800<br>**-22646.529**<br>-21451.025<br>**-111319.000**<br>-105848.000<br>-110022.248<br>-105952.531<br>**-221567.000**<br>-210570.000<br>-218311.424<br>-209925.269<br>12411.200<br>13454.600<br>12955.129<br>**11679.429**<br>25668.500<br>35389.000<br>12468.172<br>**11466.507**<br>17609.800<br>17362.600<br>17635.791<br>**16756.999**<br>**16962.500**<br>**16962.500**<br>19532.817<br>17002.578<br>**24552.400**<br>24596.800<br>25446.235<br>**24552.413**<br>25099.800<br>25095.600<br>25502.495<br>**25050.522**|
+|P random 1<br>1k/7540<br>P random 2<br>5k/37488<br>P random 3<br>10k/74518<br>P random 4<br>50k/249554<br>P random 5<br>50k/249374<br>P random 6<br>50k/299601<br>P random 7<br>50k/299538<br>P random 8<br>50k/374203<br>P random 9<br>50k/374959|**-4901.100**<br>-4505.020<br>-4900.759<br>-4564.763<br>-24059.900<br>-22934.000<br>**-24139.194**<br>-21834.693<br>-47873.200<br>-47002.000<br>**-48107.172**<br>-42120.325<br>12881.500<br>14342.300<br>12233.890<br>**11769.934**<br>12478.300<br>13337.000<br>12835.994<br>**11750.969**<br>16723.600<br>16754.500<br>18031.964<br>**16700.674**<br>**16689.200**<br>16701.600<br>18179.548<br>**16689.252**<br>**24556.000**<br>**24556.000**<br>25549.594<br>**24555.995**<br>**24635.600**<br>24689.500<br>25908.500<br>**24640.039**|
+
+
+Table 2: Results on the synthetic **high** **order** MRFs. Numbers correspond to the obtained energy
+values. Best in bold. “NA” denotes that no solution was found within the specified time limits. Best
+in bold.
+
+|Graph #Nodes/#cliques|Toulbar2 NEUROLIFTING|
+|---|---|
+|H ~~I~~nstances ~~1~~<br>500/12809<br>H ~~I~~nstances ~~2~~<br>500/57934<br>H ~~I~~nstances ~~3~~<br>50k/104059<br>H ~~I~~nstances ~~4~~<br>50k/279293<br>H ~~I~~nstances ~~5~~<br>50k/229727|-29359.827<br>**-29835.757**<br>NA<br>**-20300.795**<br>1423.823<br>**-3601.724**<br>10747.544<br>**9782.693**<br>10534.909<br>**9371.913**|
+
+
+**Pairwise** **cases.** We evaluate pairwise cases from the UAI MPE dataset. The full results of NEUROLIFTING are detailed in Appendix B. From Table 3, we see that on trivial pairwise cases, where
+Toulbar2 successfully identifies the optimal solutions, NEUROLIFTING achieves comparably highquality solutions that are on par with those obtained by LBP and TRBP. In cases where the problems
+become more challenging, although NEUROLIFTING does not surpass Toulbar2, it outperforms both
+LBP and TRBP. This suggests that NEUROLIFTING demonstrates improved performance on realworld datasets compared to simpler artificial instances.
+
+
+**High-order cases.** For the high-order cases, we select a subset that has relatively large sizes. The results are presented in Table 4. The performance of NEUROLIFTING aligns with the results obtained
+from synthetic instances, demonstrating superior efficacy on larger problems while consistently outperforming Toulbar2 in dense cases.
+
+
+4.3 PHYSICAL CELL IDENTITY
+
+
+Physical Cell Identity (PCI) is an important parameter used in both LTE (Long-Term Evolution) and
+5G (Fifth Generation) cellular networks. It is a unique identifier assigned to each cell within the
+network to differentiate and distinguish between neighboring cells. We transform PCI instances into
+pairwise MRFs, thus all the baselines could be evaluated. Appendix F details how to perform the
+transformation.
+
+
+We employ an internal real-world PCI data collection along with a synthetic PCI dataset for evaluation. The configurations for LBP, TRBP, and our proposed NEUROLIFTING approach are consistent
+with those outlined in Section 4.1. For the Toulbar2 method, a time limit of 3600 seconds is set,
+while other parameters remain at their default values. The results are summarized in Table 5. The
+first five instances are real-world PCI cases sourced from a city in China, while the latter five instances are generated. We see for smaller problem instances, Toulbar2 is able to solve them exactly.
+
+
+8
+
+
+Table 3: Results on the UAI inference competition 2022. Numbers correspond to the obtained
+energy values. Best in bold.“opt” denotes it is the optimal solution.
+
+|Graph #Nodes/#Edges|LBP TRBP Toulbar2 (1200s) NEUROLIFTING|
+|---|---|
+|ProteinFolding ~~1~~1<br>400/7160<br>ProteinFolding ~~1~~2<br>250/1848<br>Grids ~~1~~9<br>1600/3200<br>Grids ~~2~~1<br>1600/3200<br>Grids ~~2~~4<br>1600/3120<br>Grids ~~2~~5<br>1600/3120<br>Grids ~~2~~6<br>400/800<br>Grids ~~2~~7<br>1600/3120<br>Grids ~~3~~0<br>400/760<br>Segmentation ~~1~~1<br>228/624<br>Segmentation ~~1~~2<br>231/625<br>Segmentation ~~1~~3<br>225/607<br>Segmentation ~~1~~4<br>231/632<br>Segmentation ~~1~~5<br>229/622<br>Segmentation ~~1~~6<br>228/610<br>Segmentation ~~1~~7<br>225/612<br>Segmentation ~~1~~8<br>235/647<br>Segmentation ~~1~~9<br>228/624<br>Segmentation ~~2~~0<br>232/635|-3106.080<br>3079.030<br>**-4461.047**<br>-4065.294<br>3570.210<br>3604.240<br>**3562.387(opt)**<br>16051.798<br>-2250.440<br>-2103.610<br>**-2643.107**<br>-2404.975<br>-13119.300<br>-12523.300<br>**-18895.393**<br>-16446.410<br>-13210.400<br>-13260.900<br>**-18274.302**<br>-16008.008<br>-2170.890<br>-2171.050<br>**-2620.268**<br>-2353.223<br>-2063.350<br>-1903.910<br>**-3010.719**<br>-2608.395<br>-9024.640<br>-9019.470<br>**-12284.284**<br>-10704.057<br>-2142.890<br>-2154.910<br>**-2984.248**<br>-2691.091<br>329.950<br>339.762<br>**312.760 (opt)**<br>334.882<br>75.867<br>77.898<br>**51.151 (opt)**<br>79.151<br>75.299<br>88.554<br>**49.859 (opt)**<br>69.430<br>95.619<br>98.691<br>**92.334 (opt)**<br>94.951<br>412.990<br>418.853<br>**380.393 (opt)**<br>386.701<br>100.853<br>101.670<br>**95.000 (opt)**<br>98.209<br>421.888<br>432.012<br>**407.065 (opt)**<br>425.240<br>100.389<br>98.411<br>**82.669 (opt)**<br>88.809<br>86.589<br>86.692<br>**58.704 (opt)**<br>70.770<br>289.435<br>291.527<br>**262.216 (opt)**<br>298.802|
+
+
+Table 4: Results on high-order cases of the UAI inference competition 2022. Numbers correspond
+to the obtained energy values. Best in bold.
+
+|Graph #Nodes/#cliques|Toulbar2 (1200s) Toulbar2 (3600s) NEUROLIFTING|
+|---|---|
+|Maxsat gss-25-s100<br>31931/96111<br>BN-nd-250-5-10<br>250/250<br>Maxsat mod4block 2vars ~~1~~0gates u2 ~~a~~utoenc<br>479/123509<br>Maxsat ~~m~~od2c-rand3bip-sat-240-3.shuffed-as.sat05-2520<br>339/2416<br>Maxsat ~~m~~od2c-rand3bip-sat-250-3.shuffed-as.sat05-2535<br>352/2492|**-145969.060**<br>-145969.060<br>-143158.612<br>155.129<br>**154.610**<br>180.917<br>-186103.111<br>-186103.111<br>**-187416.656**<br>-3734.627<br>**-3737.076**<br>-3732.294<br>**-3863.259**<br>-3863.259<br>-3852.584|
+
+
+However, as the problem scale increases, it becomes increasingly challenging for Toulbar2 to effectively explore the solution space, and both LBP and TRBP struggle to converge. In contrast,
+NEUROLIFTING demonstrates strong generalization ability across all scales. Notably, it achieves
+commendable performance on large scales.
+
+
+4.4 ANALYSIS AND ABLATION STUDY
+
+
+**Choice** **of** **GNN** **backbones.** We evaluate the model’s performance when implemented with different GNN backbones, as classified in Section 3.3. We compare their average performance across
+several datasets: pairwise cases from the UAI Inference Competition 2022, real-world PCI instances
+from our private dataset, and synthetic instances that we generated. Each synthetic instance comprises 1000 nodes with an average degree of either 4 or 8. The cases studied include both random
+energy configurations and Potts energy models, allowing a comprehensive assessment. From Fig. 3,
+we observe that across all datasets, GraphSAGE achieves the best results and exhibits the fastest
+convergence.
+
+
+Table 5: Results on the PCI instances. Numbers are the obtained energy values. Best in bold.
+
+|Graph #Nodes/#cliques|LBP TRBP Toulbar2 (3600s) NEUROLIFTING|
+|---|---|
+|PCI ~~1~~<br>30/165<br>PCI ~~2~~<br>40/311<br>PCI ~~3~~<br>80/1522<br>PCI ~~4~~<br>286/10714<br>PCI ~~5~~<br>929/29009|20.344<br>20.455<br>**18.134**<br>18.718<br>**98.364**<br>98.762<br>**98.364**<br>100.662<br>**1003.640**<br>**1003.640**<br>**1003.640**<br>1009.202<br>585.977<br>585.977<br>426.806<br>**415.677**<br>1591.590<br>1591.590<br>1118.097<br>**1087.291**|
+|PCI ~~s~~yththetic ~~1~~<br>280/9678<br>PCI ~~s~~yththetic ~~2~~<br>526/34500<br>PCI ~~s~~yththetic ~~3~~<br>1000/49950<br>PCI ~~s~~yththetic ~~4~~<br>1500/78770<br>PCI ~~s~~yththetic ~~5~~<br>2000/120024|564198.000<br>568082.000<br>522857.923<br>**496685.831**<br>2.092e+06<br>2.084e+06<br>2.064e+06<br>**1.907e+06**<br>2.932e+06<br>2.908e+06<br>2.856e+06<br>**2.672e+06**<br>4.568e+06<br>4.532e+06<br>4.534e+06<br>**4.186e+06**<br>6.807e+06<br>6.904e+06<br>7.023e+06<br>**6.520e+06**|
+
+
+9
+
+
+|Col1|Col2|Col3|GraphSAGE<br>GCN|
+|---|---|---|---|
+||||GAT|
+|||||
+|||||
+|||||
+|||||
+
+
+|Col1|Col2|Col3|Col4|GraphSAGE<br>GCN|
+|---|---|---|---|---|
+|||||GAT|
+||||||
+||||||
+||||||
+||||||
+||||||
+||||||
+
+
+|Col1|Col2|Col3|GraphSAGE<br>GCN|
+|---|---|---|---|
+||||GAT|
+|||||
+|||||
+|||||
+
+
+|e4 L|Loss Curve o|of Different|t Optimiz|zers|s SGD|
+|---|---|---|---|---|---|
+||||||~~SGD~~<br>RMSprop<br>~~Adam~~|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+||||||||||
+
+
+**Related work** and **More analysis** are in Appendix A and C, respectively.
+
+
+5 CONCLUSION
+
+
+In this paper, we introduced NEUROLIFTING and its application to solving MAP problems for
+MRFs. Our experiments showed that NEUROLIFTING effectively handles MRFs of varying orders and energy functions, achieving performance on par with established benchmarks, as verified
+on the UAI 2022 inference competition dataset. Notably, NEUROLIFTING excels with large and
+dense MRFs, outperforming traditional methods and competing approaches on both synthetic large
+instances and real-world PCI instances.This method, which utilizes Neural Networks for lifting, has
+proven successful and could potentially be extended to other optimization problems with similar
+modeling frameworks.
+
+
+10
+
+
+Sythetic Data
+
+
+2000
+
+
+4000
+
+
+6000
+
+
+Iteration
+
+
+PCI Instances
+
+
+Iteration
+
+
+2000
+
+
+1000
+
+
+0
+
+
+1000
+
+
+2000
+
+
+Pairwise Cases(UAI 2022)
+
+
+Iteration
+
+
+950
+
+900
+
+850
+
+800
+
+750
+
+700
+
+650
+
+600
+
+550
+
+
+Figure 3: The average loss curves over UAI incference competition 2022 pairwise cases, PCI instances and systhetic instances using GraphSAGE, GCN and GAT as the GNN backbones.
+
+
+structure and empirical trials. We evaluate three optimizers: 3
+SGD, RMSprop, and Adam, using pairwise cases from the 21
+UAI 2022 dataset. The learning rate is set to 10 _[−]_ [4], the em- 0
+bedded feature vector dimension is 1024, and we employ an 1
+
+2
+
+
+Iterations
+
+test cases for each optimizer. Results with average loss curves
+in the right figure, illustrating the differences in convergence rates and final results. We see that
+Adam outperforms both RMSprop and SGD in terms of convergence speed and stability.
+
+
+**Loss** **Landscape** **Visualization.** We utilize the tool developed by Li et al. (2018) to visualize the
+loss landscape. Detailed settings of the visualization is in Appendix D. We visualize the evolution of
+the loss landscape for networks with varying depths,specifically for _K_ _∈{_ 1 _,_ 2 _,_ 5 _,_ 8 _}_ . The resulting
+landscape visualizations are presented in Fig. 4, as well as the converged loss change trend in Fig. 5.
+We observe that a significant portion of the loss function is relatively flat, indicating that the loss can
+only decrease in constrained regions of the parameter space. As more layers are incorporated into
+the lifted model, it effectively expands these local regions, facilitating convergence toward better
+solutions. This characteristic suggests that the lifted model provides a greater capacity to navigate
+the optimization landscape.
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+2
+
+
+0 20 40 60 80 100
+Iterations
+
+
+1 layer 2 layers 5 layers 8 layers
+
+
+Figure 4: The landscape of instance Segmentation ~~1~~ 9. From top to
+the bottom, each column correspond to network layer _{_ 1 _,_ 2 _,_ 5 _,_ 8 _}_ .
+The first row is the landscape range from [ _−_ 10 _,_ +10] for both _δ_ and
+_η_ direction. The second row is the landscape range from [ _−_ 1 _,_ +1]
+for both _δ_ and _η_ direction.
+
+
+Number of Layers
+
+
+Figure 5: The training
+loss of instance Segmentation ~~1~~ 9 after convergence
+of using network layer
+number _{_ 1 _,_ 2 _,_ 5 _,_ 8 _}_ .
+
+
+REFERENCES
+
+
+S.M. Aji and R.J. McEliece. The generalized distributive law. _IEEE_ _Transactions_ _on_ _Information_
+_Theory_, 46(2):325–343, 2000.
+
+
+Jan Albersmeyer and Moritz Diehl. The lifted newton method and its application in optimization.
+_SIAM Journal on Optimization_, 20(3):1655–1684, 2010.
+
+
+Talal Almutiri and Farrukh Nadeem. Markov models applications in natural language processing:
+A survey. _International Journal of Information Technology and Computer Science_, 14:1–16, 04
+2022.
+
+
+Waleed Ammar, Chris Dyer, and Noah A Smith. Conditional random field autoencoders for unsupervised structured prediction. _Advances in Neural Information Processing Systems_, 27, 2014.
+
+
+Egon Balas. Projection, lifting and extended formulation in integer and combinatorial optimization.
+_Annals OR_, 140:125–161, 11 2005.
+
+
+Egon Balas and Michael Perregaard. Lift-and-project for mixed 0–1 programming: recent progress.
+_Discrete Applied Mathematics_, 123(1):129–154, 2002.
+
+
+Egon Balas, Sebasti´an Ceria, and G´erard Cornu´ejols. A lift-and-project cutting plane algorithm for
+mixed 0-1 programs. _Math. Program._, 58:295–324, 05 1993. doi: 10.1007/BF01581273.
+
+
+Hartmut Bauermeister, Emanuel Laude, Thomas Mollenhoff, Michael Moeller, and Daniel Cremers. Lifting the convex conjugate in lagrangian relaxations: A tractable approach for continuous
+markov random fields. _SIAM Journal on Imaging Sciences_, 15(3):1253–1281, 2022.
+
+
+Dimitris Bertsimas, Melvyn Sim, and Meilin Zhang. Adaptive distributionally robust optimization.
+_Manag. Sci._, 65:604–618, 2019.
+
+
+Julian Besag. Spatial interaction and the statistical analysis of lattice systems. _Journal of the Royal_
+_Statistical Society. Series B (Methodological)_, 36(2):192–236, 1974.
+
+
+Y. Boykov, O. Veksler, and R. Zabih. Markov random fields with efficient approximations. In _Pro-_
+_ceedings. 1998 IEEE Computer Society Conference on Computer Vision and Pattern Recognition_,
+pp. 648–655, 1998.
+
+
+C´eline Brouard, Simon de Givry, and Thomas Schiex. Pushing data into cp models using graphical
+model learning and solving. In Helmut Simonis (ed.), _Principles_ _and_ _Practice_ _of_ _Constraint_
+_Programming_, pp. 811–827. Springer International Publishing, 2020.
+
+
+Quentin Cappart, Didier Chtelat, Elias B. Khalil, Andrea Lodi, Christopher Morris, and Petar Velikovi. Combinatorial optimization and reasoning with graph neural networks. _Journal of Machine_
+_Learning Research_, 24(130):1–61, 2023.
+
+
+Anna Choromanska, Mikael Henaff, Michael Mathieu, G´erard Ben Arous, and Yann LeCun. The
+loss surfaces of multilayer networks, 2015.
+
+
+P Clifford and JM Hammersley. Markov fields on finite graphs and lattices, 1971.
+
+
+Yann Dauphin, Razvan Pascanu, Caglar Gulcehre, Kyunghyun Cho, Surya Ganguli, and Yoshua
+Bengio. Identifying and attacking the saddle point problem in high-dimensional non-convex optimization, 2014.
+
+
+Simon De Givry. toulbar2, an exact cost function network solver. In _24`eme_ _´edition_ _du_ _congr`es_
+_annuel_ _de_ _la_ _Soci´et´e_ _Franc¸aise_ _de_ _Recherche_ _Op´erationnelle_ _et_ _d’Aide_ _`a_ _la_ _D´ecision_ _ROADEF_
+_2023_, 2023.
+
+
+Santanu S. Dey and Jean-Philippe Richard. Linear-programming-based lifting and its application to
+primal cutting-plane algorithms. _INFORMS Journal on Computing_, 21(1):137–150, 2008.
+
+
+P Erd¨os and A R´enyi. On random graphs i. _Publicationes_ _Mathematicae_ _Debrecen_, 6:290–297,
+1959.
+
+
+11
+
+
+Pedro F. Felzenszwalb and Daniel P. Huttenlocher. Efficient belief propagation for early vision.
+_International Journal of Computer Vision_, 70:41–54, 2004.
+
+
+Brendan Frey and David Mackay. A revolution: Belief propagation in graphs with cycles. 08 2002.
+
+
+El¯ıza Gaile, Andis Draguns, Emils Ozolins, and Karlis Freivalds. Unsupervised training for neural
+tsp solver, 07 2022.
+
+
+Angelos Georghiou, Angelos Tsoukalas, and Wolfram Wiesemann. A primal-dual lifting scheme
+for two-stage robust optimization. _Oper. Res._, 68:572–590, 2020.
+
+
+Amir Globerson and Tommi Jaakkola. Fixing max-product: Convergent message passing algorithms
+for map lp-relaxations. _Advances in neural information processing systems_, 20, 2007.
+
+
+Anna Grim and Pedro Felzenszwalb. Convex combination belief propagation. _Applied Mathematics_
+_and Computation_, 438:127572, 2023. ISSN 0096-3003.
+
+
+Will Hamilton, Zhitao Ying, and Jure Leskovec. Inductive representation learning on large graphs.
+_Advances in neural information processing systems_, 30, 2017.
+
+
+Barry Hurley, Barry O’sullivan, David Allouche, George Katsirelos, Thomas Schiex, Matthias Zytnicki, and Simon de Givry. Multi-language evaluation of exact solvers in graphical model discrete
+optimization. _Constraints_, 21:413–434, 2016.
+
+
+H. Ishikawa. Exact optimization for markov random fields with convex priors. _IEEE Transactions_
+_on Pattern Analysis and Machine Intelligence_, 25(10):1333–1336, 2003.
+
+
+H. Ishikawa and D. Geiger. Segmentation by grouping junctions. In _Proceedings. 1998 IEEE Com-_
+_puter Society Conference on Computer Vision and Pattern Recognition (Cat. No.98CB36231)_, pp.
+125–131, 1998.
+
+
+D. P. Kingma and J. Ba. Adam: A method for stochastic optimization. In _Proceedings_ _of_ _the_ _3rd_
+_International Conference for Learning Representations (ICLR)_, 2015.
+
+
+Thomas N. Kipf and Max Welling. Semi-supervised classification with graph convolutional networks. In _International Conference on Learning Representations (ICLR)_, 2017.
+
+
+Daphne Koller and Nir Friedman. _Probabilistic graphical models:_ _principles and techniques_ . MIT
+press, 2009.
+
+
+V. Kolmogorov. Convergent Tree-Reweighted Message Passing for Energy Minimization. _IEEE_
+_Transactions on Pattern Analysis and Machine Intelligence_, 28(10):1568–1583, October 2006.
+
+
+Nikos Komodakis, Nikos Paragios, and Georgios Tziritas. Mrf optimization via dual decomposition:
+Message-passing revisited. In _ICCV_, pp. 1–8, 11 2007.
+
+
+Sanjiv Kumar, Jonas August, and Martial Hebert. Exploiting inference for approximate parameter
+learning in discriminative fields: An empirical study. In Anand Rangarajan, Baba Vemuri, and
+Alan L. Yuille (eds.), _Energy Minimization Methods in Computer Vision and Pattern Recognition_,
+pp. 153–168, Berlin, Heidelberg, 2005. Springer Berlin Heidelberg.
+
+
+Hao Li, Zheng Xu, Gavin Taylor, Christoph Studer, and Tom Goldstein. Visualizing the loss landscape of neural nets. In _Neural Information Processing Systems_, 2018.
+
+
+Jerry Chun-Wei Lin, Yinan Shao, Ji Zhang, and Unil Yun. Enhanced sequence labeling based on
+latent variable conditional random fields. _Neurocomputing_, 403:431–440, 2020.
+
+
+Hugues Marchand, Alexander Martin, Robert Weismantel, and Laurence Wolsey. Cutting planes in
+integer and mixed integer programming. _Discrete Applied Mathematics_, 123(1):397–446, 2002.
+
+
+Yimeng Min, Yiwei Bai, and Carla P Gomes. Unsupervised learning for solving the travelling
+salesman problem. In A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine
+(eds.), _Advances in Neural Information Processing Systems_, volume 36, pp. 47264–47278. Curran
+Associates, Inc., 2023.
+
+
+12
+
+
+Christos Papadimitriou and Kenneth Steiglitz. _Combinatorial Optimization:_ _Algorithms and Com-_
+_plexity_, volume 32. IEEE, 01 1982. ISBN 0-13-152462-3.
+
+
+Judea Pearl. Reverend bayes on inference engines: a distributed hierarchical approach. In _Pro-_
+_ceedings_ _of_ _the_ _Second_ _AAAI_ _Conference_ _on_ _Artificial_ _Intelligence_, pp. 133–136. AAAI Press,
+1982.
+
+
+Judea Pearl. Chapter 4 - belief updating by network propagation. In Judea Pearl (ed.), _Probabilistic_
+_Reasoning_ _in_ _Intelligent_ _Systems_, pp. 143–237. Morgan Kaufmann, San Francisco (CA), 1988.
+ISBN 978-0-08-051489-5.
+
+
+Judea Pearl. Reverend bayes on inference engines: A distributed hierarchical approach. In _Proba-_
+_bilistic and causal inference:_ _the works of Judea Pearl_, pp. 129–138. 2022.
+
+
+Yun Peng, Byron Choi, and Jianliang Xu. Graph learning for combinatorial optimization: A survey
+of state-of-the-art. _Data Science and Engineering_, 6, 06 2021. doi: 10.1007/s41019-021-00155-3.
+
+
+S. Roy and I.J. Cox. A maximum-flow formulation of the n-camera stereo correspondence problem.
+In _Sixth International Conference on Computer Vision (IEEE Cat. No.98CH36271)_, pp. 492–499,
+1998.
+
+
+Masaki Saito, Takayuki Okatani, and Koichiro Deguchi. Application of the mean field methods to
+mrf optimization in computer vision. In _2012 IEEE Conference on Computer Vision and Pattern_
+_Recognition_, pp. 1680–1687, 2012.
+
+
+Dmitrij Schlesinger and BORIS FLACH. Transforming an arbitrary minsum problem into a binary
+one. 01 2006.
+
+
+Martin J. A. Schuetz, J. Kyle Brubaker, and Helmut G. Katzgraber. Combinatorial optimization with
+physics-inspired graph neural networks. _Nature Machine Intelligence_, 4(4):367–377, April 2022.
+
+
+Sergey Shebalov, Young Woong Park, and Diego Klabjan. Lifting for mixed integer programs with
+variable upper bounds. _Discrete Applied Mathematics_, 186:226–250, 2015.
+
+
+Wenkang Su, Jiangqun Ni, Xianglei Hu, and Jessica Fridrich. Image steganography with symmetric embedding using gaussian markov random field model. _IEEE_ _Transactions_ _on_ _Circuits_ _and_
+_Systems for Video Technology_, 31(3):1001–1015, 2021.
+
+
+Martin Szummer, Pushmeet Kohli, and Derek Hoiem. Learning crfs using graph cuts. volume 5303,
+pp. 582–595, 10 2008. ISBN 978-3-540-88685-3.
+
+
+Petar Veliˇckovi´c, Guillem Cucurull, Arantxa Casanova, Adrian Romero, P. Lio, and Yoshua Bengio.
+Graph attention networks. In _International_ _Conference_ _on_ _Learning_ _Representations_ _(ICLR)_,
+2018.
+
+
+M.J. Wainwright, T.S. Jaakkola, and A.S. Willsky. Map estimation via agreement on trees: messagepassing and linear programming. _IEEE Transactions on Information Theory_, 51(11):3697–3717,
+2005.
+
+
+Chaohui Wang, Nikos Komodakis, and Nikos Paragios. Markov random field modeling, inference
+learning in computer vision image understanding: A survey. _Computer Vision and Image Under-_
+_standing_, 117(11):1610–1627, 2013.
+
+
+Y. Weiss and W.T. Freeman. On the optimality of solutions of the max-product belief-propagation
+algorithm in arbitrary graphs. _IEEE Transactions on Information Theory_, 47(2):736–744, 2001.
+doi: 10.1109/18.910585.
+
+
+Xuan Wu, Di Wang, Lijie Wen, Yubin Xiao, Chunguo Wu, Yuesong Wu, Chaoyu Yu, Douglas L.
+Maskell, and You Zhou. Neural combinatorial optimization algorithms for solving vehicle routing
+problems: A comprehensive survey with perspectives, 2024.
+
+
+Yongji Wu, Defu Lian, Yiheng Xu, Le Wu, and Enhong Chen. Graph convolutional networks
+with markov random field reasoning for social spammer detection. _Proceedings_ _of_ _the_ _AAAI_
+_Conference on Artificial Intelligence_, 34(01):1054–1061, Apr. 2020.
+
+
+13
+
+
+Keyulu Xu, Chengtao Li, Yonglong Tian, Tomohiro Sonobe, Ken-ichi Kawarabayashi, and Stefanie
+Jegelka. Representation learning on graphs with jumping knowledge networks. In _International_
+_conference on machine learning_, pp. 5453–5462, 2018.
+
+
+Keyulu Xu, Weihua Hu, Jure Leskovec, and Stefanie Jegelka. How powerful are graph neural
+networks? In _International Conference on Learning Representations (ICLR)_, 2019.
+
+
+Tingman Yan, Xilian Yang, Genke Yang, and Qunfei Zhao. Hierarchical belief propagation on image
+segmentation pyramid. _IEEE Transactions on Image Processing_, 32:4432–4442, 2023.
+
+
+Jonathan S. Yedidia, William T. Freeman, and Yair Weiss. _Understanding Belief Propagation and_
+_Its Generalizations_, pp. 239–269. Morgan Kaufmann Publishers Inc., San Francisco, CA, USA,
+2003. ISBN 1558608117.
+
+
+Chaolong Ying, Xinjian Zhao, and Tianshu Yu. Boosting graph pooling with persistent homology.
+In _The Thirty-eighth Annual Conference on Neural Information Processing Systems_, 2024.
+
+
+Tianshu Yu, Runzhong Wang, Junchi Yan, and Baoxin Li. Learning deep graph matching with
+channel-independent embedding and hungarian attention. In _International conference on learning_
+_representations_, 2019.
+
+
+Elkafi Hassini Yunfei Ma, Amir Amiri and Saiedeh Razavi. Transportation data visualization with
+a focus on freight: a literature review. _Transportation Planning and Technology_, 45(4):358–401,
+2022.
+
+
+J. Zhang. The mean field theory in em procedures for blind markov random field image restoration.
+_IEEE Transactions on Image Processing_, 2(1):27–40, 1993.
+
+
+14
+
+
+A RELATED WORK
+
+
+**MRF and Inference.** In Markov Random Fields (MRFs), the energy function is associated with a
+graph-structured probability distribution. A key inference challenge is determining the maximum
+a posteriori (MAP) configuration. Although minimizing the energy function is NP-hard, advances
+in inference techniques have enhanced model capabilities. For cycle-free graphs, the MAP problem
+can be effectively addressed using a variant of the min-sum algorithm (Clifford & Hammersley,
+1971; Besag, 1974; Kumar et al., 2005), which extends the Viterbi algorithm (Yedidia et al., 2003)
+to arbitrary cycle-free structures. In graphs with cycles, graph cut methods (Komodakis et al., 2007;
+Roy & Cox, 1998; Boykov et al., 1998; Ishikawa & Geiger, 1998; Szummer et al., 2008) utilize
+min-cut/max-flow strategies to efficiently minimize energy, although they require MRFs to be graphrepresentable and are unsuitable for multi-labeled MRFs. Two graph-cut-based strategies (Ishikawa,
+2003; Schlesinger & FLACH, 2006) have been developed: the label-reduction method, for specific
+MRFs requiring binary conversion, and the move-making method, influenced by the size of node
+state combinations.
+
+
+The belief propagation (BP) algorithm (Pearl, 1982; 1988), introduced by Pearl in 1982, is a widely
+used iterative inference method for Bayesian networks, functioning through message passing. However, BP struggles with loops, leading to loopy belief propagation (LBP) (Weiss & Freeman, 2001;
+Felzenszwalb & Huttenlocher, 2004; Frey & Mackay, 2002), which iterates message passing even in
+cyclic graphs. While LBP has shown effectiveness in vision tasks, it lacks guaranteed convergence.
+Recent advancements aim to enhance BP’s performance, such as adjusting message significance with
+discount factors (Grim & Felzenszwalb, 2023) and constructing hierarchical frameworks for largescale MRFs (Yan et al., 2023). The Junction Tree Algorithm (JTA) (Aji & McEliece, 2000) provides
+exact inference for arbitrary graphs but is NP-hard, limiting its practicality. In pairwise MRFs, integer linear programming (ILP) formulations yield solutions through tree-reweighted message passing
+(TRBP) (Wainwright et al., 2005), which includes edge-based and tree-based schemes, though they
+lack guaranteed convergence. The sequential TRW-S (Kolmogorov, 2006) scheme achieves weak
+tree agreement, ensuring lower bounds stabilize, but requires substantial time for convergence.
+
+
+**Lifting** **in** **Optimization.** Lifting techniques have garnered significant attention in the optimization field, particularly in tackling combinatorial problems and enhancing the performance of various algorithms (Marchand et al., 2002). These techniques involve transforming a problem into a
+higher-dimensional space, which facilitates more effective representation and solution strategies.
+They are applied to both mixed 0-1 integer programming problems (Balas et al., 1993) and more
+general mixed-integer programming (MIP) problems in conjunction with primal cutting-plane algorithms (Dey & Richard, 2008). Additionally, lifting techniques have been integrated with variable
+upper bound constraints in applications such as the Knapsack problem (Shebalov et al., 2015). The
+use of lifting methods has also extended into robust optimization scenarios (Georghiou et al., 2020;
+Bertsimas et al., 2019). Furthermore, combining lifting techniques with Newton’s method has shown
+promise in addressing nonlinear optimization problems (NLPs) (Albersmeyer & Diehl, 2010).
+
+
+**Unsupervised** **GNNs** **for** **Combinatorial** **Optimization.** Graph Neural Networks (GNNs) have
+been proved to be powerful in optimization (Yu et al., 2019; Ying et al., 2024) and recent advancements in unsupervised GNNs have demonstrated their effectiveness in tackling combinatorial optimization problems. By leveraging the structural properties of graph data, unsupervised GNNs
+can learn meaningful representations of nodes and edges without requiring labeled datasets. It was
+shown that unsupervised GNNs can effectively capture the combinatorial structure inherent in these
+problems, leading to improved heuristics and solution strategies (Peng et al., 2021). This capability is particularly advantageous for problems such as the Traveling Salesman Problem (TSP) (Gaile
+et al., 2022; Min et al., 2023), the Vehicle Routing Problem (VRP) (Wu et al., 2024) and Boolean
+satisfiability problem(SAT) (Cappart et al., 2023), where traditional optimization methods often
+face challenges related to scalability and solution quality. The Max Independent Set (MIS) and
+Max Cut problems can also be solved efficiently in this way (Schuetz et al., 2022). However, the
+loss functions may lack the flexibility to effectively handle higher-order relationships beyond mere
+edges.
+
+
+15
+
+
+Table 6: Results on the UAI inference competition 2022 of NEUROLIFTING with different feature
+dimensions. Numbers correspond to the obtained energy values.
+
+
+|Graph #Nodes/#Edges|dim=64 dim=512 dim=1024 dim=4096 dim=8192|
+|---|---|
+|ProteinFolding ~~1~~1<br>400/7160<br>ProteinFolding ~~1~~2<br>250/1848<br>Grids ~~1~~9<br>1600/3200<br>Grids ~~2~~1<br>1600/3200<br>Grids ~~2~~4<br>1600/3120<br>Grids ~~2~~5<br>1600/3120<br>Grids ~~2~~6<br>400/800<br>Grids ~~2~~7<br>1600/3120<br>Grids ~~3~~0<br>400/760<br>Segmentation 11<br>228/624<br>Segmentation 12<br>231/625<br>Segmentation 13<br>225/607<br>Segmentation 14<br>231/632<br>Segmentation 15<br>229/622<br>Segmentation 16<br>228/610<br>Segmentation 17<br>225/612<br>Segmentation 18<br>235/647<br>Segmentation 19<br>228/624<br>Segmentation 20<br>232/635|-3892.949<br>-3886.701<br>-3946.168<br>4065.294<br>-4003.323<br>16064.795<br>16068.406<br>16051.798<br>16088.073<br>16071.324<br>-2355.159<br>-2404.975<br>-2337.281<br>-2341.2746<br>-2373.618<br>-16478.466<br>-16169.0320<br>-16446.410<br>-16209.017<br>-16278.668<br>-16008.008<br>-15900.249<br>-15841.799<br>- 15608.162<br>-15948.219<br>-2343.547<br>-2353.223<br>-2319.899<br>-2306.686<br>-2288.182<br>-2532.837<br>-2608.395<br>-2553.781<br>-2559.572<br>-2535.464<br>-10748.024<br>-10704.057<br>-10514.857<br>-10389.031<br>-10665.737<br>-2563.274<br>-2631.862<br>-2640.044<br>-2691.091<br>-2649.462<br>330.541<br>349.906<br>334.882<br>356.895<br>337.312<br>74.705<br>74.029<br>155.062<br>79.151<br>105.801<br>67.371<br>86.064<br>69.430<br>72.394<br>112.516<br>94.192<br>96.501<br>100.582<br>104.091<br>96.572<br>388.223<br>386.701<br>397.246<br>407.731<br>390.641<br>99.086<br>99.690<br>111.121<br>98.209<br>108.360<br>424.686<br>426.130<br>425.192<br>425.240<br>427.810<br>89.905<br>101.307<br>94.224<br>88.854<br>88.809<br>76.244<br>78.337<br>74.284<br>69.116<br>70.770<br>298.802<br>301.802<br>302.673<br>304.457<br>312.970|
+
+
+|Col1|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+|e5|Synth|hetic Inst|tance 3|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+|5|Col2|Synth|hetic In|nstanc|ce 5|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+|||||||||
+
+
+Figure 6: The loss curves of the Segmentation ~~1~~ 4, P ~~p~~ otts ~~6~~ and P ~~p~~ otts ~~8~~ from pairwise potts
+synthetic problems.
+
+
+B FULL TABLE OF UAI PAIRWISE CASES
+
+
+In Table 6, we present the inference results of NEUROLIFTING using various dimensions of feature
+embeddings applied to the pairwise cases from the UAI Inference Competition 2022. The results
+indicate that the dimensionality of the feature embeddings is indeed a factor that influences model
+performance. However, in most cases, a moderate dimension is sufficient to achieve high-quality results. This suggests that while increasing dimensionality may provide some advantages, the decision
+should be made by considering both performance and computational efficiency.
+
+
+C MORE ANALYSIS
+
+
+**Efficiency** **vs** **Solution** **Quality.** We evaluate the performance of the NEUROLIFTING using the
+same network size and a consistent learning rate of 1e-4 on the Segmentation ~~1~~ 4 dataset from the
+UAI 2022 inference competition, along with two of our generated Potts instances: P ~~p~~ otts ~~6~~ and
+P ~~p~~ otts ~~8~~ . This setup allows us to observe the trends associated with changes in graph size and
+sparsity. The results are presented in Fig. 6. It is seen that the model converges rapidly when
+the graph is small and sparse, within approximately 20 iterations on the Segmentation ~~1~~ 4 dataset.
+Comparing P ~~p~~ otts ~~6~~ and P ~~p~~ otts 8, we observe that though both graphs are of the same size, the
+denser graph raises significantly more challenges during optimization. This indicates that increased
+size and density can complicate the optimization process, and NEUROLIFTING would need more
+time to navigate a high quality solution under such cases.
+
+
+16
+
+
+0 20 40 60 80 100
+Iteration
+
+
+0 20 40 60 80 100 120 140
+Iteration
+
+
+500
+
+
+400
+
+
+300
+
+
+200
+
+
+100
+
+
+0 20 40 60 80 100
+Iteration
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+D VISUALIZATION SETUP
+
+
+The core idea of the visualization technique proposed by Li et al. (2018) involves applying perturbations to the trained network parameters _θ_ _[∗]_ along two directional vectors, _δ_ and _η_ : _f_ ( _α, β_ ) =
+_L_ ( _θ_ _[∗]_ + _αδ_ + _βη_ ). By doing so, we can generate a 3-D representation of the landscape corresponding
+to the perturbed parameter space. We sampled 250000 points in the _α −_ _β_ plane, where both _α_ and
+_β_ range from -10 to 10, to obtain an overview of the loss function landscape. Subsequently, we focused on the region around the parameter _θ_ _[∗]_ by sampling an additional 10,000 points in a narrower
+range, with _α_ and _β_ both from _−_ 1 to 1.
+
+
+E READ UAI FORMAT FILES
+
+
+An example data file in UAI format is provided in Box E. This Markov Random Field consists
+of 3 variables, each with 2 possible states. Detailed information can be found in the box, where
+we illustrate the meanings of different sections of the file. Notably, in the potential section, the
+distributions are not normalized. During the belief propagation (BP) procedure, these distributions
+will be normalized to prevent numerical issues. However, in the energy transformation phase, we
+will utilize these values directly.
+
+
+Since the transformation of variable energies and clique energies follows the same procedure, we
+will use the edge (0 _,_ 1) to illustrate the transformation. The value calculations will adhere to Equation 1. In Table 7, we present the unnormalized joint distribution for the edge (0 _,_ 1), while Table 8
+displays the energy table for the edge (0 _,_ 1) after transformation.
+
+
+F PCI PROBLEM FORMULATION
+
+
+The Mixed Integer Programming format of PCI problems is as follows:
+
+
+17
+
+
+Table 8: _θC_ ( _x_ 0 _, x_ 1)
+
+
+Table 7: _P_ ( _x_ 0 _, x_ 1)
+
+
+|x<br>1<br>x<br>0|0|1|
+|---|---|---|
+|0|0.1|1.0|
+|1|1.0|0.1|
+
+
+|x<br>1<br>x<br>0|0|1|
+|---|---|---|
+|0|2.303|0|
+|1|0|2.303|
+
+
+where _n_ is the index for devices, and _N_ is the set of these indices. _P_ stands for the possible states
+of each device. _Mih_ stands for the possible states set for node _ni_ . _Lij_ is the cost when given a
+certain choices of the states of device _i_ and device _j_, _aij_ is the coefficient of the cost in the objective
+function. There is an ( _i, j_ ) _∈E_ means there exists interference between these two devices. When
+using MRF to model PCI problems, each random variable represent the identity state of the given
+node and the interference between devices would be captured by the pairwise energy functions. Next
+we will introduce how to transform the PCI problem from MIP form to MRF form.
+
+
+In the original MIP formulation of the PCI problems, three types of constraints are defined. By
+combining Equation 8a and Equation 8b, we establish that each device must select exactly one state
+at any given time. Furthermore, the constraint in Equation 8c indicates that interference occurs
+between two devices only when they select specific states. The overall impact on the system is
+governed by the value of _Lij_ and its corresponding coefficient. Given that interference is always
+present, the objective is to minimize its extent.
+
+
+To transform these problems into an MRF framework, we utilize Equation 8b to represent the nodes,
+where each instance of Equation 8a corresponds to the discrete states of a specific node. The constraints set forth in Equation 8a and Equation 8b ensure that only one state can be selected at any
+given time, thus satisfying those conditions automatically. By processing Equation 8c, we can identify the edges and their associated energies. If _znip_ and _znj_ _p_ appear in the same constraint from
+Equation 8c, we can formulate an edge ( _i, j_ ). By selecting different values for _znip_ and _znj_ _p_, we
+can determine the minimum value of _Lij_ that maintains the validity of the constraint.
+
+
+The product of _Lij_ and _aij_ represents the energy associated with the edge ( _i, j_ ) under the combination of the respective states. Once the states of all nodes are fixed, the values of the edge costs also
+become fixed. This leads to the conclusion that the objective function is the summation of the energies across all edges. Since the PCI problems do not include unary terms, we can omit them during
+the transformation process. This establishes a clear pathway for converting the MIP formulation
+into an MRF representation, allowing us to leverage MRF methods for solving the PCI problems
+effectively.
+
+
+18
+
+
+min
+_z,L_
+
+
+- _aijLij_ (8)
+
+
+( _i,j_ ) _∈E_
+
+
+s _._ t _._ _znp_ _∈{_ 0 _,_ 1 _},_ _∀n ∈_ _N, p ∈_ _P_ (8a)
+
+ - _znp_ = 1 _,_ _∀n ∈_ _N._ (8b)
+
+
+_p∈P_
+
+
+- _znip_ + 
+_p∈Mih_ _p∈M_
+
+
+_znj_ _p −_ 1 _≤_ _Lij, ∀_ ( _i, j_ ) _∈E, ∀h ∈{_ 0 _,_ 1 _,_ 2 _}._ (8c)
+_p∈Mjh_
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+**Example**
+The original problem is
+
+
+min _L_ 1 _,_ 2 + 3 _L_ 2 _,_ 3
+_z,L_
+
+
+s _._ t _._ _znp_ _∈{_ 0 _,_ 1 _},_ _∀n ∈{_ 1 _,_ 2 _,_ 3 _}, p ∈{_ 1 _,_ 2 _,_ 3 _}_
+
+   - _znp_ = 1 _,_ _∀n ∈{_ 1 _,_ 2 _,_ 3 _}._
+
+
+_p∈P_
+
+_z_ 11 + _z_ 21 _−_ 1 _≤_ _L_ 1 _,_ 2
+_z_ 13 + _z_ 22 _−_ 1 _≤_ _L_ 1 _,_ 2
+_z_ 12 + _z_ 23 _−_ 1 _≤_ _L_ 1 _,_ 2
+_z_ 21 + _z_ 31 _−_ 1 _≤_ _L_ 2 _,_ 3
+_z_ 22 + _z_ 32 _−_ 1 _≤_ _L_ 2 _,_ 3
+_z_ 23 + _z_ 33 _−_ 1 _≤_ _L_ 2 _,_ 3
+(9)
+
+
+Then the corresponding MRF problem is
+
+
+min _θ_ 1 _,_ 2( _x_ 1 _, x_ 2) + _θ_ 2 _,_ 3( _x_ 2 _, x_ 3) (10)
+
+
+|x<br>2<br>x<br>1|z<br>21|z<br>22|z<br>23|
+|---|---|---|---|
+|_z_11|1|0|0|
+|_z_12|0|0|1|
+|_z_13|0|1|0|
+
+
+|s:|Col2|Col3|Col4|
+|---|---|---|---|
+|_x_2<br>_x_3|_z_31|_z_32|_z_33|
+|_z_21|3|0|0|
+|_z_22|0|3|0|
+|_z_23|0|0|3|
+
+
+19

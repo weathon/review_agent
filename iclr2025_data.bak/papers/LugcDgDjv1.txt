@@ -1,0 +1,3304 @@
+# STOCHASTICALLY CAPTURING PARTIAL RELATIONSHIP AMONG FEATURES FOR MULTIVARIATE FORECASTING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+When tackling forecasting problems that involve multiple time-series features,
+existing methods for capturing inter-feature information typically fall into three
+categories: complete-multivariate, partial-multivariate, and univariate. Completemultivariate methods compute relationships among the entire set of features,
+whereas univariate cases ignore inter-feature information altogether. In contrast
+to these two, partial-multivariate methods group features into clusters and capture inter-feature relationships within each cluster. However, existing partialmultivariate methods deal only with specific cases where there is a single way of
+grouping so once the grouping way is selected, it remains unchanged. Therefore,
+we introduce a generalized version of partial-multivariate methods where grouping
+ways are sampled stochastically (called _stochastic partial-multivariate methods_ ),
+which can incorporate the deterministic cases using Dirac delta distributions. We
+propose SPMformer, a Transformer-based stochastic partial-multivariate model,
+with its training algorithm. We demonstrate that SPMformer outperforms various
+complete-multivariate, deterministic partial-multivariate, and univariate models
+in various forecasting tasks (long-term, short-term, and probabilistic forecasting),
+providing a theoretical rationale and empirical analysis for its superiority. Additionally, by proposing an inference method leveraging the inherent stochasticity
+in SPMformer, the forecasting accuracy is further enhanced. Finally, we highlight
+other advantages of SPMformer: efficiency and robustness under missing features.
+
+
+1 INTRODUCTION
+
+
+_Time-series forecasting_ is a fundamental machine learning task that aims to predict future events
+based on past observations, requiring to capture temporal dynamics. A forecasting problem often
+includes interrelated multiple variables ( _e.g._, multiple market values in stock price forecasting). For
+decades, the forecasting task with multiple time-series features has been of great importance in various
+applications such as health care (Nguyen et al., 2021; Jones et al., 2009), meteorology (Sanhudo
+et al., 2021; Angryk et al., 2020), and finance (Qiu et al., 2020; Mehtab & Sen, 2021).
+
+
+For this problem, there have been developed a number of methods, including linear models (Chen
+et al., 2023; Zeng et al., 2022), state-space models (Liang et al., 2024; Gu et al., 2022), recurrent neural
+networks (RNNs) (Lin et al., 2023; Du et al., 2021), convolution neural networks (CNNs) (Wang
+et al., 2023; Liu et al., 2022a), and Transformers (Zhou et al., 2021; Liu et al., 2022b). These methods
+are typically categorized based on how they capture inter-feature information, falling into three
+types: (i) univariate, (ii) partial-multivariate, and (iii) complete-multivariate methods. Univariate
+methods capture only temporal dependencies, while complete-multivariate methods incorporate
+additional modules to account for complete dependencies among all the given features. In contrast,
+partial-multivariate methods divide the feature set into multiple subsets and capture dependencies
+within each subset. The differences between the three methods are illustrated in Figure 1.
+
+
+Partial-multivariate methods, which focus on relationships among mutually significant features, can
+enhance performance by excluding insignificant features that may act as noise. However, these
+methods often face limitations due to their deterministic approach to grouping (Aguiar et al., 2022;
+Pathak et al., 2021). Once optimal clusters are determined through some specific procedures, they
+remain fixed throughout training and inference. This rigidity fails to accommodate more complex
+scenarios where features may be grouped in various ways. For instance, stock prices might be
+
+
+1
+
+
+|Univariate|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|**Univariate**||||||
+|**Univariate**||||||
+|**Univariate**||||||
+|**Univariate**||||||
+|**Univariate**||||||
+|**Univariate**||||||
+|**Univariate**||||||
+
+
+Figure 1: Visualization of three types of methods where _S_ is the size of each cluster (subset) in
+partial-multivariate methods. In partial-multivariate methods, traditional approaches adhere to a
+single grouping strategy throughout training and inference. In contrast, we propose to introduce
+variability by stochastically sampling from all possible grouping configurations.
+
+
+categorized by different criteria such as market capitalization (e.g., inclusion in the S&P 500),
+industry sectors (like financials, healthcare, or energy), or geographic regions.
+
+
+To address this limitation, we introduce a generalized version of partial-multivariate methods called
+_Stochastic Partial-Multivariate_ methods. In this approach, a grouping way is not fixed but sampled
+stochastically—note that deterministic methods can be included by setting the sampling distributions
+of the grouping strategies to distributions such as Dirac delta. To implement this concept, we propose
+Stochastic Partial-Multivariate Transformer, SPMformer. Inspired by Nie et al. (2023), SPMformer is
+capable of capturing any partial relationship through a shared Transformer by individually tokenizing
+features and computing attention maps for selected features. Additionally, we introduce a basic form
+of training algorithms for SPMformer that are based on random sampling, under a usual assumption
+that the prior knowledge on how to group features into subsets is unavailable.
+
+
+In experiments, we demonstrate that SPMformer outperforms existing complete-multivariate, (deterministic) partial-multivariate, or univariate models in various forecasting tasks including longterm, short-term, and probabilistic forecasting. To explain the superiority of our stochastic
+partial-multivariate method against the other methods, we provide a theoretical analysis based
+on McAllester’s bound on generalization errors (McAllester, 1999) with supporting empirical analyses. To further enhance forecasting performance, we introduce a simple inference technique that
+leverages the inherent stochasticity of stochastic partial-multivariate methods. Finally, we show
+other useful properties of SPMformer: efficient inter-feature attention costs against other Transformers including inter-feature attention modules, and robustness under missing features compared to
+complete-multivariate models. To sum up, our contributions are summarized as follows:
+
+
+ - We introduce the novel concept of _Stochastic Partial-Multivariate_ methods in the realm of timeseries forecasting, generalizing existing forecasting models. To realize this concept, we develop
+the Transformer-based SPMformer along with its training algorithm.
+
+ - Our extensive experimental results demonstrate that SPMformer outperforms recent baselines
+across various forecasting tasks, including long-term, short-term, and probabilistic forecasting.
+We also provide a theoretical analysis to substantiate the superiority of our model, supported by
+empirical evidence.
+
+ - We propose an inference technique for SPMformer that further enhances forecasting accuracy by
+leveraging the inherent stochasticity of stochastic partial-multivariate methods. Additionally, we
+identify several advantageous properties of SPMformer compared to complete-multivariate models,
+including efficient inter-feature attention costs and robustness in scenarios with missing features.
+
+
+2 RELATED WORKS
+
+
+**Complete-multivariate and univariate methods.** To solve the forecasting problem with multiple
+features, it is important to discover not only temporal but also inter-feature relationships. As for interfeature relationships, some existing studies often aim to capture full dependencies among a complete
+set of features, which we call complete-multivariate methods. For example, some approaches
+encode all features into a single hidden vector, which is then decoded back into feature spaces after
+
+
+2
+
+
+Figure 2: Architecture of Stochastic Partial-Multivariate Transformer (SPMformer). To emphasize
+row-wise attention operations, we enclose each row within bold frames before feeding them into the
+attention modules. In this figure, the subset size _S_ is 3.
+
+
+some processes. This technique has been applied to various architectures, including RNNs (Che
+et al., 2016), CNNs (Bai et al., 2018), state-space models (Gu et al., 2022), and Transformers (Wu
+et al., 2022). Conversely, other complete-multivariate studies have developed modules to explicitly
+capture these relationships. For instance, Zhang & Yan (2023) computes _D × D_ attention matrices
+among _D_ features by encoding each feature into a separate token, while Wu et al. (2020) utilizes
+graph neural networks with graphs of inter-feature relationships. Additionally, Chen et al. (2023)
+parameterizes a weight matrix _W_ _∈_ R _[D][×][D]_, where each element in the _i_ -th row and _j_ -th column
+represents the relationship between the _i_ -th and _j_ -th features. Unlike complete-multivariate methods
+which fully employ inter-feature information, new methods have recently been developed: univariate
+methods. (Zeng et al., 2022; Xu et al., 2024; Nie et al., 2023; Wang et al., 2024; Lee et al., 2024)
+These methods capture temporal dynamics but ignore the inter-feature information by processing
+each of _D_ features separately as independent inputs.
+
+
+**Deterministic partial-multivariate methods.** Unlike complete-multivariate and univariate methods,
+partial-multivariate methods aim to capture partial relationships among features by grouping them
+into various subgroups and computing relationships within these subgroups. Traditional partialmultivariate methods typically search for a single optimal grouping method, which is then applied
+consistently throughout all training or inference stages; these are referred to as deterministic methods.
+For instance, in Pathak et al. (2021), the optimal grouping is determined using truncated SVD and
+K-means clustering, with different autoregressive models assigned to each cluster. Conversely, Aguiar
+et al. (2022) introduced training-based methods that simultaneously tackle prediction and clustering
+tasks to identify an optimal grouping. In contrast to these approaches, we propose a fundamentally
+different method for capturing partial relationships among features: we maintain the grouping method
+as stochastic rather than fixed, offering a more flexible modeling strategy.
+
+
+3 METHOD
+
+
+3.1 STOCHASTIC PARTIAL-MULTIVARIATE FORECASTING MODEL
+
+
+In this section, we provide the formulation of the stochastic partial-multivariate forecasting model.
+To simplify a notation, we denote the set of integers from _N_ to _M_ (inclusive of _N_ and exclusive of
+_M_ ) as [ _N_ : _M_ ] ( _i.e._, [ _N_ : _M_ ] := _{N, N_ + 1 _, . . ., M_ _−_ 1 _}_ ). Also, when the collection of numbers is
+given as indices for vectors or matrices, it indicates selecting all indices within the collection. ( _e.g._,
+_xt_ =[0 _,T_ ] _,d_ =[0 _,D_ ] := _xt,d_ _t∈_ [0: _T_ ] _d∈_ [0: _D_ ]). Let **x** _t,d_ R the _t_ -th observation of the _d_ -th feature,
+_{{_ _}_ _}_ _∈_
+and **x** [0: _T_ ] _,d_ and **x** [ _T_ : _T_ + _τ_ ] _,d_ the _d_ -th feature’s historical inputs and ground truth of future outputs
+with _T_ and _τ_ indicating the length of past and future time steps, respectively. Assuming _D_ denotes
+the number of features, then a stochastic partial-multivariate forecasting model _f_ is formulated as
+follows:
+
+
+**x** ˆ[ _T_ : _T_ + _τ_ ] _,_ **F** = _f_ ( **x** [0: _T_ ] _,_ **F** _,_ **F** ) _,_ **F** ( **F** ) _where_ Ω= **F** **F** [0 : _D_ ] _,_ **F** = _S_ _,_ (1)
+_∼P_ _{_ _|_ _⊂_ _|_ _|_ _}_
+
+where Ω represents the sample space of distribution _P_ . After sampling a subset **F** of size _S_ from _P_,
+a model _f_ uses the feature indices in **F** and their historical observations **x** [0: _T_ ] _,_ **F** to forecast the future
+values of the selected features **x** ˆ[ _T_ : _T_ + _τ_ ] _,_ **F** . It is worth noting that this formulation generalizes other
+forecasting models. Specifically, when _S_ = 1, it represents a univariate model; when 1 _< S_ _< D_, it
+corresponds to a partial-multivariate model; and when _S_ = _D_, it describes a complete-multivariate
+model. Additionally, in partial-multivariate scenarios, when _P_ is constrained to assign probabilities
+only to specific subsets within Ω, like Dirac delta distributions, the model becomes deterministic.
+
+
+3
+
+
+3.2 STOCHASTIC PARTIAL-MULTIVARIATE TRANSFORMER (SPMFORMER)
+
+
+For deterministic partial-multivariate or complete-multivariate cases, the architectures are required
+to capture perpetually unchanging ( _i.e._, static) relationships among features. In other words, **F**
+in equation 1 is always the same throughout training or inference. However, for stochastic partialmultivariate cases, **F** can vary when re-sampled, requiring to ability to deal with dynamic relationships.
+Therefore, inspired by recent Transformer-based models using segmentation (Nie et al., 2023; Zhang
+& Yan, 2023), we devise SPMformer which addresses this problem by encoding each feature into
+individual tokens and calculating attention maps only with the feature tokens in **F** . The overall
+architecture is illustrated in Figure 2.
+
+After sampling **F** in equation 1, the historical observations of selected features **x** [0: _T_ ] _,_ **F** R _[T][ ×][S]_ are
+_∈_
+encoded into latent tokens **h** [(0)] R _[N][S]_ _[×][S][×][d][h]_ via a segmentation process where _NS_ is the number of
+_∈_
+segments and _dh_ is hidden size. The segmentation process is formulated as follows:
+
+
+where **F** _i_ denotes the _i_ -th element in **F** . A single linear layer maps observations into latent space with
+learnable time-wise and feature-wise positional embeddings, **e** _[T ime]_ _∈_ R _[N][S]_ _[×][d][h]_ and **e** _[F eat]_ _∈_ R _[D][×][d][h]_ .
+In most scenarios, we can reasonably assume the input time span _T_ to be divisible by _NS_ by adjusting
+_T_ during data pre-processing or padding with zeros as in Zhang & Yan (2023) and Nie et al. (2023).
+
+
+Subsequently, **h** [(0)] is processed through _L_ SPMformer blocks. Each block is formulated as follows:
+
+
+**h** ¯ [(] _[ℓ][−]_ [1)] = **h** [(] _[ℓ][−]_ [1)] + `Feature`   - `Attention` ( **h** [(] _[ℓ][−]_ [1)] _,_ `Temporal`   - `Attention` ( **h** [(] _[ℓ][−]_ [1)] )) _,_ (3)
+
+**h** [(] _[ℓ]_ [)] = **h** [¯][(] _[ℓ][−]_ [1)] + `MLP` ( **h** [¯][(] _[ℓ][−]_ [1)] ) _,_ _ℓ_ = 1 _, . . ., L._ (4)
+
+
+`MLP` in equation 4 operates both feature-wise and time-wise, resembling the feed-forward networks
+found in the original Transformer (Vaswani et al., 2017). As shown in equation 3, there are two types
+of attention modules:
+
+
+_i_ [0 : _S_ ] _,_ `Temporal`     - `Attention` ( **h** )[0: _NS_ ] _,i_ = `MHSA` ( **h** [0: _NS_ ] _,i,_ **h** [0: _NS_ ] _,i,_ **h** [0: _NS_ ] _,i_ ) _,_ (5)
+_∀_ _∈_
+
+_b_ [0 : _NS_ ] _,_ `Feature`   - `Attention` ( **h** _,_ **v** ) _b,_ [0: _S_ ] = `MHSA` ( **h** _b,_ [0: _S_ ] _,_ **h** _b,_ [0: _S_ ] _,_ **v** _b,_ [0: _S_ ]) _._ (6)
+_∀_ _∈_
+
+`MHSA` ( **Q** _,_ **K** _,_ **V** ) denotes the multi-head self-attention layer like in Vaswani et al. (2017) where **Q** _,_ **K**,
+and **V** are queries, keys and values. While temporal attention is responsible for capturing temporal
+dependencies, feature attention mixes representations among features in **F** .
+
+
+Starting with initial representations **h** [(0)], SPMformer encoder with _L_ blocks generates final representations **h** [(] _[L]_ [)] . These representations are then passed through a decoder to forecast future observations.
+Similar to Nie et al. (2023), the concatenated representations **h** [(] [0: _[L]_ _N_ [)] _S_ ] _,i_ [are mapped to future observa-]
+tions **x** [ _T,T_ + _τ_ ] _,_ **F** _i_ via a single linear layer. For probabilistic forecasting, we replace this decoder with
+
+a decoder in Salinas et al. (2019) which takes **h** [(] [0: _[L]_ _N_ [)] _S_ ] _,i_ [as input and outputs the mean and variance of]
+output distributions.
+
+
+3.3 TRAINING ALGORITHM FOR SPMFORMER
+
+
+To train SPMformer, the process to sample **F** from _P_ is necessary. Ideally, _P_ should assign higher
+probabilities to subsets of features that are highly correlated. However, prior knowledge about the
+relationships between features is usually unavailable. Therefore, we propose a basic form of training
+algorithm for SPMformer where _P_ is non-informative ( _i.e._, uniform distribution). [1] In each iteration
+of training, _NU_ subsets are sampled from the uniform distribution and SPMformer processes them
+separately. However, this training algorithm may result in redundancy or omission of some features in
+each iteration, as some features might be selected multiple times while others might never be chosen
+across the _NU_ trials.
+
+
+1Despite the lack of prior knowledge, it is advantageous to tailor _P_ to the dataset using training or other
+algorithms. However, we propose non-informative cases for two main reasons: _(i)_ Since stochastic methods
+are relatively unexplored, it is essential to first investigate the simplest form of training algorithm using noninformative distributions, and _(ii)_ our SPMformer achieves the best performance even with this non-informative
+distributions. We leave it to future work to find or train optimal distribution _P_ .
+
+
+4
+
+
+**h** [(0)] _b,i_ [=] `[ Linear]` [(] **[x]** [ _[bT]_
+
+
+[+1)] _[T]_ ] _,_ **F** _i_ [) +] **[ e]** _b_ _[T ime]_ + **e** _[F eat]_ **F** _i_ _,_ _b_ [0 _, NS_ ] _,_ _i_ [0 _, S_ ] _,_ (2)
+
+_NS_ _∈_ _∈_
+
+
+_[bT]_ [(] _[b]_ [+1)] _[T]_
+
+_NS_ [:] _NS_
+
+
+_where H_ ( **Q** ) _is the entropy of_ **Q** _, (i.e., H_ ( **Q** ) = _Eh∼_ **Q** [ log **Q** ( _h_ )] _) and C_ _is a constant._
+
+_−_
+
+In equationsubsets of _S_ 7size from, the upper bound depends on _D_ features leads to _m_ - _DS_ and� possible cases, affecting _−H_ ( **Q** ), both of which are related to _m_ ( _i.e._, _m_ - _SDS_ .�Selecting). This is
+_∝_
+because each subset is regarded as a separate instance as in Figure 1. Also, the following theorem
+reveals relationships between _S_ and _−H_ ( **Q** ):
+
+**Theorem 2.** _Let H_ ( **Q** _S_ ) _be the entropy of a posterior distribution_ **Q** _S_ _with subset size S._ _For S_ +
+_and S−_ _satisfying S_ + _> S−._ _H_ ( **Q** _S_ +) _H_ ( **Q** _S−_ ) _._
+_≤_
+
+
+5
+
+
+To address this issue, we propose a training algorithm based on random partitioning (see Algorithm 1) — note that for-loop in while-loop
+can be dealt with in parallel with attention masking techniques. In this algorithm, _D_ features
+are partitioned into _NU_ = _D/S_ _disjoint_ subsets **F** _[g]_ _g∈_ [0: _NU_ ] where **F** _[g]_ [0 : _D_ ] _,_ **F** _[g]_ =
+_{_ _}_ _⊂_ _|_ _|_
+_S,_ [�] _g∈_ [0: _NU_ ] **[F]** _[g]_ [=] _[ϕ,]_ [ �] _g∈_ [0: _NU_ ] **[F]** _[g]_ [=] [[0 :] _[ D]_ []]
+
+
+**6** Loss _g_ = `Loss` (ˆ **yF** _,_ **yF** );
+
+
+**Algorithm 1:** Training Algorithm
+
+**Input:** # of features _D_, # of subsets _NU_, Past
+obs. **x** [0: _D_ ], Future obs. **y** [0: _D_ ]
+**1** **while** _is_converge_ **do**
+
+**2** Sample all **F** _[g]_ with random partition;
+
+
+**3** **for** _g_ _←_ 0 **to** _NU_ _−_ 1 **do**
+
+
+_S,_ [�] _g∈_ [0: _NU_ ] **[F]** _[g]_ [=] _[ϕ,]_ [ �] _g∈_ [0: _NU_ ] **[F]** _[g]_ [=] [[0 :] _[ D]_ []] **5** **y** ˆ **F**
+
+- we assume that _D_ is divisible by _S_ . If not, **6**
+we can handle such cases by repeating some fea- //
+tures, as explained in Appendix B. This scheme
+can minimize the redundancy and omission of **7** Loss =
+features in each iteration. We adopt the training **8** Train
+algorithm based on random partitioning as our **9** **return**
+main training algorithm. Appendix E provides a
+comparison of these two algorithms in empirical experiments.
+
+
+_g∈_ [0: _NU_ ] **[F]** _[g]_ [=] _[ϕ,]_ [ �]
+
+
+**4** **F** = **F** _[g]_ ;
+
+
+**5** **y** ˆ **F** = `SPMformer` ( **xF** _,_ **F** );
+
+
+// For-loop is processed in
+parallel with masked attn.
+
+
+**7** Loss = [�]
+
+
+_g∈_ [0: _NU_ ] [Loss] _[g][/N][U]_ [;]
+
+
+**8** Train `SPMformer` with Loss;
+
+
+**9** **return** Trained `SPMformer`
+
+
+3.4 INFERENCE TECHNIQUE FOR SPMFORMER
+
+
+After training SPMformer, we can measure inference score using Algorithm 1 without line 8. During
+inference time, leveraging stochasticity of SPMformer, we sample **F** _[g]_ _g∈_ [0: _NU_ ] randomly _NI_ times,
+_{_ _}_
+and repeat the inference process _NI_ times with these sampled subsets, averaging _NI_ outputs to obtain
+the final outcomes. In Section 4.3, we observe that this inference technique enhances forecasting
+performance as _NI_ increases. It is worth noting that without any additional computation cost ( _i.e_
+_NI_ = 1), SPMformer still achieves state-of-the-art performance against baselines in Appendix F.
+
+
+Under the assumption that sampling subsets of highly correlated features improves performance, we
+offer our conjecture on why our inference technique enhances forecasting accuracy. Let ( **F** _∗_ ) = _p_
+_P_
+be the probability that we sample a specific subset **F** _∗_ . Then, the probability of sampling **F** _∗_ at
+least once out of _NI_ trials is 1 (1 _p_ ) _[N][I]_ . Given that 0 _p_ 1, 1 (1 _p_ ) _[N][I]_ increases as _NI_
+_−_ _−_ _≤_ _≤_ _−_ _−_
+increases. By treating a specific subset **F** _∗_ as one that includes mutually significant features, our
+inference technique with a large _NI_ increases the likelihood of selecting a subset including highly
+correlated features at least once, thereby improving forecasting performance.
+
+
+3.5 THEORETICAL ANALYSIS ON SPMFORMER
+
+
+In this section, we provide theoretical reasons for superiority of our stochastic partial-multivariate
+models over univariate, complete-multivariate, and deterministic partial-multivariate ones, based on
+PAC-Bayes framework, similar to other works (Woo et al., 2023; Amit & Meir, 2019; Valle-Pérez &
+Louis, 2020). Let a neural network _f_ be a stochastic partial-multivariate model which samples subsets
+**F** of _S_ size as defined in equation 1. Also, _T_ is a training dataset which consists of _m_ instances
+sampled from the true data distribution. _H_ denotes the hypothesis class of _f_ with **P** ( _h_ ) and **Q** ( _h_ )
+representing the prior and posterior distributions over the hypotheses _h_, respectively. Then, based
+on McAllester (1999), the generalization bound of _f_ is given by:
+
+**Theorem 1.** _Under some assumptions, with probability at least_ 1 _−_ _δ over the selection of the sample_
+_T, we have the following for generalized loss l_ ( **Q** ) _under posterior distributions_ **Q** _._
+
+
+_l_ ( **Q** ) _≤_
+
+
+~~�~~
+_H_ ( **Q** ) + log [1] _δ_
+
+_−_
+
+
+_δ_ [+] 2 [log] _[ m]_ [ + 8 +] _[ C]_
+
+_,_ (7)
+2 _m −_ 1
+
+
+[1] [5]
+
+_δ_ [+] 2
+
+
+Theorem 2 is intuitively connected to the fact that capturing dependencies within large subsets of size
+_S_ + is usually harder tasks than the case of small _S−_, because more relationships are captured in the
+case of _S_ +. As such, the region of hypotheses that satisfies conditions for such hard tasks would be
+smaller than the one that meets the conditions for a simple task. In other words, probabilities of a
+posterior distribution **Q** _S_ + might be centered on a smaller region of hypotheses than **Q** _S−_, leading to
+decreasing the entropy of **Q** _S_ +. Refer to Appendix A for full proofs.
+
+
+Given the unveiled impacts of _S_ on _m_ and _H_ ( **Q** ), we can estimate _S∗_ which is _S_ leading to the
+_−_
+lowest upper-bound. When considering only the influence of _m_, _S∗_ is _D/_ 2, resulting in the largest
+
+- _DS_ �. On the other hand, considering only that of _H_ ( **Q** ), _S∗_ is 1, because _H_ ( **Q** ) decrease as _S_
+_−_ _−_
+decreases. Therefore, considering both effects simultaneously, we can think 1 _< S∗_ _< D/_ 2, which
+means stochastic partial-multivariate models (1 _< S_ _< D_ ) are better than univariate models ( _S_ = 1)
+and complete-multivariate ( _S_ = _D_ ) and the best _S∗_ is between 1 and _D/_ 2. Furthermore, when
+comparing stochastic and deterministic partial-multivariate models, stochastic models exhibit a lower
+generalization bound. This is because stochastic models sample from all - _DS_ - possible subsets, while
+deterministic models are limited to a few predefined subsets, resulting in a lower _m_ compared to the
+stochastic approach. This analysis is supported by our empirical experimental results in Section 4.3.
+As of now, since we do not evaluate _H_ ( **Q** ) exactly, we cannot compare the magnitudes of effects by
+_m_ and _−H_ ( **Q** ), leaving it for future work. Nevertheless, our analysis from the sign of correlations
+between _S_ and two factors in the upper-bound still is of importance in that it aligns with our empirical
+observations.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETUP
+
+
+**Datasets.** For long-term and probabilistic forecasting, we use the seven real-world datasets: ( _i-iv_ )
+ETTh1, ETTh2, ETTm1, and ETTm2 ( _D_ = 7), ( _v_ ) Weather ( _D_ = 21), ( _vi_ ) Electricity ( _D_ = 321),
+and ( _vii_ ) Traffic ( _D_ = 862), similar to previous works (Zhou et al., 2021; Salinas et al., 2019). For
+each dataset, four settings are constructed with different forecasting lengths _τ_, which is in {96, 192,
+336, 720} with historical length _T_ = 512. Also, for short-term forecasting, we use M5 (Makridakis
+et al., 2022), selecting 100 items randomly in the same store( _i.e.,_ _D_ = 100) with _T_ = 256 and
+_τ_ = 28 (4 weeks).
+
+
+**Baselines** . For both long-term and short-term forecasting, we include a variety of models in our baselines. For complete-multivariate baselines, we use Crossformer (Zhang & Yan, 2023), TimesNet (Wu
+et al., 2023), TSMixer (Chen et al., 2023), DeepTime (Woo et al., 2023), iTransformer (Liu et al.,
+2024), RLinear (Li et al., 2023), and ModernTCN (donghao & wang xue, 2024). On the univariate
+side, the baselines include PatchTST (Nie et al., 2023), FITS (Xu et al., 2024), and TimeMixer (Wang
+et al., 2024). For deterministic partial-multivariate models, we use CAMELOT (Aguiar et al., 2022)
+as a baseline. In the case of probabilistic forecasting, we include DeepAR (Salinas et al., 2019),
+ForecasterQR (Wen et al., 2018), and TSDiff (Kollovieh et al., 2023). To further strengthen our
+baseline set, we also include the top 8 models in long-term forecasting by attaching DeepAR decoders
+to their last hidden layer.
+
+
+**Other settings.** For long-term and short-term forecasting, SPMformer is trained with mean squared
+error (MSE) between ground truth and outputs, whereas we use negative log-likelihood for probabilistic forecasting like Salinas et al. (2019). As evaluation metrics, we report MSE for long-term
+forecasting, MSE and root mean squared scaled error (RMSSE) for short-term forecasting, and
+0.5-risk for probabilistic forecasting, following Zhou et al. (2021); Makridakis et al. (2022); Salinas
+et al. (2019). For the subset size _S_, we use _S_ = 3 for ETT datasets, _S_ = 7 for Weather, _S_ = 30 for
+Electricity, _S_ = 20 for Traffic, _S_ = 25 for M5, satisfying 1 _<_ _S_ _<_ _D/_ 2. Also, for the inference
+technique of SPMformer, we set _NI_ to 3. A detailed description of experimental settings is in
+Appendix C.
+
+
+4.2 FORECASTING RESULT
+
+
+Table 1, Table 2, and Table 3 show evaluation metrics of representative baselines along with the
+SPMformer for each task. SPMformer outperforms all baselines in 13 out of 15 cases and achieves
+
+
+6
+
+
+Table 1: MSE in long-term forecasting tasks. For each dataset, scores are averaged over _τ_ _∈_
+_{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ . The best score in each experimental setting is in boldface and the second best is
+underlined.
+
+Partial-Multivariate Univariate Complete-Multivariate
+Data
+SPMformer CAMELOT PatchTST FITS TimeMixer Crossformer TimesNet TSMixer DeepTime iTransformer RLinear ModernTCN
+
+
+ETTh1 **0.392** 0.405 0.413 0.406 0.411 0.570 0.487 0.412 0.423 0.479 0.409 0.404
+ETTh2 0.322 0.324 0.331 0.333 **0.316** 1.618 0.383 0.355 0.434 0.383 0.328 0.322
+ETTm1 **0.343** 0.356 0.353 0.358 0.348 0.427 0.422 0.347 0.354 0.407 0.359 0.351
+ETTm2 **0.248** 0.253 0.256 0.254 0.256 1.001 0.331 0.267 0.259 0.291 0.253 0.253
+Weather **0.217** 0.233 0.226 0.221 0.222 0.231 0.258 0.225 0.238 0.244 0.243 0.224
+Electricity **0.149** 0.164 0.159 0.165 0.156 0.173 0.209 0.160 0.166 0.162 0.164 0.156
+Traffic **0.382** 0.413 0.391 0.418 0.388 0.527 0.621 0.407 0.425 **0.382** 0.418 0.396
+
+
+Avg.Rank **1.143** 5.571 5.571 6.286 3.571 11.000 11.143 6.000 9.000 8.286 7.000 3.143
+
+
+Table 2: RMSSE and MSE in short-term forecasting tasks in M5 when _τ_ = 28 (4 weeks).
+
+
+Partial-Multivariate Univariate Complete-Multivariate
+Score
+SPMformer CAMELOT PatchTST FITS TimeMixer Crossformer TimesNet TSMixer DeepTime iTransformer RLinear ModernTCN
+
+
+MSE **7.418** 7.481 8.695 8.327 7.529 7.676 8.157 7.995 8.186 7.421 8.176 7.518
+RMSSE **0.803** 0.811 0.879 0.869 0.814 0.837 0.851 0.847 0.854 0.810 0.848 0.809
+
+
+Avg.Rank **1.000** 3.500 12.000 11.000 5.000 6.000 8.500 7.000 10.000 2.500 8.500 3.000
+
+
+Table 3: 0.5-risk in probabilistic forecasting tasks. For each dataset, scores are averaged over
+_τ_ _∈{_ 96 _,_ 192 _,_ 336 _,_ 720 _}_ .
+
+Partial-Multivariate Univariate Complete-Multivariate
+Data
+SPMformer CAMELOT PatchTST FITS TimeMixer TSDiff TSMixer iTransformer RLinear ModernTCN DeepAR ForecasterQR
+
+
+ETTh1 **0.657** 1.184 1.225 0.971 0.985 1.053 0.911 0.828 0.858 0.847 1.220 1.002
+ETTh2 **0.348** 0.683 0.706 0.547 0.633 0.861 0.678 0.477 0.506 0.401 1.253 0.943
+ETTm1 **0.552** 1.182 1.191 0.898 0.709 0.924 0.760 0.675 0.757 0.645 1.001 0.882
+ETTm2 **0.273** 0.664 0.666 0.497 0.460 0.716 0.459 0.345 0.400 0.317 0.791 0.713
+Weather 0.723 1.562 1.563 1.247 1.626 0.987 0.828 1.161 1.152 0.861 0.919 **0.606**
+Electricity **0.391** 1.035 1.034 0.831 0.495 1.313 0.491 0.510 0.516 0.518 0.621 0.482
+Traffic **0.442** 1.128 1.119 0.979 0.602 1.168 0.731 0.598 0.599 0.582 0.692 0.520
+
+
+Avg.Rank **1.143** 9.857 10.429 7.571 6.429 9.857 5.286 4.000 5.000 3.286 9.286 5.857
+
+
+the second place in the remaining two. We also provide visualizations of long-term forecasting results
+of SPMformer and some baselines in Appendix G.2, which shows the superiority of SPMformer. The
+scores are measured with _NI_ = 3, and in Appendix F, we provide another long-term forecasting
+result which shows that our SPMformer still outperforms other baselines even with _NI_ = 1. We refer
+the readers to Appendix G.1 for full results in each _τ_ .
+
+
+4.3 ANALYSIS
+
+
+In this section, we provide some analysis on our SPMformer. We refer the readers to Appendix G for
+additional experimental results.
+
+
+**Empirical result supporting the theoretical analysis.** In Section 3.5, we think that _S∗_ leading to
+the best forecasting performance is between 1 and _D/_ 2. To validate this analysis, we provide Table 4,
+which shows that partial-multivariate settings (1 _< S_ _< D_ ) outperform others with _S_ = 1 or _D_, in
+most cases. On top of that, our analysis is further supported by the U-shaped plots in Figure 3 where
+the best MSE is achieved when 1 _< S_ _< D/_ 2 and the worst one is in _S_ _∈{_ 1 _, D}_ .
+
+On top of that, to demonstrate that stochastic partial-multivariate models outperform deterministic
+ones by not being restricted to a few predefined subsets, we conduct an additional experiment,
+shown in Figure 4, where we vary the size of the subset pool **F** _[all]_ while keeping _S_ fixed. In
+the original training of SPMformer, the subset pool includes all possible cases, resulting in - _DS_ 
+possible subsets. However, in this experiment, we reduce the pool size to **F** _[all]_ = _α_ _NU_ by
+_|_ _|_ _×_
+randomly removing some subsets, where _NU_ is the number of subsets sampled in each iteration
+and� _DS_ - _α_ subsets. _∈{_ 1 _,_ 400As shown in Figure _,_ 1600 _,_ 6400 _,_ Max 4 _}_, the forecasting performance improves as the size of. The ‘Max’ condition corresponds to _α_ yielding the full set of _α_ increases.
+These experimental results align with our theoretical analyses that stochastic partial-multivariate
+models achieve better performance by not being constrained to a limited number of predefined cases.
+
+
+7
+
+
+Table 4: Comparison among three types of models by adjusting _S_ in SPMformer. For each dataset of
+
+
+|SPMformer Variants|Long-Term Forecasting (MSE)<br>ETTh1 ETTm1 Weather Elec. Traffci|Short-Term Forecasting (RMSSE)<br>M5|Probabilistic Forecasting (0.5-Risk)<br>ETTh1 ETTm1 Weather Elec. Traffci|
+|---|---|---|---|
+|_S_ = 1<br>1_ < S < D_<br>_S_ =_ D_|0.395<br>0.350<br>0.218<br>0.160<br>0.400<br>**0.392**<br>**0.343**<br>**0.217**<br>**0.149**<br>**0.382**<br>0.393<br>0.361<br>0.222<br>0.161<br>0.395|0.805<br>**0.803**<br>0.821|0.838<br>0.692<br>0.943<br>0.495<br>0.572<br>**0.657**<br>**0.552**<br>**0.723**<br>**0.391**<br>**0.442**<br>0.805<br>0.661<br>0.947<br>0.512<br>0.577|
+
+
+Figure 5: The effect of _NI_ on test MSE when (a) _S_ is fixed to the selected hyperparameter and (b) _S_ changes. For (b), the y axis shows the difference of test MSE between when
+_NI_ 1 _,_ 2 _,_ 4 _,_ 8 _,_ 16 _,_ 32 _,_ 64 _,_ 128 and _NI_ = 128.
+_∈{_ _}_
+
+
+Table 5: MSE of SPMformer with various inference techniques in long-term forecasting — note
+that all variants of SPMformer are trained with the same algorithms as ours. To identify relevance
+(signifcance) of features to others, we utilize attention scores after training SPMformer.
+
+
+Electricity ( _D_ = 321) Traffic ( _D_ = 862)
+Inference Technique
+_τ_ =96 192 336 720 96 192 336 720
+
+
+Proposed Technique with _NI_ = 3 (Ours) **0.125** **0.142** **0.154** **0.176** **0.345** **0.370** **0.385** **0.426**
+Sampling A Subset of Mutually Significant Features 0.132 0.148 0.174 0.205 0.352 0.372 0.386 0.428
+Sampling A Subset of Mutually Insignificant Features 0.135 0.167 0.178 0.235 0.377 0.410 0.410 0.444
+
+
+**Analysis** **on** **the** **inference** **technique.** In Section 3.4, we introduce an inference technique that
+leverages the inherent stochasticity of SPMformer, where the inference process is repeated _NI_ times,
+averaging _NI_ outputs. Figure 5(a) shows the forecasting performance as _NI_ varies. We observe that
+Test MSE monotonically decreases as _NI_ gets large. In Figure 5(b), we investigate relationships
+between the feature subset size _S_ and _NI_ by measuring performance gain by increasing _NI_ in various
+_S_ . This figure shows that the effect of increasing _NI_ tends to be smaller, as _S_ increases. We think this
+is because a single subset **F** with large _S_ can contain a number of features, so mutually significant
+features can be included in such large subsets at least once only with few repetitions.
+
+
+Besides the inference technique based on random selection, we explore another technique which
+samples subsets of mutually important features by selecting some keys with the highest attention
+scores per query. We compare this technique to the counterpart which selects keys based on the lowest
+attention score. In Table 5, we provide the forecasting MSE of each inference technique. - note that
+only the inference method is different while the training algorithm remains the same as the original
+one in Algorithm 1. In that an inference technique utilizing the highest attention scores outperforms
+one with the lowest ones, attention scores are helpful in identifying relationships between features to
+some extent. Therefore, we think this information will be helpful for approximating true _P_ .
+
+
+8
+
+
+1 400 1600 6400 Max
+(c. f. |F [all] | = × NU)
+
+
+1 400 1600 6400 Max
+(c. f. |F [all] | = × NU)
+
+
+0.3950
+
+0.3925
+
+0.3900
+
+0.3875
+
+0.3850
+
+
+0.385
+
+0.380
+
+0.375
+
+0.370
+
+
+S
+
+
+0.40
+
+
+0.39
+
+
+S
+
+
+0.374
+
+0.373
+
+0.372
+
+0.371
+
+0.370
+
+
+Figure 3: Test MSE by changing _S_ .
+
+
+Figure 4: Test MSE by changing _|_ **F** _[all]_ _|_, fixing _S_ .
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+0.144
+
+
+0.143
+
+
+0.142
+
+
+0.141
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+0.158
+
+
+0.157
+
+
+0.156
+
+
+0.155
+
+
+0.154
+
+
+0.153
+
+
+0.152
+
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+
+(a) Sensitivity to _NI_
+
+
+(b) Changes in the effect of _NI_ when _S_ increases
+
+
+**Other advantages of SPMformer.** In the real world, some features in time series are often missing.
+Inspired by the works that address irregular time series where observations at some time steps (Che
+et al., 2016; Kidger et al., 2020) are missing, we randomly drop some features of input time series in
+the inference stage and measure the increasing rate of test MSE in undropped features. For comparison,
+we use the original SPMformer and a complete-multivariate version of SPMformer (CMformer) by
+setting _S_ to _D_ . SPMformer can address the missingness by simply excluding missing features in the
+random sampling process, while CMformer has no choice but to pad dropped features with zeros. In
+Figure 6, unlike the other case, SPMformer maintains its forecasting performance, regardless of the
+drop rate of the features. This robust characteristic gives SPMformer more applicability in real-world
+situations where some features are not available.
+
+
+For Transformers with inter-feature attention modules, we compare the costs of their inter-feature
+modules using floating point operations (FLOPs) in Figure 7. When naïvely computing inter-feature
+attention (CMformer), the attention cost is _O_ ( _D_ [2] ) where _D_ is the number of features. In contrast,
+due to capturing only partial relationships, the attention cost of SPMformer is reduced to _O_ ( _SD_ )
+where _S_ is the size of each subset. In Appendix D, we elaborate on the details of the reason why the
+inter-feature module in SPMformer achieves _O_ ( _SD_ ). Given that small _S_ is enough to generate good
+forecasting performance ( _e.g._, _S_ = 20 _∼_ 30 for 100 _∼_ 800 features), the attention cost is empirically
+efficient. As a result, SPMformer achieves the lowest FLOPs compared to others, as shown in
+Figure 7. Although Crossformer achieves _O_ ( _RD_ ) complexities with low-rank approximations where
+_R_ is the rank, our SPMformer shows quite efficient costs, compared to them.
+
+
+5 CONCLUSION
+
+
+We introduce a new class of multivariate forecasting methods, called _stochastic partial-multivariate_
+_methods_, which generalize existing approaches such as univariate, deterministic partial-multivariate,
+and complete-multivariate methods. As part of this, we develop the SPMformer model. SPMformer
+first samples clusters (subsets) of a complete feature set from given distributions and captures
+dependencies only within clusters using a single inter-feature attention module shared by all clusters.
+Under usual situations without prior knowledge on clustering, we propose a basic form of training
+algorithm for SPMformer with non-informative clustering distributions. Extensive experiments show
+that SPMformer outperforms baseline models in long-term, short-term, and probabilistic forecasting
+tasks. To explain SPMformer’s superior performance, we theoretically analyze the upper-bound on
+generalization errors of SPMformer compared to univariate, deterministic partial-multivariate, and
+complete-multivariate ones, and provide empirical results supporting the results of the theoretical
+analysis. Additionally, we enhance forecasting accuracy by introducing a simple inference technique
+for SPMformer. Finally, we highlight SPMformer’s useful characteristics in terms of the efficiency of
+inter-feature attention and robustness under missing features against complete-multivariate models.
+
+
+**Future research.** Further theoretical analysis is needed to better explain partial-multivariate models,
+including more precise calculations of the entropy of posterior distributions and the relaxation
+of certain assumptions. Additionally, since we have only tested the case where _P_ is a uniform
+distribution, future work will focus on identifying the optimal _P_ for SPMformer. We believe our
+work could have a positive impact on those developing foundation models for time series due to the
+following two reasons: _(i)_ time series datasets often vary in the number of features, and our feature
+sampling scheme, where the subset size is always _S_, can address this heterogeneity, and _(ii)_ even in
+cases with an extremely large number of features, our method enables efficient training. Therefore,
+we plan to test our approach on these heterogeneous and extreme cases.
+
+
+9
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+
+Figure 6: Increasing rate of test MSE by dropping _n_ % features in SPMformer or CompleteMultivariate Transformer (CMformer).
+
+
+10 [10]
+
+
+10 [8]
+
+
+Data
+
+
+Figure 7: FLOPs of self-attention for interfeature dependencies in various Transformers
+when changing _D_ .
+
+
+REFERENCES
+
+
+Henrique Aguiar, Mauro Santos, Peter Watkinson, and Tingting Zhu. Learning of cluster-based
+feature importance for electronic health record time-series. In Kamalika Chaudhuri, Stefanie
+Jegelka, Le Song, Csaba Szepesvari, Gang Niu, and Sivan Sabato (eds.), _Proceedings_ _of_ _the_
+_39th_ _International_ _Conference_ _on_ _Machine_ _Learning_, volume 162 of _Proceedings_ _of_ _Machine_
+_Learning_ _Research_, pp. 161–179. PMLR, 17–23 Jul 2022. URL [https://proceedings.](https://proceedings.mlr.press/v162/aguiar22a.html)
+[mlr.press/v162/aguiar22a.html.](https://proceedings.mlr.press/v162/aguiar22a.html)
+
+
+Ron Amit and Ron Meir. Meta-learning by adjusting priors based on extended pac-bayes theory,
+2019.
+
+
+Rafal A Angryk, Petrus C Martens, Berkay Aydin, Dustin Kempton, Sushant S Mahajan, Sunitha
+Basodi, Azim Ahmadzadeh, Xumin Cai, Soukaina Filali Boubrahimi, Shah Muhammad Hamdi,
+et al. Multivariate time series dataset for space weather data analytics. _Scientific data_, 7(1):227,
+2020.
+
+
+Shaojie Bai, J. Zico Kolter, and Vladlen Koltun. An empirical evaluation of generic convolutional
+and recurrent networks for sequence modeling, 2018.
+
+
+Samit Bhanja and Abhishek Das. Impact of data normalization on deep neural network for time
+series forecasting, 2019.
+
+
+Zhengping Che, Sanjay Purushotham, Kyunghyun Cho, David Sontag, and Yan Liu. Recurrent neural
+networks for multivariate time series with missing values, 2016.
+
+
+Si-An Chen, Chun-Liang Li, Nate Yoder, Sercan O. Arik, and Tomas Pfister. Tsmixer: An all-mlp
+architecture for time series forecasting, 2023.
+
+
+G. Cybenko. Approximation by superpositions of a sigmoidal function. _Mathematics of Control,_
+_Signals and Systems_, 2(4):303–314, Dec 1989. ISSN 1435-568X. doi: 10.1007/BF02551274.
+[URL https://doi.org/10.1007/BF02551274.](https://doi.org/10.1007/BF02551274)
+
+
+Pedro Domingos. A few useful things to know about machine learning. _Commun. ACM_, 55(10):
+78–87, oct 2012. ISSN 0001-0782. doi: 10.1145/2347736.2347755. [URL https://doi.org/](https://doi.org/10.1145/2347736.2347755)
+[10.1145/2347736.2347755.](https://doi.org/10.1145/2347736.2347755)
+
+
+Luo donghao and wang xue. ModernTCN: A modern pure convolution structure for general time
+series analysis. In _The Twelfth International Conference on Learning Representations_, 2024. URL
+[https://openreview.net/forum?id=vpJMJerXHU.](https://openreview.net/forum?id=vpJMJerXHU)
+
+
+Yuntao Du, Jindong Wang, Wenjie Feng, Sinno Pan, Tao Qin, Renjun Xu, and Chongjun Wang.
+Adarnn: Adaptive learning and forecasting of time series, 2021.
+
+
+Albert Gu, Karan Goel, and Christopher Ré. Efficiently modeling long sequences with structured
+state spaces, 2022.
+
+
+Spencer S Jones, R Scott Evans, Todd L Allen, Alun Thomas, Peter J Haug, Shari J Welch, and
+Gregory L Snow. A multivariate time series approach to modeling and forecasting demand in the
+emergency department. _Journal of biomedical informatics_, 42(1):123–139, 2009.
+
+
+Patrick Kidger, James Morrill, James Foster, and Terry Lyons. Neural controlled differential equations
+for irregular time series. In _Advances in Neural Information Processing Systems_, 2020.
+
+
+Marcel Kollovieh, Abdul Fatir Ansari, Michael Bohlke-Schneider, Jasper Zschiegner, Hao Wang, and
+Yuyang Wang. Predict, refine, synthesize: Self-guiding diffusion models for probabilistic time
+series forecasting, 2023. [URL https://arxiv.org/abs/2307.11494.](https://arxiv.org/abs/2307.11494)
+
+
+Seunghan Lee, Taeyoung Park, and Kibok Lee. Learning to embed time series patches independently.
+In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2024. URL [https:](https://openreview.net/forum?id=WS7GuBDFa2)
+[//openreview.net/forum?id=WS7GuBDFa2.](https://openreview.net/forum?id=WS7GuBDFa2)
+
+
+Zhe Li, Shiyi Qi, Yiduo Li, and Zenglin Xu. Revisiting long-term time series forecasting: An
+investigation on linear mapping, 2023. [URL https://arxiv.org/abs/2305.10721.](https://arxiv.org/abs/2305.10721)
+
+
+10
+
+
+Aobo Liang, Xingguo Jiang, Yan Sun, and Chang Lu. Bi-mamba4ts: Bidirectional mamba for time
+series forecasting, 2024.
+
+
+Shengsheng Lin, Weiwei Lin, Wentai Wu, Feiyu Zhao, Ruichao Mo, and Haotong Zhang. Segrnn:
+Segment recurrent neural network for long-term time series forecasting, 2023.
+
+
+Minhao Liu, Ailing Zeng, Muxi Chen, Zhijian Xu, Qiuxia Lai, Lingna Ma, and Qiang Xu. Scinet:
+Time series modeling and forecasting with sample convolution and interaction, 2022a.
+
+
+Shizhan Liu, Hang Yu, Cong Liao, Jianguo Li, Weiyao Lin, Alex X. Liu, and Schahram Dustdar. Pyraformer: Low-complexity pyramidal attention for long-range time series modeling
+and forecasting. In _International_ _Conference_ _on_ _Learning_ _Representations_, 2022b. URL
+[https://openreview.net/forum?id=0EXmFzUn5I.](https://openreview.net/forum?id=0EXmFzUn5I)
+
+
+Yong Liu, Tengge Hu, Haoran Zhang, Haixu Wu, Shiyu Wang, Lintao Ma, and Mingsheng Long.
+itransformer: Inverted transformers are effective for time series forecasting, 2024. [URL https:](https://arxiv.org/abs/2310.06625)
+[//arxiv.org/abs/2310.06625.](https://arxiv.org/abs/2310.06625)
+
+
+Spyros Makridakis, Evangelos Spiliotis, and Vassilios Assimakopoulos. M5 accuracy competition:
+Results, findings, and conclusions. _International Journal of Forecasting_, 38(4):1346–1364, 2022.
+ISSN 0169-2070. doi: https://doi.org/10.1016/j.ijforecast.2021.11.013. [URL https://www.](https://www.sciencedirect.com/science/article/pii/S0169207021001874)
+[sciencedirect.com/science/article/pii/S0169207021001874. Special Issue:](https://www.sciencedirect.com/science/article/pii/S0169207021001874)
+M5 competition.
+
+
+David A. McAllester. Pac-bayesian model averaging. In _Proceedings of the Twelfth Annual Confer-_
+_ence on Computational Learning Theory_, COLT ’99, pp. 164–170, New York, NY, USA, 1999.
+Association for Computing Machinery. ISBN 1581131674. doi: 10.1145/307400.307435. URL
+[https://doi.org/10.1145/307400.307435.](https://doi.org/10.1145/307400.307435)
+
+
+Sidra Mehtab and Jaydip Sen. Stock price prediction using convolutional neural networks on a
+multivariate time series, August 2021. [URL http://dx.doi.org/10.36227/techrxiv.](http://dx.doi.org/10.36227/techrxiv.15088734.v1)
+[15088734.v1.](http://dx.doi.org/10.36227/techrxiv.15088734.v1)
+
+
+Hieu M Nguyen, Philip J Turk, and Andrew D McWilliams. Forecasting covid-19 hospital census:
+A multivariate time-series model based on local infection incidence. _JMIR Public Health and_
+_Surveillance_, 7(8):e28195, 2021.
+
+
+Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, and Jayant Kalagnanam. A time series is worth 64
+words: Long-term forecasting with transformers, 2023.
+
+
+Reese Pathak, Rajat Sen, Nikhil Rao, N. Benjamin Erichson, Michael I. Jordan, and Inderjit S.
+Dhillon. Cluster-and-conquer: A framework for time-series forecasting, 2021. URL [https:](https://arxiv.org/abs/2110.14011)
+[//arxiv.org/abs/2110.14011.](https://arxiv.org/abs/2110.14011)
+
+
+Jiayu Qiu, Bin Wang, and Changjun Zhou. Forecasting stock prices with long-short term memory
+neural network based on attention mechanism. _PLOS ONE_, 15:e0227222, 01 2020. doi: 10.1371/
+journal.pone.0227222.
+
+
+Kashif Rasul, Arjun Ashok, Andrew Robert Williams, Hena Ghonia, Rishika Bhagwatkar, Arian
+Khorasani, Mohammad Javad Darvishi Bayazi, George Adamopoulos, Roland Riachi, Nadhir
+Hassen, Marin Biloš, Sahil Garg, Anderson Schneider, Nicolas Chapados, Alexandre Drouin,
+Valentina Zantedeschi, Yuriy Nevmyvaka, and Irina Rish. Lag-llama: Towards foundation models
+for probabilistic time series forecasting, 2024.
+
+
+David Salinas, Valentin Flunkert, and Jan Gasthaus. Deepar: Probabilistic forecasting with autoregressive recurrent networks, 2019. [URL https://arxiv.org/abs/1704.04110.](https://arxiv.org/abs/1704.04110)
+
+
+Luís Sanhudo, Joao Rodrigues, and Enio Vasconcelos Filho. Multivariate time series clustering and
+forecasting for building energy analysis: Application to weather data quality control. _Journal of_
+_Building Engineering_, 35:101996, 2021.
+
+
+Guillermo Valle-Pérez and Ard A. Louis. Generalization bounds for deep learning, 2020.
+
+
+11
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Ł ukasz Kaiser, and Illia Polosukhin. Attention is all you need. In I. Guyon, U. Von
+Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett (eds.), _Ad-_
+_vances_ _in_ _Neural_ _Information_ _Processing_ _Systems_, volume 30. Curran Associates, Inc.,
+2017. URL [https://proceedings.neurips.cc/paper_files/paper/2017/](https://proceedings.neurips.cc/paper_files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf)
+[file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf.](https://proceedings.neurips.cc/paper_files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf)
+
+
+Huiqiang Wang, Jian Peng, Feihu Huang, Jince Wang, Junhui Chen, and Yifei Xiao. MICN:
+Multi-scale local and global context modeling for long-term series forecasting. In _The Eleventh_
+_International Conference on Learning Representations_, 2023. [URL https://openreview.](https://openreview.net/forum?id=zt53IDUR1U)
+[net/forum?id=zt53IDUR1U.](https://openreview.net/forum?id=zt53IDUR1U)
+
+
+Shiyu Wang, Haixu Wu, Xiaoming Shi, Tengge Hu, Huakun Luo, Lintao Ma, James Y. Zhang,
+and JUN ZHOU. Timemixer: Decomposable multiscale mixing for time series forecasting.
+In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2024. URL [https:](https://openreview.net/forum?id=7oLshfEIC2)
+[//openreview.net/forum?id=7oLshfEIC2.](https://openreview.net/forum?id=7oLshfEIC2)
+
+
+Ruofeng Wen, Kari Torkkola, Balakrishnan Narayanaswamy, and Dhruv Madeka. A multi-horizon
+quantile recurrent forecaster, 2018. [URL https://arxiv.org/abs/1711.11053.](https://arxiv.org/abs/1711.11053)
+
+
+Gerald Woo, Chenghao Liu, Doyen Sahoo, Akshat Kumar, and Steven Hoi. Learning deep time-index
+models for time series forecasting. In _Proceedings of the 40th International Conference on Machine_
+_Learning_ . PMLR, 2023.
+
+
+Haixu Wu, Jiehui Xu, Jianmin Wang, and Mingsheng Long. Autoformer: Decomposition transformers
+with auto-correlation for long-term series forecasting, 2022.
+
+
+Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, and Mingsheng Long. Timesnet:
+Temporal 2d-variation modeling for general time series analysis, 2023.
+
+
+Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Xiaojun Chang, and Chengqi Zhang. Connecting
+the dots: Multivariate time series forecasting with graph neural networks, 2020.
+
+
+Lei Xu, Maria Skoularidou, Alfredo Cuesta-Infante, and Kalyan Veeramachaneni. Modeling tabular
+data using conditional gan, 2019.
+
+
+Zhijian Xu, Ailing Zeng, and Qiang Xu. FITS: Modeling time series with $10k$ parameters.
+In _The_ _Twelfth_ _International_ _Conference_ _on_ _Learning_ _Representations_, 2024. URL [https:](https://openreview.net/forum?id=bWcnvZ3qMb)
+[//openreview.net/forum?id=bWcnvZ3qMb.](https://openreview.net/forum?id=bWcnvZ3qMb)
+
+
+Chulhee Yun, Srinadh Bhojanapalli, Ankit Singh Rawat, Sashank J. Reddi, and Sanjiv Kumar. Are
+transformers universal approximators of sequence-to-sequence functions?, 2020.
+
+
+Ailing Zeng, Muxi Chen, Lei Zhang, and Qiang Xu. Are transformers effective for time series
+forecasting?, 2022.
+
+
+Yunhao Zhang and Junchi Yan. Crossformer: Transformer utilizing cross-dimension dependency
+for multivariate time series forecasting. In _The Eleventh International Conference on Learning_
+_Representations_, 2023. [URL https://openreview.net/forum?id=vSVLM2j9eie.](https://openreview.net/forum?id=vSVLM2j9eie)
+
+
+Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, and Wancai Zhang.
+Informer: Beyond efficient transformer for long sequence time-series forecasting, 2021.
+
+
+12
+
+
+A PROOF
+
+
+A.1 PROOF FOR THEOREM 1
+
+
+Starting from McAllester’s bound on generalization errors (McAllester, 1999), we derive generalization bound in Theorem 1. Before getting into the main part, we define some notations. Let a
+neural network _f_ be a stochastic partial-multivariate model which samples subsets **F** consisting of _S_
+features from a complete set of _D_ features as defined in equation 1. _H_ denotes hypothesis class of _f_,
+and **P** ( _h_ ) and **Q** ( _h_ ) are a prior and posterior distribution over the hypotheses _h_, respectively. Also,
+( **x** _,_ **y** ) is a input-output pair in an entire dataset and ( **x** _[T]_ _,_ **y** _[T]_ ) is a pair in a training dataset _T_ with _m_
+instances sampled from the entire dataset. At last, **y** ˆ = _f_ ( **x** ) is the output value of a neural network
+_f_, and _l_ ( **Q** ) and [ˆ] _l_ ( **Q** _, T_ ) are generalized and empirical training loss under posterior distributions **Q**
+and training datasets _T_ .
+
+Subsequently, we list assumptions for proof:
+
+**Assumption 1.** _The maximum and minimum values of_ **y** _are known and min-max normalization is_
+_applied to_ **y** _(i.e.,_ 0 _≤_ **y** _≤_ 1 _)._
+**Assumption** **2.** _The_ _output_ _values_ _of_ _a_ _neural_ _network_ _are_ _assumed_ _to_ _be_ _between_ _0_ _and_ _1,_ _(i.e.,_
+0 _≤_ **y** ˆ _≤_ 1 _)._
+**Assumption 3.** _For posterior distributions_ **Q** _,_ **Q** _is pruned._ _In other words, we set_ **Q** ( _h_ ) = 0 _for_
+_hypotheses h where_ **Q** ( _h_ ) _<_ **P** ( _h_ ) _and renormalize it._
+**Assumption 4.** _For any hypothesis h,_ **P** ( _h_ ) _> ω where ω is the minimum probabilities in_ **P** ( _h_ ) _and_
+_ω_ _>_ 0 _._
+**Assumption 5.** _For posterior distributions_ **Q** _and training datasets T,_ [ˆ] _l_ ( **Q** _, T_ ) _≈_ 0 _._
+
+Given that min-max normalization has been often used in time-series domains with empirical
+minimum and maximum values (Bhanja & Das, 2019), Assumption 1 can be regarded as a reasonable
+one. Also, by equipping the last layer with some activation functions such as Sigmoid or Tanh
+(hyperbolic tangent) like Xu et al. (2019) and adequate post-processing, Assumption 2 can be
+satisfied. [2] As for Assumption 3, according to (McAllester, 1999), it might have very little effects
+on **Q** . Finally, because Transformers can universally approximate any continuous sequence-tosequence function (Yun et al., 2020), (possibly, extended to general deep neural networks with the
+universal approximation theorem (Cybenko, 1989)), any hypothesis _h_ can be approximated with
+proper parameters in _f_ . Thus, we can assume **P** ( _h_ ) _>_ _w_ _>_ 0 for any _h_ when sampling the initial
+parameters of _f_ from the whole real-number space (Assmuption 4). Also with proper training process
+and this universal approximation theorem, [ˆ] _l_ ( **Q** _, T_ ) might approximate to zero (Assumption 5). With
+these assumptions, the proof for Theorem 1 is as follows:
+
+
+2Assumption 1 and 2 can be considered somewhat strong but should be satisfied to utilize McAllester’s
+bound widely used for estimating generalization errors (Valle-Pérez & Louis, 2020; Amit & Meir, 2019). When
+the conditions of McAllester’s bound are relaxed, we can also relax our assumptions.
+
+
+13
+
+
+_Proof._ Let MSE be a loss function _l_ . Then, according to Assumption 1 and 2, 0 _≤_ _l_ ( _h,_ ( **x** _,_ **y** )) _≤_ 1
+for any data instance ( **x** _,_ **y** ) and hypothesis _h_ . Then, with probability at least 1 _−_ _δ_ over the selection
+of the sample _T_ of size _m_, we have the following for **Q** (McAllester, 1999):
+
+
+_D_ ( **Q** **P** ) + log [1] _δ_
+_∥_
+
+
+_l_ ( **Q** ) _≤_ [ˆ] _l_ ( **Q** _, T_ ) +
+
+
+_δ_ [+] 2 [log] _[ m]_ [ + 8]
+
+_,_ (8)
+2 _m −_ 1
+
+
+[1] [5]
+
+_δ_ [+] 2
+
+
+whereˆ _l_ ( **Q** _, T D_ ) _≈_ ( **Q** 0 _∥_ . **P** Also, because) denotes Kullback-Leibler divergence from distribution _E_ [log **P** (1 _h_ ) []] _[ <]_ [ log] _[ E]_ [[] **P** (1 _h_ ) []] _[ <]_ [ log] _ω_ [1] [=] _[ C]_ **Q** [with Jensen’s inequality and] to **P** . Due to Assumption 5,
+
+
+_ω_ [=] _[ C]_ [with Jensen’s inequality and]
+
+
+Assumption 4, _D_ ( **Q** **P** ) = _Eh∼_ **Q** [log **[Q]** **P** ( [(] _h_ _[h]_ ) [)]
+_∥_
+
+
+**[Q]** **P** ( [(] _h_ _[h]_ ) [)] []] [=] _[E]_ [[log] **[ Q]** [(] _[h]_ [)] +] _[ E]_ [[log] **P** (1 _h_ ) []] _[<]_ _[E]_ [[log] **[ Q]** [(] _[h]_ [)] +] _[ C]_ [.]
+
+
+Therefore, we can derive Theorem 1 by substituting [ˆ] _l_ ( **Q** _, T_ ) and _D_ ( **Q** _∥_ **P** ) with 0 and _E_ [log **Q** ( _h_ )] +
+_C_, respectively:
+
+
+_l_ ( **Q** ) _≤_
+
+
+~~�~~
+_Eh∼_ **Q** [log **Q** ( _h_ )] + log [1]
+
+
+_δ_ [+] 2 [log] _[ m]_ [ + 8 +] _[ C]_
+
+_._ (9)
+2 _m −_ 1
+
+
+[1] [5]
+
+_δ_ [+] 2
+
+
+Based on this theorem, we provide a theoretical analysis which is the impact of _S_ on _m_ and _−H_ ( _Q_ ).
+However, an additional assumption is required to make the rationale valid as follows:
+**Assumption 6.** _For the region of hypothesis h_ _[′]_ _where_ **Q** ( _h_ _[′]_ ) _>_ 0 _,_ _the prior distribution satisfies_
+log **P** (1 _h_ _[′]_ )
+
+_[≤]_ _[C][max][ where][ C][max][ is small enough to be ignored in upper-bound.]_
+
+It is possible that the upper-bound is dominated by _C_ _→∞_ when _w_ _→_ 0. As such, _P_ ( _h_ ) needs to
+be distributed properly over the region of hypothesis _h_ _[′]_ where **Q** ( _h_ _[′]_ ) _>_ 0 not to result in _C_ _→∞_,
+leading to Assumption 6. This assumption can be satisfied when the prior distribution is noninformative which is natural in Bayesian statistics under the assumption that prior knowledge is
+unknown (i.e. _P_ ( _h_ ) _∝_ 1). For any countable set of all possible inputs _{_ **x** _i}i_ _[N]_ =1 [,] [probabilities] [of]
+each _fh_ under hypothesis _h_ can be represented as _h_ (Domingos _p_ ( _h_ ) =, 2012 [�] _i_ _[N]_ =1). _[p]_ Because [(ˆ] **[y]** _i_ _[h][|]_ **[x]** _[i]_ [)][ where] 0 **y** ˆ _i_ _[h]_ **[y]** [ˆ] _i_ _[h]_ [=] _[ f][h]_ [(] **[x]** _[i]_ [)][ is the output of a function] _i_
+a uniform distribution under the non-informative assumption, _≤_ _[≤]_ _p_ [1] (ˆ [ (Assumption] **y** _i_ _[h]_ [=] [1][.] [ 2][As][) and][such,] _[ p]_ [(ˆ] **[y]** [the] _[h][|]_ **[x]** [prior] _[i]_ [)][ is]
+distribution under the non-informative assumption is **P** ( _h_ ) = 1, leading _[|]_ **[x]** _[i]_ [)] to _Cmax_ = 0 which is
+small enough not to dominate upper-bound. On top of that, we can indirectly solve this problem by
+injecting appropriate inductive biases in the form of architectures or regularizers, which can help
+to allocate more probability to each hypothesis ( _i.e._, increase _ω_ ) by reducing the size of the whole
+hypothesis space _H_ .
+
+
+A.2 PROOF FOR THEOREM 2
+
+
+To provide a proof for Theorem 2, we first prove Lemma 1. For Lemma 1, we need the following
+assumption:
+**Assumption 7.** _A neural network f_ _models models p_ ( **y** _|_ **x** ) _where_ ( **x** _,_ **y** ) _is an input-output pair._
+
+By regarding the output of a neural network **y** ˆ as mean of normal or Student’s _t_ -distribution like
+in Rasul et al. (2024), Assumption 7 can be satisfied. Then, Lemma 1 and a proof are as follows:
+
+**Lemma 1.** _Let_ [ˆ] _l_ ( **Q** _S,_ _S_ ) _be a training loss with posterior distributions_ **Q** _S_ _and a training dataset_
+_T_
+_S_ _when a subset size is S._ _Accordingly,_ [ˆ] _l_ ( **Q** _S,_ _S_ ) _< ϵ with small ϵ is a training objective._ _Then,_
+_T_ _T_
+_for S_ + _and S−_ _where S_ + _>_ _S−,_ **Q** _S_ + _satisfies both_ [ˆ] _l_ ( **Q** _S_ + _,_ _S_ +) _<_ _ϵ and_ [ˆ] _l_ ( **Q** _S_ + _,_ _S−_ ) _<_ _ϵ._ _(On_
+_T_ _T_
+_the other hands,_ **Q** _S−_ _is required to satisfy only_ [ˆ] _l_ ( **Q** _S−_ _,_ _S−_ ) _< ϵ.)_
+_T_
+
+
+_Proof._ Let _S_ + and _S−_ be subset size where _S_ + _> S−_ . **F** _S−_ be any subset of _S−_ size sampled from a
+complete set of features, and **F** _S_ + is any subset of _S_ + size among ones that satisfy **F** _S−_ **F** _S_ + . **F** _R_
+_⊂_
+is the set of elements that are in **F** _S_ + but not in **F** _S−_ ( _i.e._, **F** _R_ = **F** _S_ + **F** _S−_ ). [ˆ] _l_ ( **Q** _S,_ _S_ ) is a training
+loss value with posterior distributions **Q** _S_ and a training dataset _TS_ when a subset size is _−_ _T_ _S_ . Then, after
+training process satisfying [ˆ] _l_ ( **Q** _S_ + _,_ _S_ +) _< ϵ_ where _ϵ_ is a small value, we can say that _f_ under **Q** _S_ +
+_T_
+outputs the true value of _p_ ( **yF** _S_ + **xF** _S_ + ), according to Assumption 7. In the following process, we
+_|_
+demonstrate that _p_ ( **yF** _S−_ **xF** _S−_ ) can be derived from _p_ ( **yF** _S_ + **xF** _S_ + ) = _p_ ( **yF** _S−_ _,_ **yF** _R_ **xF** _S−_ _,_ **xF** _R_ ):
+_|_ _|_ _|_
+
+
+       
+**yF** _R_ _E_ **xF** _R_ _|_ **xF** _S−_ [ _p_ ( **yF** _S−_ _,_ **yF** _R_ _|_ **xF** _S−_ _,_ **xF** _R_ )] _d_ **yF** _R_ _,_ (10)
+
+
+= _p_ ( **yF** _S−_ **xF** _S−_ ) _,_ (12)
+_|_
+
+
+In that expectation can be approximated by an empirical mean with sufficient data and integral can be
+addressed with discretization, we can think that _p_ ( **yF** _S−_ **xF** _S−_ ) can be derived from _p_ ( **yF** _S_ + **xF** _S_ + ).
+_|_ _|_
+According to this fact, _f_ under **Q** + should be able to output not only true _p_ ( **yF** _S_ + **xF** _S_ + ) but also
+_|_
+
+true _p_ ( **yF** _S−_ **xF** _S−_ ). Therefore, we conclude that **Q** + have to satisfy both [ˆ] _l_ ( **Q** _S_ + _,_ _S_ +) _<_ _ϵ_ and
+_|_ _T_
+ˆ _l_ ( **Q** _S_ + _,_ _S−_ ) _< ϵ_ .
+_T_
+
+
+14
+
+
+  =
+
+**yF** _R_
+
+
+_p_ ( **yF** _S−_ _,_ **yF** _R_ **xF** _S−_ _,_ **xF** _R_ ) _p_ ( **xF** _R_ **xF** _S−_ ) _d_ **xF** _R_ _d_ **yF** _R_ _,_ (11)
+**xF** _R_ _|_ _|_
+
+
+With Lemma 1, we provide a proof for Theorem 2:
+
+
+_Proof._ Let _h_ be a hypothesis on a space defined when a subset size is _S_ . Then, we can denote a
+posterior distribution which is trained to decrease [ˆ] _l_ ( **Q** _S,_ _S_ ) as follows:
+_T_
+
+
+From this expansion, we can derive _H_ ( _p_ ( _h_ [˜] _S_ + _cS_ +)) _H_ ( _p_ ( _h_ [˜] _S_ +)) because entropy of _p_ ( _cS_ +) must
+_|_ _≤_
+be larger than 0 ( _i.e.,_ _H_ ( _p_ ( _cS_ +)) 0). By substituting _H_ ( **Q** _S−_ ) for _H_ ( _p_ ( _h_ [˜] _S_ +)) according to
+_≥_
+Assumption 8 and _EcS_ + [ _H_ ( **Q** _S_ +)] for _H_ ( _p_ ( _h_ [˜] _S_ + _cS_ +)), we can derive Theorem 3.
+_|_
+
+
+15
+
+
+**Q** ( _hS_ ) = _p_ ( _hS_ _cS_ = 1) _,_ where _cS_ =
+_|_
+
+
+�1 _,_ ˆ _l_ ( _h, TS_ ) _< ϵ,_ (13)
+0 _,_ otherwise _,_
+
+
+According to Lemma 1, for _S_ + and _S−_ where _S_ + _> S−_, the posterior distributions of two cases can
+be represent as **Q** ( _hS_ +) = _p_ ( _hS_ + _cS_ + = 1 _, cS−_ = 1) and **Q** ( _hS−_ ) = _p_ ( _hS−_ _cS−_ = 1), respectively.
+_|_ _|_
+With the following two assumptions, we can prove Theorem 2:
+
+
+**Assumption 8.** _hypotheses_ _hS_ + _and_ _hS−_ _have similar distributions after training with_ _S−_ _(i.e.,_
+_T_
+_p_ ( _hS_ + _cS−_ = 1) _p_ ( _hS−_ _cS−_ = 1) _)._
+_|_ _≈_ _|_
+
+**Assumption 9.** _Prior distributions are nearly non-informative (i.e., P_ ( _h_ ) _∝_ 1 _)._
+
+
+Assumption 8 can be considered reasonable because we can make the training process of a model of
+subset size _S_ + very similar to that of subset size _S−_ with a minimal change in architecture such as
+input and output masking. Also, as for Assumption 9, non-informative prior is usually used under
+usual situations without prior knowledge in Bayesian statistics.
+
+
+**Q** ( _hS_ ) can be expanded as _p_ ( _hS_ _cS_ ) _p_ ( _cS_ _hS_ ) _p_ ( _hS_ ) _p_ ( _cS_ _hS_ ), according to Assumption 9.
+_|_ _∝_ _|_ _∝_ _|_
+Because we exactly know whether to satisfy [ˆ] _l_ ( _h,_ _S_ ) _<_ _ϵ_ given _h_, _p_ ( _cS_ _hS_ ) is 1 when a given _hS_
+_T_ _|_
+satisfies _cS_ or 0, otherwise. Thus, **Q** ( _hS_ ) are defined as follows:
+
+
+**Q** ( _hS_ ) = _p_ ( _hS_ _cS_ = 1) =      - _ηS,_ _cS_ = 1 given _hS,_ (14)
+_|_ 0 _,_ otherwise _,_
+
+
+Similarly, **Q** ( _hS_ +) and **Q** ( _hS−_ ) can be expanded as _p_ ( _hS_ + _cS_ + _, cS−_ ) _p_ ( _cS_ + _, cS−_ _hS_ +) _p_ ( _hS_ +)
+_|_ _∝_ _|_ _∝_
+_p_ ( _cS_ + _, cS−_ _hS_ +) and _p_ ( _hS−_ _cS−_ ) = _p_ ( _hS_ + _cS−_ ) _p_ ( _cS−_ _hS_ +) _p_ ( _hS_ +) _p_ ( _cS−_ _hS_ +), according
+_|_ _|_ _|_ _∝_ _|_ _∝_ _|_
+to Assumption 8 and 9. A region of hypothesis satisfying both _cS_ + = 1 and _cS−_ = 1 is smaller than
+that satisfying either of them. Because the probability of _h_ in a region satisfying conditions has the
+same value and - _h_ _[p]_ [(] _[h]_ [)] _[dh]_ [ = 1][ is maintained,] _[ h]_ [ in the small region is allocated higher probabilities]
+
+than _h_ in the large one. Therefore, _ηS_ + _> ηS−_ and the entropy _H_ ( **Q** _S−_ ) is larger than _H_ ( **Q** _S_ +):
+
+
+So far, we have finished a proof for Theorem 2. We additionally provide Theorem 3 which is a
+variant of Theorem 2 where Assumption 9 can be relaxed while proposing the relationships between
+_H_ ( **Q** _S−_ ) and _H_ ( **Q** _S_ +) in the expectation level:
+
+**Theorem 3.** _for S_ + _and S−_ _satisfying S_ + _> S−, H_ ( **Q** _S_ +) _H_ ( **Q** _S−_ ) _in expectation over cS_ + _._
+_≤_
+
+
+_Proof._ Let _h_ [˜] _S_ + be the _hS_ + _cS−_ = 1 ( _i.e._, **Q** ( _hS_ +) = _p_ ( _hS_ + _cS_ + = 1 _, cS−_ = 1) = _p_ ( _h_ [˜] _S_ + _cS_ + =
+_|_ _|_ _|_
+1)). Then, _H_ ( _h_ [˜] _S_ + _cS_ +) can be expanded as follows:
+_|_
+
+
+_H_ ( _p_ ( _h_ [˜] _S_ + _cS_ +)) _,_ (15)
+_|_
+
+
+= _H_ ( _p_ ( _cS_ + _hS_ +)) + _H_ ( _p_ ( _h_ [˜] _S_ +)) _H_ ( _p_ ( _cS_ +)) _,_
+_|_ [˜] _−_
+
+
+(16)
+(∵ Bayes’ rule for conditional entropy states) _,_
+
+= _H_ ( _p_ ( _h_ [˜] _S_ +)) _H_ ( _p_ ( _cS_ +))
+_−_ (17)
+
+(∵ when _h_ is given, we know whether to satisfy [ˆ] _l_ ( _h,_ _S_ +) _< ϵ._ ( _i.e., H_ ( _p_ ( _cS_ + _hS_ +)) = 0) _,_
+_T_ _|_ [˜]
+
+
+= _H_ ( _p_ ( _h_ [˜] _S_ +)) _H_ ( _p_ ( _cS_ +))
+_−_
+
+
+**7** **else**
+
+**8** Get _{_ **F** _[g]_ _}g∈_ [0 _,NU_ ] by randomly partitioning **V** ;
+
+**9** **for** _g_ _←_ 0 **to** _NU_ _−_ 1 **do**
+
+**10** **y** ˆ **F** _[g]_ = `SPMformer` ( **xF** _[g]_ _,_ **F** _[g]_ );
+
+
+**11** **if** _R ̸_ = 0 **then**
+
+**12** Remove features of **V** [++] from **y** ˆ **F** _NU −_ 1 ;
+
+**13** Sort _{_ **y** ˆ **F** _[g]_ _}g∈_ [0 _,NU_ ] by feature index and get **y** ˆ[0: _D_ ];
+
+**14** **return** Predicted future observations **y** ˆ[0: _D_ ];
+
+
+C DETAILS OF EXPERIMENTAL ENVIRONMENTS
+
+
+We conduct experiments on this software and hardware environments: PYTHON 3.7.12, PYTORCH
+2.0.1, and NVIDIA GEFORCE RTX 3090.
+
+
+C.1 DATASETS
+
+
+We evaluate SPMformer on 8 benchmark datasets for time series forecasting with multiple variables.
+The normalization and train/val/test splits are also the same with ModernTCN (donghao & wang xue,
+2024) which is our main baseline. The information of each dataset is as follows:
+
+
+  - **(1-2)** **ETTh1**, **2** [3] (Electricity Transformer Temperature-hourly): They have 7 indicators in the
+electric power long-term deployment, such as oil temperature and 6 power load features. This data
+is collected for 2 years and the granularity is 1 hour. Different numbers denote different counties
+in China. The number of time steps is 17,420.
+
+  - **(3-4) ETTm1**, **2** (Electricity Transformer Temperature-minutely): This dataset is exactly the same
+with **ETTh1**, **2**, except for granularity. The granularity of these cases is 15 minutes. The number of
+time steps is 69,680.
+
+
+[3https://github.com/zhouhaoyi/ETDataset](https://github.com/zhouhaoyi/ETDataset)
+
+
+16
+
+
+Also, based on Chebyshev’s inequality, we can calculate the least probabilities at which _H_ ( **Q** _S_ +) _<_
+_H_ ( **Q** _S−_ ) are satisfied, given the variance _σ_ [2] = _V arcS_ + [ _H_ ( _p_ ( _h_ [˜] _S_ + _cS_ +))]:
+_|_
+
+_p_          - _H_ ( **Q** _S_ +) _< H_ ( **Q** _S−_ )� _≤_ 1 _−_ ( _H_ ( _p_ ( _σc_ [2] _S_ +))) [2] (18)
+
+
+B HOW TO HANDLE NON-DIVISIBLE CASES OF SPMFORMER WITH RANDOM
+PARTITIONING
+
+
+In this section, we further elaborate on how to deal with the cases where the number of features _D_ is
+not divisible by the size of subsets _S_ . We simply repeat some randomly chosen features and augment
+them to the original input time series, in order to make the total number of features divisible by _S_ .
+After finishing the forecasting procedure with the augmented inputs, we drop augmented features
+from outputs. The details are delineated in Algorithm 2.
+
+
+**Algorithm 2:** How to handle non-divisible cases of SPMformer with random partitioning
+
+**Input:** # of features _D_, Subset size _S_, Past obs. **x** [0: _D_ ]
+
+
+**1** **V** = _{_ 0 _,_ 1 _, ..., D −_ 1 _}_ ; _NU_ = _⌈_ _[D]_
+
+
+**2** **if** _R ̸_ = 0 **then**
+
+
+_S_ _[⌉]_ [;] _R_ = _D_ % _S_ ;
+
+
+**3** Randomly split **V** into **V** [+] _,_ **V** _[−]_, where _|_ **V** [+] _|_ = _D −_ _R, |_ **V** _[−]_ _|_ = _R,_ **V** [+] _∩_ **V** _[−]_ = _ϕ_ ;
+
+
+**4** Get _{_ **F** _[g]_ _}g∈_ [0 _,NU −_ 1] by randomly partitioning **V** [+] ;
+
+
+**5** **V** [++] = _{vi|vi_ is a random sample from **V** [+] without replacement _, i_ = [0 _, S −_ _R_ ] _}_ ;
+
+
+**6** **F** _[N][U][ −]_ [1] = **V** _[−]_ _∪_ **V** [++]
+
+
+- **(5) Weather** [4] : It has 21 indicators of weather including temperature, humidity, precipitation, and
+air pressure. It was recorded for 2020, and the granularity is 10 minutes. The number of time steps
+is 52,696.
+
+ - **(6) Electricity** [5] : In this dataset, information about hourly energy consumption from 2012 to 2014
+is collected. Each feature means the electricity consumption of one client, and there are 321 clients
+in total. The number of time steps is 26,304.
+
+ - **(7) Traffic** [6] : Traffic dataset pertains to road occupancy rates. It encompasses hourly data collected
+by 862 sensors deployed on San Francisco freeways during the period spanning from 2015 to 2016.
+The number of time steps is 17,544.
+
+ - **(8) M5** [7] : The M5 dataset is used in the M5 Forecasting Competition, which aims to evaluate and
+compare different forecasting methods. The competition centers around predicting sales data for a
+range of products, stores, and timeframes. We randomly select 100 items for our task. The number
+of time steps is 1,907.
+
+
+C.2 HYPERPARAMETERS
+
+
+The details of hyperparameters used in the SPMformer are delineated in this section. For the number
+of segments _NS_, we use _NS_ = 32 for M5, 8 for Traffic, and 64 for others. The dropout ratio _r_ dropout
+is in {0.1, 0.2, 0.3, 0.4, 0.7}. The hidden dimension _dh_ is in {32,64,128,256,512}. The number of
+heads in self-attention _nh_ is in {2,4,8,16} and the number of layers _L_ is in {1,2,3}. _dff_ is the hidden
+size of feed-forward networks in each SPMformer layer and in {32,64,128,256,512}. Also, batch
+size is 128, 128, 16, and 12 for ETT, Weather, Electricity, and Traffic datasets, respectively. Finally,
+we set the learning rate and training epochs to 10 _[−]_ [3] and 100, respectively. Finally, we use Adam
+optimizer to train our model. The selected best hyperparameters of SPMformer are in Table 6.
+
+
+D COMPLEXITY ANALYSIS OF INTER-FEATURE ATTENTION IN SPMFORMER
+
+
+E THE EFFECT OF TRAINING SPMFORMER WITH RANDOM SAMPLING OR
+PARTITIONING
+
+
+In this section, we provide the experimental results where we train SPMformer using a training
+algorithm with random sampling or partitioning. As shown in Table 7, these two ways are comparable
+in terms of forecasting performance — note that we adopt the training algorithm based on random
+partitioning for our main experiments.
+
+
+F THE PERFORMANCE OF SPMFORMER WITH _NI_ = 1
+
+
+In Table 8, we conduct the main experiments including SPMformer with _NI_ = 1 which is the number
+of repeating an inference process. In this experiment, we include some baselines showing decent
+forecasting performance. As Table 8 shows, despite _NI_ = 1, SPMformer still gives better results
+than baselines.
+
+
+[4https://www.bgc-jena.mpg.de/wetter/](https://www.bgc-jena.mpg.de/wetter/)
+[5https://archive.ics.uci.edu/ml/datasets/ElectricityLoadDiagrams20112014](https:// archive.ics.uci.edu/ml/datasets/ElectricityLoadDiagrams20112014)
+[6http://pems.dot.ca.gov](http://pems.dot.ca.gov)
+[7https://www.kaggle.com/competitions/m5-forecasting-accuracy](https://www.kaggle.com/competitions/m5-forecasting-accuracy)
+
+
+17
+
+
+In this section, we elaborate on the reason why the theoretical complexity of inter-feature attention in
+SPMformer is _O_ ( _SD_ ) where _D_ is the number of features and _S_ is the subset size. Attention cost in
+each subset is _O_ ( _S_ [2] ). Because random partitioning generates _NU_ _≈_ _[D]_ _S_ [subsets, the final complexity]
+
+[2] _[D]_ [2]
+
+
+each subset is _O_ ( _S_ ). Because random partitioning generates _NU_ _≈_ _S_ [subsets, the final complexity]
+
+is _NU_ ( _S_ [2] ) = _[D]_ _S_
+_O_ _[O]_ [(] _[S]_ [2][) =] _[ O]_ [(] _[SD]_ [)][.]
+
+
+_[D]_
+
+_S_
+
+_[O]_ [(] _[S]_ [2][) =] _[ O]_ [(] _[SD]_ [)][.]
+
+
+Table 6: Selected hyperparameters of SPMformer.
+
+
+Data _τ_ _r_ dropout _dh_ _nh_ _L_ _dff_
+
+
+Table 7: MSE of training SPMformer using a training algorithm with random sampling or partitioning
+
+
+ETTh1 ( _D_ = 7) ETTh2 (7) ETTm1 (7) ETTm2 (7)
+Training Algorithm
+96 192 336 720 96 192 336 720 96 192 336 720 96 192 336 720
+
+
+Random Partitioning **0.361** **0.396** **0.400** **0.412** **0.269** **0.323** **0.317** **0.370** **0.282** **0.325** **0.352** **0.401** **0.160** **0.213** **0.262** **0.336**
+Random Sampling 0.362 0.397 **0.400** **0.412** 0.273 **0.323** **0.317** 0.371 0.283 **0.325** **0.352** 0.403 0.162 0.214 0.263 0.337
+
+
+Weather (21) Electricity (321) Traffic (862)
+Training Algorithm Avg. Rank
+96 192 336 720 96 192 336 720 96 192 336 720
+
+
+Random Partitioning **0.142** 0.185 **0.235** **0.305** **0.125** 0.142 **0.154** **0.176** **0.345** **0.370** **0.385** **0.426** **1.071**
+Random Sampling **0.142** **0.184** 0.237 **0.305** 0.126 **0.141** **0.154** 0.180 0.347 **0.370** 0.386 0.427 1.571
+
+
+G ADDITIONAL EXPERIMENTS
+
+
+G.1 ADDITIONAL EXPERIMENTAL RESULTS IN TABULAR FORMS
+
+
+In this section, we provide full results for existing experiments. Table 9 and Table 10 are additional
+results for Table 1 and Table 3, respectively. Also, both Table 11 and Table 12 are for Table 4.
+
+
+G.2 ADDITIONAL VISUALIZATION
+
+
+Like Appendix G.1, this section provides additional visualizations with other datasets or models for
+existing ones. Figure 8 is for Figure 3, Figure 9 for Figure 4, Figure 10 for Figure 5(a), Figure 11
+for Figure 5(b), and Figure 12 for Figure 6. Furthermore, Figure 13 shows the forecasting results
+of SPMformer, PatchTST, and Crossformer. We select these baselines because they have similar
+architecture to SPMformer, such as segmentation or inter-feature attention modules. Our method
+captures temporal dynamics better than baselines.
+
+
+18
+
+
+ETTh1
+
+
+ETTh2
+
+
+ETTm1
+
+
+ETTm2
+
+
+Weather
+
+
+Electricity
+
+
+Traffic
+
+
+96 0.7 128 4 1 256
+192 0.7 32 4 1 256
+336 0.7 64 8 1 64
+336 0.7 64 8 1 64
+
+
+96 0.7 512 4 1 256
+192 0.7 512 2 1 256
+336 0.7 64 16 1 256
+720 0.7 64 16 1 128
+
+
+96 0.2 256 2 2 256
+192 0.1 64 8 1 128
+336 0.2 64 2 2 64
+720 0.7 64 4 1 128
+
+
+96 0.7 512 2 1 64
+192 0.7 128 4 1 32
+336 0.4 128 2 1 32
+720 0.7 256 4 1 32
+
+
+96 0.2 128 8 3 256
+192 0.2 128 16 3 256
+336 0.4 128 16 3 512
+720 0.4 128 2 1 256
+
+
+96 0.3 256 8 1 256
+192 0.2 256 4 2 256
+336 0.2 128 4 3 256
+720 0.2 256 4 3 256
+
+
+96 0.2 512 2 3 512
+192 0.1 256 4 3 512
+336 0.2 256 2 3 256
+720 0.2 512 4 3 512
+
+
+M5 0.0 128 8 2 128
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Table 8: MSE of main forecasting results including SPMformer wiht _NI_ = 1.
+
+
+ETTh1 ( _D_ = 7) ETTh2 (7) ETTm1 (7) ETTm2 (7)
+Method
+96 192 336 720 96 192 336 720 96 192 336 720 96 192 336 720
+
+
+SPMformer **0.361** **0.393** 0.404 **0.412** 0.270 0.328 0.321 0.371 **0.286** 0.328 **0.354** 0.418 0.165 0.219 **0.271** 0.357
+CAMELOT 0.367 0.396 0.410 0.448 0.269 0.333 0.321 0.374 0.298 0.338 0.372 0.417 **0.164** **0.218** 0.272 0.358
+TimeMixer **0.361** 0.409 0.430 0.445 0.271 **0.317** 0.332 **0.342** 0.291 **0.327** 0.360 **0.415** 0.164 0.223 0.279 0.359
+ModernTCN 0.368 0.405 **0.391** 0.450 **0.263** 0.320 **0.313** 0.392 0.292 0.332 0.365 0.416 0.166 0.222 0.272 **0.351**
+
+
+Weather (21) Electricity (321) Traffic (862)
+Method Avg. Rank
+96 192 336 720 96 192 336 720 96 192 336 720
+
+
+SPMformer **0.142** **0.185** **0.235** **0.305** **0.125** 0.142 **0.154** **0.176** **0.345** **0.370** **0.385** **0.426** **1.607**
+CAMELOT 0.158 0.204 0.253 0.317 0.138 0.150 0.165 0.204 0.390 0.402 0.411 0.449 3.321
+TimeMixer 0.147 0.189 0.241 0.310 0.129 **0.140** 0.161 0.194 0.360 0.375 **0.385** 0.430 2.321
+ModernTCN 0.149 0.196 0.238 0.314 0.129 0.143 0.161 0.191 0.368 0.379 0.397 0.440 2.607
+
+
+Table 9: MSE in long-term forecasting tasks. (Additional results for Table 1)
+
+
+Partial-Multivariate Univariate Complete-Multivariate
+Data
+SPMformer CAMELOT PatchTST FITS TimeMixer Crossformer TimesNet TSMixer DeepTime iTransformer RLinear ModernTCN
+
+
+96 **0.361** 0.367 0.370 0.372 **0.361** 0.427 0.465 **0.361** 0.372 0.396 0.364 0.368
+192 0.396 **0.396** 0.413 0.405 0.409 0.537 0.493 0.404 0.405 0.425 0.402 0.405
+336 0.400 0.410 0.422 0.420 0.430 0.651 0.456 0.420 0.437 0.459 0.419 **0.391**
+720 **0.412** 0.448 0.447 0.426 0.445 0.664 0.533 0.463 0.477 0.638 0.451 0.450
+
+
+96 0.269 0.269 0.274 0.271 0.271 0.720 0.381 0.274 0.291 0.300 **0.255** 0.263
+192 0.328 0.333 0.341 0.330 0.317 1.121 0.416 0.339 0.403 0.382 **0.316** 0.320
+336 0.320 0.321 0.329 0.353 0.332 1.524 0.363 0.361 0.466 0.424 0.325 **0.313**
+720 0.370 0.374 0.379 0.378 **0.342** 3.106 0.371 0.445 0.576 0.426 0.415 0.392
+
+
+96 **0.282** 0.298 0.293 0.307 0.291 0.336 0.343 0.285 0.311 0.341 0.310 0.292
+192 **0.325** 0.338 0.333 0.338 0.327 0.387 0.381 0.327 0.339 0.381 0.337 0.332
+336 **0.352** 0.372 0.369 0.368 0.360 0.431 0.436 0.356 0.366 0.419 0.369 0.365
+720 0.412 0.417 0.416 0.421 0.415 0.555 0.527 0.419 **0.400** 0.486 0.419 0.416
+
+
+96 **0.163** **0.164** 0.166 0.165 0.164 0.338 0.218 **0.163** 0.165 0.184 **0.163** 0.166
+192 **0.216** 0.218 0.223 0.219 0.223 0.567 0.282 **0.216** 0.222 0.253 0.219 0.222
+336 **0.266** 0.272 0.274 0.272 0.279 1.050 0.378 0.268 0.278 0.315 0.272 0.272
+720 **0.349** 0.358 0.361 0.359 0.359 2.049 0.444 0.420 0.369 0.412 0.360 0.351
+
+
+96 **0.142** 0.158 0.149 0.144 0.147 0.150 0.179 0.145 0.169 0.171 0.171 0.149
+192 **0.185** 0.204 0.194 0.188 0.189 0.200 0.230 0.191 0.211 0.212 0.216 0.196
+336 **0.235** 0.253 0.245 0.239 0.241 0.263 0.276 0.242 0.255 0.260 0.261 0.238
+720 **0.305** 0.317 0.314 0.312 0.310 0.310 0.347 0.320 0.318 0.334 0.323 0.314
+
+
+96 **0.125** 0.138 0.129 0.137 0.129 0.135 0.186 0.131 0.139 0.132 0.136 0.129
+192 0.142 0.150 0.147 0.151 **0.140** 0.158 0.208 0.151 0.154 0.152 0.150 0.143
+336 **0.154** 0.165 0.163 0.167 0.161 0.177 0.210 0.161 0.169 0.170 0.166 0.161
+720 **0.176** 0.204 0.197 0.206 0.194 0.222 0.231 0.197 0.201 0.192 0.206 0.191
+
+
+96 **0.345** 0.390 0.360 0.396 0.360 0.481 0.599 0.376 0.401 0.353 0.395 0.368
+192 **0.370** 0.402 0.379 0.408 0.375 0.509 0.612 0.397 0.413 **0.370** 0.407 0.379
+336 0.385 0.411 0.392 0.417 0.385 0.534 0.618 0.413 0.425 **0.384** 0.416 0.397
+720 0.426 0.449 0.432 0.453 0.430 0.585 0.654 0.444 0.462 **0.419** 0.453 0.440
+
+
+Avg.Rank **1.500** 5.750 5.607 6.071 3.714 10.679 11.071 5.071 8.393 8.321 6.464 4.036
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 10: 0.5-risk in probabilistic forecasting tasks. (Additional results for Table 3)
+
+
+Partial-Multivariate Univariate Complete-Multivariate
+Data
+SPMformer CAMELOT PatchTST FITS TimeMixer TSDiff TSMixer iTransformer RLinear ModernTCN DeepAR ForecasterQR
+
+
+96 **0.587** 1.170 1.200 0.944 0.768 1.001 0.755 0.722 0.775 0.781 1.174 0.930
+192 **0.648** 1.177 1.196 0.963 0.761 1.052 0.937 0.839 0.825 0.842 1.119 1.010
+336 **0.668** 1.176 1.208 0.974 1.158 1.087 0.930 0.837 0.868 0.862 1.251 0.977
+720 **0.724** 1.212 1.294 1.005 1.254 1.071 1.021 0.912 0.965 0.902 1.338 1.091
+
+
+96 **0.297** 0.665 0.675 0.530 0.572 0.789 0.617 0.396 0.438 0.354 1.343 1.026
+192 **0.326** 0.680 0.707 0.540 0.974 0.926 0.702 0.391 0.482 0.395 1.435 0.888
+336 **0.349** 0.683 0.708 0.547 0.419 0.874 0.639 0.482 0.542 0.429 1.114 1.007
+720 **0.419** 0.704 0.736 0.571 0.569 0.853 0.756 0.639 0.562 0.426 1.121 0.850
+
+
+96 **0.483** 1.176 1.191 0.852 0.626 0.861 0.658 0.545 0.697 0.559 0.840 0.797
+192 **0.546** 1.189 1.189 0.889 0.711 0.939 0.742 0.676 0.736 0.597 1.007 0.844
+336 **0.561** 1.178 1.187 0.914 0.704 0.914 0.799 0.703 0.773 0.603 1.033 0.932
+720 **0.620** 1.184 1.198 0.936 0.796 0.979 0.841 0.775 0.821 0.821 1.125 0.957
+
+
+96 **0.215** 0.644 0.647 0.444 0.302 0.553 0.347 0.288 0.315 0.309 0.573 0.417
+192 **0.260** 0.654 0.658 0.488 0.457 0.688 0.414 0.316 0.372 0.306 0.744 0.674
+336 **0.290** 0.667 0.670 0.514 0.592 0.697 0.509 0.366 0.422 0.313 0.733 0.800
+720 **0.327** 0.689 0.688 0.540 0.489 0.927 0.564 0.411 0.493 0.338 1.113 0.962
+
+
+96 0.595 1.554 1.548 1.210 2.235 0.844 0.650 0.984 1.079 0.748 0.761 **0.496**
+192 0.694 1.561 1.561 1.231 1.142 0.985 0.752 1.107 1.133 0.812 0.869 **0.598**
+336 0.751 1.560 1.565 1.256 1.243 1.020 0.864 1.201 1.171 0.886 0.971 **0.654**
+720 0.853 1.571 1.577 1.289 1.883 1.098 1.047 1.350 1.225 0.997 1.075 **0.676**
+
+
+96 **0.348** 1.025 1.022 0.803 0.436 1.353 0.448 0.443 0.469 0.505 0.602 0.462
+192 **0.376** 1.030 1.029 0.818 0.462 1.319 0.486 0.475 0.492 0.510 0.635 0.482
+336 **0.401** 1.036 1.035 0.836 0.504 1.289 0.507 0.535 0.522 0.516 0.634 0.488
+720 **0.440** 1.051 1.050 0.867 0.576 1.289 0.524 0.587 0.579 0.543 0.613 0.495
+
+
+96 **0.426** 1.131 1.120 0.965 0.602 1.171 0.663 0.555 0.586 0.575 0.630 0.531
+192 **0.439** 1.126 1.116 0.967 0.556 1.173 0.728 0.590 0.590 0.581 0.703 0.453
+336 0.446 1.125 1.115 0.976 0.629 1.173 0.760 0.619 0.597 0.575 0.709 **0.441**
+720 **0.459** 1.132 1.125 1.006 0.621 1.156 0.773 0.626 0.625 0.596 0.728 0.653
+
+
+Avg.Rank **1.179** 10.036 10.321 7.643 5.536 9.643 5.607 4.179 5.071 3.500 9.143 6.071
+
+
+Table 11: MSE of three types of models by adjusting _S_ of SPMformer in long-term forecasting tasks.
+(Additional results for Table 4)
+
+
+_S_ = 1 0.772 0.878 0.964 1.157 0.449 0.467 0.504 0.558 0.549 0.565 0.578 0.596 2.571
+1 _<_ _S_ _<_ _D_ **0.595** **0.694** **0.751** **0.853** **0.348** **0.376** **0.401** **0.440** **0.426** **0.439** **0.446** **0.459** **1.000**
+_S_ = _D_ 0.775 0.902 0.966 1.144 0.456 0.488 0.526 0.580 0.553 0.565 0.578 0.611 2.429
+
+
+20
+
+
+SPMformer
+Variants
+
+
+ETTh1 ( _D_ = 7) ETTh2 (7) ETTm1 (7) ETTm2 (7)
+96 192 336 720 96 192 336 720 96 192 336 720 96 192 336 720
+
+
+_S_ = 1 **0.361** **0.393** 0.404 0.420 0.272 0.325 0.318 0.371 0.288 0.335 0.358 0.403 0.161 **0.213** 0.265 0.338
+1 _<_ _S_ _<_ _D_ **0.361** 0.396 **0.400** **0.412** **0.269** **0.323** **0.317** **0.370** **0.282** **0.325** **0.352** **0.401** **0.160** **0.213** **0.262** **0.336**
+_S_ = _D_ **0.361** 0.395 0.401 0.413 **0.269** 0.325 0.318 0.371 0.299 0.350 0.377 0.402 0.161 **0.213** 0.265 0.338
+
+
+SPMformer
+Variants
+
+
+Weather (21) Electricity (321) Traffic (862)
+Avg. Rank
+96 192 336 720 96 192 336 720 96 192 336 720
+
+
+_S_ = 1 **0.141** 0.186 0.237 0.308 0.128 0.146 0.163 0.204 0.368 0.388 0.404 0.441 2.286
+1 _<_ _S_ _<_ _D_ 0.142 **0.185** **0.235** **0.305** **0.125** **0.142** **0.154** **0.176** **0.345** **0.370** **0.385** **0.426** **1.107**
+_S_ = _D_ 0.146 0.192 0.244 0.307 0.129 0.147 0.163 0.204 0.363 0.383 0.394 0.441 2.250
+
+
+Table 12: 0.5-risk of three types of models by adjusting _S_ of SPMformer in probabilistic forecasting
+tasks. (Additional results for Table 4)
+
+
+SPMformer
+Variants
+
+
+ETTh1 ( _D_ = 7) ETTh2 (7) ETTm1 (7) ETTm2 (7)
+96 192 336 720 96 192 336 720 96 192 336 720 96 192 336 720
+
+
+_S_ = 1 0.750 0.815 0.847 0.939 0.387 0.385 0.438 0.572 0.580 0.685 0.718 0.783 0.269 0.337 0.388 0.431
+1 _<_ _S_ _<_ _D_ **0.587** **0.648** **0.668** **0.724** **0.297** **0.326** **0.349** **0.419** **0.483** **0.546** **0.561** **0.620** **0.215** **0.260** **0.290** **0.327**
+_S_ = _D_ 0.733 0.798 0.811 0.878 0.361 0.375 0.423 0.561 0.536 0.662 0.655 0.790 0.239 0.327 0.391 0.400
+
+
+SPMformer
+Variants
+
+
+Weather (21) Electricity (321) Traffic (862)
+Avg. Rank
+96 192 336 720 96 192 336 720 96 192 336 720
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Figure 10: Sensitivity to _NI_ . (Additional results for Figure 5(a))
+
+
+21
+
+
+0.147
+
+0.146
+
+0.145
+
+0.144
+
+0.143
+
+
+S
+
+
+0.385
+
+
+0.380
+
+
+0.375
+
+
+0.370
+
+
+S
+
+
+0.244
+
+0.242
+
+0.240
+
+0.238
+
+0.236
+
+
+0.162
+
+0.160
+
+0.158
+
+0.156
+
+0.154
+
+
+0.400
+
+0.395
+
+0.390
+
+0.385
+
+
+0.307
+
+
+0.306
+
+
+0.305
+
+
+0.20
+
+
+0.19
+
+
+0.18
+
+
+0.440
+
+
+0.435
+
+
+0.430
+
+
+1 3 7 11 15 20 21
+S
+
+
+S
+
+
+S
+
+
+1 3 7 11 15 20 21
+S
+
+
+0.145
+
+0.144
+
+0.143
+
+0.142
+
+
+0.129
+
+0.128
+
+0.127
+
+0.126
+
+
+0.365
+
+0.360
+
+0.355
+
+0.350
+
+0.345
+
+
+0.128
+
+
+0.127
+
+
+0.126
+
+
+0.352
+
+
+0.350
+
+
+0.348
+
+
+0.346
+
+
+0.1265
+
+0.1260
+
+0.1255
+
+0.1250
+
+
+0.347
+
+
+0.346
+
+
+0.345
+
+
+0.344
+
+
+1 3 7 11 15 20 21
+S
+
+
+S
+
+
+S
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+0.192
+
+
+0.190
+
+
+0.188
+
+
+0.186
+
+
+0.144
+
+
+0.143
+
+
+0.142
+
+
+0.141
+
+
+0.372
+
+
+0.371
+
+
+0.370
+
+
+0.369
+
+
+1 3 7 11 15 20 21
+S
+
+
+S
+
+
+S
+
+
+Figure 8: Sensitivity to _S_ . (Additional results for Figure 3)
+
+
+1 400 1600 6400 Max
+
+
+1 400 1600 6400 Max
+
+
+0.370
+1 400 1600 6400 Max
+
+
+0.154
+1 400 1600 6400 Max
+
+
+0.394
+
+0.392
+
+0.390
+
+0.388
+
+0.386
+
+
+1 400 1600 6400 Max
+
+
+0.195
+
+
+0.190
+
+
+0.185
+
+
+0.180
+
+
+0.440
+
+
+0.435
+
+
+0.430
+
+
+0.147
+
+0.146
+
+0.145
+
+0.144
+
+0.143
+
+
+0.374
+
+0.373
+
+0.372
+
+0.371
+
+
+1 400 1600 6400 Max
+
+
+0.164
+
+0.162
+
+0.160
+
+0.158
+
+0.156
+
+
+0.175
+1 400 1600 6400 Max
+
+
+1 400 1600 6400 Max
+
+
+Figure 9: Sensitivity to **F** _[all]_ = _α_ _NU_ . (Additional results for Figure 4)
+_|_ _|_ _×_
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+0.180
+
+0.178
+
+0.176
+
+0.174
+
+
+0.429
+
+0.428
+
+0.427
+
+0.426
+
+0.425
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+0.158
+
+
+0.156
+
+
+0.154
+
+
+0.152
+
+
+0.386
+
+
+0.385
+
+
+0.384
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+1 2 3 4 8 16 32 64 128
+NI
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+Figure 12: Increasing rate of test MSE by dropping _n_ % features in SPMformer or CompleteMultivariate Transformer (CMformer). (Additional results for Figure 6)
+
+
+22
+
+
+2.0
+
+
+1.5
+
+
+1.0
+
+
+0.5
+
+
+0.0
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+5
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+3.5
+
+3.0
+
+2.5
+
+2.0
+
+1.5
+
+1.0
+
+0.5
+
+0.0
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+7
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+
+3.0
+
+2.5
+
+2.0
+
+1.5
+
+1.0
+
+0.5
+
+0.0
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+12
+
+
+10
+
+
+8
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+3.0
+
+2.5
+
+2.0
+
+1.5
+
+1.0
+
+0.5
+
+0.0
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+1 2 4 8 16 32 64 128
+NI
+
+
+Figure 11: Changes in the effect of _NI_ on forecasting performance when _S_ increases. (Additional
+results for Figure 5(b))
+
+
+3.0
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+10
+
+8
+
+6
+
+4
+
+2
+
+0
+
+
+25
+
+20
+
+15
+
+10
+
+5
+
+0
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+15
+
+
+10
+
+
+5
+
+
+0
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+10 20 30 40 50 60 70 80 90
+Drop Rate (%)
+
+
+6
+
+
+4
+
+
+2
+
+
+0
+
+
+8
+
+6
+
+4
+
+2
+
+0
+
+
+2.5
+
+2.0
+
+1.5
+
+1.0
+
+0.5
+
+0.0
+
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+Figure 13: Forecasting results of various segment-based transformers (Crossformer, PatchTST, and
+SPMformer). Dotted lines and dotted-dashed lines denote baselines, dashed lines denote SPMformer,
+and solid lines denote ground truth. _τ_ denotes the length of time steps in future outputs and _d_ denotes
+a feature index.
+
+
+23
+
+
+0 20 40 60 80
+Time Steps
+
+
+4
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+1.5
+
+1.0
+
+0.5
+
+0.0
+
+0.5
+
+1.0
+
+1.5
+
+
+40
+
+
+30
+
+
+20
+
+
+10
+
+
+0
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+0 20 40 60 80
+Time Steps
+
+
+0 20 40 60 80
+Time Steps
+
+
+0 20 40 60 80
+Time Steps
+
+
+0 25 50 75 100 125 150 175 200
+Time Steps
+
+
+3
+
+
+2
+
+
+1
+
+
+0
+
+
+0 25 50 75 100 125 150 175 200
+Time Steps
+
+
+2
+
+
+1
+
+
+0
+
+
+1
+
+
+5
+
+4
+
+3
+
+2
+
+1
+
+0
+
+1
+
+
+1.00
+
+0.75
+
+0.50
+
+0.25
+
+0.00
+
+0.25
+
+0.50
+
+0.75
+
+1.00
+
+
+0 50 100 150 200 250 300 350
+Time Steps
+
+
+0 100 200 300 400 500 600 700
+Time Steps

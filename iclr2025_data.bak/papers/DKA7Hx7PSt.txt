@@ -1,0 +1,1871 @@
+# LINEAR PROJECTIONS OF TEACHER EMBEDDINGS FOR FEW-CLASS DISTILLATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Knowledge Distillation (KD) has emerged as a promising approach for transferring
+knowledge from a larger, more complex teacher model to a smaller student model.
+Traditionally, KD involves training the student to mimic the teacher’s output probabilities, while more advanced techniques have explored guiding the student to
+adopt the teacher’s internal representations. Despite its widespread success, the
+performance of KD in binary classification and few-class problems has been less
+satisfactory. This is because the information about the teacher model’s generalization patterns scales directly with the number of classes. Moreover, several
+sophisticated distillation methods may not be universally applicable or effective
+for data types beyond Computer Vision. Consequently, effective distillation techniques remain elusive for a range of key real-world applications, such as sentiment
+analysis, search query understanding, and advertisement-query relevance assessment. Taking these observations into account, we introduce a novel method for
+distilling knowledge from the teacher model’s representations, which we term
+Learning Embedding Linear Projections (LELP). Inspired by recent findings about
+the structure of final-layer representations, LELP works by identifying informative
+linear subspaces in the teacher’s embedding space, and splitting them into pseudosubclasses. The student model is then trained to replicate these pseudo-subclasses.
+Our experimental evaluations on large-scale NLP benchmarks like Amazon Reviews and Sentiment140 demonstrate that LELP is consistently competitive with,
+and typically superior to, existing state-of-the-art distillation algorithms for binary
+and few-class problems, where most KD methods suffer.
+
+
+1 INTRODUCTION
+
+
+While deep neural networks have revolutionized Natural Language Processing (Devlin et al., 2018;
+Brown et al., 2020), Computer Vision (Simonyan & Zisserman, 2014), and other fields, their ballooning size and data demands raise challenges. Recent research (Menghani, 2021) aims to develop
+efficient models that excel without needing massive datasets or expensive hardware. Knowledge
+Distillation (KD) (Bucilua et al., 2006; Hinton et al., 2015) is a powerful approach for generatingˇ
+lightweight models by leveraging a large teacher model to guide their training. In its basic form,
+the student model is trained to replicate the teacher’s output probabilities for each training instance.
+Additionally, several subsequent studies (e.g., (Romero et al., 2014; Kim et al., 2018; Passalis &
+Tefas, 2018; Ahn et al., 2019; Müller et al., 2020)) have proposed advanced distillation techniques
+that go beyond mere output probability matching and focus on encouraging the student to learn the
+teacher’s internal representations.
+
+
+While KD can significantly improve student model performance in tasks with numerous classes, its
+impact is less pronounced in binary classification and problems with a smaller number of classes.
+As Müller et al. (2020) points out, this is because when we distill knowledge using logits or hightemperature cross-entropy, the information about the teacher model’s generalization patterns scales
+directly with the number of classes. Furthermore, Knowledge Distillation research has primarily
+focused on Computer Vision, so many sophisticated distillation techniques are not always effective
+or even suitable for other data modalities like Natural Language. As a result, effective distillation
+techniques remain elusive for a range of critical real-world applications, such as sentiment analysis,
+search query understanding, and advertisement-query relevance assessment.
+
+
+1
+
+
+Our approach leverages recent findings about the structure of final-layer representations (embeddings)
+in deep learning models and, in particular, aspects of the phenomenon known as _Neural Collapse_ (Papyan et al., 2020; Fang et al., 2021; Yang et al., 2023). Similar in spirit to Subclass Distillation (Müller
+et al., 2020), which uses a modified and retrained teacher model to identify hidden patterns, our
+method achieves improved student performance, particularly in finetuning Language Models for tasks
+with a few number of classes. Crucially though, and unlike Subclass Distillation, our approach does
+not require any retraining of the teacher model. Finally, a key advantage of LELP is its flexibility
+in bridging diverse model architectures, making it uniquely versatile for teacher-student learning
+scenarios.
+
+
+Our contributions can be summarized as follows:
+
+
+1. Motivated by recent insights into the Neural Collapse phenomenon, we demonstrate that the
+invention of pseudo-subclasses through unsupervised clustering of teacher embeddings can
+enhance distillation performance in binary and few-class classification tasks. However, the
+efficacy of this approach is contingent upon the specific clustering algorithm employed.
+
+2. Through empirical evaluation, we observe that carefully calibrated linear projections consistently achieve high performance, leading us to introduce LELP: a novel method for
+enhancing Knowledge Distillation. LELP is modality-independent, producing particularly
+strong results in NLP tasks and situations where the teacher and student architectures differ.
+
+3. Empirical evaluations on large-scale NLP benchmarks like Amazon Reviews (5 classes, 500k
+examples, achieving an improvement of 1.85% over the best baseline) and Sentiment140
+(binary, 1.6 million examples, showing a 0.88% improvement over the best baseline) validate that LELP is consistently competitive with, and typically superior to, existing SOTA
+distillation algorithms for binary and few class problems, where most KD methods suffer.
+
+4. We show that LELP possesses several advantageous characteristics, including conveying a
+large amount of information per example (data efficiency), converging faster than Vanilla
+KD, and can provide substantial improvements in semi-supervised KD scenarios.
+
+
+1.1 ORGANIZATION OF THE PAPER
+
+
+In Section 2 we discuss related work, including the baselines we considered in this work and the
+Neural Collapse phenomenon. In Section 3 we present our method. In Section 4 we present our
+experiments. Specifically, in Section 4.2 we present experiments demonstrating that inventing pseudosubclasses via clustering of the teacher’s model’s embeddings can improve distillation effectiveness,
+
+
+2
+
+
+95
+
+
+90
+
+
+85
+
+
+80
+
+
+75
+
+
+70
+
+
+65
+
+
+60
+
+
+Teacher Embeddings
+
+
+72.9%
+
+
+on binary CIFAR-100
+
+
+(b)
+
+
+and in Section 4.3 we compare LELP with other distillation baselines. In Section 5 we discuss the
+limitations of our work. In Appendix A we discuss the broader impact of our work. In Appendix B we
+present our experimental results corresponding to binary classification tasks with subclass structure
+in detail. In Appendix C we provide ablations on the design choices behind LELP. In Appendix D
+we give a detailed description of the NLP datasets we used. In Appendix E we present results
+regarding the applicability of LELP to multiclass classification tasks with a moderate number of
+classes. In Appendix F we study additional properties of LELP, including its relative performance in
+the _semi-supervised setting_ (Chen et al., 2020; Stanton et al., 2021; Iliopoulos et al., 2022; Baykal
+et al., 2023; Kontonis et al., 2023), its data efficiency and its training speed. In Appendix G we
+provide pseudo-code for our method. Finally, in Appendix H we provide implementation details.
+
+
+2 RELATED WORK
+
+
+**Knowledge** **Distillation.** Most of the literature on Knowledge Distillation has been focused on
+the _fully supervised_ setting, i.e., when distillation is performed on the labeled training data of the
+teacher model rather than on new, unlabeled data — see e.g. the original paper (Hinton et al., 2015).
+Specifically, when training the student one typically uses a convex combination of the standard
+cross-entropy loss _L_ CE with respect to the ground-truth labels, and the _distillation loss L_ distill:
+
+_L_ student = _αL_ CE + (1 _−_ _α_ ) _L_ distill _._ (1)
+
+
+In the original paper (Hinton et al., 2015) the distillation loss encourages the student model to mimic
+to replicate the teacher’s output probabilities, potentially after scaling the logits of both models
+using a temperature-scalar. (The value of the temperature is typically larger than 1, and it is used to
+emphasize the differences between the probabilities of wrong answers that would all be very close to
+zero at temperature 1.)
+
+
+In addition to focusing on the teacher model’s final outputs, follow-up methods, like those proposed
+in (Romero et al., 2014; Ahn et al., 2019), also consider the teacher model’s internal representations,
+often in the form of its embeddings. These methods encourage the student model to mimic not only
+the teacher’s final predictions but also its internal representations. The simplest, yet often highly
+effective, example of this approach is _Embedding Distillation_ (Romero et al., 2014). In this method,
+an additional term, called the “embedding-loss term”, is added to the distillation loss. This term
+measures the difference between the embeddings produced by the teacher and student models. The
+weight of this term can be adjusted using a hyperparameter. Specifically, one adds the term
+
+
+where _x_ 1 _, . . ., xn_ denotes the current batch of examples, _f_ _[T]_ ( _xi_ ) _, f_ _[S]_ ( _xi_ ) the embeddings of the
+teacher and student model corresponding to example _xi_, respectively, and _W_ is a learnable projection
+matrix to match the dimension of the teacher/student learned during the distillation phase. Romero
+et al. (2014) proposes ways of modeling and pretraining _W_ (and also potentially distilling from
+other teacher-layers), while Ahn et al. (2019) proposes losses that minimize the mutual information
+between the teacher and student embeddings (instead of considering the _ℓ_ 2 loss). Finally, Relational
+Knowledge Distillation (Park et al., 2019) transfers mutual relations of data examples instead, e.g.,
+they authors introduce a loss that penalizes structural differences in “anglewise” relations. Notably,
+Relational KD can naturally handle mismatches in teacher-student embedding dimensionality without
+introducing learnable projections.
+
+
+The Subclass Distillation method (Müller et al., 2020) presents an approach that is closely related to
+ours. Here, the teacher is forced to divide each class into many pseudo-subclasses that it invents via
+appropriate training, and then the student is trained to match the subclass probabilities. The method
+is designed for few-class classification, excelling in such scenarios. Our method shares Subclass
+Distillation’s use of invented subclasses for student knowledge transfer, but eliminates the need
+for teacher retraining and extensive hyperparameter tuning. (Note that the process of optimizing
+hyperparameters for Subclass Distillation necessitates retraining the teacher model repeatedly with
+varying loss function configurations, as outlined in equations (7) and (8) of the reference paper by
+Müller et al. (2020). However, this iterative retraining becomes _excessively computationally intensive_
+_and impractical_ when dealing with large teacher models.) As we show in Section 4, LELP achieves
+performance that is always on par with, and typically exceeding, Subclass Distillation.
+
+
+3
+
+
+_L_ Embedd = [1]
+
+_n_
+
+
+_n_
+
+- _∥f_ _[T]_ ( _xi_ ) _−_ _Wf_ _[S]_ ( _xi_ ) _∥_ 2 _,_ (2)
+
+
+_i_ =1
+
+
+Student Subclass Probabilities Student Prediction
+
+
+Figure 2: Schematic of the Learning with Embedding Projections (LELP) algorithm. LELP decomposes Teacher predictions into subclasses via a PCA decomposition, and trains a student on these
+subclasses. For predictions, subclasses are summed together back into their original classes.
+
+
+In our study we show that LELP is consistently competitive with the above methods, and that it is
+typically superior to them when it comes to classification problems with a few number of classes
+(especially in the NLP domain). We also explore two more baseline methods that have found success
+in Vision tasks: Contrastive Representation Distillation (CRD) Tian et al. (2019) and Decoupled
+Knowledge Distillation (DKD) Zhao et al. (2022). While CRD excels in Vision multi-class tasks,
+its reliance on data augmentation for contrastive learning limits its applicability to other domains.
+Indeed, in Vision classification tasks the standard “contrastive-learning” approach would be to
+generate variations of every image (e.g, via rotations), and then consider as positive any pair of
+examples (original or modified) that come from the same source. However, data augmentation of, say
+Natural Language examples, is not straightforward and this impairs the performance of the method.
+(See Appendix H for more details.) DKD has also demonstrated efficacy in multi-class Vision tasks,
+but its performance is notably compromised in scenarios with fewer classes, rendering it inappropriate
+for the specific focus of our investigation. In particular, in the context of binary classification, DKD
+is mathematically equivalent to the standard Vanilla KD approach. We demonstrate that LELP
+significantly outperforms both CRD and DKD in text classification tasks.
+
+
+**Neural Collapse.** Papyan et al. (2020) identified a phenomenon called _Neural Collapse_ that occurs in
+the final training phase (after achieving zero training error) of deep neural networks. This phenomenon
+refers to specific structural properties observed in the last layer’s representations. The simplest of
+these properties is known as _variability collapse_ . In a nutshell, as a network is trained extensively, it
+tends to group together all training samples with the same label (almost) into a single point in its final
+layer.
+
+
+Our approach is inspired by a recent paper Yang et al. (2023) which provides evidence that further
+refines the above description. In particular, it shows that while the final layer representations appear
+collapsed, they retain crucial fine-grained structure. This structure, though subtle, accurately reflects
+the inherent characteristics of the input distribution. As an illustrative example, the authors consider
+a model trained to classify images in the CIFAR-10 Krizhevsky et al. (2009) dataset using only 5
+coarse-graned labels (by combining two classes into one superclass). Remarkably, even after this
+training, they can still recover the original, more detailed 10-class system by applying unsupervised
+clustering techniques to the model’s internal representations. In light of this intriguing observation,
+and motivated by the findings of Müller et al. (2020) that creating meaningful pseudo-subclasses
+aids student knowledge transfer, we present an unsupervised technique to extract knowledge from
+teacher embeddings using linear projections to form pseudo-subclasses. Our approach, which we
+compare to other clustering methods (including the one in Yang et al. (2023)) in Table 3 in Section 4.2,
+consistently shows superior performance.
+
+
+3 LEARNING FROM EMBEDDING LINEAR PROJECTIONS (LELP)
+
+
+Since large models develop embeddings that hold information not captured in their output probabilities
+(Yang et al., 2023), we aim to transfer this knowledge to student networks while adhering to three
+desiderata:
+
+
+4
+
+
+Teacher Embeddings Teacher Super-Class Predicton Teacher Subclass Probabilities
+
+
+Class 1:
+Class 2:
+
+
+Subclass Directions
+
+
+KL-Div.
+
+
+Student
+
+
+**Modality-independent** . We aim to develop a data-agnostic method, meaning its performance remains
+consistent regardless of the underlying data type. The method should not be reliant on characteristics
+specific to certain data modalities (for instance, the ability to easily perform data augmentation).
+
+
+**Compatibility between differing Student/Teacher architectures** . Embedding Distillation, the most
+straightforward method for learning the teacher’s embedding information, only works out-of-thebox when the student and teacher have matching embedding dimensions. Otherwise, a learnable
+projection layer is required to match the student/teacher embedding dimensions, which can often
+harm performance (and even increase latency in certain cases). Therefore, we aim for a method that
+is embedding dimension agnostic.
+
+
+**No Retraining the Teacher Model** . When the teacher model is significantly larger than the student
+model, retraining it can be prohibitively expensive. Methods which require a modified teacher training
+pipeline are significantly more costly to tune hyperparameters for, as not only do the teacher models
+have to be retrained multiple times, but in addition the student hyperparameters need to be checked
+against varying teacher hyparameters. This precludes methods such as Subclass Distillation (Müller
+et al., 2020), which contains several teacher training hyperparameters, and can even hurt the teacher’s
+performance.
+
+
+With these requirements in mind, we present Learning Embedding Linear Projections (LELP), which
+extracts the information in the teacher’s embedding layer into pseudo-subclasses, on which the
+student is trained in a single unified cross-entropy loss. To motivate our method, we refer to the
+toy model of the learned teacher embeddings shown in Figure 2. Here, data points cluster around
+their respective class averages, but each cluster exhibits internal structure that holds semantically
+meaningful information. This structure differentiates individual items within the same class and
+has proven valuable for identifying subclasses when they exist Müller et al. (2020). Additionally,
+(Yang et al., 2023) shows that these subclasses can be separated using a linear probe (following an
+appropriate clustering of the embeddings space), which motivates the use of linear projections as a
+means of extracting further information for distillation.
+
+
+LELP extracts this embedding information into a single classification loss in three steps. Firstly,
+we identify meaningful linear subspaces in the teacher embedding space (section 3.1). Secondly,
+we project the teacher embeddings into these subspaces, and use them to form pseudo-subclasses,
+expanding the number of classes from _C_ to _S_ _× C_, where _S_ is the number of linear projections
+we employ per class (section 3.2). Finally, we perform standard knowledge distillation, where
+additionally the student network’s final layer outputs probabilities for _S × C_ classes (section 3.3).
+
+
+3.1 IDENTIFYING INFORMATIVE LINEAR SUBSPACES
+
+
+The first step in LELP requires identifying linear subspaces in the teacher embedding space which
+contain useful information for each class cluster. Specifically, let _{x_ _[c]_ _i_ _[}][N]_ _i_ =1 _[c]_ [, be the] _[ N][c]_ [ training points]
+in the dataset belonging to class _c_, and let _{h_ _[c]_ _i_ _[}][N]_ _i_ =1 _[c]_ [be the corresponding teacher embeddings in][ R] _[D]_ [,]
+that is, _h_ _[c]_ _i_ [=] _[h]_ [Teacher][(] _[x][c]_ _i_ [)][, where] _[ h]_ [Teacher][(] _[x]_ [)][ is the teacher feature extractor.] [We want to find the] _[ S]_
+most informative linear directions in _{h_ _[c]_ _i_ _[}][N]_ _i_ =1 _[c]_ [.] [In absence of further knowledge of the structure of]
+_{h_ _[c]_ _i_ _[}][N]_ _i_ =1 _[c]_ [, we opt to take the] _[ S]_ [top PCA directions.] [This PCA decomposition yields for each class a]
+class mean _µc_ and _S_ top PCA directions: _{vc,_ 1 _, vc,_ 2 _, . . ., vc,S}_ . Two remarks are in order.
+
+
+First, observe that such a PCA can contain “redundant” information which is already captured in
+the teacher’s output weights. Specifically, if the teacher’s output weights are _{wi, . . ., wc}_, standard
+knowledge-distillation will already contain all the information along these directions, meaning that
+further information in these directions from _vc,i_ is unnecessary. Therefore, we have found that it
+often helps to first project _{h_ _[c]_ _i_ _[}][N]_ _i_ =1 _[c]_ [onto the null-space of the teacher weights] _[ {][w][i][, . . ., w][c][}]_ [ before]
+performing the PCA. Of course, in principle, the null-space could be trivial, in which case we do not
+apply this step. Typically though, we are working in the regime where _D_ _≥_ _S_ + _C_, so this step does
+apply. In particular, we have not run into the problem in the experiments of this study.
+
+
+A second consideration is the imbalance of variance between PCA directions: projections onto the _vc,_ 1
+directions to contain the most variances and each subsequent will contain less. If there is significant
+imbalance, we find that this can lead to poor performance so we have found it is useful to apply a
+random rotation on the PCA directions so the variance in each direction is equal. Specifically, we use
+
+
+5
+
+
+_V_ ˜ _c_ = _QVc_, where _Vc_ = [ _vc,_ 1 _, . . ., vc,S_ ] _∈_ **R** _[S][×][D]_ is our PCA vectors concatenated and _Q ∈_ R _[S][×][S]_ is
+a random orthonormal matrix. _V_ [˜] _C_ = [˜ _vc,_ 1 _, . . .,_ ˜ _vc,S_ ] contains our random rotated PCA directions,
+which span the same space as _V_, but each direction has the same variance in expectation.
+
+
+In Appendix C we perform ablations where we compare applying LELP to simply applying PCA or
+Random Projections, in order to show that the above observations can indeed be beneficial in terms
+of the student’s performance. Algorithm pseudo-code for the step of identifying the linear subspaces
+is provided in Algorithm 1 in appendix G.
+
+
+The cost of performing the PCA is _O_ ( _NcD_ [2] + _D_ [3] ) in time and _O_ ( _D_ [2] ) in memory, where _D_ is the
+embedding dimension. In practice, the _O_ ( _NcD_ [2] ) associated with forward-passing the dataset through
+the teacher network is the most costly compared to the _O_ ( _D_ [3] ) PCA cost for practical embedding
+dimensions, making the practical cost of the computation _O_ ( _N_ ) where _N_ is the training dataset size.
+
+
+3.2 SPLITTING INTO PSEUDO-SUBCLASSES
+
+
+Given the set of _C_ class embedding means and _S_ PCA vectors per class, we now describe how we
+split the _C_ classes into _SC_ subclasses. Let _p_ [Teacher] _c_ be the teacher class probability of class _c_, with
+temperature parameter _τ_ . That is,
+
+
+_e_ _[z][c][/τ]_
+_p_ [Teacher] _c_ =                - _C_ _[,]_
+_i_ =1 _[e][z][i][/τ]_
+
+where _zc_ are teacher logits, i.e. _zc_ = _wc_ [Teacher][⊺] _h −_ _bc_, with _wc_ [Teacher] the teacher weight for class _c_ and
+_bc_ the bias. We split this into _S_ subclass probabilities _pc,_ 1 _, . . . pc,S_ where
+
+
+_e_ _[z][c,s][/β]_
+_p_ [Teacher] _c,s_ = _p_ [Teacher] _c_ _∗_              - _S_ _[.]_
+_j_ =1 _[e][z][c,j]_ _[/β]_
+
+where _zc,s_ = _v_ ˜ _c,s_ [⊺] [(] _[h][ −]_ _[µ][c]_ [)][.] [That is, we perform a tempered softmax over] _[ subclass logits][ z][c,s]_ [, where]
+_zc,s_ are given by the PCA decomposition coordinates for that class. _β_ is our subclass tempering
+parameter which is a hyperparameter in our method. We refer to this subclass splitting algorithm as
+subsplit, which takes as input the teacher embedding _h_, the PCA direction and mean vectors _V_ [˜]
+and _M_, the teacher final layer weights _W_, and temperature _β_ . Pseudocode is in Appendix G.
+
+
+3.3 KNOWLEDGE DISTILLATION WITH SUBCLASSES
+
+
+Finally, we perform standard knowledge distillation with our new _SC_ probabilities _pc,s_ . This requires
+a straightforward modification to the student architecture, in which it outputs _SC_ classes as opposed
+to the standard _C_ classes. We applying the standard tempered Knowledge Distillation loss as prior
+work, using the same temperature _τ_ used to generate _pc,s_ :
+
+_L_ LELP = _τ_ [2] _D_ ( _p_ [Teacher] _c,s_ _||p_ [Student] _c,s_ ) _,_
+
+where _D_ is a standard classification loss like Cross-Entropy or KL-Divergence. (In all our experiments
+in this paper we use the latter.)
+
+
+With _p_ [Student] _c,i_ using the same temperature parameter _τ_ :
+
+_e_ _[z]_ _c,s_ [Student] _/τ_
+_p_ [Student] _c,s_ =              - _C_              - _S_ _i,j_ _/τ_ _[.]_
+_i_ =1 _j_ =1 _[e][z]_ [Student]
+
+
+At test time, we simply take class probabilities to be the sum over subclass probabilities: _p_ [Student] _c_ =
+
+- _Sj_ =1 _[p]_ _c,j_ [Student] and take the prediction to be the class with largest probability. By putting embedding
+information directly into a unified classification loss, our algorithm avoids careful balancing of training
+objectives such as with Embedding Distillation, in which one must carefully tune the embedding
+loss coefficient. Furthermore, our method is minimally invasive, requiring only minor changes to the
+student network and the training pipeline relative to other effective Knowledge Distillation techniques.
+In particular, our method avoids the need for pretraining steps of learnable projections, unlike FitNet
+and VID, and it also doesn’t require a memory buffer (sometimes used for CRD), or retraining the
+teacher model like Subclass Distillation. All put together, our algorithm is given in Algorithm 3.
+
+
+6
+
+
+4 EXPERIMENTAL EVALUATION
+
+
+In this section we present our experimental results. In Section 4.1 we describe our experimental setup.
+Section 4.2 presents experiments showcasing that generating pseudo-subclasses via unsupervised
+clustering of the teacher model’s embeddings can improve distillation effectiveness. In Section 4.3
+we compare LELP with other distillation baselines.
+
+
+4.1 THE SETUP
+
+
+We focus our experiments on a variety of classification tasks, using a standard distillation setup as in
+(Hinton et al., 2015). In order to focus solely on the effect of the distillation loss of each method,
+we always set _α_ = 0 in equation 1. This reduces the variance between methods which may have
+different optimal values of _α_, and reduces the hyperparameter search space. Furthermore, in the
+important case of the semi-supervised setting one does not have access to ground-truth labels.
+
+
+**The** **Architectures** Given that the specific combination of student and teacher architectures is
+known to influence the effectiveness of knowledge distillation, we have chosen to evaluate various
+student-teacher pairings to ensure the robustness of our method.
+
+
+For Vision datasets, the “ideal" distillation scenario is given by distilling ResNet-92 to ResNet-56,
+where both architectures and embeddings dimensions match ( _D_ = 256). We also consider the case
+of a smaller and a larger dimension with ResNet-92 ( _D_ = 256) and MobileNet with width and depth
+multiplier equal to 2 ( _D_ = 2048), respectively, distilling to MobileNet ( _D_ = 1024). The latter cases
+address scenarios where the embedding dimensions differ, with one scenario involving the same
+architecture family and the other involving different architectures. For smaller NLP datasets (LMRD,
+GLUE/cola, and GLUE/sst2), we consider distillation from an ALBERT-Large model ( _D_ = 1024)
+to an ALBERT-Base model ( _D_ = 768). For the larger scale NLP datasets (based on Amazon US
+reviews and Sentiment 140) we consider distillation from an ALBERT-XXL model ( _D_ = 4096) and
+an ALBERT-XL model ( _D_ = 2048) to (i) an ALBERT-Base model ( _D_ = 768); (ii) and a two-layerMLP of width ( _D_ = 4096) that operates over representations generated by a (frozen) sentence-T5
+encoder model of 11 billion parameters (Ni et al., 2021). The latter case addresses the scenario
+involving different teacher-student architectures but with the same embedding dimension. (Using a
+pre-trained, frozen large-scale encoder model to generate representations is a common-in-practice
+approach when one needs multiple lightweight models for different classification tasks.)
+
+
+**The Baselines** To establish a baseline performance, we chose well-known distillation approaches.
+In particular, we consider Standard Training of the model with the ground-truth labels and the
+cross-entropy loss, Vanilla Distillation with temperature-scaling as described in the original paper
+of Hinton et al. (2015), the Embedding Distillation method as described in Section 2, the general
+FitNet Romero et al. (2014) approach [1], the Variational Information Distillation for Knowledge Transfer (VID) framework Ahn et al. (2019), the Relational KD approach Park et al. (2019), Contrastive
+Representation Distillation CRD Tian et al. (2019), Decoupled Knowledge Distillation Zhao et al.
+(2022) and Subclass Distillation Müller et al. (2020). As previously noted, DKD is functionally
+identical to Vanilla KD in the context of binary classification tasks. Consequently, for such tasks,
+_reported values for DKD and Vanilla KD are congruent_ . For all baselines we perform a grid search
+over their relevant parameters and report the performance (test-accuracy and standard deviation over
+three trials) of the best configuration, with hyperparameters given in Appendix H.3. The best forming
+algorithm is shown in bold, and the second best underlined. Additionally, for every scenario in our
+tables, we display the average improvement of LELP compared to: (i) the top-performing baseline;
+(ii) the best baseline excluding Subclass Distillation; (iii) Vanilla Distillation. We report the second
+comparison for a couple of reasons. Firstly, optimizing Subclass Distillation’s hyperparameters is
+significantly more costly compared to the other baselines, and it can be challenging in real-world
+situations (due to the requirement of retraining and storing multiple teacher models). Second, the
+accuracy of the teacher model in Subclass Distillation usually differs from the one used for LELP
+(and the other baselines). Therefore, comparing them directly might not be entirely fair.
+
+
+1Embedding Distillation as described in Section 2 can be thought of as an instance of the FitNet framework.
+
+
+7
+
+
+80.0
+
+
+77.5
+
+
+75.0
+
+
+72.5
+
+
+70.0
+
+
+67.5
+
+
+65.0
+
+
+62.5
+
+
+60.0
+
+
+90
+
+
+to underperform due to limited class label information.
+
+
+Crucially, the availability of original labels ( _yoriginal_ ) in these subclass datasets allows us to explore
+the "Oracle Clustering" approach. This entails training the student model on the full 10/100-way
+classification task for CIFAR-10/100, respectively, and subsequently treating the problem as binary
+classification during testing. Interestingly, the student models trained utilizing the Oracle Clustering
+approach exhibit the highest performance among all evaluated clustering methods. This approach not
+only outperforms other clustering strategies but also surpasses the performance of the original teacher
+network in certain cases. A t-SNE visualization of the feature embeddings learned by the student
+models, presented in Figure 4, offers a deeper understanding of the underlying factors contributing to
+this observed performance advantage. While Oracle Clustering represents an idealized scenario where
+subclass structure is known a priori and thus impractical for real-world datasets, its consideration
+underscores the potential power of inventing pseudo-subclasses as a methodological approach.
+
+
+We consider several natural ways of inventing pseudo-subclasses by clustering the teacher’s embedding space and we compare them with LELP. In particular, we consider three approaches: (i)
+Agglomerative clustering (complete linkage); (ii) K-means clustering; and (iii) K-means clustering
+after we first have projected the teacher’s embedding space in a two-dimensional space using tSNE (Hinton & Roweis, 2002) as proposed in (Yang et al., 2023). For these methods, we tested both
+hard-label (one-hot vector) and soft-label (weighted by teacher probabilities) representations of the
+subclasses during student training. We observed that soft-labels, even with temperature tuning, did
+not significantly impact performance. Therefore, we present results using only hard-label (one-hot
+vector) subclass representations, which can be found in Table 1 (see also Figure 3). Details on the
+number of clusters chosen can be found in Appendix H.3.
+
+
+Analysis of Table 1 reveals several key findings: (i) LELP consistently outperforms all other clustering
+methods as well as Vanilla KD across all experimental scenarios; (ii) t-SNE & K-means generally
+demonstrate superior performance to Vanilla KD; (iii) Agglomerative clustering and K-means clustering exhibit more varied results in comparison to Vanilla KD. Thus, our findings suggest that the
+generation of pseudo-subclasses via clustering methodologies holds significant potential, however,
+the efficacy of this approach is contingent upon the specific clustering algorithm employed.
+
+
+8
+
+
+85
+
+
+80
+
+
+75
+
+
+70
+
+
+65
+
+
+60
+
+
+Vanilla KD LELP Oracle Clustering
+
+
+Figure 4: The t-SNE visualization of the feature embeddings learned by student models during
+knowledge distillation from a ResNet-92 teacher to a ResNet-56 student on the binarized CIFAR-10
+dataset. The first row depicts embeddings colored according to the two primary classes of the task,
+while the second row uses color to represent the underlying subclasses. Notably, the student model
+trained with the proposed LELP method exhibits a more intricate embedding structure compared to
+the student trained with standard Vanilla KD. Furthermore, the embeddings of the student trained via
+the “ideal” Oracle Clustering approach clearly delineate the underlying subclass structure, providing
+insight into its ability to surpass even the teacher’s performance.
+
+
+Table 1: Comparison of different unsupervised clustering approaches for inventing pseudo-subclasses.
+
+|Teacher Architecture<br>Student Architecture<br>Dataset|ResNet92 ResNet92 MobileNetWD2 ResNet92 ResNet92 MobileNetWD2<br>ResNet56 MobileNet MobileNet ResNet56 MobileNet MobileNet<br>CIFAR-10-bin CIFAR-10-bin CIFAR-10-bin CIFAR-100-bin CIFAR-100-bin CIFAR-100-bin|
+|---|---|
+|Teacher<br>Oracle Clustering|96_._70<br>96_._70<br>93_._90<br>78_._69<br>78_._69<br>72_._63<br>97_._17_ ±_ 0_._02<br>93_._23_ ±_ 0_._28<br>93_._48_ ±_ 0_._05<br>86_._42_ ±_ 0_._11<br>76_._59_ ±_ 0_._60<br>77_._03_ ±_ 0_._1|
+|Vanilla Distillation<br>Agglomerative<br>K-means<br>t-SNE & K-means Yang et al. (2023)<br>LELP (Ours)|95_._75_ ±_ 0_._21<br>92_._91_ ±_ 0_._17<br>92_._79_ ±_ 0_._3<br>72_._87_ ±_ 0_._27<br>72_._16_ ±_ 0_._39<br>71_._45_ ±_ 0_._59<br>95_._48_ ±_ 0_._08<br>92_._16_ ±_ 0_._15<br>92_._41_ ±_ 0_._28<br>76_._84_ ±_ 0_._38<br>68_._05_ ±_ 1_._80<br>66_._97_ ±_ 0_._93<br>95_._76_ ±_ 0_._09<br>92_._53_ ±_ 0_._32<br>92_._05_ ±_ 0_._14<br>77_._03_ ±_ 0_._21<br>69_._4_ ±_ 0_._87<br>68_._97_ ±_ 0_._79<br>95_._92_ ±_ 0_._19<br>92_._97_ ±_ 0_._07<br>91_._20_ ±_ 0_._52<br>77_._39_ ±_ 0_._29<br>72_._19_ ±_ 0_._60<br>68_._15_ ±_ 0_._09<br>**96**_._**71**_ ±_** 0**_._**04**<br>**93**_._**99**_ ±_** 0**_._**17**<br>**93**_._**03**_ ±_** 0**_._**10**<br>**79**_._**91**_ ±_** 0**_._**15**<br>**75**_._**21**_ ±_** 0**_._**12**<br>**72**_._**38**_ ±_** 0**_._**24**|
+
+
+4.3 COMPARISON WITH PREVIOUS APPROACHES
+
+
+In this section we compare LELP with other distillation baselines.
+
+
+4.3.1 WARMUP: BINARY CLASSIFICATION WITH SUBCLASS STRUCTURE
+
+
+As a warmup, we first focus on on binary datasets that have an inherent subclass structure following
+the setting of Section 4.2. The results can be found in Table 3 in Appendix B. Among the baselines,
+Subclass Distillation often performs the best, consistent with the finding that subclass-splitting
+is effective with little label information (Müller et al., 2020). Our method is able to capture the
+learned structure from the teacher subclasses without retraining the more expensive teacher model and
+outperforms all baselines. It’s worth noting that our method achieves the highest average improvement
+over the leading baseline when applied to the CIFAR-100bin dataset, specifically when transferring
+knowledge from a ResNet teacher model to a MobileNet student model. This scenario is particularly
+challenging due to the presence of numerous subclasses and significant differences between the
+teacher and student models in terms of both embedding dimensions and architectures. Interestingly,
+our method even outperforms Oracle Clustering in the CIFAR-10bin ResNet to MobileNet case,
+suggesting that it leverages structure that is learned by the teacher that is not present in the original
+CIFAR-10 labels.
+
+
+4.3.2 FEW-CLASS CLASSIFICATION WITHOUT SUBCLASS STRUCTURE
+
+
+In this section we focus on datasets without subclass structure. We consider classification on six
+language classification tasks: the Large Movie Review dataset (Maas et al., 2011), two GLUE
+datasets: cola and sst2 (Wang et al., 2018), two datasets sampled from the Amazon US reviews
+
+
+9
+
+
+datasets (Datasets, 2020), and a dataset sampled from the Sentiment140 dataset (Go et al., 2009).
+Details are given in Appendix D. Our results are shown in Table 2. Notably, Subclass Distillation is
+typically the best performing baseline. LELP exceeds or performs as well as Subclass Distillation, but
+importantly does not require retraining the teacher, which in the age of ever growing large language
+models, becomes increasingly important. It is also worth noting that for the case of Amazon US
+Reviews-based datasets (among the largest ones considered in our study) where we distill to an
+ALBERT-Base model, LELP significantly outperforms even the teacher model, which contains over
+20x the number of parameters.
+
+
+5 LIMITATIONS
+
+
+While our method is simple and efficient to implement, there may be limitations in using a simple
+linear projection on the teacher final layer embeddings to extract subclass data. Firstly, there is no
+reason to assume that the subclasses should be linearly separable in the teacher embedding, and it
+is likely that more sophisticated unsupervised clustering methods could extract richer information.
+Second, LELP performs when there is limited teacher logit information (such as in binary classification tasks), however larger image datasets with many classes contain sufficient information in
+their teacher logits, obviating the need of subclass splitting methods such as LELP. Indeed, as the
+number of classes increases, we anticipate LELP’s performance to converge with vanilla knowledge
+distillation. (Consequently, we did not present experiments on datasets with a large number of classes,
+such as ImageNet-1k, since LELP is not designed for such scenarios.)
+
+
+6 CONCLUSION
+
+
+In this study, we have presented evidence that the creation of pseudo-subclasses via unsupervised
+clustering of teacher embeddings can improve distillation performance in binary and few-class
+classification tasks, without necessitating the retraining of the teacher model. Through empirical
+evaluation, we observed that linear projections consistently yield high performance, prompting us
+to introduce LELP. The superior performance of the "Oracle Clustering" method, where subclass
+structure is known a priori, suggests that the generation of pseudo-subclasses through clustering
+techniques has substantial promise. Consequently, future research can explore more sophisticated
+methods for extracting teacher embedding information, drawing insights from the expanding body of
+work on Neural Collapse, or investigate strategies for distilling intermediate layer embeddings using
+a similar approach.
+
+
+7 REPRODUCIBILITY STATEMENT
+
+
+Appendix G provides a detailed description of LELP, including pseudo-code. Implementation details
+for all distillation methods employed in this study, including hyperparameter choices, can be found in
+Appendix H. Appendix D offers a comprehensive overview of the NLP datasets used in this research.
+Finally, a Jupyter Notebook containing the LELP implementation and code to reproduce the binary
+classification results with subclass structure is available in the supplementary material.
+
+
+Table 2: Experiments on Classification Tasks **without** Subclass Structure.
+
+|Teacher Architecture<br>Student Architecture<br>Dataset|ALBERT-Large ALBERT-Large ALBERT-Large ALBERT-XXL ALBERT-XXL ALBERT-XXL ALBERT-XXL ALBERT-XL<br>ALBERT-Base ALBERT-Base ALBERT-Base ALBERT-Base MLP/T5(11B) ALBERT-Base MLP/T5(11B) ALBERT-Base<br>LMRD GLUE/cola GLUE/sst2 Am. Reviews Bin Am. Reviews Bin Am. Reviews Am. Reviews Sentiment140 Bin|
+|---|---|
+|Teacher<br>Subclass Distillation Teacher|90_._19<br>81_._87<br>94_._09<br>87_._82<br>87_._82<br>77_._58<br>77_._58<br>87_._29<br>90_._05<br>81_._49<br>93_._11<br>87_._71<br>87_._53<br>78_._45<br>78_._02<br>87_._45|
+|Standard Training<br>Vanilla Distillation<br>Embedding Distillation<br>FitNet<br>VID<br>Relational KD<br>DKD<br>CRD<br>Subclass Distillation<br>LELP (Ours)|87_._68_ ±_ 0_._46<br>79_._13_ ±_ 0_._79<br>91_._32_ ±_ 0_._12<br>85_._95_ ±_ 0_._09<br>87_._83_ ±_ 1_._48<br>74_._51_ ±_ 0_._32<br>66_._44_ ±_ 0_._23<br>85_._82_ ±_ 0_._15<br>88_._70_ ±_ 0_._17<br>80_._50_ ±_ 0_._05<br>92_._39_ ±_ 0_._24<br>86_._76_ ±_ 0_._23<br>88_._60_ ±_ 0_._1<br>75_._13_ ±_ 0_._12<br>72_._30_ ±_ 1_._19<br>85_._95_ ±_ 0_._17<br>88_._98_ ±_ 0_._33<br>80_._66_ ±_ 0_._65<br>92_._62_ ±_ 0_._16<br>86_._43_ ±_ 0_._14<br>89_._84_ ±_ 0_._78<br>75_._28_ ±_ 0_._07<br>72_._64_ ±_ 0_._95<br>85_._78_ ±_ 0_._03<br>88_._75_ ±_ 0_._15<br>80_._82_ ±_ 0_._32<br>92_._43_ ±_ 0_._18<br>86_._53_ ±_ 0_._2<br>91_._40_ ±_ 0_._5<br>75_._54_ ±_ 0_._05<br>75_._78_ ±_ 0_._21<br>86_._07_ ±_ 0_._02<br>88_._26_ ±_ 0_._20<br>79_._83_ ±_ 0_._62<br>91_._47_ ±_ 0_._33<br>83_._74_ ±_ 0_._7<br>89_._23_ ±_ 0_._91<br>67_._48_ ±_ 0_._81<br>63_._98_ ±_ 1_._79<br>85_._83_ ±_ 0_._01<br>88_._90_ ±_ 0_._24<br>81_._24_ ±_ 0_._43<br>92_._73_ ±_ 0_._15<br>86_._36_ ±_ 0_._09<br>89_._52_ ±_ 0_._95<br>75_._12_ ±_ 0_._39<br>74_._72_ ±_ 0_._91<br>86_._12_ ±_ 0_._07<br>88_._70_ ±_ 0_._17<br>80_._50_ ±_ 0_._05<br>92_._39_ ±_ 0_._24<br>86_._76_ ±_ 0_._23<br>88_._6_ ±_ 0_._1<br>72_._41_ ±_ 0_._91<br>72_._40_ ±_ 0_._82<br>85_._95_ ±_ 0_._17<br>89_._19_ ±_ 0_._03<br>80_._79_ ±_ 0_._21<br>92_._27_ ±_ 0_._48<br>85_._79_ ±_ 0_._11<br>88_._12_ ±_ 0_._91<br>74_._7_ ±_ 1_._32<br>61_._08_ ±_ 1_._8<br>84_._60_ ±_ 0_._69<br>**89**_._**24**_ ±_** 0**_._**31**<br>80_._85_ ±_ 0_._1<br>**92**_._**85**_ ±_** 0**_._**15**<br>87_._34_ ±_ 0_._1<br>90_._38_ ±_ 0_._82<br>76_._23_ ±_ 0_._50<br>77_._27_ ±_ 1_._45<br>85_._93_ ±_ 0_._24<br>89_._22_ ±_ 0_._06<br>**81**_._**43**_ ±_** 0**_._**47**<br>92_._81_ ±_ 0_._36<br>**88**_._**49**_ ±_** 0**_._**36**<br>**91**_._**76**_ ±_** 0**_._**17**<br>**78**_._**08**_ ±_** 0**_._**81**<br>**77**_._**48**_ ±_** 0**_._**43**<br>**87**_._**00**_ ±_** 0**_._**25**|
+|Avg. gain over the best baseline<br>Avg. gain over non-subclass baseline<br>Avg. gain over Vanilla KD|_−_0_._02<br>0_._20<br>_−_0_._04<br>1_._15<br>0_._36<br>1_._85<br>0_._21<br>0_._88<br>0_._24<br>0_._20<br>0_._08<br>1_._73<br>0_._36<br>2_._54<br>1_._68<br>0_._88<br>0_._52<br>0_._93<br>0_._42<br>1_._73<br>3_._16<br>2_._95<br>5_._18<br>1_._18|
+
+
+10
+
+
+REFERENCES
+
+
+Martín Abadi, Ashish Agarwal, Paul Barham, Eugene Brevdo, Zhifeng Chen, Craig Citro, Greg S
+Corrado, Andy Davis, Jeffrey Dean, Matthieu Devin, et al. Tensorflow: Large-scale machine
+learning on heterogeneous distributed systems. _arXiv preprint arXiv:1603.04467_, 2016.
+
+
+Sungsoo Ahn, Shell Xu Hu, Andreas Damianou, Neil D. Lawrence, and Zhenwen Dai. Variational
+information distillation for knowledge transfer. In _Proceedings of the IEEE/CVF Conference on_
+_Computer Vision and Pattern Recognition (CVPR)_, June 2019.
+
+
+Eric Arazo, Diego Ortego, Paul Albert, Noel E O’Connor, and Kevin McGuinness. Pseudo-labeling
+and confirmation bias in deep semi-supervised learning. In _2020 International Joint Conference_
+_on Neural Networks (IJCNN)_, pp. 1–8. IEEE, 2020.
+
+
+Cenk Baykal, Khoa Trinh, Fotis Iliopoulos, Gaurav Menghani, and Erik Vee. Robust active distillation.
+_International Conference on Learning Representations (ICLR)_, 2023.
+
+
+Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal,
+Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, et al. Language models are
+few-shot learners. _Advances in neural information processing systems_, 33:1877–1901, 2020.
+
+
+Cristian Bucilua, Rich Caruana, and Alexandru Niculescu-Mizil.ˇ Model compression. In _Proceedings_
+_of the 12th ACM SIGKDD international conference on Knowledge discovery and data mining_, pp.
+535–541, 2006.
+
+
+Ting Chen, Simon Kornblith, Kevin Swersky, Mohammad Norouzi, and Geoffrey E Hinton. Big
+self-supervised models are strong semi-supervised learners. _Advances_ _in_ _neural_ _information_
+_processing systems_, 33:22243–22255, 2020.
+
+
+TensorFlow Datasets. Amazon us reviews dataset, 2020. URL [https://www.tensorflow.](https://www.tensorflow.org/datasets/catalog/amazon_us_reviews)
+[org/datasets/catalog/amazon_us_reviews.](https://www.tensorflow.org/datasets/catalog/amazon_us_reviews)
+
+
+Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep
+bidirectional transformers for language understanding. _arXiv preprint arXiv:1810.04805_, 2018.
+
+
+Cong Fang, Hangfeng He, Qi Long, and Weijie J Su. Exploring deep neural networks via layer-peeled
+model: Minority collapse in imbalanced training. _Proceedings of the National Academy of Sciences_,
+118(43):e2103091118, 2021.
+
+
+Alec Go, Richa Bhayani, and Lei Huang. Twitter sentiment classification using distant supervision.
+_CS224N project report, Stanford_, 1(12):2009, 2009.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image
+recognition. In _Proceedings of the IEEE conference on computer vision and pattern recognition_,
+pp. 770–778, 2016.
+
+
+Geoffrey E Hinton and Sam Roweis. Stochastic neighbor embedding. _Advances in neural information_
+_processing systems_, 15, 2002.
+
+
+Geoffrey E. Hinton, Oriol Vinyals, and Jeffrey Dean. Distilling the knowledge in a neural network.
+_ArXiv_, abs/1503.02531, 2015. [URL https://api.semanticscholar.org/CorpusID:](https://api.semanticscholar.org/CorpusID:7200347)
+[7200347.](https://api.semanticscholar.org/CorpusID:7200347)
+
+
+Fotis Iliopoulos, Vasilis Kontonis, Cenk Baykal, Gaurav Menghani, Khoa Trinh, and Erik Vee.
+Weighted distillation with unlabeled examples. In _NeurIPS_, 2022.
+
+
+Jangho Kim, SeongUk Park, and Nojun Kwak. Paraphrasing complex network: Network compression
+via factor transfer. _Advances in neural information processing systems_, 31, 2018.
+
+
+Vasilis Kontonis, Fotis Iliopoulos, Khoa Trinh, Cenk Baykal, Gaurav Menghani, and Erik Vee. Slam:
+Student-label mixing for distillation with unlabeled examples. In _Thirty-seventh Conference on_
+_Neural Information Processing Systems_, 2023.
+
+
+Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009.
+
+
+11
+
+
+Lu Liu and Robby T Tan. Certainty driven consistency loss on multi-teacher networks for semisupervised learning. _Pattern Recognition_, 120:108140, 2021.
+
+
+Andrew L. Maas, Raymond E. Daly, Peter T. Pham, Dan Huang, Andrew Y. Ng, and Christopher
+Potts. Learning word vectors for sentiment analysis. In _Proceedings of the 49th Annual Meeting_
+_of the Association for Computational Linguistics:_ _Human Language Technologies_, pp. 142–150,
+Portland, Oregon, USA, June 2011. Association for Computational Linguistics. URL [http:](http://www.aclweb.org/anthology/P11-1015)
+[//www.aclweb.org/anthology/P11-1015.](http://www.aclweb.org/anthology/P11-1015)
+
+
+G Menghani. Efficient deep learning: A survey on making deep learning models smaller. _Faster, and_
+_Better. arXiv_, 2106, 2021.
+
+
+Rafael Müller, Simon Kornblith, and Geoffrey Hinton. Subclass distillation. _arXiv_ _preprint_
+_arXiv:2002.03936_, 2020.
+
+
+Jianmo Ni, Gustavo Hernández Ábrego, Noah Constant, Ji Ma, Keith B. Hall, Daniel Cer, and
+Yinfei Yang. Sentence-t5: Scalable sentence encoders from pre-trained text-to-text models. _CoRR_,
+abs/2108.08877, 2021. [URL https://arxiv.org/abs/2108.08877.](https://arxiv.org/abs/2108.08877)
+
+
+Vardan Papyan, XY Han, and David L Donoho. Prevalence of neural collapse during the terminal
+phase of deep learning training. _Proceedings_ _of_ _the_ _National_ _Academy_ _of_ _Sciences_, 117(40):
+24652–24663, 2020.
+
+
+Wonpyo Park, Dongju Kim, Yan Lu, and Minsu Cho. Relational knowledge distillation. In _Proceed-_
+_ings of the IEEE/CVF conference on computer vision and pattern recognition_, pp. 3967–3976,
+2019.
+
+
+Nikolaos Passalis and Anastasios Tefas. Unsupervised knowledge transfer using similarity embeddings. _IEEE transactions on neural networks and learning systems_, 30(3):946–950, 2018.
+
+
+Hieu Pham, Zihang Dai, Qizhe Xie, and Quoc V Le. Meta pseudo labels. In _Proceedings of the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 11557–11568, 2021.
+
+
+Adriana Romero, Nicolas Ballas, Samira Ebrahimi Kahou, Antoine Chassang, Carlo Gatta, and
+Yoshua Bengio. Fitnets: Hints for thin deep nets. _arXiv preprint arXiv:1412.6550_, 2014.
+
+
+Karen Simonyan and Andrew Zisserman. Very deep convolutional networks for large-scale image
+recognition. _arXiv preprint arXiv:1409.1556_, 2014.
+
+
+Samuel Stanton, Pavel Izmailov, Polina Kirichenko, Alexander A Alemi, and Andrew G Wilson.
+Does knowledge distillation really work? _Advances in Neural Information Processing Systems_, 34:
+6906–6919, 2021.
+
+
+Yonglong Tian, Dilip Krishnan, and Phillip Isola. Contrastive representation distillation. _arXiv_
+_preprint arXiv:1910.10699_, 2019.
+
+
+Alex Wang, Amanpreet Singh, Julian Michael, Felix Hill, Omer Levy, and Samuel R Bowman. Glue:
+A multi-task benchmark and analysis platform for natural language understanding. _arXiv preprint_
+_arXiv:1804.07461_, 2018.
+
+
+Qizhe Xie, Minh-Thang Luong, Eduard Hovy, and Quoc V Le. Self-training with noisy student
+improves imagenet classification. In _Proceedings of the IEEE/CVF conference on computer vision_
+_and pattern recognition_, pp. 10687–10698, 2020.
+
+
+Yongyi Yang, Jacob Steinhardt, and Wei Hu. Are neurons actually collapsed? on the fine-grained
+structure in neural representations. In _International Conference on Machine Learning_, pp. 39453–
+39487. PMLR, 2023.
+
+
+Borui Zhao, Quan Cui, Renjie Song, Yiyu Qiu, and Jiajun Liang. Decoupled knowledge distillation.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_, pp.
+11953–11962, 2022.
+
+
+12
+
+
+A BROADER IMPACT STATEMENT
+
+
+Due to its popularity and the fact that deep learning is widely used in fields from NLP to robotics to
+autonomous vehicles, knowledge distillation, as a deep learning method, carries with it the potential
+for harmful societal impact. However, we feel that none of these impacts must be specifically
+highlighted here.
+
+
+B BINARY CLASSIFICATION WITH SUBCLASS STRUCTURE: EXPERIMENTAL
+RESULTS
+
+
+Here we present the table with the experimental results corresponding to Sections 4.2 and 4.3.1.
+
+
+Table 3: Experiments on Binary Classification tasks **with** Subclass Structure.
+
+|Teacher Architecture<br>Student Architecture<br>Dataset|ResNet92 ResNet92 MobileNetWD2 ResNet92 ResNet92 MobileNetWD2<br>ResNet56 MobileNet MobileNet ResNet56 MobileNet MobileNet<br>CIFAR-10-bin CIFAR-10-bin CIFAR-10-bin CIFAR-100-bin CIFAR-100-bin CIFAR-100-bin|
+|---|---|
+|Teacher<br>Subclass Distillation Teacher<br>Oracle Clustering|96_._70<br>96_._70<br>93_._90<br>78_._69<br>78_._69<br>72_._63<br>96_._12<br>95_._99<br>93_._82<br>77_._52<br>75_._87<br>71_._53<br>97_._17_ ±_ 0_._02<br>93_._48_ ±_ 0_._05<br>93_._48_ ±_ 0_._05<br>86_._59_ ±_ 0_._05<br>86_._38_ ±_ 0_._06<br>86_._38_ ±_ 0_._06|
+|Standard Training<br>Vanilla Distillation<br>Embedding Distillation<br>FitNet<br>VID<br>Relational KD<br>DKD<br>CRD<br>Subclass Distillation<br>Agglomerative<br>K-means<br>t-SNE & K-means<br>LELP (Ours)|95_._43_ ±_ 0_._07<br>92_._04_ ±_ 0_._26<br>92_._13_ ±_ 0_._17<br>74_._80_ ±_ 0_._52<br>69_._13_ ±_ 0_._32<br>68_._84_ ±_ 0_._97<br>95_._75_ ±_ 0_._21<br>92_._91_ ±_ 0_._17<br>92_._79_ ±_ 0_._3<br>72_._87_ ±_ 0_._27<br>72_._16_ ±_ 0_._39<br>71_._45_ ±_ 0_._59<br>96_._48_ ±_ 0_._1<br>93_._05_ ±_ 0_._13<br>92_._57_ ±_ 0_._06<br>78_._77_ ±_ 0_._35<br>72_._24_ ±_ 0_._20<br>71_._99_ ±_ 0_._30<br>96_._53_ ±_ 0_._05<br>93_._31_ ±_ 0_._11<br>92_._72_ ±_ 0_._1<br>79_._14_ ±_ 0_._18<br>71_._76_ ±_ 0_._26<br>68_._79_ ±_ 2_._82<br>96_._13_ ±_ 0_._16<br>89_._95_ ±_ 1_._34<br>84_._09_ ±_ 3_._38<br>75_._69_ ±_ 0_._55<br>71_._99_ ±_ 0_._18<br>61_._15_ ±_ 0_._40<br>96_._22_ ±_ 0_._09<br>92_._98_ ±_ 0_._21<br>92_._81_ ±_ 0_._14<br>78_._57_ ±_ 0_._64<br>72_._53_ ±_ 0_._23<br>71_._66_ ±_ 0_._1<br>95_._75_ ±_ 0_._21<br>92_._91_ ±_ 0_._17<br>92_._79_ ±_ 0_._3<br>72_._87_ ±_ 0_._27<br>72_._16_ ±_ 0_._39<br>71_._45_ ±_ 0_._59<br>95_._83_ ±_ 0_._25<br>92_._47_ ±_ 0_._13<br>92_._34_ ±_ 0_._18<br>73_._01_ ±_ 0_._21<br>72_._15_ ±_ 0_._63<br>69_._53_ ±_ 1_._37<br>96_._44_ ±_ 0_._06<br>93_._76_ ±_ 0_._06<br>92_._77_ ±_ 0_._15<br>79_._23_ ±_ 0_._17<br>73_._90_ ±_ 0_._18<br>70_._60_ ±_ 0_._27<br>95_._48_ ±_ 0_._02<br>92_._16_ ±_ 0_._15<br>92_._41_ ±_ 0_._28<br>76_._84_ ±_ 0_._38<br>68_._05_ ±_ 1_._80<br>66_._97_ ±_ 0_._93<br>95_._76_ ±_ 0_._09<br>92_._53_ ±_ 0_._32<br>92_._05_ ±_ 0_._14<br>77_._03_ ±_ 0_._21<br>69_._4_ ±_ 0_._87<br>68_._97_ ±_ 0_._09<br>95_._92_ ±_ 0_._19<br>92_._97_ ±_ 0_._07<br>91_._20_ ±_ 0_._52<br>77_._39_ ±_ 0_._29<br>72_._19_ ±_ 0_._60<br>68_._15_ ±_ 0_._09<br>**96**_._**71**_ ±_** 0**_._**04**<br>**93**_._**99**_ ±_** 0**_._**17**<br>**93**_._**03**_ ±_** 0**_._**1**<br>**79**_._**91**_ ±_** 0**_._**15**<br>**75**_._**21**_ ±_** 0**_._**12**<br>**72**_._**38**_ ±_** 0**_._**24**|
+|Avg. gain over the best baseline<br>Avg. gain over non-subclass baseline<br>Avg. gain over Vanilla KD|0_._23<br>0_._23<br>0_._22<br>0_._68<br>1_._31<br>0_._39<br>0_._23<br>0_._68<br>0_._22<br>0_._77<br>2_._68<br>0_._39<br>0_._96<br>1_._08<br>0_._24<br>7_._04<br>3_._05<br>0_._93|
+
+
+C ABLATIONS
+
+
+One of the key design choices in LELP is to use the top PCA directions to construct the pseudosubclasses. This is based on the intuition that axis which contain the most variation also contain the
+most information for distillation. Here we test this assumption by comparing PCA projections against
+three baselines. The first baseline is random projections ( **Rand** ), in which we choose _S_ random
+orthogonal directions to use as our subclass direction. The second baseline is raw PCA, which is
+using the top-K PCA directions, without the additional projection and random rotation applied, as we
+discussed in Section 3. This corresponds to using vectors _vc,s_ instead of ˜ _vc,s_ . Our final baseline is
+the “Identity" projection, which is the same as using all of the teacher embeddings as subclasses. We
+consider the binarized CIFAR-100 task, and sweep _S_ from 2 _−_ 256, the embedding dimension of the
+teacher _D_ = 256. We distill from ResNet92 to ResNet56, with the subclass temperature parameter _β_
+ranging from 2 _[−]_ [5] _−_ 2 [0], with results shown in Figure 5 (top row), averaged over three runs. For a more
+clear comparison to the random projection baseline, we also show the “advantange” over random
+projections in fig. 5 (bottom row), made by subtracting the accuracy by the equivalent obtained by
+random projects with the same _S_ and _β_ . Figure 5 shows the following general trends:
+
+
+**Larger** _S_ **generally improves performance for Random Projections and LELP, and can harm**
+**PCA** . For Rand and LELP, performance seems mostly monotonically increasing with larger _S_ . For
+LELP the benefit plateaus around _S_ = 32, while for Rand, the performance slowly increases until
+_S_ = 256. This suggests that the PCA step used in LELP obtains the salient information from
+teacher embeddings in fewer _S_ than Rand. For PCA without the extra steps used in LELP, large
+subclasses with higher temperatures significantly degrades performance, while adding rotation makes
+the performance of PCA stable. We conjecture that this is due to the first few PCA directions
+containing most of the variation and the remaining direction behaving as random noise.
+
+
+**LELP consistently outperforms Random Projections** . We see in fig. 5, when compared to random
+projections, LELP almost always has a non-trivial advantage. The performance of Identity projections
+
+
+13
+
+
+Figure 5: **Top row** : Ablations of choice of Projection, number of subclasses _S_ and subclass tempereature _β_ on CIFAR-100bin. The set of plots displays raw CIFAR-100bin accuracy. **Bottom row** : The
+second set of plots demonstrates the accuracy gain achieved over random projections (using the same
+hyperparameter choice). Values over 0 indicate an advantage over random projections, which we see
+consistently with LELP.
+
+
+is more inconsistent and it can be worse than random projections, depending on _β_ . For larger number
+of subclasses, the advantage of LELP over random projections diminishes, as both methods now
+contain the majority of information from the entire embedding space.
+
+
+D DETAILED DESCRIPTION OF THE NLP DATASETS WE USED.
+
+
+The Corpus of Linguistic Acceptability (GLUE/cola) is a binary classification task which consists
+of English acceptability judgments drawn from books and journal articles on linguistic theory.
+Each example is a sequence of words annotated with whether it is a grammatical English sentence.
+GLUE/cola contains 8 _,_ 551 examples for training and 1 _,_ 063 examples for testing.
+
+
+The Large Movie Review dataset (LMRD) is a dataset for binary sentiment classification containing
+25 _,_ 000 movie reviews for training, and 25 _,_ 000 for testing.
+
+
+The Stanford Sentiment Treebank (GLUE/sst2) consists of sentences from movie reviews and human
+annotations of their sentiment. The task is to predict the sentiment (positive or negative) of a given
+sentence. It contains 67 _,_ 349 examples for training and 1 _,_ 821 examples for testing.
+
+
+The Amazon US reviews datasets comprise a vast collection of over a hundred million customer
+reviews and ratings (ranging from 1 to 5 stars). For our study, we selected a subset of these reviews
+across various products and devised two classification tasks: a 5-classes classification task and a
+binary classification task, which we describe below.
+
+
+    - “Amazon Reviews" contains 500 _,_ 000 examples for training and 10 _,_ 000 examples for testing.
+The task is to predict the star rating of the given review (ranging from 1 to 5). Both the
+training and test sets are balanced in terms of the number of examples per rating.
+
+
+    - “Amazon Reviews Bin" is a subset of “Amazon Reviews”, where we exclude all 3-star
+reviews. It consists of 400 _,_ 000 training and 8 _,_ 000 testing examples. The objective is to
+determine whether a review is “polarized” (rated either 1 or 5 stars) or “mild” (2 or 4 stars).
+
+
+14
+
+
+For sampling the examples Amazon Reviews dataset we use the following process. We first first
+sequentially parse and concatenate the first 200k examples of the following datasets: “Office Products”, “Video Games”, “Video”, “Toys”, “Tools”, “Sports”, “Jewelry”, “Digital Music Purchase”,
+“Mobile Apps”, “Video DVD”, “Watches” (in this order). We then sequentially parse the resulting
+collection of examples and we add examples to the training and testing datasets. In particular, for
+each class (1-5 stars), we add the first 100k examples we encounter to the training dataset, and the
+next 2k examples we encounter to the test dataset.
+
+
+The Sentiment140 dataset contains 1 _,_ 600 _,_ 000 tweets extracted using the twitter api, which have been
+annotated either as positive or negative. We sample 1 _,_ 590 _,_ 000 of these tweets to create a balanced
+training set, and we use the rest 10 _,_ 000 as the test set (also balanced). Note that the Sentiment140
+datasets also comes with a validation set of 498 examples, part of which is annotated as “Neutral”.
+We are not making use of the latter validation set which is why in our tables we refer to the dataset
+we use (described earlier) as “Sentiment140 Bin”.
+
+
+E MULTICLASS CLASSIFICATION
+
+
+While our primary focus lies on classification tasks with few classes, here we present results demonstrating the applicability of LELP to multiclass classification tasks with a moderate number of
+classes. To this end, we evaluate LELP on the CIFAR-10 and CIFAR-100 datasets. It is important
+to note that our objective is not to establish state-of-the-art performance in vision tasks but rather
+to showcase the versatility of our approach. We selected CIFAR-10 and CIFAR-100 as our datasets
+because they are widely recognized benchmarks for 10-class and 100-class classification, respectively.
+We intentionally disregarded image-specific techniques, such as data augmentation, to focus on
+a more general comparison. Consequently, we did not include methods like CRD and DKD that
+are specifically tailored to image data. Our results indicate that LELP can effectively handle tasks
+with a moderate number of classes and outperforms modality-independent knowledge distillation
+methods, particularly in scenarios where there is a significant disparity between the teacher and
+student architectures. As the number of classes increases, we anticipate LELP’s performance to
+converge with vanilla knowledge distillation. Consequently, we did not conduct experiments on
+datasets with a large number of classes, such as ImageNet-1k.
+
+
+Our results are shown in Table 4, where we distill a ResNet92 to a MobileNet. In this comparison,
+LELP significantly outperforms baselines, seeing a 1.1% improvement and 2.31% improvement
+over the next best baseline in CIFAR-10 and CIFAR-100, respectively. This validates the hypothesis
+that providing subclass information in the form of a classification loss avoids the pitfalls that
+methods which directly match embeddings have when students and teachers differ. When there is
+either a large performance or architecture gap, embeddings do not transfer readily. Appendix F.1
+contains additional experiments in semi-supervised knowledge distillation, where we find that LELP
+consistently outperforms existing baselines without modification in the semi-supervised setting.
+
+
+Table 4: Experiments on **Multi-class Classification tasks** .
+
+|Teacher Architecture<br>Student Architecture<br>Dataset|ResNet92 ResNet92<br>MobileNet MobileNet<br>CIFAR-10 CIFAR-100|
+|---|---|
+|Teacher<br>Subclass Distillation Teacher|94_._94<br>75_._55<br>93_._49<br>70_._23|
+|Standard Training<br>Vanilla Distillation<br>Embedding Distillation<br>FitNet<br>VID<br>Relational KD<br>Subclass Distillation<br>LELP (Ours)|84_._86_ ±_ 0_._11<br>53_._15_ ±_ 0_._21<br>86_._45_ ±_ 0_._21<br>56_._20_ ±_ 0_._11<br>86_._82_ ±_ 0_._16<br>57_._27_ ±_ 0_._4<br>85_._70_ ±_ 0_._36<br>38_._23_ ±_ 1_._12<br>76_._36_ ±_ 1_._56<br>27_._08_ ±_ 1_._08<br>86_._92_ ±_ 0_._34<br>59_._67_ ±_ 0_._58<br>86_._55_ ±_ 0_._28<br>54_._45_ ±_ 1_._25<br>**88**_._**02**_ ±_** 0**_._**19**<br>**61**_._**98**_ ±_** 0**_._**08**|
+|Avg. gain over the best baseline<br>Avg. gain over non-subclass baseline<br>Avg. gain over Vanilla KD|1_._1<br>2_._31<br>1_._1<br>2_._31<br>1_._57<br>5_._78|
+
+
+15
+
+
+Figure 6: Experiments on the binary and standard CIFAR-100 datasets using ResNet92 as the
+teacher and ResNet56 and MobileNet, respectively, as the student. **Left:** Distillation Dataset Size vs.
+Accuracy on binary CIFAR-100. LELP achieves the same performance as standard training while
+using only 25% of the data. **Middle:** Student’s validation accuracy over the training trajectory. LELP
+offers both performance gains over Vanilla KD and a faster convergence rate. **Right:** Illustration
+of the performance of LELP in a semi-supervised setting. The x-axis shows the initial quantity
+of labeled examples used to train the teacher model, which then generates pseudo-labels for the
+remaining (unlabeled) portion of the CIFAR-100 dataset. See Appendix F.1 for more details.
+
+
+F DATA EFFICIENCY, TRAINING SPEED AND ROBUSTNESS
+
+
+As we demonstrate in Figure 6, LELP comes with several desirable properties. We consider the
+binary and standard CIFAR-100 datasets, ResNet92 as the teacher and ResNet56 and MobileNet,
+respectively, as the student. As we have already discussed in Appendix E, we selected CIFAR-10
+and CIFAR-100 as our datasets because they are widely recognized benchmarks for 10-class and
+100-class classification, respectively, and we intentionally disregarded methods that are tailored to
+vision-tasks.
+
+
+We observe the following. First, the teacher conveys a high amount of information per example, in
+the sense that LELP is able to achieve the same performance as standard training using only a small
+fraction of the data. Second, LELP both outperforms and converges faster than Vanilla KD. Finally,
+in Appendix F.1 we show that LELP can offer significant gains in the semi-supervised setting, where
+the teacher is likely to generate inaccurate pseudo-labels.
+
+
+F.1 SEMI-SUPERVISED KD EXPERIMENTS
+
+
+Table 5: Experiments in the **semi-supervised KD setting.**
+
+|Teacher Architecture<br>Student Architecture<br>Dataset<br>Number of Labeled Examples|ResNet92 ResNet92 ResNet92<br>MobileNet MobileNet MobileNet<br>CIFAR-100 CIFAR-100 CIFAR-100<br>10000 15000 20000|
+|---|---|
+|Teacher<br>Subclass Distillation Teacher|51_._08<br>59_._43<br>64_._16<br>53_._05<br>60_._22<br>63_._93|
+|Standard Training<br>Vanilla Distillation<br>Embedding Distillation<br>FitNet<br>VID<br>Relational KD<br>Subclass Distillation<br>LELP (Ours)|44_._49_ ±_ 0_._82<br>48_._31_ ±_ 0_._90<br>50_._92_ ±_ 0_._04<br>44_._49_ ±_ 0_._82<br>48_._31_ ±_ 0_._90<br>50_._92_ ±_ 0_._04<br>42_._46_ ±_ 0_._47<br>48_._01_ ±_ 0_._35<br>51_._60_ ±_ 0_._38<br>33_._0_ ±_ 0_._21<br>38_._85_ ±_ 0_._31<br>38_._43_ ±_ 0_._29<br>26_._97_ ±_ 2_._53<br>27_._16_ ±_ 1_._78<br>28_._91_ ±_ 3_._38<br>47_._29_ ±_ 0_._38<br>51_._94_ ±_ 1_._06<br>55_._22_ ±_ 0_._76<br>43_._77_ ±_ 0_._38<br>47_._53_ ±_ 1_._17<br>49_._64_ ±_ 0_._38<br>**49**_._**95**_ ±_** 0**_._**22**<br>**55**_._**07**_ ±_** 0**_._**09**<br>**57**_._**90**_ ±_** 0**_._**16**|
+|Avg. gain over the best baseline<br>Avg. gain over non-subclass baseline<br>Avg. gain over Vanilla KD|2_._66<br>3_._13<br>2_._68<br>2_._66<br>3_._13<br>2_._68<br>5_._46<br>6_._76<br>6_._98|
+
+
+Semi-supervised KD, also known as KD with unlabeled examples, is a potent training paradigm for
+generating compact and efficient student models in scenarios where labeled data is scarce but a large
+pool of unlabeled data exists. This approach employs a high-capacity teacher model to generate (soft)
+pseudo-labels for the unlabeled dataset, which are subsequently utilized to train the student model.
+
+
+Despite its widespread success in practice, the effectiveness of this powerful approach generally
+depends on the quality of the pseudo-labels generated by the teacher model. Indeed, training the
+student model on noisy pseudo-labels often leads to significant degradation of its generalization
+performance, and this is a well-known phenomenon that has been observed and studied in a plethora
+
+
+16
+
+
+of papers in the literature, e.g., Arazo et al. (2020); Liu & Tan (2021); Pham et al. (2021); Stanton
+et al. (2021); Xie et al. (2020); Baykal et al. (2023); Iliopoulos et al. (2022); Kontonis et al. (2023).
+Additionally, enforcing more teacher-student consistency, e.g., by blindly mimicking the teacher’s
+embeddings, can even hinder performance when the teacher’s output contains high noise (i.e., one
+may get worse performance than simply applying Vanilla KD). Finally, in this setting, often times the
+expense of using the teacher model to generate pseudo-labels can be a significant limitation. This
+becomes particularly problematic for methods like Subclass Distillation, which necessitate training
+multiple teacher models and generating pseudo-labels with each one of them, further compounding
+the cost.
+
+
+In Table 5 (see also the rightmost plot in Figure 6) we study such a semi-supervised setting in the
+case of CIFAR-100, with the teacher model being a ResNet92 and student model being a MobileNet.
+(We choose this setting because it is the task where the teacher models will be the most noisy, and
+also the teacher and student models have different architectures.)
+
+
+We consider the cases where the teacher model has available 10000, 15000, 20000 labeled examples
+for training, and it is then used to pseudo-label the rest of the CIFAR-100 dataset. (Note that the
+amount of available labeled examples for training the teacher model directly affects its accuracy.)
+Finally, the student-model is trained on both the available labeled data (which are also soft-labeled by
+the teacher model) and the teacher’s pseudo-labels on the unlabeled data.
+
+
+We observe that LELP provides significant gains in this setting. Also notably, for the 10000 and the
+15000 case, the only baseline that outperforms Vanilla KD is Relational KD — showing that, while
+the teacher’s embeddings in a noisy teacher setting may contain valuable information, extracting it
+effectively is a complex challenge — especially when the teacher and student come from different
+architecture families.
+
+
+G DETAILED DESCRIPTION OF LELP
+
+
+Here we provide further details and pseudo-code for the steps detailed in Section 3.
+
+
+G.1 STEP 1: PCA ON TEACHER EMBEDDINGS
+
+
+**Algorithm 1** Learning Embedding Linear Projections (LELP) - Step 1 - Computing Subclass Direction
+
+
+**Input:** Teacher model feature extractor _h_ [Teacher] ( _x_ ), teacher final layer weight _WT_ _∈_ _R_ _[D][×][C]_,
+dataset with class labels _{xi, yi}i≤N_, with class counts _Nc_
+**Output:** _S × C_ class vectors _V_ [˜] = _{v_ ˜ _c,s}_ and _C_ class means _M_ = _{µc}_
+
+
+Instantiate set of ˜ _vc,s_ as empty set _V_ [˜] _←{}_
+Compute QR Decomposition of _WT_, _W_ [˜] _T_ _←_ QR( _WT_ ) with Gram-Schmidt Algorithm
+**for** _c_ = 1 **to** _C_ **do**
+
+Get set of all inputs _X_ _[c]_ = _{xi}_ belonging to class _c_
+Compute matrix of teacher features for class _c_, _H_ _[c]_ _∈_ _R_ _[N][c][×][D]_, s.t. _Hi_ _[c]_ [=] _[ h]_ [Teacher][(] _[X]_ _i_ _[c]_ [)]
+Project _H_ _[c]_ onto null space of _WT_ : _H_ [˜] _[c]_ _←_ _H_ _[c]_ _−_ _H_ _[c]_ _W_ [˜] _T_
+Compute top- _S_ PCA on _H_ [˜] _[c]_ to obtain _{vc,s}_ for 1 _≤_ _s ≤_ _S_
+Produce random orthogonal matrix _Q_ _[c]_ _∈_ _R_ _[S][×][S]_
+Set ˜ _vc,s_ _←_ _Q_ _[c]_ _vc,s_ for 1 _≤_ _s ≤_ _S_
+Compute _{σc,s}_, as _σc,s_ [2] [=] _N_ 1 _c_ _[||][H]_ [ ˜] _[c][v]_ [˜] _[c,s][||]_ 2 [2]
+Normalize ˜ _vc,s_ _←_ _maxv_ ˜ _sc,s{σc,s}_ [(Normalizing][ ˜] _[v][c,s]_ [)]
+
+Add _{v_ ˜ _c,s}_ to _V_ [˜] : _V_ [˜] _←_ _V_ [˜] _∪{v_ ˜ _c,s}_
+**end for**
+**Return:** _V_ [˜]
+
+
+This corresponds to section 3.1, and the main goal of this step is to obtain _S × C_ vectors ˜ _vs,c_ _∈_ _R_ _[D]_
+to create subclasses from, with _D_ the teacher embedding dimension. The pseudocode is provided in
+algorithm 1. Note that the version provided in algorithm 1 works with the full teacher embedding
+
+
+17
+
+
+matrix for a class _H_ _[c]_ _∈_ _R_ _[N][c][×][D]_, but it is straightforward to adapt this to a streaming approach that
+does not require storing all the embeddings at the same time by keeping running statistics. Note
+we additionally perform a small normalization step, so that the maximum variance along any of the
+teacher projection vectors _{v_ ˜ _c,s}_ is 1 for any class.
+
+
+G.2 STEP 2/3: KNOWLEDGE DISTILLATION WITH SUBCLASSES
+
+
+**Algorithm 2** Subclass Splitting from teacher embedding, subsplit( _h,_ _V, M, W, β, τ_ [˜] )
+
+
+**Input:** Teacher embedding _h_
+_C × S_ subclass projection vectors _V_ [˜] = _{v_ ˜ _c,s}_
+_C_ class means _M_ = _{µc}_
+Teacher final layer classification weights _W_ = [ _w_ 1 _. . . wC_ ] _∈_ _R_ _[D][×][C]_ and biases [ _b_ 1 _. . . bC_ ]
+Subclass Temperature _β_
+Student-Teacher Temperature _τ_
+**Output:** _C × S_ Teacher subclass probabilities: _p_ [Teacher] _c,s_
+
+
+Compute teacher coarse label logits: _zc_ _←_ _wc_ [⊺] _[h][ −]_ _[b][c]_
+_e_ _[zc/τ]_
+Compute teacher _C_ coarse label probabilities with temperature _τ_ : _p_ [Teacher] _c_ _←_  - _C_ [(] _[τ]_
+_j_ =1 _[e][zc/τ]_
+
+-tempered Softmax)
+
+**for** _c_ = 1 **to** _C_ **do**
+
+Compute _S_ subclass logits: _zc,s_ _←_ _v_ ˜ _c,s_ [⊺] [(] _[h][ −]_ _[µ][c]_ [)]
+
+_e_ _[zc,s/β]_
+Compute subclass probabilities for class c: _p_ [Teacher] _c,s_ _←_ _p_ [Teacher] _c_ _∗_   - _S_ _[.]_ [(] _[β]_ [-tempered]
+_j_ =1 _[e][zc,j /β]_
+
+softmax over subclass logits)
+**end for**
+**Return:** _p_ [Teacher] _c,s_
+
+
+**Algorithm 3** Learning Embedding Linear Projections (LELP) - Knowledge Distillation with Subclasses
+
+**Input:** Teacher model feature extractor _h_ [Teacher] ( _x_ )
+_C × S_ subclass projection vectors _V_ [˜] = _{v_ ˜ _c,s}_
+_C_ class mean vectors _M_ = _{µc}_
+Teacher final layer classification weights _W_ = [ _w_ 1 _. . . wC_ ] _∈_ _R_ _[D][×][C]_ and biases [ _b_ 1 _. . . bC_ ]
+Subclass Temperature _β_
+Student-Teacher Temperature _τ_
+_C × S_ class student model _fθ_ [Student] _S_ ( _x_ ) and weights _θS_
+Dataset _p_ ( _x_ )
+Learning rate _η_
+**Output:** Trained Student Model _θ_
+**while** Not converged **do**
+
+Sample _x ∼_ _p_ ( _x_ )
+Compute teacher embedding _h_ [Teacher] _←_ _h_ [Teacher] ( _x_ )
+Compute teacher subclass probabilities _p_ [Teacher] _s,c_ _←_ subsplit( _h,_ _V, M, W, β, τ_ [˜] )
+Compute _C × S_ student logits: _zc,s_ [Student] _←_ _fθ_ [Student] _S_ ( _x_ )
+
+_e_ _[z]_ _c,s_ [Student] _/τ_
+Compute _C × S_ tempered student probabilities: _p_ [Student] _c,s_ _←_   - _C_   - _S_ _zi,j_ [Student] _/τ_
+_i_ =1 _j_ =1 _[e]_
+
+Compute LELP loss _LLELP_ = _τ_ [2][ �] _[C]_ _c_ =1   - _Ss_ =1 _[p]_ _c,s_ [Teacher] log _pp_ [Teacher] _c,s_ [Student] _c,s_ (Standard KL Divergence)
+
+Update student parameters: _θS_ _←_ _θS_ _−_ _η_ _[∂][L]_ _∂θ_ _[LELP]_ _S_
+
+**end while**
+**Return:** _θS_
+
+
+This corresponds to Section 3.2 and Section 3.3. In Algorithm 2 we describe how to generate the
+pseudo-subclasses from a given teacher embedding, _h_ . This subprocess is used in Algorithm 3 for
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+knowledge distillation. In Algorithm 3 we describe the pure-knowledge distillation setting (i.e. with
+_α_ = 0 in eq. (1)), meaning we are not using the hard labels at all, as we did in the main text, but it is
+straightforward to combine with with the standard cross-entropy loss with hard labels using eq. (1).
+
+
+H IMPLEMENTATION DETAILS
+
+
+We implemented all algorithms in Python and used the TensorFlow deep learning library Abadi et al.
+(2016). We ran our experiments on 64 Cloud TPU v4s each with two cores.
+
+
+For a fair comparison, we use the teacher’s last-layer embeddings throughout the distillation process
+across all relevant baselines (Embedding Distillation, FitNet, VID, Relational KD, CRD). Furthermore, to handle mismatches in embedding dimensions between teacher and student, we introduce a
+trainable fully connected layer as a learnable projection for all these methods. (For Vision datasets,
+we have experimented with convolutional layers as suggested in Romero et al. (2014), and while these
+do reduce the size of the student model, they do not significantly impact its performance compared to
+the fully connected ones.)
+
+
+For FitNet and CRD, in any given experiment, we pre-train the learnable projection once. This
+same pre-trained projection is then utilized consistently across all three trials corresponding to the
+experiment. The optimizer used for the pre-training of the learnable projection is Adam with initial
+learning rate 10 _[−]_ [3] and 10 _[−]_ [6] for Vision (200 epochs training) and Natural Language (40 epochs
+training) datasets, respectively.
+
+
+We implement VID by using the loss function as described in (5) of Ahn et al. (2019) where the
+squared difference in the second term is taken over the teacher’s and student’s embeddings (using a
+learnable projection if there is a mismatch in their dimensions).
+
+
+We implement Relational KD using the loss function as described in (9) and (10) of Park et al.
+(2019).
+
+
+For CRD we implement the objective described in (17) of Tian et al. (2019) and perform grid search
+over _{_ 0 _._ 1 _,_ 1 _._ 0 _,_ 5 _._ 0 _,_ 10 _._ 0 _,_ 100 _._ 0 _}_ for its coefficient. We consider the standard negative sampling policy
+where a pair of examples ( _x, y_ ) is considered “negative" if _x_ = _y_, i.e., given a batch the number
+of positive pairs is equal to the batch size. (Note that in Vision classification tasks the standard
+approach would be to generate variations of every image (e.g, via rotations), and then also consider as
+positive any pair of examples (original or modified) that come from the same source. However, data
+augmentation of Natural Language examples is not straightforward and this impairs the performance
+of the method — this is the main point we are trying to convey here.)
+
+
+For DKD we implement equations (1), (2) and (7) in Zhao et al. (2022). We set the ’target’ hyperparameter _α_ equal to 1 and perform grid search for the “non-target" hyperparameter _β_ over
+_{_ 1 _,_ 2 _,_ 4 _,_ 6 _,_ 8 _,_ 10 _}_ (following examples in Zhao et al. (2022)).
+
+
+The hyperparameters chosen for each method and dataset can be found in Appendix H.3.
+
+
+H.1 VISION DATASETS
+
+
+In every experiment, both the teacher and student models are trained for 200 epochs.
+
+
+For training ResNet-92 we use the SGD optimizer with initial learning rate 10 _[−]_ [3], non-Nesterov
+momentum value equal to 0 _._ 9, cosine annealing learning rate schedule (minimum learning rate value
+is set to 10 _[−]_ [6] ), and batch size 256. For training ResNet-56 we use the SGD optimizer with initial
+learning rate 5 _·_ 10 _[−]_ [2], Nesterov momentum value equal to 0 _._ 9, cosine annealing learning rate schedule
+(minimum learning rate value is set to 10 _[−]_ [6] ) and batch size 256. (This is a training schedule similar
+to the one described in Stanton et al. (2021)).
+
+
+For training MobileNet (both the larger teacher-model and the student-model) we use the Adam
+optimizer with initial learning rate lr = 0 _._ 001 and batch size 128. We then proceed according to the
+
+
+19
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+following learning rate schedule for 200 epochs (see, e.g., He et al. (2016)):
+
+
+|Dataset|Temperature Embeddings-loss coefficient|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin<br>CIFAR-10<br>CIFAR-100<br>LMRD<br>GLUE/cola<br>GLUE/sst<br>Amazon Reviews Bin<br>Amazon Reviews<br>Sentiment140 Bin|<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{_0_._1_, 1.0,_ 5_._0_,_ 10_._0_,_** 100.0**_,_ 1000_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{0.1,_ 1_._0_,_ 5_._0_,_ 10_._0_,_** 100.0**_,_ 1000_._0_}_<br>_{_1_._0_,_** 2.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{0.1,_ 1_._0_,_ 5_._0_,_ 10_._0_,_** 100.0**_,_ 1000_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{0.1,_** 1.0**_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_** 4.0**_,_ 5_._0_,_ 10_._0_}_<br>_{_**0.1**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_** 2.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_0_._1_,_** 1.0**_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_ 2_._0_,_** 3.0**_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**0.1**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_**_ 4.0_**_,_ 5_._0_,_ 10_._0_}_<br>_{_**_0.1_**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_<br>_{_**_1.0_**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{0.1,_ 1_._0_,_ 5_._0_,_** 10.0**_,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_ 2_._0_,_** 3.0**_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**0.1**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_|
+
+
+|Dataset|Temperature|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin<br>CIFAR-10<br>CIFAR-100<br>LMRD<br>GLUE/cola<br>GLUE/sst2<br>Amazon Reviews Bin<br>Amazon Reviews<br>Sentiment140 Bin|_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{_1_._0_,_** 2.0**_,_ 3_._0_,_ 4_._0_, 5.0,_ 10_._0_}}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_**_ 10.0_**_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_** 4.0**_,_ 5_._0_,_ 10_._0_}_<br>_{_1_._0_,_ 2_._0_,_** 3.0**_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{1.0,_ 2_._0_,_ 3_._0_,_** 4.0**_,_ 5_._0_,_ 10_._0_}_<br>_{_**1.0**_, 2.0,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_|
+
+
+Table 8: Hyperparameters for FitNet
+
+|Dataset|Temperature Embeddings-loss coefficient|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin<br>CIFAR-10<br>CIFAR-100<br>LMRD<br>GLEU/cola<br>GLEU/sst<br>Amazon Reviews Bin<br>Amazon Reviews<br>Sentiment140 Bin|_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_, 5.0,_ 10_._0_}_<br>_{_0_._1_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_** 100.0**_, 1000.0}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{_0_._1_, 1.0,_ 5_._0_,_ 10_._0_,_** 100.0**_,_ 1000_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_, 4.0,_ 5_._0_,_ 10_._0_}_<br>_{_0_._1_,_ 1_._0_, 5.0,_ 10_._0_,_** 100.0**_,_ 1000_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_, 5.0,_ 10_._0_}_<br>_{0.1,_** 1.0**_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_0_._1_,_** 1.0**_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_** 5.0**_,_ 10_._0_}_<br>_{_0_._1_,_ 1_._0_,_ 5_._0_,_** 10.0**_,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_ 2_._0_,_** 3.0**_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_0_._1_,_ 1_._0_,_** 5.0**_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_** 2.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{_0_._1_,_** 1.0**_,_ 5_._0_, 10.0,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_ 2_._0_,_** 3.0**_,_ 4_._0_,_** 5.0**_,_ 10_._0_}_<br>_{0.1,_ 1_._0_,_ 5_._0_,_** 10.0**_,_ 100_._0_,_ 1000_._0_}_<br>_{_1_._0_,_ 2_._0_,_** 3.0**_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**0.1**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_|
+
+
+20
+
+
+lr _←_
+
+
+
+
+
+
+lr _·_ 0 _._ 5 _·_ 10 _[−]_ [3] _,_ if #epochs _>_ 180
+lr _·_ 10 _[−]_ [3] _,_ if #epochs _>_ 160
+lr _·_ 10 _[−]_ [2] _,_ if #epochs _>_ 120
+lr _·_ 10 _[−]_ [1] _,_ if #epochs _>_ 80
+
+
+
+
+
+Finally, in all cases we use data-augmentation. In particular, we use random horizontal flipping and
+random width and height translations with width and height factor, respectively, equal to 0 _._ 1.
+
+
+H.2 NATURAL LANGUAGE DATASETS
+
+
+For the GLUE/COLA dataset, the teacher model undergoes training for 2 epochs. In the case of
+GLUE/SST-2 and the Large Movie Review Dataset, teacher model training extends to 3 epochs. We
+employ the Adam optimizer (batch size 64, initial learning rate 10 _[−]_ [5] ) for these training processes. To
+minimize variance across experiments, we consistently train the student model for 40 epochs using a
+smaller learning rate. The training uses the Adam optimizer with a batch size of 64 and an initial
+learning rate of 10 _[−]_ [6] .
+
+
+For both the Amazon Reviews datasets, the teacher and student models (both the ALBERT-base and
+the MLPs over frozen-T5 embeddings) are trained for 2 epochs using the Adam optimizer with a
+batch size of 64 and an initial learning rate of 10 _[−]_ [6] .
+
+
+For the Sentiment140 Bin dataset the teacher and the student models are trained for 1 epoch using the
+Adam optimizer with batch size of 64 and an initial learning rate of 10 _[−]_ [6] .
+
+
+H.3 HYPERPARAMETER OPTIMIZATION
+
+
+In this section, we present the hyperparameter optimization (grid search) procedure we followed
+for each method, dataset and experiment of Section 4 and Appendix 4.2. For Vision datasets, **bold**
+numbers correspond to the hyperparameters chosen for the case of ResNet56 student, the number
+in _italicized_ numbers correspond to the hyperparameters chosen for the case of MobileNet student
+with ResNet92 as a teacher and, finally, the underlined numbers correspond to the case of MobileNet
+student with (a larger) MobileNet as a teacher. For Natural Language datasets, **bold** numbers
+correspond to the case of ALBERT-base student, and _italicized_ numbers correspond to the case of a
+MLP over frozen sentence-T5 (11B) embeddings as a student.
+
+
+Table 6: Hyperparameters for Vanilla
+KD
+
+
+Table 7: Hyperparameters for Embedding KD
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Table 9: Hyperparameters for VID
+
+|Dataset|Temperature Embeddings-loss coefficient|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin<br>CIFAR-10<br>CIFAR-100<br>LMRD<br>GLEU/cola<br>GLEU/sst<br>Amazon Reviews Bin<br>Amazon Reviews<br>Sentiment140 Bin|_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{0.1,_** 0.2**_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_** 2.0**_,_ 3_._0_,_ 4_._0_, 5.0,_ 10_._0_}_<br>_{_**0.1**_,_ 0_._2_, 0.5,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_** 4.0**_,_ 5_._0_, 10.0}_<br>_{_**_0.1_**_,_ 0_._2_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_ 2_._0_, 3.0,_ 4_._0_,_ 5_._0_,_** 10.0**_}_<br>_{_**0.1**_,_ 0_._2_,_ 0_._5_, 1.0,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_** 10.0**_}_<br>_{_**0.1**_,_ 0_._2_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_** 3.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**0.1**_,_ 0_._2_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_** 10.0**_}_<br>_{_**0.1**_,_ 0_._2_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_, 4.0,_ 5_._0_,_** 10.0**_}_<br>_{_**0.1**_,_ 0_._2_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_ 10_._0_, 100.0}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_, 4.0,_ 5_._0_,_** 10.0**_}_<br>_{_**0.1**_,_ 0_._2_,_ 0_._5_,_ 1_._0_, 5.0,_ 10_._0_,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**0.1**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_|
+
+
+Table 10: Hyperparameters for Relational KD
+
+|Dataset|Temperature Embeddings-loss coefficient|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin<br>CIFAR-10<br>CIFAR-100<br>LMRD<br>GLEU/cola<br>GLEU/sst<br>Amazon Reviews Bin<br>Amazon Reviews<br>Sentiment140 Bin|_{_1_._0_,_ **2.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{0.1,_ 0_._2_,_ 0_._5_,_** 1.0**_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{0.1,_ 0_._2_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_** 10.0**_,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_, 10.0}_<br>_{_0_._1_,_ 0_._2_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_**_ 100.0_**_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_**_ 10.0_**_}_<br>_{_**0.1**_,_ 0_._2_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_ 10_._0_, 100.0}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_0_._1_,_ 0_._2_,_ 0_._5_,_** 1.0**_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_** 2.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**0.1**_,_ 0_._2_,_ 0_._5_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_0_._1_,_ 0_._2_,_ 0_._5_,_** 1.0**_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_, 4.0,_ 5_._0_,_ 10_._0_}_<br>_{_0_._1_,_ 0_._2_,_ 0_._5_,_ 1_._0_, 5.0,_** 10.0**_,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_, 4.0,_ 5_._0_,_ 10_._0_}_<br>_{_0_._1_,_ 0_._2_,_ 0_._5_,_** 1.0**_,_ 5_._0_, 10.0,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**0.1**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_,_ 1000_._0_}_|
+
+
+Table 11: Hyperparameters for Subclass Distillation
+
+|Dataset|Num. Subclasses Auxiliary loss Temp. Auxiliary loss weight Distill. Temp.|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin<br>CIFAR-10<br>CIFAR-100<br>LMRD<br>GLEU/cola<br>GLEU/sst2<br>Amazon Reviews Bin<br>Amazon Reviews<br>Sentiment140 Bin|_{_2_,_ 3_,_ 4_,_ 5_,_ **_10_**_}_<br>_{_1_._0_,_** 5.0**_, 10.0}_<br>_{_0_._0_,_**_ 0.1_**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_** 2.0**_, 3.0,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_5_,_ 10_,_ 15_,_ 20_,_ 25_,_ 30_, 35,_ 40_,_ 45_,_ 50_,_** 75**_,_ 100_}_<br>_{_**1.0**_,_ 5_._0_, 10.0}_<br>_{_**_0.0_**_,_ 0_._1_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_**1.0**_, 2.0,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{2,_** 4**_,_ 8_,_ 10_}_<br>_{_1_._0_,_**_ 5.0_**_,_ 10_._0_}_<br>_{0.0,_** 0.1**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_** 2.0**_, 3.0,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**_2_**_,_ 4_,_ 8_,_ 10_}_<br>_{1.0,_** 5.0**_,_ 10_._0_}_<br>_{_0_._0_,_ 0_._1_,_** 1.0**_,_ 5_._0_, 10.0,_ 100_._0_}_<br>_{_1_._0_,_ 2_._0_,_**_ 3.0_**_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_2_,_ 3_,_ 4_,_ 5_,_** 10**_,_ 25_,_ 50_}_<br>_{_1_._0_,_** 5.0**_,_ 10_._0_}_<br>_{_0_._0_,_** 0.1**_,_ 1_._0_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_2_,_ 3_,_** 4**_,_ 5_,_ 10_}_<br>_{_1_._0_,_ 5_._0_,_** 10.0**_}_<br>_{_**0.0**_,_ 0_._1_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_1_._0_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_** 5.0**_,_ 10_._0_}_<br>_{_2_,_ 3_,_ 4_,_ 5_,_** 10**_}_<br>_{_1_._0_,_** 5.0**_,_ 10_._0_}_<br>_{_0_._0_,_** 0.1**_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_2_,_**_ 4_**_,_ 5_,_ 10_,_ 20_,_ 40_,_ 50_,_ 100_,_ 200_,_ 500_}_<br>_{_**_1.0_**_,_ 5_._0_,_ 10_._0_}_<br>_{_**_0.0_**_,_ 0_._1_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{1.0,_** 2.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**_2_**_,_ 4_,_ 8_,_ 16_,_ 20_,_ 40_,_ 80_,_ 200_}_<br>_{_**1.0**_,_ 5_._0_,_ 10_._0_}_<br>_{0.0,_ 0_._1_,_**_ 5.0_**_,_ 10_._0_,_ 100_._0_}_<br>_{_**_1.0_**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**2**_,_ 4_,_ 5_,_ 10_,_ 20_,_ 40_,_ 50_,_ 100_,_ 200_,_ 500_}_<br>_{_**1.0**_,_ 5_._0_,_ 10_._0_}_<br>_{_**0.0**_,_ 0_._1_,_ 5_._0_,_ 10_._0_,_ 100_._0_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_|
+
+
+Table 12: Hyperparameters for LELP (ours)
+
+|Dataset|Num. Subclasses Subclass Temp. Distill. Temp.|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin<br>CIFAR-10<br>CIFAR-100<br>LMRD<br>GLEU/cola<br>GLEU/sst2<br>Amazon Reviews Bin<br>Amazon Reviews<br>Sentiment140 Bin|_{_5_,_ 10_,_**_ 20_**_}_<br>_{_1_/_32_, 1/16,_ 1_/_8_,_** 1/4**_,_ 1_/_2_,_ 1_}_<br>_{_**1.0**_,_ 2_._0_, 4.0,_ 8_._0_,_ 10_._0_}_<br>_{_5_,_ 10_,_ 15_,_** 20**_,_ 25_,_ 30_,_ 35_,_ 40_,_ 45_, 50,_ 75_,_ 100_}_<br>_{_1_/_32_,_ 1_/_16_,_ 1_/_8_, 1/4,_** 1/2**_,_ 1_}_<br>_{_1_._0_,_** 2.0**_, 4.0,_ 8_._0_,_ 10_._0_}_<br>_{_2_,_ 4_,_** 8**_, 10}_<br>_{_1_/_32_,_ 1_/_16_,_ 1_/_8_,_ 1_/_4_,_**_ 1/2_**_,_ 1_}_<br>_{_1_._0_,_ 2_._0_,_** 4.0**_,_ 8_._0_, 10.0}_<br>_{_**2**_,_ 4_, 8,_ 10_}_<br>_{_1_/_32_,_ 1_/_16_,_ 1_/_8_,_ 1_/_4_,_ 1_/_2_,_**_ 1_**_}_<br>_{_1_._0_,_ 2_._0_,_ 4_._0_,_** 8.0**_, 10.0}_<br>_{_5_,_** 10**_,_ 15_,_ 20_}_<br>_{_1_/_32_,_ 1_/_16_,_ 1_/_8_,_ 1_/_4_,_ 1_/_2_,_** 1**_}_<br>_{_**1.0**_,_ 2_._0_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_5_,_ 10_,_** 15**_,_ 20_}_<br>_{_1_/_32_,_ 1_/_16_,_ 1_/_8_,_** 1/4**_,_ 1_/_2_,_ 1_}_<br>_{_1_._0_,_ 2_._0_,_** 3.0**_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_**5**_,_ 10_,_ 15_,_ 20_}_<br>_{_1_/_32_,_ 1_/_16_,_ 1_/_8_,_ 1_/_4_,_** 1/2**_,_ 1_}_<br>_{_1_._0_,_** 2.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_2_, 4,_ 5_,_ 10_,_ 20_,_ 40_,_ 50_,_** 100**_,_ 200_,_ 500_}_<br>_{_1_/_32_,_** 1/16**_, 1/8,_ 1_/_4_,_ 1_/_2_,_ 1_}_<br>_{1.0,_ 2_._0_,_ 3_._0_,_ 4_._0_,_** 5.0**_,_ 10_._0_}_<br>_{_2_,_ 4_,_ 8_,_ 16_,_ 20_,_ 40_, 80,_** 200**_}_<br>_{_1_/_32_,_ 1_/_16_,_** 1/8**_,_ 1_/_4_,_ 1_/_2_, 1}_<br>_{1.0,_** 2.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_<br>_{_2_,_ 4_,_ 5_,_ 10_,_ 20_,_ 40_,_ 50_,_ 100_,_ 200_,_** 500**_}_<br>_{_1_/_32_,_ 1_/_16_,_ 1_/_8_,_ 1_/_4_,_ 1_/_2_,_** 1**_}_<br>_{_1_._0_,_** 2.0**_,_ 3_._0_,_ 4_._0_,_ 5_._0_,_ 10_._0_}_|
+
+
+21
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+Table 13: Hyperparameters for Agglomerative Clustering
+
+|Dataset|Number of Clusters|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin|_{_**4**_,_ 6_,_ 8_, 10,_ 20_,_ 50_,_ 100_,_ 1000_}_<br>_{_**10**_,_ 20_,_ 30_,_ 40_,_ 50_,_ 60_, 70,_ 80_,_ 90_,_ 100_,_ 150_,_ 200_}_|
+
+
+Table 14: Hyperparameters for K-Means Clustering
+
+|Dataset|Number of Clusters|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin|_{_4_, 6,_ 8_,_** 10**_,_ 20_,_ 50_,_ 100_,_ 1000_}_<br>_{_**10**_,_ 20_,_ 30_,_ 40_, 50,_ 60_,_ 70_,_ 80_,_ 90_,_ 100_,_ 150_,_ 200_}_|
+
+
+Table 15: Hyperparameters for t-SNE & K-Means Clustering
+
+|Dataset|Number of Clusters|
+|---|---|
+|CIFAR-10-bin<br>CIFAR-100-bin|_{_2_,_** 3**_, 4,_ 5_,_ 10_,_ 25_,_ 50_,_ 500_}_<br>_{_**_5_**_,_ 10_,_ 15_,_ 20_,_ 25_,_ 30_,_ 35_,_ 40_,_ 45_,_ 50_,_ 75_,_ 100_}_|
+
+
+22

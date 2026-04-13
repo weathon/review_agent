@@ -1,0 +1,947 @@
+# LEARNING TO IMITATE WITH LESS: EFFICIENT INDIVIDUAL BEHAVIOR MODELING IN CHESS
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+As humans seek to collaborate with, learn from, and better understand artificial
+intelligence systems, developing AI agents that can accurately emulate individual
+decision-making becomes increasingly important. Chess, with its long-standing
+role as a benchmark for AI research and its precise measurement of skill through
+chess ratings, provides an ideal environment for studying human-AI alignment.
+However, existing approaches to modeling human behavior require large amounts of
+data from each individual, making them impractical for new or sparsely represented
+users. In this work, we introduce Maia4All, a model designed to learn and adapt
+to individual decision-making styles efficiently, even with limited data. Maia4All
+achieves this by leveraging a two-stage fine-tuning method to bridge population
+and individual-level models and uses a meta-network to initialize and refine these
+embeddings with minimal data. Our experimental results show that Maia4All
+can accurately predict individual moves and profile behavioral patterns with high
+fidelity, establishing a new standard for personalized human-like AI behavior
+modeling in chess. Our work provides an example of how population AI systems
+can flexibly adapt to individual users using a prototype model as a bridge, which
+could lead to better and more accessible human-AI collaboration in other fields like
+education, healthcare, and strategic decision-making. Maia4All implementation is
+[available at https://anonymous.4open.science/r/UChess-3103.](https://anonymous.4open.science/r/UChess-3103)
+
+
+1 INTRODUCTION
+
+
+The rise of artificial intelligence (AI) systems that rival or surpass human ability in domains where
+humans remain active has introduced the possibility of people collaborating with and learning from
+AI agents. A line of research has pursued this vision in the model system of chess, where AI became
+superhuman 20 years ago, people vary widely in their ability, and vast detailed datasets of action traces
+abound. Since capturing human decision-making style is a prerequisite to algorithmically-informed
+teaching and collaboration, previous work has focused on creating AI agents that mimic human
+play (McIlroy-Young et al., 2020; 2022; Jacob et al., 2022; Tang et al., 2024). Further, since capturing
+_individual_ decision-making style is a prerequisite to personally tailored algorithmic instruction,
+researchers have developed models of how specific people play chess, surpassing population models
+in their accuracy rates on their target individual’s decisions (McIlroy-Young et al., 2022).
+
+
+However, these fine-tuning-based models require extraordinary amounts of data per person to function.
+When Maia, a human-like chess engine, was fine-tuned to play like specific individuals, gains in
+accuracy over base Maia were only achieved when the player had 5,000 games worth of data (McIlroyYoung et al., 2022). This is an immense amount of game-playing; a typical person would take around
+1,000 hours to play this many games, which is equivalent to almost 25 weeks of full-time work at 40
+hours per week. To put this in perspective, less than 1% of players on Lichess, a popular online chess
+platform, have played at least 5,000 games. Therefore, the fine-tuning-based approaches explored in
+previous work are proofs of concept that individual-level modeling is possible in chess, but it isn’t a
+full solution to the problem because it doesn’t work for the vast majority of people who would stand
+to benefit from algorithmically-informed teaching, learning, and collaboration.
+
+
+How could we go about modeling individual-level decision-making behavior for people with much
+more modest amounts of data available? This is a difficult task for two reasons. First, existing
+models for modeling human decision-making, such as Maia and Maia-2 (McIlroy-Young et al., 2022;
+
+
+1
+
+
+Tang et al., 2024), are population models. This makes direct fine-tuning difficult, especially for
+low-resource players, as previously discussed. Second, human action prediction is formulated as a
+generative task to predict the next move that requires a model with strong generalization capabilities,
+which is particularly hard to achieve in a low-resource environment.
+
+
+In this work, we propose **Maia4All**, a model that overcomes both of these challenges and can
+successfully predict chess moves at the individual level. Strikingly, **Maia4All** can model individuallevel play with only 20 games of data. While Maia-2 shows virtually no progress when given 20
+games of data played by a specific individual, and Maia fine-tuned with 1,000 games even gets worse,
+**Maia4All** significantly rises in accuracy from a baseline of 51.4% to 53.2%—a comparable rise to
+the accuracy gains reported in previous work using 5,000 games per player (McIlroy-Young et al.,
+2022).
+
+
+We achieve data-efficient modeling of individual behavior in chess with two methodological contributions. First, we design a two-stage fine-tuning approach, where we first fine-tune Maia-2 to a
+diverse set of _prototype_ players with rich game histories in order to adapt the model parameters from
+population-level modeling to individual-level modeling. Empirically, this makes it easier for the
+model to further adapt to low-resource players. In the second stage, this prototype-infused model with
+individual-level modeling capabilities is used as a bridge to be further fine-tuned with low-resource
+player data. Our second contribution is to start with a discriminative task instead of attempting the
+difficult generative task directly; we first find the most similar prototype player to the target player we
+want to model with a prototype-matching meta-network. Once we’ve identified a suitable prototype
+player, we initialize the target player’s embedding with the prototype’s embedding, and fine-tune on
+their limited data with this much better start.
+
+
+Our framework not only provides state-of-the-art human modeling in chess, which can open the
+door to personalized AI teaching, learning, and collaboration, but it also holds potential for broader
+applications in domains where human-AI collaboration and algorithmically-informed education are
+possible.
+
+
+2 RELATED WORK
+
+
+**Human Behavior Modeling in Chess.** The challenge of creating a chess engine that can outplay any
+human was solved over 20 years ago. The research focus shifts towards extracting useful knowledge
+from these superhuman systems for humans. A direct way of doing this is to probe an AI chess
+engine in a human representation space. Evidence of human chess concepts learned by AlphaZero
+is found and measured by linear probes (McGrath et al., 2022). Going further, AlphaZero also
+encodes knowledge that extends beyond existing human knowledge but is ultimately learnable by
+humans (Schut et al., 2023). Another direction was the creation of a ‘behavioral stylometry’ model
+that can identify chess players from the moves they play (McIlroy-Young et al., 2021). Moreover,
+efforts have been made towards creating systems that can act as guides to humans (McIlroy-Young
+et al., 2020; Jacob et al., 2022; Tang et al., 2024), in which a model is trained to predict the next
+move a human will play, instead of optimizing for winning the game. In addition to predicting human
+actions at the population level, the models have been fine-tuned for individual-level human behavior
+modeling under _data-rich_ settings (McIlroy-Young et al., 2022).
+
+
+**Few-shot Learning and Meta Learning.** Few-shot learning focuses on the ability of models to
+learn and generalize from a very limited amount of labeled training data (Fei-Fei et al., 2006; Fink,
+2004; Wang et al., 2020). Modeling unseen players follows the few-shot learning paradigm, where
+players’ behavioral patterns are revealed by a limited collection of historical behaviors. Meta learning
+is a main approach to few-shot learning, aiming to improve novel tasks’ performance by training
+on similar tasks. Meta learning can be categorized into metric-based methods (Vinyals et al., 2016;
+Snell et al., 2017; Koch et al., 2015; Sung et al., 2018) that aim to learn a similarity or distance
+function over objects and represent the relationship between inputs and the task space, modelbased methods (Santoro et al., 2016; Munkhdalai & Yu, 2017), which focus on designing models
+with internal mechanisms to quickly adapt to new tasks, and optimization-based methods (Ravi &
+Larochelle, 2016; Finn et al., 2017; Nichol et al., 2018; Raghu et al., 2019) that aim to learn an
+initialization such that the model can adapt faster with few examples from there. Maia4All can be
+
+
+2
+
+
+regarded as a meta learning framework in that we learn a prototype matching meta network for player
+embedding initialization.
+
+
+**Imitation Learning.** We can also frame this work as part of the imitation learning tradition, where a
+model is trained to perform some task after observing expert (human) demonstration(s) (Schaal, 1999;
+Zare et al., 2024; Wang et al., 2019). In the imitation learning context the model is usually attempting
+to learn a value function (inverse RL) (Ng et al., 2000), or to quickly learn an optimal solution to a
+given optimization problem (Schaal, 1999). In this paper we attempt to learn a _flawed_ value function
+using _non-expert_ demonstrations. Additionally, many imitation learning methods require the model
+to be in the same, or similar, state to the demonstrated one (Ho & Ermon, 2016; Zare et al., 2024)
+which is a condition that is impossible to guarantee in chess outside of the early game.
+
+
+3 METHODOLOGY
+
+
+3.1 OVERVIEW
+
+
+As shown in Figure 1. (a) and (b), either the well-established human-like chess engine Maia (McIlroyYoung et al., 2020; 2022) and the state-of-the-art model Maia-2 (Tang et al., 2024) can be used as
+the population-level pre-trained foundation model to be fine-tuned towards individual players. We
+use Maia-2 as the base population model as it enables us to adjust its predictions by only varying the
+**population embeddings** . This property is particularly desirable for individual behavior modeling
+because the problem of adapting to individual players can be reduced to finding representative **player**
+**embeddings** . Thus the variant player embeddings can guide the personalized adjustments of human
+move predictions over a frozen model.
+
+
+We face two challenges in fine-tuning Maia-2 for players with rare game histories. On the one hand,
+Maia-2 is a population model, which means its parameters are trained toward modeling common
+behavioral patterns among groups of players. This makes direct fine-tuning difficult, especially
+for low-resource players. Therefore, as shown in Figure1. (c), we design a two-stage fine-tuning
+approach to bridge population-oriented and individual-oriented parameters. To achieve this, we first
+fine-tune Maia-2 to a diverse set of _prototype_ players with rich game histories (Maia-2-Prototype). In
+the second stage, the Maia-2-Prototype model with individual-level modeling capabilities is used as a
+bridge to be further fine-tuned to model low-resource players.
+
+
+On the other hand, human action prediction is formulated as a generative task to predict the next move
+that requires a model with strong generalization capabilities, which is particularly hard to achieve
+in a low-resource environment. Therefore, we start with a discriminative task instead of attempting
+the difficult generative task directly. We first find the most similar prototype player to the target
+player we want to model with a prototype-matching meta-network, as shown in Figure 2. Once we’ve
+identified a suitable prototype player, we initialize the target player’s embedding with the prototype’s
+embedding, and fine-tune on their limited data with this much better start.
+
+
+3.2 POPULATION MODEL
+
+
+**Population Embeddings.** In chess, players can be meaningfully grouped by their skill level (McIlroyYoung et al., 2020; 2022), which is measured with now-pervasive rating systems that were originally
+developed for chess Elo (1967; 1978). Let **E** _P_ _∈_ R _[|]_ **[E]** _[P][ |×][d]_ be the matrix of population embeddings,
+where each row corresponds to the embedding with dimension _d_ of a group of players that share a
+similar strength: **E** _P_ = [ **e** (0 _,_ 1100] _,_ **e** (1100 _,_ 1200] _, ...,_ **e** (2000 _,_ + _∞_ )] _[⊤]_ . Given a player _i_ of strength level
+_r_ ( _i_ ), we look up the embedding matrix **E** _P_ by rows to map the player strength to its embedding:
+**e** _i_ = **E** _P_ [ _r_ ( _i_ )] _._
+
+
+**Player Embeddings.** Similarly, given a set of individual players _I_, we denote their embedding matrix
+as **E** _I_ _∈_ R _[|]_ **[E]** _[I]_ _[|×][d]_, where each row corresponds to a player. Given a player _i_ _∈_ _I_, we look up **E** _I_
+by rows to obtain the corresponding embedding of the active player: **e** _i_ = **E** _I_ [ _i_ ]. For an unseen
+individual _u_ _∈/_ _I_, its embedding **e** _u_ _∈_ R _[d]_ will be initialized with prior knowledge and fine-tuned
+following the procedures in Section3.4.
+
+
+3
+
+
+Figure 2: The architecture of the Prototype Matching Meta Network.
+
+
+Maia-2 uses a ResNet (He et al., 2016) tower for chess position encoding and a skill-aware attention
+mechanism to bridge the population embedding and position embedding for human move prediction.
+
+
+**Maia-2** ( _B, r_ ( _i_ ) _|θ,_ **E** _P_ ) _,_ (1)
+
+
+where _B_ and _r_ ( _i_ ) denote the encoded tensor representation of board positions and players’ skill level
+as inputs, respectively, and _θ_ represents the shared parameters across different groups of players
+(populations). **E** _P_ denotes the embedding matrix of populations.
+
+
+3.3 MAIA-2-PROTOTYPE
+
+
+We build on Maia-2 to develop the individual model:
+
+
+**Maia-2-Prototype** ( _B, i|θ_ _[′]_ _,_ **E** _I_ ) _,_ (2)
+
+
+where **E** _I_ denote the embedding matrix of individual players. The shared parameters _θ_ _[′]_ are initialized
+with _θ_ . Since _θ_ is already trained towards modeling diverse groups of players, it is easier to update to
+a universal set of parameters that models the more fine-grained individual-level move predictions.
+
+
+While Maia-2-Prototype can be directly used to model the behaviors of individual players in _I_, it
+[is unrealistic to include all players (e.g., 11 million on Lichess) in Maia-2-Prototype.](https://lichess.org/) On the one
+hand, learning a separate embedding for huge amounts of players can be challenging for computation
+and model learnability. On the other hand, most players haven’t played enough games to support an
+accurately learned embedding for them. Furthermore, there are always new chess players, making
+it infeasible to have their embedding pre-trained. Therefore, we regard Maia-2-Prototype as a base
+model that can facilitate further adaptation to all individual players, in particular players with rare
+histories. This extensibility requirement guided us to select the player set _I_ in Maia-2-Prototype under
+two criteria: First, players should have sufficient historical games to ensure that their decision-making
+styles can be well learned in **E** _I_ and so _θ_ _[′]_ is not being interfered by under-trained embeddings.
+
+
+4
+
+
+(a) Fine-tuning **Maia** to **Maia-Individual**
+
+
+(b) Fine-tuning **Maia-2** to **Maia-2-Individual**
+
+
+(c) Two-stage fine-tuning from **Maia-2** to **Maia4All** using **Maia-2-Prototype** as a bridge and **PMN** as a **Meta Network**
+
+
+Figure 1: Overview of Maia4All training procedures.
+
+
+Second, the number of players should be balanced for each strength level. This design not only helps
+the model to learn a universal set of parameters _θ_ _[′]_ for an unbiased distribution of players but also
+facilitates prototype-informed initialization.
+
+
+Following previous work (McIlroy-Young et al., 2020), besides the main policy head to predict the
+human move, we include a value head to predict the game outcome as a regression task, where
+the labels 1, 0, -1 denote winning, drawing, and losing, respectively. To enhance the model’s
+understanding of the game state, we inject auxiliary information as labels, including _legal moves_
+represented by multi-hot vectors and _human move information_ : one-hot vectors of which piece is
+moved, which piece is captured (if any), the move’s originating square, the move’s destination square,
+and whether or not the move will deliver a check. It enriches the model’s understanding of human
+chess moves by providing contextual insights beyond mere move indices and integrating essential
+objective knowledge of the game’s mechanics, which has been proven to be helpful in human move
+prediction (Tang et al., 2024). This head is trained using bit-wise binary cross-entropy loss with
+multi-hot labels. The training objectives of these heads are balanced to contribute equally to model
+optimization.
+
+
+3.4 MAIA4ALL
+
+
+Since players can have limited historical data and there are always new players, it is crucial to ensure
+our proposed unified framework can effectively adapt to these players. We denote players that are not
+included in the training player set _I_ of Maia-2-Prototype as unseen players.
+
+
+3.4.1 MAIA4ALL FINE-TUNING
+
+
+Ideally, player strengths and styles can be well-learned by directly fine-tuning Maia4All with the new
+player embedding **e** :
+
+
+Full fine-tuning
+**Maia-2-Prototype** ( _B, u|θ_ _[′]_ _,_ **e** _u_ ) _−−−−−−−−→_ **Maia4All** ( _B, u|θ_ _[′′]_ _,_ **e** _[′]_ _u_ [)] (3)
+
+
+where the full parameter set is fine-tuned. However, since modeling unseen players follows the
+few-shot learning paradigm, severe overfitting is expected when limited historical behaviors are
+provided. Moreover, full fine-tuning results in a shifted player embedding space for each player.
+As a result, the player embeddings learned are not transferable or directly comparable with other
+(pre-trained or future) player embeddings, which hinders its applications in downstream tasks such as
+behavioral stylometry (McIlroy-Young et al., 2021).
+
+
+Since the shared parameters _θ_ _[′]_ in Maia4All are specifically learned towards modeling a wide range
+of individual players, this enables player embedding fine-tuning without updating _θ_ _[′]_ :
+
+
+Emb fine-tuning
+**Maia-2-Prototype** ( _B, u|θ_ _[′]_ _,_ **e** _u_ ) _−−−−−−−−→_ **Maia4All** ( _B, u|θ_ _[′]_ _,_ **e** _[′]_ _u_ [)] (4)
+
+Note that the universal set of parameters _θ_ _[′]_ are shared across pre-trained or unseen players. The
+number of trainable parameters is drastically reduced to the embedding dimension _d_, preventing
+overfitting and enhancing knowledge sharing on the general understanding of individual behavior
+modeling.
+
+
+Nevertheless, fine-tuning under low-resource settings is still challenging. Therefore, we propose to
+initialize unseen player embeddings with prior knowledge for data-efficient parameter updates. Such
+prior knowledge can be player strengths, as reflected by their ratings, and player styles, as derived
+from their historical behaviors.
+
+
+3.4.2 STRENGTH INFORMED INITIALIZATION
+
+
+In chess, decision-making style is informed by one’s strength: e.g., a novice will typically not employ
+deep stratagems that indicative of grandmaster-level insight. Therefore, the player strength levels are
+ideal starting points to learn player styles:
+
+
+Initialize
+**e** _u_ _←−−−−_ **E** _[′]_ _P_ [[] _[r]_ [(] _[u]_ [)]] _[,]_ (5)
+
+where **E** _[′]_ _P_ [denote the learned population embedding matrix in Maia-2-Prototype and] _[ r]_ [(] _[u]_ [)][ represent]
+the strength level of player _u_ .
+
+
+5
+
+
+However, player strengths are not accurately measured by the ratings until many games with different
+opponents are played and recorded. In real-world applications, player strength is very likely to be
+unknown and may be inaccurate. For example, when a grandmaster player joins an online chess
+platform as a new member, the rating will start to update from a preset rating that is close to the
+average ratings of the crowd. In this case, until many games are played on this platform, the player’s
+rating will be far from the grandmaster level. Therefore, we need a procedure to initialize the player
+embedding that does not rely on the long-term strength measurements provided by ratings.
+
+
+3.4.3 PROTOTYPE INFORMED INITIALIZATION
+
+
+We aim to initialize unseen player embeddings with similar player embeddings. We denote the
+pre-trained players as _prototypes_ to be matched. Since we balanced the number of players within each
+strength level during Maia-2-Prototype training, prototypical players should ideally cover the player
+styles within each level. We train a transformer-based meta-network for prototype matching, i.e.,
+finding the most similar prototypical players. In particular, as shown in Figure 2, given a collection
+of historical behaviors of a prototype player, we use ResNet-based towers pre-trained by Maia-2 to
+extract positions before and after actions, and employ stacked Transformer layers to aggregate action
+embeddings. We use the frozen prototypical player embeddings **E** _I_ to measure the similarities and
+use cross-entropy loss for model training. The goal is to recognize the player given the historical
+actions. In the inference stage, we input the historical moves of _unseen_ players to the meta-network
+and take the matched prototype embedding as the initialization for **e** _u_ .
+
+
+3.4.4 DISCUSSION
+
+
+Note that both prototype matching and Maia4All exploit the same set of historical behaviors. However,
+prototype matching is a much easier task than human move prediction. This is because prototype
+matching is essentially a _discriminative_ task against a fixed set of classes (prototypes), and human
+move prediction is a next-move _generative_ task that requires a deeper understanding of the player’s
+decision-making style. Therefore, we initialize the player embedding with the easier prototype
+matching task to get a rough understanding of how similar players behave and further calibrate the
+player embedding with human move prediction loss.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENTAL SETTINGS
+
+
+**Datasets.** Online chess platforms feature a variety of game types, including blitz, rapid, and classical,
+each representing games played at different time controls (amount of time given to each player for the
+whole game). [We use data from Lichess, a well-known large open-source chess platform, and its open](https://lichess.org/)
+[database.](https://database.lichess.org/) In Lichess, since each game type is given a separate rating, ratings across different game
+types are not comparable (e.g. a rating of 1800 in “Rapid” is significantly weaker than a rating of
+1800 in “Blitz” on Lichess). We focus on Blitz games because it’s data-rich and we do not mix with
+other game types to ensure the ratings are meaningfully comparable. For individual model training
+and fine-tuning, we use the full game history in 2023 to compromise between the changing player
+strengths and styles over time and the availability of rich historical behaviors. We divide players
+into 11 bins: under 1100, over 2000, and nine 100-point wide strength bins from 1100 to 2000, i.e.,
+_|_ **E** _P |_ = 11. During Maia-2-Prototype training, we use the game history of the _N_ most frequent
+players in each strength level, i.e., _|_ **E** _I_ _|_ = 11 _N_ . We use 10 pre-trained and unseen players in each
+strength level for testing. We simulate unseen players with limited game history by limiting the
+training positions to the first _M_ positions, and we test them with the last 2048 positions in 2023. This
+yields the testing datasets for the testing datasets of prototypical and unseen players with 225,280
+positions each.
+
+
+**Implementation Details.** To maintain a consistent perspective from both sides of players, we used
+board flipping during training and testing; that is, positions with black to move were mirrored such
+that all analyses could be conducted from the white side’s viewpoint. We further refined our dataset
+through game and position filtering, selecting only Blitz games with available clock information and
+disregarding the initial 10 plies of each game as well as positions where either player had less than 30
+
+
+6
+
+
+Table 1: Performance on unseen players under extremely low resource settings.
+
+
+Move Prediction Accuracy Move Prediction Perplexity
+
+
+#Positions 20000 8000 2000 800 20000 8000 2000 800
+#Games _≈_ 500 _≈_ 200 _≈_ 50 _≈_ 20 _≈_ 500 _≈_ 200 _≈_ 50 _≈_ 20
+
+
+Maia 0.5132 0.5132 0.5132 0.5132 5.4530 5.4530 5.4530 5.4530
+Maia-2 0.5146 0.5146 0.5146 0.5146 4.5316 4.5316 4.5316 4.5316
+Maia-2-Individual 0.5195 0.5196 0.5193 0.5189 4.4932 4.4939 4.4976 4.5022
+
+
+Maia4All **0.5365** **0.5348** **0.5334** **0.5322** **4.2295** **4.2431** **4.2669** **4.2988**
+
+
+Table 2: Performance on unseen players with 100,000 positions _≈_ 2500 games.
+
+
+Move Prediction Accuracy Move Prediction Perplexity
+
+
+Skilled Advanced Master Overall Skilled Advanced Master Overall
+
+
+Maia 0.4996 0.5099 0.5285 0.5132 5.8687 5.4642 5.1300 5.4530
+Maia-2 0.5008 0.5158 0.5364 0.5146 4.7900 4.4389 4.1936 4.5316
+Maia-2-Individual 0.5071 0.5212 0.5400 0.5199 4.7264 4.4113 4.1760 4.4903
+
+
+Maia4All **0.5261** **0.5408** **0.5554** **0.5381** **4.4018** **4.1048** **3.9219** **4.1899**
+
+
+seconds remaining. The filtration is significant to eliminate the noise introduced by rushed decisions
+under time constraints, which could skew the true representation of a player’s strength and style. We
+report all hyperparameters involved in training in Appendix Table 4.
+
+
+**Evaluation Protocol.** We evaluate Maia4All with top-1 move-matching accuracy, which is essentially
+an extensive human study: we observe what humans would play in natural situations recorded by
+the Lichess Database, and see if it matches the predicted move of our system. We also measure
+the perplexity of move predictions, which reflects the model’s confidence in its predictions. A
+lower perplexity indicates the model is more confident and accurate in human move prediction, as
+it corresponds to a higher likelihood (lower log-likelihood) of the correct human move. We report
+the results with three categories: _Skilled_ (Blitz rating up to 1600, which slightly exceeds the initial
+rating of 1500), _Advanced_ (Blitz rating between 1600 and 2000), and _Master_ (Blitz rating over 2000,
+roughly comprising the top 10% of playersDuplessis).
+
+
+**Baselines.** Maia (McIlroy-Young et al., 2020) is a set of 9 separate models, each trained on a different
+set of players at different skill levels from 1100 to 1900. Maia-1100 models the weaker players,
+Maia-1500 the intermediate players, and Maia-1900 the higher-skill players. We choose one of the
+Maia models for each population such that it is the nearest to their strength level for fair comparison.
+Since Maia-Individual (McIlroy-Young et al., 2022) is designed for data-rich settings, the published
+results of Maia-Individual indicate that it requires 5,000 games per player to show improvement over
+Maia. However, Maia4All, as a method for low-resource individual behavior modeling, at most has
+access to 100,000 positions ( _≈_ 2,500 games). Therefore, we do not include Maia-Individual as a
+baseline. Since Maia-2 is trained towards adapting to diverse populations with a unified model, we
+use pre-trained **E** _P_ for the conditioning on different populations.
+
+
+4.2 RESULTS
+
+
+**Maia2.** As shown in Table 1 and Table 2, Maia-2 consistently outperforms Maia on both evaluation
+metrics under all settings. While top-1 accuracy gains are important, they may overshadow larger
+improvements in prediction quality. Such results show that Maia-2 can not only more accurately
+predict human behaviors but also be much more certain about its predictions. It is important to note
+that each Maia model is specifically trained for its respective strength level, relying solely on games
+where the active and opponent strength levels match in its training data. On the contrary, the unified
+modeling approach with player-aware attention in Maia-2 allows it to utilize a broader spectrum of
+
+
+7
+
+
+|Maia<br>Maia-2<br>Maia-2-Prototype|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Maia<br>Maia-2<br>Maia-2-Prototype|Col14|Col15|Col16|Col17|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|Maia<br>Maia-2<br>Maia-2-Prototype||||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||||
+|F<br>, f<br> c<br>**2-**<br>sp<br> lo<br>du<br>**2-**<br> e-t<br>on<br>0<br> ow<br>ca<br> f<br> ot<br>ot<br> ci<br> th<br> ad<br>**4A**<br>ns<br> 2,<br>|S<br>ig<br> ea<br> ho<br>**In**<br>on<br> w-<br>re<br>**P**<br> un<br>s)<br> po<br> n<br>nt<br>or <br> (5<br>yp<br> sio<br> at<br> y<br>**ll**<br>tra<br> M<br>|kille<br>ur<br> tu<br> ic<br>**di**<br>d<br> re<br> an<br>**ro**<br> ed<br> pe<br> sit<br> in<br> i<br> M<br>,0<br>e<br> n-<br> th<br> to<br>**.** S<br>te <br> a<br>|d<br>e 3<br> ri<br> e<br>**vi**<br>s t<br> so<br> d<br>**to**<br> t<br> r p<br> io<br>  F<br> mp<br>ai<br> 00<br> re<br> m<br> e<br>  be<br>i<br> th<br> ia4<br>|: Pe<br> ng a<br> of ch<br>**dual**<br>o Fi<br> urce<br> the<br>**type**<br> o ind<br> laye<br> ns) t<br>  igur<br> rov<br>a-2-<br> ) sh<br> quir<br> akin<br>  prot<br>  use<br>milar<br>e re<br> All<br>|Inter<br>rf<br>  va<br>  oo<br>**.** <br>gu<br> a<br>  pro<br>**.** P<br>  iv<br> r f<br> he<br>  e 3<br> em<br>Pr<br>  ow<br> es<br> g<br>  ot<br>  d i<br>ly<br>du<br>  ou<br>|med<br>or<br>  ri<br>  si<br>As<br>re <br> nd<br>  to<br>re<br>  id<br>  or<br>  f<br> ,<br> e<br>ot<br>  i<br> m<br> sty<br>  yp<br>   n t<br>, w<br>ce<br>  tp<br>|iate<br>Play<br>ma<br>  ety<br>  ng<br> sh<br> 1<br>  re<br>  ty<br>vi<br>  ua<br>  p<br>  ne<br>   M<br> nt. <br>ot<br>  mp<br> uc<br> le<br>  e p<br>   he<br> e<br>d <br>  er<br>|er Stren<br>nce<br>  of s<br>  Ma<br> own<br>. (b)<br>  lativ<br>  pe-i<br>ous<br>  l pla<br>  erfor<br>  -tun<br>   aia-2<br> Mo<br>ype <br>  rov<br> h le<br>  of i<br>  laye<br>    dow<br> limi<br> size<br>  form<br>|M<br> gth<br> on<br>   tr<br>  ia-<br> in<br>) <br>  el<br>  nf<br> w<br>  ye<br>  m<br>  in<br>   -P<br>re<br>tra<br>  em<br>  ss<br>  nd<br>  r<br>    n<br> t<br> o<br>  s<br>|aste<br> p<br>   en<br>  2<br>  T<br>ba<br>  y d<br>  or<br> ork<br>  rs,<br>  an<br>  g<br>   ro<br>ov<br>in<br>  en<br>  hi<br>  ivi<br>   em<br>    str<br>  Ma<br>f <br>  M<br>|r<br> ro<br>   gt<br>   as<br>  ab<br>re<br>  at<br>  me<br> (<br>   b<br>  ce<br>  w<br>   to<br>er<br>in<br>  t<br>  st<br>  d<br>   b<br>    ea<br>  ia<br>his<br>  ai<br>|toty<br>   h lev<br>   the<br>  le 1<br>ly im<br>  a-ric<br>  d in<br> McI<br>   ut re<br>   to e<br>  as w<br>   type<br>, we<br>g, w<br>   by f<br>  orica<br>  ual p<br>   eddin<br>    m Pr<br>  4All<br>toric<br>  a wi<br>|O<br> pic<br>   el<br>    po<br>   an<br>p<br>  h<br>  iti<br> lro<br>   qu<br>   xc<br>   or<br>   o<br> u<br>he<br>   ne<br>  l<br>   lay<br>   g<br>    ot<br>  t<br>al<br>   th<br>|vera<br> al<br>    pa<br>    pu<br>   d<br>ro<br>   set<br>  ali<br> y-<br>   ire<br>   ee<br>   se<br>   ut<br> se<br>re<br>   -t<br>   da<br>   er<br>   s a<br>    ot<br>  o a<br> d<br>   ov<br>|ll<br>  p<br>    ir<br>    la<br>   Ta<br>ve<br>   ti<br>  za<br> Y<br>    5<br>   d t<br>   th<br>   pe<br>  at<br> 2<br>   un<br>   ta<br>   s. <br>   nd<br>    yp<br>   cc<br>at<br>   er<br>|la<br>    in<br>    ti<br>   bl<br>s <br>   ng<br>  ti<br> ou<br>   ,0<br>    h<br>   a<br>   rf<br>  m<br>,5<br>   ei<br>   to<br> T<br>    t<br>    e<br>   e<br>a <br>    2<br>|
+
+
+|Maia<br>Maia-2<br>Maia-2-Prototype|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Maia<br>Maia-2<br>Maia-2-Prototype|Col14|Col15|Col16|Col17|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||||
+|Maia<br>Maia-2<br>Maia-2-Prototype|||||||||||||||||
+|w<br>    fo<br>    mo|S<br>  it<br>    r t<br>    d|kille<br>  h<br>     rai<br>    l.|d<br>   10<br>     ni|0,00<br>     ng p|Inter<br>   0<br>     ur|med<br>   po<br>     po|iate<br>Play<br>   sit<br>     se|er Stren<br>   ions <br>     s. S|M<br> gth<br>_ ≈_<br>uc|aste<br> 2<br>h r|r<br>50<br> es|0 ga<br> ults|O<br> m<br> su|vera<br> es.<br> pp|ll<br> <br> or|t|
+
+
+demonstrate Maia4All’s capability to adapt to unseen players with relatively rich data, and the amount
+of data needed is significantly lower.
+
+
+When even fewer historical behaviors are accessible, Maia4All can still adapt to unseen players
+with considerable improvement in move prediction accuracy and perplexity. In particular, with
+only 800 positions (20 games, which is considered incredibly few for style modeling), Maia4All
+can transfer its predictions to unseen players with over 1.9 more percentage point and 1.1 lowered
+perplexity with prototype informed initialization. Note that the number of accessible positions is
+at most 20,000 position (worth 500 games) and Maia fine-tuning with 1,000 games is still showing
+negative improvement, which indicates fine-tuning Maia with our limited historical behaviors will
+result in even worse results than the original model.
+
+
+**Prototype-Informed Initialization.** Strength-Init and Prototype-Init in Table 3 denote strength and
+prototype-informed initialization without further fine-tuning. Prototype-Init significantly performs
+better than Strength-Init on both metrics under all data scarcity settings. Strength-FT denotes the
+fine-tuned model based on Maia-2-Prototype with strength-informed initialization, and Maia4All can
+be regarded as Prototype-FT with the same naming strategy. The consistent superior performance of
+Maia4All over Strength-FT not only shows the effectiveness of the Prototype Matching Meta Net,
+but also supports that the better initialization provided by a discriminative task can be crucial to the
+final performance of the generative task.
+
+
+8
+
+
+0.58
+
+
+0.56
+
+
+0.54
+
+
+0.52
+
+
+0.50
+
+
+0.48
+
+
+0.46
+
+
+6.5
+
+
+6.0
+
+
+5.5
+
+
+5.0
+
+
+4.5
+
+
+4.0
+
+
+3.5
+
+
+3.0
+
+
+|Move Prediction Accuracy|Col2|Col3|Col4|
+|---|---|---|---|
+|||||
+
+
+|Move Prediction Accuracy|Col2|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+
+
+5 CONCLUSION
+
+
+decision-making.
+
+
+9
+
+
+Table 3: Performance of strength and prototype informed initialization.
+
+
+Move Prediction Accuracy Move Prediction Perplexity
+
+
+#Positions 100000 20000 8000 2000 800 100000 20000 8000 2000 800
+#Games _≈_ 2500 _≈_ 500 _≈_ 200 _≈_ 50 _≈_ 20 _≈_ 2500 _≈_ 500 _≈_ 200 _≈_ 50 _≈_ 20
+
+
+Strength-Init 0.5008 0.5008 0.5008 0.5008 0.5008 4.8344 4.8344 4.8344 4.8344 4.8344
+Prototype-Init 0.5180 0.5180 0.5175 0.5173 0.5167 4.5360 4.5360 4.5333 4.5400 4.5459
+Strength-FT 0.5336 0.5308 0.5298 0.5279 0.5249 4.2599 4.3077 4.3238 4.3658 4.4151
+
+
+Maia4All **0.5381** **0.5365** **0.5348** **0.5334** **0.5322** **4.1899** **4.2295** **4.2431** **4.2669** **4.2988**
+
+
+0.525
+
+
+0.520
+
+
+0.515
+
+
+0.510
+
+
+0.505
+
+
+0.500
+
+
+Low Mid High Uniform
+Prototype Distribution
+
+
+10 50 100 150
+#Prototypes per Skill Level
+
+
+4.8
+
+
+4.7
+
+
+4.6
+
+
+4.5
+
+
+4.4
+
+
+4.3
+
+
+4.2
+
+
+1.00
+
+
+0.95
+
+
+0.90
+
+
+0.85
+
+
+0.80
+
+
+0.75
+
+
+0.70
+
+
+0.5350
+
+
+0.5325
+
+
+0.5300
+
+
+0.5275
+
+
+0.5250
+
+
+0.5225
+
+
+0.5200
+
+
+0.5175
+
+
+0.5150
+
+
+|Move Prediction Perplexity|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|||||||||
+|Low<br> <br> f th<br>str<br>       nc<br>   hig<br>   ed<br>    ces<br>per<br>ee<br>     pl<br>    ore<br>ate<br>   s). <br> th<br>   nd<br>    ng<br>ify<br>  fn<br>ef<br>     ga<br>    0 p<br>    de<br>da<br>    etw<br>   w t<br>    fd<br> O<br>    er<br>   I c|Proto<br>  e d<br>ibu<br>       lud<br>   h-<br>    to<br>     of<br> st<br>n t<br>     aye<br>     ca<br> th<br> Inc<br>e b<br>    pl<br>     net<br>in<br>  etu<br>ore<br>     me<br>     la<br>    l de<br>ta. <br>    or<br>    hat<br>    eli<br>ur <br>    s u<br>    oll|Mid<br>typ<br>   is<br>ti<br>       e<br>   le<br>     un<br>      se<br> re<br>he<br>     r<br>     nd<br>e <br>re<br>es<br>    ay<br>     w<br>g<br>  ne<br>, o<br>     s)<br>     ye<br>     si<br> M<br>    k<br>     M<br>    ty,<br>wo<br>     si<br>    ab|e Dis<br>   trib<br>on <br>        the<br>   vel<br>     ifo<br>      lec<br> ngt<br> re<br>      em<br>     ida<br> top<br>asi<br>t-p<br>    er<br>     ork<br> pla<br>   pl<br> ur<br>     , o<br>     rs p<br>     gn<br>ai<br>     to<br>     ai<br>     es<br>rk <br>     ng<br>    ora|High<br> trib<br>   u<br> of<br>         p<br>    pl<br>     r<br>      ti<br> h<br>pr<br>      be<br>     te<br> 1<br>ng<br>er<br>     em<br>      c<br> ye<br>   ay<br>  de<br>      ur<br>      er<br>     ed<br>a4<br>      in<br>     a4<br>     ta<br> p<br>      a<br>    ti|U<br> ution<br>   tio<br> th<br>         rot<br>    ay<br>     mly<br>      ng<br>  lev<br>es<br>      dd<br>     s t<br> m<br>_ N_<br>for<br>     be<br>      an<br> rs<br>   er<br>  sig<br>       mo<br>       st<br>      to<br>All<br>      itia<br>     Al<br>     blis<br>rov<br>       pro<br>    on i|nifor<br> <br>   n a<br> e <br>         oty<br>    ers<br>      s<br>       th<br>  el<br>en<br>      in<br>      o b<br>at<br>  f<br>m<br>     d<br>       be<br>  gi<br>    em<br>  n<br>       d<br>       re<br>       le<br> a<br>      liz<br>     l c<br>     h<br>id<br>       to<br>     n|m<br> <br>p<br> <br>    ,<br>      e<br>       e<br>   i<br>t<br>      g<br> <br>c<br>r<br>i<br>     d<br>        d<br>  v<br> <br> <br>       e<br>       n<br>       a<br>c<br> <br>      a<br>     i<br>e<br>       t<br>      o|
+
+
+|Prototype Matching Accuracy|Col2|Col3|Col4|Col5|Col6|Col7|Col8|
+|---|---|---|---|---|---|---|---|
+|||||||||
+|10<br>#P<br>     mb<br>pe<br>          m<br>      l r<br>  p<br>        yp<br>     a<br>ess<br>       , a<br>|rotot<br>     er o<br>s t<br>           a b<br>       esu<br>rot<br>        es<br>      hyp<br> of<br>        nd<br>|50<br>ype<br>      f<br>o<br>            ia<br>       lt<br>ot<br>         un<br>      er<br> p<br>         th<br>|s per<br>       pro<br> be  <br>            sed<br>        in l<br>ype<br>         ifo<br>      pa<br>rot<br>         e d<br>|100<br>  Sk<br>       to<br>m<br>             d<br>         o<br>s<br>         rm<br>      ra<br>ot<br>          iff<br>|ill Le<br>       typ<br>atc<br>             ist<br>         wer<br> fro<br>         ly<br>      me<br>yp<br>          cu<br>|150<br>   vel<br>       es<br>he<br>             rib<br>         ed<br> m<br>          to<br>      te<br>es <br>          lty<br>|<br>d<br> <br> <br> <br> <br>      r.<br> <br> <br>|
+
+
+REFERENCES
+
+
+Thibault Duplessis. Weekly rapid rating distribution - lichess.org. URL [https://lichess.](https://lichess.org/stat/rating/distribution/rapid)
+[org/stat/rating/distribution/rapid.](https://lichess.org/stat/rating/distribution/rapid)
+
+
+Arpad E Elo. The proposed uscf rating system, its development, theory, and applications. _Chess Life_,
+22(8):242–247, 1967.
+
+
+Arpad E Elo. _The rating of chessplayers, past and present_ . Arco Pub., 1978.
+
+
+Li Fei-Fei, Robert Fergus, and Pietro Perona. One-shot learning of object categories. _IEEE transac-_
+_tions on pattern analysis and machine intelligence_, 28(4):594–611, 2006.
+
+
+Michael Fink. Object classification from a single example utilizing class relevance metrics. _Advances_
+_in neural information processing systems_, 17, 2004.
+
+
+Chelsea Finn, Pieter Abbeel, and Sergey Levine. Model-agnostic meta-learning for fast adaptation of
+deep networks. In _ICML_, pp. 1126–1135. JMLR. org, 2017.
+
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image
+recognition. In _Proceedings of the IEEE conference on computer vision and pattern recognition_,
+pp. 770–778, 2016.
+
+
+Jonathan Ho and Stefano Ermon. Generative adversarial imitation learning. In _NIPS_, 2016.
+
+
+Athul Paul Jacob, David J Wu, Gabriele Farina, Adam Lerer, Hengyuan Hu, Anton Bakhtin, Jacob
+Andreas, and Noam Brown. Modeling strong and human-like gameplay with kl-regularized search.
+In _International Conference on Machine Learning_, pp. 9695–9728. PMLR, 2022.
+
+
+Gregory Koch, Richard Zemel, Ruslan Salakhutdinov, et al. Siamese neural networks for one-shot
+image recognition. In _ICML deep learning workshop_, volume 2. Lille, 2015.
+
+
+Michael L Littman. Markov games as a framework for multi-agent reinforcement learning. In
+_Machine learning proceedings 1994_, pp. 157–163. Elsevier, 1994.
+
+
+Thomas McGrath, Andrei Kapishnikov, Nenad Tomašev, Adam Pearce, Martin Wattenberg, Demis
+Hassabis, Been Kim, Ulrich Paquet, and Vladimir Kramnik. Acquisition of chess knowledge in
+alphazero. _Proceedings of the National Academy of Sciences_, 119(47):e2206625119, 2022.
+
+
+Reid McIlroy-Young, Siddhartha Sen, Jon Kleinberg, and Ashton Anderson. Aligning superhuman
+ai with human behavior: Chess as a model system. In _Proceedings of the 26th ACM SIGKDD_
+_International Conference on Knowledge Discovery & Data Mining_, pp. 1677–1687, 2020.
+
+
+Reid McIlroy-Young, Yu Wang, Siddhartha Sen, Jon Kleinberg, and Ashton Anderson. Detecting
+individual decision-making style: Exploring behavioral stylometry in chess. _Advances in Neural_
+_Information Processing Systems_, 34:24482–24497, 2021.
+
+
+Reid McIlroy-Young, Russell Wang, Siddhartha Sen, Jon Kleinberg, and Ashton Anderson. Learning
+models of individual behavior in chess. In _Proceedings of the 28th ACM SIGKDD Conference on_
+_Knowledge Discovery and Data Mining_, pp. 1253–1263, 2022.
+
+
+Tsendsuren Munkhdalai and Hong Yu. Meta networks. In _ICML_, pp. 2554–2563, 2017.
+
+
+Andrew Y Ng, Stuart Russell, et al. Algorithms for inverse reinforcement learning. In _Icml_, volume 1,
+pp. 2, 2000.
+
+
+Alex Nichol, Joshua Achiam, and John Schulman. On first-order meta-learning algorithms. _arXiv_
+_preprint arXiv:1803.02999_, 2018.
+
+
+Aniruddh Raghu, Maithra Raghu, Samy Bengio, and Oriol Vinyals. Rapid learning or feature reuse?
+towards understanding the effectiveness of maml. _arXiv preprint arXiv:1909.09157_, 2019.
+
+
+Sachin Ravi and Hugo Larochelle. Optimization as a model for few-shot learning. In _International_
+_conference on learning representations_, 2016.
+
+
+10
+
+
+Adam Santoro, Sergey Bartunov, Matthew Botvinick, Daan Wierstra, and Timothy Lillicrap. Metalearning with memory-augmented neural networks. In _International_ _conference_ _on_ _machine_
+_learning_, pp. 1842–1850. PMLR, 2016.
+
+
+Stefan Schaal. Is imitation learning the route to humanoid robots? _Trends in cognitive sciences_, 3(6):
+233–242, 1999.
+
+
+Lisa Schut, Nenad Tomasev, Tom McGrath, Demis Hassabis, Ulrich Paquet, and Been Kim. Bridging
+the human-ai knowledge gap: Concept discovery and transfer in alphazero. _arXiv_ _preprint_
+_arXiv:2310.16410_, 2023.
+
+
+David Silver, Aja Huang, Chris J Maddison, Arthur Guez, Laurent Sifre, George Van Den Driessche,
+Julian Schrittwieser, Ioannis Antonoglou, Veda Panneershelvam, Marc Lanctot, et al. Mastering
+the game of go with deep neural networks and tree search. _nature_, 529(7587):484–489, 2016.
+
+
+David Silver, Thomas Hubert, Julian Schrittwieser, Ioannis Antonoglou, Matthew Lai, Arthur Guez,
+Marc Lanctot, Laurent Sifre, Dharshan Kumaran, Thore Graepel, et al. Mastering chess and shogi
+by self-play with a general reinforcement learning algorithm. _arXiv_, 2017.
+
+
+Jake Snell, Kevin Swersky, and Richard Zemel. Prototypical networks for few-shot learning. In
+_NeurIPS_, pp. 4077–4087, 2017.
+
+
+Flood Sung, Yongxin Yang, Li Zhang, Tao Xiang, Philip HS Torr, and Timothy M Hospedales.
+Learning to compare: Relation network for few-shot learning. In _Proceedings_ _of_ _the_ _IEEE_
+_conference on computer vision and pattern recognition_, pp. 1199–1208, 2018.
+
+
+Zhenwei Tang, Difan Jiao, Reid McIlroy-Young, Jon Kleinberg, Siddhartha Sen, and Ashton Anderson. Maia-2: A unified model for human-ai alignment in chess. In _The Thirty-eighth Annual_
+_Conference on Neural Information Processing Systems_, 2024. [URL https://arxiv.org/](https://arxiv.org/abs/2409.20553)
+[abs/2409.20553.](https://arxiv.org/abs/2409.20553)
+
+
+Oriol Vinyals, Charles Blundell, Timothy Lillicrap, Daan Wierstra, et al. Matching networks for one
+shot learning. In _NeurIPS_, pp. 3630–3638, 2016.
+
+
+Pin Wang, Dapeng Liu, Jiayu Chen, Hanhan Li, and Ching-Yao Chan. Human-like decision making
+for autonomous driving via adversarial inverse reinforcement learning. _arXiv_, pp. arXiv–1911,
+2019.
+
+
+Yaqing Wang, Quanming Yao, James T Kwok, and Lionel M Ni. Generalizing from a few examples:
+A survey on few-shot learning. _ACM computing surveys (csur)_, 53(3):1–34, 2020.
+
+
+Maryam Zare, Parham M Kebria, Abbas Khosravi, and Saeid Nahavandi. A survey of imitation
+learning: Algorithms, recent developments, and challenges. _IEEE Transactions on Cybernetics_,
+2024.
+
+
+11
+
+
+A REPRODUCTIBILITY
+
+
+Table 4: Hyperparameter Settings.
+
+Initial learning rate 1 _e_ _[−]_ [4]
+
+Weight decay 1 _e_ _[−]_ [5]
+Batch size (positions) 8192
+Minimum move ply 10
+Maximum move ply 300
+Remaining seconds threshold 30
+#Backbone blocks _KConv_ 12
+#Attention block _KAtt_ 2
+#Input channels _C_ input 18
+#Intermediate channels _C_ mid 256
+#Encoded channels _C_ patch 8
+Player embedding dimension _d_ 128
+Attention head dimension _dh_ 64
+Attention intermediate dimension _d_ att 1024
+#Attention heads _h_ 16
+player per range _N_ 100
+
+
+A.1 POSITION REPRESENTATION AND ENCODING
+
+
+We follow the well-established prior works McIlroy-Young et al. (2020); Silver et al. (2017) to
+represent chess positions as multi-channel 8 _×_ 8 matrices, including:
+
+
+    - Piece Representation: The first 12 channels categorize the board’s pieces by type and color,
+with one channel each for white and black Pawns, Knights, Bishops, Rooks, Queens, and
+Kings. A cell is marked 1 to denote the presence of a piece in the corresponding location,
+and 0 otherwise.
+
+
+    - Player’s Turn: A single channel (the 13th) indicates the current player’s turn, filled entirely
+with 1s for white and 0s for black, providing the model with context on whose move is being
+evaluated.
+
+
+    - Castling Rights: Four channels (14th to 17th) encode the castling rights for both players,
+with the entire channel set to 1 if the right is available or 0 otherwise.
+
+
+    - En Passant Target: The final channel (18th) marks the square available for en passant capture,
+if any, with 1 and 0s elsewhere.
+
+
+One important departure from previous work is that we only use the current chess position, and not
+the last few chess positions that occurred in the game (models have typically incorporated the six
+most recent positions in the game). Many games with perfect information, including chess, can
+be modeled as alternating Markov games Littman (1994); Silver et al. (2016), where future states
+are independent of past states given the current game state. Therefore, the current chess position
+theoretically encapsulates all the information necessary to make future decisions. Although human
+decision-making in chess may sometimes subtly depend on the historical lead-up to the current
+position, these effects are anecdotally small.
+
+
+In exchange, we gain two large practical benefits. First, modeling AI-human move matching
+in a Markovian way vastly improves training _efficiency_ by reducing the computational load via
+significantly smaller data usage for each decision. Second, it also enhances _flexibility_, enabling our
+resulting model to make predictions even without historical data, which is particularly advantageous
+in situations where only the current position is available, like chess training puzzles or any position
+that didn’t necessarily occur in a full game.
+
+
+12

@@ -1,0 +1,917 @@
+# DISTILLING CROSS-DOMAIN KNOWLEDGE FOR PER- SON RE-ID BY ALIGNING ANY PRETRAINED EN- CODER WITH CLIP TEXTUAL FEATURES
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Based on the alignment of image-text pairs, CLIP has demonstrated superior
+performance across various tasks, even in a zero-shot setting. In person ReID,
+CLIP-based models achieve state-of-the-art results without explicit text descriptions for further fine-tuning. However, previous models are primarily initialized
+with weights from ImageNet or self-supervised methods, lacking cross-domain
+knowledge in both image and text areas. This paper introduces a novel approach
+that aligns a pure image-domain pretrained student model with CLIP textual features, distilling cross-domain knowledge from existing CLIP-ReID into the online
+student model. To leverage CLIP’s textual features for each ID, we address the
+challenge of mismatched feature dimensions between the teacher and student. A
+trainable adapter is inserted on the student side to match dimensions and preserve
+the prior knowledge within the pretrained student. For the student encoder yielding lower or equal-dimensional features compared to the teacher, the adapter is
+initialized as an identity matrix, while offline PCA is employed on the teacher
+side for dimensionality reduction. PCA eigenvectors are computed from all training images and applied to existing text features for matching with the student. In
+cases where the student outputs exceed the teacher’s dimensions, the adapter is
+initialized using eigenvectors computed from the student side to retain knowledge
+in the pretrained student model. After dimension alignment, text features for each
+ID are compared with online image features, specifying cross-domain similarities, which are further constrained to mimic the teacher through a KL-divergence
+loss. Experiments with different pretraining encoder structures demonstrate the
+effectiveness of this approach, which is also compatible with relation knowledge
+distillation to enhance performance.
+
+
+1 INTRODUCTION
+
+
+As a cross-domain model, CLIP Radford et al. (2021) can be directly utilized in many downstream
+tasks without any fine-tuning. _E.g._, it is able to classify images by inserting class keywords into a
+template like ”a photo of ...”, generating textual features that are compared with visual features from
+input image to make final predictions without prior training on labeled data. The zero-shot inference
+capability of CLIP stems from its large number of training data consisting of image-text pairs, and
+its training scheme which aligns visual and textual representations in a shared embedding space.
+The cross domain alignment allows it to leverage knowledge from diverse data sources, making it
+particularly effective for tasks where annotated data may be scarce or absent.
+
+
+In person re-identification (ReID), CLIP-based methods Li et al. (2023a); Lin et al. (2023); Zhai
+et al. (2024) that initialize with pretrained weights and fine-tune on downstream ReID data also
+demonstrate competitive results. Notably, these approaches eliminate the need for explicit textual
+descriptions by using trainable text prompt tokens to represent each ID, serving as constraints for
+optimizing the image encoder. However, most of the previous ReID methods Zhou et al. (2019);
+He et al. (2021); Luo et al. (2021); Chen et al. (2023), rely on the single domain pretraining model
+derived only from supervised or self-supervised methods in the image domain. As a result, there
+are no pretrained text encoders available to provide cross-domain descriptions. Such single-domain
+methods negatively impacts the model’s performance. To bridge the gap between single and cross
+
+
+1
+
+
+domain models, our method introduces a novel approach that aligns a image-domain pretrained
+student model with CLIP’s textual features. This alignment provides a comprehensive solution to
+the absence of pretrained text encoders, enabling the matching textual features of each ID for any
+single domain image encoder. By effectively leveraging the strengths of both visual and textual
+domains, we distill cross-domain knowledge from the teacher model, which is the CLIP-ReID Li
+et al. (2023a), to enhance the student model’s performance.
+
+
+Particularly, to tackle the challenge of mismatched feature dimensions between the teacher and
+student, a trainable adapter is inserted on the student side to ensure dimensional consistency while
+preserving the prior knowledge in the pretrained student model. The adapter is a simple linear layer
+with initialization schemes that vary based on the dimension comparison between the teacher and
+student. For cases where the student outputs features of lower or equal dimensions compared to
+the teacher, the adapter is initialized as an identity matrix. Meanwhile, we employ offline PCA on
+the teacher model for dimensionality reduction, using PCA eigenvectors computed from the training
+images to align existing text features with the student. When the student outputs exceed the teacher’s
+dimensions, the adapter utilizes eigenvectors derived from the student model as the initial parameters
+to retain valuable knowledge. After achieving dimension alignment, we compare the text features
+of each ID with the online image features, specifying cross-domain similarities and constraining
+them through a KL-divergence loss to emulate the teacher model’s performance. To validate the
+effectiveness of our approach, we conduct experiments on various backbones, including TinyViT
+Wu et al. (2022), OSNet Zhou et al. (2019), and Solider Chen et al. (2023), which are pretrained
+using either supervised learning on ImageNet or self-supervised learning on LUPerson Fu et al.
+(2021). In summary, the contributions of this paper are as follows.
+
+
+    - We propose to align the image-domain pretrained backbone with existing textual features
+that describe each ID, creating a text-image cross-domain model. We address three scenarios in which the teacher’s feature dimension is larger than, equal to, or smaller than that of
+the student. To ensure dimensional alignment while preserving the knowledge within the
+student model, we utilize a parametric adapter with tailored initialization schemes for each
+scenario.
+
+    - Our findings indicate that knowledge distillation using a pretrained CLIP-based ReID
+model as the teacher can significantly enhance the student’s performance. Notably, the
+cross-domain and relational knowledge distillation approaches are compatible in ReID
+tasks, effectively compensating for the triplet and ID loss during supervised fine-tuning.
+
+    - We conduct extensive experiments across various person ReID datasets to demonstrate the
+effectiveness of our method. Specifically, we achieve state-of-the-art results on both the
+Market1501 and MSMT17 datasets using the Soldier pretrained backbone.
+
+
+2 RELATED WORKS
+
+
+**Supervised Person ReID** is a common representation learning task. CNN-based models, particularly those built on ResNet-50 Luo et al. (2019); Dai et al. (2019); Ye et al. (2022) pretrained on
+ImageNet, have been widely adopted across various ReID datasets. These models are typically optimized using a combination of ID classification loss and metric learning, specifically the triplet loss
+Hermans et al. (2017), to reduce the distances between features of the same ID in the embedding
+space, ensuring the model can generalize to unseen IDs during inference. However, CNNs often focus on small, irrelevant regions in the spatial feature maps, limiting the effectiveness of their feature
+representations. To address this, researchers have introduced attention layers on top of CNNs Chen
+et al. (2019); Wang et al. (2022a) to expand the receptive field. In addition to global representations,
+local part features Sun et al. (2018); Wang et al. (2018); Li et al. (2021) and semantic parts Kalayeh
+et al. (2018); Zhu et al. (2020) have also proven effective in learning more discriminative features.
+Besides ResNet-50, other light-weight CNN backbones like Zhou et al. (2019); Gu et al. (2023) are
+also proposed. They have advantages on training and inference speed.
+
+
+Image transformers Dosovitskiy et al. (2021) have recently gained popularity in ReID tasks. Like
+CNN-based models, they are also pretrained on ImageNet. Models such as TransReID He et al.
+(2021), AAFormer Zhu et al. (2021), DCAL Zhu et al. (2022a), DC-Former Li et al. (2023b), and
+PFD Wang et al. (2022b) have achieved better performance than CNN-based approaches, particularly on large and challenging ReID datasets like MSMT. Furthermore, self-supervised pretraining
+
+
+2
+
+
+methods built on larger datasets, such as LUPerson Fu et al. (2021), including TransReID-SSL Luo
+et al. (2021), PASS Zhu et al. (2022b), and SOLIDER Chen et al. (2023), have further boosted
+performance.
+
+
+All of the above methods utilize models pretrained in a single image domain. CLIP-ReID Li et al.
+(2023a) is the first work to leverage CLIP’s cross-domain pretraining and has achieved state-ofthe-art results on MSMT, demonstrating the potential of cross-domain pretraining even for singledomain ReID tasks. Thus, we select CLIP-ReID as the teacher model, aligning its textual features
+for each ID with a single-domain model, thereby incorporating cross-domain constraints during
+optimization.
+
+
+**Knowledge** **Distillation** Hinton (2015) encourages the online student model to mimic the teacher
+model. Typically, the teacher has more parameters than the student and remains fixed during training.
+By applying a distillation loss that compares the outputs of the teacher and student models, the socalled ”dark knowledge” from the teacher can be transferred to the student. For classification tasks,
+this distillation loss is often computed using KL divergence, which measures the difference between
+the two predicted logit vectors produced by softmax functions. Distillation can also be performed in
+other forms, such as feature distance Romero et al. (2014), pairwise similarity Tung & Mori (2019);
+Park et al. (2019), or through contrastive learning Tian et al. (2019). The teacher model can be
+updated online during training Tarvainen & Valpola (2017). Recently, knowledge distillation has
+been widely adopted for training lightweight models He et al. (2022); Wu et al. (2022), and even for
+ViT Touvron et al. (2021). It can also be performed more efficiently through fast distillation methods
+Shen & Xing (2022). Moreover, online distillation has proven useful for cross-domain pretraining
+on image-text pairs Dong et al. (2023).
+
+
+3 METHOD
+
+
+We propose a novel knowledge distillation scheme for supervised learning in person ReID. Our key
+idea is to leverage a CLIP-based model as the teacher, guiding the optimization of the student model
+by incorporating a cross-domain constraint to mimic the teacher. The overview of the proposed
+method is shown in Figure 1. Formally, we denote _T_ as the teacher model, which consists of
+an image encoder _EI_ and text encoder _ET_ structured as transformers. The image features _fI_ =
+_EI_ ( _I_ ) _∈_ R _[d]_ output by _EI_ represent each image and are used in the inference stage for pairwise
+distance calculations, where _d_ is the feature dimension.
+
+
+3.1 PRELIMINARIES: CLIP-BASED REID MODEL
+
+
+In the CLIP-based ReID model, the pretrained weights for both _EI_ and _ET_ already contain rich
+prior knowledge derived from a large number of image-text pairs. However, since ReID is a finegrained task, _EI_ requires fine-tuning based on the specific downstream data. The optimization of
+_EI_ is conducted in two stages. In the first stage, learnable prompt tokens shared for each identity
+are inserted into a predefined text template _T_ of ”a photo of a [X][X][X][X] person” and fed into
+the text encoder _ET_, generating textual features _fT_ = _ET_ ( _T_ ) for each ID. During this stage, only
+the prompt tokens [X] are optimized while all parameters in _EI_ and _ET_ remain fixed. The training
+objective is defined by a multi-positive contrastive loss, as illustrated in Equations 1 and 2..
+
+
+Here, _fI_ _[i]_ [and] _[ f]_ _T_ _[ i]_ [are the] _[ i]_ [th image and text within a training batch,] [respectively.] _[P]_ [(] _[i]_ [)][ is the list of]
+positives sharing the same ID labels as _fI_ _[i]_ [or] _[ f]_ _T_ _[ i]_ [.] _[f]_ _T_ _[ p]_ [and] _[ f]_ _I_ _[ p]_ [denote the] _[ p]_ [th positive in this list, while]
+_A_ ( _i_ ) is the set of all images or texts in the batch, excluding _fI_ _[i]_ [or] _[ f]_ _T_ _[ i]_ [itself.] [In the second training]
+stage, _ET_ and prompt tokens [X] are kept fixed, and together providing textual features _fT_ for all
+_C_ identities. During this stage, only parameters within _EI_ are optimized. Besides _Li_ 2 _tce_ defined in
+Equation 3, they are trained under a common ID _Lid_ and triplet loss _Ltri_ . In 3, _yi_ is the label of the
+
+
+3
+
+
+1
+_Li_ 2 _t_ ( _i_ ) = _−_ _|P_ ( _i_ ) _|_
+
+
+- exp(sim( _fI_ _[i]_ _[·][ f]_ _T_ _[ p]_ [))] _[/τ]_
+
+log
+
+  _p∈P_ ( _i_ ) _j∈A_ ( _i_ ) [exp(][sim][(] _[f]_ _I_ _[ i]_ _[·][ f]_ _T_ _[ j]_
+
+
+(1)
+_j∈A_ ( _i_ ) [exp(][sim][(] _[f]_ _I_ _[ i]_ _[·][ f]_ _T_ _[ j]_ [))] _[/τ]_
+
+
+1
+_Lt_ 2 _i_ ( _i_ ) = _−_ _|P_ ( _i_ ) _|_
+
+
+- exp( _fT_ _[i]_ _[·][ f]_ _I_ _[ p]_ [)] _[/τ]_
+
+log
+
+  _p∈P_ ( _i_ ) _j∈A_ ( _i_ ) [exp(] _[f]_ _T_ _[ i]_ _[·][ f]_
+
+
+(2)
+_j∈A_ ( _i_ ) [exp(] _[f]_ _T_ _[ i]_ _[·][ f]_ _I_ _[ j]_ [)] _[/τ]_
+
+
+3.2 ALIGNING TEXTUAL FEATURES FOR ANY PRETRAINED IMAGE ENCODER
+
+
+To fully utilize the cross domain description ability of CLIP-based ReID model, we consider to
+match textual features of all identities with any pretrained image encoder, therefore, converting the
+single domain image encoder _EI_ _[′]_ [into the cross domain model including a pair of] _[ E]_ _I_ _[′]_ [and] _[ E][T]_ [ .] [The]
+main challenge is to align the dimension between _fI_ _[′]_ _[∈]_ [R] _[d][′]_ [in] _[d][′]_ [dimensional] [space] [with] _[f][T]_ [in] _[d]_
+space. We consider following cases according to comparison results between _d_ and _d_ _[′]_ .
+
+
+3.2.1 DIMENSION REDUCTION AT THE TEACHER SIDE
+
+
+When the dimensionality of the textual feature _fT_ exceeds that of the image feature _fI_ _[′]_ [(i.e.,] _[ d > d][′]_ [),]
+it is necessary to reduce the dimensions of _fT_ . For this purpose, we employ Principal Component
+Analysis (PCA). Specifically, we collect all image features from the training data using _EI_ . We
+then compute the _d_ _[′]_ eigenvectors corresponding to the largest eigenvalues in the feature space of
+_fI_, which collectively form a projection matrix denoted as _Wd→d′_ _∈_ R _[d][′][×][d]_ . Since CLIP-ReID
+keeps the cross domain alignment characteristic of the original CLIP, this matrix is then applied to
+all textual features _fT_ _[i]_ [describing each identity,] [where] _[ i]_ [=] [1] _[,]_ [ 2] _[, . . ., C]_ [,] [resulting in the dimension-]
+reduced textual features _fT_ _[i]_ _′_ _∈_ R _d′_ . The PCA retains most of the relevant dimensions in the teacher
+model while minimizing information loss. Note that the dimension reduction at the teacher side is
+a fixed operation, where _Wd→d′_ is not learnable and remains static. Moreover, _Wd→d′_ is omitted
+when the student gives the larger dimension which _d ≤_ _d_ _[′]_ .
+
+
+4
+
+
+_E_ I'
+
+_**Student**_
+
+
+_**RKD Loss**_
+
+
+�’1�
+
+�’2�
+
+�’3�
+
+
+_d_  _d_ '
+
+
+_C_  _d_
+
+
+_b_  _d_ '
+
+
+_b_  _C_
+
+
+_**KL Loss**_
+
+
+_**KL Loss**_
+
+⨂ ⨂
+
+
+_d_ ' _d_ ' or _d_ ' _d_ _b_  _d_ ' or _b_  _d_
+
+
+�1�
+
+�2�
+
+�3�
+
+
+head
+
+
+_**Triplet Loss**_ _**ID Loss**_
+
+
+Figure 1: Overview of our proposed method. We use CLIP-ReID Li et al. (2023a) as the teacher
+model, with memory banks for image and textual features built offline. These stored features provide
+cross-domain similarity guidance to the student. A trainable linear adapter is inserted into the student
+model to align its feature dimension _d_ _[′]_ with the teacher’s _d_, initialized in a specific way. Optionally,
+PCA is applied at the teacher side to reduce the textual feature dimension for better alignment with
+the student. The KL divergence loss is then calculated, along with relational distillation loss (RKD)
+and other losses commonly used in ReID tasks, to optimize the student model including the adapter.
+
+
+_fI_ _[i]_ [and] _[ N]_ [represents the batch size.] [sim][(] _[·]_ [)][ computes the cross domain cosine similarity of two input]
+vectors.
+
+
+_Li_ 2 _tce_ ( _i_ ) = _−_ [1]
+
+_N_
+
+
+- _N_ exp(sim( _fI_ _[i]_ _[·][ f]_ _T_ _[ y][i]_ [)] _[/τ]_ [)]
+
+log   - _C_ (3)
+_i_ =1 _j_ =1 [exp(][sim][(] _[f]_ _I_ _[ i]_ _[·][ f]_ _T_ _[ j]_ [)] _[/τ]_ [)]
+
+
+3.2.2 LEARNABLE ADAPTER AT THE STUDENT SIDE AND ITS INITIALIZATION
+
+
+The online student model _EI_ _[′]_ [must] [be] [fine-tuned] [for] [person] [ReID] [while] [simultaneously] [aligning]
+with the teacher model. To leverage the pretrained weights of _EI_ _[′]_ [and utilize its prior knowledge, we]
+aim to make minimal modifications without introducing numerous randomly initialized parameters.
+Therefore, we insert a simple linear learnable layer, parameterized by _Wa_, at the output of _EI_ _[′]_ [to]
+align _fI_ _[′]_ [with the teacher model’s features. The dimensions of] _[ W][a]_ [ depend on two cases: when] _[ d][ ≥]_ _[d][′]_
+or when _d_ _<_ _d_ _[′]_ . In the first case, where the student’s feature dimension is greater than or equal to
+the teacher’s ( _d_ _≥_ _d_ _[′]_ ), _Wa_ _∈_ R _[d][′][×][d][′]_ maintains the feature dimension from _EI_ _[′]_ [.] [In the second case,]
+where the student’s feature dimension is less than the teacher’s ( _d_ _<_ _d_ _[′]_ ), _Wa_ _∈_ R _[d][×][d][′]_ reduces the
+dimension to _d_ .
+
+Furthermore, it is important to initialize _Wa_ appropriately. For _Wa_ _∈_ R _[d][′][×][d][′]_, we initialize it as
+the identity matrix _I_ . In other words, at the beginning of training, the features _fI_ _[′]_ [from] [the] [stu-]
+dent backbone _EI_ _[′]_ [are] [directly] [passed] [through] [the] [adapter] [unchanged,] [ensuring] [a] [warm] [start.] [In]
+the case where _Wa_ _∈_ R _[d][×][d][′]_, we initialize it using PCA eigenvectors computed from all training
+images processed by the pretrained _EI_ _[′]_ [.] [This] [initialization] [allows] [the] [adapter] [to] [capture] [the] [most]
+significant variance, preserving essential information and facilitating effective alignment with the
+feature space of the teacher. In practice, we find that this straightforward linear adapter and its initialization scheme not only facilitate teacher-student alignment but also ensure compatibility of the
+cross-domain knowledge distillation loss with other loss functions.
+
+
+3.3 OPTIMIZATION
+
+
+We now present the details of the optimization process for the student model. Specifically, all
+parameters in _EI_ _[′]_ [are trained under two types of losses.] [The first is the knowledge distillation loss,]
+which ensures that the online student model mimics the output of the teacher model. The second is
+the traditional ReID loss, which has been proven effective in most ReID models.
+
+
+3.3.1 KNOWLEDGE DISTILLATION LOSS
+
+
+The image feature _fa_ = _WafI_ _[′]_ [, produced by the adapter, is used to compute cross-domain similarity]
+with either the original textual feature _fT_ or the dimension-reduced feature _fT_ _[′]_ [from the CLIP-based]
+ReID model. While directly applying the _Li_ 2 _tce_ loss defined in Equation 3 improves performance,
+we observe that it yields inferior results compared to cross-domain distillation, which uses the KL
+divergence loss defined in Equation 4.
+
+
+Here, _**q**_ _i_ and _**p**_ _i_ are cross-domain similarity vectors for the _i_ -th image, computed from the teacher
+and student models, respectively. The _j_ -th element in these vectors, such as _**p**_ _i_ ( _j_ ), can be computed
+as follows, where _fT_ _[j]_ [is the textual feature for the] _[ j]_ [-th ID:]
+
+exp(sim( _fa_ _[i]_ _[·][ f]_ _T_ _[ j]_ [)] _[/τ]_ [)]
+_**p**_ _i_ ( _j_ ) =           - _C_ (5)
+_k_ =1 [exp(][sim][(] _[f]_ _a_ _[ i]_ _[·][ f]_ _T_ _[ k]_ [)] _[/τ]_ [)]
+
+
+Besides the distillation loss in Equation 4, the pairwise relationships between image features also
+encapsulate knowledge from the teacher model. Therefore, the relation knowledge distillation loss
+_Lrkd_ proposed by can also be incorporated. In practice, we find that _Lrkd_ is compatible with _Lkl_
+when it is applied to the image feature _fI_ _[′]_ [before the adapter.] [In other words, the adapter facilitates]
+the simultaneous use of both distillation losses, enhancing the overall performance of the model.
+
+
+Since the computation of the knowledge distillation losses, including _Lkl_ and _Lrkd_, involves both the
+image features _fI_ and the textual features _fT_ from the teacher model, as well as their corresponding
+versions _fI_ _[′]_ [and] _[f]_ _T_ _[ ′]_ [(or] [the] [original] _[f][T]_ [ )] [from] [the] [student] [model,] [performing] [all] [these] [calculations]
+online would require significant computational resources. To facilitate faster computation for _Lkl_
+and _Lrkd_, we adopt strategies from FKD . Specifically, all necessary image and textual features
+_fI_ and _fT_ (or their dimension-reduced counterparts _fT_ _[′]_ [)] [are] [pre-computed] [offline] [and] [stored] [in] [a]
+memory bank. During training, these features are retrieved from the bank based on the current
+
+
+5
+
+
+_C_
+
+
+- _**q**_ _i_ ( _j_ ) log _**[p]**_ _[i]_ [(] _[j]_ [)]
+
+_**q**_ _i_ ( _j_ )
+
+_j_ =1
+
+
+(4)
+_**q**_ _i_ ( _j_ )
+
+
+_Lkl_ ( _i_ ) = _−_ [1]
+
+_N_
+
+
+_N_
+
+
+_i_ =1
+
+
+|Dataset|Image Training IDs Query IDs Gallery IDs Cam + View|
+|---|---|
+|MSMT17<br>Market-1501<br>DukeMTMC-reID<br>Occluded-Duke|126,441<br>1,041<br>3,060<br>3,060<br>15<br>32,668<br>751<br>750<br>751<br>6<br>36,411<br>702<br>702<br>1,110<br>8<br>35,489<br>702<br>519<br>1,110<br>8|
+
+
+Table 1: Statistics of datasets used in the paper.
+
+
+online batch. The similarity vector _**q**_ in 4 and pairwise relation vector in _Lrkd_ is then computed to
+guide the online version, thus reducing the computational burden on the teacher model during online
+processing.
+
+
+3.3.2 REID LOSS
+
+
+For supervised person ReID, the cross-entropy loss _Lid_ and the triplet loss _Ltri_ are two commonly
+used loss functions for optimization. These two losses are also compatible with the knowledge
+distillation losses _Lkl_ and _Lrkd_ . Specifically, _Lrkd_ serves as a complement to _Ltri_, while _Lkl_
+enhances _Lid_ . By integrating these loss functions, we can effectively leverage the strengths of both
+traditional ReID training and knowledge distillation techniques. In the experiment section, we verify
+the effectiveness of each loss term.
+
+
+4 EXPERIMENTS
+
+
+We conduct experiments on four different person ReID datasets, including MSMT17 Wei et al.
+(2018), Market-1501 Zheng et al. (2015), DukeMTMC-reID Ristani et al. (2016), Occluded-Duke
+Miao et al. (2019). To evaluate performance, we use cumulative matching characteristics (CMC)
+at Rank-1 (R1) and mean average precision (mAP). The statistics of each training dataset are listed
+in Table 1. Note that MSMT17 is the largest and most challenge dataset in person ReID. So we
+emphasize the performance on this dataset and do ablation study on it.
+
+
+4.1 IMPLEMENTATION DETAILS
+
+
+We utilize CLIP-ReID Li et al. (2023a) as the teacher model. It provides us image and textual
+features from its image and text encoder _EI_ and _ET_, respectively. Particularly, we choose the ViTB model without any camera ID as input for side information embedding. We only use the cross
+domain (post) layer, which is the last layer of CLIP-ReID, and both the image and textual feature
+_fI_ _, fT_ _∈_ R [512] . Features from middle and previous layer in the teacher model are not considered
+during the distillation. We follow most of the training set in CLIP-ReID. Images are resized into the
+resolution of 256 _×_ 128. Each mini-batch consists of _B_ = _P × K_ images, where _P_ = 16 represents
+the number of randomly selected identities, and _K_ = 4 indicates the number of samples per identity.
+For data augmentation, random horizontal flipping, padding, cropping, and erasing are conducted
+on the student side.
+
+
+We choose TinyViT (11M) Wu et al. (2022), OSNet Zhou et al. (2019), Solider-Tiny, -Small and
+-Base models Chen et al. (2023) as the student for optimization. All these models are pretrained
+within the single image domain. The first two are pretrained on ImageNet-22k and -1k in supervised
+way. The Solider series are pretrained by self-supervised learning. For TinyViT, image features _fI_ _[′]_
+lie in lower dimensional space than the teacher, which means _d_ _[′]_ = 448 _<_ _d_ . Hence, the learnable
+adapter is in size of 448 _×_ 448 and initialized by the identity matrix. Offline PCA dimension reduction is performed on textual features from the teacher model. For OSNet, image feature dimension
+_d_ _[′]_ = 512 = _d_, and the adapter is 512 _×_ 512 and initialized in the same way. We omit PCA at
+the student side. For Solider series models, all models have larger dimension than the teacher with
+_d_ _[′]_ _>_ _d_ . The tiny and small models have _d_ _[′]_ = 768 and the adapter is of 768 _×_ 512. While the base
+model has _d_ _[′]_ = 1024, and the adapter is 1024 _×_ 512. They are initialized by PCA eigen vectors
+computed from all training images. For TinyViT, it is trained for 90 epochs with Cosine annealing
+for scheduling the learning rate. For optimization of OSNet and Solider series, it is trained for 120
+epochs. Extra training details are provided at the Appendix.
+
+
+6
+
+
+|Pretraining<br>dataset|Backbones|Methods|MSMT17 Market-1501 DukeMTMC Occ-Duke<br>mAP Rank-1 mAP Rank-1 mAP Rank-1 mAP Rank-1|
+|---|---|---|---|
+|LAINON-5B|ResNet-50|CLIP-ReID|63.0<br>84.4<br>89.8<br>95.7<br>80.7<br>90.0<br>53.5<br>61.0|
+|ImageNet|ImageNet|PCB*<br>MGN*<br>ABD-Net*<br>HOReID<br>ISP<br>SAN<br>PAT<br>CAL*<br>CBDB-Net*<br>DRL-Net<br>C2F|-<br>-<br>81.6<br>93.8<br>69.3<br>83.3<br>-<br>-<br>-<br>-<br>86.9<br>95.7<br>78.4<br>88.7<br>-<br>-<br>60.8<br>82.3<br>88.3<br>95.6<br>78.6<br>89.0<br>-<br>-<br>-<br>-<br>84.9<br>94.2<br>75.6<br>86.9<br>43.8<br>55.1<br>-<br>-<br>88.6<br>95.3<br>80.0<br>89.6<br>52.3<br>62.8<br>55.7<br>79.2<br>88.0<br>**96.1**<br>75.5<br>87.9<br>-<br>-<br>-<br>-<br>88.0<br>95.4<br>78.2<br>88.8<br>53.6<br>64.5<br>56.2<br>79.5<br>87.0<br>94.5<br>76.4<br>87.2<br>-<br>-<br>-<br>-<br>85.0<br>94.4<br>74.3<br>87.7<br>38.9<br>50.9<br>55.3<br>78.4<br>86.9<br>94.7<br>76.6<br>88.1<br>50.8<br>65.0<br>-<br>-<br>87.7<br>94.8<br>74.9<br>87.4<br>-<br>-|
+|ImageNet|Light CNN|Auto-ReID*<br>OSNet<br>CDNet<br>MSINet<br>OSNet-KD|52.5<br>78.2<br>85.1<br>94.5<br>-<br>-<br>-<br>-<br>52.9<br>78.7<br>84.9<br>94.8<br>73.5<br>88.6<br>43.4<br>53.0<br>54.7<br>78.9<br>86.0<br>95.1<br>76.8<br>88.6<br>-<br>-<br>59.6<br>81.0<br>89.6<br>95.3<br>-<br>-<br>-<br>-<br>61.2<br>82.5<br>87.7<br>94.8<br>78.4<br>88.3<br>50.0<br>57.1|
+|LAION-5B|ViT-B|CLIP-ReID|73.4<br>88.7<br>89.6<br>95.5<br>82.5<br>90.0<br>59.5<br>67.1|
+|ImageNet|ImageNet|AAformer*<br>TransReID!<br>TransReID!*<br>DiP<br>PFD<br>DCAL<br>X-ReID<br>DC-Former!|63.2<br>83.6<br>87.7<br>95.4<br>80.0<br>90.1<br>58.2<br>67.0<br>64.9<br>83.3<br>88.2<br>95.0<br>80.6<br>89.6<br>55.7<br>64.2<br>69.4<br>86.2<br>89.5<br>95.2<br>82.6<br>90.7<br>-<br>-<br>67.5<br>84.6<br>90.3<br>95.7<br>83.8<br>91.2<br>59.1<br>66.4<br>65.1<br>82.7<br>89.6<br>95.5<br>82.2<br>90.6<br>60.1<br>67.7<br>64.0<br>83.1<br>87.5<br>94.7<br>80.1<br>89.0<br>-<br>-<br>65.1<br>84.0<br>88.0<br>94.9<br>-<br>-<br>-<br>-<br>69.8<br>86.2<br>90.4<br>96.0<br>-<br>-<br>-<br>-|
+|ImageNet|TinyViT|TinyViT<br>TinyViT-KD|58.2<br>81.7<br>85.3<br>93.7<br>76.6<br>86.5<br>49.5<br>60.5<br>68.4<br>85.9<br>89.3<br>95.0<br>81.4<br>90.1<br>56.9<br>63.5|
+|LUPerson|SwinT|SoliderT<br>SoliderT-KD|67.4<br>85.9<br>91.6<br>96.1<br>82.1<br>91.2<br>56.7<br>66.6<br>68.6<br>86.5<br>92.2<br>96.2<br>83.1<br>91.3<br>61.4<br>69.0|
+|LUPerson|SwinS|SoliderS<br>SoliderS-KD|76.9<br>90.8<br>93.3<br>96.6<br>85.7<br>92.8<br>66.5<br>75.2<br>77.8<br>90.9<br>93.7<br>96.9<br>87.1<br>93.3<br>67.5<br>73.7|
+|LUPerson|SwinB|SoliderB<br>SoliderB-KD|77.1<br>90.7<br>93.9<br>96.9<br>85.8<br>92.6<br>64.6<br>72.5<br>79.0<br>91.1<br>94.1<br>96.9<br>87.3<br>92.9<br>67.9<br>74.7|
+
+
+Table 2: Comparison with state-of-the-art methods on four different person ReID datasets. We categorize these methods by their pretraining datasets and backbone structures. The superscript star*
+means that the input image is resized to a resolution larger than 256 _×_ 128, while the exclamation mark ! indicates the utilization of camera information. Our models, including OSNet-KD,
+TinyViT-KD and Solider-KD, significantly outperform its non-distillation models, meanwhile, they
+also achieve competitive performance comparing with other methods.
+
+
+4.2 QUANTITATIVE COMPARISON WITH OTHER METHODS
+
+
+In Table 2, we present a comparative analysis of our proposed method with the state-of-the-art
+approaches. Particularly, we categorize all methods based on its pretraining datasets, structures
+of backbones, and conduct experiments on three different types of backbones including TinyViT,
+OSNet and Solider series. Since we perform knowledge distillation, light-weight models are intentionally chosen. However, we emphasize that on larger model like SwinB, our method is also
+effective.
+
+
+On all of the four datasets, the proposed cross domain distillation method is able to boost the performance compared to the corresponding non-distillation model. Particularly, our OSNet-KD model
+achieves 61.2 mAP and 82.5 R1 on MSMT17 dataset using light-weight CNN backbones, which is
+even better than ABD-Net in ResNet-50. This metric also surpasses MSINet Gu et al. (2023), which
+is a more advanced light-weight model. Our TinyViT-KD model, with its mAP of 68.4 and R1 of
+85.9, shows a much better performance than TransReID in the advanced setting which uses camera
+information and larger ViT-B model denoted by ”!”. It even approaches the highest metric of ”!*”,
+which benefits from much larger number of tokens. For Solider series pretraining, KD versions give
+higher metrics on all datasets compared with its original ones. Note that due to usage of extra human
+data in LUPerson Fu et al. (2021), the original Solider models have already achieved competitive
+performances, but their corresponding KD versions still obtain higher metrics on all datasets. All
+metrics on backbones of SwinS and SwinB surpass the teacher model, namely the CLIP-ReID, by a
+large margin.
+
+
+7
+
+
+|Method|Params FLOPs Dims|
+|---|---|
+|TinyViT<br>OSNet<br>SoliderT<br>SoliderS<br>SoliderB<br>CLIP-ReID<br>TransReID|11M<br>1.30<br>448<br>3.5M<br>1.01<br>512<br>28M<br>2.93<br>768<br>50M<br>5.66<br>768<br>88M<br>10.01G<br>1024<br>86M<br>35.75G<br>1280<br>86M<br>35.75G<br>768|
+
+
+Table 3: Key parameters of different models that affect the inference efficiency.
+
+
+4.3 ABLATION STUDIES AND VISUALIZATIONS
+
+
+Detailed ablation studies are carried out on MSMT17 datasets with TinyViT as the backbone, to
+show the effectiveness of our cross domain distillation scheme and usage of the inserted adapter.
+The results are listed in Table 4. Specifically, we first conduct series of experiments without bringing
+in the learnable adapter. This is mainly for checking the utility of each loss term. It is obvious that
+training ReID model in normal supervised manner by ID loss _Lid_ and triplet loss _Ltri_ only gives
+an inferior result with mAP of 58.2 and R1 of 81.7. Incorporating any distillation loss, _e.g._, _Lrkd_,
+_Lkl_ or _Lckl_, will give a boost on the metrics. Here _Lkl_ defined in Equation 4 introduces the cross
+domain similarity from CLIP-based teacher model. _Lrkd_ proposed by Park et al. (2019) is computed
+based on the pairwise relation of two image features. We also try knowledge distillation from the
+parametric image classifier in the last layer of the teacher model, which is _Lckl_, and it is a pure
+image domain distillation loss without considering the cross domain similarity like _Lkl_ . Although
+any distillation loss gives the positive effect, _Lrkl_ gives the best performance with mAP of 68 _._ 0.
+Moreover, they are not compatible with each other, and using any two of them leads to a worse
+metric. Then we insert a linear adapter at the student side to make _Lkl_ to be compatible with _Lrkd_ .
+In this case, these two knowledge distillation losses computed on different image features after and
+before the learnable adapter, respectively. It gives the best mAP of 68.4. However, adding _Lckl_ or
+removing _Lkl_ degrades the metric to 67.9 and 66.3, respectively. Moreover, we are curious about
+the effect of _Ltri_ and _Lid_, and find that removing any of them slightly decreases the metric to 68.2
+and 67.7, respectively. We think these downstream task losses become important when optimizing
+a better pretrained model like Solider series, and helps the student model beat the teacher. More
+ablations on OSNet can be found in the Appendix, which also gives a similar results.
+
+
+To further compare the teacher and student models and understand the effect of knowledge distillation losses, TSNE visualization is performed in Figure 2. Particularly, we randomly select 10
+identities and encode their images into the cross domain embedding layer after the adapter. Then
+TSNE reduces these vectors into 2D space. We compare feature spread in the 2D space and find
+that the student model highly mimic the behaivour of the teacher model, showing that knowledge
+distillation losses indeed affect the training process for the student model.
+
+
+We also perform Gradcam Selvaraju et al. (2017) visualizations and compare the results with CLIPReID. Gradcam heat-maps aims to explain the model classification results. Usually, smaller model
+tends to give a reasonable results. Figure 3 shows the results from CLIP-ReID and TinyViT-KD on
+the top and bottom rows, respectively. Obviously, the bottom row tends to highlight on the body of
+person, showing that TinyViT-KD have learned reasonable feature representations. Furthermore, we
+also show person retrieval results in Figure 4.
+
+
+Since knowledge distillation primarily aims to train models smaller than the teacher, we list and
+compare the key parameters of different backbones in Table 3 to highlight the advantages of our
+smaller models. From this comparison, we observe that TinyViT and OSNet are significantly smaller
+than other models, with much lower feature dimensions. This is particularly beneficial for ReID
+inference, as a large number of gallery images typically have pre-computed features, and online
+inference mainly involves forwarding the query image and calculating a vast number of distances.
+Thus, a compact feature representation directly improves inference efficiency.
+
+
+8
+
+
+|Adapter Layer|L L L L L<br>tri id rkd kl ckl|mAP R1|
+|---|---|---|
+|-<br>-<br>-<br>-<br>-<br>-|✓<br>✓<br>-<br>-<br>-<br>✓<br>✓<br>✓<br>-<br>-<br>✓<br>✓<br>-<br>✓<br>-<br>✓<br>✓<br>-<br>-<br>✓<br>✓<br>✓<br>✓<br>✓<br>-<br>✓<br>✓<br>-<br>✓<br>✓|58.2<br>81.7<br>68.0<br>85.7<br>65.7<br>85.2<br>59.5<br>81.7<br>67.5<br>85.3<br>67.1<br>85.5|
+|✓<br>✓<br>✓<br>✓<br>✓<br>✓|✓<br>✓<br>✓<br>✓<br>-<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>✓<br>-<br>-<br>✓<br>-<br>✓<br>✓<br>-<br>-<br>✓<br>✓<br>✓<br>-<br>-<br>-<br>✓<br>✓<br>✓|68.4<br>85.9<br>67.9<br>85.5<br>66.3<br>85.9<br>67.7<br>85.9<br>68.2<br>85.8<br>67.9<br>85.5|
+
+
+Table 4: Ablation study on the adapter at the student side and different combinations schemes of
+training losses. In all these experiments, we employ TinyViT as the online student model and optimize it on MSMT17 dataset.
+
+
+（a) Teacher (CLIP-ReID) (b) Student (TinyViT)
+
+
+Textual features Image features
+
+
+Figure 2: T-SNE visualizations of the image and textual features from the teacher and student models, respectively. It is obvious that features from the student model have a similar spreading with
+those in the teacher model.
+
+
+5 CONCLUSION
+
+
+This paper proposes a cross-domain knowledge distillation method for person ReID. We utilize an
+optimized CLIP-based ReID model as the teacher to provide cross-domain similarity and pairwise
+relational guidance to the online student model, which is pretrained solely in the image domain
+using either supervised or self-supervised methods. An adapter is incorporated on the student side
+to align its output with the cross-domain embedding of the CLIP-based model. Depending on the
+dimensional relationship between the student and teacher models, we adopt different strategies for
+initializing the adapter to better preserve the knowledge within the student model, and optionally
+reduce textual feature dimension at the teacher side to compute the cross domain similarity for the
+online model. Constrained by the relational and cross domain KD loss imposed before and after
+the adapter, our method significantly enhances the performance of different backbones on multiple
+ReID datasets.
+
+
+9
+
+
+(a) (b) (c) (d) (e) (f) (g)
+
+
+Figure 3: Gradcam Selvaraju et al. (2017) visualization of our TinyViT-KD model compared with
+its teacher model CLIP-ReID. On the top, Gradcam results are from the CLIP-ReID. On the bottom,
+the same images are used for visualization through TinyViT-KD model.
+
+
+Query 1 2 3 4 5 6 7 8 9 10
+
+
+Figure 4: ReID retrieval results. Given a query image, we list its the most similar five images from
+the gallery set. Images in blue boxes have the same ID with the query, while those in orange boxes
+are wrong images having different ID with the given query.
+
+
+REFERENCES
+
+
+Tianlong Chen, Shaojin Ding, Jingyi Xie, Ye Yuan, Wuyang Chen, Yang Yang, Zhou Ren, and
+Zhangyang Wang. Abd-net: Attentive but diverse person re-identification. In _ICCV_, pp. 8350–
+8360. IEEE, 2019.
+
+
+10
+
+
+Weihua Chen, Xianzhe Xu, Jian Jia, Hao Luo, Yaohua Wang, Fan Wang, Rong Jin, and Xiuyu
+Sun. Beyond appearance: A semantic controllable self-supervised learning framework for humancentric visual tasks. In _CVPR_, pp. 15050–15061. IEEE, 2023.
+
+
+Zuozhuo Dai, Mingqiang Chen, Xiaodong Gu, Siyu Zhu, and Ping Tan. Batch dropblock network
+for person re-identification and beyond. In _ICCV_, pp. 3690–3700. IEEE, 2019.
+
+
+Xiaoyi Dong, Jianmin Bao, Yinglin Zheng, Ting Zhang, Dongdong Chen, Hao Yang, Ming Zeng,
+Weiming Zhang, Lu Yuan, Dong Chen, et al. Maskclip: Masked self-distillation advances contrastive language-image pretraining. In _Proceedings of the IEEE/CVF Conference on Computer_
+_Vision and Pattern Recognition_, pp. 10995–11005, 2023.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at
+scale. In _ICLR_ . OpenReview.net, 2021.
+
+
+Dengpan Fu, Dongdong Chen, Jianmin Bao, Hao Yang, Lu Yuan, Lei Zhang, Houqiang Li, and
+Dong Chen. Unsupervised pre-training for person re-identification. In _CVPR_, pp. 14750–14759.
+Computer Vision Foundation / IEEE, 2021.
+
+
+Jianyang Gu, Kai Wang, Hao Luo, Chen Chen, Wei Jiang, Yuqiang Fang, Shanghang Zhang, Yang
+You, and Jian Zhao. Msinet: Twins contrastive search of multi-scale interaction for object reid.
+In _CVPR_, pp. 19243–19253. IEEE, 2023.
+
+
+Ruifei He, Shuyang Sun, Jihan Yang, Song Bai, and Xiaojuan Qi. Knowledge distillation as efficient
+pre-training: Faster convergence, higher data-efficiency, and better transferability. In _Proceedings_
+_of the IEEE/CVF conference on computer vision and pattern recognition_, pp. 9161–9171, 2022.
+
+
+Shuting He, Hao Luo, Pichao Wang, Fan Wang, Hao Li, and Wei Jiang. Transreid: Transformerbased object re-identification. In _ICCV_, pp. 14993–15002. IEEE, 2021.
+
+
+Alexander Hermans, Lucas Beyer, and Bastian Leibe. In defense of the triplet loss for person reidentification. _CoRR_, abs/1703.07737, 2017.
+
+
+Geoffrey Hinton. Distilling the knowledge in a neural network. _arXiv preprint arXiv:1503.02531_,
+2015.
+
+
+Mahdi M. Kalayeh, Emrah Basaran, Muhittin G¨okmen, Mustafa E. Kamasak, and Mubarak Shah.
+Human semantic parsing for person re-identification. In _CVPR_, pp. 1062–1071. Computer Vision
+Foundation / IEEE Computer Society, 2018.
+
+
+Siyuan Li, Li Sun, and Qingli Li. Clip-reid: Exploiting vision-language model for image reidentification without concrete text labels. In _AAAI_, pp. 1405–1413. AAAI Press, 2023a.
+
+
+Wen Li, Cheng Zou, Meng Wang, Furong Xu, Jianan Zhao, Ruobing Zheng, Yuan Cheng, and Wei
+Chu. Dc-former: Diverse and compact transformer for person re-identification. In _AAAI_, pp.
+1415–1423. AAAI Press, 2023b.
+
+
+Yulin Li, Jianfeng He, Tianzhu Zhang, Xiang Liu, Yongdong Zhang, and Feng Wu. Diverse part
+discovery: Occluded person re-identification with part-aware transformer. In _CVPR_, pp. 2898–
+2907. Computer Vision Foundation / IEEE, 2021.
+
+
+Yin Lin, Cong Liu, Yehansen Chen, Jinshui Hu, Bing Yin, Baocai Yin, and Zengfu Wang.
+Exploring part-informed visual-language learning for person re-identification. _arXiv_ _preprint_
+_arXiv:2308.02738_, 2023.
+
+
+Hao Luo, Youzhi Gu, Xingyu Liao, Shenqi Lai, and Wei Jiang. Bag of tricks and a strong baseline for
+deep person re-identification. In _CVPR Workshops_, pp. 1487–1495. Computer Vision Foundation
+/ IEEE, 2019.
+
+
+Hao Luo, Pichao Wang, Yi Xu, Feng Ding, Yanxin Zhou, Fan Wang, Hao Li, and Rong Jin. Selfsupervised pre-training for transformer-based person re-identification. _CoRR_, abs/2111.12084,
+2021.
+
+
+11
+
+
+Jiaxu Miao, Yu Wu, Ping Liu, Yuhang Ding, and Yi Yang. Pose-guided feature alignment for
+occluded person re-identification. In _ICCV_, pp. 542–551. IEEE, 2019.
+
+
+Wonpyo Park, Dongju Kim, Yan Lu, and Minsu Cho. Relational knowledge distillation. In _Proceed-_
+_ings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_ _recognition_, pp. 3967–3976,
+2019.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya
+Sutskever. Learning transferable visual models from natural language supervision. In _ICML_, pp.
+8748–8763. PMLR, 2021.
+
+
+Ergys Ristani, Francesco Solera, Roger S. Zou, Rita Cucchiara, and Carlo Tomasi. Performance
+measures and a data set for multi-target, multi-camera tracking. In _ECCV_ _Workshops_ _(2)_, pp.
+17–35, 2016.
+
+
+Adriana Romero, Nicolas Ballas, Samira Ebrahimi Kahou, Antoine Chassang, Carlo Gatta, and
+Yoshua Bengio. Fitnets: Hints for thin deep nets. _arXiv preprint arXiv:1412.6550_, 2014.
+
+
+Ramprasaath R Selvaraju, Michael Cogswell, Abhishek Das, Ramakrishna Vedantam, Devi Parikh,
+and Dhruv Batra. Grad-cam: Visual explanations from deep networks via gradient-based localization. In _Proceedings_ _of_ _the_ _IEEE_ _international conference on computer vision_, pp. 618–626,
+2017.
+
+
+Zhiqiang Shen and Eric Xing. A fast knowledge distillation framework for visual recognition. In
+_European conference on computer vision_, pp. 673–690. Springer, 2022.
+
+
+Yifan Sun, Liang Zheng, Yi Yang, Qi Tian, and Shengjin Wang. Beyond part models: Person
+retrieval with refined part pooling (and A strong convolutional baseline). In _ECCV (4)_, pp. 501–
+518. Springer, 2018.
+
+
+Antti Tarvainen and Harri Valpola. Mean teachers are better role models: Weight-averaged consistency targets improve semi-supervised deep learning results. _Advances in neural information_
+_processing systems_, 30, 2017.
+
+
+Yonglong Tian, Dilip Krishnan, and Phillip Isola. Contrastive representation distillation. _arXiv_
+_preprint arXiv:1910.10699_, 2019.
+
+
+Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre Sablayrolles, and
+Herv´e J´egou. Training data-efficient image transformers & distillation through attention. In
+_International conference on machine learning_, pp. 10347–10357. PMLR, 2021.
+
+
+Frederick Tung and Greg Mori. Similarity-preserving knowledge distillation. In _Proceedings of the_
+_IEEE/CVF international conference on computer vision_, pp. 1365–1374, 2019.
+
+
+Guanshuo Wang, Yufeng Yuan, Xiong Chen, Jiwei Li, and Xi Zhou. Learning discriminative features
+with multiple granularities for person re-identification. In _ACM Multimedia_, pp. 274–282. ACM,
+2018.
+
+
+Haochen Wang, Jiayi Shen, Yongtuo Liu, Yan Gao, and Efstratios Gavves. Nformer: Robust person re-identification with neighbor transformer. In _Proceedings of the IEEE/CVF conference on_
+_computer vision and pattern recognition_, pp. 7297–7307, 2022a.
+
+
+Tao Wang, Hong Liu, Pinhao Song, Tianyu Guo, and Wei Shi. Pose-guided feature disentangling
+for occluded person re-identification based on transformer. In _AAAI_, pp. 2540–2549. AAAI Press,
+2022b.
+
+
+Longhui Wei, Shiliang Zhang, Wen Gao, and Qi Tian. Person transfer GAN to bridge domain gap
+for person re-identification. In _CVPR_, pp. 79–88. Computer Vision Foundation / IEEE Computer
+Society, 2018.
+
+
+Kan Wu, Jinnian Zhang, Houwen Peng, Mengchen Liu, Bin Xiao, Jianlong Fu, and Lu Yuan.
+Tinyvit: Fast pretraining distillation for small vision transformers. In _European_ _conference_ _on_
+_computer vision (ECCV)_, 2022.
+
+
+12
+
+
+Mang Ye, Jianbing Shen, Gaojie Lin, Tao Xiang, Ling Shao, and Steven C. H. Hoi. Deep learning
+for person re-identification: A survey and outlook. _IEEE_ _Trans._ _Pattern_ _Anal._ _Mach._ _Intell._, 44
+(6):2872–2893, 2022.
+
+
+Yajing Zhai, Yawen Zeng, Zhiyong Huang, Zheng Qin, Xin Jin, and Da Cao. Multi-prompts learning
+with cross-modal alignment for attribute-based person re-identification. In _Proceedings_ _of_ _the_
+_AAAI Conference on Artificial Intelligence_, volume 38, pp. 6979–6987, 2024.
+
+
+Liang Zheng, Liyue Shen, Lu Tian, Shengjin Wang, Jingdong Wang, and Qi Tian. Scalable person
+re-identification: A benchmark. In _ICCV_, pp. 1116–1124. IEEE Computer Society, 2015.
+
+
+Kaiyang Zhou, Yongxin Yang, Andrea Cavallaro, and Tao Xiang. Omni-scale feature learning for
+person re-identification. In _ICCV_, pp. 3701–3711. IEEE, 2019.
+
+
+Haowei Zhu, Wenjing Ke, Dong Li, Ji Liu, Lu Tian, and Yi Shan. Dual cross-attention learning for
+fine-grained visual categorization and object re-identification. In _CVPR_, pp. 4682–4692. IEEE,
+2022a.
+
+
+Kuan Zhu, Haiyun Guo, Zhiwei Liu, Ming Tang, and Jinqiao Wang. Identity-guided human semantic
+parsing for person re-identification. In _Computer Vision–ECCV 2020: 16th European Conference,_
+_Glasgow, UK, August 23–28, 2020, Proceedings, Part III 16_, pp. 346–363. Springer, 2020.
+
+
+Kuan Zhu, Haiyun Guo, Shiliang Zhang, Yaowei Wang, Gaopan Huang, Honglin Qiao, Jing Liu,
+Jinqiao Wang, and Ming Tang. Aaformer: Auto-aligned transformer for person re-identification.
+_CoRR_, abs/2104.00921, 2021.
+
+
+Kuan Zhu, Haiyun Guo, Tianyi Yan, Yousong Zhu, Jinqiao Wang, and Ming Tang. PASS: part-aware
+self-supervised pre-training for person re-identification. In _ECCV_ _(14)_, pp. 198–214. Springer,
+2022b.
+
+
+13
+
+
+Table 5: Training details of the different backbones.
+Backbones Optimizer Training Epochs Initial LR Weight Decay Warmup Epochs
+TinyViT AdamW 90 10 _[−]_ [3] 10 _[−]_ [2] 5
+OSNet AdamW 120 5 _×_ 10 _[−]_ [4] 10 _[−]_ [4] 20
+SoliderT SGD 120 8 _×_ 10 _[−]_ [4] 10 _[−]_ [4] 20
+SoliderS SGD 120 2 _×_ 10 _[−]_ [4] 10 _[−]_ [4] 20
+SoliderB SGD 120 2 _×_ 10 _[−]_ [4] 10 _[−]_ [4] 20
+
+
+Table 6: Ablation studies on OSnet.
+Adapter Layer _Ltri_ _Lid_ _Lrkd_ _Lkl_ mAP R1
+
+                - ✓ ✓                 -                 - 53.2 78.0
+
+                - ✓ ✓ ✓                 - 60.4 81.5
+
+                - ✓ ✓                 - ✓ 54.2 78.6
+
+                - ✓ ✓ ✓ ✓ 60.5 81.9
+✓ ✓ ✓ ✓ ✓ 61.2 82.5
+
+
+A APPENDIX
+
+
+A.1 TRAINING DETAILS
+
+
+We provide more training details of different student backbones in Table 5. Basically, for training
+TinyViT, we follow the hyper-parameters in CLIP-ReID Li et al. (2023a). For training OSNet Zhou
+et al. (2019) and Solider Chen et al. (2023).
+
+
+A.2 MORE ABLATION STUDIES ON OSNET
+
+
+Here we provide more ablation studies with OSNet backbones. Particularly, we find the setting with
+learnable adapter and with all loss terms gives the best results, which is the same setting as the
+detailed ablation study in Table 4.
+
+
+A.3 MORE VISUALIZATION RESULTS.
+
+
+Following figures provide more retrieval results for different query images. For one query image,
+we show the retrieval results from the teacher model on the top and from the student model on the
+bottom row.
+
+
+14
+
+
+Query 1 2 3 4 5 6 7 8 9 10
+
+
+Query 1 2 3 4 5 6 7 8 9 10
+
+
+Query 1 2 3 4 5 6 7 8 9 10
+
+
+Figure 5: ReID retrieval results comparison between the teacher and student models.
+
+
+15

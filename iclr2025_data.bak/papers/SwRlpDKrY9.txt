@@ -1,0 +1,1245 @@
+# REDEBIAS: EXPLORING RESIDUAL ENERGY BASED DEBIAS LEARNING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+In real-world applications, ensuring that model decisions are independent of the
+training data distribution is crucial for safely deploying models. To address the
+long-tailed problem, massive approaches focus either on improving individual
+prediction quality or enhancing aggregate evaluation. Although these methods
+improve overall performance, they often sacrifice performance in some classes,
+undermining the goals of long-tailed learning. We conduct a mathematical analysis of the limitations of the Empirical Risk Minimization (ERM) framework in
+long-tailed learning, examining both individual performance and aggregate evaluation. For individual evaluation, although the Negative log-likelihood (NLL)
+metric is effective, it relies heavily on softmax leading to poor distinction and
+ambiguity when the probabilities of correct and incorrect predictions are similar.
+For aggregate evaluation, the naive estimator in ERM is not an unbiased estimator, dominated by head classes. To overcome these challenges, we propose ReDebias, a comprehensive framework combining the Residual-Energy score and a
+Debias estimator. The Residual-Energy score provides a more sensitive reflection of prediction quality than softmax-based scores, enhancing prediction precision and reducing ambiguity. The Debias estimator applies causal inference
+techniques to ensure unbiased estimates during the averaging process, correcting
+for class-wise biases inherent in the naive estimator. Through extensive validation on long-tailed benchmarks, including training from scratch on iNaturalist18,
+ImageNet-LT, and CIFAR10/100-LT, as well as fine-tuning Vision Transformer
+(ViT) on iNaturalist18, our method outperforms the state-of-the-art algorithms.
+Our code and trained models will be made available following the publication of
+this paper.
+
+
+1 INTRODUCTION
+
+
+In real-world scenarios, data often follow Zipf’s law, resulting in long-tailed class distributions (Reed
+(2001)). This imbalance poses a challenge for deep neural networks trained with Empirical Risk
+Minimization (ERM), as they tend to favor head classes with abundant samples while neglecting
+tail classes with fewer samples (Zhang et al. (2023)). Such bias hinders model performance in realworld applications with long-tail distributions, such as visual question answering (Dai et al. (2023);
+Shi et al. (2024)), medical image diagnosis (Huang et al. (2024); Holste et al. (2024)), and unmanned
+aerial vehicle detection (Yu et al. (2021); Pan et al. (2023)).
+
+
+To tackle this challenge, recent studies have focused on two main goals: enhancing individual prediction quality and ensuring aggregate evaluation remains unbiased by class distribution. For the
+first goal, mainstream paradigms aim to enhance network representation to improve individual sample performance, particularly for tail samples, measured by metric _ℓ_ . Common approaches include
+re-weighting Cui et al. (2019); Wang et al. (2024b); Peng et al. (2024), ensemble learning methods
+(Wang et al. (2021b); Li et al. (2022); Tao et al. (2023)), and decouple training (Kang et al. (2020);
+Xu et al. (2023)). For the second goal, numerous aim to ensure that aggregate evaluation is not dominated by head classes. Methods like modified sampling strategies (Chawla et al. (2002); Ren et al.
+(2020); Kang et al. (2020); Wu et al. (2021))and information mixing/transfering (Chou et al. (2020);
+Wang et al. (2024a); Gao et al. (2024); Rangwani et al. (2024)) balance the number or diversity of
+training samples. In addition, logit adjustment techniques (Cao et al. (2019); Menon et al. (2021);
+Hong et al. (2021a)) make the estimator less sensitive to class imbalance during training.
+
+
+1
+
+
+Despite overall performance gains, these approaches often at the expense of performance in certain classes, contradicting the purpose of long-tail learning. To better illustrate this trade-off, we
+evaluated two representative methods: LGLA(Tao et al. (2023)), which enhances individual sample performance through structural improvements, and DODA(Wang et al. (2024a)), which reduces
+class distribution effects on aggregate evaluation via data augmentation. We also explored a hybrid
+approach that combines both LGLA and DODA. As shown in Fig 1, the red curve (SA) reveals
+that although performance improves significantly across most classes, especially tail classes, some
+classes, particularly head classes, still experience performance drops, which is also reflected by the
+SR value. This indicates that neither method alone, nor their combination, fully balance aggregate
+
+
+Figure 1: Comparison of class-wise performance on ImageNet-LT. Blue bars represent the distribution of class sample ratios. Red curves represent SA (Sacrificial Accuracy), indicating the difference in accuracy between baseline and Cross-Entropy (CE) for each class, with larger SA indicating
+greater improvement. SR (Sacrifice Ratio) quantifies the percentage of classes with performance
+drops compared to CE, highlighting the trade-offs in accuracy.
+
+
+In response to this phenomenon, we mathematically analyze the limitations of ERM framework
+in long-tailed learning, focusing on both individual and aggregate evaluation tasks. For individual
+evaluation, we observe that Negative log-likelihood (NLL) loss, which heavily relies on softmax,
+struggles to distinguish correct from incorrect predictions when their predicted probabilities for the
+target class are similar. This weakens its ability to assess prediction quality effectively. From the perspective of energy, we find that this ambiguity arises from the misalignment between softmax-based
+scores and the input probability density, obscuring meaningful differences in model confidence. In
+aggregate evaluation, measured by estimator _R_, we connect the long-tailed problem to causal inference by treating long-tailed datasets as instances of data Missing Not At Random (MNAR), where
+only a subset of data is observable. Under the MNAR condition, the naive estimator in ERM, which
+averages over observed samples, is severely biased and fails to accurately assess true performance
+due to the underlying data distribution bias.
+
+
+To address these limitations, we introduce _**Re-Debias**_, a comprehensive framework combining the
+_Residual-Energy score_ with _Debias estimator_ . The _Residual-Energy score_ unified predictions onto
+a single scale, where lower values indicate larger errors, and higher values reflect more accurate predictions. Our mathematical analysis and empirical validation confirm that this energy-based score
+is particularly well-suited for detection tasks, as it captures non-target class information typically
+missed by softmax-based scores. The _Debias estimator_ corrects the inherent class-wise bias in the
+naive estimator of ERM by estimating and leveraging inverse propensity weights from causal inference. We theoretically prove that it is an unbiased estimator, capable of delivering more accurate
+performance evaluations under long-tailed distributions. To ensure Fisher consistency, we further
+incorporate the propensity into the logits. We validate our method through comprehensive experiments, demonstrating robust performance across various datasets and target-label distributions, confirming its effectiveness and generalizability.
+
+
+In summary, the main contributions of this paper are:
+
+
+- _Evaluation_ _decomposition_ : We identify that state-of-the-art ERM-based methods often achieve
+performance gains by sacrificing accuracy in certain classes. To address this, we decompose the
+optimise process into two tasks: improving individual prediction precision and ensuring unbiased
+aggregate evaluation.
+
+- _Residual-Energy_ _score_ : To overcome limitations of softmax-based scores, we introduce the
+Residual-Energy score, an energy-based metric that captures non-target class information more
+accurately than softmax-based socres, improving the precision of individual predictions.
+
+
+2
+
+
+- _Debias estimator_ : To correct the naive estimator, we develop a novel framework linking the longtailed problem to causal inference, introducing the Debias estimator that ensures fair learning
+under long-tailed distributions through inverse propensity weighting.
+
+- _Extensive_ _Validation_ : We validated our method by training from scratch on on iNaturalist18(Van Horn et al. (2018)), ImageNet-LT(Liu et al. (2019)), and CIFAR10/100-LT(Krizhevsky
+et al. (2009)), and fine-tuning Vision Transformer (ViT) (Alexey (2021)) on iNaturalist18. Our
+approach consistently demonstrated strong performance across different target-label distributions,
+confirming its effectiveness and generalization.
+
+
+2 RELATED WORK
+
+
+2.1 LONG-TAILED LEARNING
+
+
+Long-tailed class distribution datasets are inevitable in real-world applications. Most existing longtail classification methods solve the long-tailed problem in class-wise, and can be divided into three
+categories Zhang et al. (2023): class rebalancing (Menon et al. (2021); Wang et al. (2024b); Zang
+et al. (2021); Lin et al. (2017); Du & Wu (2023)) attempts to balance the class distribution during
+training; Information enhancement (Chou et al. (2020); Wang et al. (2024a; 2021a)) try to introduce
+additional information to improve the performance of the tail class without sacrificing the performance of the head class, for example Tang et al. (2022) utilizes the pre-trained model (Paszke et al.
+(2019)) to generate image feature clusters as annotations of implicit attributes, and then uses data
+sampling strategies to build different training environments for invariant feature learning; and module improvement Zhou et al. (2023); Jin et al. (2023); Zhou et al. (2020); Tao et al. (2023)) tries
+to come up with solutions from exploring methods to optimize network modules to the long-tailed
+problem. However, all these approaches rely on softmax-based scores to measure prediction quality,
+which is suboptimal. From energy perspective, the softmax-based score emphasizes reducing the
+target class energy and increasing that of other classes but neglects sufficiently boosting non-target
+class energies. This leads to similar loss values for correct and incorrect predictions, diminishing
+the model’s ability to accurately distinguish between target and non-target classes.
+
+
+2.2 ENERGY-BASED LEARNING
+
+
+Energy-based models(EBMs) (LeCun et al. (2006); Ranzato et al. (2006; 2007)), rooted in Boltzmann machines (Ackley et al. (1985)), offer a flexible framework for both probabilistic and nonprobabilistic learning. In image recognition, EBMs aim to assign as low energy as possible to
+images from the target class and high energies to images of other classes. Recent advancements like
+BiDVL(Kan et al. (2022) )proposes a bi-level optimization to enhance energy-based hidden variable
+models, while CLEL(Lee et al. (2023)) leverages contrastive representation learning to make EBM
+training faster and more efficient. In GAN training, Zhao et al. (2017) leverages energy values to improve the discriminator’s performance. Despite these successes, training EBMs remains challenging
+due to the intractability of the normalization constant. To bypass the calculation of proper normalization, Liu et al. (2020) shows that energy scores can better distinguish in- and out-of-distribution
+samples compared to softmax-based methods. However, existing approaches mainly focus on the
+energy of target or total classes, overlooking the non-target class energy. Taking a step further,
+we introduce the residual-energy score, which measures the energy of non-target classes, reducing
+the overconfidence of softmax scores and offering greater optimization flexibility without requiring
+normalization. Our approach directly optimizes the energy gap between boundary samples, aligning
+naturally with energy-based detectors. Additionally, previous EBMs have largely ignored the longtailed class imbalance problem. To address this, we propose an unbiased performance estimator that
+mitigates the imbalance using causal inference principles.
+
+
+3 RETHINKING ERM
+
+
+3.1 PROBLEM SETUP
+
+
+Let O = ( _xi, yi_ ) _[N]_ _i_ =1 [denote the long-tailed training dataset, where] _[ x][i]_ [ represents an input sample and]
+_yi_ _∈{_ 1 _, . . ., C}_ is the corresponding class label. The total number of samples is _N_ = [�] _c_ _[C]_ =1 _[n][c]_ [,]
+
+
+3
+
+
+This formulation highlights that the NLL loss _ℓnll_ which heavily relies on softmax, quantifies the difference between the energy _E_ ( _x, y_ ) and the free energy _E_ ( _x_ ; _f_ ). Minimizing the NLL loss involves
+decreasing _E_ ( _x, y_ ) while increasing _E_ ( _x_ ; _f_ ). To directly illustrate the limitations of softmax-based
+scores, Fig. 2 compares two samples from the CIFAR10 dataset with an imbalance ratio of 50. Even
+though sample 1 is correctly classified and sample 2 is misclassified, both samples yield nearly
+identical softmax-based score. This similarity reflects the softmax-based score tendency to saturate
+the output probabilities, obscuring meaningful differences in model confidence between correctly
+and incorrectly classified samples. Therefore, relying solely on softmax introduces ambiguity in
+assessing classification performance, potentially hindering model training and evaluation.
+
+
+4
+
+
+with _nc_ indicating the number of instances in class _c_ . Following a common assumption (Zhang et al.
+(2023)), _πc_ = _[n]_ _N_ _[c]_ [represents the label frequency of class] _[ c]_ [. The classes are sorted in decreasing order]
+
+of cardinality, that is, if _i_ 1 _<_ _i_ 2, then _ni_ 1 _≥_ _ni_ 2, and it holds that _n_ 1 _≫_ _nC_ . Then, the imbalance
+ratio, which quantifies the degree of skewness in the dataset, is calculated by _γ_ = _n_ _[n]_ _C_ [1] [.] [The goal of]
+
+Long-tailed learning is to develop well-performing deep models from datasets characterized by longtailed class distributions. Empirical Risk Minimization (ERM) is a widely used principle, aiming to
+identify a hypothesis _θ_ [ˆ] that minimizes the empirical risk _R_ ( _θ_ ):
+
+
+_n_
+
+- _ℓ_ (ˆ _yi, yi_ ; _θ_ ) _,_ (1)
+
+
+_i_ =1
+
+
+_θ_ ˆ = arg min _R_ ( _θ_ ) = arg min
+_θ_ _θ_
+
+
+1
+
+_N_
+
+
+This raises two critical problems: is the typical individual metric _ℓ_ sufficiently precise enough to
+reflect the discrepancy between the prediction _y_ ˆ and the true label _y_ ? And, is the estimator _R_
+unaffected by the class distribution?
+
+
+3.2 TYPICAL INDIVIDUAL METRIC FROM AN ENERGY PERSPECTIVE
+
+
+In a discriminative neural network _f_ ( _x_ ) : R _[D]_ _→_ R _[C]_, an input _x ∈_ R _[D]_ is mapped to _C_ -dimensional
+logits. These logits are then transformed into categorical distribution using the softmax function:
+
+
+_e_ _[f][y]_ [(] _[x]_ [)]
+_p_ ( _y|x_ ) =                - _C_ _[,]_ (2)
+_j_ _[e][f][j]_ [(] _[x]_ [)]
+
+
+where _fj_ ( _x_ ) represent the logit for the _j_ class label.
+
+
+According to Liu et al. (2020), the core concept of energy-based models (EBMs) is to construct a
+_energy_ function _E_ ( _x_ ) : R _[D]_ _→_ R that assigns a scalar value to each input sample _x_ . Building on
+recent advancements highlighted by Wu et al. (2023), a set of energy values could be turned into a
+probability density _p_ ( _x_ ) via the Boltzmann distribution:
+
+
+_e_ _[−][E]_ [(] _[x,y]_ [)]
+_p_ ( _y|x_ ) =             - _C_ [=] _[e]_ _e_ _[−][−][E][E]_ [(] _[x,y]_ [(] _[x]_ [)][)] _[.]_ (3)
+_j_ =1 _[e][−][E]_ [(] _[x,j]_ [)]
+
+
+By connecting Eq.3 and Eq.2, the energy can be defined as _E_ ( _x, y_ ) = _−fy_ ( _x_ ), and the free energy
+function _E_ ( _x_ ; _f_ ), which marginalizes over _y_, can be represented as the denominator of the softmax
+activation as _E_ ( _x_ ; _f_ ) = _−_ log [�] _j_ _[C]_ _[e][f][j]_ [(] _[x]_ [)][.]
+
+
+The Negative log-likelihood (NLL) loss depends on softmax, a typical individual metric _ℓ_ used in
+ERM, is commonly defined as:
+
+
+_e_ _[f][y]_ [(] _[x]_ [)]
+_ℓnll_ = _−_ log _p_ ( _y|x_ ) = _−_ log                 - _C_ _[.]_ (4)
+_j_ =1 _[e][f][j]_ [(] _[x]_ [)]
+
+
+Using the energy-based formulation, this softmax-based score can be equivalently rewritten as:
+
+
+_e_ _[f][y]_ [(] _[x]_ [)]
+_ℓnll_ = _−_ log - _C_ [=] _[ −]_ [log] _[ e][f][y]_ [(] _[x]_ [)][ + log]
+_j_ =1 _[e][f][j]_ [(] _[x]_ [)]
+
+
+_C_
+
+- _e_ _[f][j]_ [(] _[x]_ [)] = _E_ ( _x, y_ ) _−_ _E_ ( _x_ ; _f_ ) _._ (5)
+
+
+_j_ =1
+
+
+|8.36 logits|Col2|
+|---|---|
+|sample1<br>sample2<br><br><br>7.97<br>8.36|sample1<br>sample2<br><br><br>7.97<br>8.36|
+|sample1<br>sample2<br><br><br>7.97<br>8.36||
+|.88<br>3.65||
+|||
+
+
+|0.99 0.99 scores|Col2|Col3|Col4|
+|---|---|---|---|
+|0.99<br>0.99|0.99<br>0.99|0.99<br>0.99|0.99<br>0.99|
+|||||
+|||||
+|sample1<br>sample2<br>-4.39<br>-8.48|sample1<br>sample2<br>-4.39<br>-8.48|sample1<br>sample2<br>-4.39<br>-8.48|sample1<br>sample2<br>-4.39<br>-8.48|
+
+
+A highlighted by Steck (2013), _Rnaive_ ( _Y, Y_ [ˆ] ) does not provide an unbiased estimate of the true
+performance _R_ ( _Y, Y_ [ˆ] ) when the data is Missing Not At Random (MNAR):
+
+
+E _O_ [ _R_ [ˆ] _naive_ ( _Y, Y_ [ˆ] )] _̸_ = _R_ ( _Y, Y_ [ˆ] ) _._ (8)
+
+
+This formulation illustrates that under MNAR conditions, the naive estimator introduces bias, failing
+to accurately reflect the true performance of the model across the entire dataset.
+
+
+4 RESIDUAL ENERGY BASED DEBIAS ESTIMATOR: AN OPTIMISED
+ESTIMATOR IN ERM
+
+
+To ensure that aggregate evaluation is independent of class distribution while improving the precision of individual predictions, we first introduce Residual-energy score to tackle the limination
+of softmax-based score (Section 4.1). Subsequently, we connect the long-tailed problem to causal
+inference and propose Debias Estimator which is measure the predictions quality without bias from
+class distribution (Section 4.2).
+
+
+4.1 RESIDUAL-ENERGY-BASED INDIVIDUAL METRIC
+
+
+In this section, we aim to evaluate the quality of individual samples more precisely. As discussed in
+Section 3.2, the NLL loss, one of tipycal softmax-based scores, only consider the difference between
+
+
+5
+
+
+10
+
+
+5
+
+
+0
+
+
+-5
+
+
+-10
+
+
+0 1 2 3 4 5 6 7 8 9
+
+
+0
+
+-2
+
+-4
+
+-6
+
+-8
+
+-10
+
+
+2
+
+
+Residual-energy score
+
+
+Softmax-based score
+
+
+Figure 2: Comparison of two CIFAR-10-im50 samples on Resnet32. For the two samples with a
+target class of 0, by comparing the logits, it is clear that Sample 1 predicts correctly while Sample 2
+predicts incorrectly. However, their softmax-based score (NLL loss) are nearly identical. In contrast,
+the residual-energy score calculated from logits of non-target classes shows a clear difference, with
+sample 1 at -4.39 and sample 2 at -8.48. This demonstrates that residual-energy scores provide
+a more sensitive reflection of prediction errors, whereas softmax-based scores do not reflect this
+effectively.
+
+
+3.3 TYPICAL STAND ESTIMATOR
+
+
+The naive estimator in ERM calculates empirical risk by averaging loss over the observed dataset.
+In an ideal scenario the class distribution without bias, and all samples are fully observed (Schnabel
+et al. (2016)), the standard empirical risk estimator can be expressed as:
+
+
+_n_
+
+ - _ℓ_ ( ˆ _yi, yi_ ) _,_ (6)
+
+
+_i_ =1 _,yi_ = _c_
+
+
+1
+_R_ ( _Y, Y_ [ˆ] ) =
+_C · n_
+
+
+_C_
+
+
+_c_ =1
+
+
+where each class _c ∈C_ has _n_ instances, implying a balanced dataset with an imbalance ratio _γ_ = 1.
+
+
+However, in real-world applications, training datasets are often incomplete. Let _Oi,c_ = 1 denote
+that the _i_ -th sample of class _c_ is observed. The conventional, naive estimator _Rnaive_ ( _Y, Y_ [ˆ] ) measure
+the overall performance by averaging over the observed instances:
+
+
+_Rnaive_ ( _Y, Y_ [ˆ] ) =
+
+
+_{_ ( _i,c_ ): _Oi,c_ =1 _}_ _[ℓ]_ [( ˆ] _[y][i][, y][i]_ [)]
+
+
+_i,c_ _._ (7)
+
+_|{_ ( _i, c_ ) : _Oi,c_ = 1 _}|_
+
+
+_E_ ( _x, y_ ) and _E_ ( _x_ ; _f_ ), which can lead to ambiguity in model confidence. To overcome this limitation,
+we propose the _Residual Energy_ score:
+
+
+Thus, the required propensity _P_ [�] _i,c_ can be reconstructed as:
+
+
+_P_              - _i,c_ = _C · πc,_ (13)
+
+where _πc_ is the label frequency, calculated as _|O|nc_ [.] [The] [detailed] [process] [is] [outlined] [in] **[Appendix]**
+**A.1** . As a result, we derive the Debias estimator, which inversely weights prediction quality using
+
+
+6
+
+
+_C_
+
+_E_ ( _x, y_ ) = _−_ log - _e_ _[f][j]_ [(] _[x]_ [)] _,_ (9)
+
+
+_j_ =1
+
+
+this score accounts for the energy of all non-target classes. As demonstrated in Fig.2, the residual
+energy scores offer clearer distinctions between samples, providing more meaningful information
+than softmax-based scores. This makes the Residual-Energy score more sensitive to variations in
+logit distributions, offering a finer-grained assessment of prediction certainty, especially in longtailed scenarios where softmax scores may obscure true uncertainty.
+
+
+Given the non-linear relationship between _E_ ( _x, y_ ), _E_ ( _x_ ; _f_ ), and _E_ ( _x, y_ ), directly incorporating
+the residual energy _E_ ( _x, y_ ) into the NLL loss is suboptimal. Therefore, inspired by Mixture of
+Softmax (MoS) (Yang et al. (2018)), we apply _K_ different softmax functions and mix them enhance
+expressive power beyond traditional softmax by residual-energy score:
+
+
+_K_
+
+- _w_ ( _E_ _[k]_ ( _x, y_ )) = 1 _,_ (10)
+
+
+_k_ =1
+
+
+_pre_ ( _y|x_ ) =
+
+
+_K_
+
+- _w_ _[k]_ _e_ _[f][ k]_ _y_ [(] _[x]_ [)] _s.t._
+
+  - _C_ _j_ [(] _[x]_ [)] [;]
+_k_ =1 _j_ =1 _[e][f][ k]_
+
+
+_K_
+
+- _w_ _[k]_ =
+
+
+_k_ =1
+
+
+_K_
+
+
+where _fj_ _[k]_ [is] [the] _[k]_ [-th] [component] [associated] [with] [class] _[j]_ [,] _[E][k]_ [(] _[x, ][y]_ [)] [is] [the] [residual] [energy] [of] _[k]_ [-th]
+softmax function, and _w_ ( _·_ ) is a normalisation function. Thus, the NLL loss relies on residual-energy
+score, _ℓre_ = _−_ log _pre_ ( _y|x_ ), is able to fully consider the energy of the target class, the energy of the
+other classes, and the entire energy.
+
+
+4.2 DEBIASED PERFORMANCE ESTIMATOR
+
+
+Instead of evaluating the precision of individual predictions, we also want to evaluate overall performance more impartially. The key to handling the bias in naive estimator _Rnaive_ lies in a thorough
+understanding of the process that generates the observation instances in _O_, which is known as the
+_Assignment Mechanism_ in causal inference (Imbens & Rubin (2015)). In this paper, we assume that
+the assignment mechanism is probabilistic. The marginal probability of observing a sample _xi_ with
+target class _yi_ = _c_ is denoted by _Pi,c_ = _P_ ( _O_ ( _xi, yi_ ) = 1). Following Schnabel et al. (2016), observations are assumed to be independent given _P_, corresponding to a multivariate Bernoulli model
+where each _Oi,c_ is a biased coin flip with probability _Pi,c_ . In long-tailed datasets, this assignment
+is non-random, and _Pi, c_ varies across classes. The Inverse Propensity Scoring (IPS) estimator
+(Imbens & Rubin (2015)) refer to _Pi,c_ as the propensity of observing ( _xi, yi_ ), where _yi_ = _c_ . IPS
+corrects dataset bias by inversely weighting the prediction error based on the propensity of observation, resulting in an unbiased performance estimate:
+
+
+1
+_R_ ˆ _IP S_ ( ˆ _Y |P_ ) =
+_C · n_
+
+
+ 
+
+( _i,c_ ) _∈Oi,c_ =1
+
+
+_ℓ_ ( ˆ _yi, yi_ )
+
+_,_
+(11)
+_Pi,c_
+
+
+where _C_ _· n_ is the total number of the ideal dataset. However, accurately estimating _Pi,c_ is crucial,
+the IPS often suffers from high variance in propensity, leading to oscillating training losses and poor
+generalization. Moreover, the _C · n_ is often unknown in the real world. Therefore, IPS is unsuitable
+for directly handling the long-tail problem in deep learning.
+
+
+To develop an unbiased estimator, inspired by IPS, a straightforward idea is to adjust the naive
+estimator for long-tailed class distributions to align with IPS:
+
+
+1
+_|O|_
+
+
+_O_
+
+
+_O_
+
+
+_ℓ_ ( ˆ _yi, yi_ ) 1
+
+=
+_P_ - _i,c_ _C · n_
+
+
+_ℓ_ ( ˆ _yi, yi_ )
+
+_,_ (12)
+_Pi,c_
+
+
+_P_ - _i,c_ and averages over observed samples, yields an unbiased estimator. The proof is provided in
+**Appendix** **A.2** . Since the most common individual metric _ℓ_ in deep learning is the NLL loss, the
+Debias estimator can be further expressed as:
+
+
+5 EXPERIMENTS
+
+
+5.1 SETUP
+
+
+**Long-tailed** **datasets** We conducted experiments on four long-tailed datasets: CIFAR-10-LT,
+CIFAR-100-LT, ImageNet-LT, and iNaturalist18. CIFAR-10-LT and CIFAR-100-LT have imbalance ratios of 50 and 100. ImageNet-LT is derived from the larger ImageNet dataset, and it consists
+of 1,000 classes with images ranging from 1,280 to 5 per class, while iNaturalist 2018 showcases a
+naturally long-tailed distribution with samples from over 8,000 species.
+
+
+**Training** **Details** For a fair comparison, we follow the setup outlined in previous works(Menon
+et al. (2021)). Unless specified, we use an SGD optimizer with momentum 0.9 and a weight decay
+of 10 _[−]_ [4] . Cosine learning rate decay and standard data augmentation are also applied as in prior
+works(Menon et al. (2021)).
+
+
+In the _traning_ _from_ _scratch_ experiments, for CIFAR-10/100-LT, we train ResNet-32 from scratch
+for 200 epochs with a batch size of 128. The base learning rate is set to 0.4, with a 5-epochs linear
+warm-up, followed by decay factors of 0.1 at the 160th and 180th epochs. For ImageNet-LT, we
+train ResNext-50 from scratch, using a base learning rate of 0.05, and a batch size of 256, with a
+weight decay of 5 _×_ 10 _[−]_ [4], as in Tao et al. (2023). For iNaturalist 2018, we adopt ResNet-50 with a
+base learning rate of 0.1, a batch size of 512, and a weight decay of 2 _×_ 10 _[−]_ [4] .
+
+
+7
+
+
+1
+_Rdebias_ ( _Y, Y_ [ˆ] ) = _|O|_
+
+
+_O_
+
+
+_O_
+
+
+_O_
+
+
+_ℓ_ ( ˆ _yi, yi_ ) 1
+
+=
+_P_ - _i,c_ _|O|_
+
+
+_ℓ_ ( ˆ _yi, yi_ ) 1
+
+=
+_C · πc_ _|O|_
+
+
+_−_ log( _p_ ( _yi|xi_ ))
+
+_._ (14)
+_C · πc_
+
+
+Recalling the goal of ERM is to minimize losses across all samples:
+
+
+arg min _−_ [log(] _[p]_ [(] _[y][i][|][x][i]_ [))]
+
+
+_[p]_ [(] _[y][i][|][x][i]_ [))] = arg max [log(] _[p]_ [(] _[y][i][|][x][i]_ [))]
+
+_C · πc_ _C · πc_
+
+
+_[p]_ [(] _[y][i][|][x][i]_ [))]
+
+_∝_ arg max _[p]_ [(] _[y][i][|][x][i]_ [)]
+_C · πc_ _C · πc_
+
+
+_,_ (15)
+_C · πc_
+
+
+and since _p_ ( _yi|xi_ ; _θ_ ) _∝_ _e_ _[f][yi]_ [(] _[x][i]_ [)], we have,
+
+
+[(] _[y][i][|][x][i]_ [)]
+
+_∝_ arg max _[e][f][yi]_ [(] _[x][i]_ [)]
+_C · πc_ _C · πc_
+
+
+arg max _[p]_ [(] _[y][i][|][x][i]_ [)]
+
+
+= arg max( _e_ _[f][yi]_ [(] _[x][i]_ [)] _[−]_ [log(] _[C][·][π][c]_ [)] ) _._ (16)
+_C · πc_
+
+
+Following Menon et al. (2021), to ensure Fisher consistency and robust network performance, we
+apply a class prior offset directly during logits learning, rather than post-hoc during inference. This
+leads to the adjusted logits _gy_ ( _x_ ) = _fy_ ( _x_ ) + log( _C · πy_ ), incorporating both marginal probabilities
+and the number of classes for unbiased performance evaluation:
+
+
+1
+_R_ - _debias_ ( ˆ _Y, Y_ ) = _|O|_
+
+
+_e_ _[g][y]_ [(] _[x]_ [)]
+
+_−_ log
+
+  _O_ _j∈C_ _[e][g][j]_
+
+
+_e_ _[f][y]_ [(] _[x]_ [)+log(] _[C][·][π][y]_ [)]
+
+_−_ log
+
+  _O_ _j∈C_ _[e][f][j]_ [(] _[x]_ [)+log(] _[C]_
+
+
+_e_ _[y]_ 1
+
+_j∈C_ _[e][g][j]_ [(] _[x]_ [)] [=] _|O|_
+
+
+_[.]_ (17)
+_j∈C_ _[e][f][j]_ [(] _[x]_ [)+log(] _[C][·][π][j]_ [)]
+
+
+Finnally, we can combine residual-energy score with the Debias estimator to address the long-tailed
+problem:
+
+
+1
+_Rre−debias_ ( _Y, Y_ [ˆ] ) = _|O|_
+
+
+- _−_ log
+
+
+_O_
+
+
+_K_
+
+- _w_ _[k]_ _e_ _[g]_ _y_ _[k]_ [(] _[x]_ [)]
+
+  - _C_ _j_ [(] _[x]_ [)] _[,]_
+_k_ =1 _j_ =1 _[e][g][k]_
+
+
+1
+=
+_|O|_
+
+
+- _−_ log
+
+
+_O_
+
+
+_K_
+
+- _w_ _[k]_ _e_ _[f][ k]_ _y_ [(] _[x]_ [)+log(] _[C][·][π][y]_ [)]
+
+  - _C_ _j_ [(] _[x]_ [)+log(] _[C][·][π][j]_ [)] [;]
+_k_ =1 _j_ =1 _[e][f][ k]_
+
+
+(18)
+
+
+_K_
+
+- _w_ ( _E_ _[k]_ ( _x, y_ )) = 1 _._
+
+
+_k_ =1
+
+
+_s.t._
+
+
+_K_
+
+- _w_ _[k]_ =
+
+
+_k_ =1
+
+
+In the _fine-tuning_ experiments, we employ ViT-B/32(Dosovitskiy et al. (2020)) as the backbone,
+performing end-to-end fine-tuning for 100 epochs with a base learning rate is 0.01 and a weight
+decay of 2 _×_ 10 _[−]_ [4] .
+
+
+**Evaluation** **Metrics** We present our evaluation results using top-1 accuracy, denoted as “All”. In
+accordance with Kang et al. (2020), we further categorize the validation/test sets of ImageNet-LT
+and iNaturalist18 into three subsets based on the number of training instances: Many (more than
+100 instances), Medium (20 to 100 instances), and Few (less than 20 instances). This breakdown
+allows for a more nuanced analysis of performance across varying sample sizes in the long-tailed
+distribution.
+
+
+5.2 RESULTS ON TRAINING FROM SCRATCH
+
+
+We compare our method with various baselines that address long-tailed problems, categorize them
+into three main approaches, as Zhang et al. (2023): Class Re-balancing, Module Imporvement, and
+Information Augmentation. The detailed descriptions for baselines are in **Appendix A.3**
+
+
+Table 1: Breakdown results of _training_ _from_ _scratch_ on ImageNet-LT and iNaturalist18. The epo
+is an abbreviation for epochs, and Med is short for Medium. “ _[∗]_ ”: results reported in OTmix. “ _[†]_ ”:
+results reported in origin paper. RIDE and RIDE-based methods have 3 experts by default. The best
+
+|and second best performance for each dataset configuration are bolded and underlined, respectively.|Col2|Col3|Col4|Col5|Col6|Col7|
+|---|---|---|---|---|---|---|
+|Methods<br>ImageNet-LT<br>iNaturalist18<br>epo<br>Many<br>Med<br>Few<br>All<br>epo<br>Many<br>Med<br>Few<br>All|Methods<br>ImageNet-LT<br>iNaturalist18<br>epo<br>Many<br>Med<br>Few<br>All<br>epo<br>Many<br>Med<br>Few<br>All|Methods<br>ImageNet-LT<br>iNaturalist18<br>epo<br>Many<br>Med<br>Few<br>All<br>epo<br>Many<br>Med<br>Few<br>All|Methods<br>ImageNet-LT<br>iNaturalist18<br>epo<br>Many<br>Med<br>Few<br>All<br>epo<br>Many<br>Med<br>Few<br>All|Methods<br>ImageNet-LT<br>iNaturalist18<br>epo<br>Many<br>Med<br>Few<br>All<br>epo<br>Many<br>Med<br>Few<br>All|Methods<br>ImageNet-LT<br>iNaturalist18<br>epo<br>Many<br>Med<br>Few<br>All<br>epo<br>Many<br>Med<br>Few<br>All|Methods<br>ImageNet-LT<br>iNaturalist18<br>epo<br>Many<br>Med<br>Few<br>All<br>epo<br>Many<br>Med<br>Few<br>All|
+|Methods<br>ImageNet-LT<br>iNaturalist18<br>epo<br>Many<br>Med<br>Few<br>All<br>epo<br>Many<br>Med<br>Few<br>All|epo|Many<br>Med<br>Few|All|epo|Many<br>Med<br>Few|All|
+
+
+ViT-B Backbone training from scratch
+
+|ViT†<br>DeiT†<br>LiVT†<br>DeiT-LT†|800<br>800<br>900<br>1400|56.9 30.4 10.3<br>70.4 40.9 12.8<br>73.6 56.4 41.0<br>66.6 58.3 40.0|37.5<br>48.4<br>60.9<br>59.1|800<br>800<br>900<br>1000|64.3 53.9 52.1<br>72.9 62.8 55.8<br>78.9 76.5 74.8<br>70.3 75.2 76.2|54.2<br>61.0<br>76.1<br>75.1|
+|---|---|---|---|---|---|---|
+|ResNext-50 Backbone training from scratch<br>|ResNext-50 Backbone training from scratch<br>|ResNext-50 Backbone training from scratch<br>|ResNext-50 Backbone training from scratch<br>|ResNet-50 Backbone training from scratch|ResNet-50 Backbone training from scratch|ResNet-50 Backbone training from scratch|
+|CE _∗_<br>Focal loss_∗_<br>Logits Adj._†_<br>LADE_†_<br>BALMS_∗_<br>DDC_†_<br>|90<br>90<br>90<br>180<br>90<br>400|66.8<br>38.4<br>8.4<br>66.9<br>39.2<br>9.2<br>62.2<br>49<br>28.3<br>65.1<br>48.9<br>33.4<br>50.3<br>39.5<br>25.3<br>62.9<br>52.6<br>37.1|45.3<br>45.8<br>51.3<br>53.0<br>41.8<br>54.1|200<br>200<br>90<br>200<br>200<br>400|73.9<br>63.5<br>55.5<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>-<br>70.0<br>70.2<br>69.9<br>64.7<br>70.7<br>72.1|61.0<br>61.1<br>68.4<br>70.0<br>70.0<br>70.7|
+|PaCo_†_<br>TDE_†_<br>BBN_†_<br>Decouple-cRT_∗_<br>Decouple-LWS_∗_<br>RIDE _†_<br>NCL_†_<br>LGLA_†_<br>|400<br>90<br>90<br>100<br>100<br>100<br>200<br>180|67.2<br>56.9<br>36.7<br>62.7<br>48.8<br>31.6<br>52.6<br>46.3<br>43.8<br>58.8<br>44.0<br>26.1<br>57.1<br>45.2<br>29.3<br>66.2<br>51.7<br>34.9<br>-<br>-<br>-<br>-<br>-<br>-|58.2<br>51.8<br>49.3<br>47.3<br>47.7<br>54.9<br>60.5<br>61.1|400<br>200<br>200<br>200<br>200<br>100<br>400<br>400|-<br>-<br>-<br>-<br>-<br>-<br>49.4<br>70.8<br>65.3<br>69.0<br>66.0<br>63.2<br>65<br>66.3<br>65.5<br>70.9<br>72.4<br>73.1<br>72.7<br>75.6<br>74.5<br>70.1<br>76.2<br>77.6|73.2<br>63.9<br>66.3<br>65.2<br>65.9<br>72.6<br>74.9<br>76.2|
+|Remixup_∗_<br>CMO+CE_∗_<br>CMO+RIDE_∗_<br>OTmix+CE_†_<br>OTmix+RIDE_†_<br>DODA+CE _†_<br>DODA+RIDE _†_|100<br>100<br>100<br>200<br>200<br>100<br>100|60.4<br>46.9<br>30.7<br>67<br>42.3<br>20.5<br>66.4<br>53.9<br>35.6<br>70.0<br>45.9<br>22.3<br>59.4<br>56.5<br>44.1<br>67.4<br>47.5<br>13.9<br>66.9<br>54.1<br>37.4|48.6<br>49.1<br>56.2<br>52.0<br>57.3<br>48.1<br>56.9|200<br>200<br>200<br>210<br>210<br>100<br>100|-<br>-<br>-<br>76.9<br>69.3<br>66.6<br>68.7<br>72.6<br>73.1<br>69.3<br>70.5<br>68.4<br>71.3<br>72.8<br>73.8<br>74.9<br>66.0<br>58.4<br>71.2<br>73.2<br>73.4|62.3<br>68.9<br>72.8<br>69.5<br>73.0<br>63.6<br>73.7|
+|ours<br>ours<br>ours|90<br>180<br>200|72.8<br>**61.3**<br>42.1<br>**74.6**<br>60.3<br>42.7<br>74.4<br>61.0<br>**44.5**|63.1<br>63.4<br>**63.9**|90<br>200<br>400|76.7<br>75.8<br>76.0<br>78.8<br>78.3<br>78.2<br>**80.6**<br>**79.6**<br>**79.1**|76.0<br>78.3<br>**79.5**|
+
+
+To demonstrate the scalability and effectiveness of our method, we evaluated it on two large-scale,
+real-world long-tailed datasets: ImageNet-LT and iNaturalist18. For fair comparison, we report results at 90, 180, and 200 epochs for ImageNet-LT, and at 90, 200, and 400 epochs for iNaturalist18.
+As shown in Table 1, our method achieves a top-1 accuracy of 63 _._ 9% at 200 epochs on ImageNet-LT,
+with performance improving as training progresses. Notably, even after just 90 epochs, it surpasses
+
+
+8
+
+
+previous state-of-the-art results, demonstrating effectiveness early in training. This consistent improvement underscores the robustness and efficiency of our approach, which continues to outperform
+existing methods with extended training. Since iNaturalist18 lacks a validation set, we report test
+accuracy directly. Our method achieves an overall accuracy of 79 _._ 5%at 400 epochs, outperforming
+the best transformer-based method, DeiT-LT (75 _._ 1%), and RIDE (72 _._ 6%). It also maintains strong
+performance across Many (80 _._ 6%), Medium (79 _._ 6%), and Few (79 _._ 1%) categories, highlighting its
+robustness in handling long-tailed distributions.
+
+
+|Methods|CIFAR-10-LT|CIFAR-100-LT|
+|---|---|---|
+|Methods<br>|100<br>50|100<br>50|
+|CB Focal loss_∗_<br>Logits Adj._∗_<br>LADE_∗_<br>BALMS_†_<br>DDC_†_<br>|74.6<br>79.3<br>-<br>77.7<br>-<br>-<br>84.9<br>88.9<br>83.6<br>82.3|38.7<br>46.2<br>-<br>43.9<br>45.4<br>50.5<br>50.8<br>54.1<br>46.4<br>57.9|
+|PaCo_∗_<br>BBN_∗_<br>RIDE_∗_<br>TDE_∗_<br>NCL_∗_<br>LGLA_†_|-<br>-<br>79.8<br>82.2<br>81.6<br>84.0<br>80.6<br>83.6<br>85.5<br>87.3<br>87.5<br>89.8|52.0<br>56.0<br>39.4<br>47.0<br>48.6<br>49.1<br>44.1<br>50.3<br>54.2<br>58.2<br>**57.2**<br>61.6|
+|Remixup_†_<br>CMO+ERM_†_<br>CMO+RIDE_†_<br>OTmix+ERM_†_<br>OTmix+RIDE_†_|75.4<br>79.8<br>75.0<br>81.4<br>82.2<br>84.6<br>78.2<br>83.4<br>82.7<br>85.2|39.5<br>45.0<br>43.9<br>47.3<br>50.0<br>53.0<br>46.4<br>50.7<br>50.7<br>53.8|
+|ours|**88.3**<br>**91.5**|56.3<br>**62.2**|
+
+
+We conducted an ablation study on
+ImageNet-LT using ResNeXt-50 as the
+backbone, training all models for 90
+
+indicate the number of softmax operations
+
+|Method|Many Medium Few|All|
+|---|---|---|
+|CLIP Zero<br>CLIP Finetune<br>VL-LTR _†_<br>RAC_†_<br>LPT_†_<br>LTGC_†_|6.1<br>3.3<br>2.9<br>76.6<br>74.1<br>70.2<br>-<br>-<br>-<br>75.9<br>80.5<br>81.0<br>-<br>-<br>79.3<br>77.5<br>83.9<br>82.6|3.4<br>72.6<br>76.8<br>80.2<br>76.1<br>82.5|
+|ours|**84.2**<br>**84.0**<br>**83.9**|**84.0**|
+
+used. Applying the debias estimator significantly improves overall accuracy from 43 _._ 5% to 52 _._ 2%.
+Introducing the original MoS with three softmax components into the baseline increases accuracy to
+47 _._ 0%, and integrating MoS with residual-energy scoring further enhances it to 52 _._ 1%. Finally, combining residual-energy-based MoS with the debias estimator yields an overall accuracy of 63 _._ 1%,
+with the energy-based MoS also utilizing three softmax components. These results demonstrate
+
+
+Table 2 shows that our method outperforms all baselines across various imbalance ratios for both CIFAR-10-LT and
+CIFAR-100-LT datasets. Specifically,
+our method achieves the highest accuracy of 88 _._ 31% and 91 _._ 51% for CIFAR10-LT with imbalance ratios of 100 and
+50, respectively. In the CIFAR-100-LT
+dataset with an imbalance ratio of 100,
+our method performs slightly worse than
+LGLATao et al. (2023). This discrepancy
+may be due to underfitting, as our model is
+trained for only 200 epochs, while LGLA
+was trained for 400 epochs.
+
+
+5.3 RESULTS ON FINE-TUNING VIT
+
+
+Table 2: Top 1 accuracy for CIFAR-10/100-LT. “ _[∗]_ ”:
+results reported in LGLA.“ _[†]_ ”: results reported in origin paper. The best and second-best performances are
+**bolded** and underlined, respectively.
+
+
+Efficient fine-tuning helps the model retain the general knowledge learned from
+a large, diverse dataset while refining its
+
+approach, we conducted end-to-end finetuning of the ViT model for 100 epochs on the iNaturalist18 dataset, as shown in Table 3. For
+comparison, we established baseline methods, with LPT(Dong et al. (2023)) and LTGC(Zhao et al.
+(2024)) representing prompt tuning, and VL-LTR(Tian et al. (2022)), RAC(Long et al. (2022)) and
+CLIP-Finetune representing end-to-end fine-tuning. Our method achieved the highest overall accuracy of 83 _._ 9%, outperforming all baselines. It demonstrated robust performance, with 84 _._ 2% on
+Many, 84 _._ 0% on Medium, and 83 _._ 6% on Few.
+
+
+5.4 EVALUATION AND ANALYSIS
+
+
+Table 3: Breakdown results of _fine-tuning_ on iNaturalist18. “ _[†]_ ”: results reported in origin paper.
+
+
+In this section, we conduct a detailed analysis of the mechanism of Re-Debias and
+discuss the following three concerns.
+
+
+**How does each component affect perfor-**
+**mance?**
+
+
+9
+
+
+that our method does not require a gating mechanism to adjust the contribution of each softmax
+component, as is necessary in MoS, thereby avoiding potential overfitting and added complexity.
+
+
+Table 4: Ablation results on ImageNet-LT. These models are all We further explored the effect
+trained on ResNext-50 by 90 epoches. The number in brackets of varying the number of softindicates the number of softmax. max components: using two
+
+components achieves an accu
+ponents reach the highest ac
+rating both the debias estimator
+
+|MoS|Energy|Debias|ImageNet-LT|Col5|
+|---|---|---|---|---|
+|MoS|Energy|Debias|Many<br>Medium<br>Few|All|
+|✓(3)|||66.8<br>38.4<br>8.4<br>68.2<br>40.4<br>9.9|45.3<br>47.0|
+|✓(3)<br>✓(3)|✓|✓<br>✓|63<br>49.7<br>30.4<br>62.9<br>49.4<br>31.0<br>74.0<br>50.8<br>17.5|52.2<br>52.1<br>55.4|
+|✓(2)<br>✓(3)<br>✓(4)|✓<br>✓<br>✓|✓<br>✓<br>✓|69.1<br>55.9<br>36.7<br>72.8<br>**61.3**<br>**42.1**<br>**74.1**<br>58.8<br>38.4|58.4<br>**63.1**<br>61.9|
+
+and residual-energy scoring, highlights the importance of balancing model complexity to optimize
+performance in long-tailed visual recognition tasks. Additional ablation studies are provided in
+**Appendix A.4** .
+
+
+**Does** **ReDebias** **make** **fewer** **classes** **be** **‘sac-**
+**rificed’?** we analyse and validate that previous approaches improve the average performance by sacrificing certain classes (especially
+the header class).The goal of Re-Debias is to
+mitigate the imbalance in terms of data while
+aiming for inter-class fairness. Ambiguity is
+reduced by allowing residual-energy scores to
+enhance the expressiveness of softmax-based
+scores. AIn addition, the Debias estimator ensures that the class distribution no longer affects
+
+Figure 3: Visualization of the sacrifice accuracy
+
+the averaging operation. From the visualization
+
+of each class between CE and ReDebias.
+
+of the sacrifice accuracy of each class and sacrifice rate in Fig.3, it can be found that compared with Re-Debias, Re-Deibas reduces the sacrifice
+rate by 17 _._ 2%, indicating that Re-Debias makes fewer classes be ‘sacrifaiced’.
+
+
+**Does** **ReDebias** **still** **suffer** **from** **class** **imbalance** **from** **training?** The results in Table 5 reveal
+significant performance differences among methods under varying imbalance ratios (IB) during inference. In the forward label distribution scenario, while accuracies generally decrease as IB values
+drop, our model maintains high accuracy rates of 65 _._ 7% and 65 _._ 3% at IB values of 25 and 10, respectively, demonstrating robustness to different imbalance levels. Under both uniform and backward
+target label distributions, our method consistently performs well, achieving the highest accuracy of
+61 _._ 2% in the uniform setting and outperforming other methods in backward scenarios. In contrast,
+although methods like LADE and LGLA excel under certain conditions, they do not surpass our
+model overall. This indicates that our approach not only adapts effectively to forward label distributions but also maintains stable, high performance under uniform and backward distributions,
+highlighting its general adaptability to various target label distribution offsets.
+
+
+Table 5: Top-1 accuracy over all classes on test time shifted ImageNet-LT. All models are all trained
+on ResNet-50. “ _[∗]_ ”: results reported in LADE. IB denotes the imbalance ratio, epo represents the
+epoch, and Unif stands for Uniform.
+
+|Dataset|epo|Forward|Unif|Backward|
+|---|---|---|---|---|
+|IB<br>|-|50<br>25<br>10<br>5<br>2|1|2<br>5<br>10<br>25<br>50|
+|CE _∗_<br>TDE_∗_<br>LADE_∗_<br>LGLA<br>OTmix|180<br>180<br>180<br>180<br>200|66.3<br>63.9<br>60.4<br>57.1<br>52.3<br>64.1<br>62.5<br>60.1<br>57.8<br>54.6<br>**67.4**<br>64.8<br>61.3<br>58.6<br>55.2<br>64.0<br>62.7<br>61.9<br>61.0<br>59.6<br>65.7<br>64.4<br>63.9<br>62.1<br>61.5|48.2<br>52.0<br>53.0<br>59.9<br>60.4|44.2<br>38.9<br>35.0<br>30.5<br>27.9<br>49.3<br>45.8<br>43.4<br>40.4<br>38.4<br>51.2<br>49.8<br>49.2<br>49.3<br>50.0<br>57.6<br>56.9<br>56.7<br>55.9<br>56.5<br>59.3<br>58.6<br>58.0<br>56.8<br>57.2|
+|ours|90|66.8<br>**65.7**<br>**65.3**<br>**63.9**<br>**62.4**|**61.2**|**60.2**<br>**59.3**<br>**58.7**<br>**57.8**<br>**58.2**|
+
+
+10
+
+
+Table 4: Ablation results on ImageNet-LT. These models are all
+trained on ResNext-50 by 90 epoches. The number in brackets
+indicates the number of softmax.
+
+
+REFERENCES
+
+
+David H Ackley, Geoffrey E Hinton, and Terrence J Sejnowski. A learning algorithm for boltzmann
+machines. _Cognitive science_, 9(1):147–169, 1985.
+
+
+Dosovitskiy Alexey. An image is worth 16x16 words: Transformers for image recognition at scale.
+_International Conference on Learning Representations_, 2021.
+
+
+Kaidi Cao, Colin Wei, Adrien Gaidon, Nikos Arechiga, and Tengyu Ma. Learning imbalanced
+datasets with label-distribution-aware margin loss. _Advances_ _in_ _neural_ _information_ _processing_
+_systems_, 32, 2019.
+
+
+Nitesh V Chawla, Kevin W Bowyer, Lawrence O Hall, and W Philip Kegelmeyer. Smote: synthetic
+minority over-sampling technique. _Journal of artificial intelligence research_, 16:321–357, 2002.
+
+
+Hsin-Ping Chou, Shih-Chieh Chang, Jia-Yu Pan, Wei Wei, and Da-Cheng Juan. Remix: rebalanced mixup. In _Computer Vision–ECCV 2020 Workshops:_ _Glasgow, UK, August 23–28, 2020,_
+_Proceedings, Part VI 16_, pp. 95–110. Springer, 2020.
+
+
+Jiequan Cui, Zhisheng Zhong, Shu Liu, Bei Yu, and Jiaya Jia. Parametric contrastive learning. In
+_Proceedings of the IEEE/CVF international conference on computer vision_, pp. 715–724, 2021.
+
+
+Yin Cui, Menglin Jia, Tsung-Yi Lin, Yang Song, and Serge Belongie. Class-balanced loss based
+on effective number of samples. In _Proceedings of the IEEE/CVF conference on computer vision_
+_and pattern recognition_, pp. 9268–9277, 2019.
+
+
+Yi Dai, Hao Lang, Yinhe Zheng, Fei Huang, and Yongbin Li. Long-tailed question answering in
+an open world. In _Proceedings of the 61st Annual Meeting of the Association for Computational_
+_Linguistics (Volume 1:_ _Long Papers)_, pp. 6362–6382, 2023.
+
+
+Bowen Dong, Pan Zhou, Shuicheng Yan, and Wangmeng Zuo. Lpt: Long-tailed prompt tuning for
+image classification. 2023.
+
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al. An image is worth 16x16 words: Transformers for image recognition at scale. In _International Confer-_
+_ence on Learning Representations_, 2020.
+
+
+Yingxiao Du and Jianxin Wu. No one left behind: Improving the worst categories in long-tailed
+learning. In _Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-_
+_tion_, pp. 15804–15813, 2023.
+
+
+Jintong Gao, He Zhao, Zhuo Li, and Dandan Guo. Enhancing minority classes by mixing: an adaptative optimal transport approach for long-tailed classification. _Advances in Neural Information_
+_Processing Systems_, 36, 2024.
+
+
+Gregory Holste, Yiliang Zhou, Song Wang, Ajay Jaiswal, Mingquan Lin, Sherry Zhuge, Yuzhe
+Yang, Dongkyun Kim, Trong-Hieu Nguyen-Mau, Minh-Triet Tran, et al. Towards long-tailed,
+multi-label disease classification from chest x-ray: Overview of the cxr-lt challenge. _Medical_
+_Image Analysis_, pp. 103224, 2024.
+
+
+Youngkyu Hong, Seungju Han, Kwanghee Choi, Seokjun Seo, Beomsu Kim, and Buru Chang. Disentangling label distribution for long-tailed visual recognition. In _Proceedings of the IEEE/CVF_
+_conference on computer vision and pattern recognition_, pp. 6626–6636, 2021a.
+
+
+Youngkyu Hong, Seungju Han, Kwanghee Choi, Seokjun Seo, Beomsu Kim, and Buru Chang. Disentangling label distribution for long-tailed visual recognition. In _Proceedings of the IEEE/CVF_
+_conference on computer vision and pattern recognition_, pp. 6626–6636, 2021b.
+
+
+Jie Huang, Zhao-Min Chen, Xiaoqin Zhang, Lusi Ye, Guodao Zhang, Huiling Chen, et al. Label decoupling and reconstruction: A two-stage training framework for long-tailed multi-label medical
+image recognition. In _ACM Multimedia 2024_, 2024.
+
+
+11
+
+
+Guido W Imbens and Donald B Rubin. _Causal_ _inference_ _in_ _statistics,_ _social,_ _and_ _biomedical_ _sci-_
+_ences_ . Cambridge university press, 2015.
+
+
+Yan Jin, Mengke Li, Yang Lu, Yiu-ming Cheung, and Hanzi Wang. Long-tailed visual recognition
+via self-heterogeneous integration with knowledge excavation. In _Proceedings of the IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition_, pp. 23695–23704, 2023.
+
+
+Ge Kan, Jinhu L¨u, Tian Wang, Baochang Zhang, Aichun Zhu, Lei Huang, Guodong Guo, and
+Hichem Snoussi. Bi-level doubly variational learning for energy-based latent variable models.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+18460–18469, 2022.
+
+
+Bingyi Kang, Saining Xie, Marcus Rohrbach, Zhicheng Yan, Albert Gordo, Jiashi Feng, and Yannis Kalantidis. Decoupling representation and classifier for long-tailed recognition. In _Eighth_
+_International Conference on Learning Representations (ICLR)_, 2020.
+
+
+Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images.
+2009.
+
+
+Yann LeCun, Sumit Chopra, Raia Hadsell, M Ranzato, Fujie Huang, et al. A tutorial on energybased learning. _Predicting structured data_, 1(0), 2006.
+
+
+Hankook Lee, Jongheon Jeong, Sejun Park, and Jinwoo Shin. Guiding energy-based models via contrastive latent variables. In _The Eleventh International Conference on Learning Representations_,
+2023. [URL https://openreview.net/forum?id=CZmHHj9MgkP.](https://openreview.net/forum?id=CZmHHj9MgkP)
+
+
+Jun Li, Zichang Tan, Jun Wan, Zhen Lei, and Guodong Guo. Nested collaborative learning for longtailed visual recognition. In _Proceedings of the IEEE/CVF Conference on Computer Vision and_
+_Pattern Recognition_, pp. 6949–6958, 2022.
+
+
+Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and Piotr Doll´ar. Focal loss for dense
+object detection. In _Proceedings_ _of_ _the_ _IEEE_ _international_ _conference_ _on_ _computer_ _vision_, pp.
+2980–2988, 2017.
+
+
+Weitang Liu, Xiaoyun Wang, John Owens, and Yixuan Li. Energy-based out-of-distribution detection. _Advances in neural information processing systems_, 33:21464–21475, 2020.
+
+
+Ziwei Liu, Zhongqi Miao, Xiaohang Zhan, Jiayun Wang, Boqing Gong, and Stella X Yu. Largescale long-tailed recognition in an open world. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_
+_computer vision and pattern recognition_, pp. 2537–2546, 2019.
+
+
+Alexander Long, Wei Yin, Thalaiyasingam Ajanthan, Vu Nguyen, Pulak Purkait, Ravi Garg, Alan
+Blair, Chunhua Shen, and Anton van den Hengel. Retrieval augmented classification for long-tail
+visual recognition. In _Proceedings of the IEEE/CVF conference on computer vision and pattern_
+_recognition_, pp. 6959–6969, 2022.
+
+
+Aditya Krishna Menon, Sadeep Jayasumana, Ankit Singh Rawat, Himanshu Jain, Andreas Veit, and
+Sanjiv Kumar. Long-tail learning via logit adjustment. _ICLR_, 2021.
+
+
+Mian Pan, Weijie Xia, Haibin Yu, Xinzhi Hu, Wenyu Cai, and Jianguang Shi. Vehicle detection in
+uav images via background suppression pyramid network and multi-scale task adaptive decoupled
+head. _Remote Sensing_, 15(24):5698, 2023.
+
+
+Seulki Park, Youngkyu Hong, Byeongho Heo, Sangdoo Yun, and Jin Young Choi. The majority can
+help the minority: Context-rich minority oversampling for long-tailed classification. In _Proceed-_
+_ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 6887–6896,
+2022.
+
+
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: An imperative style, highperformance deep learning library. _Advances in neural information processing systems_, 32, 2019.
+
+
+12
+
+
+Ru Peng, Chao Zhao, Xingyu Chen, Ziru Wang, Yaxin Liu, Yulong Liu, and Xuguang Lan. A
+causality guided loss for imbalanced learning in scene graph generation. _Neurocomputing_, pp.
+128042, 2024.
+
+
+Harsh Rangwani, Pradipto Mondal, Mayank Mishra, Ashish Ramayee Asokan, and R Venkatesh
+Babu. Deit-lt: Distillation strikes back for vision transformer training on long-tailed datasets.
+In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_ _Recognition_, pp.
+23396–23406, 2024.
+
+
+Marc’Aurelio Ranzato, Christopher Poultney, Sumit Chopra, and Yann Cun. Efficient learning of
+sparse representations with an energy-based model. _Advances in neural information processing_
+_systems_, 19, 2006.
+
+
+Marc’Aurelio Ranzato, Y-Lan Boureau, Sumit Chopra, and Yann LeCun. A unified energy-based
+framework for unsupervised learning. In _Artificial_ _Intelligence_ _and_ _Statistics_, pp. 371–379.
+PMLR, 2007.
+
+
+William J Reed. The pareto, zipf and other power laws. _Economics letters_, 74(1):15–19, 2001.
+
+
+Jiawei Ren, Cunjun Yu, Xiao Ma, Haiyu Zhao, Shuai Yi, et al. Balanced meta-softmax for longtailed visual recognition. _Advances_ _in_ _neural_ _information_ _processing_ _systems_, 33:4175–4186,
+2020.
+
+
+Tobias Schnabel, Adith Swaminathan, Ashudeep Singh, Navin Chandak, and Thorsten Joachims.
+Recommendations as treatments: Debiasing learning and evaluation. In _international conference_
+_on machine learning_, pp. 1670–1679. PMLR, 2016.
+
+
+Jiang-Xin Shi, Chi Zhang, Tong Wei, and Yu-Feng Li. Efficient and long-tailed generalization for
+pre-trained vision-language model. In _Proceedings_ _of_ _the_ _30th_ _ACM_ _SIGKDD_ _Conference_ _on_
+_Knowledge Discovery and Data Mining_, pp. 2663–2673, 2024.
+
+
+Harald Steck. Evaluation of recommendations: rating-prediction and ranking. In _Proceedings of the_
+_7th ACM conference on Recommender systems_, pp. 213–220, 2013.
+
+
+Kaihua Tang, Jianqiang Huang, and Hanwang Zhang. Long-tailed classification by keeping the
+good and removing the bad momentum causal effect. _Advances in neural information processing_
+_systems_, 33:1513–1524, 2020.
+
+
+Kaihua Tang, Mingyuan Tao, Jiaxin Qi, Zhenguang Liu, and Hanwang Zhang. Invariant feature
+learning for generalized long-tailed classification. In _European Conference on Computer Vision_,
+pp. 709–726. Springer, 2022.
+
+
+Yingfan Tao, Jingna Sun, Hao Yang, Li Chen, Xu Wang, Wenming Yang, Daniel Du, and Min Zheng.
+Local and global logit adjustments for long-tailed learning. In _Proceedings_ _of_ _the_ _IEEE/CVF_
+_International Conference on Computer Vision_, pp. 11783–11792, 2023.
+
+
+Changyao Tian, Wenhai Wang, Xizhou Zhu, Jifeng Dai, and Yu Qiao. Vl-ltr: Learning class-wise
+visual-linguistic representation for long-tailed visual recognition. In _European_ _conference_ _on_
+_computer vision_, pp. 73–91. Springer, 2022.
+
+
+Hugo Touvron, Matthieu Cord, and Herv´e J´egou. Deit iii: Revenge of the vit. In _European confer-_
+_ence on computer vision_, pp. 516–533. Springer, 2022.
+
+
+Grant Van Horn, Oisin Mac Aodha, Yang Song, Yin Cui, Chen Sun, Alex Shepard, Hartwig Adam,
+Pietro Perona, and Serge Belongie. The inaturalist species classification and detection dataset. In
+_Proceedings of the IEEE conference on computer vision and pattern recognition_, pp. 8769–8778,
+2018.
+
+
+Binwu Wang, Pengkun Wang, Wei Xu, Xu Wang, Yudong Zhang, Kun Wang, and Yang Wang. Kill
+two birds with one stone: Rethinking data augmentation for deep long-tailed learning. In _The_
+_Twelfth International Conference on Learning Representations_, 2024a.
+
+
+13
+
+
+Peng Wang, Kai Han, Xiu-Shen Wei, Lei Zhang, and Lei Wang. Contrastive learning based hybrid
+networks for long-tailed image classification. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_
+_computer vision and pattern recognition_, pp. 943–952, 2021a.
+
+
+Xudong Wang, Long Lian, Zhongqi Miao, Ziwei Liu, and Stella Yu. Long-tailed recognition by
+routing diverse distribution-aware experts. In _International Conference on Learning Representa-_
+_tions_, 2021b.
+
+
+Zitai Wang, Qianqian Xu, Zhiyong Yang, Yuan He, Xiaochun Cao, and Qingming Huang. A unified
+generalization analysis of re-weighting and logit-adjustment for imbalanced learning. _Advances_
+_in Neural Information Processing Systems_, 36, 2024b.
+
+
+Jialian Wu, Liangchen Song, Qian Zhang, Ming Yang, and Junsong Yuan. Forestdet: Largevocabulary long-tailed object detection and instance segmentation. _IEEE Transactions on Multi-_
+_media_, 24:3693–3705, 2021.
+
+
+Qitian Wu, Yiting Chen, Chenxiao Yang, and Junchi Yan. Energy-based out-of-distribution detection
+for graph neural networks. In _International_ _Conference_ _on_ _Learning_ _Representations_ _(ICLR)_,
+2023.
+
+
+Zhengzhuo Xu, Ruikang Liu, Shuo Yang, Zenghao Chai, and Chun Yuan. Learning imbalanced data
+with vision transformers. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_ _and_
+_pattern recognition_, pp. 15793–15803, 2023.
+
+
+Zhilin Yang, Zihang Dai, Ruslan Salakhutdinov, and William W Cohen. Breaking the softmax
+bottleneck: A high-rank rnn language model. In _International Conference on Learning Represen-_
+_tations_, 2018.
+
+
+Weiping Yu, Taojiannan Yang, and Chen Chen. Towards resolving the challenge of long-tail distribution in uav images for object detection. In _Proceedings of the IEEE/CVF winter conference on_
+_applications of computer vision_, pp. 3258–3267, 2021.
+
+
+Yuhang Zang, Chen Huang, and Chen Change Loy. Fasa: Feature augmentation and sampling
+adaptation for long-tailed instance segmentation. In _Proceedings of the IEEE/CVF International_
+_Conference on Computer Vision_, pp. 3457–3466, 2021.
+
+
+Yifan Zhang, Bingyi Kang, Bryan Hooi, Shuicheng Yan, and Jiashi Feng. Deep long-tailed learning:
+A survey. _IEEE Transactions on Pattern Analysis & Machine Intelligence_, (01):1–20, 2023.
+
+
+Junbo Zhao, Michael Mathieu, and Yann LeCun. Energy-based generative adversarial networks. In
+_International Conference on Learning Representations_, 2017. [URL https://openreview.](https://openreview.net/forum?id=ryh9pmcee)
+[net/forum?id=ryh9pmcee.](https://openreview.net/forum?id=ryh9pmcee)
+
+
+Qihao Zhao, Yalun Dai, Hao Li, Wei Hu, Fan Zhang, and Jun Liu. Ltgc: Long-tail recognition
+via leveraging llms-driven generated content. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_
+_Computer Vision and Pattern Recognition_, pp. 19510–19520, 2024.
+
+
+Boyan Zhou, Quan Cui, Xiu-Shen Wei, and Zhao-Min Chen. Bbn: Bilateral-branch network with
+cumulative learning for long-tailed visual recognition. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 9719–9728, 2020.
+
+
+Zhipeng Zhou, Lanqing Li, Peilin Zhao, Pheng-Ann Heng, and Wei Gong. Class-conditional
+sharpness-aware minimization for deep long-tailed recognition. In _Proceedings of the IEEE/CVF_
+_Conference on Computer Vision and Pattern Recognition_, pp. 3499–3509, 2023.
+
+
+14

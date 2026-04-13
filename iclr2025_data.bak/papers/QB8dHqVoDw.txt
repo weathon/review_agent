@@ -1,0 +1,1111 @@
+# TRANSFER LEARNING IN SCALABLE GRAPH NEURAL NETWORK FOR IMPROVED PHYSICAL SIMULATION
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+In recent years, Graph Neural Network (GNN) based models have shown promising results in simulating physics of complex systems. However, training dedicated
+graph network based physics simulators can be costly, as most models are confined
+to fully supervised training, which requires extensive data generated from traditional physics simulators. To date, how transfer learning could improve the model
+performance and training efficiency has remained unexplored. In this work, we
+introduce a pre-training and transfer learning paradigm for graph network simulators. We propose the scalable graph U-net (SGUNET). Incorporating an innovative
+depth-first search (DFS) pooling, the SGUNET is adaptable to different mesh sizes
+and resolutions for various simulation tasks. To enable the transfer learning between differently configured SGUNETs, we propose a set of mapping functions to
+align the parameters between the pre-trained model and the target model. An extra
+normalization term is also added into the loss to constrain the difference between
+the pre-trained weights and target model weights for better generalization performance. To pre-train our physics simulator we created a dataset which includes
+20,000 physical simulations of randomly selected 3D shapes from the open source
+A Big CAD (ABC) dataset. We show that our proposed transfer learning methods allow the model to perform even better when fine-tuned with small amounts
+of training data than when it is trained from scratch with full extensive dataset.
+On the 2D Deformable Plate benchmark dataset, our pre-trained model fine-tuned
+on 1/16 of the training data achieved an 11.05% improvement in position RMSE
+compared to the model trained from scratch.
+
+
+1 INTRODUCTION
+
+
+Graph Neural Networks (GNNs) have shown promising results in simulating physics of complex
+systems on unstructured meshes Pfaff et al. (2021); Allen et al. (2022a); Rubanova et al. (2022);
+Allen et al. (2022c). Existing works stack message passing (MP) blocks to model propagation of
+physical information. Different pooling operations Li et al. (2020); Cao et al. (2023) and U-Net like
+architectures Gladstone et al. (2023); Deshpande et al. (2024) have been introduced to better solve
+the multi-scale challenges in different simulation tasks. However, despite their potential, current
+GNN-based methods rely heavily on supervised training approaches. Collecting extensive annotated
+data typically involves using traditional Finite Element Analysis (FEA) solvers Han et al. (2022);
+Fortunato et al. (2022); Allen et al. (2022b), 3D engines Greff et al. (2022), and real-life video
+clips Lopez-Guevara et al. (2024). The substantial cost of acquiring the training data has constrained
+the scalability and practicality of GNN-based simulators.
+
+
+On the other hand, transfer learning has revolutionized fields like computer vision (CV) Reddy &
+Juliet (2019); Rezende et al. (2017) and natural language processing (NLP) Radford et al. (2019);
+Mann et al. (2020); Touvron et al. (2023), where models pre-trained on large datasets are finetuned for specific tasks, leading to remarkable improvements in training efficiency and the model’s
+performance Zhuang et al. (2020). However, for GNN-based simulators, network architecture hyperparameters, such as number of message passing steps and pooling ratios, must be specifically
+tailored to the mesh resolution of the target problem Fortunato et al. (2022); Cao et al. (2023). As
+a result, pre-trained models are difficult to load and fine-tune directly for downstream GNN-based
+simulators. It remains unexplored how to apply transfer learning to GNN-based physics simulators.
+
+
+1
+
+
+In this work, we introduce a transfer learning paradigm applied to the proposed scalable graph U-net
+(SGUNET) for physical simulations. The SGUNET follows the Encoder-Processor-Decoder design
+and incorporates an innovative DFS pooling operation to handle various mesh receptive fields. It
+is designed to be modular and configurable, making it adaptable to different mesh sizes and resolutions across various simulation tasks. To enable transfer learning between differently configured
+SGUNETs, we propose a set of mapping functions to align the parameters between the pre-trained
+model and the target model. An extra normalization term is also added into the loss to constrain the
+difference between the pre-trained weights and target model weights for better generalization performance. As there is no existing dataset available for pre-training, we created a dataset named ABC
+Deformable (ABCD) for pre-training. The dataset includes approximately 20,000 physical simulations of deformable bodies, whose shapes are sampled from the open-source ABC dataset Koch
+et al. (2019).
+
+
+We evaluated our proposed methods over two public datasets, namely the 2D Deformable Plate
+Linkerh¨agner et al. (2023) and a more complex 3D Deforming Plate Pfaff et al. (2021). We set
+MESHGRAPHNET (MGN) Pfaff et al. (2021) training from scratch as the baseline. On 2D Deformable Plate, our model pre-trained by ABCD and fine-tuned on 1/16 of the training data could
+achieve an 11.05% improvement in position RMSE compared to the model trained from scratch.
+On 3D Deforming Plate, our pre-trained model reached the same level of performance when finetuned with only 1/8 of the training data in 40% of the training time. Applying the transfer learning
+approach to MGN also lead to better performance with less training data and shorter training time.
+
+
+2 RELATED WORK
+
+
+Graph Neural Networks (GNNs) have emerged as a powerful tool for simulating complex physical
+systems, particularly on unstructured meshes Pfaff et al. (2021); Allen et al. (2022a); Rubanova
+et al. (2022); Allen et al. (2022c;b). However, these methods predominantly rely on supervised
+training, which requires extensive annotated data. Common approaches involve generating data
+through analytical solvers like OpenFOAM Weller et al. (1998) and ArcSim Narain et al. (2012).
+Additionally, some works use real-world observations to train models Whitney et al. (2023); Allen
+et al. (2022c). Early work, such as MGN Pfaff et al. (2021), adapts the Encoder-Process-Decode
+architecture Sanchez-Gonzalez et al. (2020) to mesh data, with the Process module implemented as
+a GNN for effective message passing. Variants like EA-GNN and M-GNN Gladstone et al. (2023)
+introduce enhancements such as virtual edges and multi-resolution graphs to improve efficiency
+and handle long-range interactions. Additionally, the transformer architecture has been explored
+in mesh-based physical simulations. Hybrid models like the GMR-Transformer-GMUS Han et al.
+(2022) and HCMT Yu et al. (2023) combine GNNs to learn local rules and transformers to capture
+global context and long-term dependencies over roll-out trajectories. Unlike most methods that
+directly predict future states from input data, C-GNS Rubanova et al. (2022) employs a GNN to
+model system constraints and computes future states by solving an optimization problem based on
+these learned constraints.
+
+
+Transfer learning, which transfers knowledge from a source domain to a target domain, has gained
+prominence in deep learning for improving performance and reducing the need for annotated data
+Reddy & Juliet (2019); Rezende et al. (2017); Mann et al. (2020); Touvron et al. (2023). Strategies
+typically involve parameter control, either by sharing parameters between models or enforcing similarity through techniques like _l_ [2] -norm penalties Zhuang et al. (2020); Gouk et al. (2020); Xuhong
+et al. (2018). These approaches have proven effective in computer vision and natural language processing. However, the application of transfer learning to GNN-based physics simulations remains
+largely unexplored.
+
+
+3 METHOD
+
+
+3.1 OVERVIEW
+
+
+In this section, we introduce our pre-training and fine-tuning framework. We begin by detailing the
+data format used by our model. Following this, we provide an in-depth explanation of the model
+architecture, discussing its fundamental networks, operators, and key modules. Finally, we describe
+
+
+2
+
+
+the transfer learning mechanism, emphasizing two mapping functions that adjust the model size for
+optimal performance.
+
+
+mesh-mesh edge ℰ [!!]
+
+mesh-element edge ℰ ["!] /ℰ [!"]
+
+element-element edge ℰ [""]
+
+
+(a) (b)
+
+
+Figure 1: (a) An illustration of the composition of mesh data _M_ and its representation as a heterogeneous graph _G_ _[hetero]_ . (b) Example of down-sampled graphs with pooling ratios as 3 and 2.
+
+
+3.2 PROBLEM STATEMENT
+
+
+Given the physical state of a system, our task is to predict the subsequent state over a time interval and under specified boundary conditions. The system’s current state at time _t_ is described by a
+discretized mesh _M_ _[t]_ and can be represented in 2D or 3D space. The mesh data _M_ _[t]_ is comprised
+of world coordinates, element connectivity, and physical parameters (stress/strain state and material
+properties). We use one-step prediction to find the subsequent mesh state _M_ _[t]_ [+1], but for sake of notational convenience, we will omit the superscript _t_, which indicates the timestamp in the subsequent
+expressions.
+
+
+To facilitate the learning process, we transform the original mesh data _M_ into a heterogeneous graph
+_G_ _[hetero]_ = ( _V, E_ ), where _V_ denotes the set of nodes and _E_ represents the set of edges. The node
+set _V_ comprises two types of node: mesh nodes _V_ _[M]_ and element nodes _V_ _[E]_ . The mesh vertices
+in _M_ are converted to graph nodes in _V_ _[M]_, while the mesh faces are represented as nodes in _V_ _[E]_ .
+This heterogeneous graph structure is necessary to describe physical state variables like stress in a
+single-valued way when multiple materials are present in a system, as is typical for many physical
+simulations. The edge set _E_ includes three groups of edges: (1) bidirectional edges _E_ _[M,M]_ between
+adjacent mesh vertices _V_ _[M]_, (2) bidirectional edges _E_ _[E,E]_ between adjacent faces _V_ _[E]_, and (3) directional edges _E_ _[E,M]_ and _E_ _[M,E]_ which connect each mesh face to its vertices. Figure 1a provides a
+demonstration of mesh data derived from the Deformable Plate dataset and its corresponding heterogeneous graph.
+
+
+Each type of node and edge has its own feature matrix. For example, the feature matrix of mesh
+nodes _V_ _[M]_ is **X** _[M]_ _∈_ R _[|V]_ _[M]_ _[|×][h]_ 0 _[M]_, where the feature vector of node _i_ _∈V_ _[M]_ is the _i_ -th row vector of
+**X** _[M]_ . We explain the composition of feature matrices in Appendix **??** .
+
+
+3.3 SCALABLE GRAPH U-NET
+
+
+Our model comprises four main modules, as illustrated in Figure 2a. We adopt an Encoder-ProcessDecoder Sanchez-Gonzalez et al. (2020) style model with several key extensions: (1) the framework
+is extended to handle the heterogeneous graph structure with multiple node and edge types, and (2)
+we add a staged U-Net with variable DFS pooling and unpooling that greatly expands the model’s
+receptive field. In the following paragraphs, we will detail these networks and modules.
+
+
+**Encoder:** The Encoder comprises a set of MLP models and three Processors. The MLP models map
+raw node and edge features of varying sizes into a unified latent space. The three Processors manage
+the message passing flows _V_ _[M]_ _→V_ _[M]_, _V_ _[E]_ _→V_ _[E]_, and _V_ _[M]_ _→V_ _[E]_, respectively. Consequently, the
+Encoder transforms the heterogeneous graph _G_ [hetero] into a homogeneous graph _G_ _[E]_ by aggregating
+the mesh node representations into their neighboring element nodes.
+
+
+**Processor:** The Processor (Pr) consists of _m_ identical Graph-Net blocks (GNBs), with the output of
+each block serving as the input to the subsequent block in the sequence. This sequential processing
+enables the model to gather and integrate information from nodes located up to _m_ hops away from
+the central node.
+
+
+3
+
+
+mesh node
+
+
+𝒱 [!]
+
+
+element node
+
+
+𝒱 ["]
+
+
+(a)
+
+
+(b) Uniform mapping (c) First-N mapping
+
+
+Figure 2: (a) A detailed depiction of our proposed model, SGUNET, which includes four primary
+modules: the **Processor** _Pri_ for information propagation; the **Encoder** for data transformation, the
+**GUnet** for graph pooling, and the **Decoder** for downstream tasks. (b) & (c) Mapping functions for
+GUNet stages and GNBs for the case where pre-trained model has more stages and per-processor
+GNBs than the fine-tuned model.
+
+
+Each Graph-Net block operates as an independent message passing unit, with no shared parameters
+between blocks. We extend the concept of Graph-Net blocks from Sanchez-Gonzalez et al. (2018);
+Pfaff et al. (2021) to accommodate graphs with various types of nodes and edges. Specifically,
+for message passing flow from _V_ [src] to _V_ [tgt], where src and tgt _∈{E, M_ _}_, the feature of the edge
+connecting nodes _i_ and _j_ is updated via
+
+**X** [src] _i,j_ _[,]_ [tgt] = _f_ [src] _[,]_ [tgt][ �] **X** [src] _i_ _[|]_ **[X]** _j_ [tgt] _[|]_ **[X]** [src] _i,j_ _[,]_ [tgt]        - _,_
+
+
+where _f_ [src] _[,]_ [tgt] is an MLP model with residual connections, and _|_ represents the concatenation operation. After updating the edge features, the feature of the end-point node _j_ is updated via
+
+
+where _f_ [tgt] is an MLP model with residual connections, and _Nj_ [src] are the neighborhoods of node _j_ of
+type src.
+
+
+**GUnet Stage:** The GUnet (GU) is composed of _L_ stages, with each stage containing one pooling
+layer and two Processors. During the down-sampling phase, a Processor (Pr _[E]_ _i_ [) and a down-sample]
+operator (Down _i_ ) are sequentially applied at stage _i_ . This process allows graphs of varying sizes
+to undergo information propagation and aggregation. During the up-sampling phase, the procedure
+is reversed: the graph is first restored to its original size by an up-sampling operator (Up _i_ ) before
+being processed by a Processor (Pr _[D]_ _i_ [)] [at] [stage] _[i]_ [.] [Unlike] [traditional] [graph] [network] [models] [such]
+as those in Pfaff et al. (2021); Rubanova et al. (2022); Allen et al. (2022a), which require many
+message passing steps to capture long-range dependencies, the GUnet is able to process long-range
+data with significantly fewer message passing steps. This can also help alleviate the difficulty of
+scaling message passing networks to a large number of nodes as the number of message passing
+steps needed would become intractable for GPU memory.
+
+
+We design a Depth First Search style pooling (DFS-pooling) which has two key advantages that
+distinguishes it from the existing work Gao & Ji (2019): (1) changeable pooling ratios for different
+pooling stages and (2) pooling based on node proximity. We first select an un-visited node from the
+element node set as the starting node and initiate a DFS-style random walk to explore adjacent nodes
+of the same material. During this walk, nodes are clustered according to the pooling ratio, with nodes
+in each cluster pooled into a single node. We use an even-pooling scheme of averaging weights to
+
+
+4
+
+
+
+
+
+ _,_
+
+
+**X** [tgt] _j_ [=] _[ f]_ [ tgt]
+
+
+
+
+ **X** [tgt] _j_ _[|]_ - **X** [src] _i,j_ _[,]_ [tgt]
+
+_i∈Nj_ [src]
+
+
+update the node and edge features within each cluster. This process continues until all nodes in
+_V_ _[E]_ have been visited. The pseudo-code for this clustering computation is provided in Algorithm 1.
+Additionally, we provide an example of down-sampled graphs in Figure 1b with pooling ratios as 3
+and 2, respectively. Here, nodes of different colors have different types of material. Note that this
+computation needs to be performed only once during the preprocessing stage, once the pooling ratio
+is determined.
+
+
+**Decoder:** In line with MGN Pfaff et al. (2021), we use an MLP model to project the latent features
+of the element nodes **X** _[E]_ into the output space. Additionally, we perform a 1-hop message passing
+operation from _V_ _[E]_ to _V_ _[M]_ to interpolate the features of the element nodes to those of mesh nodes.
+Finally, another MLP model decodes the interpolated latent features of the mesh nodes into the
+desired output space.
+
+
+3.4 UTILIZING THE PRE-TRAINED MODEL
+
+
+How exactly the knowledge from a pre-trained model is instilled into a target task-specific model,
+particularly when their architectures are mismatched, is a non-trivial task. As stated in Section 2, one
+of the widely-used approaches in transfer learning operates at the parameter level. We also adopt the
+parameter sharing and parameter restriction strategies and discuss these in more detail here. To our
+knowledge, this is the first time transfer learning has been adapted and applied to GNNs predicting
+physics simulations.
+
+
+3.4.1 PARAMETER SHARING
+
+
+The parameter sharing strategy involves initializing the downstream task-specific model with a pretrained model. Typically, the pre-trained model is either the same as or more complex than the
+task-specific model due to resource constraints Xu et al. (2023). However, this is not the case for
+our mesh-based graph network model. This distinction arises because the number of stages and
+message passing steps in the GUnet are closely aligned with the data size and simulation settings.
+As a result, conventional weight initialization methods are not directly applicable. Therefore, we
+design alternative strategies to effectively transfer learned knowledge from the pre-trained model to
+the downstream model within our unique framework.
+
+
+We propose a scaling method at two levels — Processor and GUnet — to align the sizes of the pretrained and fine-tuned models. We choose between two mapping functions for both the Processors
+and GUnet: Uniform and First-N. The details of these mapping functions are described below. For
+the Processors, we employ the mapping function on GNBs, which ensures that the alignment reflects
+the stages of message propagation through the blocks. For the GUnet, we employ the mapping
+function on the GUNet stages. In general, the mapping function chosen for the Processors and GUnet
+need not be the same, but for our present work we used the same mapping (First-N or Uniform) for
+both Processors and GUnet for a given experiment.
+
+
+Note that the Encoder and the Decoder do not contain generalizable knowledge as they are tailored
+to specific tasks. In our implementation, we randomly initialize the parameters of the Encoder and
+Decoders during fine-tuning.
+
+
+**1)** **Uniform** **Mapping:** The first method of parameter sharing between pre-trained and fine-tuned
+models is the Uniform method. The goal of this mapping method is to achieve uniform division and
+alignment of weights. To align the weights of two Processors, we consider cases where the number
+of GNBs in the pre-trained model _m_ pt is less than, greater than, or equal to that in the fine-tuned
+model _m_ ft. Formally, let _g_ 1( **Pr** pt) be a function that maps a Processor **Pr** pt in the pre-trained model
+to a Processor **Pr** ft in the fine-tuned model. This mapping function uses uniform division to achieve
+the alignment:
+
+
+�(dwN + 1) _× i,_ if _i <_ r _,_ �dwN + 1 _,_ if _i <_ r _,_
+_st_ ( _i_ ) =
+dwN _× i_ + r _,_ if _i ≥_ r _,_ _[d]_ [(] _[i]_ [) =] dwN _,_ if _i ≥_ r _[,]_
+
+
+5
+
+
+**Pr** _[i]_ ft [=] _[ g]_ 1 [uni][(] _[i]_ [;] **[ Pr]** [pt][) =]
+
+
+
+
+
+
+**Pr** _[⌊]_ pt _[i/]_ [upN] _[⌋][,]_ _,_ if _m_ pt _< m_ ft
+MEAN _[st]_ _j_ = [(] _st_ _[i]_ [)+] ( _i_ _[d]_ ) [(] _[i]_ [)] _{_ **Pr** _[j]_ pt _[}][,]_ if _m_ pt _> m_ ft
+**Pr** _[i]_ pt _[,]_ if _m_ pt == _m_ ft _,_
+
+
+
+
+
+where,
+
+
+upN = _⌈m_ ft _/m_ pt _⌉,_ dwN = _⌊m_ pt _/m_ ft _⌋,_ r = _m_ pt mod _m_ ft _._
+
+
+**Pr** _[i]_ represents the _i_ -th Graph-Net block in the Processor, and MEAN _{·}_ represents the averaging operation. We can define the mapping function for the GUnet _g_ 2( **GU** pt) in a similar fashion.
+We leave the detailed discussion to Appendix B.2. An example of the Uniform mapping for both
+Processor and GUnet is shown in Figure 2b.
+
+
+**2) First-N Mapping:** The second method for parameter sharing between pre-trained and fine-tuned
+models is the First-N method. For Processor, the goal of this mapping method is to selectively share
+weights for the first set of Graph-Net blocks that are common between the pre-trained and fine-tuned
+models. Formally,
+
+
+             - **Pr** _i_ pt _[,]_ if _i ≤_ _m_ pt
+**Pr** _[i]_ ft [=] _[ g]_ 1 [First-N] ( _i_ ; **Pr** pt) =
+Randomly Initialized _,_ if _i > m_ pt _._
+
+
+We can also define the First-N mapping from a pre-trained GUnet **GU** pt to a fine-tuned GUnet **GU** ft.
+An example of the First-N mapping of both pooling and message passing is shown in Figure 2c.
+
+
+Regardless of the mapping methods, the stages from the GUnet must first be mapped from the pretrained model to the fine-tuned model, then within each GUNet stage the GNBs for the Processor
+must be mapped to the fine-tuned model as well. In this way there is a hierarchical approach to the
+shared parameters.
+
+
+In summary, the key difference between the Uniform and First-N mapping functions lies in the
+extent to which parameters from the GUnet modules are used by the fine-tuned model. The Uniform
+strategy may allow for more comprehensive parameter use, whereas the First-N approach might be
+more selective. The effectiveness of these mapping functions will be assessed in Section 4.
+
+
+3.4.2 PARAMETER RESTRICTION
+
+
+Beyond parameter sharing, we implement a parameter restriction technique to enhance the generalization capabilities of the downstream models. Following Gouk et al. Gouk et al. (2020), we
+calculate the Frobenius distance between the pre-trained and fine-tuned model weights to apply a
+regularization term that penalizes discrepancies between them. Let **W** pt denote the weights of the
+pre-trained model, and **W** ft represent the weights of the fine-tuned model. Then the Frobenius norm
+of the difference between these two sets of weights can be expressed as:
+
+
+To incorporate Frobenius distance into the training process, the regularization term is added to the
+loss function. The regularized loss function _Lreg_ can be written as:
+
+
+_L_ reg = _L_ task + _λ∥_ **W** pt _−_ **W** ft _∥_ [2] _F_ _[,]_
+
+
+where _λ_ is a hyperparameter that controls the strength of the regularization term, and _Ltask_ represents the original task-related loss.
+
+
+4 EXPERIMENTS
+
+
+We present an evaluation of our proposed pre-training and fine-tuning framework for mesh-based
+simulations. We begin by detailing the datasets used in our experiments, highlighting both the generalized dataset constructed for pre-training and the benchmark datasets employed for fine-tuning.
+Following this, we introduce the baseline models against which our approach is compared. We then
+present the results of our pre-training phase and evaluate the transfer learning performance.
+
+
+4.1 DATASETS
+
+
+**1) For pre-training:** Since there is currently no existing work on pre-training for mesh-based physical simulations, and popular benchmark datasets contain at best a few thousands training samples,
+
+
+6
+
+
+_n_
+
+
+_j_ =1
+
+
+_∥_ **W** pt _−_ **W** ft _∥F_ =
+
+
+~~�~~ - _m_
+��
+
+
+_i_ =1
+
+
+- �2
+**W** pt [(] _[i,j]_ [)] _−_ **W** ft [(] _[i,j]_ [)] _._
+
+
+Figure 3: Randomized FEA simulation dataset using geometry from ABC dataset.
+
+
+we constructed a larger and more-generalized pre-training dataset. The goal of this dataset was to
+have a wide variety of geometric shapes that are deformed after coming into contact with each other.
+We used the ABC dataset Koch et al. (2019), which is a CAD model dataset used for geometric
+deep learning, to get a wide sample of parts and shapes to deform. To generate a simulation in our
+pre-training dataset, we first randomly select two CAD geometries, then auto-mesh them with the
+meshing tool Shabaka Hafez & Rashid (2023). We then align the two meshed parts in 3D space
+and apply compressive boundary conditions to simulate the parts coming into contact. Figure 3
+illustrates the workflow of the pre-training dataset construction process.
+
+
+In total, we generated a pre-training dataset of 20,000 simulations by drawing pairs of geometries
+from a set of 400 geometry samples. Figure 4 shows several example simulations and the modes of
+deformation achieved through contact. Here we can see examples of mechanical contact and stress
+around a hole.
+
+
+Figure 4: The FEA simulation results using ABC CAD dataset highlight various deformation modes,
+including compression with associated tension around a hole, as well as plate and beam bending.
+
+
+**2)** **For** **Transfer** **Learning:** We selected two representative datasets for quasi-static mechanical
+simulations as benchmarks to evaluate model performance on downstream tasks: 2D Deformable
+Plate Linkerh¨agner et al. (2023) and 3D Deforming Plate Pfaff et al. (2021). These downstream
+task datasets represent a subspace of simulations relative to our generalized pre-training dataset, and
+thought to be good candidates to evaluate our fine-tuning framework. For more detailed information
+about the datasets, please refer to Table 2.
+
+
+4.2 BASELINE AND METRIC
+
+
+To demonstrate the generalization and effectiveness of our pre-training and fine-tuning paradigm,
+we used MGN Pfaff et al. (2021), a state-of-the-art model in the field of physics simulation, as the
+baseline for comparison. The model configurations are shown in Table 1 and more explanations can
+be found in Appendix C.1. We used the RMSE loss on the positions of mesh nodes _V_ _[M]_ as the metric
+to evaluate model performance. We show the calculation of receptive field size in Appendix **??** .
+
+
+4.3 PRE-TRAINING RESULTS
+
+
+We trained both the MGN and SGUNET models on ABCD for 1 million training steps. The RMSE
+losses for MGN on the training and validation datasets are 8.3205 _×_ 10 _[−]_ [4] and 5.8018 _×_ 10 _[−]_ [4], respectively. In comparison, SGUNET achieves RMSE losses of 4.2041 _×_ 10 _[−]_ [4] on the training set and
+4.2657 _×_ 10 _[−]_ [4] on the validation set. These results demonstrate that SGUNET outperforms MGN,
+
+
+7
+
+
+Table 1: Hyperparameter configurations for the models.
+
+
+**# Message Passing** **# Message Passing** **Mesh Receptive**
+**Model** **Dataset** **# Parameters** **Batch Size**
+(Encoder) (Processor) **Field Size**
+
+ABCD 5 13 18 1053766 2
+MGN Deforming Plate 2 15 17 891462 8
+Deformable Plate 2 6 8 553156 16
+
+
+**# Message Passing** **# Message Passing** **Mesh Receptive**
+**Model** **Dataset** **Pooling Ratio** **# Parameters** **Batch Size**
+(Encoder) (GUnet) **Field Size**
+
+ABCD [4, 2, 2] 3 1 35 719686 4
+SGUNET Deforming Plate [4, 2] 4 2 29 894918 16
+Deformable Plate [2] 2 2 9 569540 16
+
+
+reducing the training loss by nearly 50%. Moreover, the validation loss shows that SGUNET generalizes better to unseen data while converging more effectively during training.
+
+
+4.4 TRANSFER LEARNING PERFORMANCE
+
+
+To evaluate the effectiveness of our pre-training and fine-tuning framework, we performed experiments using the ABCD dataset for pre-training. Both the MGN and SGUNET models are trained for
+a defined number of epochs. Subsequently, we fine-tuned these models on downstream tasks. For
+the Deformable Plate dataset, the models were fine-tuned for 20k steps. For the Deforming Plate
+dataset, the models were fine-tuned for 500k steps. We applied two parameter sharing strategies —
+Uniform and First-N - when loading the checkpoint of the pre-trained model. Additionally, we
+reduced the size of the training dataset to investigate whether our framework can decrease reliance
+on large volume of data. During this process, we recorded the minimum validation loss and saved
+the corresponding model checkpoint, which was later used to assess performance on the test dataset.
+All experiments are repeated 5 times with different random seeds.
+
+
+offering insights from various perspectives. The results demonstrate that SGUNET consistently outperforms MGN across all data scales, with lower RMSE values and faster convergence, particularly
+when fine-tuned. These observations are corroborated by the test dataset performance shown in Ta1
+ble 3. Notably, the RMSE of SGUNET fine-tuned with the Uniform strategy on 16 [of] [the] [training]
+data is comparable to that of the model fine-tuned on the full dataset, achieving an 11.05% improvement compared to the model trained from scratch.
+
+
+These results reveal that fine-tuning with the Uniform strategy further reduces the RMSE compared
+to the First-N strategy, demonstrating the effectiveness of this approach. Notably, SGUNET-FT with
+
+
+8
+
+
+the Uniform strategy achieves the lowest RMSE even with significantly reduced datasets, highlighting the model’s robustness and efficiency in generalizing from limited data.
+
+
+training size. The colors indicate displacement magnitude.
+
+
+Figures 9 and 10 compare the roll-out validation RMSE, while Table 4 presents the performance of
+different models on the test dataset. The results reveal that - consistent with the findings on Deformable Plate — (1) Fine-tuned models consistently outperform those trained from scratch across
+all dataset scales. Notably, reduction on training data does not lead to much worse performance,
+especially on the proposed SGUNET. (2) Fine-tuned models also exhibit faster convergence speeds.
+For instance, as shown in Figure 10c, SGUNET-FT on 8 [1] [of the training data reaches the RMSE value]
+
+that its counterpart requires 500k steps to achieve, in just 200k steps.
+
+
+9
+
+
+8 × 10 2
+
+
+7 × 10 2
+
+
+6 × 10 2
+
+
+5 × 10 2
+
+
+4 × 10 2
+
+
+0 5000 10000 15000 20000 25000
+step
+
+
+(a)
+
+
+0 5000 10000 15000 20000 25000
+step
+
+
+(b)
+
+
+0 5000 10000 15000 20000 25000
+step
+
+
+(c)
+
+
+Figure 7: Comparison of the best validation loss tendencies on the Deformable Plate. (a) Two
+models both trained from scratch. (b) MGN trained from scratch and fine-tuned with the Uniform
+strategy. (c) SGUNET trained from scratch and fine-tuned with the Uniform strategy.
+
+
+**Deforming** **Plate:** We reduced the training set to [1]
+
+
+[1] [1]
+
+4 [and] 8
+
+
+**Deforming** **Plate:** We reduced the training set to 4 [and] 8 [of] [its] [original] [size.] [The] [images] [in] [Fig-]
+
+ure 8 offer a qualitative assessment by showing an example from the test dataset. The visualizations
+reveal that MGN performs poorly when trained from scratch as the displacement of the plate was
+concentrated tightly around the ball. Although fine-tuning improved MGN’s predictions, the dis
+
+|8 × 103<br>7 × 103<br>6 × 103<br>5 × 103<br>ure 9: T<br>m scratc<br>2<br>3<br>3|Col2|Col3|Col4|Col5|All Data<br>1/4 Data<br>1/8 Data<br>Ours FT (first-N)<br>dataset when traine<br>Ours_all<br>Ours_1/4<br>Ours_1/8<br>Ours_FT_all<br>Ours_FT_1/4<br>Ours_FT_1/8|
+|---|---|---|---|---|---|
+|5 × 10<br>3<br>6 × 10<br>3<br>7 × 10<br>3<br>8 × 10<br>3<br> <br>ure 9: T<br>m scratc<br>2<br> <br>3<br> <br>3|5 × 10<br>3<br>6 × 10<br>3<br>7 × 10<br>3<br>8 × 10<br>3<br> <br>ure 9: T<br>m scratc<br>2<br> <br>3<br> <br>3||||All Data<br>1/4 Data<br>1/8 Data|
+|<br>3<br> <br>3<br> <br>||||||
+
+
+Figure 10: Comparison of the best validation loss tendencies on the Deforming Plate. (a) Two
+models both trained from scratch. (b) MGN trained from scratch and fine-tuned with the Uniform
+strategy. (c) SGUNET trained from scratch and fine-tuned with the Uniform strategy.
+
+
+5 DISCUSSION
+
+
+In this paper, we introduce a novel pre-training and fine-tuning framework tailored specifically for
+mesh-based physical simulations. Our approach uses a scalable graph U-net (SGUNET), which is
+defined in a modular and configurable manner to facilitate the parameter sharing process for transfer
+learning. We constructed a dataset for pre-training, i.e. ABCD, and utilized it to pre-train the
+models. Through extensive experiments, we demonstrate that not only does SGUNET outperform
+MGN, a SOTA model in this field, but also both models achieve improvements in performance across
+various dataset scales when fine-tuned. Notably, the fine-tuned models reduce their dependence on
+the training data.
+
+
+Despite the promising results, there are some limitations that warrant further exploration. First, we
+have evaluated our framework only in the context of quasi-static simulations. Future work could
+extend it to a broader range of physical systems to assess its versatility and effectiveness in more
+dynamic scenarios. Second, our current transfer learning methods, which includes two strategies for
+parameter sharing and one for parameter restriction, have proven effective, exploring alternative and
+more advanced transfer learning techniques could offer valuable opportunities for future research.
+
+
+10
+
+
+0 100000 200000 300000 400000 500000
+step
+
+
+(a)
+
+
+0 100000 200000 300000 400000 500000
+step
+
+
+(b)
+
+
+0 100000 200000 300000 400000 500000
+step
+
+
+(c)
+
+
+REFERENCES
+
+
+Kelsey R. Allen, Tatiana Lopez-Guevara, Yulia Rubanova, Kimberly L. Stachenfeld, Alvaro
+Sanchez-Gonzalez, Peter W. Battaglia, and Tobias Pfaff. Graph network simulators can learn
+discontinuous, rigid contact dynamics. In Karen Liu, Dana Kulic, and Jeffrey Ichnowski (eds.),
+_Conference on Robot Learning, CoRL 2022, 14-18 December 2022, Auckland, New Zealand_, volume 205 of _Proceedings_ _of_ _Machine_ _Learning_ _Research_, pp. 1157–1167. PMLR, 2022a. URL
+[https://proceedings.mlr.press/v205/allen23a.html.](https://proceedings.mlr.press/v205/allen23a.html)
+
+
+Kelsey R Allen, Tatiana Lopez-Guevara, Kimberly Stachenfeld, Alvaro Sanchez-Gonzalez, Peter
+Battaglia, Jessica Hamrick, and Tobias Pfaff. Physical design using differentiable learned simulators. _arXiv preprint arXiv:2202.00728_, 2022b.
+
+
+Kelsey R Allen, Yulia Rubanova, Tatiana Lopez-Guevara, William Whitney, Alvaro SanchezGonzalez, Peter Battaglia, and Tobias Pfaff. Learning rigid dynamics with face interaction graph
+networks. _arXiv preprint arXiv:2212.03574_, 2022c.
+
+
+Yadi Cao, Menglei Chai, Minchen Li, and Chenfanfu Jiang. Efficient learning of mesh-based
+physical simulation with bi-stride multi-scale graph neural network. In Andreas Krause, Emma
+Brunskill, Kyunghyun Cho, Barbara Engelhardt, Sivan Sabato, and Jonathan Scarlett (eds.), _Pro-_
+_ceedings_ _of_ _the_ _40th_ _International_ _Conference_ _on_ _Machine_ _Learning_, volume 202 of _Proceed-_
+_ings_ _of_ _Machine_ _Learning_ _Research_, pp. 3541–3558. PMLR, 23–29 Jul 2023. URL [https:](https://proceedings.mlr.press/v202/cao23a.html)
+[//proceedings.mlr.press/v202/cao23a.html.](https://proceedings.mlr.press/v202/cao23a.html)
+
+
+Saurabh Deshpande, St´ephane P.A. Bordas, and Jakub Lengiewicz. Magnet: A graph u-net architecture for mesh-based simulations. _Engineering Applications of Artificial Intelligence_, 133:108055,
+2024. ISSN 0952-1976. doi: https://doi.org/10.1016/j.engappai.2024.108055. URL [https:](https://www.sciencedirect.com/science/article/pii/S0952197624002136)
+[//www.sciencedirect.com/science/article/pii/S0952197624002136.](https://www.sciencedirect.com/science/article/pii/S0952197624002136)
+
+
+Meire Fortunato, Tobias Pfaff, Peter Wirnsberger, Alexander Pritzel, and Peter W. Battaglia. Multiscale meshgraphnets. _CoRR_, abs/2210.00612, 2022. doi: 10.48550/ARXIV.2210.00612. URL
+[https://doi.org/10.48550/arXiv.2210.00612.](https://doi.org/10.48550/arXiv.2210.00612)
+
+
+Hongyang Gao and Shuiwang Ji. Graph u-nets. In _international conference on machine learning_,
+pp. 2083–2092. PMLR, 2019.
+
+
+Rini Jasmine Gladstone, Helia Rahmani, Vishvas Suryakumar, Hadi Meidani, Marta D’Elia,
+and Ahmad Zareei. Gnn-based physics solver for time-independent pdes. _arXiv_ _preprint_
+_arXiv:2303.15681_, 2023.
+
+
+Henry Gouk, Timothy M Hospedales, and Massimiliano Pontil. Distance-based regularisation of
+deep networks for fine-tuning. _arXiv preprint arXiv:2002.08253_, 2020.
+
+
+Klaus Greff, Francois Belletti, Lucas Beyer, Carl Doersch, Yilun Du, Daniel Duckworth, David J
+Fleet, Dan Gnanapragasam, Florian Golemo, Charles Herrmann, et al. Kubric: A scalable dataset
+generator. In _Proceedings of the IEEE/CVF conference on computer vision and pattern recogni-_
+_tion_, pp. 3749–3761, 2022.
+
+
+Omar M Hafez and Mark M Rashid. A robust workflow for b-rep generation from image masks.
+_Graphical Models_, 128:101174, 2023.
+
+
+Xu Han, Han Gao, Tobias Pfaff, Jian-Xun Wang, and Liping Liu. Predicting physics in meshreduced space with temporal attention. In _The_ _Tenth_ _International_ _Conference_ _on_ _Learning_
+_Representations,_ _ICLR_ _2022,_ _Virtual_ _Event,_ _April_ _25-29,_ _2022_ . OpenReview.net, 2022. URL
+[https://openreview.net/forum?id=XctLdNfCmP.](https://openreview.net/forum?id=XctLdNfCmP)
+
+
+Sebastian Koch, Albert Matveev, Zhongshi Jiang, Francis Williams, Alexey Artemov, Evgeny Burnaev, Marc Alexa, Denis Zorin, and Daniele Panozzo. Abc: A big cad model dataset for geometric deep learning. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _conference_ _on_ _computer_ _vision_ _and_ _pattern_
+_recognition_, pp. 9601–9611, 2019.
+
+
+Zongyi Li, Nikola Kovachki, Kamyar Azizzadenesheli, Burigede Liu, Andrew Stuart, Kaushik Bhattacharya, and Anima Anandkumar. Multipole graph neural operator for parametric partial differential equations. _Advances in Neural Information Processing Systems_, 33:6755–6766, 2020.
+
+
+11
+
+
+Jonas Linkerh¨agner, Niklas Freymuth, Paul Maria Scheikl, Franziska Mathis-Ullrich, and Gerhard Neumann. Grounding graph network simulators using physical sensor observations. _arXiv_
+_preprint arXiv:2302.11864_, 2023.
+
+
+Tatiana Lopez-Guevara, Yulia Rubanova, William F Whitney, Tobias Pfaff, Kimberly Stachenfeld,
+and Kelsey R Allen. Scaling face interaction graph networks to real world scenes. _arXiv preprint_
+_arXiv:2401.11985_, 2024.
+
+
+Ben Mann, N Ryder, M Subbiah, J Kaplan, P Dhariwal, A Neelakantan, P Shyam, G Sastry, A Askell, S Agarwal, et al. Language models are few-shot learners. _arXiv_ _preprint_
+_arXiv:2005.14165_, 1, 2020.
+
+
+Rahul Narain, Armin Samii, and James F O’brien. Adaptive anisotropic remeshing for cloth simulation. _ACM transactions on graphics (TOG)_, 31(6):1–10, 2012.
+
+
+Tobias Pfaff, Meire Fortunato, Alvaro Sanchez-Gonzalez, and Peter W. Battaglia. Learning meshbased simulation with graph networks. In _9th_ _International_ _Conference_ _on_ _Learning_ _Repre-_
+_sentations,_ _ICLR_ _2021,_ _Virtual_ _Event,_ _Austria,_ _May_ _3-7,_ _2021_ . OpenReview.net, 2021. URL
+[https://openreview.net/forum?id=roNqYL0_XP.](https://openreview.net/forum?id=roNqYL0_XP)
+
+
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, et al. Language
+models are unsupervised multitask learners. _OpenAI blog_, 1(8):9, 2019.
+
+
+A Sai Bharadwaj Reddy and D Sujitha Juliet. Transfer learning with resnet-50 for malaria cellimage classification. In _2019 International conference on communication and signal processing_
+_(ICCSP)_, pp. 0945–0949. IEEE, 2019.
+
+
+Edmar Rezende, Guilherme Ruppert, Tiago Carvalho, Fabio Ramos, and Paulo De Geus. Malicious
+software classification using transfer learning of resnet-50 deep neural network. In _2017_ _16th_
+_IEEE international conference on machine learning and applications (ICMLA)_, pp. 1011–1014.
+IEEE, 2017.
+
+
+Yulia Rubanova, Alvaro Sanchez-Gonzalez, Tobias Pfaff, and Peter W. Battaglia. Constraint-based
+graph network simulator. In Kamalika Chaudhuri, Stefanie Jegelka, Le Song, Csaba Szepesv´ari,
+Gang Niu, and Sivan Sabato (eds.), _International Conference on Machine Learning, ICML 2022,_
+_17-23_ _July_ _2022,_ _Baltimore,_ _Maryland,_ _USA_, volume 162 of _Proceedings_ _of_ _Machine_ _Learning_
+_Research_, pp. 18844–18870. PMLR, 2022. URL [https://proceedings.mlr.press/](https://proceedings.mlr.press/v162/rubanova22a.html)
+[v162/rubanova22a.html.](https://proceedings.mlr.press/v162/rubanova22a.html)
+
+
+Alvaro Sanchez-Gonzalez, Nicolas Heess, Jost Tobias Springenberg, Josh Merel, Martin Riedmiller,
+Raia Hadsell, and Peter Battaglia. Graph networks as learnable physics engines for inference and
+control. In _International conference on machine learning_, pp. 4470–4479. PMLR, 2018.
+
+
+Alvaro Sanchez-Gonzalez, Jonathan Godwin, Tobias Pfaff, Rex Ying, Jure Leskovec, and Peter W.
+Battaglia. Learning to simulate complex physics with graph networks. In _Proceedings of the 37th_
+_International_ _Conference_ _on_ _Machine_ _Learning,_ _ICML_ _2020,_ _13-18_ _July_ _2020,_ _Virtual_ _Event_,
+volume 119 of _Proceedings of Machine Learning Research_, pp. 8459–8468. PMLR, 2020. URL
+[http://proceedings.mlr.press/v119/sanchez-gonzalez20a.html.](http://proceedings.mlr.press/v119/sanchez-gonzalez20a.html)
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee
+Lacroix, Baptiste Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, et al. Llama: Open and
+efficient foundation language models. _arXiv preprint arXiv:2302.13971_, 2023.
+
+
+Henry G Weller, Gavin Tabor, Hrvoje Jasak, and Christer Fureby. A tensorial approach to computational continuum mechanics using object-oriented techniques. _Computers in physics_, 12(6):
+620–631, 1998.
+
+
+William F Whitney, Tatiana Lopez-Guevara, Tobias Pfaff, Yulia Rubanova, Thomas Kipf, Kimberly
+Stachenfeld, and Kelsey R Allen. Learning 3d particle-based simulators from rgb-d videos. _arXiv_
+_preprint arXiv:2312.05359_, 2023.
+
+
+Zhiqiu Xu, Yanjie Chen, Kirill Vishniakov, Yida Yin, Zhiqiang Shen, Trevor Darrell, Lingjie Liu,
+and Zhuang Liu. Initializing models with larger ones. In _The Twelfth_ _International Conference_
+_on Learning Representations_, 2023.
+
+
+12
+
+
+LI Xuhong, Yves Grandvalet, and Franck Davoine. Explicit inductive bias for transfer learning
+with convolutional networks. In _International Conference on Machine Learning_, pp. 2825–2834.
+PMLR, 2018.
+
+
+Youn-Yeol Yu, Jeongwhan Choi, Woojin Cho, Kookjin Lee, Nayong Kim, Kiseok Chang, ChangSeung Woo, Ilho Kim, SeokWoo Lee, Joon-Young Yang, Sooyoung Yoon, and Noseong Park.
+Learning flexible body collision dynamics with hierarchical contact mesh transformer. _CoRR_,
+abs/2312.12467, 2023. doi: 10.48550/ARXIV.2312.12467. URL [https://doi.org/10.](https://doi.org/10.48550/arXiv.2312.12467)
+[48550/arXiv.2312.12467.](https://doi.org/10.48550/arXiv.2312.12467)
+
+
+Fuzhen Zhuang, Zhiyuan Qi, Keyu Duan, Dongbo Xi, Yongchun Zhu, Hengshu Zhu, Hui Xiong,
+and Qing He. A comprehensive survey on transfer learning. _Proceedings_ _of_ _the_ _IEEE_, 109(1):
+43–76, 2020.
+
+
+13
+
+
+A DATASET DETAILS
+
+
+Three quasi-static datasets, ABCD, Deforming Plate, Deformable Plate are used in our experiments.
+All datasets are simulated as hyper-elastic deformations with linear elements. For ABCD, it includes
+20,000 trajectories for pre-training. For Deforming Plate, it contains 1200 trajectories in total, we
+split it into 1000/100/100 for training, validation and testing. For Deformable Plate, we use a split
+of 675/135/135 for training, validation and testing.
+
+
+In the experiments, we repeated the fine-tuning on Deformable Plate and Deforming Plate 5 times.
+Each time, we shuffled the data splits for training, validation and testing while maintaining the ratio.
+
+
+Table 2: Basic statistics for datasets.
+
+
+# _|V_ _[M]_ _|_ # _|V_ _[E]_ _|_ # _|E_ _[M,M]_ _|_ # _|E_ _[E,E]_ _|_ # _|E_ _[E,M]_ _|_
+**Dataset** # Steps Mesh Type Dimension
+**pre-training** (avg.) (avg.) (avg.) (avg.) (avg.)
+
+**ABCD** 4445 12944 42919 57052 51777 20 Tetrahedral 3
+
+# _|V_ _[M]_ _|_ # _|V_ _[E]_ _|_ # _|E_ _[M,M]_ _|_ # _|E_ _[E,E]_ _|_ # _|E_ _[E,M]_ _|_
+**Dataset** # Steps Mesh Type Dimension
+(avg.) (avg.) (avg.) (avg.) (avg.)
+**Transfer Learning**
+
+**Deforming Plate** 1270 4038 12718 15648 16154 400 Tetrahedral 3
+**Deformable Plate** 138 183 648 515 549 50 Triangular 2
+
+
+B METHOD DETAILS
+
+
+B.1 DFS-POOLING
+
+
+We provide the pseudocode for generating the cluster index vector, which is utilized for graph pooling in the GUnet module.
+
+
+**Algorithm 1:** Get nodes clustering index
+
+**Data:** adjacency matrix **A**, pooling ratio _p_, material index vector **m**, number of nodes _n_
+**Result:** cluster index vector **c**
+
+**1** **Function** DFS( _nid, mat_ ) **:**
+
+**2** **c** _._ get( _nid_ ) _←_ _cid_ ;
+
+**3** _cnt ←_ _cnt_ + 1;
+
+**4** **if** _cnt ≥_ _p_ **then**
+
+**5** _cid ←_ _cid_ + 1;
+
+**6** _cnt ←_ 0;
+
+**7** **end**
+
+**8** **for** _nnid ∈_ [0 _,_ 1 _, . . ., n −_ 1] **do**
+
+**9** **if** _nnid ∈_ _left ∧_ **m** _._ get( _nnid_ ) == _mat_ **then**
+
+**10** _left._ remove( _nnid_ );
+
+**11** DFS( _nnid, mat_ );
+
+**12** **end**
+
+**13** **end**
+
+**14** **return**
+
+**15** Let _cid ←−_ 1 _, cnt ←_ 0;
+
+**16** Let _left ←_ set(0 _,_ 1 _, . . ., n −_ 1), **c** _←_ [ _−_ **1** ] _n_ ;
+
+**17** **while** _left is not empty_ **do**
+
+**18** _nid ←_ _left._ pop(0);
+
+**19** _mat ←_ **m** _._ get( _nid_ );
+
+**20** **if c** _._ count( _cid_ ) _>_ 0 **then**
+
+**21** _cid ←_ _cid_ + 1;
+
+**22** _cnt ←_ 0;
+
+**23** **end**
+
+**24** DFS( _nid, mat_ );
+
+**25** **end**
+
+**26** **return c**
+
+
+14
+
+
+B.2 ALIGNMENT OF GUNET
+
+
+A GUnet module comprise _L_ stages. To align a GUnet with _L_ pt stages in the pre-trained model with
+a GUnet having _L_ ft stages in the fine-tuned model, it is essential to construct a mapping function that
+build the connection between stages of the two models. Similar to the alignment of the Processor
+module, we design two mapping methods. Let _g_ 2( **GU** pt) denote the function that maps a GUnet
+**GU** pt in the pre-trained model to a GUnet **GU** ft in the fine-tuned model. For **Uniform Mapping**,
+
+
+              - _g_ 1( **GU** _i_ pt [)] _[,]_ if _i ≤_ _L_ pt
+**GU** _[i]_ ft [=] _[ g]_ 2 [First-N] ( _i_ ; **GU** pt) =
+Randomly Initialized _,_ if _i > L_ pt _._
+
+
+The calculations for upN, dwN, _st_ ( _i_ ), and _ed_ ( _i_ ) are nearly the same as those in scaling the Processor.
+The only difference is to replace _m∗_ with _L∗_ . Here, **GU** _[i]_ denotes the Processor at the _i_ -th layer
+of the GUnet. Prior to the alignment between GUnets, the Processor should be aligned up using the
+function _g_ 1 to ensure consistency.
+
+
+B.3 HOW TO CALCULATE RECEPTIVE FIELD SIZE
+
+
+The receptive field size is defined as the maximum distance from which the central node can aggregate information from other nodes. Let the receptive field in the _i_ -th stage be denoted by _ri_,
+the pooling ratio by _pi_, and the number of message passing steps in the GUnet’s Processors by
+_m_ [GU] . Due to the presence of a Processor at the bottom of the GUnet, we have _rL_ = _m_ [GU] . Given
+_ri_, the receptive field for the ( _i −_ 1)-th stage can be calculated as _ri−_ 1 = ( _ri_ + 1) _· pi_ _−_ 1. By
+applying this recursively, the receptive field of the central node in the first stage is determined as
+�� _L−_ 1      _r_ 0 = ( _m_ [GU] + 1) _·_ _i_ =0 _[p][i]_ [ + 1] _−_ 2. Prior to reaching the first stage of the GUnet, the graph
+
+has already undergone _m_ [Enc] steps of information aggregation through the Processor in the Encoder.
+�� _L−_ 1                   Therefore, the overall receptive field size is _r_ = _m_ [Enc] + ( _m_ [GU] + 1) _·_ _i_ =0 _[p][i]_ [ + 1] _−_ 2.
+
+
+B.4 MORE INFORMATION ABOUT HETEROGENEOUS GRAPH
+
+
+As described in Section 3.2, each node and edge type has a distinct feature matrix. Specifically,
+the feature at time _t_ is constructed as follows: 1) for _vi_ _∈V_ _[M]_, the feature is given by _ni_ ����( **x** _ti_ _[−]_
+**x** [0] _i_ [)][;] [2)] [for] _[v][i]_ _[∈V]_ _[E]_ [,] [it] [is] [represented] [as] _[λ][i]_ ���� _µi_ ����( **x** _ti_ _[−]_ **[x]** _i_ [0][)][;] [3)] [for] _[e][i,j]_ _[∈E]_ [src] _[,]_ [tgt][,] [the] [feature] [is]
+**x** [0] _ij_ ���� _|_ **x** 0 _ij_ _[|]_ ���� **x** _tij_ ���� _|_ **x** _tij_ _[|]_ [.] [Here,] _[ n][i]_ [is a binary indicator (0 or 1) representing whether the mesh node] _[ v][i]_
+is a normal or boundary node, _λi_ and _µi_ are mechanical properties of the material, **x** _[t]_ _i_ [denotes the]
+world coordinates of node _i_ at time _t_, and **x** _[t]_ _ij_ [refers to the relative world position between nodes] _[ i]_
+and _j_ at time _t_ . The operator ���� denotes concatenation, while _| · |_ refers to the _L_ 2 norm.
+
+
+Following the approach in previous work Pfaff et al. (2021), we construct edges between the plate
+and the ball in the Deforming Plate and Deformable Plate datasets based on the distance between
+endpoints. Specifically, the distances used for ABCD, Deforming Plate, and Deformable Plate are
+0.0003, 0.003, and 0.05, respectively. Unlike MGN, which connects mesh nodes directly, we establish edges between element nodes.
+
+
+Previous work transforms the mesh data from the Deforming Plate and Deformable Plate datasets
+into homogeneous graphs, where mesh vertices are represented as graph nodes. As a result, these
+datasets only capture the physical information of the mesh vertices and lack material properties. To
+address these limitations, we 1) use the average position of the mesh nodes to represent the position
+of the corresponding element node, and 2) set the material properties _λ_ and _µ_ to zero.
+
+
+15
+
+
+**GU** _[i]_ ft [=] _[ g]_ 2 [uni][(] _[i]_ [;] **[ GU]** [pt][) =]
+
+
+For **First-N Mapping**,
+
+
+
+
+
+
+_g_ 1( **GU** _[⌊]_ pt _[i/]_ [upN] _[⌋]_ ) _,_ if _L_ pt _< L_ ft
+MEAN _[st]_ _j_ = [(] _st_ _[i]_ [)+] ( _i_ _[d]_ ) [(] _[i]_ [)] _{g_ 1( **GU** _[j]_ pt [)] _[}][,]_ if _L_ pt _> L_ ft
+_g_ 1( **GU** _[i]_ pt [)] _[,]_ if _L_ pt == _L_ ft _._
+
+
+
+
+
+C EXPERIMENT DETAILS
+
+
+C.1 MODEL CONFIGURATION
+
+
+**MGN:** For the Deforming Plate and Deformable Plate datasets, we adhere to the settings outlined
+in the original paper Pfaff et al. (2021); Linkerh¨agner et al. (2023). For the ABCD dataset, which
+involves larger-scale mesh sizes, more message passing steps are required. Since increased message
+passing steps lead to higher memory consumption and longer training times, we balance effectiveness and efficiency by setting the message passing steps in the Encoder and Processor to 5 and 13,
+respectively.
+
+
+**SGUNET:** We configure our model based on two key objectives: 1) achieving a larger mesh receptive field size and 2) maintaining a model size that is comparable to or smaller than that of MGN.
+We evaluate the model performance across several configurations and select the one that performs
+best.
+
+
+**Noise Std.:** As we adopt the next-step prediction approach, adding noise to the input data is essential to enhance robustness during inference. We follow the noise settings specified in the original
+paper Pfaff et al. (2021); Linkerh¨agner et al. (2023) for the Deforming Plate and Deformable Plate
+datasets, which are 0.003 and 0.05, respectively. For the ABCD dataset, given that it involves fewer
+roll-out steps, we use a smaller noise standard deviation value of 0.0003.
+
+
+C.2 LOSS
+
+
+The task-related objective across all datasets is unified as the mean squared error (MSE) loss of the
+normalized delta displacement between nodes over two steps. This can be expressed as:
+
+_Ltask_ = _|V_ _[M]_ _|_ +1 _|V_ _[E]_ _|_              - _v∈V_ _[M]_ _∪V_ _[E]_ ���� **x** ˙ _v_ pred _−_ **x** �˙ _v_ GT [�] ��2 _,_
+
+
+pred GT
+where **x** [�] ˙ _v_ and **x** �˙ _v_ represent the normalized predicted and ground truth displacements of node
+_v_ over two steps, respectively.
+
+
+C.3 ADDITIONAL EXPERIMENTAL RESULTS
+
+
+We present the experimental results of MGN and SGUNET on the Deformable Plate and Deforming
+Plate datasets in Table 3 and Table 4, respectively. These results are obtained by loading the checkpoint from the best-performing step on the validation set, followed by inference on the corresponding test datasets. To facilitate comparison, the best result for each training data size is highlighted in
+bold, while the second-best result is underlined.
+
+
+|Model Method All Data|1 Data|1 Data|
+|---|---|---|
+|<br>MGN<br>From scratch<br>0.062391_±_0.0106<br>Fine-tuned (First-N)<br>0.056409_±_0.0052<br>Fine-tuned (uni)<br>**0.054644**_±_**0.0029**|8 <br>0.064114_±_0.0046<br>0.057404_±_0.0015|16 <br>0.070436_±_0.0065<br>0.058858_±_0.0052|
+|<br>MGN<br>From scratch<br>0.062391_±_0.0106<br>Fine-tuned (First-N)<br>0.056409_±_0.0052<br>Fine-tuned (uni)<br>**0.054644**_±_**0.0029**|**0.055432**_±_**0.0032**|0.060024_±_0.0030|
+|SGUNET<br>From scratch<br>0.059615_±_0.0005<br>Fine-tuned (First-N)<br>0.057769_±_0.0058<br>Fine-tuned (uni)<br>0.056966_±_0.0061|0.063806_±_0.0085<br>0.059909_±_0.0062<br>0.057517_±_0.0044|0.064714_±_0.0096<br>0.061929_±_0.0060<br>**0.057560**_±_**0.0034**|
+
+
+|Model Method All Data|1 Data|1 Data|
+|---|---|---|
+|<br>MGN<br>From scratch<br>0.007058_±_0.0009<br>Fine-tuned (First-N)<br>**0.005903**_±_**0.0008**<br>Fine-tuned (uni)<br>0.006363_±_0.0006|4 <br>0.007068_±_0.0006<br>0.006977_±_0.0008<br>0.006523_±_0.0007|8 <br>0.007477_±_0.0008<br>0.006350_±_0.0005<br>0.006535_±_0.0009|
+|SGUNET<br>From scratch<br>0.006402_±_0.0008<br>Fine-tuned (First-N)<br>0.006071_±_0.0002<br>Fine-tuned (uni)<br>0.006173_±_0.0005|0.006585_±_0.0007<br>**0.005993**_±_**0.0003**<br>0.006140_±_0.0005|0.007045_±_0.0008<br>**0.006006**_±_**0.0004**<br>0.006272_±_0.0006|
+
+
+Figure 11 and Figure 12 provide supplementary animations, where the models are trained on the full
+training dataset.
+
+
+16
+
+
+Table 3: The performance of the two models
+on the test dataset for Deformable Plate when
+trained from scratch and when fine-tuned.
+
+
+Table 4: The performance of the two models on
+the Deforming Plate dataset when trained from
+scratch and when fine-tuned.
+
+
+ment magnitude.
+
+
+17

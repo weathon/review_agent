@@ -1,0 +1,1343 @@
+### KLAY: ACCELERATING ARITHMETIC CIRCUITS
+#### FOR NEUROSYMBOLIC AI
+
+
+**Jaron Maene & Vincent Derkinderen**
+Department of Computer Science
+KU Leuven
+Leuven, Belgium
+_{_ jaron.maene,vincent.derkinderen _}_ @kuleuven.be
+
+
+**Pedro Zuidberg Dos Martires**
+Centre for Applied Autonomous Sensor Systems
+¨Orebro University
+¨Orebro, Sweden
+pedro.zuidberg-dos-martires@oru.se
+
+
+ABSTRACT
+
+
+A popular approach to neurosymbolic AI involves mapping logic formulas to
+arithmetic circuits (computation graphs consisting of sums and products) and
+passing the outputs of a neural network through these circuits. This approach
+enforces symbolic constraints onto a neural network in a principled and end-toend differentiable way. Unfortunately, arithmetic circuits are challenging to run on
+modern tensor accelerators as they exhibit a high degree of irregular sparsity. To
+address this limitation, we introduce knowledge layers (KLAY), a new data structure to represent arithmetic circuits that can be efficiently parallelized on GPUs.
+Moreover, we contribute two algorithms used in the translation of traditional circuit representations to KLAY and a further algorithm that exploits parallelization
+opportunities during circuit evaluations. We empirically show that KLAY achieves
+speedups of multiple orders of magnitude over the state of the art, thereby paving
+the way towards scaling neurosymbolic AI to larger real-world applications.
+
+
+1 INTRODUCTION
+
+
+Interest in neurosymbolic AI (Hitzler & Sarker, 2022) continues to grow as the integration of symbolic reasoning and neural networks has been shown to increase reasoning capabilities (Yi et al.,
+2018; Trinh et al., 2024), safety (Yang et al., 2023), controllability (Jiao et al., 2024), and interpretability (Koh et al., 2020). Furthermore, neurosymbolic methods often require less data by
+allowing a richer and more explicit set of priors (Diligenti et al., 2017; Manhaeve et al., 2018).
+
+
+However, as the computational structure of many neurosymbolic models is partially dense (in its neural component) and partially sparse (in its symbolic component), efficiently learning neurosymbolic
+models still presents a challenge (Wan et al., 2024). So far, the symbolic components of these
+neurosymbolic models have struggled to fully exploit the potential of modern GPUs or TPUs.
+
+
+Our work focuses on a particular flavor of neurosymbolic AI, pioneered by Xu et al. (2018) and
+Manhaeve et al. (2018), which performs probabilistic inference on the outputs of a neural network.
+This is achieved by encoding the symbolic knowledge using arithmetic circuits. While arithmetic
+circuits are end-to-end differentiable, they also pose certain challenges. In particular, arithmetic
+circuits are ill-suited to be evaluated in terms of dense tensor operations due to their high degree of
+irregular sparsity. In this work, we address the challenge of optimizing neurosymbolic architectures
+to efficiently leverage available widely available hardware. To this end, we present KLAY: a new
+data structure representing arithmetic circuits as **k** nowledge **lay** ers which can exploit the parallel
+compute present in modern GPUs or TPUs.
+
+
+1
+
+
+The main advantage of KLAY is that it reduces arithmetic circuit evaluations to index and scatter
+operations - operations already present in popular tensor libraries. This allows for the embarrassingly parallel nature of these knowledge layers to be harnessed. Importantly and in contrast to
+alternative approaches that speed up sparse neurosymbolic computation graphs (Dadu et al., 2019;
+Liu et al., 2024), we forego the need for custom hardware-specific implementations. This makes
+KLAY completely agnostic towards the underlying hardware. By leveraging the compiler stacks of
+open-source tensor libraries, KLAY can furthermore considerably outperform existing hand-written
+CUDA kernels.
+
+
+2 ARITHMETIC CIRCUITS AND NEUROSYMBOLIC AI
+
+
+The symbolic knowledge in neurosymbolic AI is commonly specified as Boolean logic. _Boolean_
+_circuits_ are a compact representation of Boolean logic using directed acyclic graphs (Darwiche,
+2021). More specifically, the leaves in Boolean circuits correspond to Boolean variables (or their
+negation), while inner nodes are either _∧_ -gates or _∨_ -gates. We make the usual assumption that
+Boolean circuits do not contain negation, known as _negation normal form_ (NNF). Figure 1a contains
+an example of a Boolean circuit. A circuit can be evaluated for a set of inputs by a simple post-order
+traversal of the graph, meaning children get evaluated before their parents. More formally, the value
+_v_ ( _n_ ) of a node _n_ is a defined as
+
+
+_v_ ( _n_ ) =
+
+
+
+
+
+
+_ln_ if _n_ is a leaf node,
+
+
+- _c∈Cn_ _[v]_ [(] _[c]_ [)] if _n_ is a _∧_ -gate,
+
+
+
+
+
+_c∈Cn_ _[v]_ [(] _[c]_ [)] if _n_ is a _∧_ -gate, (1)
+
+_c∈Cn_ _[v]_ [(] _[c]_ [)] if _n_ is a _∨_ -gate.
+
+
+We write _ln_ for the Boolean input value of the leaf node _n_ and _Cn_ for the set of children of an inner
+node _n_ . The evaluation of a circuit is a function B _[N]_ _→_ B which maps the Boolean inputs of the
+leaves to the value of the root node.
+
+
+In order to render Boolean circuits useful in the context of neurosymbolic AI, we first need to
+perform a so-called knowledge compilation step (Darwiche & Marquis, 2002). This compilation
+step transforms an NNF circuit into _deterministic decomposable negation normal form_ (d-DNNF).
+_Determinism_ (Darwiche, 2001b) and _decomposability_ (Darwiche, 2001a) are two properties that
+guarantee certain computations can be performed tractably, such as finding the number of satisfying
+assignments. We refer the reader to Vergari et al. (2021) for an in-depth discussion on tractable computations on circuits. Figure 1b contains the d-DNNF circuit resulting from knowledge-compiling
+the circuit in Figure 1a.
+
+
+The important advantage of d-DNNF circuits over general NNF circuits is that they allow linear
+time probabilistic inference. Assume first that the Boolean variables are not deterministic anymore
+but constitute Bernoulli random variables. We can then compute the probability of the d-DNNF
+circuit evaluating to true under the input distribution by labeling the leaves of the circuit with the
+probabilities of the Boolean variables and replacing _∧_ - and _∨_ -gates with _×_ and + operations, respectively. The resulting circuit is also called an arithmetic circuit (Darwiche, 2003) and is displayed
+in Figure 1c.
+
+
+While probabilistic inference on d-DNNF circuits has linear time complexity, transforming a NNF
+circuit into d-DNNF is #P-hard (Valiant, 1979). However, once the d-DNNF structure is obtained
+we can re-evaluate the circuit with different probabilities for the Boolean variables in the leaves.
+This approach has been very successful in probabilistic inference for a variety of models such as
+Bayesian networks (Chavira & Darwiche, 2008) and more general probabilistic programs (Fierens
+et al., 2015).
+
+
+This compile once and evaluate often paradigm has also gained traction in neurosymbolic systems (Manhaeve et al., 2018; Ahmed et al., 2022b; De Smet et al., 2023). The high-level idea behind
+these approaches is to compile the symbolic knowledge once into an arithmetic circuit and let a neural network predict the probabilities to be fed into the arithmetic circuit. Given that the arithmetic
+circuit consists only of sum and product operations, the resulting computation graph (neural network
++ arithmetic circuit) is end-to-end differentiable and the parameters can be optimized using standard
+gradient descent methods. Furthermore, as gradient descent is an iterative method, the circuit (and
+its gradient) needs to be evaluated repeatedly. This yields a convenient return on investment for the
+
+
+2
+
+
+_a_
+
+
+_pa_
+
+
+_¬b_ _¬c_ _d_
+
+
+_c_ _¬d_
+
+
+_c_ _d_
+
+
+(b) d-DNNF circuit.
+
+
+_pc_ _pd_
+
+
+(c) Arithmetic circuit.
+
+
+(a) NNF circuit.
+
+
+Figure 1: Example of (a) a Boolean circuit, (b) its d-DNNF version, and (c) the corresponding
+arithmetic circuit. The arithmetic circuit replaces Boolean variables with their probabilities. Consequently, the arithmetic circuit computes the probability of the underlying Boolean circuit being
+satisfied. In a neurosymbolic setting, the input probabilities are predicted by a neural network.
+
+
+initial expensive knowledge compilation step, which now amortizes over multiple evaluations. Appendix D explains in more detail how neural networks and circuits can be used together on a simple
+example.
+
+
+As discussed in the introduction, arithmetic circuits currently hinder the efficient application of
+neurosymbolic methods as these circuits are not well-suited to be evaluated as parallel tensor operations. As a matter of fact, the standard way to evaluate an arithmetic circuit in a neurosymbolic
+context is to naively evaluate every node one by one (Manhaeve et al., 2018; Ahmed et al., 2022a;b)
+using a naive traversal of the arithmetic circuit. Although this naive traversal of the circuit allows
+for a certain degree of data parallelism, it fails to fully utilize the capacity of modern GPUs. Consequently, many existing frameworks in practice just evaluate the entire computation graph on the
+CPU (Manhaeve et al., 2018; Ahmed et al., 2022b).
+
+
+3 LAYERIZING CIRCUITS
+
+
+In this section, we show how to map a d-DNNF circuit to our layerized KLAY representation. Afterward, in Section 4, we discuss how the resulting KLAY representation can be run efficiently on
+GPUs. Although our exposition focuses on d-DNNF circuits, it is more generally applicable to NNF
+circuits, meaning KLAY could also be of interest to neurosymbolic systems based on, e.g. fuzzy
+logic (Badreddine et al., 2022) or grammars (Winters et al., 2022).
+
+
+3.1 FROM LINKED NODES TOWARDS LAYERS
+
+
+In order to parallelize a d-DNNF circuit, we group the nodes into sets of nodes that can be evaluated
+in parallel. We dub these groups layers – reminiscent of layers in neural networks. Concretely, for
+each node _n_ in a circuit _C_ we compute its height in the circuit _hn_, and nodes with the same height
+are assigned to the same layer.
+
+
+�0 _,_ if _n_ is a leaf,
+_Li_ = _{n ∈_ _C_ _| hn_ = _i}_ where _hn_ = (2)
+max _c∈Cn hc_ + 1 otherwise _._
+
+
+Here, we use _Cn_ to denote the set of children of a node _n_ . Note that the height of all nodes can be
+efficiently evaluated in a single post-order circuit traversal. The initial layer, _L_ 0, comprises all leaf
+nodes, while the last layer comprises the root node.
+
+
+Without loss of generality, we can assume that _∨_ -gates only have _∧_ -gates as children and that _∧_ gates have either _∨_ -gates or leaf nodes as children (Choi et al., 2020). This implies that _∧_ - and
+_∨_ -gates appear in an alternating fashion throughout the circuit, which can be observed in Figure 1b,
+and that all nodes in the same layer have the same type.
+
+
+If nodes are assigned to layers based on their height _hn_, the child of a node can be in any of the
+previous layers. However, to transform the circuit evaluation into a sequence of parallel operations,
+it is more convenient if all children are in the immediately preceding layer. In such a structure, the
+next layer can be computed solely using the current layer.
+
+
+3
+
+
+_¬b_ _¬a_ _b_ _¬c_ _c_ _d_ _¬d_ _a_
+
+
+layer _L_ 4
+
+
+layer _L_ 3
+
+
+layer _L_ 2
+
+
+layer _L_ 1
+
+
+layer _L_ 0
+
+
+Figure 2: A layered version of the d-DNNF in Figure 1b. Dashed nodes indicate nodes that are not
+present in the original d-DNNF and which are introduced during the layerization of the circuit.
+
+
+We obtain this layer-by-layer structure by introducing additional unary nodes. Whenever a node
+_n_ _∈_ _Lhn_ has a child _c_ in a non-immediately preceding layer _Lhc_, i.e. _hc_ + 1 _<_ _hn_, we introduce a
+chain of unary nodes, one per layer between _Lhc_ and _Lhn_, to connect _n_ to _c_ via these unary nodes.
+This is illustrated in Figure 2, where the newly introduced nodes are indicated by dashed circles.
+Note that the type of a unary node ( _∨_ or _∧_ ) is irrelevant and chosen to satisfy the assumption of
+alternating node types. Algorithm 2 in Appendix C summarizes this layerization in pseudo-code.
+
+
+3.2 MULTI-ROOTED CIRCUITS AND NODE DEDUPLICATION
+
+
+Suppose now that we have multiple circuits over a (partially) shared set of variables. A set of _M_
+circuits effectively computes a Boolean function _f_ : B _[N]_ _→_ B _[M]_ . Such _M_ -dimensional circuits
+are also called multi-rooted circuits and are rather common in the standard neurosymbolic setting.
+Indeed, unless all data has the same symbolic knowledge, batched training or inference requires
+multi-rooted circuits. For instance, the widely-known MNIST addition problem (Manhaeve et al.,
+2018) can be solved using a multi-rooted arithmetic circuit with 19 roots, as it has 19 different
+possible outputs.
+
+
+If all _M_ circuits comprising the multi-rooted circuit have already been layerized according to Section 3.1, we again have that nodes at the same height in different circuits are of the same type.
+We can hence simply combine the layers of the different circuits to further exploit parallelization.
+Additionally, different circuits might share equivalent sub-circuits amongst each other. By correctly
+identifying and merging shared nodes, we avoid redundant computations. Figure 3 gives an example
+of a multi-rooted d-DNNF circuit with shared nodes.
+
+
+To merge all duplicate nodes, we need an efficient way to identify these nodes. We show that this is
+possible in linear time.
+
+
+**Theorem** **1.** _Given_ _a_ _set_ _of_ _circuits,_ _all_ _identical_ _sub-circuits_ _can_ _be_ _identified_ _in_ _linear_ _expected_
+_time complexity in the total number of edges in the circuits._
+
+
+The proof is included in Appendix A. For canonical circuits, such as SDDs with the same variable
+tree [1], this result is strengthened from syntactically identical sub-circuits to semantic equivalence. We
+realize Theorem 1 using Merkle hashes (Merkle, 1987). That is, we associate a hash _hash_ ( _n_ ) with
+every node _n_ in a recursive fashion. For each leaf node, we hash the associated (negated) variable.
+For each internal node, we combine the hashes of the children using a permutation invariant function.
+
+
+_hash_ ( _n_ ) = �mix ~~h~~ ash( _ln_ ) if _n_ is leaf. (3)
+
+       - _c∈Cn_ [mix] ~~[h]~~ [ash][(] _[hash]_ [(] _[c]_ [))] otherwise.
+
+
+Here, _ln_ is a unique identifier for the (negated) variable of the leaf node _n_, is a permutation
+[�]
+invariant operation such as XOR, and mix ~~h~~ ash is a function that disperses the bits of the hash.
+
+
+We can now merge all equivalent nodes in a multi-rooted circuit by computing the node hashes in a
+bottom-up pass and merging all nodes with the same hash, e.g. by storing the nodes in a hash map.
+
+
+1A sentential decision diagram (SDD) is a subclass of d-DNNF circuits that are canonical given a variable
+tree. We refer to Darwiche (2011) for more details.
+
+
+4
+
+
+_c_ _d_ _¬d_ _a_ _e_ _¬a_
+
+
+(a) Layered d-DNNF circuit.
+
+
+(b) Layered multi-rooted circuit.
+
+
+Figure 3: (a) contains a layered d-DNNF circuit over the variables _a_, _c_, _d_, and _e_ . The dashed
+circles indicate again nodes introduced during the layerization process. (b) illustrates a multi-rooted
+circuit where the upper left node computes the circuit from Figure 2 and where the upper right node
+computes the circuit from Figure (a). Note how nodes at the same height in the multi-rooted circuit
+are of the same type and how the sub-circuit colored in orange is used to compute both root nodes.
+
+
+The efficient deduplication via Merkle hashes is not only useful in the context of merging singlerooted circuits; duplicate nodes may also occur within a single circuit. This can, for instance, happen
+when the circuit is an SDD [2] . Another source of duplicate nodes stems from the layerization procedure in Section 3.1. Concretely, the connection of a node _n_ to a higher-up node through a chain of
+unary nodes results in equivalent chains if node _n_ has multiple higher-up parent nodes. Using Merkle
+hashes resolves this issue as it automatically merges multiple equivalent node chains, limiting the
+overhead of adding new nodes.
+
+
+Lastly, we make sure that all circuits have the same height by artificially extending a circuit with
+unary nodes at the root if necessary. This results in the last layer of our multi-rooted circuit containing the root nodes of every added circuit.
+
+
+4 TENSORIZING LAYERED CIRCUITS
+
+
+In the previous section, we organized d-DNNF circuits into layers by assigning each node _n_ in the
+circuit a height _hn_ . We also avoided duplicate nodes by computing a unique Merkle hash _hash_ ( _n_ )
+for each node. We proceed in this section with mapping the layered linked nodes to a layered
+computation graph where layers are evaluated sequentially and computations within a layer can be
+parallelized.
+
+
+To this end, we make a simple, yet powerful, observation: the current layer can be computed from
+the output of the previous layer by only using _indexing and aggregation_ . To see this, we first impose
+an arbitrary order on the nodes within each layer. This means we can write the values of all nodes in
+a layer _Li_ as a vector **N** _i_ . For our running example, we simply pick the order already insinuated by
+the graphical representation in Figure 2, except for the input layer where we order lexicographically:
+**N** 0 = [ _pa, p¬a, pb, p¬b, pc, p¬c, pd, p¬d_ ] [⊺] .
+
+
+Now, in order to compute **N** _l_ from **N** _l−_ 1 we use two vectors of indices: **S** _l_ and **R** _l_ . For each edge
+between **N** _l−_ 1 and **N** _l_, **S** _l_ contains the index of the input node, while **R** _l_ contains the index of the
+output node. We exemplify this for a single layer in Figure 4. By imposing an order on the input
+nodes and by providing the set of vectors _{_ **S** 1 _. . ._ **S** _L}_ and _{_ **R** 1 _. . ._ **R** _L}_, we entirely characterize an
+arithmetic circuit. This means that we can use these vectors instead of a linked node representation
+to evaluate the circuit.
+
+
+To compute **N** _l_, we first select relevant values from **N** _l−_ 1 using as index **S** _l_, giving us **E** _l_ = **N** _l−_ 1[ **S** _l_ ].
+The vector **E** _l_ essentially contains the values of all the edges between **N** _l_ and **N** _l−_ 1. Next, we need
+to correctly segment the edges **E** _l_ and aggregate the individual segments – either by using sums or
+products, depending on the layer. This is done using **R** _l_ : all elements with the same index in **R** _l_
+
+
+2An SDD node represents an _∨_ -gate, and is defined as a set of tuples each representing _∧_ -gates. This
+structure typically does not share tuples, and thus does not automatically reuse duplicate _∧_ -gates.
+
+
+5
+
+
+|×|×|×|×|×|×|×|Col8|Col9|
+|---|---|---|---|---|---|---|---|---|
+||||||||||
+|0|0|1|2|3|4|4|5|6|
+
+
+|3|1|Col3|1|2|5|4|6|Col9|7|0|
+|---|---|---|---|---|---|---|---|---|---|---|
+||||||||||||
+||||||||||||
+
+
+_pa_ _p¬a_ _pb_ _p¬b_ _pc_ _p¬c_ _pd_ _p¬d_
+
+
+node values **N** 1
+
+
+aggregation indices **R** 1
+
+
+edge indices **S** 1
+
+
+node values **N** 0
+
+
+Figure 4: The evaluation of the first layer in Figure 1c, as an indexing and aggregation operation.
+The symbols **N** 0 and **N** 1 denote the node values at layer _L_ 0 and _L_ 1 respectively. First, we index in
+**N** 0 using the edge indices **S** 1, effectively creating a vector with the values of all edges in between
+**N** 0 and **N** 1. Next, the aggregation indices **R** 1 determine what edges are reduced together. As a result
+we obtain the node values **N** 1 = scatter( **N** 0[ **S** 1] _,_ **R** 1 _,_ reduce = ‘product’).
+
+
+are reduced together. Fortunately, such segment-reduce operations are implemented as primitives in
+various tensor libraries such as Jax, TensorFlow, or PyTorch (Abadi et al., 2015; Paszke et al., 2019;
+Bradbury et al., 2018). In Figure 4, these segments are indicated with alternating colors.
+
+
+Algorithm 1 contains pseudo-code for the layerwise circuit evaluations, where we use the common
+scatter function to segment and aggregate the **E** _l_ vectors. In Figure 5, we show the full tensorized
+circuit representation of the arithmetic circuit in Figure 1c, which corresponds to the computation
+graph induced by Algorithm 1. Although we depict the edge vectors **E** _l_ in Figure 5, we stress that
+these do not need to be represented explicitly because modern tensor libraries in practice fuse the
+indexing and segmentation operations together.
+
+
+**Algorithm 1:** KLay Forward Evaluation
+**Input:** **N** 0, selection indices **S** 1 _,_ **S** 2 _, . . .,_ **S** _L_, reduction indices **R** 1 _,_ **R** 2 _, . . .,_ **R** _L_
+**for** _l ←_ 1 **to** _L_ **do**
+
+**E** _l_ _←_ **N** _l−_ 1[ **S** _l_ ];
+**if** _l_ mod 2 = 0 **then**
+
+**N** _l_ _←_ scatter( **E** _l,_ **R** _l,_ reduce=‘sum’);
+**else**
+
+**N** _l_ _←_ scatter( **E** _l,_ **R** _l,_ reduce=‘product’);
+**end**
+**end**
+**return N** _L_ ;
+
+
+Finally, we note that in practice arithmetic circuits are usually evaluated in the logarithmic domain
+for numerical stability. This means that the reduction uses logsumexp and sum operations instead
+of the sum and product, respectively. We provide the pseudo-code in Algorithm 4 in Appendix C.
+More generally, any pair of operations that forms a semiring may be used to evaluate the circuit
+(Kimmig et al., 2017), as long as the semiring operations can be expressed as reduction operations
+in the tensor library.
+
+
+5 RELATED WORK
+
+
+The closest related work is the arithmetic circuit layerization present in JUICE (Dang et al., 2021).
+Similar to our circuit layerization scheme, JUICE takes a Boolean circuit and maps it to a set of
+layers that can be evaluated sequentially, although not layer per layer. To this end, Dang et al. (2021)
+implemented a custom SIMD implementation for the CPU and custom CUDA kernels for the GPU.
+This is in contrast to KLAY where we reduce circuit evaluations to a sequence of index and scatterreduce operations, which are already efficiently implemented in the modern deep learning stack.
+In our experiments, we show that KLAY dramatically outperforms JUICE in terms of run time on
+
+
+6
+
+
+|+|Col2|Col3|Col4|Col5|Col6|Col7|Col8|Col9|Col10|Col11|Col12|Col13|Col14|
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|**+**|**+**|**+**|**+**|**+**|**+**|**+**|**+**|**+**|**+**|**+**|**+**|**+**|**+**|
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|**_×_**|
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+|||||||||||||||
+
+
+_pa_ _p¬a_ _pb_ _p¬b_ _pc_ _p¬c_ _pd_ _p¬d_
+
+
+node values **N** 4
+
+
+edge values **E** 4
+
+
+node values **N** 3
+
+
+edge values **E** 3
+
+
+node values **N** 2
+
+
+edge values **E** 2
+
+
+node values **N** 1
+
+
+edge values **E** 1
+
+
+node values **N** 0
+
+
+Figure 5: Tensorized KLAY representation of the arithmetic circuit in Figure 1c. We depict the
+segments of the edge vectors **E** _l_ with alternating colors.
+
+
+CPU and more importantly on GPU as well. Noteworthy here is that our experimental evaluation
+also shows that JUICE’s GPU implementation is slower than their CPU implementation – hinting at
+missed parallelization opportunities.
+
+
+The difficulty of running arithmetic circuits on GPUs was also pointed out by Shah et al. (2020;
+2021). While Shah et al. (2020; 2021) focused on developing hardware accelerators for arithmetic
+circuits, they also implemented custom circuit evaluations exploiting to a certain degree SIMD instructions and GPU parallelization. They found that CPU circuit evaluations outperformed the GPU
+implementations. Shah et al. (2020) concluded that arithmetic circuits were simply too sparse to
+be run efficiently on GPUs. By layerizing arithmetic circuits and interpreting the product and sum
+layers as indexing and scatter-reduce operations, we are able to refute this claim. We provide experimental evidence for this in Section 6.
+
+
+Notable is also the work of Vasimuddin et al. (2018), who proposed an efficient CPU implementation
+for evaluating arithmetic circuits deployed on multiple CPU cores. They deemed an efficient GPU
+implementation to be impractical due to the high demands on memory bandwidth. We can again
+refute this claim.
+
+
+Arithmetic circuits are closely related to the model class of probabilistic circuits (Vergari et al.,
+2021). The main difference is that the sum units for the latter are parameterized using mixture
+weights, while the former does not contain such weights. In order to run probabilistic circuits
+efficiently on the GPU, implementations usually rely on casting circuit evaluations as dense matrixvector product (Peharz et al., 2020b;a; Galindez Olascoaga et al., 2019; Mari et al., 2023; Sommer
+et al., 2021). This idea has recently been generalized by Liu et al. (2024), who allow for the presence
+of block-sparsity in the matrix that encodes a layer. By exploiting this sparsity via custom kernels,
+they widened the class of probabilistic circuits that can be run efficiently on GPUs. Nevertheless,
+probabilistic circuits are usually far more dense than arithmetic circuits that are compiled from a
+logical theory. Unfortunately, this prevents the techniques developed for probabilistic circuits to be
+effective in the context of arithmetic circuits. Similarly, having densely parameterized sum nodes
+also limits the relevance of techniques developed for arithmetic circuits for probabilistic circuits,
+e.g. the indexing and segmenting scheme of KLAY circuit evaluations.
+
+
+7
+
+
+Besides algorithmic advances, specialized hardware solutions have also been proposed to deal with
+the irregularity of the computational graph of an arithmetic circuit (Dadu et al., 2019; Shah et al.,
+2020; 2021). However, these approaches have the drawback that they would require the purchase
+of non-commoditized hardware. While this could partially be remedied by the use of FPGAs, as
+done by Sommer et al. (2018); Weber et al. (2022); Choi et al. (2023), any custom hardware retains
+a communication overhead. Specifically, in the context of neurosymbolic AI, one needs to pass
+the output of a neural network to an arithmetic circuit. If the neural net and the circuit are on two
+different devices, e.g. a GPU and an FPGA, the latency of data transfer can counteract gains in
+evaluation speed.
+
+
+6 EXPERIMENTAL EVALUATION
+
+
+We implement KLAY as a Python library supporting two popular tensor libraries: PyTorch and Jax.
+We evaluate the runtime performance of KLAY on several synthetic benchmarks and neurosymbolic
+experiments. All experiments were conducted on the same machine, which has an NVIDIA GeForce
+RTX 4090 as GPU and an Intel i9-13900K as CPU.
+
+
+6.1 SYNTHETIC BENCHMARKS
+
+
+We first consider the performance of KLAY on a set of synthetic circuits, by randomly generating
+logical formulas in 3-CNF. We compile the 3-CNF formulas into d-DNNF circuits, more specifically
+SDD circuits, using the PySDD library [3] . By changing the number of variables and clauses in the
+CNF, we vary the size of the compiled circuits over 5 orders of magnitude. Figure 6 compares
+the performance of KLAY with the native post-order traversal from PySDD implemented in C. We
+report results for both the real and logarithmic semiring. As JUICE does not support the logarithmic
+semiring and Jax does not support backpropagation on scatter multiplication, these are excluded
+from the respective comparisons. In Appendix B, we repeat the same experiment using the D4
+knowledge compiler (Lagniez & Marquis, 2017) instead of PySDD.
+
+
+Our results in Figure 6 indicate that on large circuits, KLAY on GPU outperforms all baselines with
+over one order of magnitude. Due to SIMD and multi-core parallelization, KLAY on CPU is still
+considerably faster than the baselines. JUICE does not include results for the largest instances due to
+a timeout after 30 minutes. KLAY attains best results with Jax, due to its superior JIT compilation
+and kernel fusion.
+
+
+In Figure 7, we display the size and sparsity of the circuits in our synthetic benchmark. Remarkably,
+KLAY on average has fewer nodes than the original SDD, meaning the node deduplication outweighs
+the overhead of introducing unary node chains. As we discuss in Appendix B, this is not the case
+for circuits compiled by D4. Figure 7 (right) shows that larger circuits are increasingly sparse, with
+less than one in a million edges being present for the largest circuits.
+
+
+6.2 NEUROSYMBOLIC BENCHMARKS
+
+
+Next, we consider the use of KLAY in neurosymbolic learning, by measuring the runtime of calculating the gradient on the circuits of several neurosymbolic tasks. As a baseline, we consider the
+naive evaluation in PyTorch, which is the standard approach performed by existing exact probabilistic neurosymbolic approaches where each node is evaluated individually. We take four different
+neurosymbolic benchmarks from the literature. The Sudoku benchmark is a classification problem,
+determining whether a 4 _×_ 4 grid of images forms a valid Sudoku (Augustine et al., 2022). The
+Grid (Xu et al., 2018) and Warcraft (Poganˇci´c et al., 2020) instances require the prediction of a
+valid low-cost path. Finally, hierarchical multi-level classification (HMLC) concerns the consistent
+classification of labels in a hierarchy (Giunchiglia & Lukasiewicz, 2020). The results in Table 1
+demonstrate the drastic speedups of KLAY compared to the naive baseline, improving by as far as
+four orders of magnitude for the Warcraft experiment.
+
+
+As a last experiment, we demonstrate the integration of KLAY into a neurosymbolic framework.
+Specifically, we use KLAY instead of conventional SDD circuits in DeepProbLog. We measure the
+
+
+[3https://github.com/wannesm/PySDD](https://github.com/wannesm/PySDD)
+
+
+8
+
+
+Log Semiring
+
+
+Real Semiring
+
+
+10 [4]
+
+10 [3]
+
+10 [2]
+
+10 [1]
+
+10 [0]
+
+10 1
+
+
+10 [4]
+
+10 [3]
+
+10 [2]
+
+10 [1]
+
+10 [0]
+
+10 1
+
+
+KLay (torch, cpu)
+KLay (torch, cuda)
+KLay (jax, cpu)
+KLay (jax, cuda)
+Post-order (cpu)
+Juice (cpu)
+Juice (cuda)
+
+
+0 20 40 60 80 100
+Instances
+
+
+0 20 40 60 80 100
+Instances
+
+
+Figure 6: Cumulative runtime in milliseconds for the forward and backward pass on a circuit. That
+is, we plot the combined run time of the _n_ fastest circuit evaluations against the number of _n_ circuits. Timings are averaged over 10 runs per SDD. The SDDs are randomly generated from 3-CNF,
+where the difficulty is varied by the number of variables and clauses. The left and right figure show
+cumulative evaluation times for the logarithmic and real semiring, respectively.
+
+
+10 [8]
+
+
+10 [7]
+
+
+10 [6]
+
+
+10 [5]
+
+
+10 [4]
+
+
+10 [3]
+
+
+|Col1|Nb of No<br>Nb of No|des i<br>des i|n SDD<br>n KLay|Col5|
+|---|---|---|---|---|
+||||||
+
+
+0 20 40 60 80 100
+Instances
+
+
+10 2
+
+
+10 3
+
+
+10 4
+
+
+10 5
+
+
+10 6
+
+
+0 20 40 60 80 100
+Instances
+
+
+Figure 7: (Left) Number of nodes in the original SDD, compared to the KLAY representation. The
+instances are the same as in Figure 6. (Right) The sparsity of KLAY, meaning the number of edges
+in the circuit divided by the number of edges in a dense interconnection of all layers.
+
+
+Table 1: (Top) Number of nodes in the SDD circuits of various neurosymbolic benchmarks, and
+the number of nodes and layers in the corresponding KLAY representation. (Middle) Runtime in
+milliseconds for one forward and backward pass on the circuit with batch size 128, using PyTorch
+autograd for both KLAY and the naive baseline. (Bottom) Runtime in milliseconds for one forward
+and backward pass on the neural network of the neurosymbolic task.
+
+
+Sudoku (4 _×_ 4) Grid (4 _×_ 4) HMLC Warcraft (12 _×_ 12)
+
+
+SDD Nodes 2 408 6 610 9 730 1 110 234
+KLAY Nodes 3 926 6 590 26 306 1 155 063
+KLAY Layers 30 24 84 84
+
+
+Naive (cpu) 17 _._ 35 _±_ 0 _._ 05 46 _._ 12 _±_ 0 _._ 49 127 _._ 00 _±_ 140 _._ 03 11484 _._ 53 _±_ 251 _._ 94
+Naive (cuda) 42 _._ 70 _±_ 2 _._ 76 107 _._ 78 _±_ 4 _._ 67 175 _._ 58 _±_ 1 _._ 26 18930 _._ 67 _±_ 496 _._ 16
+KLAY (cpu) 0 _._ 45 _±_ 0 _._ 02 0 _._ 53 _±_ 0 _._ 03 1 _._ 41 _±_ 0 _._ 02 18 _._ 55 _±_ 0 _._ 14
+KLAY (cuda) 0 _._ 46 _±_ 0 _._ 17 0 _._ 49 _±_ 0 _._ 19 1 _._ 03 _±_ 0 _._ 35 1 _._ 59 _±_ 0 _._ 25
+
+
+Neural (cpu) 0 _._ 90 _±_ 0 _._ 63 0 _._ 17 _±_ 0 _._ 02 0 _._ 55 _±_ 0 _._ 29 242 _._ 60 _±_ 4 _._ 81
+Neural (cuda) 0 _._ 51 _±_ 0 _._ 13 0 _._ 34 _±_ 0 _._ 12 0 _._ 20 _±_ 0 _._ 04 2 _._ 80 _±_ 0 _._ 07
+
+
+9
+
+
+Table 2: MNIST-addition training time in seconds for one epoch. We report the average and standard
+deviation over 10 epochs, using a batch size of 128. Both KLAY and the baselines use PyTorch as
+autograd. T/O indicates a timeout after 2 hours.
+
+
+Nb of Digits 1 2 3
+
+
+KLAY Nodes 776 12 660 1 015 867
+
+
+DeepProbLog (cpu) 241 _._ 63 _±_ 4 _._ 38 323 _._ 26 _±_ 22 _._ 20 T/O
+Scallop (cpu, _k_ = 3) 52 _._ 30 _±_ 0 _._ 37 601 _._ 20 _±_ 14 _._ 65 5345 _._ 78 _±_ 171 _._ 47
+KLAY (cpu) 2 _._ 08 _±_ 0 _._ 12 2 _._ 10 _±_ 0 _._ 14 71 _._ 54 _±_ 0 _._ 46
+KLAY (cuda) 1 _._ 26 _±_ 0 _._ 03 1 _._ 25 _±_ 0 _._ 01 8 _._ 85 _±_ 0 _._ 02
+
+
+training time of the MNIST-addition task in Table 2. MNIST-addition is a common neurosymbolic
+task where the input is two numbers represented as MNIST images and the model needs to predict
+their sum. For more details, we refer to Manhaeve et al. (2018). As a reference, we also include
+Scallop, which aims to improve the scalability of DeepProbLog by approximating using top-k provenance (Li et al., 2023). While DeepProbLog and Scallop cannot perform batched inference, KLAY
+can by using multi-rooted circuits. This is reflected in speed-ups of two orders of magnitude over the
+existing DeepProbLog implementation, even on rather small circuits. Even though KLAY remains
+exact unlike Scallop, KLAY also demonstrates large speedups here.
+
+
+7 CONCLUSIONS
+
+
+The success of neural networks has been largely attributed to their scale (Kaplan et al., 2020), which
+is realized by their effective use of hardware accelerators. To compete, novel methods must run efficiently on the available hardware or risk losing out due to what Hooker (2021) coined the hardware
+lottery. We tackled this issue for neurosymbolic AI by introducing KLAY– a new data structure
+to represent arithmetic circuits that is amenable to efficient evaluations on modern GPUs or TPUs.
+Along with this representation, we contributed three algorithms for KLAY. The first two algorithms
+map the traditional linked node representation of arithmetic circuits to the corresponding KLAY
+representation (Algorithm 2 and 3). This representation is efficiently evaluated using the third algorithm, which exploits the parallelization opportunities (Algorithm 1).
+
+
+Contrary to widely held belief, our experiments demonstrated that arithmetic circuits can be run
+efficiently on GPUs, despite their high degree of sparsity. To this end, a key aspect is the reduction
+of circuit evaluations to a sequence of indexing and scatter-reduce operations, as these can be implemented using highly optimized primitives available in modern tensor libraries. Resolving circuit
+evaluations as one of the major bottlenecks present in current neurosymbolic architectures allows to
+further scale neurosymbolic models and tackle new problems that have been out of reach so far.
+
+
+AUTHOR CONTRIBUTIONS
+
+
+PZD conceived the conceptual idea of KLAY and made an initial prototype. JM worked out the
+technical details and implemented the methods with the help of VD. JM proposed and carried out
+the experiments. All authors contributed equally to the writing. PZD supervised the project.
+
+
+ACKNOWLEDGMENTS
+
+
+This research received funding from the Flemish Government (AI Research Program), the Flanders Research Foundation (FWO) under project G097720N, the KU Leuven Research Fund
+(C14/18/062), and the European Research Council (ERC) under the European Union’s Horizon
+2020 research and innovation programme (Grant agreement No. 101142702). PZD is supported by
+the Wallenberg AI, Autonomous Systems and Software Program (WASP) funded by the Knut and
+Alice Wallenberg Foundation. We thank Luc De Raedt for his valuable feedback.
+
+
+10
+
+
+REPRODUCIBILITY
+
+
+The functionality of KLAY has been described in pseudo-code (Algorithms 1, 2, and 3) and has
+been implemented as a Python library to easily replicate all experiments in the paper, available at
+[https://github.com/ML-KULeuven/klay.](https://github.com/ML-KULeuven/klay)
+
+
+REFERENCES
+
+
+Mart´ın Abadi, Ashish Agarwal, Paul Barham, Eugene Brevdo, Zhifeng Chen, Craig Citro, Greg S.
+Corrado, Andy Davis, Jeffrey Dean, Matthieu Devin, Sanjay Ghemawat, Ian Goodfellow, Andrew
+Harp, Geoffrey Irving, Michael Isard, Yangqing Jia, Rafal Jozefowicz, Lukasz Kaiser, Manjunath
+Kudlur, Josh Levenberg, Dandelion Man´e, Rajat Monga, Sherry Moore, Derek Murray, Chris
+Olah, Mike Schuster, Jonathon Shlens, Benoit Steiner, Ilya Sutskever, Kunal Talwar, Paul Tucker,
+Vincent Vanhoucke, Vijay Vasudevan, Fernanda Vi´egas, Oriol Vinyals, Pete Warden, Martin Wattenberg, Martin Wicke, Yuan Yu, and Xiaoqiang Zheng. TensorFlow: Large-scale machine learning on heterogeneous systems, 2015. URL [https://www.tensorflow.org/.](https://www.tensorflow.org/) Software
+available from tensorflow.org.
+
+
+Kareem Ahmed, Tao Li, Thy Ton, Quan Guo, Kai-Wei Chang, Parisa Kordjamshidi, Vivek Srikumar, Guy Van den Broeck, and Sameer Singh. Pylon: A pytorch framework for learning with
+constraints. In _NeurIPS_ _2021_ _Competitions_ _and_ _Demonstrations_ _Track_, pp. 319–324. PMLR,
+2022a.
+
+
+Kareem Ahmed, Stefano Teso, Kai-Wei Chang, Guy Van den Broeck, and Antonio Vergari. Semantic probabilistic layers for neuro-symbolic learning. _Advances in Neural Information Processing_
+_Systems_, 35:29944–29959, 2022b.
+
+
+Eriq Augustine, Connor Pryor, Charles Dickens, Jay Pujara, William Wang, and Lise Getoor. Visual sudoku puzzle classification: A suite of collective neuro-symbolic tasks. In _International_
+_Workshop on Neural-Symbolic Learning and Reasoning (NeSy)_, 2022.
+
+
+Samy Badreddine, Artur d’Avila Garcez, Luciano Serafini, and Michael Spranger. Logic tensor
+networks. _Artificial Intelligence_, 303:103649, 2022.
+
+
+Djamal Belazzougui, Fabiano C Botelho, and Martin Dietzfelbinger. Hash, displace, and compress.
+In _European Symposium on Algorithms_, pp. 682–693. Springer, 2009.
+
+
+James Bradbury, Roy Frostig, Peter Hawkins, Matthew James Johnson, Chris Leary, Dougal
+Maclaurin, George Necula, Adam Paszke, Jake VanderPlas, Skye Wanderman-Milne, and Qiao
+Zhang. JAX: composable transformations of Python+NumPy programs, 2018. URL [http:](http://github.com/google/jax)
+[//github.com/google/jax.](http://github.com/google/jax)
+
+
+Mark Chavira and Adnan Darwiche. On probabilistic inference by weighted model counting. _Arti-_
+_ficial Intelligence_, 172(6-7):772–799, 2008.
+
+
+YooJung Choi, Antonio Vergari, and Guy Van den Broeck. Probabilistic circuits: A unifying framework for tractable probabilistic models. Technical report, University of California Los Angeles,
+2020.
+
+
+Young-kyu Choi, Carlos Santillana, Yujia Shen, Adnan Darwiche, and Jason Cong. Fpga acceleration of probabilistic sentential decision diagrams with high-level synthesis. _ACM Transactions on_
+_Reconfigurable Technology and Systems_, 16(2):1–22, 2023.
+
+
+Vidushi Dadu, Jian Weng, Sihao Liu, and Tony Nowatzki. Towards general purpose acceleration
+by exploiting common data-dependence forms. In _Proceedings_ _of_ _the_ _52nd_ _Annual_ _IEEE/ACM_
+_International Symposium on Microarchitecture_, pp. 924–939, 2019.
+
+
+Meihua Dang, Pasha Khosravi, Yitao Liang, Antonio Vergari, and Guy Van den Broeck. Juice:
+A julia package for logic and probabilistic circuits. In _Proceedings_ _of_ _the_ _AAAI_ _Conference_ _on_
+_Artificial Intelligence_, pp. 16020–16023, 2021.
+
+
+Adnan Darwiche. Decomposable negation normal form. _Journal of the ACM (JACM)_, 48(4):608–
+647, 2001a.
+
+
+11
+
+
+Adnan Darwiche. On the tractable counting of theory models and its application to truth maintenance
+and belief revision. _Journal of Applied Non-Classical Logics_, 11(1-2):11–34, 2001b.
+
+
+Adnan Darwiche. A differential approach to inference in Bayesian networks. _Journal of the ACM_
+_(JACM)_, 50(3):280–305, 2003.
+
+
+Adnan Darwiche. SDD: A new canonical representation of propositional knowledge bases. In
+_Twenty-Second International Joint Conference on Artificial Intelligence_, 2011.
+
+
+Adnan Darwiche. Tractable boolean and arithmetic circuits. In _Neuro-Symbolic_ _Artificial_ _Intelli-_
+_gence:_ _The State of the Art_, pp. 146–172. IOS Press, 2021.
+
+
+Adnan Darwiche and Pierre Marquis. A knowledge compilation map. _Journal of Artificial Intelli-_
+_gence Research_, 17:229–264, 2002.
+
+
+Lennert De Smet, Pedro Zuidberg Dos Martires, Robin Manhaeve, Giuseppe Marra, Angelika Kimmig, and Luc De Readt. Neural probabilistic logic programming in discrete-continuous domains.
+In _Uncertainty in Artificial Intelligence_, pp. 529–538. PMLR, 2023.
+
+
+Michelangelo Diligenti, Marco Gori, and Claudio Sacca. Semantic-based regularization for learning
+and inference. _Artificial Intelligence_, 244:143–165, 2017.
+
+
+Daan Fierens, Guy Van den Broeck, Joris Renkens, Dimitar Shterionov, Bernd Gutmann, Ingo Thon,
+Gerda Janssens, and Luc De Raedt. Inference and learning in probabilistic logic programs using
+weighted boolean formulas. _Theory and Practice of Logic Programming_, 15(3):358–401, 2015.
+
+
+Laura I Galindez Olascoaga, Wannes Meert, Nimish Shah, Marian Verhelst, and Guy Van den
+Broeck. Towards hardware-aware tractable learning of probabilistic models. _Advances in Neural_
+_Information Processing Systems_, 32, 2019.
+
+
+Eleonora Giunchiglia and Thomas Lukasiewicz. Coherent hierarchical multi-label classification
+networks. _Advances in neural information processing systems_, 33:9662–9673, 2020.
+
+
+Pascal Hitzler and Md Kamruzzaman Sarker. _Neuro-symbolic artificial intelligence: The state of the_
+_art_ . IOS press, 2022.
+
+
+Sara Hooker. The hardware lottery. _Communications of the ACM_, 64(12):58–65, 2021.
+
+
+Ying Jiao, Luc De Raedt, and Giuseppe Marra. Valid text-to-sql generation with unification-based
+deepstochlog. In _Processings of the 18th International Conference on Neural-Symbolic Learning_
+_and Reasoning_, 2024.
+
+
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language
+models. _arXiv preprint arXiv:2001.08361_, 2020.
+
+
+Angelika Kimmig, Guy Van den Broeck, and Luc De Raedt. Algebraic model counting. _Journal of_
+_Applied Logic_, 22:46–62, 2017.
+
+
+Pang Wei Koh, Thao Nguyen, Yew Siang Tang, Stephen Mussmann, Emma Pierson, Been Kim, and
+Percy Liang. Concept bottleneck models. In _International conference on machine learning_, pp.
+5338–5348. PMLR, 2020.
+
+
+Jean-Marie Lagniez and Pierre Marquis. An Improved Decision-DNNF Compiler. In _IJCAI_, volume 17, pp. 667–673, 2017.
+
+
+Ziyang Li, Jiani Huang, and Mayur Naik. Scallop: A language for neurosymbolic programming.
+_Proceedings of the ACM on Programming Languages_, 7(PLDI):1463–1487, 2023.
+
+
+Anji Liu, Kareem Ahmed, and Guy Van den Broeck. Scaling tractable probabilistic circuits: A
+systems perspective. In _Forty-first International Conference on Machine Learning_, 2024.
+
+
+Robin Manhaeve, Sebastijan Dumancic, Angelika Kimmig, Thomas Demeester, and Luc De Raedt.
+Deepproblog: Neural probabilistic logic programming. _Advances in neural information process-_
+_ing systems_, 31, 2018.
+
+
+12
+
+
+Antonio Mari, Gennaro Vessio, and Antonio Vergari. Unifying and understanding overparameterized circuit representations via low-rank tensor decompositions. In _The_ _6th_ _Workshop_ _on_
+_Tractable Probabilistic Modeling_, 2023.
+
+
+Ralph C Merkle. A digital signature based on a conventional encryption function. In _Conference on_
+_the theory and application of cryptographic techniques_, pp. 369–378. Springer, 1987.
+
+
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor
+Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al. Pytorch: An imperative style, highperformance deep learning library. _Advances in neural information processing systems_, 32, 2019.
+
+
+Robert Peharz, Steven Lang, Antonio Vergari, Karl Stelzner, Alejandro Molina, Martin Trapp, Guy
+Van den Broeck, Kristian Kersting, and Zoubin Ghahramani. Einsum networks: Fast and scalable
+learning of tractable probabilistic circuits. In _International Conference on Machine Learning_, pp.
+7563–7574. PMLR, 2020a.
+
+
+Robert Peharz, Antonio Vergari, Karl Stelzner, Alejandro Molina, Xiaoting Shao, Martin Trapp,
+Kristian Kersting, and Zoubin Ghahramani. Random sum-product networks: A simple and effective approach to probabilistic deep learning. In _Uncertainty in Artificial Intelligence_, pp. 334–344.
+PMLR, 2020b.
+
+
+Marin Vlastelica Poganˇci´c, Anselm Paulus, Vit Musil, Georg Martius, and Michal Rolinek. Differentiation of blackbox combinatorial solvers. In _International Conference on Learning Represen-_
+_tations_, 2020.
+
+
+Nimish Shah, Laura I Galindez Olascoaga, Wannes Meert, and Marian Verhelst. Acceleration of
+probabilistic reasoning through custom processor architecture. In _2020_ _Design,_ _Automation_ _&_
+_Test in Europe Conference & Exhibition (DATE)_, pp. 322–325. IEEE, 2020.
+
+
+Nimish Shah, Laura Isabel Galindez Olascoaga, Shirui Zhao, Wannes Meert, and Marian Verhelst.
+Dpu: Dag processing unit for irregular graphs with precision-scalable posit arithmetic in 28 nm.
+_IEEE Journal of Solid-State Circuits_, 57(8):2586–2596, 2021.
+
+
+Lukas Sommer, Julian Oppermann, Alejandro Molina, Carsten Binnig, Kristian Kersting, and Andreas Koch. Automatic mapping of the sum-product network inference problem to fpga-based
+accelerators. In _2018_ _IEEE_ _36th_ _International_ _Conference_ _on_ _Computer_ _Design_ _(ICCD)_, pp.
+350–357. IEEE, 2018.
+
+
+Lukas Sommer, Michael Halkenh¨auser, Cristian Axenie, and Andreas Koch. Spnc: Accelerating
+sum-product network inference on cpus and gpus. In _2021 IEEE 32nd International Conference_
+_on Application-specific Systems, Architectures and Processors (ASAP)_, pp. 53–56. IEEE, 2021.
+
+
+Trieu H Trinh, Yuhuai Wu, Quoc V Le, He He, and Thang Luong. Solving olympiad geometry
+without human demonstrations. _Nature_, 625(7995):476–482, 2024.
+
+
+Leslie G Valiant. The complexity of computing the permanent. _Theoretical computer science_, 8(2):
+189–201, 1979.
+
+
+Md Vasimuddin, Sriram P Chockalingam, and Srinivas Aluru. A parallel algorithm for Bayesian
+network inference using arithmetic circuits. In _2018 IEEE International Parallel and Distributed_
+_Processing Symposium (IPDPS)_, pp. 34–43. IEEE, 2018.
+
+
+Antonio Vergari, YooJung Choi, Anji Liu, Stefano Teso, and Guy Van den Broeck. A compositional
+atlas of tractable circuit operations for probabilistic inference. In _Advances in Neural Information_
+_Processing Systems_, 2021.
+
+
+Zishen Wan, Che-Kai Liu, Hanchen Yang, Ritik Raj, Chaojian Li, Haoran You, Yonggan Fu, Cheng
+Wan, Sixu Li, Youbin Kim, et al. Towards Efficient Neuro-Symbolic AI: From Workload Characterization to Hardware Architecture. _IEEE Transactions on Circuits and Systems for Artificial_
+_Intelligence_, 2024.
+
+
+Lukas Weber, Johannes Wirth, Lukas Sommer, and Andreas Koch. Exploiting high-bandwidth
+memory for fpga-acceleration of inference on sum-product networks. In _2022 IEEE International_
+_Parallel and Distributed Processing Symposium Workshops (IPDPSW)_, pp. 112–119. IEEE, 2022.
+
+
+13
+
+
+Thomas Winters, Giuseppe Marra, Robin Manhaeve, and Luc De Raedt. Deepstochlog: Neural
+stochastic logic programming. In _Proceedings of the AAAI Conference on Artificial Intelligence_,
+volume 36, pp. 10090–10100, 2022.
+
+
+Jingyi Xu, Zilu Zhang, Tal Friedman, Yitao Liang, and Guy Broeck. A semantic loss function for
+deep learning with symbolic knowledge. In _International_ _conference_ _on_ _machine_ _learning_, pp.
+5502–5511. PMLR, 2018.
+
+
+Wen-Chi Yang, Giuseppe Marra, Gavin Rens, and Luc De Raedt. Safe reinforcement learning via
+probabilistic logic shields. In _Proceedings_ _of_ _the_ _Thirty-Second_ _International_ _Joint_ _Conference_
+_on Artificial Intelligence_, pp. 5739–5749, 2023.
+
+
+Kexin Yi, Jiajun Wu, Chuang Gan, Antonio Torralba, Pushmeet Kohli, and Josh Tenenbaum. Neuralsymbolic vqa: Disentangling reasoning from vision and language understanding. _Advances_ _in_
+_neural information processing systems_, 31, 2018.
+
+
+14
+
+
+# APPENDIX
+
+
+A PROOF OF THEOREM 1
+
+
+**Theorem** **1.** _Given_ _a_ _set_ _of_ _circuits,_ _all_ _identical_ _sub-circuits_ _can_ _be_ _identified_ _in_ _linear_ _expected_
+_time complexity in the total number of edges in the circuits._
+
+
+_Proof._ We provide a constructive proof. First, observe that nodes representing syntactically identical
+sub-circuits have the same height and are therefore members of the same layer. Second, observe that
+nodes within a layer are identified by their set of children. Combining these two observations, we can
+rely on the following inductive property: by ensuring deduplication of all nodes in layer _Ln−_ 1, it is
+trivial to check equivalence for the nodes in layer _Ln_ . In conclusion, we can identify and deduplicate
+all equivalent nodes by iterating over all nodes bottom-up. To detect equivalent nodes within a layer,
+we employ an efficient hashing scheme where each node _n_ is hashed as the set of the hashes of its
+children _Cn_ (see Equation 3). As the set of nodes is fixed, we can assume a perfect hashing scheme
+devoid of any hashing conflicts (Belazzougui et al., 2009). As this algorithm considers each edge
+precisely once, it is indeed linear in the number of edges. Moreover, the hash tables requires linear
+memory in the number of nodes.
+
+
+B ADDITIONAL EXPERIMENTAL DETAILS
+
+
+**Synthetic** **Benchmarks** To generate the circuits, we randomly generate 3-CNF formulas. This
+requires 2 parameters, the number of clauses _k_ and the number of variables _v_ . The generated 3-CNF
+formulas contains _k_ clauses with 3 randomly picked variables from the _v_ variables. To vary the
+difficulty, we generate 3-CNF with 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, and 80 variables. For each
+variable count, we generate 10 random instances, resulting in a total of 110 instances. The clause
+count is also taken as half the number of variables for the SDD benchmarks and twice the number of
+variables for the D4 benchmarks. This difference can be attributed to D4 generating smaller circuits,
+so we make the instances harder.
+
+
+**Extra Experiments** In Figure 8, we repeat the same synthetic experiment as in Figure 6 but using a top-down d-DNNF knowledge compiler, D4, instead of a bottom-up SDD compiler. As a
+baseline, we use an optimized Rust implementation of the node-by-node post-order evaluation algorithm. These circuits do not contain duplicate nodes and are somewhat less balanced, leading to a
+larger overhead in terms of extra nodes, as is visible on the right of Figure 8. Nonetheless, KLAY
+still outperforms the baseline by a large margin. Finally, in Table 1 we repeat the neurosymbolic
+experiments from Table 1 with batch size 128 instead of 1.
+
+
+10 [8]
+
+10 [7]
+
+10 [6]
+
+10 [5]
+
+10 [4]
+
+10 [3]
+
+
+~~Nb of Nodes in d-DNNF~~
+
+|Col1|Nb of N|odes in|KLay|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+
+
+0 20 40 60 80 100
+Instances
+
+
+0 20 40 60 80 100
+Instances
+
+
+10 [4]
+
+10 [3]
+
+10 [2]
+
+10 [1]
+
+10 [0]
+
+10 1
+
+
+KLay (torch, cpu)
+KLay (torch, cuda)
+KLay (jax, cpu)
+KLay (jax, cuda)
+Post-order (cpu)
+
+
+Figure 8: (Left) Number of nodes in the original d-DNNF, compared to KLAY’s layerized circuit.
+(Right) Cumulative runtime in milliseconds for the forward and backward pass on a d-DNNF circuit
+in the log semiring. Timings for each individual circuit are averaged over 10 runs. Each instance
+is a randomly generated logical formula in 3-CNF, compiled into a d-DNNF circuit using D4. The
+number of variables and clauses in the CNF was varied to achieve different levels of difficulty.
+
+
+15
+
+
+Table 3: (Top) Number of nodes in the SDD circuits of various neurosymbolic benchmarks, and
+the number of nodes and layers in the corresponding KLAY representation. (Middle) Runtime in
+milliseconds for one forward and backward pass on the circuit with batch size 128, using PyTorch
+autograd for both KLAY and the naive baseline. (Bottom) Runtime in milliseconds for one forward
+and backward pass on the neural network of the neurosymbolic task.
+
+
+Sudoku (4 _×_ 4) Path (4 _×_ 4) HMLC Warcraft (12 _×_ 12)
+
+
+SDD Nodes 2 408 6 610 9 730 1 110 234
+KLAY Nodes 3 926 6 590 26 306 1 155 063
+KLAY Layers 30 24 84 84
+
+
+Naive (cpu) 21 _._ 55 _±_ 0 _._ 83 55 _._ 46 _±_ 5 _._ 83 122 _._ 37 _±_ 35 _._ 33 12225 _._ 93 _±_ 626 _._ 03
+Naive (cuda) 47 _._ 20 _±_ 5 _._ 29 112 _._ 86 _±_ 2 _._ 49 201 _._ 07 _±_ 18 _._ 62 19324 _._ 75 _±_ 74 _._ 16
+KLAY (cpu) 5 _._ 64 _±_ 0 _._ 06 4 _._ 96 _±_ 0 _._ 15 15 _._ 43 _±_ 0 _._ 17 514 _._ 20 _±_ 22 _._ 14
+KLAY (cuda) 3 _._ 03 _±_ 0 _._ 05 2 _._ 47 _±_ 0 _._ 03 8 _._ 76 _±_ 1 _._ 56 72 _._ 59 _±_ 0 _._ 16
+
+
+Neural (cpu) 23 _._ 05 _±_ 3 _._ 63 0 _._ 72 _±_ 0 _._ 02 0 _._ 63 _±_ 0 _._ 15 17420 _._ 27 _±_ 202 _._ 31
+Neural (cuda) 1 _._ 24 _±_ 0 _._ 21 0 _._ 30 _±_ 0 _._ 02 0 _._ 21 _±_ 0 _._ 04 73 _._ 20 _±_ 0 _._ 02
+
+
+C PSEUDO-CODE
+
+
+Algorithm 2 and 3 contains pseudo-code of the previously discussed layerization and tensorization
+procedures. Algorithm 4 contains the pseudo-code for the evaluation of KLAY in the logarithmic
+semiring instead of the real semiring.
+
+
+**Algorithm 2:** KLay Layerization
+
+**Input:** Boolean Circuit _C_ as linked nodes.
+layers _←_ [ ];
+height _←_ [ ];
+hashes _←_ [ ];
+**for** _node n in the nodes of C, children before parents_ **do**
+
+**if** _n is a leaf node_ **then**
+
+height[ _n_ ] _←_ 0 ;
+hashes[ _n_ ] _←_ _hash_ ( _n_ );
+**else**
+
+height[ _n_ ] _←_ 1 + max _c∈_ children( _n_ ) height[ _c_ ];
+/* Bring children to the prior layer */
+**for** _child node c in children(n)_ **do**
+
+**while** _height[c]+1 ̸_ = _height[n]_ **do**
+
+_c ←_ new unary node with child _c_ ;
+height[ _c_ ] _←_ height[child( _c_ )] + 1;
+hashes[ _c_ ] _←_ _hash_ (hashes[child( _c_ )]);
+layers[height[ _c_ ]][hashes[ _c_ ]] _←_ _c_ ;
+**end**
+**end**
+hashes[ _n_ ] _←_ [�] _c∈_ children( _n_ ) _[hash]_ [(hashes][[] _[c]_ []][)]
+
+**end**
+/* Add node to its layer */
+layers[height[ _n_ ]][hashes[ _n_ ]] _←_ _n_ ;
+**end**
+**return** _layers_ ;
+
+
+16
+
+
+**Algorithm 3:** KLay Tensorization
+
+**Input:** layers.
+/* We assume the nodes in each layer are ordered, such that index(n) is the index of node n in
+its layer. */
+**for** _layer l in layers_ **do**
+
+**S** _l_ _←_ [ ];
+**R** _l_ _←_ [ ];
+**for** _node n in layer l_ **do**
+
+**for** _child c of node n_ **do**
+
+**R** _l_ .push(index( _n_ ));
+**S** _l_ .push(index( _c_ ));
+**end**
+**end**
+**end**
+**return** _{_ **S** 1 _, . . .,_ **S** _L}, {_ **R** 1 _, . . .,_ **R** _L}_ ;
+
+
+**Algorithm 4:** KLay Forward Evaluation in the Logarithmic Semiring
+**Input:** **N** 0, selection indices **S** 1 _,_ **S** 2 _, . . .,_ **S** _L_, reduction indices **R** 1 _,_ **R** 2 _, . . .,_ **R** _L_, epsilon _ϵ_
+**for** _l ←_ 1 **to** _L_ **do**
+
+**E** _l_ _←_ **N** _l−_ 1[ **S** _l_ ];
+**if** _l_ mod 2 = 0 **then**
+
+/* As logsumexp reduction is not always implemented for scatter, we perform it using
+max and sum scatter operations. */
+**M** _←_ scatter( **E** _l,_ **R** _l,_ reduce=‘max’);
+**T** _←_ scatter(exp( **E** _l −_ **M** [ **R** _l_ ]) _,_ **R** _l,_ reduce=‘sum’);
+**N** _l_ _←_ log( **T** + _ϵ_ ) + **M** ;
+**else**
+
+**N** _l_ _←_ scatter( **E** _l,_ **R** _l,_ reduce=‘sum’);
+**end**
+**end**
+**return N** _L_ ;
+
+
+D NEUROSYMBOLIC EXAMPLE
+
+
+We demonstrate how neural networks can be combined with circuits on a simplified variant of the
+canonical MNIST-addition task (Manhaeve et al., 2018). In this task, two MNIST images are given
+containing either the digit zero or one, and the goal is to predict the sum of the two digits. Note that
+the labels of the individual digits are not given. There are four distinct possibilities for the ground
+truth labels of the images. Either both images are zero and the sum is also zero, or one image is zero
+and the other is one resulting in a sum of one, or both are one and the sum is two.
+
+
+Let us write _p_ (Img _i_ = _j_ ) for the probability that image _i_ contains the digit _j_, and _p_ (Sum = _k_ ) for
+the probability that the sum equals _k_ . Now it follows that
+
+
+_p_ (Sum = 0) = _p_ (Img0 = 0) _· p_ (Img1 = 0)
+_p_ (Sum = 1) = _p_ (Img0 = 0) _· p_ (Img1 = 1) + _p_ (Img0 = 1) _· p_ (Img1 = 0)
+_p_ (Sum = 2) = _p_ (Img0 = 1) _· p_ (Img1 = 1)
+
+
+We can now encode the above probabilities in a multi-rooted circuit, which we visualize in Figure 9.
+Observe that each root computes one of the probabilities for _p_ (Sum = _k_ ).
+
+
+17
+
+
+_p_ (Sum = 0) _p_ (Sum = 1) _p_ (Sum = 2)
+
+
+_p_ (Img0 = 0) _p_ (Img0 = 1) _p_ (Img1 = 0) _p_ (Img1 = 1)
+
+
+Figure 9: A simple neurosymbolic model for the MNIST-addition task. Two MNIST images are
+given as input. First, a vision model classifies the probability of the image containing a zero or one.
+Next, a circuit uses these probabilities to calculate the probabilities of the different possible sums.
+
+
+18

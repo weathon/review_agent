@@ -1,0 +1,1541 @@
+# ON REWARD FUNCTIONS FOR SELF-IMPROVING GENERAL-PURPOSE REASONING
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Prompting a Large Language Model (LLM) to output Chain-of-Thought (CoT)
+reasoning improves performance on complex problem-solving tasks. Moreover,
+several popular approaches exist to “self-improve” the CoT reasoning abilities of
+LLMs on tasks where supervised (question, answer) datasets are already available. An emerging line of work explores whether self-improvement is possible
+without these supervised datasets, instead utilizing the same large, unstructured
+text corpora as used during pre-training. This would overcome the data availability bottleneck present in current self-improvement methods, and open the door towards _compute-only scaling_ of language model reasoning ability. We investigate
+a fundamental question in this line of work: What constitutes a suitable reward
+function for learning to reason during general language model pretraining? We
+outline the desirable qualities of such a reward function and empirically demonstrate how different functions affect what reasoning is learnt and where reasoning
+is rewarded. Using these insights, we introduce a novel reward function called
+Reasoning Advantage (RA) that facilitates self-improving CoT reasoning on freeform question-answering (QA) data, where answers are unstructured and difficult
+to verify. We also perform an exploratory experiment optimizing RA on general
+unstructured text using offline RL, and our analysis indicates that future work
+should investigate methods for generating a more diverse set of CoTs.
+
+
+1 INTRODUCTION
+
+
+Large Language Models (LLMs) have become increasingly effective at solving complex reasoning
+tasks (Huang & Chang, 2022; Kojima et al., 2023; Wei et al., 2023; Havrilla et al., 2024b). A
+key driver of this success has been the discovery of Chain-of-Thought (CoT) reasoning (Wei et al.,
+2023), whereby a model outputs a step-by-step “thought process” before arriving at a final answer.
+
+
+While some CoT reasoning ability emerges naturally from pretraining on unstructured web-text data
+(Fu et al., 2023), it is through further supervised finetuning (SFT) on curated question-answering
+(QA) datasets (Saparov & He, 2023), as well as Reinforcement Learning from Human Feedback
+(RLHF) (Ouyang et al., 2022), that CoT becomes such a powerful tool. Considerable effort is being
+placed in curating large-scale (question, CoT, answer) datasets (Cobbe et al., 2021; Saparov & He,
+2023; Liu et al., 2023), with models increasingly being used “in the loop” to help generate initial
+reasoning traces or refine existing ones (Zelikman et al., 2022; Zhang et al., 2024). In certain domains like mathematics, it is also possible to further automate dataset generation by sampling many
+CoTs and selecting those which lead to ground-truth answers (Zelikman et al., 2022). However,
+despite these recent advancements, there are significant limitations to relying on curated datasets for
+improving CoT abilities. It is becoming increasingly difficult and prohibitively expensive to curate
+sufficiently challenging, large-scale (question, CoT, answer) datasets across the diverse set domains
+that today’s general models can tackle. For instance, a popular benchmark of just 500 graduate-level
+biology, physics, and chemistry questions with CoT reasoning and answers cost over $120,000 to
+produce and required thousands of human expert hours (Rein et al., 2023).
+
+
+To address these limitations, an emerging line of work explores self-improving CoT reasoning ability
+in a self-supervised setting—leveraging the large, unstructured datasets used for pretraining (Zelikman et al., 2024) instead of relying on curated QA or RLHF datasets. In this new setting, the LLM
+learns to produce CoT reasoning for the task of next-token prediction: **given** _n_ **tokens from the pre-**
+
+
+1
+
+
+**training corpus, the model generates a CoT and receives a reward based on how well the CoT**
+**helps predict the following** _m_ **tokens.** This is an exciting prospect, as we have trillions of tokens
+of unstructured text encompassing much of human knowledge. Therefore, learning to self-improve
+CoT reasoning on pretraining scale data might overcome the data availability bottleneck in current
+self-improvement methods, opening the door towards _compute-only scaling_ of reasoning ability.
+
+
+While there have been some initial efforts towards self-improving CoT during pretraining, we investigate a fundamental problem in this emerging line of work: **What constitutes a suitable reward**
+**function** **for** **reasoning** **during** **general** **language** **model** **pretraining?** In Section 4, we outline
+the desirable qualities of such a reward function, and in Section 5.1, we empirically investigate how
+different functions affect:
+
+
+1. _What_ reasoning is rewarded—the ability to distinguish effective CoT reasoning
+
+
+2. _Where_ reasoning is rewarded—the ability to pick useful locations to produce CoT reasoning
+
+
+To our knowledge, our work is the first to provide this type of analysis on reward functions towards
+self-improving CoT reasoning on unstructured text. Our investigations reveal critical shortcomings
+in commonly used reward functions, including an inability to differentiate between meaningful CoT
+reasoning and random word sequences (poor _what_ : failing to reward effective reasoning), as well
+as a tendency to incentivize reasoning at locations where predicting following tokens is trivial (poor
+_where_ : inability to pick out useful locations for reasoning). Drawing on these insights, we introduce
+a novel reward function called Reasoning Advantage (RA), an augmentation of standard language
+modeling loss, and show that it addresses many of these limitations.
+
+
+To facilitate more efficient study of self-improving CoT reasoning, we also introduce an openended, free-form QA dataset called MMLU-FREE-FORM by adapting the popular MMLU dataset
+(Hendrycks et al., 2020) to be closer to the unstructured text setting. Specifically, by removing its
+multiple-choice format and requiring models to generate full, unstructured answers—which are hard
+to verify using exact-match accuracy heuristics (see Figure 6). Our purpose in creating MMLUFREE-FORM is to make the smallest possible change to MMLU that reveals the limitations of existing reward functions. It acts as an intermediate benchmark between improving CoT reasoning using
+curated (question, CoT, answer) datasets and the challenging, unsolved task of self-improving CoT
+reasoning on unstructured text.
+
+
+MMLU-FREE-FORM does not allow for using exact-match accuracy as a reward metric (similar
+to unstructured pretraining text), and yet offers a higher density of clear opportunities for CoT reasoning compared to typical pre-training corpora. This makes it an ideal stepping-stone towards the
+ultimate goal of self-improving CoT reasoning on unstructured text. In Section 5.2, we demonstrate
+that RA is the only reward function which enables self-improvement of CoT reasoning on MMLUFREE-FORM, improving zero-shot transfer accuracy on GSM8K (Cobbe et al., 2021) by nearly 7%,
+compared to barely when trained with other reward functions.
+
+
+Using our Reasoning Advantage (RA) reward function, we conduct an initial experiment on selfimproving CoT reasoning on general unstructured text using OpenWebMath (Paster et al., 2023),
+a collection of 14.7 billion tokens of maths-heavy text. Our results in Section 6 indicate that the
+offline RL algorithm employed is not sufficiently powerful to escape the local optimum of extremely
+conservative CoT reasoning that just summarizes previous information instead of trying to solve the
+problem. Future work should investigate methods for generative a more diverse set of CoTS. To
+facilitate future work, we will open-source all of our code, which runs on academic compute.
+
+
+In summary, our main contributions are as follows:
+
+
+    - We establish desirable criteria of reward functions for self-improving CoT reasoning on
+unstructured text at pretraining scale.
+
+
+    - We provide empirical evidence demonstrating how different reward functions impact both
+the quality of CoT reasoning ( _what_ reasoning is rewarded) and the ability to pick out useful
+locations to produce CoT reasoning ( _where_ reasoning is rewarded).
+
+
+    - We introduce MMLU-FREE-FORM, an open-ended QA dataset that facilitates more efficient study of self-improving CoT reasoning and reveals the limitations of commonly used
+reward functions. It serves as an intermediate benchmark between curated QA datasets and
+general language modeling on unstructured text.
+
+
+2
+
+
+- We propose Reasoning Advantage (RA), a novel reward function based on clipped normalized loss, and demonstrate that RA is the only reward function which facilitates
+self-improvement of CoT reasoning on MMLU-FREE-FORM, a key step towards selfimproving reasoning on unstructured, pretraining-scale text.
+
+
+    - While our work does not solve the challenging problem of self-improving CoT reasoning
+on unstructured text at the pretraining scale, we conduct an initial experiment and provide
+key insights into how future work might make further headway in this direction. Specifically, while we are unable to generalize when optimizing RA using a simple offline RL
+algorithm on OpenWebMath (Paster et al., 2023), our analysis suggests that future works
+should investigate ways to better explore the space of possible CoTs. This includes moving
+towards more online RL algorithms, in order to escape the local optimum of learning conservative CoT reasoning strategies that just summarize prior information from the context.
+
+
+    - We will open source all of our code, which runs on academic compute, to facilitate future
+work in this direction.
+
+
+2 BACKGROUND
+
+
+**CoT Reasoning** Given _n_ prefix tokens **p**, performing CoT reasoning refers to an LLM _M_ generating a sequence of reasoning tokens **r** before the _m_ answer suffix tokens **s** . The goal of generating
+CoT reasoning tokens before the final answer is to maximize _PM_ ( **s** _|_ **p** _,_ **r** ), the probability of the
+answer suffix tokens **s** conditioned on both the prefix **p** and the CoT reasoning tokens **r** . The prefixsuffix pair can be any token sequence, ranging from question-answer pairs in mathematical datasets
+to arbitrarily split sentences from an unstructured text corpus.
+
+
+Traditionally, CoT reasoning has been elicited by pretending few-shot examples of (question, CoT,
+answer) to the prefix. This approach relies the pattern-completion tendencies of LLMs to continue
+this structure for subsequent outputs. Alternatively, it has also become popular to elicit CoT reasoning by appending prompts like “Let’s think step by step.” to the prefix (e.g., to the end of input
+questions), especially for instruction-tuned models.
+
+
+**Self-Improving** **CoT** **Reasoning** **as** **Reinforcement** **Learning** Self-improvement refers to any
+process where an LLM is finetuned on self-generated data, leading to performance gains without
+human intervention or assistance from larger models. This process can be framed as a Reinforcement
+Learning (RL) problem. In RL, an agent interacts with an environment by taking actions _a_ _∈_ _A_ in
+states _s_ _∈_ _S_ to maximize cumulative rewards. The agent receives a reward _Rt_ = _R_ ( _st, at_ ) after
+each action _at_ and aims to learn a policy _π_ ( _a|s_ ) that maximizes the expected cumulative discounted
+reward _Gt_ = [�] _k_ _[∞]_ =0 _[γ][k][R][t]_ [+] _[k]_ [, where] _[ γ]_ _[∈]_ [[0] _[,]_ [ 1]][ is the discount factor.]
+
+In the context of CoT generation, each token can be viewed as an action _at_, with the current string of
+generated tokens representing the state _st_ so far. We focus on a sparse reward setting where rewards
+are 0 until CoT generation is complete, and with a discount factor _γ_ = 1. The reward function maps
+the prefix **p**, CoT reasoning tokens **r**, and answer suffix **s** to a real number _R_ ( **p** _,_ **r** _,_ **s** ) _∈_ R, with
+higher rewards for CoTs that better predict the suffix. As long as this reward function doesn’t require
+external intervention from humans or more powerful models, optimizing it through RL methods
+constitutes self-improving CoT reasoning.
+
+
+**Self-Improving CoT Reasoning Using Supervised Datasets** When a supervised dataset of (question, answer) pairs is available, accuracy can serve as a reward function:
+
+
+�1 if arg max **s** _′ PM_ ( **s** _[′]_ _|_ **p** _,_ **r** ) = **s**
+_R_ acc( **p** _,_ **r** _,_ **s** ) = (1)
+0 otherwise
+
+
+In this case, we can sample multiple CoTs and finetune on those that lead to correct answers (Dong
+et al., 2023; Zelikman et al., 2022). Iterating this process yields increasingly high-quality CoT generation, and this iterative self-improvement is equivalent to online reinforcement learning (Zelikman
+et al., 2022). There are also more complex methods, such as Process Reward Models (PRMs), which
+provide dense rewards for each step in a CoT and address credit assignment challenges (Ma et al.,
+2023; Wang et al., 2023; Havrilla et al., 2024b; Lightman et al., 2023).
+
+
+3
+
+
+**Self-Improving CoT Reasoning on General-Purpose, Unstructured Data** This setting explores
+the possibility of self-improving CoT reasoning given only an unstructured corpus of text, without
+access to a curated dataset of (question, CoT, answer) or (question, answer) pairs. In this setting, the
+model generates and inserts intermediate CoT reasoning at various points in a sequence of tokens
+(for example, at various points in a web-document that shows how to apply the quadratic formula).
+
+
+A key challenge in this setting is evaluating the performance of CoT reasoning tokens inserted
+into general-purpose text. The accuracy-based reward _Racc_ is ineffective here, as it would almost
+always be 0, providing minimal learning signal. Instead, language modelling performance—the loglikelihood of the suffix conditioned on the prefix and CoT—serves as a more natural starting point
+for a reward function:
+
+
+_R_ loss( **p** _,_ **r** _,_ **s** ) = log _PM_ ( **s** _|_ **p** _,_ **r** ) (2)
+
+
+We aim to help advance the field towards this setting, enabling self-improving CoT reasoning on unstructured text at the pretraining. In this paper, we specifically focus on identifying key shortcomings
+of commonly used reward functions and introducing a new function to address these limitations.
+
+
+3 RELATED WORK
+
+
+**LLM** **Reasoning** Various works have looked at improving the reasoning capabilities of LLMs.
+Rajani et al. (2019) improve the commonsense reasoning ability of language models by training on
+human explanations for commonsense problems. Nye et al. (2021) generate tokens in a “scratchpad”
+for intermediate computations when solving multi-step reasoning problems. On difficult algorithmic tasks, Pfau et al. (2024) show that LLMs can even be trained to leverage meaningless filler
+tokens under dense supervision, in place of legible CoTs. Further, theoretical analyses by Merrill &
+Sabharwal (2023) and Feng et al. (2024) show that CoT improves the expressivity of Transformers
+(Vaswani et al., 2017).
+
+
+**LLM Self-Improvement Using Supervised Datasets** Iterated learning approaches involve LLMs
+generating new outputs and using “successful” ones to improve generation quality (Anthony et al.,
+2017; Vani et al., 2021; Polu et al., 2022). Such methods have been applied to LLMs (Zelikman
+et al., 2022; Huang et al., 2022; Chen et al., 2024). However, much of the research on LLM
+self-improvement has been limited to question-answer domains where accuracy is an appropriate success measure, such as multiple-choice questions or simple numeric answers. This limitation is evident in the policy gradient objective approximated by STaR (Zelikman et al., 2022):
+_∇J_ ( _M, X, Y_ ) = [�] _i_ [E] _[r]_ [ˆ] _i_ _[,][y]_ [ˆ] _i_ _[∼][p]_ _M_ [(] _[·|][x]_ _i_ [)][[][⊮][(ˆ] _[y][i]_ [=] _[y][i]_ [)] _[ · ∇]_ [log] _[ p][M]_ [(ˆ] _[y][i][,]_ [ ˆ] _[r][i][|][x][i]_ [)]][, which makes use of an in-]
+
+dicator function with respect to ground truth labels. Clearly, this breaks down in settings where
+ground truth labels are not available, such as open-ended or “free-form” QA setting as well as
+general-purpose language modelling. Havrilla et al. (2024a) show that Expert Iteration (Anthony
+et al., 2017), a self-improvement method based on iterative Supervised Fine-Tuning (SFT), outperforms RL in their evaluations. Building on this, our work extends RAFT (Dong et al., 2023), which
+also uses iterative SFT, by introducing a new reward function called Reasoning Advantage (RA) for
+filtering synthetically generated CoTs.
+
+
+Process Reward Models (PRMs) (Ma et al., 2023; Wang et al., 2023; Havrilla et al., 2024b; Lightman
+et al., 2023) have been used to enhance reasoning via Reinforcement Learning (RL) by rewarding
+individual problem-solving steps in a CoT. However, PRM training is computationally expensive,
+usually involving backtracking and resampling from specific points in the CoT, and these points
+from which to resample are usually determined by hard-coded heuristics such as new line breaks.
+
+
+**Self-Supervised** **LLM** **Self-Improvement** Quiet-STaR (Zelikman et al., 2024) looks to selfimprove reasoning during general language modeling. Zelikman et al. generate a CoT at _every_
+token in an unstructured text document, using the negative cross-entropy loss on the suffix tokens
+as a reward. They employ REINFORCE (Williams, 1992) to optimize the loss of the suffix **s** given
+a prefix **p** and a reasoning trace **r**, with a baseline for variance reduction. Importantly, performing CoT reasoning at every token is highly computationally expensive, making it difficult to use
+for pretraining-scale datasets and also limiting the length of CoT sequences that can be learnt (the
+reasoning learnt in Quiet-STaR is quite short and simple). Regardless, Quiet-STaR provides key insights into _how_ to optimize for reward on general, unstructured text—a very difficult problem. Our
+work aims to take a step back and investigate the reward functions we optimize to self-improving
+
+
+4
+
+
+reasonin ability, with particular focus on _what_ reasoning we should be rewarding and whether we
+can take steps towards determining _where_ is the best place to produce CoT reasoning.
+
+
+RHO-1 (Lin et al., 2024) investigates whether the sample efficiency of general language pretraining
+can be improved by selectively training on more useful tokens in a dataset, instead of training on all
+tokens. Lin et al. (2024) show that pretraining a model in this way enhances downstream reasoning
+ability, and we are excited for future work to investigate a combination of RHO-1 with our proposed
+RA reward function (i.e., to perform RL for CoT on datapoints that are suitable for reasoning, not
+noisy, and not yet learned).
+
+
+4 REWARD FUNCTIONS FOR SELF-IMPROVING COT REASONING
+
+
+In Section 2, we framed self-improving Chain-of-Thought (CoT) reasoning as a Reinforcement
+Learning (RL) problem. Given _n_ tokens from a pre-training corpus (the prefix **p** ), the model generates a CoT **r** and receives a reward based on how well the CoT helps predict the following _m_ tokens
+(the suffix **s** ). Previous works have primarily explored two reward functions for self-improving CoT
+reasoning: loss and accuracy. Here, we explore other potential reward functions and their characteristics from the perspective of facilitating self-improving CoT reasoning on unstructured web-text at
+pretraining scale.
+
+
+There are several key criteria to consider when designing such a reward function. Primarily, it should
+reward high-quality reasoning over CoTs containing logical errors or simply random characters. As
+shown in Section 5.1, this is not always the case. Moreover, for the purposes of _self-improving_ CoT
+reasoning, the reward function must not depend on an stronger source of intelligence (i.e., using a
+more powerful LLM to verify the correctness of its CoT). Further, for reasonable use on pretraining
+scale datasets, evaluating the function should be fast and ideally parallelizable—requiring a minimal
+number of model forward passes.
+
+
+In this work, we do not consider using an LLM-as-judge to evaluate or verify CoTs since: (1) it
+may rely on a stronger model, which is not self-improvement, and (2) while one could use the same
+model for both generation and verification, this approach incurs too much computational overhead
+to apply to pretraining scale data as it requires the decoding of an answer to be verified against the
+ground truth, and the verifier itself needs to generate CoT tokens. We also do not consider accuracybased metrics, since free-form answers are often impossible to verify using exact-match, and using
+an LLM-as-judge to compute accuracy faces the issues mentioned above. Thus, we choose to focus
+on the family of “loss-based” reward functions. These functions compute the token-by-token loglikelihood of the suffix tokens **s** 0 _,...,m−_ 1, given the CoT **r** and prefix **p** :
+
+
+The most basic reward function in this family is _R_ ( **p** _,_ **r** _,_ **s** ) = log _P_ ( **s** _|_ **p** _,_ **r** ). This family of reward
+functions offers several key advantages. They are computationally efficient, since they can be evaluated by an autoregressive model in a single forward pass and can be parallelized across a batch
+of CoTs. Also, they do not require access to any external form of intelligence, a requirement for
+self-improvement. Most importantly, this family of functions does not rely on an using exact-match
+accuracy to compare with the answer suffix, enabling multiple valid answers and accommodating
+ambiguity in formatting (a key property of unstructured text).
+
+
+While there are many possible ways to augment the basic loss-based reward function _R_ ( **p** _,_ **r** _,_ **s** ) =
+log _P_ ( **s** _|_ **p** _,_ **r** ), we focus our analysis on two key modifications: _clipping_ the log probabilities and
+incorporating a _baseline_ value.
+
+
+**Clipping:** We clip (aka clamp) the minimum value of the token-level log probabilities to some
+_−ϵ_ such that _R_ clipped( **p** _,_ **r** _,_ **s** ) = [�] _i_ _[m]_ =0 [max [log] _[ P]_ [(] **[s]** _[i][|]_ **[p]** _[,]_ **[ r]** _[,]_ **[ s]** [0:] _[i]_ [)] _[,][ −][ϵ]_ []][.] [This] [constrains] [the] [loss] [con-]
+tribution of each suffix token to the range [ _−ϵ,_ 0). In Section 5.1, we demonstrate that this clipping
+mechanism helps reward functions distinguish between well-formed CoTs containing a few logical
+errors and degenerate CoTs that resemble random tokens.
+
+
+**Baseline Incorporation:** We explore incorporating a baseline value both with normalization ( _R_ _−_
+_B_ ) _/B_ and without normalization _R −_ _B_, where _R_ is the reward and _B_ is the baseline value. A full
+
+
+5
+
+
+log _P_ ( **s** _|_ **p** _,_ **r** ) = log _P_ ( **s** 0 _|_ **p** _,_ **r** )
++ log _P_ ( **s** 1 _|_ **p** _,_ **r** _,_ **s** 0)
++ log _P_ ( **s** 2 _|_ **p** _,_ **r** _,_ **s** 0 _,_ 1)
++ _..._
+
+
+(3)
+
+
+Criteria Accuracy Loss Loss with baseline RA LLM-as-judge
+
+
+Uses no external intelligence Yes Yes Yes Yes Yes [2]
+Rewards good reasoning over random Yes **No** **No** Yes Yes
+Robust to multiple choices in answer **No** Yes Yes Yes Yes [3]
+Robust to answer perplexity Yes **No** **No** Yes Yes
+Fast and parrallelisable No [1] Yes Yes Yes **No**
+
+
+Table 1: To what extent different reward functions meet our criteria. By RA, we mean loss augmented with clipping and the no CoT baseline, as defined in Appendix A. 1whilst we do derive
+a generation free variant ‘expected accuracy’ in Appendix A that is as fast as loss based methods,
+the variant of accuracy used widely through the literature requires answers to be sampled, and so
+is slow. [2] Whilst acting as a verifier may be possible for larger models under heavy prompting, we
+found it difficult to consistently verify solutions with the 7B models we used for generation and
+finetuning. [3] Again, whilst this may be possible with more work, we found it very difficult to have
+models consistently grade CoTs that yielded answers close to, but not exactly, the right answer.
+
+
+list and derivation of the reward functions we investigate can be found in Appendix A. Specifically,
+we investigate the three baseline values:
+
+1. Average reward: _n_ [1]    - _ni_ =1 _[R]_ [(] **[p]** _[,]_ **[ r][i]** _[,]_ **[ s]** [)][, where] **[ r][i]** [ are multiple generated CoTs.]
+
+2. Empty CoT reward: _R_ ( **p** _,_ “ ” _,_ **s** ), where the CoT is an empty string.
+
+
+3. Random CoT reward: _R_ ( **p** _,_ **rrandom** _,_ **s** ), where **rrandom** is a sequence of random tokens.
+
+
+In the main text of this paper, we focus on two main combinations of these augmentations (Appendix B.1 contains results for additional reward functions):
+
+
+    - **Delta Loss:** _R_ DL = _R_ ( **p** _,_ **r** _,_ **s** ) _−R_ ( **p** _,_ “ ” _,_ **s** ), where we subtract the “Empty CoT” baseline.
+
+    - **Reasoning** **Advantage** **(RA):** _R_ RA = _R_ clipped( **p** _R,_ clipped **r** _,_ **s** ) _−_ ( **p** _R,_ clipped“ ” _,_ **s** () **p** _,_ “ ” _,_ **s** ), which is clipped delta
+
+loss normalized by the “Empty CoT” baseline.
+
+
+We find that **Reasoning Advantage (RA)** is particularly effective. It satisfies each of the identified
+criteria in Table 1 and, in Section 5.1, we empirically demonstrate that RA can best distinguish effective CoT and pick out useful locations for CoT reasoning. Moreover, in Section 5.2, we demonstrate
+that RA is the only reward function which enables self-improveming CoT reasoning on free-form
+QA data, a key step towards self-improving CoT at on unstructured, pretraining-scale text.
+
+
+5 EXPERIMENTS
+
+
+5.1 REWARD FUNCTIONS FOR SELECTING WHAT & WHERE TO REASON
+
+In this section, we empirically investigate a fundamental problem when self-improving CoT reasoning on unstructured, pretraining text: **What constitutes a suitable reward function for reasoning**
+**during general language model pretraining?** Building on the reward function criteria Section 4,
+we empirically investigate how different reward functions affect _what_ and _where_ reasoning is rewarded. Our two experiments reveal critical shortcomings in commonly used reward functions and
+demonstrate the advantages of our novel Reasoning Advantage (RA) function in addressing these
+limitations.
+
+
+_**What**_ **reasoning is rewarded** This first experiment evaluates the ability of different reward functions to distinguish between three categories of CoTs: correct, incorrect, and randomly generated.
+We select 1,000 prefix-suffix pairs from random locations in the FineWeb text corpus of unstructured
+web-text data (Penedo et al., 2024). Then, for each pair, we generate the three types of CoT: corrent,
+incorrect, and random. “Correct” CoTs are generated using GPT-4o with post-rationalization—by
+showing GPT-4o both the prefix and suffix, but instructing the model to generate a CoT without
+explicitly repeating the suffix (similar to Zelikman et al. (2022)). “Incorrect” CoTs are generated by
+GPT-4o without post-rationalization—while these CoTs often exhibit sophisticated reasoning, they
+typically do not predict the exact suffix as well as the “correct” CoTs, which is enough for the purposes of this experiment. Finally, “random” CoTs consist of strings of random words and serve as
+our baseline. The goal is to evaluate how well different reward functions can rank these CoT types,
+with the ideal ordering: correct _>_ incorrect _>_ random.
+
+
+6
+
+
+To evaluate how well a reward function distinguishes between these CoT types, we compute the reward score for Reward _What_ _Where_
+all CoTs—using Mistral-7B-Instruct (Jiang et al., 2023) Function (Acc) (AUC)
+to compute the log probabilities—and partition them into
+
+RA **66.3** **77.0**
+
+thirds: classifying the top third as “correct,” the middle
+
+Delta Loss 58.3 64.4
+
+third as “incorrect,” and the bottom third as “random.”
+
+Loss 44.6 39.4
+
+An effective reward function should rank the CoTs in
+the ideal order: correct _>_ incorrect _>_ random. The re
+Table 2: Reward function performance
+
+sults in Table 2 demonstrate that RA performs best among
+
+for distinguishing CoT types ( _What_ )
+
+loss, delta loss, and RA. Moreover, Table 3 shows results
+
+and identifying optimal CoT placement
+
+for the complete list of evaluated reward functions. No
+( _Where_ ). See Appendix B.1 for full re
+tice that while RA without normalization performs just
+
+sults and confidence bounds.
+
+slightly better, the normalized version significantly outperforms all other functions in the _where_ experiments below. Hence, we pick the normalized version as our proposed reward function. Table 3 also shows
+the “Average reward” baseline, which is used Quiet-STaR (Zelikman et al., 2024), performs poorly
+in this setting—due to a lack of variation in reward over different CoTs.
+
+
+The histogram in Figure 1 reveals that standard loss struggles primarily in distinguishing between
+“incorrect” and “random” CoTs. Interestingly, when we simplify to binary classification between
+only “correct” and “incorrect” CoTs, non-clipping methods perform similar to clipping methods,
+which suggests that the main advantage of clipping lies in distinguishing truly random reasoning.
+
+
+_**Where**_ **reasoning** **is** **rewarded** Next, we investigate how different function reward reasoning at
+different locations in a document. Using 1,000 problems each from GSM8K (Cobbe et al., 2021),
+CSQA (Talmor et al., 2018), and MMLU (Hendrycks et al., 2020), we first format each problem’s
+question, multiple choice options, and answer as a single text string. We then create four (prefix,
+suffix) pairs per problem by splitting at different points: 1) mid-question, 2) after the question but
+before the multiple choice options, 3) after the multiple choice options ( _the ideal location for CoT_
+_reasoning_ ), and 4) mid-answer. This setup aims to mimic a key fact about unstructured pretraining text: not all locations are suitable for CoT reasoning. That is, reasoning may be unhelpful if
+produced too early (insufficient context) or too late in a document.
+
+
+To evaluate each reward function, we frame this as a binary classification task: identifying the ideal
+location (after the multiple choice answers but before the solution) versus the three suboptimal locations. Using reward as a classifier and computing the AUC for this classification task. We find
+that RA performs best, followed by delta loss and standard loss (see Table 2). Notice that functions
+which use a baseline consistently outperform those without, with clipping providing additional improvement. Particularly, subtracting the “Empty CoT” baseline helps distinguish between locations
+that have low loss due to effective CoT reasoning versus locations that have low loss because the
+suffix is trivial to predict without any reasoning (i.e., with an empty CoT). This partially explains
+why standard loss performs so poorly: it favors locations halfway through the answer where suffix
+prediction becomes trivial. Table 4 shows results for the complete list of evaluated reward functions.
+
+
+**Summary** Across both experiments, the Reasoning Advantage (RA) reward function outperformed standard loss and delta loss. As for the two main augmentations, clipping and baseline, we
+can summarize their effects. Clipping is often beneficial, almost never harmful, and requires minimal extra computation. We explore the impact of different clipping values in Appendix B.1 (Figure 5). And incorporating a baseline value provides a substantial boost in performance—especially
+the “Empty CoT” baseline. Moreover, a key advantage of the “Empty CoT” baseline is that it doesn’t
+require generating any additional CoTs per (prefix, suffix) pair. In contrast, the “Average CoT” baseline requires taking the average loss over multiple CoTs for a single location. Appendix B.1 contains
+tables which show results for all combinations of augmentations. Notice that two combinations and
+the non-normalized version of RA performed slightly better on the _what_ experiments, but they performed much worse on the _where_ experiments. RA is the only function with strong performance on
+both tasks.
+
+
+5.2 LEARNING TO REASON ON FREE-FORM QA DATA
+
+
+To investigate the ability of different reward functions to facilitate self-improving CoT during pretraining, we create a new “free-form” QA dataset called MMLU-FREE-FORM by adapting the pop
+
+7
+
+
+Reward _What_ _Where_
+Function (Acc) (AUC)
+
+
+RA **66.3** **77.0**
+Delta Loss 58.3 64.4
+Loss 44.6 39.4
+
+
+Table 2: Reward function performance
+for distinguishing CoT types ( _What_ )
+and identifying optimal CoT placement
+( _Where_ ). See Appendix B.1 for full results and confidence bounds.
+
+
+Post rationalised "Correct" CoTs Non post rationalised "incorrect" CoTs CoTs of random tokens
+
+
+Figure 1: ( _What_ to reward) Distribution of reward scores across different CoT types using standard
+loss (left) and RA (right). Each histogram shows reward distribution: “correct” post-rationalized
+CoTs (blue), “incorrect” non-post-rationalized CoTs (orange), and “random” token CoTs (green).
+Notice, RA can better differentiate between incorrect and random CoTs. See details in Section 5.1.
+
+
+ular MMLU training dataset (Hendrycks et al., 2020) to be closer to the unstructured text setting.
+Specifically, by removing its multiple-choice format and requiring models to generate full, unstructured answers—which are hard to verify. We use the entire labeled free-form solution as the suffix
+when computing rewards. This induces many of the challenges found in reasoning on unstructured
+text. For one, problems often become significantly more difficult to answer without multiple choice
+options, mirroring the complexity of next-token prediction in pretraining text. In some cases, the
+problems become almost impossible to answer (e.g., “Which of the following is the correct method
+to multiply 32 x 18?”). Moreover, the free-form nature of answers introduces substantial variance in
+response length and structure, making it challenging to predict an answer exactly. Finally, the same
+correct answer can be expressed in numerous valid ways (e.g., “Henry VIII had 6 wives” versus
+“In total there were 6 different women who were married to Henry the Eighth”). Without a list of
+multiple-choice options, it is unclear which answer should preferred. These challenges make the
+MMLU-FREE-FORM more representative of real-world pretraining text corpora.
+
+
+Our purpose in creating MMLU-FREE-FORM is to make the smallest possible change to MMLU
+that reveals the limitations of existing reward functions. It acts as an intermediate benchmark between improving CoT reasoning using curated (question, CoT, answer) datasets and the challenging,
+unsolved task of self-improving CoT reasoning on unstructured text. Moreover, this dataset provides
+a higher density of clear opportunities for CoT reasoning compared to typical pretraining corpora,
+since we know that reasoning is particularly beneficial when predicting answers to questions, and
+prior works have shown that LLM reasoning ability on MMLU can be improved with only few thousand labeled CoT examples. Thus, for the purposes of our investigations, MMLU-FREE-FORM
+enables a more compute and time efficient study of reward functions, acting as a stepping stone
+towards self-improving CoT reasoning on the type of truly unstructured text seen during pretraining
+(i.e., OpenWebMath (Paster et al., 2023)).
+
+
+We will release MMLU-FREE-FORM to the research community, and we hope it will serve as a
+helpful intermediate benchmark for future work to progress toward the unsolved problem of selfimproving CoT reasoning on unstructured, pretraining-scale text. Further discussion about MMLUFREE-FORM can be found in Appendix B.2.
+
+
+Now, to self-improve CoT reasoning using MMLU-FREE-FORM as our dataset, we utilize a simple
+offline RL method. First, we generate 16 CoTs for each question (using Mistral-7B-Instruct with a
+temperature value of 0.5) and compute the reward for each CoT using the entire labeled free-form
+solution as the suffix. Then, we filter the CoTs with the highest reward (Dong et al., 2023), finetune
+on MMLU-FREE-FORM containing these self-inserted CoTs, and evaluate the trained model on a
+held-out test set. Notice that since all self-inserted CoTs are the same for each reward function, we
+can directly and efficiently compare each of them.
+
+
+We test this pipeline using Mistral-7B (Jiang et al., 2023) and find that **only RA facilitates general-**
+**ization** —both on the in-domain MMLU test set (see Figure 2a) and on zero-shot transfer to GSM8k
+(Cobbe et al., 2021) (see Figure 2b). These figures show the probability of the answer given the
+question and the generated CoT. This metric is also known as “expected accuracy”, since it estimates how often the model would generate the exact ground truth answer if we repeatedly sampled
+completions given the question and CoT reasoning. We produce 95% confidence intervals through
+bootstrapping (LaFlair et al., 2015).
+
+
+In more detail, only RA is able to substantially increase the answer probability on the MMLU test
+set, while filtering CoTs by standard loss, delta loss, or just randomly, improves test performance
+
+
+8
+
+
+1.00 0.75 0.50 0.25 0.00 0.25 0.50 0.75 1.00
+RA
+
+
+200
+
+
+0
+
+
+150 125 100 75 50 25 0
+Loss
+
+
+400
+
+
+200
+
+
+0
+
+
+(a) MMLU Test Performance
+
+
+|Col1|random<br>no clip, no baseline<br>clip, no baseline<br>clip, minus baseline < 0<br>clip, minus baseline / baseline < -0.2|
+|---|---|
+|||
+|||
+|||
+|||
+|||
+
+
+Figure 2: Reward function performance for self-improving reasoning on MMLU-FREE-FORM.
+Only RA (purple) facilitates generalization to MMLU test set and zero-shot transfer to GSM8k.
+Functions yield different amounts of filtered data (so different “N training steps”). ‘ _<_ ’ shows the
+filtering threshold, all baselines are “Empty CoT”, and “random” means randomly picking CoTs.
+
+
+by just a few percent and plateaus quickly with more steps. A full breakdown of in-domain MMLU
+performance is shown in Figure 7 in Appendix B.2. Moreover, only RA facilitates zero-shot transfer
+to GSM8K math problems—improving accuracy on by nearly 7%, compared to barely 0.5% when
+trained with other reward functions. Notice that we were only able to train for 1,000 steps with RA,
+since only 1,000 steps worth of generated CoTs were above the threshold of 0.2.
+
+
+These strong results demonstrate that the resulting model learns generalizable reasoning—beyond
+just matching specific token patterns in the data. Thus, by rewarding CoTs that best reduce some
+form of loss on a suffix, we can enhance a model’s general reasoning ability. This aligns with
+recent work (Du et al., 2024) showing that optimizing for loss during general pretraining improves
+downstream reasoning performance. Moreover, this shows that RA’s key modifications to standard
+loss (clipping, adding a baseline, and normalizing) are crucial for learning generalizable reasoning.
+
+
+6 CHALLENGES AND FUTURE DIRECTIONS
+
+
+As it becomes increasingly challenging and expensive to curate large-scale (question, CoT, answer)
+datasets (Rein et al., 2023), the reasoning community has begun focusing on the challenging task of
+self-improving CoT reasoning on unstructured, pretraining-scale text. Our work frames this challenging task as an RL problem and demonstrates the effectiveness of RA at identifying useful reasoning, determining useful locations for reasoning, and facilitating self-improvement in the simplified
+MMLU-FREE-FORM setting. There is still more work to be done in order to solve the full, unstructured pretraining setting. In this section, we present an exploratory experiment that provides key
+insights into the barriers that must be overcome to achieve self-improvement at pretraining scale.
+
+
+Specifically, we attempt to use our novel Reasoning Advantage (RA) reward function with the offline RL procedure from Section 5.2 to self-improve CoT reasoning on OpenWebMath (Paster et al.,
+2023), a pretraining corpus of unstructured web-text data. The two main steps of this procedure
+are: (1) generate a large batch of CoTs and self-insert them into OpenWebMath, and (2) finetune on
+the CoTs with the highest reward scores. Our analysis indicates that this method is not sufficiently
+powerful to escape the local optimum of extremely conservative CoT reasoning that just summarizes
+previous information instead of attempting to actually solve problems (see Appendix C for examples). In Section 6.1, we provide key insights into why this method is not sufficient. In Section 6.2,
+we provide a more detailed experimental setup and additional results.
+
+
+6.1 KEY INSIGHTS **(NEW** **SUBSECTION)**
+
+
+To understand why this procedure fails on OpenWebMath, we isolate the problem into two key
+components: generating diverse CoTs and identifying useful CoTs. In our offline RL approach, the
+role of the reward function is purely to _identify_ useful CoTs to use for training, and Section 5.1
+demonstrates that RA excels at this task. This suggests that the remaining challenge lies in generation. Indeed, our analysis shows that only 0.01% of the generated CoTs achieve a reward above 0.2,
+which is our filtering threshold for RA (a decent threshold for “good reasoning” in our experience).
+Moreover, many of the CoTs that passed the filtering threshold exhibited the conservative strategy
+
+
+9
+
+
+0.30
+
+
+0.25
+
+
+0.20
+
+
+0.15
+
+
+0.10
+
+
+Zero Shot GSM8K Expected Accuracy
+
+
+0 1000 2000 3000 4000
+N training steps
+
+
+(b) GSM8K Transfer Performance
+
+
+described previously: they simply summarize past information from the context. This explains why
+the model learned to be overly conservative. However, these overly conservative CoTs which made
+it past the RA threshold were still superior to those that did not pass the threshold (those ones mainly
+contained **incorrect** reasoning that predicted the subsequent tokens incorrectly). This indicates that
+RA actually succeeded at its job of identifying the best reasoning from the generated batch of CoTs,
+and that the main issue indeed lies with the _lack of diversity_ in the generated CoTs.
+
+
+Thus, to facilitate self-improvement using RA, we must crucially generate a diverse-enough set of
+CoTs so that there are enough useful samples for RA to identify. This remains a critical barrier
+for future work to investigate. To increase the diversity of explored CoTs, future work might use
+Quality-Diversity (Mouret & Clune, 2015) or other evolutionary techniques (Fernando et al., 2023;
+Samvelyan et al., 2024), which could generate more diverse CoTs. It would also be worth exploring
+different prompting strategies (we used a single system prompt to generate these CoTs, and did not
+spend much time prompt engineering). Better exploration may also be facilitated by using online
+RL, but the only existing method in this direction generates a CoT at every token in a document (Zelikman et al., 2024), which is highly inefficient. Thus, we believe that our computationally feasible
+offline RL approach of generating CoTs in large, offline batches and performing supervised finetuning is key to enabling the self-improvement of CoT reasoning at the pretraining scale. However,
+future work should investigate ways of generating a more diverse batch of CoTs in order for this
+method to work. One possible idea is to use a combination of RHO-1 (Lin et al., 2024) and RA.
+
+
+To encourage future research in this direction, we will open-source our offline RL code, which runs
+on an academic compute budget. We will also open-source MMLU-FREE-FORM, which we believe
+acts as a useful intermediate benchmark between curated QA data and general language pretraining.
+
+
+6.2 EXPERIMENTAL SETUP AND ADDITIONAL RESULTS **(NEW SUB SECTION)**
+
+
+We first finetune Mistral-7B-Instruct (Jiang et al., 2023) on a small set of CoTs to learn the
+“[THOUGHT]...[/THOUGHT]” syntax. Then, we randomly sample 50,000 (prefix, suffix) pairs
+from OpenWebMath and generate CoTs for each location using Mistral-7B-Instruct with a temperature value of 0.5. From this pool of generated CoTs, we create three variants of an augmented
+OpenWebMath dataset by selecting 3,200 CoTs using different filtering methods: (1) random selection, (2) best loss scores, and (3) best RA scores.
+
+
+Throughout training, we evaluate each model’s CoT reasoning ability on a holdout set of OpenWebMath documents. At each checkpoint, we identify locations where “[THOUGHT]” is the predicted
+next token, generate CoTs at these points, and measure three metrics on the holdout documents (excluding CoT tokens but using them as context): standard loss, delta loss, and RA. Figure 8 show
+three plots—each measuring one of these metrics at various checkpoints throughout training. Notice
+that each line represents an entirely different model trained on differently filtered CoTs.
+
+7 CONCLUSION ( **UPDATED,** **BETTER** **CLARITY** **OF** **CONTRIBUTIONS** )
+As it becomes increasingly challenging and prohibitively expensive to curate large-scale (question,
+CoT, answer) datasets, the LLM reasoning community has began to focus on the challenging task
+of self-improving CoT reasoning on unstructured text at the pretraining scale. We frame this as a
+reinforcement learning problem and investigate a fundamental question: What constitutes a suitable
+reward function for learning to reason during general language model pretraining? We outline the
+desirable qualities of such a reward, point out critical shortcomings in many commonly used reward
+functions, and introduce Reasoning Advantage (RA), a novel reward function which addresses these
+limitations. Further, we provide a comprehensive analysis on how different functions affect: (1) the
+ability to identify effective CoT reasoning ( _what_ reasoning is rewarded), and (2) the ability to pick
+out useful locations to produce CoT reasoning ( _where_ reasoning is rewarded). To our knowledge,
+our work is the first to provide this type of analysis on reward functions for self-improving CoT
+reasoning on unstructured text.
+
+
+We introduce MMLU-FREE-FORM, a small step towards the full unstructured pretraining setting,
+and demonstrate that only RA is able to facilitate generalization when self-improving CoT reasoning
+on MMLU-FREE-FORM. There is still more work to be done in order to solve the full, unstructured
+pretraining setting, and we present an exploratory experiment that provides key insights into the
+barriers that must be overcome to achieve self-improvement at pretraining scale. Most importantly,
+future work should investigate methods for generating a more diverse set of CoTs. We will open
+source all of our code, which runs on academic compute, to facilitate future work in this direction.
+
+
+10
+
+
+REFERENCES
+
+
+Thomas Anthony, Zheng Tian, and David Barber. Thinking fast and slow with deep learning and
+tree search. _Advances in neural information processing systems_, 30, 2017.
+
+
+Zixiang Chen, Yihe Deng, Huizhuo Yuan, Kaixuan Ji, and Quanquan Gu. Self-play fine-tuning
+converts weak language models to strong language models. _arXiv_ _preprint_ _arXiv:2401.01335_,
+2024.
+
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser,
+Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to
+solve math word problems, 2021. _URL https://arxiv. org/abs/2110.14168_, 2021.
+
+
+Hanze Dong, Wei Xiong, Deepanshu Goyal, Yihan Zhang, Winnie Chow, Rui Pan, Shizhe Diao,
+Jipeng Zhang, Kashun Shum, and Tong Zhang. Raft: Reward ranked finetuning for generative
+foundation model alignment, 2023.
+
+
+Zhengxiao Du, Aohan Zeng, Yuxiao Dong, and Jie Tang. Understanding emergent abilities of
+language models from the loss perspective. _arXiv preprint arXiv:2403.15796_, 2024.
+
+
+Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha
+Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models.
+_arXiv preprint arXiv:2407.21783_, 2024.
+
+
+Guhao Feng, Bohang Zhang, Yuntian Gu, Haotian Ye, Di He, and Liwei Wang. Towards revealing
+the mystery behind chain of thought: a theoretical perspective. _Advances in Neural Information_
+_Processing Systems_, 36, 2024.
+
+
+Chrisantha Fernando, Dylan Banarse, Henryk Michalewski, Simon Osindero, and Tim Rockt¨aschel.
+Promptbreeder: Self-referential self-improvement via prompt evolution, 2023. URL [https:](https://arxiv.org/abs/2309.16797)
+[//arxiv.org/abs/2309.16797.](https://arxiv.org/abs/2309.16797)
+
+
+Yao Fu, Litu Ou, Mingyu Chen, Yuhao Wan, Hao Peng, and Tushar Khot. Chain-of-thought hub: A
+[continuous effort to measure large language models’ reasoning performance, 2023. URL https:](https://arxiv.org/abs/2305.17306)
+[//arxiv.org/abs/2305.17306.](https://arxiv.org/abs/2305.17306)
+
+
+Alex Havrilla, Yuqing Du, Sharath Chandra Raparthy, Christoforos Nalmpantis, Jane Dwivedi-Yu,
+Maksym Zhuravinskyi, Eric Hambro, Sainbayar Sukhbaatar, and Roberta Raileanu. Teaching
+large language models to reason with reinforcement learning. _arXiv preprint arXiv:2403.04642_,
+2024a.
+
+
+Alex Havrilla, Sharath Raparthy, Christoforus Nalmpantis, Jane Dwivedi-Yu, Maksym Zhuravinskyi, Eric Hambro, and Roberta Railneau. Glore: When, where, and how to improve llm reasoning
+via global and local refinements. _arXiv preprint arXiv:2402.10963_, 2024b.
+
+
+Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and
+Jacob Steinhardt. Measuring massive multitask language understanding. _arXiv_ _preprint_
+_arXiv:2009.03300_, 2020.
+
+
+Jiaxin Huang, Shixiang Shane Gu, Le Hou, Yuexin Wu, Xuezhi Wang, Hongkun Yu, and Jiawei
+Han. Large language models can self-improve. _arXiv preprint arXiv:2210.11610_, 2022.
+
+
+Jie Huang and Kevin Chen-Chuan Chang. Towards reasoning in large language models: A survey.
+_arXiv preprint arXiv:2212.10403_, 2022.
+
+
+Albert Q. Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier,
+L´elio Renard Lavaud, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas
+Wang, Timoth´ee Lacroix, and William El Sayed. Mistral 7b, 2023.
+
+
+Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. Large
+language models are zero-shot reasoners, 2023.
+
+
+11
+
+
+Geoffrey T LaFlair, Jesse Egbert, and Luke Plonsky. A practical guide to bootstrapping descriptive
+statistics, correlations, t tests, and anovas. In _Advancing quantitative methods in second language_
+_research_, pp. 46–77. Routledge, 2015.
+
+
+Hunter Lightman, Vineet Kosaraju, Yura Burda, Harri Edwards, Bowen Baker, Teddy Lee, Jan
+Leike, John Schulman, Ilya Sutskever, and Karl Cobbe. Let’s verify step by step. _arXiv preprint_
+_arXiv:2305.20050_, 2023.
+
+
+Zhenghao Lin, Zhibin Gou, Yeyun Gong, Xiao Liu, Yelong Shen, Ruochen Xu, Chen Lin, Yujiu
+Yang, Jian Jiao, Nan Duan, and Weizhu Chen. Rho-1: Not all tokens are what you need. _CoRR_,
+abs/2404.07965, 2024. [URL https://doi.org/10.48550/arXiv.2404.07965.](https://doi.org/10.48550/arXiv.2404.07965)
+
+
+Hanmeng Liu, Zhiyang Teng, Leyang Cui, Chaoli Zhang, Qiji Zhou, and Yue Zhang. Logicot:
+[Logical chain-of-thought instruction-tuning, 2023. URL https://arxiv.org/abs/2305.](https://arxiv.org/abs/2305.12147)
+[12147.](https://arxiv.org/abs/2305.12147)
+
+
+Qianli Ma, Haotian Zhou, Tingkai Liu, Jianbo Yuan, Pengfei Liu, Yang You, and Hongxia Yang.
+Let’s reward step by step: Step-level reward model as the navigators for reasoning. _arXiv preprint_
+_arXiv:2310.10080_, 2023.
+
+
+William Merrill and Ashish Sabharwal. The expresssive power of transformers with chain of
+thought. _arXiv preprint arXiv:2310.07923_, 2023.
+
+
+Jean-Baptiste Mouret and Jeff Clune. Illuminating search spaces by mapping elites, 2015. URL
+[https://arxiv.org/abs/1504.04909.](https://arxiv.org/abs/1504.04909)
+
+
+Maxwell Nye, Anders Johan Andreassen, Guy Gur-Ari, Henryk Michalewski, Jacob Austin, David
+Bieber, David Dohan, Aitor Lewkowycz, Maarten Bosma, David Luan, Charles Sutton, and Augustus Odena. Show your work: Scratchpads for intermediate computation with language models,
+2021.
+
+
+Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Carroll L. Wainwright, Pamela Mishkin, Chong
+Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike,
+and Ryan Lowe. Training language models to follow instructions with human feedback, 2022.
+[URL https://arxiv.org/abs/2203.02155.](https://arxiv.org/abs/2203.02155)
+
+
+Keiran Paster, Marco Dos Santos, Zhangir Azerbayev, and Jimmy Ba. Openwebmath: An open
+dataset of high-quality mathematical web text. _arXiv preprint arXiv:2310.06786_, 2023.
+
+
+Guilherme Penedo, Hynek Kydl´ıˇcek, Anton Lozhkov, Margaret Mitchell, Colin Raffel, Leandro
+Von Werra, Thomas Wolf, et al. The fineweb datasets: Decanting the web for the finest text data
+at scale. _arXiv preprint arXiv:2406.17557_, 2024.
+
+
+Jacob Pfau, William Merrill, and Samuel R Bowman. Let’s think dot by dot: Hidden computation
+in transformer language models. _arXiv preprint arXiv:2404.15758_, 2024.
+
+
+Stanislas Polu, Jesse Michael Han, Kunhao Zheng, Mantas Baksys, Igor Babuschkin, and Ilya
+Sutskever. Formal mathematics statement curriculum learning. _arXiv preprint arXiv:2202.01344_,
+2022.
+
+
+Nazneen Fatema Rajani, Bryan McCann, Caiming Xiong, and Richard Socher. Explain yourself!
+leveraging language models for commonsense reasoning, 2019.
+
+
+David Rein, Betty Li Hou, Asa Cooper Stickland, Jackson Petty, Richard Yuanzhe Pang, Julien Dirani, Julian Michael, and Samuel R Bowman. Gpqa: A graduate-level google-proof q&a benchmark. _arXiv preprint arXiv:2311.12022_, 2023.
+
+
+Mikayel Samvelyan, Sharath Chandra Raparthy, Andrei Lupu, Eric Hambro, Aram H. Markosyan,
+Manish Bhatt, Yuning Mao, Minqi Jiang, Jack Parker-Holder, Jakob Foerster, Tim Rockt¨aschel,
+and Roberta Raileanu. Rainbow teaming: Open-ended generation of diverse adversarial prompts,
+2024. [URL https://arxiv.org/abs/2402.16822.](https://arxiv.org/abs/2402.16822)
+
+
+12
+
+
+Abulhair Saparov and He He. Language models are greedy reasoners: A systematic formal analysis
+of chain-of-thought, 2023. [URL https://arxiv.org/abs/2210.01240.](https://arxiv.org/abs/2210.01240)
+
+
+Alon Talmor, Jonathan Herzig, Nicholas Lourie, and Jonathan Berant. Commonsenseqa: A question
+answering challenge targeting commonsense knowledge. _arXiv preprint arXiv:1811.00937_, 2018.
+
+
+Ankit Vani, Max Schwarzer, Yuchen Lu, Eeshan Dhekane, and Aaron Courville. Iterated learning
+for emergent systematicity in vqa. _arXiv preprint arXiv:2105.01119_, 2021.
+
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. _Advances_ _in_ _neural_ _informa-_
+_tion processing systems_, 30, 2017.
+
+
+Peiyi Wang, Lei Li, Zhihong Shao, RX Xu, Damai Dai, Yifei Li, Deli Chen, Y Wu, and Zhifang
+Sui. Math-shepherd: A label-free step-by-step verifier for llms in mathematical reasoning. _arXiv_
+_preprint arXiv:2312.08935_, 2023.
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc
+Le, and Denny Zhou. Chain-of-thought prompting elicits reasoning in large language models,
+2023.
+
+
+Ronald J Williams. Simple statistical gradient-following algorithms for connectionist reinforcement
+learning. _Machine learning_, 8:229–256, 1992.
+
+
+Eric Zelikman, Yuhuai Wu, Jesse Mu, and Noah D Goodman. Star: Self-taught reasoner bootstrapping reasoning with reasoning. In _Proceedings_ _of_ _the_ _36th_ _International_ _Conference_ _on_ _Neural_
+_Information Processing Systems_, pp. 15476–15488, 2022.
+
+
+Eric Zelikman, Georges Harik, Yijia Shao, Varuna Jayasiri, Nick Haber, and Noah D Goodman.
+Quiet-star: Language models can teach themselves to think before speaking. _arXiv_ _preprint_
+_arXiv:2403.09629_, 2024.
+
+
+Di Zhang, Xiaoshui Huang, Dongzhan Zhou, Yuqiang Li, and Wanli Ouyang. Accessing gpt-4 level
+mathematical olympiad solutions via monte carlo tree self-refine with llama-3 8b, 2024. URL
+[https://arxiv.org/abs/2406.07394.](https://arxiv.org/abs/2406.07394)
+
+
+13
+
+
+A FORMAL DEFINITIONS
+
+
+We look at the following metrics for evaluation of intermediate contemplation for next token prediction, that is, given a prefix set of tokens _p_ = _p_ 1 _, ..., pn_, a generated set of intermediate reasoning
+tokens _r_ and a suffix of _m_ tokens to predict _s_ = _s_ 1 _, ...., sm_, produce a score _R_ ( _p, r, s_ ) _∈_ R. We use
+_P_ ( _s_ 0 _|p_ + _r_ ) to denote the probability distribution over all tokens on the first token of the suffix.
+
+
+1. **Accuracy (using generation)** : Generate, such as through sampling or via greedy decoding,
+_k_ continuations _s_ ˆ1 _, ...,_ _s_ ˆ _k_ of length _ns_ from the input _p_ + _r_ .
+
+
+_R_ Model eval = [1]
+
+_k_
+
+
+14
+
+
+_R_ accuracy using generation = [1]
+
+_k_
+
+
+_k_
+
+
+I[ ˆ _si_ = _s_ ] (4)
+
+_i_ =1
+
+
+2. **Accuracy** **(generation** **free)** : Accuracy using generation requires at least _ns_ forward
+passes. Instead, one can leverage the autoregressive nature of transformers to obtain the
+probability distribution over next tokens for the entire answer simultaneously. That is input
+the model _p_ + _r_ + _s_ and obtain _P_ ( ˆ _s_ 0 _|p_ + _r_ ) _, P_ ( ˆ _s_ 1 _|p_ + _r_ + _s_ 0) _, ..._ with one forward pass.
+Looking at whether the argmax of this distribution is _s_ is equivalent to accuracy above
+using greedy decoding, and taking _P_ ( _s|p_ + _r_ )
+
+
+_R_ expected greedy accuracy = Π _[n]_ _i_ =1 _[s]_ [I][[arg max(] _[P]_ [( ˆ] _[s][i][|][p]_ [ +] _[ r]_ [ +] _[ s]_ [:] _[i]_ [)) =] _[ s][i]_ []] (5)
+
+
+_R_ expected accuracy = Π _[n]_ _i_ =1 _[s]_ _[P]_ [( ˆ] _[s][i][|][p]_ [ +] _[ r]_ [ +] _[ s]_ [:] _[i]_ [)] (6)
+
+
+3. **Loss** : We use the cross entropy loss over tokens, i.e:
+
+
+_ns_
+
+_R_ cross entropy loss = _−_ - log( _P_ ( ˆ _si|p_ + _r_ + _s_ : _i_ )) (7)
+
+
+_i_ =1
+
+
+4. **Delta Loss:** The difference in cross entropy between using and not using the reasoning.
+
+
+_R_ delta cross entropy loss = _−_
+
+
+_ns_
+
+- log( _P_ ( ˆ _si|p_ + _r_ + _s_ : _i_ )) _−−_
+
+
+_i_ =1
+
+
+_ns_
+
+- log( _P_ ( ˆ _si|p_ + _s_ : _i_ )) (8)
+
+
+_i_ =1
+
+
+_ns_
+
+
+5. **Normalised** **Delta** **loss:** Different answers have varying levels of inherent predictability.
+Thus desirable values for loss or delta loss can vary massively. To account for this, we
+divide by the answer likelihood without reasoning.
+
+
+_ns_
+
+_R_ normalised delta cross entropy loss = _R_ delta cross entropy loss _/ −_ - log( _P_ ( ˆ _si|p_ + _s_ : _i_ )) (9)
+
+
+_i_ =1
+
+
+6. **Clipped** **variants** : We evaluate loss, delta loss and normalised delta loss with clipping
+applied to the token log probabilities to prevent large values dominating. Our final results
+leverage _ϵ_ = _−_ 3. For example
+
+
+_R_ clipped loss = _−_
+
+
+_ns_
+
+- max[log( _P_ ( ˆ _si|p_ + _r_ + _s_ : _i_ )) _, ϵ_ ] (10)
+
+
+_i_ =1
+
+
+7. Normalised clipped delta loss **(Reasoning Advantage)** : We combine the benefits of delta
+loss, normalisation and clipping into one metric.
+
+
+8. **LLM-as-judge** : Generate, such as through sampling or via greedy decoding, _k_ continuations _s_ ˆ1 _, ...,_ _s_ ˆ _k_ of length _ns_ from the input _p_ + _r_ . Let _M_ ( _p, r,_ _s_ ˆ _i, si_ ) denote whether a
+model considers _s_ ˆ _i_ to match be the correct answer of _si_ .. Average over the _k_ completions,
+i.e:
+
+
+_k_
+
+- _M_ ( _p, r,_ _s_ ˆ _i, si_ ) (11)
+
+
+_i_ =1
+
+
+B ADDITIONAL EXPERIMENT DETAILS, RESULTS, AND VISUALIZATIONS
+
+
+To compute the log probabilities for all reward functions, we used Mistral-7B-Instruct (Jiang et al.,
+2023) finetuned on a small set of 1,000 GPT-4 generated CoTs that have been filtered for correctness
+(by providing the model with the correct answer and asking whether it corresponds). This finetuning
+allows us to start from a base model that is used to the format of:
+
+
+### Question: <question> ### Thought <reasoning> ### Answer: <response>.
+
+
+B.0.1 ADDITIONAL VISUALIZATIONS FOR WHAT & WHERE TO REASON
+
+
+Figure 3 and Figure 4 provide additional visualization for the _What_ and _Where_ experimental results
+from Section 5.1, respectively.
+
+
+Halfway Through Question After Question Before Options After Options Before Answer Halfway Through Answer
+
+
+Figure 4: ( _Where_ to reward) Distribution of reward scores for CoTs inserted at different locations
+using standard loss (left) and RA (right) reward functions. Each histogram shows the reward distribution for four insertion points: halfway through question (blue), after question before multiplechoice options (orange), after multiple-choice options before answer (green), and halfway through
+answer (red). As mentioned in Section 5.1, we assume that after multiple-choice options before
+answer (green) is the optimal location to generate CoT reasoning. RA successfully scores CoTs
+generated at this location higher, while standard loss does not. Particularly, standard loss fails to
+prevent halfway-through-answer CoTs from receiving high rewards.
+
+
+B.1 WHAT & WHERE TO REASON RESULTS FOR ADDITIONAL REWARD FUNCTIONS
+
+
+Table 3 and Table 4 show full results for additional reward functions. That is, for the entire family of
+loss-based reward functions. Moreover, they include results for the “empty CoT” baseline as well as
+the “random CoT” and “mean loss” baselines. We explore incorporating these baselines both with
+normalization ( _R −_ _B_ ) _/B_ and without normalization _R −_ _B_, where _R_ is the reward score and _B_ is
+the baseline value.
+
+
+In Tables 3 and 4, RA outperforms standard loss and delta loss—as in the main text. However, it’s
+worth mentioning that there are three combinations of augmentations that perform better than RA in
+Table 3 ( _What_ to reward), while performing much worse than RA in Table 4 ( _Where_ to reward). In
+the main text of this work, we choose to focus mainly on standard loss, delta loss, and RA since delta
+
+
+15
+
+
+1.00 0.75 0.50 0.25 0.00 0.25 0.50 0.75 1.00
+RA
+
+
+200
+
+
+0
+
+
+150 125 100 75 50 25 0
+Loss
+
+
+400
+
+
+200
+
+
+0
+
+
+Post rationalised "Correct" CoTs Non post rationalised "incorrect" CoTs CoTs of random tokens
+
+
+Figure 3: ( _What_ to reward) Distribution of reward scores across different CoT types using standard loss (left) and RA (right) reward functions. Each histogram shows the reward distribution for
+three categories: “correct” post-rationalized CoTs (blue), “incorrect” non-post-rationalized CoTs
+(orange), and “random” token CoTs (green). Notice that RA is better able to differentiate between
+incorrect and random CoTs. Moreover, the RA scores are normalized to the range [-1, 1], which
+may facilitate better learning. See Section 5.1 for more details.
+
+
+1.00 0.75 0.50 0.25 0.00 0.25 0.50 0.75 1.00
+RA
+
+
+500
+
+
+250
+
+
+0
+
+
+200 175 150 125 100 75 50 25 0
+Loss
+
+
+2000
+
+
+1000
+
+
+0
+
+
+loss shows how the simple change of adding an empty CoT baseline improves results over standard
+loss, and RA shows the added effectiveness of clipping and normalization.
+
+
+Name Baseline Clipping Normalisation Mean q0.025 q0.975 Rank
+
+
+Loss none none none 44.6% 44.0% 45.4% 9
+
+ - empty CoT reward clipped none 67.2% 65.7% 68.3% 3
+**RA** **empty CoT reward** **clipped** **yes** **66.3%** **64.5%** **67.8%** **4**
+Delta Loss empty CoT reward none none 58.3% 57.8% 58.9% 8
+
+ - empty CoT reward none yes 58.8% 58.1% 59.8% 7
+
+ - random CoT reward clipped none 80.4% 79.7% 81.4% 1
+
+ - random CoT reward clipped yes 78.4% 77.8% 79.0% 2
+
+ - random CoT reward none none 60.9% 60.1% 62.7% 6
+
+ - random CoT reward none yes 60.9% 59.2% 63.1% 5
+
+ - average reward clipped none 30.8% 30.1% 31.7% 10
+
+ - average reward clipped yes 30.7% 29.9% 31.3% 11
+
+ - average reward none none 29.2% 28.7% 29.8% 13
+
+ - average reward none yes 30.7% 30.0% 31.7% 11
+
+
+Table 3: Full results for _What_ to reward experiment, showing all combinations of augmentations to
+the basic loss-based reward in Equation 3.
+
+
+Name Baseline Clipping Normalisation Mean q0.025 q0.975 Rank
+
+
+Loss none none none 39.4% 37.7% 40.8% 6
+
+ - empty CoT reward clipped none 55.9% 52.5% 59.9% 4
+**RA** **empty CoT reward** **clipped** **yes** **77.0%** **75.3%** **79.0%** **1**
+Delta Loss empty CoT reward none none 64.4% 62.7% 67.0% 3
+
+ - empty CoT reward none yes 73.0% 71.9% 74.3% 2
+
+ - random CoT reward clipped none 29.8% 28.2% 30.6% 9
+
+ - random CoT reward clipped yes 40.8% 38.9% 43.4% 5
+
+ - random CoT reward none none 27.9% 26.7% 28.8% 11
+
+ - random CoT reward none yes 27.3% 25.8% 28.6% 13
+
+ - average reward clipped none 27.7% 25.8% 29.2% 12
+
+ - average reward clipped yes 33.4% 32.5% 35.4% 7
+
+ - average reward none none 28.3% 26.5% 30.0% 10
+
+ - average reward none yes 32.1% 30.8% 33.4% 8
+
+
+Table 4: Full results for _Where_ to reward experiment, showing all combinations of augmentations to
+the basic loss-based reward in Equation 3.
+
+
+What to Contemplate (Accuracy) Where to Contemplate (AUC)
+
+
+Method Mean _q_ 0 _._ 025 _q_ 0 _._ 975 Mean _q_ 0 _._ 025 _q_ 0 _._ 975
+
+RA **0.546** **0.530** **0.563** **0.875** **0.857** **0.890**
+Delta Loss 0.498 0.484 0.511 0.684 0.668 0.700
+Loss 0.439 0.426 0.453 0.386 0.367 0.401
+
+
+Table 5: Reward function performance using Llama-3.1-8B (Dubey et al., 2024) (in contrast to
+Mistral-7B as in the main body) for distinguishing CoT types ( _What_ ) and identifying optimal CoT
+placement ( _Where_ ). This agrees with the results for Mistral-7B in the main body.
+
+
+16
+
+
+(b) Ablation of clipping value for identifying optimal
+CoT placement (Where to reason) with Mistral-7B.
+
+
+(a) Ablation of clipping value for distinguishing CoT
+types (What to reason) with Mistral-7B.
+
+
+Figure 5: Ablating the clipping value used in RA. A value of 1.0 is reasonably optimal for both experiments, and was therefore used for the results in Table 2 and the MMLU-Free-Form experiments.
+
+
+Figure 6: Example from MMLU-FREE-FORM, our modified version of MMLU (Hendrycks et al.,
+2020) designed to study improving CoT reasoning on unstructured, open-ended text. By removing
+multiple-choice options, answers become free-form so that they can can be expressed in multiple
+different and equally valid ways—this invalidates the use of accuracy without an external verifier.
+The left-hand side is the example from MMLU-FREE-FORM and the right-hand side is the original
+example from MMLU.
+
+
+B.2 PERFORMANCE BREAKDOWN FOR SELF-IMPROVING COT REASONING ON
+MMLU-FREE-FORM
+
+
+Figure 7 shows a more complete breakdown of the results on the MMLU test set after self-improving
+CoT reasoning on MMLU-FREE-FORM using the method outlined in Section 5.2. The “reasoning
+style questions” require quantitative reasoning and span a wide range of subjects including physics,
+biology, accounting, mathematics, and computer science. Moreover, we observe far greater improvement on “reasoning style questions” compared to “recall style questions”. This interesting
+result makes sense, since additional reasoning doesn’t help as much when trying to recall a fact that
+was present in the context.
+
+
+17
+
+
+Figure 7: Performance breakdown on MMLU test set after self-improving CoT reasoning on
+MMLU-FREE-FORM. Results are shown for different question types. Left: Ensembled crossentropy loss (higher is better), computed as average log-likelihood across multiple CoTs. Right:
+Answer probability (higher is better). See Section 5.2 for full experiment and method details.
+
+
+C EXAMPLES OF CONSERVATIVE CHAIN-OF-THOUGHT
+
+
+As discussed in Section 6, our offline RL procedure applied to the unstructured OpenWebMath
+dataset (Paster et al., 2023) converges to a local optimum where the model generates overly conservative CoT reasoning, merely restating or summarizing information rather than attempting problemsolving. Below are some examples of this behavior. Notice that the model knows about the “prefix”
+and “completion” from the prompts it received.
+
+
+**GSM8K Example:**
+
+
+Q: Richard l i v e s in an apartment b u i l d i n g with 15 f l o o r s . Each
+f l o o r c o n t a i n s 8 u ni t s, and 3/4 of the b u i l d i n g i s occupied .
+What ’ s the t o t a l number of unoccupied u n i t s In the b u i l d i n g ? [
+THOUGHT] The p r e f i x p ro v id e s i n f o r m a t i o n about an apartment
+b u i l d i n g with 15 f l o o r s, each f l o o r c o n t a i n i n g 8 u n it s, and
+3/4 of the b u i l d i n g occupied . The completion l i k e l y pr o vi d es
+the t o t a l number of unoccupied u n i t s in the building, based on
+the given i n f o r m a t i o n . [ /THOUGHT]
+A: 30
+
+
+**OpenWebMath Example 1:**
+
+
+In t h i s a r t i c l e, by using norms ( $T$ and $C$ ), we p r e s e n t the
+concept of i n t u i t i o n i s t i c fuzzy i m p l i c a t i v e i d e a l s,
+i n t u i t i o n i s t i c fuzzy closed i m p l i c a t i v e i d e a l s and
+i n t u i t i o n i s t i c fuzzy commutative i d e a l s of $BCI$−a l g e b r a s .
+Some i n t e r e s t i n g r e s u l t s of them are given . C h a r a c t e r i s a t i o n s
+of i m p l i c a t i v e i d e a l s, closed i m p l i c a t i v e i d e a l s and
+commutative i d e a l s of $BCI$−a l g e b r a s by using them are
+explored . By using i n t e r s e c t i o n s, d i r e c t p r od u ct s and
+homomorphisms, some i n t e r e s t i n g r e s u l t s are   - b ta i ne d [THOUGHT]
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+Consider the p r e f i x, which i n t r o d u c e s the concept of
+i n t u i t i o n i s t i c fuzzy i m p l i c a t i v e i d e a l s in $BCI$−a l g e b r a s . The
+completion l i k e l y p r ov i de s a d e f i n i t i o n or d e s c r i p t i o n of
+t h e s e i d e a l s, along with t h e i r p r o p e r t i e s and a p p l i c a t i o n s . [ /
+THOUGHT] .
+
+
+**OpenWebMath Example 2:**
+
+
+# Chapter 8 −Polynomials and F a c t o r i n g −Chapter Review −8−3 and
+8−4 M u l t i p l y i n g Binomials : 31
+
+
+$9r ˆ _{_ 2 _}_ −12 r +4 [THOUGHT] The p r e f i x pr o vi d es a l i s t of equations,
+each with a v a r i a b l e and a c o e f f i c i e n t . The completion l i k e l y
+p ro v id e s the s o l u t i o n to each equation, using the v a r i a b l e and
+c o e f f i c i e n t to determine the value of the e q ua t io n . The
+completion may a l s o provide a step −by−s t e p e x p l a n a t i o n [ /
+THOUGHT] $
+
+
+#### Work Step by Step
+
+
+Simplify and w r i t e in s t a n d a r d form $ (3 r −2) ˆ _{_ 2 _}_ $ Rewrite as : $ (3 r
+−2) (3 r −2)$ F o i l $9r ˆ _{_ 2 _}_ −6 r −6 r +4$ Combine l i k e terms $9r ˆ _{_ 2 _}_ −12
+r +4$
+
+
+After you claim an answer you ’ l l have 24 hours to send in a d r a f t .
+An e d i t o r w i l l review the submission and e i t h e r p u b l i s h your
+submission or provide feedback .
+
+
+D SOCIETAL IMPACT
+
+
+While our work is primarily analytical and does not introduce new models, the broader direction of
+self-improving CoT reasoning on large-scale unstructured text datasets could significantly enhance
+LLMs’ problem-solving capabilities—if successful. Such advances would amplify both the benefits
+and risks associated with current language models, warranting continued attention from the research
+community on ensuring responsible development.
+
+
+E ADDITIONAL VISUALIZATIONS
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+|||All T<br>Loss<br>|houghts<br> Filtered T<br>|houghts<br>|
+||||||
+||||||
+|||RA Fi<br>No T|ltered Th<br> houghts C|ughts<br>  ontrol|
+||||||
+||||||
+||||||
+
+
+|Col1|Col2|Col3|Col4|Col5|
+|---|---|---|---|---|
+||||||
+||||||
+||||||
+||||||
+|||All Th<br>|oughts<br>||
+||||||
+|||~~Loss~~<br>RA Fil|~~ iltered T~~<br> tered Tho|~~  oughts~~<br>  ughts|
+||||||
+
+
+|Col1|All T<br>Loss|houghts<br>Filtered T|houghts|
+|---|---|---|---|
+||<br>RA F|<br> iltered Th|<br>  oughts|
+|||||
+|||||
+|||||
+|||||
+|||||
+
+
+Figure 8: Standard loss, delta loss, and RA on the _holdout_ documents measured at different training
+checkpoints (see Section 6.2 for details). Each line represents an entirely different model trained on
+differently filtered CoTs. The filtering strategies are: random selection (“All Thoughts”), loss-based
+(“Loss Filtered Thoughts”), RA-based (“RA Filtered Thoughts”), and a “No Thoughts Control”
+baseline (trained on standard OpenWebMath documents without any self-inserted CoTs).
+
+
+19
+
+
+-212.05
+
+
+-397.02
+
+
+475.5
+
+
+456.2
+
+
+Step
+
+
+(a) LM Loss with thoughts
+
+
+Step
+
+
+(b) RA
+
+
+20.8
+
+
+14.4
+
+
+Step
+
+
+(c) Delta Loss

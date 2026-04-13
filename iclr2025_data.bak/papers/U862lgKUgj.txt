@@ -1,0 +1,4850 @@
+# BOOTSTRAP3D: IMPROVING MULTI-VIEW DIFFUSION MODEL WITH SYNTHETIC DATA
+
+
+**Anonymous authors**
+Paper under double-blind review
+
+
+ABSTRACT
+
+
+Recent years have witnessed remarkable progress in multi-view diffusion models
+for 3D content creation. However, there remains a significant gap in image quality
+and prompt-following ability compared to 2D diffusion models. A critical bottleneck is the scarcity of high-quality 3D data with detailed captions. To address this
+challenge, we propose **Bootstrap3D**, a novel framework that automatically generates an arbitrary quantity of multi-view images to assist in training multi-view
+diffusion models. Specifically, we introduce a data generation pipeline that employs (1) 2D and video diffusion models to generate multi-view images based on
+constructed text prompts, and (2) our fine-tuned 3D-aware **MV-LLaVA** for filtering high-quality data and rewriting inaccurate captions. Leveraging this pipeline,
+we have generated 1 million high-quality synthetic multi-view images with dense
+descriptive captions to address the shortage of high-quality 3D data. Furthermore,
+we present a **Training** **Timestep** **Reschedule** **(TTR)** strategy that leverages the
+denoising process to learn multi-view consistency while maintaining the original
+2D diffusion prior. Extensive experiments demonstrate that Bootstrap3D can generate high-quality multi-view images with superior aesthetic quality, image-text
+alignment, and maintained view consistency.
+
+
+1 INTRODUCTION
+
+
+3D content creation stands as a fundamental challenge within the generative domain, boasting
+widespread applications in augmented reality (AR) and game modeling. Unlike 2D image generation, the dearth of high-quality 3D models persists as a significant hurdle to overcome. In the
+realm of 2D image generation, the pivotal role of training on billion-scale image-text pairs (Schuhmann et al., 2022) has been firmly established (Betker et al., 2023; Rombach et al., 2022; Li et al.,
+2024; Chen et al., 2023a; 2024a). However, in 3D content generation, the scarcity of high-quality
+3D models often compels reliance on the priors of 2D diffusion models. The predominant methodologies in this domain can be categorized into two main streams: 1) Gaining optimized neural
+representations from fixed 2D diffusion models via Score Distillation Sampling (SDS) loss (Poole
+et al., 2022; Shi et al., 2023b; Liu et al., 2023b; Shi et al., 2023a; Liu et al., 2023a; Wang et al.,
+2024a), which are time-intensive, lacking diversity and suffer from low robustness although capable
+of producing high-quality 3D objects. 2) Fine-tuning 2D diffusion models to achieve multi-view
+generation (Li et al., 2023a; Shi et al., 2023a;b), directly synthesizing 3D objects through sparse
+reconstruction models (Li et al., 2023a; Wang et al., 2023b; Xu et al., 2024a;b; Tang et al., 2024a;
+Wei et al., 2024). With recent improvements in large-scale sparse view reconstruction models and
+3D representations (Kerbl et al., 2023), the second stream is garnering increasing attention.
+
+
+Fine-tuning 2D diffusion models for multi-view generation remains challenging owing to the insufficiency in both data quality and quantity. Previous methods (Qiu et al., 2023; Li et al., 2023a;
+Shi et al., 2023b; Deitke et al., 2024) primarily train on a filtered subset of high-quality data from
+Objaverse (Deitke et al., 2023) and Objaverse-XL (Deitke et al., 2024). The scarcity of high-quality
+data often introduces various shortcomings. In single-view based novel view synthesis (Liu et al.,
+2023b; Shi et al., 2023a; Wang & Shi, 2023; Voleti et al., 2024), if the input images deviate from the
+distribution of the training data, it can induce issues such as motion blurring, object distortion and
+deformation (Shi et al., 2023a).
+
+
+1
+
+
+Cartoon Style PhotoRealistic CAD Low Poly
+
+
+**A flaming candle**
+
+
+**circular pond surrounded by blooming lilies, in the center of a sunlit courtyard**
+
+
+Figure 1: **Bootstrap3D** can generate high quality multi-view images with precise long text control
+and style customization while maintaining view consistency.
+
+
+Moreover, in direct text-to-multi-view image generation, the pursuit of enhancing view consistency
+compromises the aesthetic and photo-realistic quality. For instance, Intant3D (Li et al., 2023a) finetunes SDXL (Podell et al., 2023) using only 10K high-quality Objaverse (Deitke et al., 2023) data
+with a small learning rate for 10K steps, which does not fundamentally prevent the catastrophic
+forgetting problem of losing 2D diffusion prior, leading to compromised image quality. Recent
+endeavors have predominantly focused on alleviating data scarcity and improving view consistency
+from a model-centric perspective (Kant et al., 2024; Shi et al., 2023a; Tang et al., 2024b), with
+limited exploration into the improvement of training data and training method itself.
+
+
+Recent Multimodal Large Language Models (MLLMs) (Liu et al., 2024a; Chen et al., 2023b; Li
+et al., 2023b; Alayrac et al., 2022; Anil et al., 2023) like GPT-4V (OpenAI, 2023a) and Gemini (Team et al., 2023), possess image understanding capabilities and rudimentary 3D world awareness, has enabled automatic quality assessment of multi-view images and dense caption generation.
+Furthermore, notable advancements in video diffusion (Brooks et al., 2024; Voleti et al., 2024) have
+improved the generalizability of novel view synthesis (Voleti et al., 2024; Chen et al., 2024b; Kwak
+et al., 2023). Employing these advancements, we propose Bootstrap3D to generate synthetic data
+to counteract the data deficiencies inherent in training multi-view diffusion models. To be specific,
+we introduce the Bootstrap3D data generation pipeline for producing high-quality multi-view images with dense descriptive captions. Subsequently, we fine-tune a multi-view-aware MLLM model,
+dubbed as MV-LLaVA, to achieve fully automated high-quality data annotation with both efficiency
+and accuracy. To mitigate catastrophic forgetting of 2D diffusion prior, we introduce a training
+timestep reschedule (TTR) strategy when fine-tuning multi-view diffusion models. Specifically, we
+use the phased nature of the denoising process (Ho et al., 2020) and limit different training time
+steps for synthetic data to achieve enhanced image quality with maintained view consistency.
+
+
+2
+
+
+Through extensive experiments, we demonstrate that our method significantly enhances the adherence of the multi-view diffusion model to text prompts and image quality while ensuring view consistency. Integrated with the reconstruction model, our approach facilitates the creation of 3D models
+with superior quality. We show some of the qualitative results in Fig. 1, where our model can achieve
+high quality multi-view images with precise text control and style customization. Our contributions
+are summarized into the following points:
+
+
+**1)** We present an automated **Bootstrap3D** data generation pipeline that uses the video diffusion
+model and our fine-tuned 3D-aware MV-LLaVA to synthesize an arbitrary number of high-quality
+multi-view image text pairs.
+
+
+**2)** We propose a Training Time-step Reschedule (TTR) strategy for fine-tuning the multi-view diffusion model that employs both synthetic data and real data to enhance image quality and image-text
+alignment while maintaining view consistency.
+
+
+**3)** We generate 1 million multi-view images with dense descriptive captions suitable for training
+the multi-view diffusion model and provide dense descriptive captions on Objaverse Deitke et al.
+(2023), which mitigates the gap with the 2D diffusion model from a data perspective.
+
+
+2 RELATED WORK
+
+
+**Existing** **3D** **datasets** **and** **data** **pre-processing.** Existing object level 3D datasets, sourced either
+from CAD (Chang et al., 2015; Wu et al., 2015; Deitke et al., 2023; 2024) or scan from real objects (Aanæs et al., 2016; Yao et al., 2020; Downs et al., 2022; Wu et al., 2023), are still small in size.
+Most state-of-the-art open-sourced 3D content creation models are trained on Objaverse (Deitke
+et al., 2023). However, there still exists a huge gap compared to data used for training 2D diffusion
+models (Schuhmann et al., 2022). In addition to quantity, quality is also an important problem remains to be solved as many methods (Shi et al., 2023b; Li et al., 2023a; Qiu et al., 2023; Tang et al.,
+2024a) trained on Objaverse rely on filtering out low-quality data, making the precious 3D data even
+less. Another critical gap that requires attention is the quality of the 3D object’s caption. Previous
+work Cap3D (Luo et al., 2024) propose to apply BLIP-2 (Li et al., 2023b) and GPT-4 (OpenAI,
+2023b) to generate caption based on multi-view images. However, this approach, without direct
+input image into GPT, can lead to severe hallucination. Given recent breakthroughs in improving
+text-image alignment through caption rewriting (Betker et al., 2023; Chen et al., 2023a; 2024a; Esser
+et al., 2024), there is a pressing need to rewrite denser and more accurate captions for 3D objects
+with the assistance of advanced Multimodal Large Language Models (MLLMs). In this work, we
+propose a new data generation pipeline to synthesize multi-view images and rewrite captions for 3D
+objects incorporating additional quality scoring mechanisms to address the aforementioned issues.
+
+
+**Text-to-3D content creation.** The field of 3D content creation has been a vibrant area of research
+over the past years. One prominent research direction explores the use of Score Distillation Sampling (SDS) (Poole et al., 2022) and its variants (Chen et al., 2023c; Chung et al., 2023; Hertz et al.,
+2023; Liang et al., 2023; Lin et al., 2023; Liu et al., 2023b; Shi et al., 2023b; Liu et al., 2023c; Long
+et al., 2023; Wang et al., 2024a; Tang et al., 2023; Wang et al., 2023a; Yang et al., 2024; Qi et al.,
+2024), using the priors of 2D diffusion models to optimize 3D representations. While these methods
+have demonstrated success in producing high-quality 3D generations, they often require prolonged
+optimization time to converge. In contrast, recent studies (Hong et al., 2023; Wang et al., 2023b;
+Li et al., 2023a; Tang et al., 2024a; Tochilkin et al., 2024; Xu et al., 2024b; Wei et al., 2024) have
+proposed the direct inference of 3D representations (Mildenhall et al., 2021; Chan et al., 2022; Kerbl
+et al., 2023; Zhang et al., 2023a) conditioned by images. Among these approaches, Instant3D (Li
+et al., 2023a) stands out by utilizing multi-view images of the same object to directly deduce the Triplane (Chan et al., 2022) representation. This approach effectively addresses the issue of ambiguous
+unseen areas inherent in the single image to 3D conversions, as encountered in LRM (Hong et al.,
+2023) and TripoSR (Tochilkin et al., 2024). Instant3D, along with subsequent works (Xu et al.,
+2024b; Zheng et al., 2024; Wang et al., 2024b; Xu et al., 2024a), efficiently decomposes 3D generation into two processes: the generation of multi-view images using multi-view diffusion model (Liu
+et al., 2023b;c;a; Shi et al., 2023b; Liu et al., 2024b; Shi et al., 2023a; Long et al., 2023; Kant et al.,
+2024; Voleti et al., 2024) and large reconstruction model to generate 3D representations conditioned
+on these multi-view images. In this work, we introduce a method that significantly enhances the
+scalability of training and data generation for multi-view image generation.
+
+
+3
+
+
+Figure 2: **Bootstrap3D data generation pipeline** that consists of 1) using LLM to generate diverse
+text prompts 2) employing the T2I model to generate single-view images 3) synthesizing arbitrary
+number of multi-view images by applying the video diffusion model, 4) employing MV-LLaVA to
+filter and select only high-quality data, and rewrite captions to be dense and descriptive.
+
+
+**Video** **diffusion** **for** **novel** **view** **synthesis.** Recent advancements in video diffusion have marked
+a significant breakthrough, with models such as Sora (Brooks et al., 2024) and SVD (Blattmann
+et al., 2023) scaling up the direct generation process from images to videos. Following these developments, a series of works (Wang et al., 2023c; Kwak et al., 2023; Blattmann et al., 2023; MelasKyriazi et al., 2024; Han et al., 2024; Chen et al., 2024b) represented by SV3D (Voleti et al., 2024),
+have fine-tuned these video diffusion models for 3D content creation. Despite these groundbreaking
+developments, the new perspective images generated based on video priors still suffer from issues
+like motion blur. In this work, we propose to utilize SV3D (Voleti et al., 2024) as a data generator to
+produce novel views of given images with additional quality checks to leave only high-quality data.
+
+
+**Multimodal** **Large** **Language** **Models.** With the development of large language models (Brown
+et al., 2020; OpenAI, 2023b; Chowdhery et al., 2022; Anil et al., 2023; Hoffmann et al., 2022;
+Touvron et al., 2023), multimodal large language models (MLLMs) (Zhang et al., 2023b; Alayrac
+et al., 2022; Li et al., 2023b; 2022; Huang et al., 2023; Driess et al., 2023; Awadalla et al., 2023;
+Liu et al., 2024a; Dong et al., 2024; Sun et al., 2023), such as GPT-4V (OpenAI, 2023a), have
+demonstrated groundbreaking 2D comprehension capabilities and open-world knowledge. As is
+discovered in GPTEval3D (Wu et al., 2024), GPT-4V can achieve human-aligned evaluation for
+multi-view images rendered from 3D objects. In this work, we fine-tune the LLaVA (Liu et al.,
+2024a) for quality judgment and descriptive caption generation based on multi-view images.
+
+
+3 METHODS
+
+
+Due to the scarcity of high-quality 3D data, we develop the Bootstrap3D data generation pipeline
+to efficiently construct an arbitrary number of training data (Sec. 3.1). Subsequently, the quality
+of generated multi-view images is assessed using the powerful GPT-4V (OpenAI, 2023a) or our
+proposed MV-LLaVA (Liu et al., 2024a) model to generate dense descriptive captions efficiency
+and faithfully (Sec. 3.2). We also design a training timestep reschedule (Sec. 3.3) when fine-tuning
+the multi-view diffusion model with our synthetic and real data.
+
+
+3.1 BOOTSTRAP3D DATA GENERATION PIPELINE
+
+
+As illustrated in Fig.2, our data generation pipeline initially employs GPT-4 (OpenAI, 2023a) to
+generate a multitude of imaginative and varied text prompts (Wu et al., 2024). Subsequently, to
+generate 2D images that closely align with the text prompts, we utilize the PixArt-Alpha (Chen
+et al., 2023a) model use FlanT5 (Chung et al., 2024) text encoder with DiT (Peebles & Xie, 2023)
+architecture for text-to-image (T2I) generation. Thereafter, we use SV3D (Voleti et al., 2024) for
+novel view synthesis. Given the significant motion blur and distortion often present in SV3D (Voleti
+et al., 2024) outputs, we further employ Multimodal Large Language Models(MLLM) to evaluate
+the quality of multi-view images. To rectify mismatches between multi-view images and the original
+
+
+4
+
+
+Figure 3: **MV-LLaVA.** We use GPT-4V (OpenAI, 2023a) to generate long descriptive captions,
+quality scoring, and reasoning processes for multi-view images to construct the instruction tuning
+dataset. Then we fine-tune our MV-LLaVA based on LLaVA (Liu et al., 2024a) to serve as the
+human-aligned quality checker and captioner for multi-view images.
+
+
+text prompts induced by novel view synthesis and provide more precise captions, we further propose
+MV-LLaVA to generate dense descriptive captions for multi-view images.
+
+
+3.2 MULTI-VIEW LLAVA (MV-LLAVA)
+
+
+To efficiently generate captions and label quality scores for both generated multi-view images and
+3D assets in Objaverse (Deitke et al., 2023), we propose the Multi-View LLaVA (MV-LLaVA) that
+fine-tune LLaVA (Liu et al., 2024a) based on our instructive conversation pairs generated by the
+powerful GPT-4V (OpenAI, 2023a).
+
+
+**Preparing the instruction tuning data.** As shown in Fig.2, we use GPT-4 to generate 20k varied
+text prompts based on prompts designed in (Wu et al., 2024) and use PixArt-alpha (Chen et al.,
+2023a) to generate single view image and use SV3D (Voleti et al., 2024) or Zero123++ (Shi et al.,
+2023a) to generate multi-view images. For these 20k generated multi-view images, we prompt GPT4V (OpenAI, 2023a) to generate comments on view consistency, image quality and generate dense
+descriptive captions. For the additional 10K rendered multi-view images from Objaverse (Deitke
+et al., 2023), we prompt GPT-4V (detailed prompts in Sup. A.5.1) to offer feedback on the quality and aesthetic appeal of 3D objects, along with style judgments. We utilize these 30K highquality multi-view image text pairs (prompts detailed in Sup. A.5.2) as the instruction tuning data
+for LLaVA.
+
+
+**Instruction tuning.** As presented in the left part of Fig. 3, due to the LLaVA’s maximum training
+context length constraints of 2048, we input four images separately into CLIP-L/14 (Radford et al.,
+2021) and generate 4 _×_ 256 image tokens. Inspired by ShareGPT-4V (Chen et al., 2023b), we freeze
+only a portion of layers of CLIP (Radford et al., 2021) in the first stage of pre-training to enhance
+multi-view awareness and texture perception of vision encoder (detailed in Sup. A.4.1). As shown
+in the right part of Fig. 3, we first ask the model to generate descriptions, then let the model score
+the quality based on multi-view images and captions. Our approach encourages LLM to deduct
+more reasonable quality scores through chain-of-thought (Wei et al., 2022). A mixture of original
+training data of LLaVA is adopted to mitigate over-fitting. As a result, we obtain MV-LLaVA,
+which efficiently filters and re-captions both synthetic data and 3D assets. As detailed in Sup.A.4,
+MV-LLaVA can not only generate more accurate, less hallucinated dense captions that faithfully
+describe 3D objects compared to Cap3D (Luo et al., 2024) but also assign the human-aligned quality
+score on both synthetic data and Objaverse assets. The filtered high-quality multi-view images with
+rewritten dense captions served as training data for the diffusion model.
+
+
+5
+
+
+During training, _t_ is randomly sampled in [0 _, N_ ] ( _N_ = 1000 in (Chen et al., 2023a; Rombach
+et al., 2022)) for the model to predict the added noise _ϵt_, where _x_ 0 denotes for the clear nature image and _xN_ denotes for pure Gaussian noise. As depicted in Fig.4, when _t_ is large, the denoising
+process primarily focuses on determining the global low frequency( _f_ ) content such as overall structure and shape. Conversely, when _t_ is small, the denoising process is predominantly responsible for
+generating high _f_ components such as texture.
+
+
+When adapting Stable Diffision (Rombach et al., 2022) for multi-view generation, the previous approach (Shi et al., 2023a) changes the default scaled linear schedule into the linear schedule to
+emphasize more on early denoising stage for structural variation and view consistency. Inspired by
+this, we propose restricting the denoising time step of synthetic data during training. As small yet
+observable blur still exists in synthetic data with novel view generated by SV3D (Voleti et al., 2024),
+we limit them to training diffusion model only with large _t_ . This restricts the backpropagation of
+these synthetic data to focus on the low-frequency component of the image like the overall structure and shape that faithfully follow text prompts and consistency between different views. Small _t_
+values are only sampled on clear and physically consistent multi-view images rendered from Objaverse (Deitke et al., 2023) and supplemented high-quality 2D images from SA-1B (Kirillov et al.,
+
+
+6
+
+
+**[multi view] [photo-realistic]** **[multi view] [CAD]** **[single view] [photo-realistic]**
+
+
+A lively, Renaissance-style
+banquet around a castle with
+jesters and knights.
+
+
+A section of an ancient temple
+in India constructed from red
+sandstone.
+
+
+An animated character
+dressed in a combination
+of purple and blue…
+
+
+Figure 4: **Training** **Timestep** **Reschedule** **(TTR).** For different types of training data, we restrict
+the training time step _t_ accordingly to achieve the balance between varied high aesthetic images that
+are better aligned with text prompt, photo-realistic texture, and view consistency for 3D generation.
+
+
+3.3 TRAINING TIMESTEP RESCHEDULE (TTR)
+
+
+Despite retaining only relatively high-quality synthetic data with minimal motion blur from
+SV3D (Voleti et al., 2024) through MV-LLaVA, small areas of blurring persist, stemming from
+both motion and out-of-distribution scenarios for SV3D and SVD (Blattmann et al., 2023). These
+blurred data can potentially compromise the final performance of the multi-view diffusion model.
+To restrict the training time step for synthetic data, we proposed a simple yet effective Training
+Timestep Reschedule (TTR) method.
+
+
+**Background.** Before delving into TTR, we briefly review some basic concepts needed to understand
+diffusion models (DDPMs) (Ho et al., 2020; Sohl-Dickstein et al., 2015; Salimans & Ho, 2022;
+Rombach et al., 2022; Chen et al., 2023a). Gaussian diffusion models assume a forward noising
+process which gradually applies noise to real data _x_ 0
+
+_q_ ( _xt|x_ 0) = _N_ ( _xt_ ; _[√]_ _α_ ¯ _tx_ 0 _,_ (1 _−_ _α_ ¯ _t_ ) **I** ) (1)
+
+
+here constants _α_ ¯ _t_ are hyperparameters. By applying the reparameterization trick, we can sample
+
+
+_√_
+_xt_ = _[√]_ _α_ ¯ _tx_ 0 +
+
+
+1 _−_ _α_ ¯ _tϵt_ (2)
+
+
+prompt. More results with higher resolution are available in Sup.A.8.1.
+
+
+2023), help model outcome high-quality images with more photo-realistic and varied texture details.
+
+
+4 EXPERIMENTS
+
+
+4.1 EXPERIMENT SETTINGS
+
+
+**Training** **data.** For each set of 4-view images obtained from both Objaverse (Deitke et al., 2023)
+and generated by SV3D (Voleti et al., 2024) or Zero123++(Shi et al., 2023a), we use MV-LLaVA
+to generate long descriptive captions with predicted quality score. Detailed quality check of MVLLaVA is supplied in Sup. A.4 and data analysis in Sup. A.3. In the end, we generate 200K 4-view
+image-text pairs on Objaverse (Deitke et al., 2023), 1000K 4-view image-text pairs from synthetic
+data from SV3D (Voleti et al., 2024) and Zero123++(Shi et al., 2023a). We also sample 35K HQ
+SA (Kirillov et al., 2023) data with captions from ShareGPT4V (Chen et al., 2023b).
+
+
+**Training** **details.** We test our framework directly on the text-to-multi-view diffusion model. We
+fine-tune PixArt- _α_ (Chen et al., 2023a) with backbone DiT-XL/2 (Peebles & Xie, 2023) model
+on the data as mentioned earlier. Similar to Instant3D (Li et al., 2023a), we train the diffusion
+model directly on 4-view images naturally arranged in a 2 _×_ 2 grid. For 4 same view images from
+SA (Kirillov et al., 2023), we limit training time step _t_ _∈_ [0 _,_ 50]. We limit synthetic multi-view
+images _t_ _∈_ [200 _,_ 1000]. Regarding 3D object-rendered images, we do not limit _t_ but sample more
+frequently in the range [50 _,_ 200] as a complement. We set the total batch size to 1024 with the
+learning rate set to 8e-5 for 20K steps. Training is conducted on 32 NVIDIA A100-80G GPUs for
+20 hours with Flan-T5-XXL (Chung et al., 2024) text features and VAE (Kingma & Welling, 2013)
+features pre-extracted.
+
+
+**Evaluation** **metrics.** We primarily benchmark the quantitative results of our approach and other
+methods from two main dimensions: 1). **Image-text alignment** measured by CLIP score and CLIP
+
+7
+
+
+Table 1: **Benchmark of CLIP and FID score of text-to-multi-view (T2MV) models** on generated
+4 view images, CLIP score tests on 110 text prompts from GPTeval3D (Wu et al., 2024) while FID
+is measured with the distribution of 30K object-centric images generated by SOTA T2I models. For
+text-to-image-to-multi-view(T2I2MV), we input I2MV models with single view images generated
+by Pixart- _α_, which superior single view image quality is marked in green .
+
+
+CLIP-R Score _↑_ CLIP Score _↑_ FID _↓_
+**Domain** **Method**
+CLIP-L/14 CLIP-bigG CLIP-L/14 CLIP-bigG PG2.5 PixArt- _α_
+
+
+T2I PixArt- _α_ 96.1 94.7 25.9 41.5 20.7 5.4
+
+
+SV3D 78.8 81.3 24.7 37.3 55.7 54.2
+T2I2MV CRM 77.5 85.1 24.9 38.9 59.0 52.2
+Zero123++ 78.0 84.5 24.2 36.9 53.2 49.3
+
+
+Instant3D (unofficial) 83.6 91.1 25.6 39.2 83.2 77.9
+T2MV MVDream 84.8 89.3 25.5 38.4 60.2 59.2
+Bootstrap3D **88.8** **92.5** **25.8** **40.1** **42.4** **31.0**
+
+
+Figure 6: **Bootstrap3D** **can** **generate** **high** **quality** **multi-view** **images** in out of domain cases
+compare to other edge-cutting multi-view diffusion models trained on Objaverse only.
+
+
+R score indicating the prompt follow ability of text-to-multi-view (T2MV) diffusion model. 2).
+**Quality of generated images** measured by FID (Heusel et al., 2017). Given the trend of decoupling
+multi-view image generation and sparse view reconstruction, we conduct tests separately on multiview images by T2MV and rerendered images from generated 3D objects. To test the robustness
+and diversity of Bootstrap3D beyond prompts generated by GPT, we also collect real user prompts
+from public website, the details and test results are available in Sup. A.1.
+
+
+**Evaluation** **details.** For CLIP-R Score and CLIP Score, we test on 110 text prompts from GPTeval3D (Wu et al., 2024) using different CLIP models (i.e., CLIP-L/14 (Radford et al., 2021) and
+CLIP-bigG (Ilharco et al., 2021)) following the same setting of Instant3D (Li et al., 2023a). Regarding the FID (Heusel et al., 2017) test, as there is no golden standard for HQ 3D objects, we
+follow the similar evaluation idea of PlayGround2.5 (Li et al., 2024) (PG2.5) to use powerful T2I
+model generated images to form ground truth (GT) distribution. We use curated prompts to guide
+powerful PixArt and PG2.5 to generate high-quality CAD-style images with a single object in the
+pure background. Rembg (etc, 2020) is adopted to create white background object-centric images.
+We use the method proposed in GPTeval3D (Wu et al., 2024) to generate 3K prompts. For both
+PG-2.5 and PixArt, we generate 10 images for each prompt with different seeds, resulting in 30K
+images to form the GT distribution of high-quality CAD-style objects.
+
+
+**Comparing methods.** In addition to Instant3D (Li et al., 2023a) and MVDream (Shi et al., 2023b)
+as direct text-to-multi-view (T2MV) methods, we also adopt edge-cutting single image to multi-view
+(I2MV) methods CRM (Wang et al., 2024b), SV3D (Voleti et al., 2024) and Zero123++(Shi et al.,
+2023a). For these methods, we condition the diffusion model on the single view image generated
+by PixArt (prompted to generate CAD-style single object-centric image). The result of the CLIP
+score is 3 times averaged with different seeds. For FID, we use 3 different seeds for each of the 3K
+prompts to generate 9K images to test the distance with GT high-quality images.
+
+
+4.2 EVALUATION OF MULTI-VIEW IMAGES
+
+
+As illustrated in Tab.1, compared to other methods, the T2MV diffusion model trained by our framework yields the best results both according to image-text alignment and image quality. For qualitative experiments, we visualize some of the comparisons with other edge-cutting multi-view diffusion
+
+
+8
+
+
+model in Fig.6. For these image-to-multi-view models, we condition them on the top-left image generated by Bootstrap3D. Compared to these models trained solely on Objaverse Deitke et al. (2023),
+our model demonstrates superior generalizability when the image domain is beyond the domain of
+Objaverse. Since it is difficult to directly measure view consistency as there is no ground truth
+3D object for text-to-3D generation. we evaluate the view consistency by synthesizing 3D objects
+through large reconstruction model in the following experiments. Qualitative results of real user
+cases are in Sup. A.1.
+
+
+4.3 EVALUATION OF GENERATED 3D OBJECTS
+
+
+Table 2: **Benchmark of CLIP and FID score of generated 3D objects** based on rendered 9 view
+images. *MVDream is tested on 200 generated objects for FID test using SDS (Shi et al., 2023b),
+other methods are tested on 1000 objects using GRM (Xu et al., 2024b) and InstantMesh (Xu et al.,
+2024a) as sparse view reconstruction model.
+
+
+CLIP-R Score _↑_ CLIP Score _↑_ FID _↓_
+**Reconstruction** **Method**
+
+CLIP-L/14 CLIP-bigG CLIP-L/14 CLIP-bigG PG2.5 PixArt
+
+
+SDS MVDream* 85.2 90.8 **26.1** 39.4 57.8 56.7
+
+
+Zero123++ 73.2 84.1 23.0 37.2 82.3 88.8
+InstantMesh Bootstrap3D **87.1** **92.0** 26.0 39.2 61.2 55.3
+
+
+View consistency is another crucial factor in reconstructing reasonable 3D objects. Miss alignment
+between different views can lead to blurred areas in reconstructed objects by large reconstruction
+model (Hong et al., 2023; Wei et al., 2024). This misalignment causes a significant deterioration in
+quality, resulting in a notable increase in metrics like FID. To assess the view consistency directly
+on 3D object, we employ GRM (Xu et al., 2024b) and InstantMesh (Xu et al., 2024a) to reconstruct
+the object given sparse view images generated in Sec. 4.2. We render 9 view images evenly in orbit
+for each object and evaluate the image-text alignment and image quality. As reported in Tab. 2.
+Bootstrap3D, after conditioning GRM or InstantMesh on 4 view images, can generate the best 3D
+objects both according to image-text alignment and image quality. GPT-4V based human-aligned
+evaluation based on GPTeval3D (Wu et al., 2024) is supplied in Sup. A.6.
+
+
+We also present visualizations of some results in Fig.5. Bootstrap3D can generate objects with
+higher quality and prompt following ability. For other methods, as shown in the first column of
+Fig.5, although the first image may be well aligned with the given text prompt, the final 3D object
+may be compromised due to the limitations of its poor generalizability as they are also fine-tuned on
+Objaverse (Deitke et al., 2023) only. More visualizations and discussions of this are in Sup. A.2
+
+
+4.4 ABLATION STUDY
+
+
+**Training Timestep Reschedule (TTR)** is proposed in 3.3 to better integrate different types of data.
+The training time step of synthetic data is restricted in [ _T,_ 1000], where _T_ is a hyper-parameter to be
+set in training. We demonstrate the effect of the time-step limit in Fig.7, where the bar in the middle
+is the value of _T_ . When _T_ is large, namely synthetic data won’t affect more time-step at the end of
+the denoising process, Synthetic data has less influence on the denoising process towards the end,
+which leads to better view consistency but lower prompt-following ability. Conversely, if _T_ is small,
+the denoised result better follows the given text prompt but blurring becomes much more severe. In
+summary, there is a trade-off in injecting synthetic data into the training process: better image-text
+alignment comes at the cost of worse view consistency and increased blurring. Ultimately, we set
+_T_ = 200 based on empirical study.
+
+
+**Synthetic data and dense captioning** are proposed in our work to achieve high-quality images and
+better image-text alignment. We ablate their effects and the importance of data quantity in Tab. 3.
+Direct use of synthetic data without Training Timestep Reschedule (TTR) can cause severe blurs and
+deformation in final outcome. With the help of TTR, the mixture of data can not only improve imagetext alignment but also maintain view consistency. Replacing Cap3D (Luo et al., 2024)’s caption
+
+
+9
+
+
+GRM
+
+
+Instant3D (unofficial) 81.7 89.4 24.8 37.1 85.4 80.3
+SV3D 74.1 82.8 23.4 34.1 68.4 69.1
+Zero123++ 71.2 80.3 22.3 34.5 69.3 72.4
+Bootstrap3D 86.3 91.6 25.9 **39.7** **51.2** **50.7**
+
+
+Table 3: **Ablation study of proposed components and quantity of synthetic data.** with CLIP-R
+Score represents image-text alignment and FID represents image quality.
+
+
+Multi-view Image Generated Object
+Methods
+CLIP-R Score FID PG-2.5 CLIP-R Score FID PG-2.5
+
+
+Instant3D (unofficial) 83.6 83.2 81.7 85.4
+
+
+Cap3D only 77.9 101.3 74.6 120.4
+Cap3D + Synthetic Image (100k) w/o TTR 81.5 92.0 71.2 134.6
+Cap3D + Synthetic Image (100k) w/ TTR 83.3 60.8 80.2 70.6
+Dense recaption + Synthetic Image (100k) 87.4 50.2 85.1 50.9
+Dense recaption + Synthetic Image (500k) 88.8 42.4 86.3 51.2
+
+
+A cat with two different colored eyes
+
+
+400 300 200 100
+
+
+A collection of fresh vegetables arranged in a wicker basket
+
+Figure 7: **Ablation** **study** **of** **training** **time** **reschedule** **(TTR)** demonstrates a trade-off between
+image-text alignment and image quality with different _t_ .
+
+
+with MV-LLaVA’s dense descriptive caption further improves the model’s capability of following
+prompts faithfully. Improvement through increasing volume of data also proves the scalability of
+our framework.
+
+
+5 CONCLUSION AND DISCUSSION
+
+
+In this work, we introduce a novel framework that employs MLLMs and diffusion models to synthesize high-quality data for bootstrapping multi-view diffusion models. With a powerful fine-tuned
+3D-aware MLLM serving as the dense captioner and quality filter, the generated synthetic data addresses the issue of insufficient high-quality 3D data. The proposed strategy of injecting different
+data at different training time steps uses the property of the denoising process to further achieve
+higher image quality while maintaining view consistency. We believe this work will contribute to
+the goal of achieving 3D content creation with each rendered view comparable with the single view
+diffusion model, with more advanced MLLMs and diffusion models on the horizon.
+
+
+**Limitations** **and** **future** **work.** Despite its promise, our work still faces several unresolved challenges. Firstly, the multi-view diffusion model is only the first step of the 3D content creation
+pipeline. Sparse view reconstruction models also need improvement as most edge-cutting sparse
+view reconstruction models are also trained on Objaverse Deitke et al. (2023) only. Secondly, Although MLLMs can estimate general quality and view consistency, subtle view inconsistency is
+hard to detect until ambiguity leads to blurred areas in reconstructed 3D object. While the proposed
+Training Timestep Reschedule can mitigate this problem, it cannot solve the problem fundamentally.
+Using synthetic data to train sparse view reconstruction models and quality estimation directly based
+on the reconstructed object are thus interesting future directions for improving 3D content creation.
+
+
+10
+
+
+6 ETHICS STATEMENT
+
+
+Our training code is modified based on public available repository [https://github.com/](https://github.com/PixArt-alpha/PixArt-alpha)
+[PixArt-alpha/PixArt-alpha.](https://github.com/PixArt-alpha/PixArt-alpha) Part of training data are synthesized by our proposed data
+generation pipeline. For other part of original Objaverse Deitke et al. (2023) data, we only use
+Cap3D Luo et al. (2024) filtered assets (Objects with CC BY-NC-SA and CC BY-NC licenses are
+removed, while we retain those with CC-BY 4.0, CC BY-SA, and CC0 licenses) and with face recognizable objects filtered through MSFW classifier and face detector. The ethical filtering in Cap3D
+make our work using only data without ethics problem. For our synthetic new data, We will launch
+both the generated captions for Objaverse Deitke et al. (2023) and high-quality synthetic data, model
+checkpoints and codes with CC-BY 4.0 license for the research community.
+
+
+7 REPRODUCIBILITY STATEMENT
+
+
+Main experimental setting/details (training data, hyperparameters, optimizer, evaluation settings,
+etc) are clearly presents in Sec. 4.1. For main results, we detail the full test settings in Sec. 4.1. For
+GPT-4V OpenAI (2023a) based preference study, we provide detailed test prompts and test settings
+in Sup. A.6. Readers can easily follow the same settings and reproduce all of our experiment results.
+We provide code for generating synthetic data. Both codes for training the model and testing are also
+available in supplementary material. The full data and model checkpoints are too large to provide
+public link without violation of double-blinding. We will release full data and model checkpoints
+after review.
+
+
+REFERENCES
+
+
+Henrik Aanæs, Rasmus Ramsbøl Jensen, George Vogiatzis, Engin Tola, and Anders Bjorholm Dahl.
+Large-scale data for multiple-view stereopsis. _International_ _Journal_ _of_ _Computer_ _Vision_, 120:
+153–168, 2016.
+
+
+Jean-Baptiste Alayrac, Jeff Donahue, Pauline Luc, Antoine Miech, Iain Barr, Yana Hasson, Karel
+Lenc, Arthur Mensch, Katie Millican, Malcolm Reynolds, Roman Ring, Eliza Rutherford, Serkan
+Cabi, Tengda Han, Zhitao Gong, Sina Samangooei, Marianne Monteiro, Jacob Menick, Sebastian Borgeaud, Andy Brock, Aida Nematzadeh, Sahand Sharifzadeh, Mikolaj Binkowski,
+Ricardo Barreira, Oriol Vinyals, Andrew Zisserman, and Karen Simonyan. Flamingo: a visual language model for few-shot learning. _ArXiv_, abs/2204.14198, 2022. URL [https:](https://api.semanticscholar.org/CorpusID:248476411)
+[//api.semanticscholar.org/CorpusID:248476411.](https://api.semanticscholar.org/CorpusID:248476411)
+
+
+Rohan Anil, Andrew M. Dai, Orhan Firat, Melvin Johnson, Dmitry Lepikhin, Alexandre Tachard
+Passos, Siamak Shakeri, Emanuel Taropa, Paige Bailey, Z. Chen, Eric Chu, J. Clark, Laurent El
+Shafey, Yanping Huang, Kathleen S. Meier-Hellstern, Gaurav Mishra, Erica Moreira, Mark Omernick, Kevin Robinson, Sebastian Ruder, Yi Tay, Kefan Xiao, Yuanzhong Xu, Yujing Zhang,
+Gustavo Hernandez Abrego, Junwhan Ahn, Jacob Austin, Paul Barham, Jan A. Botha, James
+Bradbury, Siddhartha Brahma, Kevin Michael Brooks, Michele Catasta, Yongzhou Cheng, Colin
+Cherry, Christopher A. Choquette-Choo, Aakanksha Chowdhery, C Cr´epy, Shachi Dave, Mostafa
+Dehghani, Sunipa Dev, Jacob Devlin, M. C. D’iaz, Nan Du, Ethan Dyer, Vladimir Feinberg,
+Fan Feng, Vlad Fienber, Markus Freitag, Xavier Garc´ıa, Sebastian Gehrmann, Lucas Gonz´alez,
+Guy Gur-Ari, Steven Hand, Hadi Hashemi, Le Hou, Joshua Howland, An Ren Hu, Jeffrey Hui,
+Jeremy Hurwitz, Michael Isard, Abe Ittycheriah, Matthew Jagielski, Wen Hao Jia, Kathleen
+Kenealy, Maxim Krikun, Sneha Kudugunta, Chang Lan, Katherine Lee, Benjamin Lee, Eric
+Li, Mu-Li Li, Wei Li, Yaguang Li, Jun Yu Li, Hyeontaek Lim, Han Lin, Zhong-Zhong Liu,
+Frederick Liu, Marcello Maggioni, Aroma Mahendru, Joshua Maynez, Vedant Misra, Maysam
+Moussalem, Zachary Nado, John Nham, Eric Ni, Andrew Nystrom, Alicia Parrish, Marie Pellat, Martin Polacek, Alex Polozov, Reiner Pope, Siyuan Qiao, Emily Reif, Bryan Richter, Parker
+Riley, Alexandra Ros, Aurko Roy, Brennan Saeta, Rajkumar Samuel, Renee Marie Shelby, Ambrose Slone, Daniel Smilkov, David R. So, Daniela Sohn, Simon Tokumine, Dasha Valter, Vijay
+Vasudevan, Kiran Vodrahalli, Xuezhi Wang, Pidong Wang, Zirui Wang, Tao Wang, John Wieting, Yuhuai Wu, Ke Xu, Yunhan Xu, Lin Wu Xue, Pengcheng Yin, Jiahui Yu, Qiaoling Zhang,
+Steven Zheng, Ce Zheng, Wei Zhou, Denny Zhou, Slav Petrov, and Yonghui Wu. Palm 2 techni
+
+11
+
+
+cal report. _ArXiv_, abs/2305.10403, 2023. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:258740735)
+[CorpusID:258740735.](https://api.semanticscholar.org/CorpusID:258740735)
+
+
+Anas Awadalla, Irena Gao, Josh Gardner, Jack Hessel, Yusuf Hanafy, Wanrong Zhu, Kalyani
+Marathe, Yonatan Bitton, Samir Yitzhak Gadre, Shiori Sagawa, Jenia Jitsev, Simon Kornblith, Pang Wei Koh, Gabriel Ilharco, Mitchell Wortsman, and Ludwig Schmidt. Openflamingo: An open-source framework for training large autoregressive vision-language models. _ArXiv_, abs/2308.01390, 2023. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:261043320)
+[CorpusID:261043320.](https://api.semanticscholar.org/CorpusID:261043320)
+
+
+James Betker, Gabriel Goh, Li Jing, Tim Brooks, Jianfeng Wang, Linjie Li, Long Ouyang, Juntang
+Zhuang, Joyce Lee, Yufei Guo, et al. Improving image generation with better captions. _Computer_
+_Science. https://cdn. openai. com/papers/dall-e-3. pdf_, 2(3), 2023.
+
+
+Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik
+Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, et al. Stable video diffusion: Scaling
+latent video diffusion models to large datasets. _arXiv preprint arXiv:2311.15127_, 2023.
+
+
+Tim Brooks, Bill Peebles, Connor Holmes, Will DePue, Yufei Guo, Li Jing, David Schnurr, Joe
+Taylor, Troy Luhman, Eric Luhman, Clarence Ng, Ricky Wang, and Aditya Ramesh. Video
+generation models as world simulators. 2024. URL [https://openai.com/research/](https://openai.com/research/video-generation-models-as-world-simulators)
+[video-generation-models-as-world-simulators.](https://openai.com/research/video-generation-models-as-world-simulators)
+
+
+Tom B. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, T. J. Henighan, Rewon Child, Aditya Ramesh,
+Daniel M. Ziegler, Jeff Wu, Clemens Winter, Christopher Hesse, Mark Chen, Eric Sigler,
+Mateusz Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec Radford, Ilya Sutskever, and Dario Amodei. Language models are few-shot
+learners. _ArXiv_, abs/2005.14165, 2020. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:218971783)
+[CorpusID:218971783.](https://api.semanticscholar.org/CorpusID:218971783)
+
+
+Eric R Chan, Connor Z Lin, Matthew A Chan, Koki Nagano, Boxiao Pan, Shalini De Mello, Orazio
+Gallo, Leonidas J Guibas, Jonathan Tremblay, Sameh Khamis, et al. Efficient geometry-aware 3d
+generative adversarial networks. In _Proceedings of the IEEE/CVF conference on computer vision_
+_and pattern recognition_, pp. 16123–16133, 2022.
+
+
+Angel X Chang, Thomas Funkhouser, Leonidas Guibas, Pat Hanrahan, Qixing Huang, Zimo Li,
+Silvio Savarese, Manolis Savva, Shuran Song, Hao Su, et al. Shapenet: An information-rich 3d
+model repository. _arXiv preprint arXiv:1512.03012_, 2015.
+
+
+Junsong Chen, Jincheng Yu, Chongjian Ge, Lewei Yao, Enze Xie, Yue Wu, Zhongdao Wang, James
+Kwok, Ping Luo, Huchuan Lu, et al. Pixart- _α_ : Fast training of diffusion transformer for photorealistic text-to-image synthesis. _arXiv preprint arXiv:2310.00426_, 2023a.
+
+
+Junsong Chen, Chongjian Ge, Enze Xie, Yue Wu, Lewei Yao, Xiaozhe Ren, Zhongdao Wang, Ping
+Luo, Huchuan Lu, and Zhenguo Li. Pixart- _σ_ : Weak-to-strong training of diffusion transformer
+for 4k text-to-image generation. _arXiv preprint arXiv:2403.04692_, 2024a.
+
+
+Lin Chen, Jisong Li, Xiaoyi Dong, Pan Zhang, Conghui He, Jiaqi Wang, Feng Zhao, and Dahua
+Lin. Sharegpt4v: Improving large multi-modal models with better captions. _arXiv_ _preprint_
+_arXiv:2311.12793_, 2023b.
+
+
+Rui Chen, Yongwei Chen, Ningxin Jiao, and Kui Jia. Fantasia3d: Disentangling geometry and
+appearance for high-quality text-to-3d content creation. In _Proceedings of the IEEE/CVF Inter-_
+_national Conference on Computer Vision_, pp. 22246–22256, 2023c.
+
+
+Zilong Chen, Yikai Wang, Feng Wang, Zhengyi Wang, and Huaping Liu. V3d: Video diffusion
+models are effective 3d generators. _arXiv preprint arXiv:2403.06738_, 2024b.
+
+
+Aakanksha Chowdhery, Sharan Narang, Jacob Devlin, Maarten Bosma, Gaurav Mishra, Adam
+Roberts, Paul Barham, Hyung Won Chung, Charles Sutton, Sebastian Gehrmann, Parker Schuh,
+Kensen Shi, Sasha Tsvyashchenko, Joshua Maynez, Abhishek Rao, Parker Barnes, Yi Tay,
+
+
+12
+
+
+Noam M. Shazeer, Vinodkumar Prabhakaran, Emily Reif, Nan Du, Benton C. Hutchinson,
+Reiner Pope, James Bradbury, Jacob Austin, Michael Isard, Guy Gur-Ari, Pengcheng Yin, Toju
+Duke, Anselm Levskaya, Sanjay Ghemawat, Sunipa Dev, Henryk Michalewski, Xavier Garc´ıa,
+Vedant Misra, Kevin Robinson, Liam Fedus, Denny Zhou, Daphne Ippolito, David Luan, Hyeontaek Lim, Barret Zoph, Alexander Spiridonov, Ryan Sepassi, David Dohan, Shivani Agrawal,
+Mark Omernick, Andrew M. Dai, Thanumalayan Sankaranarayana Pillai, Marie Pellat, Aitor
+Lewkowycz, Erica Moreira, Rewon Child, Oleksandr Polozov, Katherine Lee, Zongwei Zhou,
+Xuezhi Wang, Brennan Saeta, Mark D´ıaz, Orhan Firat, Michele Catasta, Jason Wei, Kathleen S. Meier-Hellstern, Douglas Eck, Jeff Dean, Slav Petrov, and Noah Fiedel. Palm: Scaling language modeling with pathways. _J._ _Mach._ _Learn._ _Res._, 24:240:1–240:113, 2022. URL
+[https://api.semanticscholar.org/CorpusID:247951931.](https://api.semanticscholar.org/CorpusID:247951931)
+
+
+Hyung Won Chung, Le Hou, Shayne Longpre, Barret Zoph, Yi Tay, William Fedus, Yunxuan Li,
+Xuezhi Wang, Mostafa Dehghani, Siddhartha Brahma, et al. Scaling instruction-finetuned language models. _Journal of Machine Learning Research_, 25(70):1–53, 2024.
+
+
+Jaeyoung Chung, Suyoung Lee, Hyeongjin Nam, Jaerin Lee, and Kyoung Mu Lee. Luciddreamer:
+Domain-free generation of 3d gaussian splatting scenes. _arXiv preprint arXiv:2311.13384_, 2023.
+
+
+Matt Deitke, Dustin Schwenk, Jordi Salvador, Luca Weihs, Oscar Michel, Eli VanderBilt, Ludwig
+Schmidt, Kiana Ehsani, Aniruddha Kembhavi, and Ali Farhadi. Objaverse: A universe of annotated 3d objects. In _Proceedings_ _of_ _the IEEE/CVF_ _Conference on_ _Computer Vision and_ _Pattern_
+_Recognition_, pp. 13142–13153, 2023.
+
+
+Matt Deitke, Ruoshi Liu, Matthew Wallingford, Huong Ngo, Oscar Michel, Aditya Kusupati, Alan
+Fan, Christian Laforte, Vikram Voleti, Samir Yitzhak Gadre, et al. Objaverse-xl: A universe of
+10m+ 3d objects. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Xiaoyi Dong, Pan Zhang, Yuhang Zang, Yuhang Cao, Bin Wang, Linke Ouyang, Xilin Wei,
+Songyang Zhang, Haodong Duan, Maosong Cao, Wenwei Zhang, Yining Li, Hang Yan, Yang
+Gao, Xinyue Zhang, Wei Li, Jingwen Li, Kai Chen, Conghui He, Xingcheng Zhang, Yu Qiao,
+Dahua Lin, and Jiaqi Wang. Internlm-xcomposer2: Mastering free-form text-image composition
+and comprehension in vision-language large model, 2024.
+
+
+Laura Downs, Anthony Francis, Nate Koenig, Brandon Kinman, Ryan Hickman, Krista Reymann,
+Thomas B McHugh, and Vincent Vanhoucke. Google scanned objects: A high-quality dataset
+of 3d scanned household items. In _2022_ _International_ _Conference_ _on_ _Robotics_ _and_ _Automation_
+_(ICRA)_, pp. 2553–2560. IEEE, 2022.
+
+
+Danny Driess, F. Xia, Mehdi S. M. Sajjadi, Corey Lynch, Aakanksha Chowdhery, Brian Ichter,
+Ayzaan Wahid, Jonathan Tompson, Quan Ho Vuong, Tianhe Yu, Wenlong Huang, Yevgen Chebotar, Pierre Sermanet, Daniel Duckworth, Sergey Levine, Vincent Vanhoucke, Karol Hausman,
+Marc Toussaint, Klaus Greff, Andy Zeng, Igor Mordatch, and Peter R. Florence. Palm-e: An
+embodied multimodal language model. In _International Conference on Machine Learning_, 2023.
+[URL https://api.semanticscholar.org/CorpusID:257364842.](https://api.semanticscholar.org/CorpusID:257364842)
+
+
+Patrick Esser, Sumith Kulal, Andreas Blattmann, Rahim Entezari, Jonas M¨uller, Harry Saini, Yam
+Levi, Dominik Lorenz, Axel Sauer, Frederic Boesel, et al. Scaling rectified flow transformers for
+high-resolution image synthesis. _arXiv preprint arXiv:2403.03206_, 2024.
+
+
+Daniel Gatis etc. Rembg. [https://github.com/danielgatis/rembg, 2020.](https://github.com/danielgatis/rembg)
+
+
+Ye Fang, Zeyi Sun, Tong Wu, Jiaqi Wang, Ziwei Liu, Gordon Wetzstein, and Dahua Lin. Make-itreal: Unleashing large multimodal model’s ability for painting 3d objects with realistic materials,
+2024.
+
+
+Junlin Han, Filippos Kokkinos, and Philip Torr. Vfusion3d: Learning scalable 3d generative models
+from video diffusion models. _arXiv preprint arXiv:2403.12034_, 2024.
+
+
+Amir Hertz, Kfir Aberman, and Daniel Cohen-Or. Delta denoising score. In _Proceedings_ _of_ _the_
+_IEEE/CVF International Conference on Computer Vision_, pp. 2328–2337, 2023.
+
+
+13
+
+
+Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter.
+Gans trained by a two time-scale update rule converge to a local nash equilibrium. _Advances in_
+_neural information processing systems_, 30, 2017.
+
+
+Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. _Advances in_
+_neural information processing systems_, 33:6840–6851, 2020.
+
+
+Jordan Hoffmann, Sebastian Borgeaud, Arthur Mensch, Elena Buchatskaya, Trevor Cai, Eliza
+Rutherford, Diego de Las Casas, Lisa Anne Hendricks, Johannes Welbl, Aidan Clark, Tom
+Hennigan, Eric Noland, Katie Millican, George van den Driessche, Bogdan Damoc, Aurelia Guy, Simon Osindero, Karen Simonyan, Erich Elsen, Jack W. Rae, Oriol Vinyals, and
+L. Sifre. Training compute-optimal large language models. _ArXiv_, abs/2203.15556, 2022. URL
+[https://api.semanticscholar.org/CorpusID:247778764.](https://api.semanticscholar.org/CorpusID:247778764)
+
+
+Yicong Hong, Kai Zhang, Jiuxiang Gu, Sai Bi, Yang Zhou, Difan Liu, Feng Liu, Kalyan Sunkavalli,
+Trung Bui, and Hao Tan. Lrm: Large reconstruction model for single image to 3d. _arXiv preprint_
+_arXiv:2311.04400_, 2023.
+
+
+Shaohan Huang, Li Dong, Wenhui Wang, Yaru Hao, Saksham Singhal, Shuming Ma, Tengchao
+Lv, Lei Cui, Owais Khan Mohammed, Qiang Liu, Kriti Aggarwal, Zewen Chi, Johan Bjorck,
+Vishrav Chaudhary, Subhojit Som, Xia Song, and Furu Wei. Language is not all you need:
+Aligning perception with language models. _ArXiv_, abs/2302.14045, 2023. URL [https://](https://api.semanticscholar.org/CorpusID:257219775)
+[api.semanticscholar.org/CorpusID:257219775.](https://api.semanticscholar.org/CorpusID:257219775)
+
+
+Gabriel Ilharco, Mitchell Wortsman, Ross Wightman, Cade Gordon, Nicholas Carlini, Rohan
+Taori, Achal Dave, Vaishaal Shankar, Hongseok Namkoong, John Miller, Hannaneh Hajishirzi,
+Ali Farhadi, and Ludwig Schmidt. Openclip. [https://github.com/mlfoundations/](https://github.com/mlfoundations/open_clip)
+[open_clip, 2021.](https://github.com/mlfoundations/open_clip)
+
+
+Heewoo Jun and Alex Nichol. Shap-e: Generating conditional 3d implicit functions. _arXiv preprint_
+_arXiv:2305.02463_, 2023.
+
+
+Yash Kant, Ziyi Wu, Michael Vasilkovsky, Guocheng Qian, Jian Ren, Riza Alp Guler, Bernard
+Ghanem, Sergey Tulyakov, Igor Gilitschenski, and Aliaksandr Siarohin. Spad: Spatially aware
+multiview diffusers. _arXiv preprint arXiv:2402.05235_, 2024.
+
+
+Bernhard Kerbl, Georgios Kopanas, Thomas Leimk¨uhler, and George Drettakis. 3d gaussian splatting for real-time radiance field rendering. _ACM Transactions on Graphics_, 42(4):1–14, 2023.
+
+
+Diederik P Kingma and Max Welling. Auto-encoding variational bayes. _arXiv_ _preprint_
+_arXiv:1312.6114_, 2013.
+
+
+Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete
+Xiao, Spencer Whitehead, Alexander C Berg, Wan-Yen Lo, et al. Segment anything. In _Proceed-_
+_ings of the IEEE/CVF International Conference on Computer Vision_, pp. 4015–4026, 2023.
+
+
+Jeong-gi Kwak, Erqun Dong, Yuhe Jin, Hanseok Ko, Shweta Mahajan, and Kwang Moo Yi. Vivid1-to-3: Novel view synthesis with video diffusion models. _arXiv_ _preprint_ _arXiv:2312.01305_,
+2023.
+
+
+Daiqing Li, Aleks Kamko, Ehsan Akhgari, Ali Sabet, Linmiao Xu, and Suhail Doshi. Playground
+v2.5: Three insights towards enhancing aesthetic quality in text-to-image generation, 2024.
+
+
+Jiahao Li, Hao Tan, Kai Zhang, Zexiang Xu, Fujun Luan, Yinghao Xu, Yicong Hong, Kalyan
+Sunkavalli, Greg Shakhnarovich, and Sai Bi. Instant3d: Fast text-to-3d with sparse-view generation and large reconstruction model. _arXiv preprint arXiv:2311.06214_, 2023a.
+
+
+Junnan Li, Dongxu Li, Caiming Xiong, and Steven C. H. Hoi. Blip: Bootstrapping languageimage pre-training for unified vision-language understanding and generation. In _International_
+_Conference_ _on_ _Machine_ _Learning_, 2022. URL [https://api.semanticscholar.org/](https://api.semanticscholar.org/CorpusID:246411402)
+[CorpusID:246411402.](https://api.semanticscholar.org/CorpusID:246411402)
+
+
+14
+
+
+Junnan Li, Dongxu Li, Silvio Savarese, and Steven C. H. Hoi. Blip-2: Bootstrapping
+language-image pre-training with frozen image encoders and large language models. _ArXiv_,
+abs/2301.12597, 2023b. URL [https://api.semanticscholar.org/CorpusID:](https://api.semanticscholar.org/CorpusID:256390509)
+[256390509.](https://api.semanticscholar.org/CorpusID:256390509)
+
+
+Yixun Liang, Xin Yang, Jiantao Lin, Haodong Li, Xiaogang Xu, and Yingcong Chen. Luciddreamer: Towards high-fidelity text-to-3d generation via interval score matching. _arXiv preprint_
+_arXiv:2311.11284_, 2023.
+
+
+Chen-Hsuan Lin, Jun Gao, Luming Tang, Towaki Takikawa, Xiaohui Zeng, Xun Huang, Karsten
+Kreis, Sanja Fidler, Ming-Yu Liu, and Tsung-Yi Lin. Magic3d: High-resolution text-to-3d content creation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_ _Vision_ _and_ _Pattern_
+_Recognition_, pp. 300–309, 2023.
+
+
+Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Visual instruction tuning. _Advances_
+_in neural information processing systems_, 36, 2024a.
+
+
+Minghua Liu, Ruoxi Shi, Linghao Chen, Zhuoyang Zhang, Chao Xu, Xinyue Wei, Hansheng Chen,
+Chong Zeng, Jiayuan Gu, and Hao Su. One-2-3-45++: Fast single image to 3d objects with
+consistent multi-view generation and 3d diffusion. _arXiv preprint arXiv:2311.07885_, 2023a.
+
+
+Minghua Liu, Chao Xu, Haian Jin, Linghao Chen, Mukund Varma T, Zexiang Xu, and Hao Su. One2-3-45: Any single image to 3d mesh in 45 seconds without per-shape optimization. _Advances in_
+_Neural Information Processing Systems_, 36, 2024b.
+
+
+Ruoshi Liu, Rundi Wu, Basile Van Hoorick, Pavel Tokmakov, Sergey Zakharov, and Carl Vondrick.
+Zero-1-to-3: Zero-shot one image to 3d object. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _International_
+_Conference on Computer Vision_, pp. 9298–9309, 2023b.
+
+
+Yuan Liu, Cheng Lin, Zijiao Zeng, Xiaoxiao Long, Lingjie Liu, Taku Komura, and Wenping Wang.
+Syncdreamer: Generating multiview-consistent images from a single-view image. _arXiv preprint_
+_arXiv:2309.03453_, 2023c.
+
+
+Xiaoxiao Long, Yuan-Chen Guo, Cheng Lin, Yuan Liu, Zhiyang Dou, Lingjie Liu, Yuexin Ma,
+Song-Hai Zhang, Marc Habermann, Christian Theobalt, et al. Wonder3d: Single image to 3d
+using cross-domain diffusion. _arXiv preprint arXiv:2310.15008_, 2023.
+
+
+Tiange Luo, Chris Rockwell, Honglak Lee, and Justin Johnson. Scalable 3d captioning with pretrained models. _Advances in Neural Information Processing Systems_, 36, 2024.
+
+
+Luke Melas-Kyriazi, Iro Laina, Christian Rupprecht, Natalia Neverova, Andrea Vedaldi, Oran Gafni,
+and Filippos Kokkinos. Im-3d: Iterative multiview diffusion and reconstruction for high-quality
+3d generation. _arXiv preprint arXiv:2402.08682_, 2024.
+
+
+Ben Mildenhall, Pratul P Srinivasan, Matthew Tancik, Jonathan T Barron, Ravi Ramamoorthi, and
+Ren Ng. Nerf: Representing scenes as neural radiance fields for view synthesis. _Communications_
+_of the ACM_, 65(1):99–106, 2021.
+
+
+OpenAI. Gpt-4v(ision) system card. _OpenAI_, 2023a. URL [https://api.](https://api.semanticscholar.org/CorpusID:263218031)
+[semanticscholar.org/CorpusID:263218031.](https://api.semanticscholar.org/CorpusID:263218031)
+
+
+R OpenAI. Gpt-4 technical report. _arXiv_, pp. 2303–08774, 2023b.
+
+
+William Peebles and Saining Xie. Scalable diffusion models with transformers. In _Proceedings of_
+_the IEEE/CVF International Conference on Computer Vision_, pp. 4195–4205, 2023.
+
+
+Dustin Podell, Zion English, Kyle Lacey, Andreas Blattmann, Tim Dockhorn, Jonas M¨uller, Joe
+Penna, and Robin Rombach. Sdxl: Improving latent diffusion models for high-resolution image
+synthesis. _arXiv preprint arXiv:2307.01952_, 2023.
+
+
+Ben Poole, Ajay Jain, Jonathan T Barron, and Ben Mildenhall. Dreamfusion: Text-to-3d using 2d
+diffusion. _arXiv preprint arXiv:2209.14988_, 2022.
+
+
+15
+
+
+Zhangyang Qi, Yunhan Yang, Mengchen Zhang, Long Xing, Xiaoyang Wu, Tong Wu, Dahua Lin,
+Xihui Liu, Jiaqi Wang, and Hengshuang Zhao. Tailor3d: Customized 3d assets editing and generation with dual-side images. _arXiv preprint arXiv:2407.06191_, 2024.
+
+
+Lingteng Qiu, Guanying Chen, Xiaodong Gu, Qi Zuo, Mutian Xu, Yushuang Wu, Weihao Yuan,
+Zilong Dong, Liefeng Bo, and Xiaoguang Han. Richdreamer: A generalizable normal-depth
+diffusion model for detail richness in text-to-3d. _arXiv preprint arXiv:2311.16918_, 2023.
+
+
+Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,
+Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual
+models from natural language supervision. In _International conference on machine learning_, pp.
+8748–8763. PMLR, 2021.
+
+
+Robin Rombach, Andreas Blattmann, Dominik Lorenz, Patrick Esser, and Bj¨orn Ommer. Highresolution image synthesis with latent diffusion models. In _Proceedings of the IEEE/CVF confer-_
+_ence on computer vision and pattern recognition_, pp. 10684–10695, 2022.
+
+
+Tim Salimans and Jonathan Ho. Progressive distillation for fast sampling of diffusion models. _arXiv_
+_preprint arXiv:2202.00512_, 2022.
+
+
+Christoph Schuhmann, Romain Beaumont, Richard Vencu, Cade Gordon, Ross Wightman, Mehdi
+Cherti, Theo Coombes, Aarush Katta, Clayton Mullis, Mitchell Wortsman, et al. Laion-5b: An
+open large-scale dataset for training next generation image-text models. _Advances_ _in_ _Neural_
+_Information Processing Systems_, 35:25278–25294, 2022.
+
+
+Prafull Sharma, Varun Jampani, Yuanzhen Li, Xuhui Jia, Dmitry Lagun, Fredo Durand, William T
+Freeman, and Mark Matthews. Alchemist: Parametric control of material properties with diffusion models. _arXiv preprint arXiv:2312.02970_, 2023.
+
+
+Ruoxi Shi, Hansheng Chen, Zhuoyang Zhang, Minghua Liu, Chao Xu, Xinyue Wei, Linghao Chen,
+Chong Zeng, and Hao Su. Zero123++: a single image to consistent multi-view diffusion base
+model. _arXiv preprint arXiv:2310.15110_, 2023a.
+
+
+Yichun Shi, Peng Wang, Jianglong Ye, Mai Long, Kejie Li, and Xiao Yang. Mvdream: Multi-view
+diffusion for 3d generation. _arXiv preprint arXiv:2308.16512_, 2023b.
+
+
+Jascha Sohl-Dickstein, Eric Weiss, Niru Maheswaranathan, and Surya Ganguli. Deep unsupervised
+learning using nonequilibrium thermodynamics. In _International_ _conference_ _on_ _machine_ _learn-_
+_ing_, pp. 2256–2265. PMLR, 2015.
+
+
+Zeyi Sun, Ye Fang, Tong Wu, Pan Zhang, Yuhang Zang, Shu Kong, Yuanjun Xiong, Dahua Lin, and
+Jiaqi Wang. Alpha-clip: A clip model focusing on wherever you want, 2023.
+
+
+Jiaxiang Tang, Jiawei Ren, Hang Zhou, Ziwei Liu, and Gang Zeng. Dreamgaussian: Generative
+gaussian splatting for efficient 3d content creation. _arXiv preprint arXiv:2309.16653_, 2023.
+
+
+Jiaxiang Tang, Zhaoxi Chen, Xiaokang Chen, Tengfei Wang, Gang Zeng, and Ziwei Liu. Lgm:
+Large multi-view gaussian model for high-resolution 3d content creation. _arXiv_ _preprint_
+_arXiv:2402.05054_, 2024a.
+
+
+Shitao Tang, Jiacheng Chen, Dilin Wang, Chengzhou Tang, Fuyang Zhang, Yuchen Fan, Vikas
+Chandra, Yasutaka Furukawa, and Rakesh Ranjan. Mvdiffusion++: A dense high-resolution
+multi-view diffusion model for single or sparse-view 3d object reconstruction. _arXiv_ _preprint_
+_arXiv:2402.12712_, 2024b.
+
+
+Gemini Team, Rohan Anil, Sebastian Borgeaud, Yonghui Wu, Jean-Baptiste Alayrac, Jiahui Yu,
+Radu Soricut, Johan Schalkwyk, Andrew M Dai, Anja Hauth, et al. Gemini: a family of highly
+capable multimodal models. _arXiv preprint arXiv:2312.11805_, 2023.
+
+
+Dmitry Tochilkin, David Pankratz, Zexiang Liu, Zixuan Huang, Adam Letts, Yangguang Li, Ding
+Liang, Christian Laforte, Varun Jampani, and Yan-Pei Cao. Triposr: Fast 3d object reconstruction
+from a single image. _arXiv preprint arXiv:2403.02151_, 2024.
+
+
+16
+
+
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timoth´ee
+Lacroix, Baptiste Rozi`ere, Naman Goyal, Eric Hambro, Faisal Azhar, Aurelien Rodriguez, Armand Joulin, Edouard Grave, and Guillaume Lample. Llama: Open and efficient foundation
+language models. _ArXiv_, abs/2302.13971, 2023. [URL https://api.semanticscholar.](https://api.semanticscholar.org/CorpusID:257219404)
+[org/CorpusID:257219404.](https://api.semanticscholar.org/CorpusID:257219404)
+
+
+Vikram Voleti, Chun-Han Yao, Mark Boss, Adam Letts, David Pankratz, Dmitry Tochilkin, Christian Laforte, Robin Rombach, and Varun Jampani. Sv3d: Novel multi-view synthesis and 3d
+generation from a single image using latent video diffusion. _arXiv_ _preprint_ _arXiv:2403.12008_,
+2024.
+
+
+Haochen Wang, Xiaodan Du, Jiahao Li, Raymond A Yeh, and Greg Shakhnarovich. Score jacobian chaining: Lifting pretrained 2d diffusion models for 3d generation. In _Proceedings_ _of_ _the_
+_IEEE/CVF Conference on Computer Vision and Pattern Recognition_, pp. 12619–12629, 2023a.
+
+
+Peng Wang and Yichun Shi. Imagedream: Image-prompt multi-view diffusion for 3d generation.
+_arXiv preprint arXiv:2312.02201_, 2023.
+
+
+Peng Wang, Hao Tan, Sai Bi, Yinghao Xu, Fujun Luan, Kalyan Sunkavalli, Wenping Wang, Zexiang Xu, and Kai Zhang. Pf-lrm: Pose-free large reconstruction model for joint pose and shape
+prediction, 2023b.
+
+
+Zhengyi Wang, Cheng Lu, Yikai Wang, Fan Bao, Chongxuan Li, Hang Su, and Jun Zhu. Prolificdreamer: High-fidelity and diverse text-to-3d generation with variational score distillation.
+_Advances in Neural Information Processing Systems_, 36, 2024a.
+
+
+Zhengyi Wang, Yikai Wang, Yifei Chen, Chendong Xiang, Shuo Chen, Dajiang Yu, Chongxuan Li,
+Hang Su, and Jun Zhu. Crm: Single image to 3d textured mesh with convolutional reconstruction
+model. _arXiv preprint arXiv:2403.05034_, 2024b.
+
+
+Zhouxia Wang, Ziyang Yuan, Xintao Wang, Tianshui Chen, Menghan Xia, Ping Luo, and Ying
+Shan. Motionctrl: A unified and flexible motion controller for video generation. _arXiv preprint_
+_arXiv:2312.03641_, 2023c.
+
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny
+Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models. _Advances in_
+_neural information processing systems_, 35:24824–24837, 2022.
+
+
+Xinyue Wei, Kai Zhang, Sai Bi, Hao Tan, Fujun Luan, Valentin Deschaintre, Kalyan Sunkavalli,
+Hao Su, and Zexiang Xu. Meshlrm: Large reconstruction model for high-quality mesh, 2024.
+
+
+Tong Wu, Jiarui Zhang, Xiao Fu, Yuxin Wang, Jiawei Ren, Liang Pan, Wayne Wu, Lei Yang, Jiaqi
+Wang, Chen Qian, et al. Omniobject3d: Large-vocabulary 3d object dataset for realistic perception, reconstruction and generation. In _Proceedings_ _of_ _the_ _IEEE/CVF_ _Conference_ _on_ _Computer_
+_Vision and Pattern Recognition_, pp. 803–814, 2023.
+
+
+Tong Wu, Guandao Yang, Zhibing Li, Kai Zhang, Ziwei Liu, Leonidas Guibas, Dahua Lin, and
+Gordon Wetzstein. Gpt-4v (ision) is a human-aligned evaluator for text-to-3d generation. _arXiv_
+_preprint arXiv:2401.04092_, 2024.
+
+
+Zhirong Wu, Shuran Song, Aditya Khosla, Fisher Yu, Linguang Zhang, Xiaoou Tang, and Jianxiong
+Xiao. 3d shapenets: A deep representation for volumetric shapes. In _Proceedings_ _of_ _the_ _IEEE_
+_conference on computer vision and pattern recognition_, pp. 1912–1920, 2015.
+
+
+Jiale Xu, Weihao Cheng, Yiming Gao, Xintao Wang, Shenghua Gao, and Ying Shan. Instantmesh:
+Efficient 3d mesh generation from a single image with sparse-view large reconstruction models.
+_arXiv preprint arXiv:2404.07191_, 2024a.
+
+
+Yinghao Xu, Zifan Shi, Wang Yifan, Hansheng Chen, Ceyuan Yang, Sida Peng, Yujun Shen, and
+Gordon Wetzstein. Grm: Large gaussian reconstruction model for efficient 3d reconstruction and
+generation. _arXiv preprint arXiv:2403.14621_, 2024b.
+
+
+17
+
+
+Fan Yang, Jianfeng Zhang, Yichun Shi, Bowen Chen, Chenxu Zhang, Huichao Zhang, Xiaofeng
+Yang, Jiashi Feng, and Guosheng Lin. Magic-boost: Boost 3d generation with mutli-view conditioned diffusion. _arXiv preprint arXiv:2404.06429_, 2024.
+
+
+Yao Yao, Zixin Luo, Shiwei Li, Jingyang Zhang, Yufan Ren, Lei Zhou, Tian Fang, and Long Quan.
+Blendedmvs: A large-scale dataset for generalized multi-view stereo networks. In _Proceedings of_
+_the IEEE/CVF conference on computer vision and pattern recognition_, pp. 1790–1799, 2020.
+
+
+Biao Zhang, Jiapeng Tang, Matthias Niessner, and Peter Wonka. 3dshape2vecset: A 3d shape
+representation for neural fields and generative diffusion models. _ACM Transactions on Graphics_
+_(TOG)_, 42(4):1–16, 2023a.
+
+
+Pan Zhang, Xiaoyi Dong, Bin Wang, Yuhang Cao, Chao Xu, Linke Ouyang, Zhiyuan Zhao,
+Haodong Duan, Songyang Zhang, Shuangrui Ding, Wenwei Zhang, Hang Yan, Xinyue Zhang,
+Wei Li, Jingwen Li, Kai Chen, Conghui He, Xingcheng Zhang, Yu Qiao, Dahua Lin, and Jiaqi
+Wang. Internlm-xcomposer: A vision-language large model for advanced text-image comprehension and composition, 2023b.
+
+
+Xin-Yang Zheng, Hao Pan, Yu-Xiao Guo, Xin Tong, and Yang Liu. Mvd [2] : Efficient multiview 3d
+reconstruction for multiview diffusion. _arXiv preprint arXiv:2402.14253_, 2024.
+
+
+18
+
+
+**1000**
+
+**1001**
+
+**1002**
+
+
+**1003**
+
+**1004**
+
+**1005**
+
+**1006**
+
+**1007**
+
+**1008**
+
+
+**1009**
+
+**1010**
+
+**1011**
+
+**1012**
+
+**1013**
+
+
+**1014**
+
+**1015**
+
+**1016**
+
+**1017**
+
+**1018**
+
+**1019**
+
+
+**1020**
+
+**1021**
+
+**1022**
+
+**1023**
+
+**1024**
+
+**1025**
+
+
+A APPENDIX
+
+
+A.1 EVALUATION ON WILD PROMPTS FROM REAL USERS
+
+
+The results of the main part of the paper are only tested on GPT generated prompts. To test our
+work’s capability in wild cases, we also collect real user prompts and compare our method with
+Instant3D (Li et al., 2023a). [specifically, we randomly collect 100 prompts from https://www.](https://www.meshy.ai/)
+[meshy.ai/ and test the CLIP-R precision as well as GPT based evaluation (detailed in Sup. A.6).](https://www.meshy.ai/)
+Results and some qualitative cases are shown in Tab. 4 and Fig. 8. We highlight that our Bootstrap3D
+excels Instant3D (Li et al., 2023a) when tested on real user prompts through training on synthetic
+data.
+
+
+Figure 8: **Real user prompt cases** visualization compared to Instant3D (Li et al., 2023a)
+
+
+A.2 MORE VISUALIZATION COMPARED TO OTHER METHODS.
+
+
+We show more visualization of the quantitative experiments shown in the main paper in Fig.9
+
+
+19
+
+
+a girl, fantasy, large horns Hugh detail real a small owl, jade and gold
+
+
+a character resembling a victorian gentle man, T-Pose,
+
+
+wings are on the sides of the helmet. Highly detailed bird wings with
+
+
+**1026**
+
+**1027**
+
+
+**1028**
+
+**1029**
+
+**1030**
+
+**1031**
+
+**1032**
+
+**1033**
+
+
+**1034**
+
+**1035**
+
+**1036**
+
+**1037**
+
+**1038**
+
+**1039**
+
+
+**1040**
+
+**1041**
+
+**1042**
+
+**1043**
+
+**1044**
+
+
+**1045**
+
+**1046**
+
+**1047**
+
+**1048**
+
+**1049**
+
+**1050**
+
+
+**1051**
+
+**1052**
+
+**1053**
+
+**1054**
+
+**1055**
+
+**1056**
+
+
+**1057**
+
+**1058**
+
+**1059**
+
+**1060**
+
+**1061**
+
+**1062**
+
+
+**1063**
+
+**1064**
+
+**1065**
+
+**1066**
+
+**1067**
+
+
+**1068**
+
+**1069**
+
+**1070**
+
+**1071**
+
+**1072**
+
+**1073**
+
+
+**1074**
+
+**1075**
+
+**1076**
+
+**1077**
+
+**1078**
+
+**1079**
+
+
+Table 4: **Test results of in the wild cases.** Bootstrap3D also excels Instant3D (Li et al., 2023a) in
+generating high quality images according to real user prompts.
+
+
+CLIP based metric GPTEval3D
+**Method**
+CLIP-R score image-text alignment texture detail
+
+
+Instant3D (unofficial) 77.0 22.0% 24.5%
+Bootstrap3D 83.5 78.0% 75.5%
+
+
+Figure 9: **Generated** **multivew** **images** **compare** **to** **other** **methods.** Our method can generate
+multi-view images with long text control without encountering blurring effect from data generated
+by SV3D thanks to TTR and quality filtering.
+
+
+For Image-to-3D methods, they can sometimes produces significant motion blurring and fails when
+the input image is out-of-distribution (like the 3rd cartoon style case). We resample the high-quality
+segment of the distribution of generated images using quality filtering based on MLLM methods.
+Furthermore, by employing TTR, we limit the impact of these data when training multi-view diffusion models, allowing our model to produce much clear results. In addition, we use a caption
+rewriting method, enabling finer prompt control for the generated multi-view images.
+
+
+A.3 DATA STATISTICS
+
+
+A.3.1 CAPTION ANALYSIS
+
+
+Fig. 10 and 11 provide a visualization of the root noun-verb pairs for the captions generated by GPT4V (OpenAI, 2023a) and MV-LLaVA. It’s clear to see that the diversity and linguistic expression
+of the captions produced by MV-LLaVA are highly matched with those of GPT-4V. We believe
+the highly detailed description focusing on object’s texture, shape and color have potential usage
+beyond training multi-view diffusion model in the field like object texturing (Fang et al., 2024) and
+stylization (Sharma et al., 2023) in Computer Graphics. MV-LLaVA can also serve as free and
+efficient 3D object assistant comparable with GPT-4V for future research of 3D content creation.
+
+
+Fig. 12 visualizes the histogram of caption length compared with Cap3D (Luo et al., 2024). We
+fine-tune MV-LLaVA to generate two different lengths suitable for different diffusion architecture,
+namely CLIP-based text encoding (Blattmann et al., 2023; Podell et al., 2023) with 77 token length
+and T5 based text encoding (Chen et al., 2023a; 2024a) with 120 token length. Both excel the length
+of Cap3D with less hallucinations.
+
+
+20
+
+
+**1080**
+
+**1081**
+
+
+**1082**
+
+**1083**
+
+**1084**
+
+**1085**
+
+**1086**
+
+**1087**
+
+
+**1088**
+
+**1089**
+
+**1090**
+
+**1091**
+
+**1092**
+
+**1093**
+
+
+**1094**
+
+**1095**
+
+**1096**
+
+**1097**
+
+**1098**
+
+
+**1099**
+
+**1100**
+
+**1101**
+
+**1102**
+
+**1103**
+
+**1104**
+
+
+**1105**
+
+**1106**
+
+**1107**
+
+**1108**
+
+**1109**
+
+**1110**
+
+
+**1111**
+
+**1112**
+
+**1113**
+
+**1114**
+
+**1115**
+
+**1116**
+
+
+**1117**
+
+**1118**
+
+**1119**
+
+**1120**
+
+**1121**
+
+
+**1122**
+
+**1123**
+
+**1124**
+
+**1125**
+
+**1126**
+
+**1127**
+
+
+**1128**
+
+**1129**
+
+**1130**
+
+**1131**
+
+**1132**
+
+**1133**
+
+
+Figure 11: **Visualized analysis of dense reasoning descriptions generated by our MV-LLaVA** of
+the root noun-verb pairs (occurring over 1%) of the descriptions
+
+
+A.3.2 ESTIMATED QUALITY ANALYSIS
+
+
+For direct grasp of the quality of objaverse data and synthetic data used to train diffusion model,
+we randomly picked some of multi-view images from different score rank. Results are shown in
+
+
+21
+
+
+Figure 10: **Visualized analysis of dense reasoning descriptions generated by GPT4-Vision (Ope-**
+**nAI, 2023a)** of the root noun-verb pairs (occurring over 1%) of the descriptions
+
+
+**1134**
+
+**1135**
+
+
+**1136**
+
+**1137**
+
+**1138**
+
+**1139**
+
+**1140**
+
+**1141**
+
+
+**1142**
+
+**1143**
+
+**1144**
+
+**1145**
+
+**1146**
+
+**1147**
+
+
+**1148**
+
+**1149**
+
+**1150**
+
+**1151**
+
+**1152**
+
+
+**1153**
+
+**1154**
+
+**1155**
+
+**1156**
+
+**1157**
+
+**1158**
+
+
+**1159**
+
+**1160**
+
+**1161**
+
+**1162**
+
+**1163**
+
+**1164**
+
+
+**1165**
+
+**1166**
+
+**1167**
+
+**1168**
+
+**1169**
+
+**1170**
+
+
+**1171**
+
+**1172**
+
+**1173**
+
+**1174**
+
+**1175**
+
+
+**1176**
+
+**1177**
+
+**1178**
+
+**1179**
+
+**1180**
+
+**1181**
+
+
+**1182**
+
+**1183**
+
+**1184**
+
+**1185**
+
+**1186**
+
+**1187**
+
+
+Caption Words Histogram
+
+
+80000
+
+
+60000
+
+
+|Col1|Cap3D<br>BS-Caption<br>BS-Description|Col3|Col4|Col5|Col6|
+|---|---|---|---|---|---|
+|||||||
+|||||||
+|||||||
+|||||||
+|||||||
+
+
+Figure 13: **Quality score statistics of different data source.**
+
+
+We count the number of multi-view images from different data sources, namely 660K from Objaverse, 500K from SV3D (Voleti et al., 2024) and 500K from Zero123++ (Shi et al., 2023a) generated
+by our Bootstrap3D pipeline. Result are shown in Fig.13. For Objaverse and SV3D, the assigned
+score is normal and we use score 4 and score 5 multi-view images as high quality data for training.
+
+
+22
+
+
+40000
+
+
+20000
+
+
+0
+
+
+Length
+
+
+Figure 12: **Histogram** **Visualization** **of** **the** **Caption** **Length** compared with Cap3D (Luo et al.,
+2024)
+
+
+Table 5: **Comparison of lexical composition of the captions** generated by GPT4-Vision and ShareCaptioner.
+
+
+Lexical n. adj. adv. v. num. prep.
+
+
+GPT-4V (OpenAI, 2023a) 29.1% 16.0% 1.5% 11.1% 0.5% 9.0%
+
+
+BS-Description 28.5% 16.0% 1.4% 10.8% 0.3% 8.6%
+BS-Caption 30.2% 23.0% 0.3% 5.6% 0.1% 8.9%
+
+
+Fig. 16, Fig. 17 and Fig. 18. We use high quality data with score 4 and 5 for the training of multiview diffusion model.
+
+
+**1188**
+
+**1189**
+
+
+**1190**
+
+**1191**
+
+**1192**
+
+**1193**
+
+**1194**
+
+**1195**
+
+
+**1196**
+
+**1197**
+
+**1198**
+
+**1199**
+
+**1200**
+
+**1201**
+
+
+**1202**
+
+**1203**
+
+**1204**
+
+**1205**
+
+**1206**
+
+
+**1207**
+
+**1208**
+
+**1209**
+
+**1210**
+
+**1211**
+
+**1212**
+
+
+**1213**
+
+**1214**
+
+**1215**
+
+**1216**
+
+**1217**
+
+**1218**
+
+
+**1219**
+
+**1220**
+
+**1221**
+
+**1222**
+
+**1223**
+
+**1224**
+
+
+**1225**
+
+**1226**
+
+**1227**
+
+**1228**
+
+**1229**
+
+
+**1230**
+
+**1231**
+
+**1232**
+
+**1233**
+
+**1234**
+
+**1235**
+
+
+**1236**
+
+**1237**
+
+**1238**
+
+**1239**
+
+**1240**
+
+**1241**
+
+
+However, for Zero123++, most objects are assigned with score greater than 3. We attribute this
+phenomenon to the fact that Zero123++ tend to generate objects with less motion blurring but more
+stretching and deformation compared to SV3D. Joint training of MV-LLaVA on three different data
+source lead to higher and more focused distribution for Zero123++’s multi-view images. For this
+part of synthetic data, we leave only score 5 multi-view images as high quality data.
+
+
+A.4 QUALITY OF MV-LLAVA
+
+
+A.4.1 CHOICE OF NUMBER OF UNFROZEN LAYERS OF VISION ENCODER.
+
+
+Figure 14: **Qualitative** **results** **of** **unfreeze** **final** **layers** **of** **CLIP** **(Radford** **et** **al.,** **2021)** **vision**
+**encoder** compared to original fixed vision encoder setting in LLaVA (Liu et al., 2024a).
+
+
+Inspired by ShareGPT-4V (Chen et al., 2023b), we unfreeze selected final layers of the CLIP (Liu
+et al., 2024a) vision encoder during the initial phase of vision language alignment. The CLIP-L/14
+model used for LLaVA (Liu et al., 2024a) contains 24 transformer layers. We selectively unfreeze
+some of final layers to enable the CLIP model to focus more on details such as texture of multiview images. After qualitative manual screening, we select to unfreeze eight layers to yield better
+results. Fig. 14 illustrates the differences between unfreezing eight layers and not unfreezing any
+(the original training setting of LLaVA (Liu et al., 2024a)). The red sections highlight the erroneous
+hallucinations occurring when the vision encoder remains fully unchanged, while the green sections
+indicate accurate descriptions of the image content. This demonstrates that partially unfreezing the
+vision encoder can produce more precise captions and reduce some hallucinations.
+
+
+A.4.2 QUANTITATIVE QUALITY STUDY
+
+
+To test the quality of our MV-LLaVA. We propose two quantitative study over the quality of captions
+and the alignment of quality estimation with human experts. In first study, we randomly picked 200
+object from Objaverse (Deitke et al., 2023) and exclude training data of MV-LLaVA. We use GPT4V (OpenAI, 2023a) and MV-LLaVA to generate descriptive captions for each object. We invite
+human volunteers to choose their preference over shuffled captions. Results are shown in Tab. 6,
+where MV-LLaVA shows comparable captioning ability with powerful GPT4-V (OpenAI, 2023a),
+which is essential to generate millions of high quality image-text pairs for the training of text to
+multi-view image diffusion model.
+
+
+Second experiment studies MV-LLaVA’s ability in quality estimation of both 3D assets and generated multi-view images. We invite human volunteers to estimate the quality of multi-view images
+rendered from Objaverse (Deitke et al., 2023) or generated by SV3D (Voleti et al., 2024). As there
+is no golden standard for multi quality classification, We ask them to separate the randomly select
+
+
+23
+
+
+**1242**
+
+**1243**
+
+
+**1244**
+
+**1245**
+
+**1246**
+
+**1247**
+
+**1248**
+
+**1249**
+
+
+**1250**
+
+**1251**
+
+**1252**
+
+**1253**
+
+**1254**
+
+**1255**
+
+
+**1256**
+
+**1257**
+
+**1258**
+
+**1259**
+
+**1260**
+
+
+**1261**
+
+**1262**
+
+**1263**
+
+**1264**
+
+**1265**
+
+**1266**
+
+
+**1267**
+
+**1268**
+
+**1269**
+
+**1270**
+
+**1271**
+
+**1272**
+
+
+**1273**
+
+**1274**
+
+**1275**
+
+**1276**
+
+**1277**
+
+**1278**
+
+
+**1279**
+
+**1280**
+
+**1281**
+
+**1282**
+
+**1283**
+
+
+**1284**
+
+**1285**
+
+**1286**
+
+**1287**
+
+**1288**
+
+**1289**
+
+
+**1290**
+
+**1291**
+
+**1292**
+
+**1293**
+
+**1294**
+
+**1295**
+
+
+multi-view images into approximately two half and serve as GT quality. We use MV-LLaVA to estimate the quality of these images and generate confusion matrix. Results are shown in Tab.7. Given
+the great amount of source data of 3D assets and infinite synthetic data, we care more about the false
+positive rate, as these data will be mixed into training data. In this observation, we highlight the false
+positive rate of over 20% for SV3D (Voleti et al., 2024) generated multi-view images. This result
+align with the observation of inevitable motion blurring of SV3D (Voleti et al., 2024). To leverage
+this part of data source for data diversity without hurting the final quality. We propose Training
+Noise Reschedule to avoid samplings from these synthetic data when time step is small.
+
+
+Table 6: **Human** **evaluation** on the quality of generated captions from MV-LLaVA vs. GPT4Vision (OpenAI, 2023a) over 200 validation samples from Objaverse (Deitke et al., 2023).
+
+
+Preference GPT4-Vision (OpenAI, 2023a) MV-LLaVA Comparable
+
+
+Percentage 39.5% 34.5% 26.0%
+
+
+Table 7: **Confusion matrix** of mutli-view images quality estimation.
+
+
+Objaverse quality check Synthetic quality check
+
+
+HQ-gt LQ-gt HQ-gt LQ-gt
+
+
+HQ by model 31.0% 4.5% HQ by model 34.5% 11.5%
+LQ by model 11.0% 53.5% LQ by model 17.0% 37.0%
+
+
+A.4.3 QUALITATIVE CAPTION QUALITY STUDY
+
+
+We selective compare some of the captions generated by Cap3D (Luo et al., 2024) and MV-LLaVA
+in Fig. 15. Our MV-LLaVA can generate more detailed descriptive captions with less hallucinations.
+
+
+24
+
+
+**1296**
+
+**1297**
+
+
+**1298**
+
+**1299**
+
+**1300**
+
+**1301**
+
+**1302**
+
+**1303**
+
+
+**1304**
+
+**1305**
+
+**1306**
+
+**1307**
+
+**1308**
+
+**1309**
+
+
+**1310**
+
+**1311**
+
+**1312**
+
+**1313**
+
+**1314**
+
+
+**1315**
+
+**1316**
+
+**1317**
+
+**1318**
+
+**1319**
+
+**1320**
+
+
+**1321**
+
+**1322**
+
+**1323**
+
+**1324**
+
+**1325**
+
+**1326**
+
+
+**1327**
+
+**1328**
+
+**1329**
+
+**1330**
+
+**1331**
+
+**1332**
+
+
+**1333**
+
+**1334**
+
+**1335**
+
+**1336**
+
+**1337**
+
+
+**1338**
+
+**1339**
+
+**1340**
+
+**1341**
+
+**1342**
+
+**1343**
+
+
+**1344**
+
+**1345**
+
+**1346**
+
+**1347**
+
+**1348**
+
+**1349**
+
+
+**Score: 1**
+
+
+Figure 15: **Caption** **comparison** **with** **Cap3D** **(Luo** **et** **al.,** **2024).** Our MV-LLaVA can generate
+long captions that faithfully describing 3D assets from different perspectives like color, geometry
+and texture.
+
+
+25
+
+
+**Ours:** The model is a highly
+abstract representation, possibly
+of a figure or object with an
+unclear purpose. It features thin,
+rod-like lines and sparse clusters
+of pink and blue colors, lacking
+any discernible texture, material
+quality, or detailed features.
+
+
+**Cap3D:** A collection of drawings featuring a jellyfish, a
+girl with various accessories, a fish, and a unicorn.
+
+
+**Score: 2**
+
+**Ours:** The model is a low-polygon
+representation of a character's head
+with a simplified form, featuring a
+broad, flat surface with minimal
+texture. The main body of the model is
+white, while the facial features are
+depicted in a flat grey tone, lacking
+depth and detail. It suggests a basic,
+monochromatic material, possibly
+indicative of clay or a digital sculpting
+tool...
+
+**Cap3D:** A low poly 3D model of a white ghost, small bird,
+and teddy bear.
+
+
+**Score: 3**
+
+
+**Ours:** The model represents a
+whimsical, simplified vehi cl e
+consisting of a brown wagon with
+yellow wheels and a red, toy-like
+trailer being pulled. The wagon's body
+has a flat, wood-like texture, while the
+trailer's body shows a smooth, glossy
+finish. The handle and wheels of the
+trailer are colored in bright yellow,
+enhancing its toy-like appearance...
+
+
+**Cap3D:** A 3D wooden toy car model featuring a stove,
+chair, pipe, spout, bottle, and steering wheel.
+
+
+**Score: 4**
+
+**Ours:** This model is a robotic chair
+with a minimalist design, rendered in a
+clean, modern style. The seat and
+backrest are white, implying a smooth,
+possibly plastic or painted metal
+surface. The mechanical arm and base
+are a metallic gray, suggesting a
+metallic texture with a matte finish.
+Gold-colored accents, likely meant to
+represent controls or adjustments, add
+a touch of color to the model...
+
+
+**Cap3D:** A 3D model of a white, yellow, and gold
+machine-like spaceship.
+
+
+**Score: 5**
+
+**Ours:** The model is a red SUV with a
+high level of detail, including realistic
+shapes for the body, windows, and
+wheels. The body has a glossy finish,
+simulating automotive paint, while the
+black trim and silver rims have a matte
+texture. The wheels are detailed with
+intricate silver spokes that resemble
+alloy wheels, and the tires are a vibrant
+green with tread patterns adding to the
+model's realism...
+
+**Cap3D:** Red Peugeot 208 SUV 3D model.
+
+
+**Ours:** The model is composed
+of faint, scattered dots and lacks
+discernible shape or texture,
+making it difficult to determine
+its intended representation. It
+appears as a collection of sparse,
+flat details without any clear
+function or recognizability.
+
+
+**Cap3D:** A 3D object featuring elements of maps, a fish, a heart,
+a person, and a ghost, all adorned with pink and blue dots.
+
+
+**Ours:** 'The model represents a rocklike object with a textured surface,
+depicting moss or lichen patches in
+shades of green and gray. The
+underlying stone surface exhibits rust
+tones suggesting iron-rich sedimentary
+rock. However, the model lacks finer
+details such as specific rock strata or
+additional variations that could
+enhance its realism.
+
+**Cap3D:** 3D models of a fruit, paper airplane, rock, and green
+leaf with various surfaces and interactions.
+
+
+**Ours:** The model is a whimsical,
+cartoon-style character with a spherical
+blue body and exaggerated, bulbous
+limbs. The facial features include a
+wide, cheerful smile and large,
+expressive eyes with a simple white
+sclera and black pupils. The limbs' ends
+have been stylized into points,
+enhancing the playful nature of the
+model...
+
+
+**Cap3D:** A 3D blue sphere with pink eyes and hands, resembling
+a cartoon character.
+
+
+**Ours:** The model is a packaged
+product, most likely an air purifier,
+with a recognizable brand and model
+identifiable from the images. The
+packaging is a vibrant yellow with
+white accents, which gives a sense of a
+plastic or laminated paper material.
+The product image on the box shows a
+white device with a blue air filter,
+conveying a clean and modern
+aesthetic...
+**Cap3D:** Yvy toilet paper box, Yui air purifier, Yoyo toner
+cartridges, Yii vitamins, and Yui sanitary napkins in yellow and
+white packaging with respective logos.
+
+
+**O u r s :** T h i s 3 D m o d e l i s a
+charming, medieval-style vendor
+cart with a high degree of texture
+detail, suggesting materials like
+weathered wood for the main
+structure, rusty metal for the fittings
+and wheel rims, and tattered fabric
+for the awning. The cart is laden
+with goods such as sacks, barrels,
+and hanging items...
+
+**Cap3D:** 3D model of a wagon with a roof and wheels, featuring
+a horse.
+
+
+**Cap3D:** 3D rendering of a
+square, tiled floor and ceiling.
+
+
+**Ours:** The model shows a plain
+with nearly identical flat surfaces
+with a uniform beige color,
+lacking any distinctive features
+or t e xt ur e s. T he r e a r e n o
+discernible details indicating
+what the surfaces represent or
+their potential use, and thus the
+model serves as an extremely
+basic representation of a flat
+object.
+
+
+**Ours:** The model represents a
+minimalistic art gallery scene with
+discernible but simplified elements.
+Semi-transparent white walls and floors
+suggest a clean, empty space. Slight
+color variations hint at lighting nuances.
+Sparse objects including picture frames
+are rendered in simplistic grayscale,
+l a c k i n g t e x t u r e b u t o f f e r i n g a
+rudimentary representation of an art
+display.
+
+
+**Cap3D:** A 3D rendering of a white exhibition space featuring
+a round table, pictures, a water feature, and a chair.
+
+
+**Ours:** The 3D model represents a
+minimalist architectural form, possibly
+a building or pavilion with an external
+staircase. It's composed of white and
+grey tones, where white suggests a
+smooth concrete or plaster and grey
+represents metallic or stone features.
+The model lacks intricate textures but
+has discernible geometric shapes and
+shadows, offering a basic sense of
+depth and spatial relationships.
+
+**Cap3D:** A 3D rendering of a white cabinet, staircase, small box,
+chair, desk, ceiling-mounted light fixture, and ceiling panel.
+
+
+**Ours:** This model portrays a small,
+stylized scene of a Japanese garden with a
+pond and cherry blossom trees. The pond is
+depicted in a tranquil shade of blue,
+surrounded by vibrant green grass. Pink
+cherry blossom trees, a symbol of spring in
+Japan, are scattered around the pond with
+varying shades of pink. A small bridge with
+a red railing crosses the pond, adding a pop
+of color to the scene. The textures are
+simple yet distinct, with the grass and trees
+having a flat appearance...
+
+
+**Cap3D:** 3D model of a Japanese garden village with trees, a
+bridge, and a hill, featuring a plane flying overhead.
+
+
+**Ours:** This 3D model represents a
+wooden tankard with a detailed
+wood grain texture in natural tan
+shades, featuring realistic knots and
+variations in the wood. The handle
+and rim of the tankard are welldefined, and the model exhibits a
+rustic, handcrafted appearance. The
+carved lines and wood texture give
+it an authentic look...
+
+**Cap3D:** A 3D horn-shaped jug with a wooden handle and
+writing on it.
+
+
+**1350**
+
+**1351**
+
+
+**1352**
+
+**1353**
+
+**1354**
+
+**1355**
+
+**1356**
+
+**1357**
+
+
+**1358**
+
+**1359**
+
+**1360**
+
+**1361**
+
+**1362**
+
+**1363**
+
+
+**1364**
+
+**1365**
+
+**1366**
+
+**1367**
+
+**1368**
+
+
+**1369**
+
+**1370**
+
+**1371**
+
+**1372**
+
+**1373**
+
+**1374**
+
+
+**1375**
+
+**1376**
+
+**1377**
+
+**1378**
+
+**1379**
+
+**1380**
+
+
+**1381**
+
+**1382**
+
+**1383**
+
+**1384**
+
+**1385**
+
+**1386**
+
+
+**1387**
+
+**1388**
+
+**1389**
+
+**1390**
+
+**1391**
+
+
+**1392**
+
+**1393**
+
+**1394**
+
+**1395**
+
+**1396**
+
+**1397**
+
+
+**1398**
+
+**1399**
+
+**1400**
+
+**1401**
+
+**1402**
+
+**1403**
+
+
+Score4&5
+
+
+Figure 16: **Randomly picked multi-view images with different scores from 500k synthetic data**
+**generated by SV3D (Voleti et al., 2024).**
+
+
+26
+
+
+**1404**
+
+**1405**
+
+
+**1406**
+
+**1407**
+
+**1408**
+
+**1409**
+
+**1410**
+
+**1411**
+
+
+**1412**
+
+**1413**
+
+**1414**
+
+**1415**
+
+**1416**
+
+**1417**
+
+
+**1418**
+
+**1419**
+
+**1420**
+
+**1421**
+
+**1422**
+
+
+**1423**
+
+**1424**
+
+**1425**
+
+**1426**
+
+**1427**
+
+**1428**
+
+
+**1429**
+
+**1430**
+
+**1431**
+
+**1432**
+
+**1433**
+
+**1434**
+
+
+**1435**
+
+**1436**
+
+**1437**
+
+**1438**
+
+**1439**
+
+**1440**
+
+
+**1441**
+
+**1442**
+
+**1443**
+
+**1444**
+
+**1445**
+
+
+**1446**
+
+**1447**
+
+**1448**
+
+**1449**
+
+**1450**
+
+**1451**
+
+
+**1452**
+
+**1453**
+
+**1454**
+
+**1455**
+
+**1456**
+
+**1457**
+
+
+Score: 1
+
+
+Score: 2
+
+
+Score: 3
+
+
+Score: 4&5
+
+
+Figure 17: **Randomly picked multi-view images with different scores from 500k synthetic data**
+**generated by Zero123++ (Shi et al., 2023a).**
+
+
+27
+
+
+**1458**
+
+**1459**
+
+
+**1460**
+
+**1461**
+
+**1462**
+
+**1463**
+
+**1464**
+
+**1465**
+
+
+**1466**
+
+**1467**
+
+**1468**
+
+**1469**
+
+**1470**
+
+**1471**
+
+
+**1472**
+
+**1473**
+
+**1474**
+
+**1475**
+
+**1476**
+
+
+**1477**
+
+**1478**
+
+**1479**
+
+**1480**
+
+**1481**
+
+**1482**
+
+
+**1483**
+
+**1484**
+
+**1485**
+
+**1486**
+
+**1487**
+
+**1488**
+
+
+**1489**
+
+**1490**
+
+**1491**
+
+**1492**
+
+**1493**
+
+**1494**
+
+
+**1495**
+
+**1496**
+
+**1497**
+
+**1498**
+
+**1499**
+
+
+**1500**
+
+**1501**
+
+**1502**
+
+**1503**
+
+**1504**
+
+**1505**
+
+
+**1506**
+
+**1507**
+
+**1508**
+
+**1509**
+
+**1510**
+
+**1511**
+
+
+Score: 1
+
+
+Score: 2
+
+
+Figure 18: **Randomly** **picked** **multi-view** **images** **with** **different** **scores** **from** **660k** **Obja-**
+**verse (Deitke et al., 2023) 3D assets.**
+
+
+28
+
+
+**1512**
+
+**1513**
+
+
+**1514**
+
+**1515**
+
+**1516**
+
+**1517**
+
+**1518**
+
+**1519**
+
+
+**1520**
+
+**1521**
+
+**1522**
+
+**1523**
+
+**1524**
+
+**1525**
+
+
+**1526**
+
+**1527**
+
+**1528**
+
+**1529**
+
+**1530**
+
+
+**1531**
+
+**1532**
+
+**1533**
+
+**1534**
+
+**1535**
+
+**1536**
+
+
+**1537**
+
+**1538**
+
+**1539**
+
+**1540**
+
+**1541**
+
+**1542**
+
+
+**1543**
+
+**1544**
+
+**1545**
+
+**1546**
+
+**1547**
+
+**1548**
+
+
+**1549**
+
+**1550**
+
+**1551**
+
+**1552**
+
+**1553**
+
+
+**1554**
+
+**1555**
+
+**1556**
+
+**1557**
+
+**1558**
+
+**1559**
+
+
+**1560**
+
+**1561**
+
+**1562**
+
+**1563**
+
+**1564**
+
+**1565**
+
+
+A.5 DETAILS OF PROMPT DESIGN
+
+
+A.5.1 PROMPTS FOR GPT-4V FOR QUALITY CHECK
+
+
+Assume you are a quality checker of a diffusion model. This diffusion model is trained to achieve novel view synthesis. I give this model the image in the upper-left side
+and it generate novel views in the rest three images(upper-right, lower-left, lower-right). You should tell me the quality of the generated novel view images. The score
+ranges from 1 to 5, representing the quality of the model from low to high. The detailed evaluation criteria are as follows:
+1. The novel views are difficult to discern what the image supposed to be, lacking in recognizability. It has no usable value.
+2. The novel views are distinguishable, clearly determine what the object/scene is similar to the given ground truth image. However, there is obvious inconsistency
+between the novel view synthesized images and groud-truth image. There are many obvious areas of image is blurred or indicating rotation.
+3. The novel views are relatively good, the inconsistency between novel view synthesized images with groud-truth image is not obvious. The blurring area indicating
+rotation or uncerntainty is accecptable for usage.
+4. The novel views are pretty good, although the might be blurring areas or less resolution. the view consistancy is well maintained.
+5. The novel views are excellent. It is hard to tell which image from four is ground-truth and which is synthesised.
+You shoud give me the overall score with one score number, with reason in next line. besides the quality check, I need you to generate a long discriptive caption for the
+scene/object from 4 different view. focusing on the part/object relative position, color, number of objects and so on with no more than 50 words and no less than 30 words.
+DO NOT MENSHION MULTI-VIEW IMAGES FROM DIFFERENT PERSPECTIVE since it is a single scene/object. you should rearrange your result in a JSON format.
+if all the images(include the groud-truth image) are of low quality, just output a lowest score.
+Here is an example for you:
+{"score": 4, "reason": "The novel views generated from the model are quite convincing with a high degree of consistency in terms of texture, lighting, and color when
+compared to the ground-truth image. There is some minor distortion in shape and perspective, but the overall quality is high, and it maintains the realism of the scene.",
+"caption": "A cluster of shiny five apples, ranging from deep red to sunny yellow, sits comfortably within a rustic woven basket. Their smooth, round forms are grouped
+closely, reflecting light and casting soft shadows that accentuate their voluminous curves and vibrant colors."
+}
+
+
+This is a quad image generated from rendering a SINGLE 3D model FROM FOUR DIFFERENT views. I would like you to score the quality of this models to evaluate its
+current state. The score ranges from 1 to 5, representing the quality of the model from low to high. The detailed evaluation criteria are as follows:
+1 point: The overall quality of the model is quite poor, making it difficult to discern what it is supposed to be, lacking in recognizability. The model is almost one solid
+block, or extremely scattered, or in fragments. It has no usable value.
+2 points: The overall quality of the model is relatively poor, but it is possible to guess what it is, possessing low recognizability. It preliminarily has some geometric shape
+and can be considered a prototype model element, lacking identifiable material information, and almost has no usable value.
+3 points: The overall quality of the model is average, it is possible to determine what it is, having certain recognizability. Different areas use different materials (colors), it
+preliminarily has usable value, and initially has aesthetic value.
+4 points: The overall quality of the model is relatively high, it can be clearly determined what it is, with high recognizability. It preliminarily has certain texture details, and
+different parts of a model can be clearly distinguished, having high usable value and certain aesthetic value.
+5 points: The overall quality of the model is extremely high, allowing for the classification of the model's type at a very fine granularity. It has high texture details, is a
+fully formed 3D model that can be used for games, simulations, or even animations, and has high aesthetic value.
+After scoring, please also generate a description of the current model. If the model quality is low, only a brief description is needed; when the model quality is high, a
+complete description of the different details of the model is required. The description process should focus on color, material, texture details as much as possible. You can
+also recommended to suggest overall style. With NO MORE THAN 120 words. Especially discribe color and meterial of different parts concretely and faithfully, let the
+reader easilly imagine the same model.
+Finally, I hope you can annotate two kinds of tags for the model. Tag1 is about the style of overall model. You can choose from [photo-realistic], [carton] and [CAD]. Tag
+model as [CAD] when seems like a preliminary work build by CAD software and not real. Tag model [carton] when it is good enough with carton style. Tage model
+
+[photo-realistic] when model seems like real object in the world; Tag2 is about the scale that the model represents, you can choose from [single object], [multi-object],
+
+[small scene] and [large scene]. Assign model [large scene] when it represents scene like urban street, park, etc. Assign it as [small scene] when it represents scene like
+inner structure or design of a house, small area, etc. Assign it as [multi-object] when it represents combination of multi objects. Assign it as [single object] when it
+represents single object.
+Here are three examples. You should follow this format:
+e.g. 1
+Score: 1
+Description: The model depicts a very basic and abstract urban planning concept with indistinct structures and simplistic landscaping, lacking detail and texture,
+appropriate for early-stage design or conceptual visualization.
+Tag: [Photorealistic] [large scene]
+e.g. 2
+Score: 2
+Description: The object is a simple sphere with a homogeneous speckled texture, suggesting a stone-like material. The colors vary slightly between shades of dark gray,
+brown, and rust, with a matte finish. It lacks specific features or details that would indicate a higher level of complexity or function.
+Tag: [Photorealistic] [single object]
+e.g. 3
+Score: 3
+Description: The model appears to represent an architectural structure with two levels. Different colors suggest varied materials: translucent white for the structural
+framework, solid blue representing walls or glass panels, and yellow for interior elements, possibly stairs or floors. The style seems utilitarian, potentially for preliminary
+construction visualization.
+Tag: [CAD] [small scene]
+e.g. 4
+Score: 4
+The model depicts a metallic livestock handling equipment known as a cattle chute. It is rendered in shades of dark gray, conveying a metallic texture consistent with steel
+or iron. The structure is detailed with bolts, bars, and sliding gates, implying a sturdy construction. Text labels like \"METALCORP\" and \"CATTLE MASTER\" in blue
+enhance realism, suggesting a commercial quality model suitable for simulations or instructional material. The style is industrial and pragmatic.
+Tag: [Photorealistic] [single object]
+e.g. 5
+Score: 5
+The model is a stylized, anime-inspired character with a cheerful expression. Hair is rendered in a turquoise shade, contrasting with ribbons in alternate hues of pink and
+blue. Skin tone is in a soft peach, while the outfit combines white, grey, and gold tones, with a large yellow flower accessory. Surfaces show subtle shading, indicating
+variations in material. The playful, colorful appearance suggests a light-hearted, fantasy aesthetic.
+Tag: [Cartoon] [single object]
+
+
+Figure 19: **Prompt for GPT-4V to generate caption and estimate quality of multi-view images**
+**from** **SV3D** **(Voleti** **et** **al.,** **2024),** **zero123++** **(Shi** **et** **al.,** **2023a)** **and** **Objaverse** **(Deitke** **et** **al.,**
+**2023).**
+
+
+Detailed prompts are shown in Fig.19.
+
+
+29
+
+
+**1566**
+
+**1567**
+
+
+**1568**
+
+**1569**
+
+**1570**
+
+**1571**
+
+**1572**
+
+**1573**
+
+
+**1574**
+
+**1575**
+
+**1576**
+
+**1577**
+
+**1578**
+
+**1579**
+
+
+**1580**
+
+**1581**
+
+**1582**
+
+**1583**
+
+**1584**
+
+
+**1585**
+
+**1586**
+
+**1587**
+
+**1588**
+
+**1589**
+
+**1590**
+
+
+**1591**
+
+**1592**
+
+**1593**
+
+**1594**
+
+**1595**
+
+**1596**
+
+
+**1597**
+
+**1598**
+
+**1599**
+
+**1600**
+
+**1601**
+
+**1602**
+
+
+**1603**
+
+**1604**
+
+**1605**
+
+**1606**
+
+**1607**
+
+
+**1608**
+
+**1609**
+
+**1610**
+
+**1611**
+
+**1612**
+
+**1613**
+
+
+**1614**
+
+**1615**
+
+**1616**
+
+**1617**
+
+**1618**
+
+**1619**
+
+
+A.5.2 PROMPTS FOR MV-LLAVA INSTRUCT TUNING
+
+
+Table 8: **Instruct tuning prompt for SV3D (Voleti et al., 2024) and Zero123++ (Shi et al., 2023a)**
+**multi-view images**
+
+
+**prompt type** **prompt**
+
+
+quality estimation What do you think about the overall quality of this 3D model? Choosing
+from ”poor”, ”relatively poor”, ”boardline”, ”relatively good”, ”good”,
+”perfect”.
+
+
+scale tag What do you think about the scale of the 3D model represents? Choosing from ”single ~~o~~ bject”, ”multi-object”, ”small ~~s~~ cene”, ”large ~~s~~ cene”.
+
+
+style tag What do you think about the overall style of the 3D model? Choosing
+from ”CAD”, ”Cartoon”, ”Photo ~~r~~ ealistic”.
+
+
+A.6 GPT-4V BASED 3D OBJECT GENERATION EVALUATION.
+
+
+We adopt method proposed in GPTeval3D (Wu et al., 2024) for more thorough and human-aligned
+evaluation of the quality of generated object by different methods. A full test case is shown in
+Fig. 20. Left 9-view image is rendered from object generated by Bootstrap3D and the right one
+generated by Instant3D (Li et al., 2023a). We ask GPT-4V to mainly evaluate through comparison
+based on three dimensions: text-image alignment, low-level texture quality and 3D plausibility.
+The answer of GPT-4V shows its in depth perception ability of given reasonable comparison well
+
+
+30
+
+
+generate caption
+
+
+reasoning
+
+
+_<_ image _><_ image _><_ image _><_ image _>\_ nWhat is this multi-view
+photo about? generate a short caption for me.
+_<_ image _><_ image _><_ image _><_ image _>\_ nGenerate a short caption of
+the following multi-view image.
+_<_ image _><_ image _><_ image _><_ image _>\_ nCan you describe the main
+features of this multi-view image for me by a short caption?
+
+
+How about the view consistency of this synthesized multi-view image?
+Do some comments about the view consistency of this synthesized
+multi-view image.
+What do you think about the view consistency of this synthesized multiview image?
+
+
+quality estimation What do you think about the overall quality of view consistency of three
+synthesized novel views? Choosing from ”poor”, ”relatively poor”,
+”boardline”, ”relatively good”, ”good”, ”perfect”.
+
+
+Table 9: **Instruct tuning prompt for Objaverse (Deitke et al., 2023) rendered multi-view images**
+
+
+**prompt type** **prompt**
+
+
+long description
+
+
+caption
+
+
+_<_ image _><_ image _><_ image _><_ image _>\_ nWhat is this multi-view
+photo about? generate a long descriptive caption for me.
+_<_ image _><_ image _><_ image _><_ image _>\_ nGenerate a long descriptive
+caption of the following multi-view image.
+_<_ image _><_ image _><_ image _><_ image _>\_ nCan you describe the main
+features of this multi-view image for me by a long descriptive caption
+caption?
+
+
+_<_ image _><_ image _><_ image _><_ image _>\_ nWhat is this multi-view
+photo about? generate a short caption for me.
+_<_ image _><_ image _><_ image _><_ image _>\_ nGenerate a short caption of
+the following multi-view image.
+_<_ image _><_ image _><_ image _><_ image _>\_ nCan you describe the main
+features of this multi-view image for me by a short caption?
+
+
+**1620**
+
+**1621**
+
+
+**1622**
+
+**1623**
+
+**1624**
+
+**1625**
+
+**1626**
+
+**1627**
+
+
+**1628**
+
+**1629**
+
+**1630**
+
+**1631**
+
+**1632**
+
+**1633**
+
+
+**1634**
+
+**1635**
+
+**1636**
+
+**1637**
+
+**1638**
+
+
+**1639**
+
+**1640**
+
+**1641**
+
+**1642**
+
+**1643**
+
+**1644**
+
+
+**1645**
+
+**1646**
+
+**1647**
+
+**1648**
+
+**1649**
+
+**1650**
+
+
+**1651**
+
+**1652**
+
+**1653**
+
+**1654**
+
+**1655**
+
+**1656**
+
+
+**1657**
+
+**1658**
+
+**1659**
+
+**1660**
+
+**1661**
+
+
+**1662**
+
+**1663**
+
+**1664**
+
+**1665**
+
+**1666**
+
+**1667**
+
+
+**1668**
+
+**1669**
+
+**1670**
+
+**1671**
+
+**1672**
+
+**1673**
+
+
+Figure 20: **A test conversation with GPT-4V (OpenAI, 2023a)** of evaluating generated objects.
+
+
+aligned with human preference. We thus choose to use GPT-4V rather than human volunteers to
+give reasonable evaluation.
+
+
+We adopt the 110 test prompts proposed in GPTeval3D (Wu et al., 2024) to test Bootstrap3D generated object comparing with Instant3D (Li et al., 2023a), Zero123++ (Shi et al., 2023a) and MVDream (Shi et al., 2023b). For each methods, we conditioned model based on 110 test prompts with
+
+
+31
+
+
+**1674**
+
+**1675**
+
+
+**1676**
+
+**1677**
+
+**1678**
+
+**1679**
+
+**1680**
+
+**1681**
+
+
+**1682**
+
+**1683**
+
+**1684**
+
+**1685**
+
+**1686**
+
+**1687**
+
+
+**1688**
+
+**1689**
+
+**1690**
+
+**1691**
+
+**1692**
+
+
+**1693**
+
+**1694**
+
+**1695**
+
+**1696**
+
+**1697**
+
+**1698**
+
+
+**1699**
+
+**1700**
+
+**1701**
+
+**1702**
+
+**1703**
+
+**1704**
+
+
+**1705**
+
+**1706**
+
+**1707**
+
+**1708**
+
+**1709**
+
+**1710**
+
+
+**1711**
+
+**1712**
+
+**1713**
+
+**1714**
+
+**1715**
+
+
+**1716**
+
+**1717**
+
+**1718**
+
+**1719**
+
+**1720**
+
+**1721**
+
+
+**1722**
+
+**1723**
+
+**1724**
+
+**1725**
+
+**1726**
+
+**1727**
+
+
+4 different seeds, with each methods generates 440 objects, we make 1-to-1 comparison following
+aforementioned test setting. Results are reported in Tab. 10. Except MVDream (Shi et al., 2023b)
+(SDS) (which generates single object consuming 30 mins while Bootstrap3D only need 5 seconds.).
+Bootstrap3D excels in all three evaluation dimensions, which proves the ability of Bootstrap3D in
+creating high quality 3D objects.
+
+
+Table 10: **GPT-4V based evaluation result.** the result is in format of ”number of objects preferred
+geneated by Bootstrap3D/ that of other methods”. Cases when GPT cannot answer the question or
+generates ”cannot decide” answer are excluded.
+
+
+Image-text alignment Texture quality 3D plausibility
+
+
+Compared to Instant3D (Li et al., 2023a) (unofficial) 247 / 116 202 / 162 259 / 110
+Compared to Zero123++ (Shi et al., 2023a) 192 / 143 210 / 161 231 / 139
+Compared to MVDream (Shi et al., 2023b) (GRM) 290 / 71 245 / 131 284 / 102
+Compared to MVDream (Shi et al., 2023b) (SDS) 188 / 155 173 / 190 192 / 150
+
+
+A.7 IMPROVING DIRECT 3D GENERATIVE MODELS
+
+
+**Shape-E**
+
+
+**Cap3D**
+
+
+Figure 21: **Fine** **tuned** **Shape-E** **generation** **results** that shows better object-text alignment than
+original Shape-E (Jun & Nichol, 2023) and finetuned version in Cap3D (Luo et al., 2024).
+
+
+Table 11: **Test results on Shape-E.** More accurate and descriptive 3D caption help model to achieve
+better object-text alignment.
+
+Method FID _↓_ CLIP score _↑_ CLIP-R-precision _↑_
+
+
+Shape-E 37.2 80.4 20.3
+Cap3D 35.5 79.1 20.0
+Ours 35.3 81.2 22.1
+
+
+In addition to fine-tuning the multiview diffusion model, we also evaluate our framework on direct
+3D generative models, circumventing the use of multi-view images as intermediaries. For this purpose, we selected the Shape-E (Jun & Nichol, 2023) model for experiment and assess the outcomes
+following the testing method the same to Cap3D (Luo et al., 2024). Specifically, we fine-tune ShapeE using 250K BS-Objaverse data, ensuring that all entries scored greater than 3, accompanied by
+more precise and descriptive captions. The metrics for training and testing are consistent with those
+employed in Cap3D (Luo et al., 2024). Some qualitative results are presented in Fig.21, where our
+finetuned verson can generate object that follow text prompt more precisely. Quantitative results
+are detailed in Tab.11, where more accurate and desciptive captions than Cap3D can significantly
+improve metrics like CLIP score. Our findings indicate that improved data quality can significantly
+enhance object-text alignment and visual quality of Shape-E. This experiment substantiates that
+our pipeline, characterized by detailed captions and quality filtering, is also effective for direct 3D
+objects generation represented by neural field.
+
+
+32
+
+
+**A cracked teapot heating on an old stove**
+
+
+**1728**
+
+**1729**
+
+
+**1730**
+
+**1731**
+
+**1732**
+
+**1733**
+
+**1734**
+
+**1735**
+
+
+**1736**
+
+**1737**
+
+**1738**
+
+**1739**
+
+**1740**
+
+**1741**
+
+
+**1742**
+
+**1743**
+
+**1744**
+
+**1745**
+
+**1746**
+
+
+**1747**
+
+**1748**
+
+**1749**
+
+**1750**
+
+**1751**
+
+**1752**
+
+
+**1753**
+
+**1754**
+
+**1755**
+
+**1756**
+
+**1757**
+
+**1758**
+
+
+**1759**
+
+**1760**
+
+**1761**
+
+**1762**
+
+**1763**
+
+**1764**
+
+
+**1765**
+
+**1766**
+
+**1767**
+
+**1768**
+
+**1769**
+
+
+**1770**
+
+**1771**
+
+**1772**
+
+**1773**
+
+**1774**
+
+**1775**
+
+
+**1776**
+
+**1777**
+
+**1778**
+
+**1779**
+
+**1780**
+
+**1781**
+
+
+**A chibi phoenix reborn from ashes, flames gently**
+
+**flickering around it**
+
+
+Figure 22: **Visualization of generated objects compared to other edge-cutting methods**
+
+
+A.8 MORE RESULTS VISUALIZATION
+
+
+A.8.1 COMPARISON WITH OTHER METHODS
+
+
+A.8.2 VISUALIZATION OF GENERATED OBJECTS WITH DIFFERENT STYLES
+
+
+A.9 BROADER IMPACTS
+
+
+**Potential positive societal impacts:** The proposed framework, Bootstrap3D, enhances the quality
+and consistency of 3D models, which can benefit various industries such as entertainment, education,
+virtual reality, and digital art. By generating and sharing a large synthetic dataset of high-quality
+synthetic multi-view images, We will promotes open access to resources that can accelerate progress
+
+
+33
+
+
+**1782**
+
+**1783**
+
+
+**1784**
+
+**1785**
+
+**1786**
+
+**1787**
+
+**1788**
+
+**1789**
+
+
+**1790**
+
+**1791**
+
+**1792**
+
+**1793**
+
+**1794**
+
+**1795**
+
+
+**1796**
+
+**1797**
+
+**1798**
+
+**1799**
+
+**1800**
+
+
+**1801**
+
+**1802**
+
+**1803**
+
+**1804**
+
+**1805**
+
+**1806**
+
+
+**1807**
+
+**1808**
+
+**1809**
+
+**1810**
+
+**1811**
+
+**1812**
+
+
+**1813**
+
+**1814**
+
+**1815**
+
+**1816**
+
+**1817**
+
+**1818**
+
+
+**1819**
+
+**1820**
+
+**1821**
+
+**1822**
+
+**1823**
+
+
+**1824**
+
+**1825**
+
+**1826**
+
+**1827**
+
+**1828**
+
+**1829**
+
+
+**1830**
+
+**1831**
+
+**1832**
+
+**1833**
+
+**1834**
+
+**1835**
+
+
+Figure 23: **Visualization of generated objects compared to other edge-cutting methods**
+
+
+in the field. The model and data can serve as educational tools for students and researchers, fostering
+learning and innovation in machine learning and 3D modeling.
+
+
+**Potential negative societal impacts:** High-quality 3D models could be used to create deepfakes or
+misleading content, which may contribute to disinformation or malicious activities. Monitoring and
+Defense Mechanisms: Developing tools to detect and prevent the misuse of the generated 3D models, particularly in contexts like disinformation and surveillance. There may be unintended biases
+in the generated data or models, leading to unfair treatment of specific groups if the technology is
+deployed in applications affecting societal decision-making.
+
+
+34
+
+
+**A galactic lighthouse guiding traverlers through**
+
+**space-time anomalies** **with glowing eyes**
+
+
+**space-time anomalies**
+
+
+**A miniature robot companion, poised for adventure**
+
+
+**A serene, celestial observatory**
+
+
+**Zero123++** **Instant3D** **Ours**
+
+
+**1836**
+
+**1837**
+
+
+**1838**
+
+**1839**
+
+**1840**
+
+**1841**
+
+**1842**
+
+**1843**
+
+
+**1844**
+
+**1845**
+
+**1846**
+
+**1847**
+
+**1848**
+
+**1849**
+
+
+**1850**
+
+**1851**
+
+**1852**
+
+**1853**
+
+**1854**
+
+
+**1855**
+
+**1856**
+
+**1857**
+
+**1858**
+
+**1859**
+
+**1860**
+
+
+**1861**
+
+**1862**
+
+**1863**
+
+**1864**
+
+**1865**
+
+**1866**
+
+
+**1867**
+
+**1868**
+
+**1869**
+
+**1870**
+
+**1871**
+
+**1872**
+
+
+**1873**
+
+**1874**
+
+**1875**
+
+**1876**
+
+**1877**
+
+
+**1878**
+
+**1879**
+
+**1880**
+
+**1881**
+
+**1882**
+
+**1883**
+
+
+**1884**
+
+**1885**
+
+**1886**
+
+**1887**
+
+**1888**
+
+**1889**
+
+
+**A tranquil, winter cabin**
+
+
+**Zero123++** **Instant3D** **Ours**
+
+
+Figure 24: **Visualization of generated objects compared to other edge-cutting methods**
+
+
+35
+
+
+**A warm, glowing streetlamp**
+
+
+**Zero123++** **Instant3D** **Ours**
+
+
+**1890**
+
+**1891**
+
+
+**1892**
+
+**1893**
+
+**1894**
+
+**1895**
+
+**1896**
+
+**1897**
+
+
+**1898**
+
+**1899**
+
+**1900**
+
+**1901**
+
+**1902**
+
+**1903**
+
+
+**1904**
+
+**1905**
+
+**1906**
+
+**1907**
+
+**1908**
+
+
+**1909**
+
+**1910**
+
+**1911**
+
+**1912**
+
+**1913**
+
+**1914**
+
+
+**1915**
+
+**1916**
+
+**1917**
+
+**1918**
+
+**1919**
+
+**1920**
+
+
+**1921**
+
+**1922**
+
+**1923**
+
+**1924**
+
+**1925**
+
+**1926**
+
+
+**1927**
+
+**1928**
+
+**1929**
+
+**1930**
+
+**1931**
+
+
+**1932**
+
+**1933**
+
+**1934**
+
+**1935**
+
+**1936**
+
+**1937**
+
+
+**1938**
+
+**1939**
+
+**1940**
+
+**1941**
+
+**1942**
+
+**1943**
+
+
+**A blinking star**
+
+
+**Zero123++** **Instant3D** **Ours**
+
+
+Figure 25: **Visualization of generated objects compared to other edge-cutting methods**
+
+
+36
+
+
+**A teal cup, steaming with hot tea.**
+
+
+**Zero123++** **Instant3D** **Ours**
+
+
+**1944**
+
+**1945**
+
+
+**1946**
+
+**1947**
+
+**1948**
+
+**1949**
+
+**1950**
+
+**1951**
+
+
+**1952**
+
+**1953**
+
+**1954**
+
+**1955**
+
+**1956**
+
+**1957**
+
+
+**1958**
+
+**1959**
+
+**1960**
+
+**1961**
+
+**1962**
+
+
+**1963**
+
+**1964**
+
+**1965**
+
+**1966**
+
+**1967**
+
+**1968**
+
+
+**1969**
+
+**1970**
+
+**1971**
+
+**1972**
+
+**1973**
+
+**1974**
+
+
+**1975**
+
+**1976**
+
+**1977**
+
+**1978**
+
+**1979**
+
+**1980**
+
+
+**1981**
+
+**1982**
+
+**1983**
+
+**1984**
+
+**1985**
+
+
+**1986**
+
+**1987**
+
+**1988**
+
+**1989**
+
+**1990**
+
+**1991**
+
+
+**1992**
+
+**1993**
+
+**1994**
+
+**1995**
+
+**1996**
+
+**1997**
+
+
+**A colossal, stone giant wandering a deserted**
+
+**landscape.**
+
+
+**Zero123++** **Instant3D** **Ours**
+
+
+Figure 26: **Visualization of generated objects compared to other edge-cutting methods**
+
+
+37
+
+
+**1998**
+
+**1999**
+
+
+**2000**
+
+**2001**
+
+**2002**
+
+**2003**
+
+**2004**
+
+**2005**
+
+
+**2006**
+
+**2007**
+
+**2008**
+
+**2009**
+
+**2010**
+
+**2011**
+
+
+**2012**
+
+**2013**
+
+**2014**
+
+**2015**
+
+**2016**
+
+
+**2017**
+
+**2018**
+
+**2019**
+
+**2020**
+
+**2021**
+
+**2022**
+
+
+**2023**
+
+**2024**
+
+**2025**
+
+**2026**
+
+**2027**
+
+**2028**
+
+
+**2029**
+
+**2030**
+
+**2031**
+
+**2032**
+
+**2033**
+
+**2034**
+
+
+**2035**
+
+**2036**
+
+**2037**
+
+**2038**
+
+**2039**
+
+
+**2040**
+
+**2041**
+
+**2042**
+
+**2043**
+
+**2044**
+
+**2045**
+
+
+**2046**
+
+**2047**
+
+**2048**
+
+**2049**
+
+**2050**
+
+**2051**
+
+
+Figure 27: **Visualization** **of** **generated** **objects** **compared** **to** **other** **edge-cutting** **methods** **with**
+**different style control.**
+
+
+38
+
+
+**2052**
+
+**2053**
+
+
+**2054**
+
+**2055**
+
+**2056**
+
+**2057**
+
+**2058**
+
+**2059**
+
+
+**2060**
+
+**2061**
+
+**2062**
+
+**2063**
+
+**2064**
+
+**2065**
+
+
+**2066**
+
+**2067**
+
+**2068**
+
+**2069**
+
+**2070**
+
+
+**2071**
+
+**2072**
+
+**2073**
+
+**2074**
+
+**2075**
+
+**2076**
+
+
+**2077**
+
+**2078**
+
+**2079**
+
+**2080**
+
+**2081**
+
+**2082**
+
+
+**2083**
+
+**2084**
+
+**2085**
+
+**2086**
+
+**2087**
+
+**2088**
+
+
+**2089**
+
+**2090**
+
+**2091**
+
+**2092**
+
+**2093**
+
+
+**2094**
+
+**2095**
+
+**2096**
+
+**2097**
+
+**2098**
+
+**2099**
+
+
+**2100**
+
+**2101**
+
+**2102**
+
+**2103**
+
+**2104**
+
+**2105**
+
+
+Figure 28: **Visualization** **of** **generated** **objects** **compared** **to** **other** **edge-cutting** **methods** **with**
+**different style control.**
+
+
+39
+
+
+**2106**
+
+**2107**
+
+
+**2108**
+
+**2109**
+
+**2110**
+
+**2111**
+
+**2112**
+
+**2113**
+
+
+**2114**
+
+**2115**
+
+**2116**
+
+**2117**
+
+**2118**
+
+**2119**
+
+
+**2120**
+
+**2121**
+
+**2122**
+
+**2123**
+
+**2124**
+
+
+**2125**
+
+**2126**
+
+**2127**
+
+**2128**
+
+**2129**
+
+**2130**
+
+
+**2131**
+
+**2132**
+
+**2133**
+
+**2134**
+
+**2135**
+
+**2136**
+
+
+**2137**
+
+**2138**
+
+**2139**
+
+**2140**
+
+**2141**
+
+**2142**
+
+
+**2143**
+
+**2144**
+
+**2145**
+
+**2146**
+
+**2147**
+
+
+**2148**
+
+**2149**
+
+**2150**
+
+**2151**
+
+**2152**
+
+**2153**
+
+
+**2154**
+
+**2155**
+
+**2156**
+
+**2157**
+
+**2158**
+
+**2159**
+
+
+**A pair of worn-outed boots**
+
+
+Figure 29: **Visualization** **of** **generated** **objects** **compared** **to** **other** **edge-cutting** **methods** **with**
+**different style control.**
+
+
+40
+
+
+**2160**
+
+**2161**
+
+
+**2162**
+
+**2163**
+
+**2164**
+
+**2165**
+
+**2166**
+
+**2167**
+
+
+**2168**
+
+**2169**
+
+**2170**
+
+**2171**
+
+**2172**
+
+**2173**
+
+
+**2174**
+
+**2175**
+
+**2176**
+
+**2177**
+
+**2178**
+
+
+**2179**
+
+**2180**
+
+**2181**
+
+**2182**
+
+**2183**
+
+**2184**
+
+
+**2185**
+
+**2186**
+
+**2187**
+
+**2188**
+
+**2189**
+
+**2190**
+
+
+**2191**
+
+**2192**
+
+**2193**
+
+**2194**
+
+**2195**
+
+**2196**
+
+
+**2197**
+
+**2198**
+
+**2199**
+
+**2200**
+
+**2201**
+
+
+**2202**
+
+**2203**
+
+**2204**
+
+**2205**
+
+**2206**
+
+**2207**
+
+
+**2208**
+
+**2209**
+
+**2210**
+
+**2211**
+
+**2212**
+
+**2213**
+
+
+**A hissing snake**
+
+**Zero123++** **Instant3D** **Ours (CAD)** **Ours (Cartoon)** **Ours (Photorealistic)**
+
+
+Figure 30: **Visualization** **of** **generated** **objects** **compared** **to** **other** **edge-cutting** **methods** **with**
+**different style control.**
+
+
+41
+
+
+**2214**
+
+**2215**
+
+
+**2216**
+
+**2217**
+
+**2218**
+
+**2219**
+
+**2220**
+
+**2221**
+
+
+**2222**
+
+**2223**
+
+**2224**
+
+**2225**
+
+**2226**
+
+**2227**
+
+
+**2228**
+
+**2229**
+
+**2230**
+
+**2231**
+
+**2232**
+
+
+**2233**
+
+**2234**
+
+**2235**
+
+**2236**
+
+**2237**
+
+**2238**
+
+
+**2239**
+
+**2240**
+
+**2241**
+
+**2242**
+
+**2243**
+
+**2244**
+
+
+**2245**
+
+**2246**
+
+**2247**
+
+**2248**
+
+**2249**
+
+**2250**
+
+
+**2251**
+
+**2252**
+
+**2253**
+
+**2254**
+
+**2255**
+
+
+**2256**
+
+**2257**
+
+**2258**
+
+**2259**
+
+**2260**
+
+**2261**
+
+
+**2262**
+
+**2263**
+
+**2264**
+
+**2265**
+
+**2266**
+
+**2267**
+
+
+**A flaming candel**
+
+
+Figure 31: **Visualization** **of** **generated** **objects** **compared** **to** **other** **edge-cutting** **methods** **with**
+**different style control.**
+
+
+42
