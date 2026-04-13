@@ -261,7 +261,7 @@ async def _call_openai(
                 kwargs["extra_body"] = extra
             response = await resolved_client.chat.completions.create(**kwargs)
             result = response.choices[0].message.content or ""
-            cost = _extract_cost(response)
+            cost = 0.0 if provider_name == "Ollama" else _extract_cost(response)
             usage = getattr(response, "usage", None)
             input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
             output_tokens = getattr(usage, "completion_tokens", None) if usage else None
@@ -475,7 +475,7 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
         timeout=30,
     )
     parsed = response.choices[0].message.parsed
-    cost = _extract_cost(response)
+    cost = 0.0 if provider_name == "Ollama" else _extract_cost(response)
     usage = getattr(response, "usage", None)
     input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
     output_tokens = getattr(usage, "completion_tokens", None) if usage else None
