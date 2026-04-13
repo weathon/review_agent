@@ -37,8 +37,8 @@ ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 #base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "qwen/qwen3.5-flash-02-23"
 MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
-MODEL_NEUTRAL = "ollama:glm-5.1:cloud"
-MODEL_SPARK = "ollama:glm-5.1:cloud"
+MODEL_NEUTRAL = f"ollama:{base_model}"
+MODEL_SPARK = "ollama:qwen/qwen3.5-plus-02-15"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
@@ -185,6 +185,17 @@ def _get_ollama_client() -> AsyncOpenAI:
 ollama_client = _get_ollama_client()
 
 
+def _resolve_openai_client_and_model(
+    client: AsyncOpenAI,
+    model: str,
+) -> tuple[AsyncOpenAI, str, str]:
+    if model.startswith("ollama:"):
+        return ollama_client, model.split(":", 1)[1], "Ollama"
+    if model.startswith("zai:"):
+        return zai_client, model.split(":", 1)[1], "ZAI"
+    return client, model, "OpenRouter"
+
+
 
 # ── OpenRouter calls ───────────────────────────────────────────────────
 
@@ -231,21 +242,24 @@ async def _call_openai(
     model: str,
     tools: list[dict] | None = None,
 ) -> tuple[str, float]:
-    """Call OpenRouter chat completions with retry logic. Returns (result, cost)."""
+    """Call an OpenAI-compatible chat completion endpoint with retry logic."""
+    resolved_client, resolved_model, provider_name = _resolve_openai_client_and_model(client, model)
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             kwargs = dict(
-                model=model,
+                model=resolved_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 timeout=REQUEST_TIMEOUT,
             )
-            extra = _build_extra_body(model, reasoning_effort="medium")
+            extra = None
+            if provider_name == "OpenRouter":
+                extra = _build_extra_body(resolved_model, reasoning_effort="medium")
             if extra:
                 kwargs["extra_body"] = extra
-            response = await client.chat.completions.create(**kwargs)
+            response = await resolved_client.chat.completions.create(**kwargs)
             result = response.choices[0].message.content or ""
             cost = _extract_cost(response)
             usage = getattr(response, "usage", None)
@@ -263,7 +277,7 @@ async def _call_openai(
                     continue
                 _error_logger.error(f"[{name}] empty response after {MAX_RETRIES} attempts, model={model}")
                 print(f"  [{name}] empty response after {MAX_RETRIES} attempts")
-            print(f"  [{name}] done — {model} (OpenRouter) — {tokens} tokens — ${cost:.4f}")
+            print(f"  [{name}] done — {model} ({provider_name}) — {tokens} tokens — ${cost:.4f}")
             return result, cost
         except APITimeoutError as e:
             _error_logger.error(f"[{name}] timeout (attempt {attempt}/{MAX_RETRIES}), model={model}\n{traceback.format_exc()}")
@@ -434,9 +448,25 @@ async def run_related_work_search(
 
 
 async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
-    """Use GPT-5.4-nano with structured output to extract a score. Returns (score, cost)."""
-    response = await client.beta.chat.completions.parse(
-        model=MODEL_PARSER,
+    """Extract a score using an OpenAI-compatible endpoint. Returns (score, cost)."""
+    resolved_client, resolved_model, provider_name = _resolve_openai_client_and_model(client, MODEL_PARSER)
+    if provider_name == "Ollama":
+        parser_prompt = (
+            f"{_load_prompt('parse_score.txt')}\n\n"
+            f"Return valid JSON with exactly this shape: {{\"score\": 0.0}}"
+        )
+        parser_text, cost = await _call_openai(
+            resolved_client,
+            "score_parser",
+            parser_prompt,
+            text,
+            MODEL_PARSER,
+        )
+        parsed = ScoreSchema.model_validate(json.loads(parser_text))
+        return parsed.score, cost
+
+    response = await resolved_client.beta.chat.completions.parse(
+        model=resolved_model,
         messages=[
             {"role": "system", "content": _load_prompt("parse_score.txt")},
             {"role": "user", "content": text},
@@ -450,7 +480,7 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
     output_tokens = getattr(usage, "completion_tokens", None) if usage else None
     tokens = f"{input_tokens}in/{output_tokens}out" if input_tokens and output_tokens else "n/a"
-    print(f"  [score_parser] done — {MODEL_PARSER} — {tokens} tokens — ${cost:.4f}")
+    print(f"  [score_parser] done — {MODEL_PARSER} ({provider_name}) — {tokens} tokens — ${cost:.4f}")
     if parsed is None:
         raise ValueError("score_parser returned no parsed output")
     return parsed.score, cost
@@ -508,14 +538,9 @@ async def run_merge(
         f"Remember: many of the harsh critic's points may be nonsensical or overly "
         f"picky — cross-check everything against the actual paper before including it."
     )
-    if MODEL_MERGER.startswith("zai:"):
-        review_text, cost = await _call_openai(
-            zai_client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER.split(":", 1)[1]
-        )
-    else:
-        review_text, cost = await _call_openai(
-            client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER,
-        )
+    review_text, cost = await _call_openai(
+        client, "merger", merger_prompt, user_prompt_review, MODEL_MERGER,
+    )
     return review_text, cost
 
 
