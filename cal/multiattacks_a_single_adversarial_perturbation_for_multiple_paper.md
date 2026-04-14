@@ -1,0 +1,279 @@
+
+
+{0}------------------------------------------------
+
+# MULTI-ATTACKS: A SINGLE ADVERSARIAL PERTURBATION FOR MULTIPLE IMAGES AND TARGET LABELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+We show that we can easily design a single adversarial perturbation  $P$  that changes the class of  $n$  images  $X_1, X_2, \dots, X_n$  from their original, unperturbed classes  $c_1, c_2, \dots, c_n$  to desired (not necessarily all the same) classes  $c_1^*, c_2^*, \dots, c_n^*$  for up to hundreds of images and target classes at once. We call these *multi-attacks*. Characterizing the maximum  $n$  we can achieve under different conditions such as image resolution, we estimate the number of regions of high class confidence around a particular image in the space of pixels to be around  $10^{O(100)}$ , posing a significant problem for exhaustive defense strategies. We show several immediate consequences of this: adversarial attacks that change the resulting class based on their intensity, and scale-independent adversarial examples. To demonstrate the redundancy and richness of class decision in the pixel space, we look for its two-dimensional sections that trace images and spell words using particular classes. We also show that ensembling reduces susceptibility to multi-attacks, and that classifiers trained on random labels are more susceptible.
+
+![Figure 1: (Left panel) A simultaneous multi-attack on 5 images. (Right panel) A 2D section of the pixel space spelling AGI and outlining a tortoise.](1559db1c389771b44f7dc11d48b06079_img.jpg)
+
+The figure consists of two panels. The left panel shows a stack of five images of a biplane, each with a different colored border (blue, orange, red, yellow, green). Above the stack, labels indicate target classes: c=48 laptop, c=581 keyboard, c=588 server, c=448 letter, c=454 airline. To the right of the stack, a label '5 attacks in 1' is next to a small square of noise. Below the stack, labels indicate the resulting classes: c=580 cohesant, c=483 aircraft carrier, c=482 boat drum, c=480 off-loading, c=480 ventiler. The right panel shows a 2D section of the pixel space. It features a large green shape resembling a tortoise, with the letters 'AGI' in red above it. The axes are labeled 'x' and 'y', with 'x = multiplier of P\_y' and 'y = multiplier of P\_x'. A legend on the right indicates: c=480 laptop (red dot), c=481 bus (blue dot), c=480 daisy (green dot).
+
+Figure 1: (Left panel) A simultaneous multi-attack on 5 images. (Right panel) A 2D section of the pixel space spelling AGI and outlining a tortoise.
+
+(a) A simultaneous multi-attack on 5 images at once.
+
+(b) A 2D section of the pixel space spelling *AGI* and outlining a tortoise.
+
+Figure 1: (**Left panel**): A single, small adversarial perturbation (in orange) to the pixels of many images at once (5 in this example, in blue) can change their classification to arbitrarily chosen classes (that are not necessarily the same). The partitioning of the space of inputs into classes is extremely rich and redundant, and allows for optimization of very constrained problems, such as finding a simultaneous attack on  $\mathcal{O}(100)$  images at once. (**Right panel**): To demonstrate the richness of the space of inputs, we simultaneous attack 288 neighboring images on a 2D slice of the pixel space (starting at a CIFAR-10 image of a biplane) with 2 adversarial perturbations,  $P_x$  and  $P_y$ , defining a 2D affine subspace around it. We optimize the subspace to spell *AGI* in the ImageNet class 620 (laptop) and draw a tortoise in the class 37 (turtle), with a background of class 985 (daisy).
+
+## 1 INTRODUCTION
+
+The problem of adversarial examples is typically framed in the classification setting (Szegedy et al., 2013), where a small, specifically tailored adversarial perturbation  $P$  to the input data  $X$  changes the classification decision from a class  $c$ ,  $c = \operatorname{argmax}_c f(X)$ , to a different class  $c^*$ ,  $c^* = \operatorname{argmax}_c f(X + P)$ , while the magnitude of  $P$  (typically measured by its  $L_2$  or  $L_\infty$  norms) remains very small compared to  $X$ . In other words, the classification decision about an input image  $X$  is changed from one class to a confident prediction of another class (chosen by the attacker) by a small, often human-imperceptible change  $P$  to the image  $X$ . This problem is omnipresent in image
+
+{1}------------------------------------------------
+
+classification, starting from small models and data (Szegedy et al., 2013), all the way to current large models such as CLIP (Radford et al., 2021), as described for example in (Fort, 2021). Adversarial vulnerability applies not only to the classification setting but is a prominent issue in other domains, e.g. for near out-of-distribution detection (Chen et al., 2021; Fort, 2022). Despite the tremendous success of deep learning, the persistent presence of adversarial vulnerabilities points towards a potentially deeply ingrained problem with the approach.
+
+In this paper, we investigate the limits of adversarial attacks. The key question we are addressing is whether multiple attacks can be carried out by the same adversarial perturbation. For  $n$  images, e.g. an image  $X_1$  of a *cat*, an image  $X_2$  of a *tortoise*, and an image  $X_3$  of a *house*, can we can design a single change  $P$  to all  $n$  images at once such that  $X_1 + P$  is classified as e.g. a *tree*,  $X_2 + P$  is a *plane* and  $X_3 + P$  is a *dinosaur*?
+
+Our key contribution is to show that such attacks do exist and are in fact easy to find. We call these *multi-attacks*. Multi-attacks are easy to find using standard methods, and the higher the resolution of the image, the more images we can attack at the same time. We demonstrate that models trained on randomly permuted labels are more susceptible to multi-attacks, and that ensembling multiple models decreases their susceptibility to multi-attacks. Using a simple toy model theory, we estimate the number of distinct class regions around each image in the space of pixels to be  $10^{\mathcal{O}(100)}$ , which poses a major challenge to any adversarial defence strategies that rely on exhaustion. To show the flexibility and richness provided by the  $10^{\mathcal{O}(100)}$  class regions around each image in the space of pixels, we show that we can easily find two-dimensional sections of the input space that show images and spell words in arbitrary classes.
+
+## 2 METHOD
+
+For a classifier  $f : X \rightarrow y$ ,  $n$  inputs  $X_1, X_2, \dots, X_n$ , and  $n$  target classes  $c_1^*, c_2^*, \dots, c_n^*$ , the goal is to produce an adversarial perturbation  $P$  such that  $\operatorname{argmax} f(X_1 + P) = c_1^*$ ,  $\operatorname{argmax} f(X_2 + P) = c_2^*$ ,  $\dots$ ,  $\operatorname{argmax} f(X_n + P) = c_n^*$ . A standard adversarial attack takes a single image  $X$  and finds a single perturbation  $P$  such that  $X + P$  is misclassified as the target class the attacker chose. In this paper, we are looking for *single* perturbation  $P$  that is simultaneously capable of changing *many* images to *many* distinct classes. We call these perturbations *multi-attacks*.
+
+### 2.1 GENERATING A MULTI-ATTACK
+
+To find a multi-attack  $P$ , we are using the simplest method available. Given  $n$  target labels  $y_i^* \in \{0, 1, \dots, C-1\}^n$ , and  $n$  input images  $X \in \{X_1, X_2, \dots, X_n\}$ , we get the classifier logits  $z_i = f(X_i)$  for each image, and compute the cross-entropy loss against the desired target labels as
+
+$$\mathcal{L} = \frac{1}{n} \sum_{i=0}^{n-1} \text{CE}(z_i, y_i^*), \quad (1)$$
+
+where CE is the standard cross-entropy loss
+
+$$\text{CE}(z, y) = - \sum_{j=0}^{C-1} y_j \log \left( \frac{\exp z_j}{\sum_{k=0}^{C-1} \exp z_k} \right), \quad (2)$$
+
+and  $C$  is the total number of classes. We use the Adam optimizer (Kingma & Ba, 2014) to get the attack  $P$  by using the gradient of the loss  $\mathcal{L}$  with respect to the perturbation  $P$ . This is the same way adversarial examples, first described in (Szegedy et al., 2013), were generated. More robust methods exist, such as *Fast Gradient Sign Method* in (Goodfellow et al., 2014) that only uses the signs of the gradient instead of the gradient itself, however, we found that simply taking the gradient itself and doing the most straightforward thing worked well enough.
+
+Starting from the input images  $X$  of the shape [batch, channels, resolution, resolution] and the target labels  $y^*$  of the shape [batch], we are gradually getting updates to the perturbation  $P$  of the shape [1, channels, resolution, resolution]. The standard gradient descent approach would look like
+
+$$P_{t+1} = P_t - \eta \frac{\partial \mathcal{L}(f(X + P), y^*)}{\partial P} \Big|_{P=P_t}, \quad (3)$$
+
+{2}------------------------------------------------
+
+where  $\eta$  is the learning rate. We are using the Adam optimizer with an arbitrarily chosen learning rate of  $10^{-2}$ .
+
+### 2.2 ENSEMBLES
+
+Adversarial robustness of classifiers has been shown to improve with the use of ensembles (Tramèr et al., 2020; Kariyappa & Qureshi, 2019). This has also been the case with adversarial attacks against strong out-of-distribution detectors (Fort, 2022). We wanted to see if the number of simultaneously attackable images in a *multi-attack* showed any signs of dependence on the size of an ensemble. To do that, we took models  $f_1, f_2, \dots, f_m$ , and averaged their logit outputs to form a single model  $f_{\text{ensemble}}(x) = (1/m) \sum_{i=1}^m f_i(x)$ . The results of these experiments are shown in Section 4.3.
+
+## 3 SIMPLE THEORY
+
+Let us sketch a simple geometric model of the neighborhood of a particular image  $X$  in the space of inputs (the space of pixels). For CIFAR-10 (Krizhevsky & Hinton, 2009), this would be a  $d_{\text{in}} = 32 \times 32 \times 3 = 3072$  dimensional space of pixels and their channels. Let’s imagine that a particular image  $X$  is surrounded, within a certain distance, by  $N$  cells – regions of a high probability value of some class. We would like to estimate this number  $N$ . The particular locations of these cells around two inputs  $X_1$  and  $X_2$  will generically be very different. If we perturb the input  $X_1$  by a perturbation  $v$ ,  $X_1 + v$  might be a high confidence class 542, while  $X_2 + v$  might be in a high confidence region of a wholly different class, or not a high confidence region of any class altogether.
+
+For simplicity, let’s consider a random perturbation  $v$  that for all  $X_i + v$  reaches a high-confidence class area for some class. We illustrate the situation in Figure 2. The probability of it reaching the correct class  $c_i^*$  on the  $i^{\text{th}}$  image is  $1/C$ , where  $C$  is the total number of classes (in our experiments  $C = 1000$  since we are using models pretrained on ImageNet (Deng et al., 2009), or 10 for our CIFAR-10 trained models and experiments). To reach the target class for each  $i = 1, 2, \dots, n$ , the probability decreases to  $(1/C)^n$ . In our toy model, for a vector  $v$  to exist such that the predicted classes are  $c_1^*, c_2^*, \dots, c_n^*$ , we need there to be at least  $N$  regions around each input  $X$  where  $N(1/C)^n \geq 1$ . The maximum number of images we can attack at once,  $n_{\max}$ , is then approximately
+
+$$n_{\max} \approx \log(N) / \log(C). \quad (4)$$
+
+Given the maximum number of images we can attack at once,  $n_{\max}$ , the number of regions surrounding an image is approximately  $N \approx \exp(n_{\max} \log(C))$ . For  $n_{\max} = \mathcal{O}(100)$  and  $C = 1000$ , this works out to be  $N = 10^{\mathcal{O}(100)}$ . For CIFAR-10 models with  $C = 10$ , the difference in the order of magnitude is small.
+
+## 4 EXPERIMENTS
+
+In our experiments, we primarily used an ImageNet (Deng et al., 2009) pretrained ResNet50 (He et al., 2016) from the PyTorch (Paszke et al., 2019) `torchvision` hub<sup>1</sup>. This model has 1000 output classes and uses the  $224 \times 224 \times 3$  input resolution. As inputs, we were using images from the CIFAR-10 dataset (Krizhevsky & Hinton, 2009), however, working with random Gaussian noise yielded equivalent results. To study the effect of resolution, we would first change the resolution of the input image to the target resolution  $r \times r$ , add the attack of the same resolution, and then rescale the result to  $224 \times 224$  before feeding it into the classifier. The default learning rate we used
+
+<sup>1</sup><https://pytorch.org/vision/main/models/generated/torchvision.models.resnet50.html>
+
+{3}------------------------------------------------
+
+![Figure 4: Four line plots showing the number of successfully attacked images out of 1024. The first three plots show 'Success vs step', 'Success vs L_infinity', and 'Success vs L_2' for four models: 224x224, 112x112, 56x56, and 28x28. The fourth plot shows 'Effect of resolution' for the 224x224 model, plotting successful attacks against resolution from 14 to 224.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 4: Four line plots showing the number of successfully attacked images out of 1024. The first three plots show 'Success vs step', 'Success vs L\_infinity', and 'Success vs L\_2' for four models: 224x224, 112x112, 56x56, and 28x28. The fourth plot shows 'Effect of resolution' for the 224x224 model, plotting successful attacks against resolution from 14 to 224.
+
+Figure 4: The number of successfully attacked images out of 1024 randomly chosen but fixed samples of CIFAR-10 with 1024 randomly chosen but fixed ImageNet classes (1000 in total) as a function of the size of the adversarial perturbation and optimization step (left-most panel). The higher the resolution of the image, the easier it is to attack a large number of them simultaneously even with a smaller  $L_\infty$  norm perturbation.
+
+for finding the adversarial attacks was  $10^{-2}$  with the Adam (Kingma & Ba, 2014) optimizer. All experiments were done on a single A100 GPU in a Google Colab in a matter of hours.
+
+To see what the effect of architecture is, we also used a ResNet18 from the same source. For experiments where we trained models on CIFAR-10 ourselves, we removed the final linear layer from the original architecture and replaced it with a randomly initialized linear layer with 10 outputs. We also trained a small CNN architecture we call a SimpleCNN with 4 layers of  $3 \times 3$  convolutional kernels followed by ReLU and mean pooling, with channel numbers 32, 64, 128, and 128, followed by a linear layer to 10 logits.
+
+### 4.1 NUMBER OF SIMULTANEOUS ATTACKS VS PERTURBATION STRENGTH
+
+We are measuring the strength of the adversarial perturbation by the  $L_\infty$  and  $L_2$  norms.  $L_\infty$  is the maximum value of the perturbation  $P$  over all pixels and all channels. We are using pixel values in the 0 to 255 range. Starting with a fixed batch of 1024 images (an arbitrary choice large enough to be challenging at the  $224 \times 224$  resolution but also fast enough to experiment with), we track how many have been classified as the randomly chosen but fixed target classes (from the 1000 ImageNet classes) as a function of the iteration of the adversary finding step, and the  $L_2$  and  $L_\infty$  norms of the attack perturbation. The results are shown in Figure 4. The higher the resolution of the image, the more images we can attack successfully at once. In addition, the  $L_\infty$  norms of the higher resolution images are smaller (though still pretty large compared to the standard  $8/255$ ). The  $L_2$  norms are roughly equivalent at the end of optimization. Interestingly, it seems (by visual inspection alone) the number of successfully attacked images scales linearly with the logarithm of the resolution, as  $n_{\max} \propto \log r$  (as shown in the right-most panel of Figure 4. It is possible that the numbers we obtained is an overestimate of the actual number of images attackable at once to 100% accuracy, since the images that are in some sense easier to attack might be chosen first from the full batch of 1024 images available. We discuss this further in Section 4.2.
+
+### 4.2 ATTACKING A BATCH AT ONCE
+
+In our experiments, e.g. in Figure 4, we start with a batch of images (1024 in that Figure), and optimize the cross-entropy of the classifier predictions against the target labels, as shown in Eq. 1. There are two disadvantages to this approach: 1) having the  $\operatorname{argmax}_i \hat{f}(X_i + P) = c_i^*$  does not stop the optimization, and 2) an easier subset of images can be chosen by the optimizer. The first problem is a standard mismatch between minimizing a loss and maximizing accuracy. In our case it can mean that the optimizer can over-focus on a particular image that has already been misclassified correctly as
+
+![Figure 3: A line plot showing the number of successfully attacked images out of 128 as a function of ensemble size (1 to 10). The y-axis is 'Attacked at once (out of 128)' ranging from 60 to 95. The x-axis is 'Ensemble size' ranging from 2 to 10. The data points show a general downward trend with some fluctuations, ending around 45 attacks at ensemble size 10.](846242b2850d88b17a6d47cd9dd0ccbf_img.jpg)
+
+Figure 3: A line plot showing the number of successfully attacked images out of 128 as a function of ensemble size (1 to 10). The y-axis is 'Attacked at once (out of 128)' ranging from 60 to 95. The x-axis is 'Ensemble size' ranging from 2 to 10. The data points show a general downward trend with some fluctuations, ending around 45 attacks at ensemble size 10.
+
+Figure 3: Successfully attacked images out of 128 with a single multi-attack for ensembles of CIFAR-10-trained SimpleCNN models. The larger the ensemble, the fewer images we can successfully attack at the end of the 500 steps of attack optimization.
+
+{4}------------------------------------------------
+
+![Figure 5: Four line graphs showing the success of attacks on different batch sizes of 224 x 224 images. The graphs are titled 'Success vs step', 'Success vs step', 'Success vs L_infinity', and 'Success vs L_2'. The x-axis for the first two is 'Optimization step' (0 to 200), and for the last two is 'Attack L_infinity / all white' (0.0 to 0.07). The y-axis for all is 'Successful attacks fraction' (0.0 to 1.0). The legend indicates batch sizes of 96, 128, 160, 192, 224, 256, 512, and 1024 images. The graphs show that larger batch sizes lead to higher success rates, especially for smaller batch sizes (160 and below) which reach 100% success.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 5: Four line graphs showing the success of attacks on different batch sizes of 224 x 224 images. The graphs are titled 'Success vs step', 'Success vs step', 'Success vs L\_infinity', and 'Success vs L\_2'. The x-axis for the first two is 'Optimization step' (0 to 200), and for the last two is 'Attack L\_infinity / all white' (0.0 to 0.07). The y-axis for all is 'Successful attacks fraction' (0.0 to 1.0). The legend indicates batch sizes of 96, 128, 160, 192, 224, 256, 512, and 1024 images. The graphs show that larger batch sizes lead to higher success rates, especially for smaller batch sizes (160 and below) which reach 100% success.
+
+Figure 5: Attacks on different numbers of  $224 \times 224$  images at once. Large batches get more successful attacks in the 200 optimization steps we ran the experiment for, likely by focusing on the easier images in the batch. For batches of  $\approx 160$  and below, we get 100% success for the simultaneous multi-attack.
+
+the target class, while ignoring the ones that have not been successfully attacked yet. To see the effect of batch size, Figure 5 shows the success of attacks on different batch sizes of  $224 \times 224$  images after 200 steps of optimization. The larger batches lead to more images successfully attacked, likely focusing on the easier subset of them. Small batches, in this case 160 and below, get 100% success rate.
+
+### 4.3 MULTI-ATTACKS AGAINST ENSEMBLES
+
+We trained 10 independently initialized `SimpleCNN` models on `CIFAR-10` and developed multi-attacks against ensembles of subsets of them (averaging their output logits for a given input) at the resolution  $32 \times 32 \times 3$ . We used 500 steps of the attack optimization at the learning rate of  $10^{-2}$  with the Adam optimizer, and checked the number of images we successfully attacked at the end of the optimization. Each ensemble size is run 3 times and the resulting average and standard deviation are shown in Figure 3. The larger the ensemble, the fewer images we can attack at the same time, which is consistent with a broad trend of ensembling increasing out-of-distribution (Fort, 2022) and adversarial robustness (Tramèr et al., 2020).
+
+### 4.4 STARTING AT NOISE
+
+We experiment with starting with real images  $X_1, X_2, \dots, X_m$  is any different from starting with random noise samples. In Figure 6 we show that, at least visually, the number of successful attacks as a function of iteration and  $L_2$  and  $L_\infty$  distances seems very similar between real images and noise samples of the same mean and standard deviation. The experiment was done with  $224 \times 224$  images, 1024 images in total, and for 200 iterations of a  $10^{-2}$  learning rate with Adam. We can take  $\mathcal{O}(100)$  samples of noise, and with a single perturbation  $P$  change their classification to equally many arbitrarily chosen classes.
+
+In Section A.1 we show that instead of starting from  $n$  independent realizations of noise, we can instead start with a single image and add random realizations of noise as a perturbation to it. For a sufficient amount of noise, these images act as distinct for the purpose of designing a multi-attack against them.
+
+### 4.5 MODELS TRAINED ON RANDOM LABELS
+
+The structure of the space of pixels and the way it is partitioned into classes is what allows multi-attacks and adversarial attacks in general to exist. To see what the effect of training on real data and labels vs training on randomly permuted but fixed labels is, we trained a `ResNet50` on `CIFAR-10` first with real labels, and then with labels randomly permuted and fixed. As (Zhang et al., 2016) shows, a large enough network can fit to 100% precision a training set with randomly assigned labels. Such learning is, however, distinct from training on semantically meaningful labels in many ways, and in our experiments we see a clear signal that models trained on random random labels are more susceptible to multi-attacks. Figure 7 shows the result of multi-attacks with 500 optimization steps at the learning rate of  $10^{-2}$  against a batch of  $128 \ 32 \times 32$  images of `CIFAR-10`. Models trained on
+
+{5}------------------------------------------------
+
+![Figure 6: Three line plots showing 'Success vs step', 'Success vs L_infinity', and 'Success vs L_2'. Each plot compares 'real images' (red line) and 'random images' (blue line) for CIFAR-10. The y-axis represents 'Successful attacks at once (out of 1024)'. In all three plots, the red and blue lines are nearly perfectly overlaid, showing that real and random images have similar susceptibility to multi-attacks.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 6: Three line plots showing 'Success vs step', 'Success vs L\_infinity', and 'Success vs L\_2'. Each plot compares 'real images' (red line) and 'random images' (blue line) for CIFAR-10. The y-axis represents 'Successful attacks at once (out of 1024)'. In all three plots, the red and blue lines are nearly perfectly overlaid, showing that real and random images have similar susceptibility to multi-attacks.
+
+Figure 6: The number of successfully attacked images out of 1024 randomly chosen but fixed samples of CIFAR-10 with 1024 randomly chosen but fixed ImageNet (1000 in total) classes as a function of the size of the adversarial perturbation as compared to images of random noise of the same mean and standard deviation. Real images and noise samples do not differ in their susceptibility to multi-attacks against them. The plots show two random experiments for each type.
+
+![Figure 7: Three line plots showing 'Success vs step', 'Success vs L_infinity', and 'Success vs L_2' for ResNet50. Each plot compares 'permuted CIFAR-10' (red lines) and 'standard CIFAR-10' (blue lines). The y-axis represents 'Successful attacks at once (out of 128)'. The red lines are consistently higher than the blue lines, indicating that models trained on permuted (random) labels are more vulnerable to multi-attacks.](46f43cb4ffd47565e7c0ca306d461435_img.jpg)
+
+Figure 7: Three line plots showing 'Success vs step', 'Success vs L\_infinity', and 'Success vs L\_2' for ResNet50. Each plot compares 'permuted CIFAR-10' (red lines) and 'standard CIFAR-10' (blue lines). The y-axis represents 'Successful attacks at once (out of 128)'. The red lines are consistently higher than the blue lines, indicating that models trained on permuted (random) labels are more vulnerable to multi-attacks.
+
+Figure 7: Multi-attacks against ResNet50 trained on real vs random labels of CIFAR-10. Models trained on random labels are easier to attack and allow for multi-attacks on more images at once.
+
+random labels are easier to attacks given a perturbation strength, and also allow for more simultaneous attacks.
+
+### 4.6 LONG LINES OF ADVERSARIES
+
+The very high number of distinct high-confidence regions surrounding each image allows for simultaneous satisfaction of many constraints. A particularly interesting situation is to attack a series of images that all derive from the same original,  $X_0$ , but to which the adversarial perturbation is progressively applied with an increasing multiplicative factor.
+
+$$(X_0, P, m) : (X_0 + P, X_0 + 2P, X_0 + 3P, \dots, X_0 + mP). \quad (5)$$
+
+In a geometric sense, we are creating a straight line through the pixel space, starting at an image  $X_0$  and gradually, in integer steps of  $P$ , moving in the  $P$  direction. The  $i^{\text{th}}$  image in the line is  $X_0 + iP$  and we can optimize  $P$  such that it gets mapped to a desired class  $c_i^*$  of our choosing,  $\text{argmax}_c f(X_0 + iP) = c_i^*$ . These target classes can be arbitrary, or we can choose them all to be the same target class. If we choose them to be the same, we would have identified a direction  $P$  in which the scale of the adversarial attack preserves its function as discussed in Section 4.7
+
+Figure 8 demonstrates an attack,  $P$ , that starts at an image,  $X$ , of an airplane and gradually changes the classification to classes 111, 222, 333, 444, and 555 for  $X + P$ ,  $X + 2P$ ,  $X + 3P$ ,  $X + 4P$ , and  $X + 5P$  respectively. The class decision in between the integer values of the  $\alpha P$  is filled with the respective classes, showing that the attack is not fragile to small changes of  $\alpha$  outside of the directly optimized for integer multiples. The attack shown is to a  $32 \times 32$  image, and therefore the magnitude of the perturbation is large. Were we to use  $224 \times 224$ , the perturbation would be much less prominent, as discussed in Section 4.1. Figure 9 shows a second case of such a line of adversaries, this time at a higher resolution and lasting for 9 steps.
+
+{6}------------------------------------------------
+
+![Figure 8: Adversarial examples for a bird image. The left side shows the original image 'c=111 nematode' plus a perturbation 'P' to produce images classified as 'c=222 kerosol', 'c=333 hamster', 'c=444 tandem bike', and 'c=555 fire truck' for strengths P, 2P, 3P, 4P, and 5P respectively. The right side is a plot of class probabilities (0.0 to 1.0) against the multiple of adversarial perturbation (0 to 9). The plot shows peaks for class 364 (blue), class 111 (orange), class 222 (green), class 333 (red), class 444 (purple), and class 555 (brown) at integer multiples of alpha.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 8: Adversarial examples for a bird image. The left side shows the original image 'c=111 nematode' plus a perturbation 'P' to produce images classified as 'c=222 kerosol', 'c=333 hamster', 'c=444 tandem bike', and 'c=555 fire truck' for strengths P, 2P, 3P, 4P, and 5P respectively. The right side is a plot of class probabilities (0.0 to 1.0) against the multiple of adversarial perturbation (0 to 9). The plot shows peaks for class 364 (blue), class 111 (orange), class 222 (green), class 333 (red), class 444 (purple), and class 555 (brown) at integer multiples of alpha.
+
+Figure 8: The same attack,  $P$ , when applied with different strength, leads to the image  $X$  being classified as classes 111, 222, 333, 444, and 555 for  $X + P, 2P, 3P, 4P$  and  $5P$  respectively. The figure on the left shows the resulting attack perturbations and the corresponding perturbed images, while the right-hand side shows the probabilities of the classes (including class 364, the original class of  $X$ ) as a function of the strength of the perturbation. The x-axis shows  $\alpha$  for  $f(X + \alpha P)$
+
+![Figure 9: Adversarial examples for a container ship image. The left side shows the original image 'image = 10 attack predicted class 510' plus perturbations to produce images classified as '0 attack', '10 attack', '20 attack', '30 attack', '40 attack', '50 attack', '60 attack', and '70 attack' for strengths P, 2P, 3P, 4P, 5P, 6P, 7P, and 8P respectively. The right side is a plot of class probabilities (0.0 to 1.0) against the multiple of adversarial perturbation (0 to 9). The plot shows peaks for class 510 (black), class 0 (orange), class 100 (green), class 200 (red), class 300 (purple), class 400 (brown), class 500 (pink), class 600 (yellow), class 700 (light green), and class 800 (dark green) at integer multiples of alpha.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 9: Adversarial examples for a container ship image. The left side shows the original image 'image = 10 attack predicted class 510' plus perturbations to produce images classified as '0 attack', '10 attack', '20 attack', '30 attack', '40 attack', '50 attack', '60 attack', and '70 attack' for strengths P, 2P, 3P, 4P, 5P, 6P, 7P, and 8P respectively. The right side is a plot of class probabilities (0.0 to 1.0) against the multiple of adversarial perturbation (0 to 9). The plot shows peaks for class 510 (black), class 0 (orange), class 100 (green), class 200 (red), class 300 (purple), class 400 (brown), class 500 (pink), class 600 (yellow), class 700 (light green), and class 800 (dark green) at integer multiples of alpha.
+
+Figure 9: The starting image  $X_0$  is classified as class 510 (*container ship*). We optimized an attack  $P$  that makes  $X_0 + P, X_0 + 2P, \dots, X_0 + 10P$  classified as classes 0, 100, 200, 300, ..., 900. On the left panel, examples of progressively more corrupted images are shown that are classified as such. On the right panel, the probability of the target classes are shown, peaking around the multiples of the adversarial attack that corresponds to them.
+
+### 4.7 SCALE-INDEPENDENT ATTACKS
+
+A particular consequence of being able to find lines of adversarial attacks is that we can find such lines where the target class does not change with the scale  $\alpha$  of the attack  $\alpha P$ . Figure 10 shows the result of such an attack. A picture of a bird is attacked with a perturbation  $P$  that is optimized such that  $X + P, X + 2P, \dots, X + 60P$  are all classified as class 111 (nematode). The right panel of Figure 10 shows that the class decision holds in between the integer values of  $\alpha$ , and also that, while only directly optimized up to  $X + 60P$ , the predicted class stays at 111 all the way to  $X + 160P$ , showing an amount of generalization of this scale-independent attack.
+
+### 4.8 FINDING SHAPES IN THE PIXEL SPACE
+
+Using the very large number of regions surrounding each image in the pixel space, we decided to optimize for pairs of attacks  $P_x$  and  $P_y$  that, together with a starting image  $X_0$ , define a two-dimensional affine space (a "plane") in the pixel space. This is related to the cutting-plane method used in (Fort et al., 2022), however, there the bases are randomly chosen (and as such  $\mathcal{O}(10)$  are needed to find high-confidence adversarial attacks). Here, we optimize for  $P_x$  and  $P_y$  such that the affine subspace they trace out in the space of pixels spells out words and draws images of our choosing, demonstrating the flexibility of the input-space partitioning of deep neural networks.
+
+(Skorokhodov & Burtsev, 2019) shows that in the space of weights and biases of deep neural networks (also known as the loss landscape), there exists a vast richness of two-dimensional sections where the loss value traces various shapes and images, and where we can optimize for finding particular ones, such as the shape of a *bat*, a *skull*, a *cow*, or the planet *Saturn*. (Czarnecki et al., 2020) extends this work and show that this a general property of sufficiently large and deep neural networks.
+
+Inspired by this experiment and given the rich nature of the class boundaries in the space of pixels that we demonstrated by creating *multi-attacks* on many images and towards many labels at once, we find similarly suggestive shapes in the space of images and their classification decisions.
+
+{7}------------------------------------------------
+
+![Figure 10: A grid of images showing the progression of an adversarial attack on a red-breasted merganser. The top row shows the original image and its classification as class 98. The bottom row shows the adversarial perturbation at 1x, 10x, 20x, 40x, and 60x multiples. The right panel is a line graph showing the probability of the target class 111 (nematode) increasing from 0 to nearly 1.0 as the perturbation multiplier increases from 0 to 300. The class 111 probability remains high until approximately 160 multiples.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 10: A grid of images showing the progression of an adversarial attack on a red-breasted merganser. The top row shows the original image and its classification as class 98. The bottom row shows the adversarial perturbation at 1x, 10x, 20x, 40x, and 60x multiples. The right panel is a line graph showing the probability of the target class 111 (nematode) increasing from 0 to nearly 1.0 as the perturbation multiplier increases from 0 to 300. The class 111 probability remains high until approximately 160 multiples.
+
+Figure 10: The starting image  $X_0$  is classified as class 98 (*red-breasted merganser*). We trained an attack  $P$  that makes the  $X_0 + P, X_0 + 2P, \dots, X_0 + 60P$  classified as class 111 (*nematode*). On the left panel, examples of progressively more corrupted images are shown. On the right panel, the probability of the target class 111 is shown. The class 111 remains the highest for the full 60 multiples of the attack, and continue to be so until  $\approx 160$  multiples, demonstrating an amount of generalization.
+
+![Figure 11: A diagram illustrating the optimization of adversarial perturbations. On the left, a grid of images shows the result of applying different combinations of two perturbations, P_x and P_y, to a target image. The horizontal axis is labeled alpha (multiplier of P_x) and the vertical axis is labeled beta (multiplier of P_y). The grid shows a transition from a daisy background to a turtle outline. On the right, a 2D plot shows the probabilities of classes c=37 (turtle) and c=985 (daisy) across the same alpha and beta space, with a color gradient indicating the dominant class.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 11: A diagram illustrating the optimization of adversarial perturbations. On the left, a grid of images shows the result of applying different combinations of two perturbations, P\_x and P\_y, to a target image. The horizontal axis is labeled alpha (multiplier of P\_x) and the vertical axis is labeled beta (multiplier of P\_y). The grid shows a transition from a daisy background to a turtle outline. On the right, a 2D plot shows the probabilities of classes c=37 (turtle) and c=985 (daisy) across the same alpha and beta space, with a color gradient indicating the dominant class.
+
+Figure 11: A picture of a tortoise drawn by the ImageNet class  $c=37$  *turtle* with a background of class  $c=985$  *daisy*, found on a two-dimensional slice of the space of inputs around a CIFAR-10 image of an airplane. By finding two adversarial perturbations  $P_x$  and  $P_y$ , we were able to optimize for these classes on a two-dimensional slice of the pixel space starting at the plane image  $X_0$ . This further demonstrates the richness and flexibility of the class partitioning of the pixel space.
+
+Starting at an image  $X_0$ , we optimize for two adversarial attacks,  $P_x$  and  $P_y$ , defining a two-dimensional affine subspace  $X_0 + \alpha P_x + \beta P_y$ . For integer values of the parameters  $\alpha = 0, 1, \dots, W - 1$  and  $\beta = 0, 1, \dots, H - 1$ , we force the classifier to classify  $X_0 + \alpha P_x + \beta P_y$  as the class specified by a target image  $T[\alpha, \beta]$ .  $T[\alpha, \beta]$  is a bitmap of the image we would like to discover in the pixel space in the neighborhood starting at the image  $X_0$ , specifying a target class for each  $(\alpha, \beta)$ . In Figure 2 we show a random illustration of a particular section of the space of inputs. Here, we optimize its orientation to look in a particular way.
+
+In Figure 1b we show a result of this optimization: the word *AGI* spelled in the ImageNet class *laptop*, an outline of a tortoise drawn in the class *turtle* and the background of this image being made of the class *daisy*. Figure 11 shows the grid of images  $X_0 + \alpha P_x + \beta P_y$  spanned by the two trained adversarial attacks  $P_x$  and  $P_y$ .
+
+## 5 DISCUSSION AND CONCLUSION
+
+In this work, we have demonstrated the existence of *multi-attacks* – we show that we can take a large number of images (e.g.  $> 100$  for images of the  $224 \times 224$  resolution and an ImageNet-trained classifier) and optimize for a single adversarial perturbation  $P$  that we call a *multi-attack* and that, when added to each of the images, makes them misclassified as arbitrarily chosen target classes. Given this, we estimate the number of distinct high-confidence class regions in the pixel space around every image to be approximately  $10^{\mathcal{O}(100)}$  using a simple toy theory, which links the maximum number of simultaneously attackable images  $n_{\max}$  and the number of classes  $C$  to the number of regions  $N$  as  $N \approx \exp(n_{\max} \log(C))$ .
+
+{8}------------------------------------------------
+
+Exploiting this flexibility, we show that we can find two-dimensional sections of the pixel space that trace words and images in whatever class we choose. This can be understood as a consequence of the sheer number of two-dimensional patterns that hide in a high-dimensional space partitioned into  $10^{\mathcal{O}(100)}$  cells reachable from each point. We can also find adversarial attacks  $\alpha P$  that change the image attacked to a different class based on their strength  $\alpha$  and that can change them to the same class regardless of the scale  $\alpha$  for a range of  $\alpha$ s.
+
+We show that classifiers trained on randomly assigned labels are easier to design multi-attacks against as compared to classifiers trained on labels that are semantically connected to their corresponding images. Interestingly, whether we are modifying real images or samples of noise does not seem to have any effect on how easy it is to design a multi-attack.
+
+Every strategy designed to defend against adversarial attacks has to deal with this issue: around each image there are very many, e.g.  $10^{100}$  neighboring images that, to a human, differ only slightly from the original image, and yet are classified very different by a learned classifier. Making sure that each of these gets classified correctly is a difficult task. For example, it is virtually impossible to add all of them to the training set with the correct (to a human) label, as some strategies attempt to do. Unless we can somehow do this exponentially effectively, defending against attacks might be a very hard task. The key problem is the dimensionality of the input space and how small a cell each high-confidence region seems to be.
+
+Our findings open several directions for future work. More rigorous theory is needed to tightly characterize the scale of this redundancy. Study of failure cases and images resistant to multi-attacks could inspire new defensive techniques. And development of fast algorithms to find minimal multi-attacks could enable applications.
+
+By exposing the scale of redundancy in neural network classifiers, we hope these results will inspire further investigation – both of the root causes of this extreme flexibility, and of potential solutions to make models more robust.
+
+{9}------------------------------------------------
+
+## REFERENCES
+
+- 486  
+487  
+488 Jiefeng Chen, Yixuan Li, Xi Wu, Yingyu Liang, and Somesh Jha. Robust out-of-distribution detection  
+489 for neural networks, 2021.
+- 490 Wojciech Marian Czarnecki, Simon Osindero, Razvan Pascanu, and Max Jaderberg. A deep neural  
+491 network’s loss surface contains every low-dimensional pattern, 2020.
+- 492  
+493 Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale  
+494 hierarchical image database. In *2009 IEEE conference on computer vision and pattern recognition*,  
+495 pp. 248–255. Ieee, 2009.
+- 496 Stanislav Fort. Adversarial examples for the openai clip in its zero-shot classification regime and  
+497 their semantic generalization, 2021.
+- 498  
+499 Stanislav Fort. Adversarial vulnerability of powerful near out-of-distribution detection, 2022.
+- 500 Stanislav Fort, Andrew Brock, Razvan Pascanu, Soham De, and Samuel L. Smith. Drawing multiple  
+501 augmentation samples per image during training efficiently decreases test error, 2021.
+- 502  
+503 Stanislav Fort, Ekin Dogus Cubuk, Surya Ganguli, and Samuel S. Schoenholz. What does a deep  
+504 neural network confidently perceive? the effective dimension of high certainty class manifolds and  
+505 their low confidence boundaries, 2022.
+- 506 Ian J. Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial  
+507 examples, 2014.
+- 508  
+509 Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep Residual Learning for Im-  
+510 age Recognition. In *Proceedings of 2016 IEEE Conference on Computer Vision and Pattern*  
+511 *Recognition, CVPR ’16*, pp. 770–778. IEEE, June 2016. doi: 10.1109/CVPR.2016.90. URL  
+512 <http://ieeexplore.ieee.org/document/7780459>.
+- 513 Sanjay Kariyappa and Moinuddin K. Qureshi. Improving adversarial robustness of ensembles with  
+514 diversity training, 2019.
+- 515  
+516 Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization, 2014.
+- 517 Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images.  
+518 Technical report, Technical Report, University of Toronto, 2009.
+- 519  
+520 Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan,  
+521 Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas  
+522 Kopf, Edward Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy,  
+523 Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. Pytorch: An imperative style, high-  
+524 performance deep learning library. In *Advances in Neural Information Processing Systems* 32, pp.  
+525 8024–8035. Curran Associates, Inc., 2019. URL [http://papers.neurips.cc/paper/](http://papers.neurips.cc/paper/9015-pytorch-an-imperative-style-high-performance-deep-learning-library.pdf)  
+526 [9015-pytorch-an-imperative-style-high-performance-deep-learning-library.](http://papers.neurips.cc/paper/9015-pytorch-an-imperative-style-high-performance-deep-learning-library.pdf)  
+527 pdf.
+- 528 Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal,  
+529 Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever.  
+530 Learning transferable visual models from natural language supervision, 2021.
+- 531 Ivan Skorokhodov and Mikhail Burtsev. Loss landscape sightseeing with multi-point optimization,  
+532 2019.
+- 533  
+534 Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Goodfellow,  
+535 and Rob Fergus. Intriguing properties of neural networks, 2013.
+- 536 Florian Tramèr, Alexey Kurakin, Nicolas Papernot, Ian Goodfellow, Dan Boneh, and Patrick Mc-  
+537 Daniel. Ensemble adversarial training: Attacks and defenses, 2020.
+- 538  
+539 Chiyuan Zhang, Samy Bengio, Moritz Hardt, Benjamin Recht, and Oriol Vinyals. Understanding  
+deep learning requires rethinking generalization, 2016.
+
+ Rest of paper (reference and Appendix) is removed.

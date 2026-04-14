@@ -1,0 +1,271 @@
+
+
+{0}------------------------------------------------
+
+# ONLINE REINFORCEMENT LEARNING IN NON-STATIONARY CONTEXT-DRIVEN ENVIRONMENTS
+
+**Pouya Hamadian**  
+MIT CSAIL  
+pouyah@mit.edu
+
+**Arash Nasr-Esfahany**  
+MIT CSAIL  
+arashne@mit.edu
+
+**Malte Schwarzkopf**  
+CS Brown University  
+malte@cs.brown.edu
+
+**Siddhartha Sen**  
+Microsoft Research  
+sidsen@microsoft.com
+
+**Mohammad Alizadeh**  
+MIT CSAIL  
+alizadeh@mit.edu
+
+## ABSTRACT
+
+We study online reinforcement learning (RL) in non-stationary environments, where a time-varying exogenous context process affects the environment dynamics. Online RL is challenging in such environments due to “catastrophic forgetting” (CF). The agent tends to forget prior knowledge as it trains on new experiences. Prior approaches to mitigate this issue assume task labels (which are often not available in practice), employ brittle regularization heuristics, or use off-policy methods that suffer from instability and poor performance.
+
+We present Locally Constrained Policy Optimization (LCPO), an online RL approach that combats CF by anchoring policy outputs on old experiences while optimizing the return on current experiences. To perform this anchoring, LCPO locally constrains policy optimization using samples from experiences that lie outside of the current context distribution. We evaluate LCPO in Mujoco, classic control and computer systems environments with a variety of synthetic and real context traces, and find that it outperforms a variety of baselines in the non-stationary setting, while achieving results on-par with a “prescient” agent trained offline across all context traces.
+
+LCPO’s source code is available at <https://github.com/pouyahmdn/LCPO>.
+
+## 1 INTRODUCTION
+
+— *Those who cannot remember the past are condemned to repeat it. (George Santayana, The Life of Reason, 1905)*
+
+Reinforcement Learning (RL) has seen success in many domains (Mao et al., 2017; Haarnoja et al., 2018a; Mao et al., 2019b; Marcus et al., 2019; Zhu et al., 2020; Haydari & Yilmaz, 2022), but real-world deployments have been rare. A major hurdle has been the gap between simulation and reality, where the environment simulators do not match the real-world dynamics. Thus, recent work has turned to applying RL in an *online* fashion, i.e., continuously training and using an agent in a live environment (Zhang et al., 2021; Gu et al., 2021).
+
+While online RL is difficult in and of itself, it is particularly challenging in *non-stationary* environments—also known as continual RL (Khetarpal et al., 2020)—where the characteristics of the environment change over time. A key challenge is Catastrophic Forgetting (CF) (McCloskey & Cohen, 1989). An agent based on function approximators like Neural Networks (NNs) tends to forget its past knowledge when training sequentially on new non-stationary data. On-policy RL algorithms (Sutton & Barto, 2018) are particularly vulnerable to CF in non-stationary environments, since these methods cannot retrain on stale data from prior experiences.
+
+In this paper, we consider problems where the source of the non-stationarity is an observed exogenous *context* process that varies over time and exposes the agent to different environment dynamics. Such context-driven environments (Sinclair et al., 2023; Mao et al., 2018; Zhang et al., 2023; Dietterich et al., 2018; Pan et al., 2022) appear in a variety of applications. Examples include computer systems subject to incoming workloads (Mao et al., 2018), locomotion in environments with varying terrains and
+
+{1}------------------------------------------------
+
+obstacles (Heess et al., 2017b), robots subject to external forces (Pinto et al., 2017), and more. In contrast to most prior work (Alegre et al., 2021; Chandak et al., 2020), we do not restrict the context process to be discrete, piecewise stationary or Markov.
+
+Broadly speaking, there are three existing approaches to mitigate CF in online learning. One class of techniques is *task-based* (Rusu et al., 2016; Kirkpatrick et al., 2017; Schwarz et al., 2018; Farajtabar et al., 2019; Zeng et al., 2019). Such works assume explicit task labels that identify the different context distributions which the agent encounters over time. Task labels make it easier to prevent the training for one context from affecting knowledge learned for other contexts. In settings where task labels (or boundaries) are not available, a few proposals try to infer the task labels via self-supervised (Nagabandi et al., 2019b) or Change-Point Detection (CPD) approaches (Padakandla et al., 2020; Alegre et al., 2021). These techniques, however, are brittle when the context processes are difficult to separate and task boundaries are not pronounced (Hamadanian et al., 2022). Our experiments show that erroneous task labels lead to poorly performing agents in such environments (§5).
+
+A second category of approaches avoids task labels by approximating task-based methods with heuristics (Schwarz et al., 2018; Chaudhry et al., 2018; Kaplanis et al., 2018; Woo et al., 2022). However, these heuristics are based on brittle assumptions about the nature and cadence of non-stationarity. For example, one approach implicitly assumes each episode is a distinct task, and uses a window of past  $N$  episode to regularize learning (Woo et al., 2022). These assumptions are rarely met and would likely lead to poor performance in practice, as we observe in our analysis and evaluations (§5 and §D.1, §D.2 and §D.3 in the Appendix).
+
+The third category of approaches employs rehearsal, i.e., learning using past or generated data. For example, off-policy learning (Sutton & Barto, 2018) makes it possible to retrain on past data. These techniques (e.g., Experience Replay (Mnih et al., 2013), CLEAR (Rolnick et al., 2019), etc.) store prior experience data in a buffer and sample from the buffer randomly to train. Not only does this improve sample complexity, it sidesteps the pitfalls of sequential learning and prevents CF (Rolnick et al., 2019). However, off-policy methods come at the cost of increased hyper-parameter sensitivity and unstable training (Duan et al., 2016; Gu et al., 2016; Haarnoja et al., 2018b). This brittleness is particularly catastrophic in an online setting, as we also observe in our experiments (§5).
+
+We present LCPO (§4.1), an on-policy RL algorithm that “anchors” policy outputs for old contexts while optimizing for the current context. Unlike prior work, LCPO does not rely on task labels and only requires an Out-of-Distribution (OOD) detector, i.e., a function that recognizes old experiences that occurred in a sufficiently different context than the current one. LCPO maintains a bounded buffer of past experiences, similar to off-policy methods (Mnih et al., 2013). But as an on-policy approach, LCPO does not use stale experiences to optimize the policy. Instead, it uses past data to *constrain* the policy optimization on fresh data, such that the agent’s behavior does not change in other contexts.
+
+We evaluate LCPO on several environments with real and synthetic contexts (§5), and show that it outperforms a variety of baselines across mentioned categories in the online learning setting. We also compare against a “prescient agent” that is trained offline on the entire context distribution prior to deployment. The prescient agent does not suffer from CF. Among all the online methods, LCPO is the closest to this idealized baseline. Our ablation results show that LCPO is robust to variations in the OOD detector’s thresholds and works well with small experience buffer sizes.
+
+LCPO’s source code is available online at <https://github.com/pouyahmdn/LCPO>.
+
+## 2 PRELIMINARIES
+
+**Notation.** We consider online reinforcement learning in a non-stationary context-driven Markov Decision Process (MDP), where the context is observed (only up to the current time step  $t$ ) and exogenous. Formally, at time step  $t$  the environment has state  $s_t \in \mathcal{S}$  and context  $z_t \in \mathcal{Z}$ . The agent takes action  $a_t \in \mathcal{A}$  based on the observed state  $s_t$  and context  $z_t$ ,  $a_t = \pi(s_t, z_t)$ , and receives feedback in the form of a scalar reward  $r_t = r(s_t, z_t, a_t)$ , where  $r(\cdot, \cdot, \cdot) : \mathcal{S} \times \mathcal{Z} \times \mathcal{A} \rightarrow \mathbb{R}$  is the reward function. The environment’s state, the context, and the agent’s action determine the next state,  $s_{t+1}$ , according to a transition kernel,  $T(s_{t+1} | s_t, z_t, a_t)$ . The context  $z_t$  is an independent stochastic process, unaffected by states  $s_t$  or actions  $a_t$ . Finally,  $d_0$  defines the distribution over initial states ( $s_0$ ). This model is fully defined by the tuple  $\mathcal{M} = (\mathcal{S}, \mathcal{Z}, \mathcal{A}, \{z_t\}_{t=1}^{\infty}, T, d_0, r)$ .
+
+{2}------------------------------------------------
+
+**Non-stationary contexts.** The non-stationary context  $\mathbf{z} = \{z_t\}_{t=1}^{\infty}$  impacts the environment dynamics and implies a non-stationary environment. We assume the context process can change arbitrarily: e.g., it can follow a predictable pattern, be i.i.d samples from some distribution, be a discrete process or a multi-dimensional continuous process, experience smooth or dramatic shifts, be piecewise stationary, or include any mixture of the above. We have no prior knowledge of the context process, the environment dynamics, or access to an offline simulator. Examples of (observed) context processes include market demand in a supply chain system, incoming request workloads in virtual machine allocation problem, customer distributions in airline revenue management (Sinclair et al., 2023), traffic information in vehicular networks (Wu et al., 2017), terrain profiles in a locomotion task (Heess et al., 2017a), network traffic for video streaming (Mao et al., 2020) and congestion control (Winstein & Balakrishnan, 2013), etc.
+
+**Goal.** We seek good long-term performance. Formally, for a given policy  $\pi: \mathcal{S} \times \mathcal{Z} \rightarrow \mathcal{A}$  and context process  $\mathbf{z} = \{z_t\}_{t=1}^{\infty}$  we define the lifelong return as  $J(\pi, \mathbf{z}) = \lim_{t \rightarrow \infty} \sum_{i=1}^t \frac{r_i}{t}$  for an infinite horizon MDP. Similarly, for finite horizon MDPs of length  $H$ , where episode  $i$  is subject to context traces  $\mathbf{z}_i = (z_{H \cdot i}, z_{H \cdot i+1}, \dots, z_{H \cdot (i+1)-1})$  and has an episodic return of  $R_i = \sum_{t=1}^H r_t^{(i)}$ , we define the lifelong return as  $J(\pi, \mathbf{z}) = \lim_{t \rightarrow \infty} \sum_{i=1}^t \frac{R_i}{t}$ . For a policy sequence  $\mathbf{\Pi} = \{\pi_t\}_{t=1}^{\infty}$ , e.g., the sequence of policies resulting from a continual RL algorithm, we can define the lifelong return  $J(\mathbf{\Pi}, \mathbf{z})$  similarly.
+
+**Online RL.** In most RL settings, a policy is trained in a separate training phase. During testing, the policy is fixed and does not change. By contrast, online learning starts with the test phase, and the policy must reach and maintain optimality within this test phase. An important constraint in the online setting is that the agent gets to experience each interaction only once. There is no way to revisit past interactions and try a different action in the same context. This is a key distinction with training in a separate offline phase, such as in meta-learning (Al-Shedivat et al., 2018), where the agent can explore the same conditions many times.
+
+Note that the policy that maximizes lifelong return  $\pi^* = \text{argmax}_{\pi} J(\pi, \mathbf{z})$  has to be *prescient*, i.e., it needs to have upfront knowledge of the context process  $\mathbf{z}$ . Since an online agent is causal and has only observed context values up to the current time step  $t$ , it can never perform as well as this prescient policy. Therefore, in general online RL agents will have a gap with prescient policies in terms of lifelong return. In certain special cases the online RL can asymptotically reach the prescient policy, e.g., when the context process is Markovian the entire context-driven MDP collapses to a standard MDP with a state  $\hat{s}_t = \langle s_t, z_t \rangle$ . However, we do not intend to limit the context process in any way, and our aim is to minimize the gap between the online and prescient agents for arbitrary context processes.
+
+## 3 RELATED WORK
+
+**Non-stationary RL.** Non-stationary RL is a family of sub-problems, such as CF, latent context inference, meta-learning, etc (Khetarpal et al., 2020). In this work we focus on CF, and highlight the differences of CF with other well-known non-stationary RL problems below. Then, we will explore related work for CF in Machine Learning (ML) and RL. We highlight other lines of work in §A in the Appendix.
+
+**Latent Context Inference.** These works consider a context-driven MDP where the context  $z_t$  is unobserved. The goal is to infer an estimated context  $\hat{z}_t$  from other signals, such as transition functions, reward functions, etc (Hallak et al., 2015; Zintgraf et al., 2019; Xie et al., 2020; Caccia et al., 2020; Lee et al., 2020; He et al., 2020; Poiani et al., 2021; Chen et al., 2022; Huang et al., 2022; Feng et al., 2022; Ren et al., 2022; Woo et al., 2022; Bing et al., 2022; Luo et al., 2022; Lee et al., 2023). Once inferred, a traditional RL algorithm such as Soft Actor Critic (SAC) learns a policy  $\pi(\cdot | s_t, \hat{z}_t)$  from the state and inferred context, and is typically compared to an ‘upper-bound policy’ that observes the true context  $\pi(\cdot | s_t, z_t)$ . These works aim to recover the unobserved context, while we focus on CF after observing the true/recovered context. In fact, the ‘upper-bound’ policies in these works are baselines we compare to in §5. Combining LCPO with this line of work to solve CF in environments with latent context is an interesting future work.
+
+**Catastrophic Forgetting.** Three general techniques exist for mitigating CF in ML (Paris et al., 2019): (1) regularizing the optimization to avoid memory loss during sequential training (Kirkpatrick et al., 2017; Zenke et al., 2017; Farajtabar et al., 2019; Lopez-Paz & Ranzato, 2022); (2) training separate parameters per task, and expanding/shrinking parameters as necessary (Rusu et al., 2016; Shmelkov et al., 2017; Li et al., 2019); (3) rehearsal, i.e., retraining on original data or generative batches (Shin et al., 2017; Isele & Cosgun, 2018; Atkinson et al., 2021); or combinations of these techniques (Schwarz et al., 2018; Aljundi et al., 2019).
+
+{3}------------------------------------------------
+
+Regularization techniques such as Elastic Weight Consolidation (EWC) and Orthogonal Gradient Descent (OGD) require task labels. Approximations have been proposed for problems without task labels (Schwarz et al., 2018) or boundaries (Woo et al., 2022). Kaplanis et al. (2018) use biologically inspired models of brain synapses to regularize networks.
+
+Another class of approaches aims to infer task labels, by learning the transition dynamics of the MDP, and detecting a new environment when a surprising sample is observed with respect to the learned model (Doya et al., 2002; da Silva et al., 2006; Padakandla et al., 2020; Alegre et al., 2021). The inferred labels are often used to train separate policies/models to mitigate CF. These methods are effective when MDP transitions are abrupt and have well-defined boundaries, but are brittle and perform poorly in realistic environments with noisy and hard-to-distinguish non-stationarities (Hamadanian et al., 2022).
+
+For rehearsal, we can use learned models of the MDP to replay past experiences (Xu et al., 2020; Lee et al., 2020; Pong et al., 2020; Huang et al., 2021; Janner et al., 2021). An alternative type of rehearsal is off-policy training (Haarnoja et al., 2018b; van Hasselt et al., 2016) (e.g., Experience Replay (Mnih et al., 2013)), which can train on stale data, naturally circumvent sequential learning and avoid CF. However, off-policy RL is empirically unstable and sensitive to hyperparameters due to bootstrapping and function approximation (Sutton & Barto, 2018), and is often outperformed by on-policy algorithms in online settings (Duan et al., 2016; Gu et al., 2016; Haarnoja et al., 2018b). CLEAR (Rolnick et al., 2019) is an off-policy RL algorithm explicitly designed to overcome CF with fast adaptations. Similarly, PT-DQN (Anand & Precup, 2023) learns a permanent Q-network to remember past tasks while learning a transient Q-network for fast adaptation.
+
+**Constrained Optimization.** LCPO’s constrained optimization formulation is structurally similar to Trust Region Policy Optimization (TRPO) (Schulman et al., 2015), despite our different problem setting.
+
+## 4 LOCALLY-CONSTRAINED POLICY OPTIMIZATION
+
+Our goal is to learn a policy  $\pi(\cdot, \cdot)$  that takes action  $a_t \sim \pi(s_t, z_t)$ , in a context-driven MDP characterized by an exogenous non-stationary context process.
+
+### 4.1 ILLUSTRATIVE EXAMPLE
+
+Consider a simple environment with a discrete context. In this grid-world problem depicted in Figure 1, the agent can move in 4 directions in a 2D grid, and incurs a base negative reward of  $-1$  per step until it reaches the terminal exit state (no penalty in the last step) or fails to reach the exit within 20 steps. The grid can be in two modes: 1) ‘No Trap’ mode, where the center cell is empty, and 2) ‘Trap Active’ mode, where walking into the center cell incurs a reward of  $-10$ . When in ‘No Trap’ mode, the optimal path passes through the center cell, and the best episodic return is  $-3$ . In the ‘Trap Active’ mode, the center cell’s penalty forces the optimal path to go left at the blue cell for an optimal episodic return of  $-5$ . This environment mode is our discrete context and the source of non-stationarity in this simple example. The agent observes its current location and the context, i.e., whether the trap is on the grid ( $z_t = 1$ ) or not ( $z_t = 0$ ) in every episode (beginning from the start square).
+
+**Advantage Actor Critic (A2C).** We use the A2C algorithm to train a policy for this environment, while its context changes every so often. Figure 1c depicts the episodic return across time and Figures 1d and 1e depict the total variation distance between the optimal and learned policy when the policy input is ‘No Trap’ mode (Figure 1d) or ‘Trap Active’ mode (Figure 1e). This distance represents how close the learned policy is to the optimal in either context. The agent initially attains optimality for the ‘No Trap’ mode, but once the context changes at epoch 4K it immediately forgets it. Note that during epochs 4K-16K, the A2C agent is only trained on samples from the ‘Trap Active’ mode, and its output for the ‘No Trap’ mode is drifting. When the context changes back to the ‘No Trap’ mode at epoch 16K, the agent behaves sub-optimally (epochs 16K-18K) before relearning. Figure 1e shows that A2C also forgets the optimal ‘Trap Active’ policy during the final 4K epochs.
+
+**Key Insight.** Since the policy observes the current context  $z_t$ , it should be able to distinguish between different environment modes. Therefore, if the agent could surgically modify its policy on the current state-context pairs  $\pi(\cdot | s_t, z_t)$  and leave outputs for other state-context pairs  $\pi(\cdot | s_t, z' \neq z_t)$  unchanged, it would eventually learn a good policy for all contexts. In fact, tabular RL achieves this trivially in this
+
+{4}------------------------------------------------
+
+![Figure 1: A 3x3 grid-world problem with two modes and the optimal path visualized in blue. (a) 'No Trap' mode: the center square is safe. (b) 'Trap' mode: the center square is a trap. (c) Episodic return across time. (d) Total variation distance for 'No Trap' mode. (e) Total variation distance for 'Trap Active' mode. The graphs compare A2C (red dashed), Tabular A2C (blue dotted), and LCPO (green solid).](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 1: A 3x3 grid-world problem with two modes and the optimal path visualized in blue. (a) 'No Trap' mode: the center square is safe. (b) 'Trap' mode: the center square is a trap. (c) Episodic return across time. (d) Total variation distance for 'No Trap' mode. (e) Total variation distance for 'Trap Active' mode. The graphs compare A2C (red dashed), Tabular A2C (blue dotted), and LCPO (green solid).
+
+Figure 1: A 3x3 grid-world problem with two modes and the optimal path visualized in blue. (a) In the ‘No Trap’ mode, the center square is safe to pass through. (b) In the ‘Trap’ mode, the agent must avoid the trap with a longer path. (c) Episodic return across time in the grid environment. (d and e) Total variation distance between learned and optimal policy outputs for the (d) ‘No Trap’ mode, and the (e) ‘Trap Active’ mode at the blue cell (lower is better). Tabular A2C and LCPO remember the optimal decision for either context during shaded regions and instantly attain optimal returns when the environment switches.
+
+finite discrete state-context space. To illustrate, we apply a tabular version of A2C: i.e., the policy and value networks are replaced with tables with separate rows for each state-context pair (18 total rows). Figures 1d and 1e demonstrate that the tabular RL policy for each context remains unchanged when it does not actively interact with that context. This is because when an experience is used to update the table, it only updates the row pertaining to its own state and context, and does not change rows belonging to other contexts. Under sufficient conditions, tabular RL can provably converge to the optimal policy for such environments. Due to space constraints, we state the theorem and its proof in §B in the Appendix.
+
+Can we achieve a similar behavior with neural network function approximators? In general, updating a neural network (say, a policy network) for certain state-context pairs will change the output for all state-context pairs, leading to CF. But if we could somehow “anchor” the output of the neural network on distinct prior state-context pairs (analogous to the cells in the tabular setting) while we update the relevant state-context pairs, then the neural network would not “forget”.
+
+**LCPO.** Achieving the aforementioned anchoring does not require task labels. We only need to know if two contexts  $z_i$  and  $z_j$  are *different*. In particular, let the batch of recent environment interactions  $\langle s_t, z_t, a_t, r_t \rangle$  be  $B_r$  and let all previous interactions (from possibly different contexts) be  $B_o$ . Suppose we have a difference detector  $W(B_o, B_r)$  that can be used to sample experiences from  $B_o$  that are not from the same distribution as the samples in the recent batch  $B_r$ , i.e., the difference detector provides out-of-distribution (OOD) samples with respect to  $B_r$ . Then, when optimizing the policy for the current batch  $B_r$ , we can constrain the policy’s output on experiences sampled via  $W(B_o, B_r)$  to not change (see §4.2 for details). We name this approach Locally Constrained Policy Optimization (LCPO). The result for LCPO is presented in Figures 1d and 1e. While it does not retain its policy as perfectly as tabular A2C, it does sufficiently well to recover near instantaneously upon the second switch at epoch 16K.
+
+**Change-Point Detection (CPD) vs. OOD Detection.** CPD (and task labeling in general) requires stronger assumptions than OOD detection. The context process has to be piecewise stationary to infer task labels and context changes must happen infrequently to be detectable. Furthermore, online CPD is sensitive to outliers. In contrast, OOD is akin to defining a distance metric on the context process and can be well-defined on any context process. Consider the context process shown in Figure 2. We run this context process through a CPD algorithm (Alegre et al., 2021) for two different sensitivity factors  $\sigma_{mbcd}$  and represent each detected change-point with a red vertical line. A slight increase in sensitivity leads
+
+{5}------------------------------------------------
+
+![Figure 2: Two plots showing a sample context process z_t over time t. The left plot shows the process with a threshold sigma_mbed = 3.1, and the right plot shows the process with a threshold sigma_mbed = 3. Red vertical lines indicate detected change-points. The y-axis ranges from -2 to 2, and the x-axis ranges from 0 to 20M.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 2: Two plots showing a sample context process z\_t over time t. The left plot shows the process with a threshold sigma\_mbed = 3.1, and the right plot shows the process with a threshold sigma\_mbed = 3. Red vertical lines indicate detected change-points. The y-axis ranges from -2 to 2, and the x-axis ranges from 0 to 20M.
+
+Figure 2: A sample context process  $z_t$ , and detected change-points at two thresholds. Teasing meaningful task boundaries is difficult for this process, but defining an OOD metric is intuitive.
+
+to 34 detected change-points, and these change-points are also not reasonable. There is no obvious way to assign task labels for this smooth process and there aren’t clearly separated segments that can be defined as tasks. However, an intuitive OOD detection method is testing if the distance between  $z_i$  and  $z_j$  is larger than some threshold, i.e.,  $|z_i - z_j| > 1$ . Altogether, OOD is considerably easier in practice compared to CPD. Note that although the grid-world example – and discrete context environments in general – is a good fit for CPD, this environment was purposefully simple to explain the insight behind LCPO.
+
+### 4.2 METHODOLOGY
+
+Consider a parameterized policy  $\pi_\theta$  with parameters  $\theta$ . Our task is to choose a direction for changing  $\theta$  such that it improves the expected return on the most recent batch of experiences  $B_r$ , while the policy is ‘anchored’ on prior samples with sufficiently distinct context distributions,  $W(B_a, B_r)$ .
+
+#### Algorithm 1 LCPO Training
+
+```
+
+1: initialize parameter vectors  $\theta_0$ , empty buffer  $B_a$ 
+2: for each iteration do
+3:    $B_r \leftarrow$  Sample a mini-batch of new interactions
+4:    $S_c \leftarrow W(B_a, B_r)$ 
+5:    $v \leftarrow \nabla_\theta \mathcal{L}_{tot}(\theta; B_r)|_{\theta_0}$ 
+6:   if  $S_c$  is not empty then
+7:      $g(x) := \nabla_\theta (x^T \nabla_\theta D_{KL}(\theta_{old}; \theta; S_c)|_{\theta_0})|_{\theta_0}$ 
+8:      $v_c \leftarrow \text{conjgrad}(v, g(\cdot))$ 
+9:     while  $\theta_{old} + v_c$  violates constraints do
+10:       $v_c \leftarrow v_c/2$ 
+11:     $\theta_0 \leftarrow \theta_0 + v_c$ 
+12:  else
+13:     $\theta_0 \leftarrow \theta_0 + v$ 
+14:   $B_a \leftarrow B_a + B_r$ 
+
+```
+
+In supervised learning, this anchoring is straightforward to perform, e.g., by adding a regularization loss that directs the neural network to output the ground truth labels for OOD samples (Caruana, 1997). In the case of an RL policy, however, we do not know the ground truth (optimal actions) for anchoring the policy output. Moreover, using the actions we took in prior contexts as the ground truth is not possible, since the policy may have not converged at those times. Anchoring to those actions may cause the policy to relearn suboptimal actions from an earlier period in training. To avoid these problems, LCPO solves a constrained optimization problem that forces the policy to not change for OOD samples. Formally, we consider the following optimization problem:
+
+$$\begin{aligned}
+\min_{\theta} \quad & \mathcal{L}_{tot}(\theta; B_r) \triangleq \mathcal{L}_{PG}(\theta; B_r) + \mathcal{L}_e(\theta; B_r) \\
+\text{s.t.} \quad & D_{KL}(\theta_0; \theta; W(B_a, B_r)) \leq c_{anchor}
+\end{aligned} \tag{1}$$
+
+We use the standard definition of policy gradient loss, that optimizes a policy to maximize returns (Schulman et al., 2018; Mnih et al., 2016; Sutton & Barto, 2018):
+
+$$\mathcal{L}_{PG}(\theta; B_r) = \mathbb{E}_{r_t \sim B_r} \left[ \sum_{t=0}^H -\gamma^t r_t \right] \tag{2}$$
+
+We use automatic entropy regularization (Haarnoja et al., 2018c), to react to and explore in response to novel contexts. The learnable parameter  $\theta_e$  is adapted such that the entropy coefficient is  $e^{\theta_e}$ , and the
+
+{6}------------------------------------------------
+
+entropy remains close to a target entropy  $\bar{H}$ . This worked well in our experiments but LCPO could use any exploration method designed for non-stationary context-driven environments.
+
+$$\mathcal{L}_e(\theta; B_r) = e^{\theta_r} \mathbb{E}_{s_t, z_t \sim B_r, a_t \sim \pi} [\log \pi(a_t | s_t, z_t)] \quad (3)$$
+
+We use KL-divergence as a measure of policy change, and for simplicity we use  $D_{KL}(\theta_0, \theta; W(B_a, B_r))$  as a shorthand for  $\mathbb{E}_{s, z \sim W(B_a, B_r)} [D_{KL}(\pi_{\theta_0}(s, z) || \pi_{\theta}(s, z))]$ . Here,  $\theta_0$  denotes the current policy parameters, and we are solving the optimization over  $\theta$  to determine the new policy parameters.
+
+**Buffer Management.** To avoid storing all interactions in  $B_a$ , we use reservoir sampling (Vitter, 1985); we randomly replace old interactions with new ones with probability  $\frac{n_a}{n_b}$ , where  $n_b$  is the buffer size and  $n_a$  is the total interactions thus far. Reservoir sampling guarantees that the interactions in the buffer are a uniformly random subset of the full set of interactions. For a pseudo-code see §C.1 in the Appendix.
+
+**Difference detector.** To realize  $W(B_a, B_r)$ , we treat it as an OOD detection task. A variety of methods can be used in practice (§5), e.g., we can compute the Mahalanobis distance (Mahalanobis, 2018) — the normalized distance of each experience’s context with respect to the average context in  $B_r$  — and deem any distance above a certain threshold to be OOD. To avoid a high computational overhead when sampling from  $W(B_a, B_r)$ , we sample a larger batch from  $B_a$ , and keep the state-context pairs that are OOD with respect to  $B_r$ . If not enough different samples exist, we do not apply the constraint for that update. For a pseudo-code and further implementation details about the OOD detector, see §C.2 and §C.3.
+
+**Solving the constrained optimization.** To solve this constrained optimization, we approximate the optimization goal and constraint, and calculate a search direction accordingly (pseudocode in Algorithm 1). Our problem is structurally similar to TRPO (Schulman et al., 2015), though the constraint is quite different. Similar to TRPO, we model the optimization goal with a first-order approximation, i.e.,  $\mathcal{L}_{tot}(\theta; \cdot) = \mathcal{L}_0 + (\theta - \theta_0)^T \nabla_{\theta} \mathcal{L}_{tot}(\theta; \cdot) |_{\theta_0}$ , and the constraint with a second order approximation  $D_{KL}(\theta_0, \theta; \cdot) = (\theta - \theta_0)^T \nabla_{\theta}^2 D_{KL}(\theta_0, \theta; \cdot) |_{\theta_0} (\theta - \theta_0)$ . The optimization problem can therefore be written as
+
+$$\begin{aligned} & \min_{\theta} \quad (\theta - \theta_0)^T v \\ & s.t. \quad (\theta - \theta_0)^T A (\theta - \theta_0) \leq c_{anchor} \end{aligned} \quad (4)$$
+
+where  $A_{ij} = \frac{\partial}{\partial \theta_i} \frac{\partial}{\partial \theta_j} D_{KL}(\theta_0, \theta; W(B_a, B_r)) |_{\theta_0}$ , and  $v = \nabla_{\theta} \mathcal{L}_{tot}(\theta; \cdot) |_{\theta_0}$ . This optimization problem can be solved using the conjugate gradient method followed by a line search (Schulman et al., 2015; Achiam et al., 2017).
+
+**Bounding policy change.** The above formulation does not bound policy change on the current context, which could destabilize learning. We could add a second constraint, i.e., TRPO’s constraint,  $D_{KL}(\theta_0, \theta; B_r) \leq c_{recent}$  (note that this constraint is different from that in Equation (1), as the samples come from  $B_r$  instead of  $W(B_a, B_r)$ ). However, having two second order constraints is computationally expensive. Instead, we guarantee the TRPO constraint in the line search phase (lines 9–10 in Algorithm 1), where we repeatedly decrease the gradient update size until both constraints are met.
+
+## 5 EVALUATION
+
+We evaluate LCPO across six environments: four from Gymnasium Mujoco (Towers et al., 2023), one from Gymnasium Classic Control (Towers et al., 2023), and a straggler mitigation task from computer systems (Mao et al., 2019a; Hamadanian et al., 2022). These environments are subject to synthetic or real context processes that affect their dynamics. Our experiments aim to answer the following questions: **(1)** How does LCPO compare to baselines, and can it perform as well as the pre-trained prescient policies (§5.1)? **(2)** How does the accuracy of the OOD sampler  $W(\cdot, \cdot)$  affect LCPO (§5.2)? **(3)** How does the maximum buffer size  $n_b = |B_a|$  affect LCPO (§5.3)? We include further ablations of LCPO and baselines in Appendices §E.1, §D.5 and §D.1
+
+**Baselines.** We consider the following approaches for comparison: **Regularization-based:** (1) Online EWC (Kirkpatrick et al., 2017; Chaudhry et al., 2018; Schwarz et al., 2018), (2) Sliding OGD (Farajtabar et al., 2019; Woo et al., 2022) and (3) Benna-Fusi DQN (BFQDN) (Kaplanis et al., 2018), **Task Inference:**
+
+{7}------------------------------------------------
+
+(4) Model-Based Changepoint Detection (MBCD) (Alegre et al., 2021), **Rehearsal**: (5) Model-Based Policy Optimization (MBPO) (Janner et al., 2021), (6) CLEAR (Rolnick et al., 2019), (7) PT-DQN (Anand & Precup, 2023), (8) SAC (Haarnoja et al., 2018b) and (9) Double Deep Q Network (DDQN) (Hasselt et al., 2016) **On-policy RL**: (10) A2C (Mnih et al., 2016) and (11) TRPO (single-path) (Schulman et al., 2015), both using Generalized Advantage Estimation (GAE) (Schulman et al., 2018). **Prescient RL**: (12) as described in §2, the best of policies trained with A2C (Mnih et al., 2016), TRPO (single-path) (Schulman et al., 2015), DDQN (Hasselt et al., 2016) and SAC (Haarnoja et al., 2018b). For more details about these baselines, refer to §D in the Appendix
+
+**Experiment Setup.** We use 25 random seeds for gymnasium (5 for slower schemes) and 10 random seeds for the straggler mitigation experiments, and use the same hyperparameters for LCPO in all environments and contexts. Gym environments were modified to accept discrete action space policies, as even prescient policies struggled to learn stable continuous space policies in the presence of contexts (See §F.3). Hyperparameters and neural network structures are noted in Appendices §F.4 and §G.2. These experiments were conducted on a machine with 2 AMD EPYC 7763 CPUs (256 logical cores) and 512 GiB of RAM. With 32 concurrent runs, experiments finished in  $\sim 1152$  hours. This figure does not include runtime devoted to tuning the baselines.
+
+**Environment and Contexts.** We consider six environments: Modified versions of Pendulum-v1 from the classic control environments, InvertedPendulum-v4, InvertedDoublePendulum-v4, Hopper-v4 and Reacher-v4 from the Mujoco environments (Towers et al., 2023), and a straggler mitigation environment (Hamadanian et al., 2022). In the gym environments, the context is an exogenous “wind” process that creates external force on joints and affects movements. We append the external wind vectors from the last 3 time-steps to the observation, since the agent cannot observe the external context that is going to be applied in the next step, and a history of prior steps helps with the prediction. We create 4 synthetic context sequences with the Ornstein-Uhlenbeck process (Uhlenbeck & Ornstein, 1930), piecewise Gaussian models, or hand-crafted signals with additive noise. These context processes cover smooth, sudden, stochastic, and predictable transitions at short horizons. All context traces are visualized in Figure 7 in the Appendix. Context traces 1 and 2 are 20 million, and context traces 3 and 4 are 8 million steps long. All baselines were allowed a ‘warm-up’ period of 6 million time steps, and episodes were truncated at 200 steps. For the straggler mitigation environments, we use workloads provided by the authors in (Hamadanian et al., 2022), that are from a production web framework cluster at Microsoft, collected from a single day in February 2018. These workloads are visualized in Figure 8b in the appendix.
+
+**OOD detection.** We set the buffer size  $n_b$  to 1% of all samples, which is  $n_b \leq 200K$ . To sample OOD state-context pairs  $W(B_a, B_r)$ , we use distance metrics and thresholds. For gym environments where the context is a wind process, we use L2 distance, i.e., if  $\bar{w}_r = \mathbb{E}_{w \sim B_r}[w]$  is the average wind vector observed in the recent batch  $B_r$ , we sample a minibatch of states in  $B_a$  where  $W(B_a, B_r) = \{w_i | \forall w_i \in B_a : \|w_i - \bar{w}_r\|_2 > \sigma\}$ . There exist domain-specific models for workload distributions in the straggler mitigation environment, but we used Mahalanobis distance as it is a well-accepted and general approach for outlier detection in prior work (Lee et al., 2018; Podolskiy et al., 2021). Concretely, we fit a Gaussian multivariate model to the recent batch  $B_r$ , and report a minibatch of states in  $B_a$  with a Mahalanobis distance further than  $\sigma$  from this distribution (see §C.2 in the Appendix for more details).
+
+### 5.1 RESULTS
+
+To evaluate across different gymnasium environments and traces, we score agents with *Normalized Return*, i.e., for each environment and context process we report a scaled score function where 0 and 1 are the minimum and maximum lifelong return across all agents. We prefer agents with higher scores over different environments and traces. Figure 3a provides a summary of all gymnasium experiments (full details in Tables 5 and 6 in the Appendix). LCPO maintains a lead over baselines, is close to the best-performing prescient policy, all while learning online and sequentially. We present a detailed analysis of baselines’ performance in §D, and we summarize these findings below. We also report the wallclock time for each scheme in §F.2 in the appendix; LCPO is  $\sim 1.5\times$  as demanding as A2C.
+
+Online EWC and Sliding OGD employ heuristics to circumvent the necessity of task labels in the original techniques. Conceptually, they implicitly assume past episodes are separate “tasks”. Empirically these heuristics are not successful at solving CF. As for BFDQN, Kaplanis et al. (2018) note that while the
+
+{8}------------------------------------------------
+
+![Figure 3: CDF of normalized lifelong returns. (a) LCPO outperforms all online agents. (b) LCPO is affected by the OOD threshold sigma, but still outperforms baselines.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 3 consists of two subplots, (a) and (b), showing the Cumulative Distribution Function (CDF) of normalized lifelong returns. The x-axis represents 'Normalized Return' from 0.0 to 1.0, and the y-axis represents 'CDF (%)' from 0 to 100. Shaded regions around the lines indicate 95% confidence intervals.
+
+Subplot (a) compares LCPO (L2) and LCPO (MHD) against various online agents: Best Prescient, CLEAR, SAC, MBPO, Online EWC, BFDQN, TRPO, MBCD, Sifting OGD, KXC, DDQN, and PT-DQN. LCPO variants show higher returns, reaching the 100% CDF faster than most online agents.
+
+Subplot (b) shows the performance of LCPO with different OOD thresholds  $\sigma^2$ : 0.25, 0.5, 1.0, 2.0, 4.0, and 12.0. It also includes the A2C baseline. As the threshold  $\sigma^2$  increases, the performance of LCPO decreases, but it still maintains an advantage over the A2C baseline.
+
+Figure 3: CDF of normalized lifelong returns. (a) LCPO outperforms all online agents. (b) LCPO is affected by the OOD threshold sigma, but still outperforms baselines.
+
+Figure 3: CDF of normalized lifelong returns, where 0/1 denote the lowest/highest returns among agents. Shaded regions denote 95% confidence intervals. **(a)** LCPO outperforms all online agents, and remains the closest to prescient policies. **(b)** LCPO is affected by the OOD threshold  $\sigma$ , but still outperforms baselines.
+
+architecture was successful in simple environments, it failed with more complex and challenging ones. In our experience, this architecture did not provide any benefits compared to vanilla DDQN.
+
+MBCD struggles to tease out meaningful task boundaries. In some experiments, it launches anywhere between 3 to 7 policies just by changing the random seed. This observation is in line with MBCD’s sensitivity in §4.1, and prior work (Hamadanian et al., 2022).
+
+MBPO performed poorly, even though we verified that its learned model of the environment is highly accurate. CLEAR (Rolnick et al., 2019) and PT-DQN (Anand & Precup, 2023) are highly hyperparameter sensitive due to how they address catastrophic forgetting. While we tuned both extensively for the Pendulum-v1 environment, as we did for all baselines, they fail catastrophically in other environments. SAC and Deep Q Network (DQN) struggle to outperform A2C in the online case. This falls in line with prior observations (Hamadanian et al., 2022) and can be attributed to the instability and hyperparameter sensitivity of off-policy RL (Duan et al., 2016; Gu et al., 2016; Haarnoja et al., 2018b) and the quick adaptation that a fully online algorithm such as A2C provides (Sutton et al., 2007). In fact, despite not having been designed for non-stationary RL, A2C is the most successful baseline.
+
+Table 1: Tail latency (negative reward) and 95th percentile confidence ranges for different algorithms and contexts in the straggler mitigation environment.
+
+|  | Online Learning |  |  |  |  |  |  |  |  |  | Best Prescient |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | LCPO Agg | LCPO Med | LCPO Cons | MBCD | MBPO | Online EWC | A2C | TRPO | DDQN | SAC |  |
+| Workload 1 | 1070<br>$\pm 10$ | 1076<br>$\pm 16$ | 1048<br>$\pm 7$ | 1701<br>$\pm 112$ | 2531<br>$\pm 197$ | 2711<br>$\pm 232$ | 1716<br>$\pm 710$ | 3154<br>$\pm 464$ | 1701<br>$\pm 47$ | 1854<br>$\pm 245$ | 984<br>(TRPO) |
+| Workload 2 | 589<br>$\pm 43$ | 617<br>$\pm 62$ | 586<br>$\pm 27$ | 678<br>$\pm 38$ | 891<br>$\pm 54$ | 724<br>$\pm 22$ | 604<br>$\pm 109$ | 864<br>$\pm 105$ | 633<br>$\pm 7$ | 644<br>$\pm 27$ | 509<br>(A2C) |
+
+For the straggler mitigation environment, Table 1 presents the latency metric (negative reward) over two workloads. Recall that this environment uses real-world traces from a production cloud network. The overall trends are similar to the gymnasium experiments, with LCPO outperforming all other baselines. This table includes three variants of LCPO, that will be discussed further in §5.2.
+
+### 5.2 SENSITIVITY TO OOD METRIC
+
+LCPO applies a constraint to OOD state-context pairs, as dictated by the OOD sampler  $W(B_a, B_r)$ . We vary the OOD threshold  $\sigma$ —which the OOD method uses in sampling—and monitor the normalized return for the gym environments in Figure 3b and the straggler mitigation environments in Table 1. In the gym environments, a lower value for  $\sigma$  yields tighter margin of difference before a sample is deemed OOD. LCPO is affected by  $\sigma$ , with the smallest threshold  $\sigma^2 = 0.25$  performing the best. However, LCPO still maintains a lead over the A2C baseline across  $\sigma$  variations. We also experiment with a handicapped OOD metric that observes a state-context vector  $x_t = \langle s_t, z_t \rangle$  without the ability to separate state and context.
+
+{9}------------------------------------------------
+
+We use the Mahalanobis distance OOD metric (Mahalanobis, 2018) at several thresholds  $\sigma_{\text{MHD}}^2$  for this experiment. Despite the handicap, the LCPO +Mahalanobis surpasses the LCPO +L2 agent that we have used in this evaluation. This is not surprising, as the L2 distance is less robust than Mahalanobis distance, but easier to interpret. In the straggler mitigation environment LCPO Agg, LCPO Med and LCPO Cons use  $\sigma = 5, 6$  and 7, and a higher value for  $\sigma$  yields more conservative OOD samples (i.e., fewer samples are detected as OOD). The difference between these three is significant: The model in LCPO Agg allows for  $26.7\times$  more samples to be considered OOD compared to LCPO Cons. Table 1 provides the normalized return for LCPO with varying thresholds, along with baselines. Notably, all variations of LCPO achieve similar results.
+
+### 5.3 SENSITIVITY TO BUFFER SIZE
+
+LCPO uses Reservoir sampling (Vitter, 1985) to maintain a limited number of samples  $n_b$ . We evaluate how sensitive LCPO is to the buffer size in Figure 4 (full results in Table 8 in the Appendix). The full experiment has 8–20M samples. LCPO maintains its high performance, even with as little as  $n_b = 500$  samples, but drops below this point (statistically significant in over one third of experiments). This is not surprising, as the context traces do not change drastically at short intervals, and even 500 randomly sampled points from the trace should be enough to have a representation over all of the trace. However, with more complicated and high-dimensional contexts, a higher buffer size would likely be necessary.
+
+![Figure 4: CDF of normalized returns of LCPO in gym environments with various buffer sizes. The plot shows CDF (%) on the y-axis (0 to 100) versus Normalized Return on the x-axis (0.4 to 1.0). Six curves are shown: Best Prescient (dashed grey), A2C (dotted blue), LCPO n_b = 20M (solid red), LCPO n_b = 200K (solid green), LCPO n_b = 25 (solid purple), and LCPO n_b = 500 (solid orange). The LCPO curves are clustered near the top right, indicating high performance, while the A2C and Best Prescient curves are lower.](6b32b7b928d34eeccb15c29cdf9d2cb3_img.jpg)
+
+Figure 4: CDF of normalized returns of LCPO in gym environments with various buffer sizes. The plot shows CDF (%) on the y-axis (0 to 100) versus Normalized Return on the x-axis (0.4 to 1.0). Six curves are shown: Best Prescient (dashed grey), A2C (dotted blue), LCPO n\_b = 20M (solid red), LCPO n\_b = 200K (solid green), LCPO n\_b = 25 (solid purple), and LCPO n\_b = 500 (solid orange). The LCPO curves are clustered near the top right, indicating high performance, while the A2C and Best Prescient curves are lower.
+
+Figure 4: CDF of normalized returns of LCPO in gym environments with various buffer sizes. Shaded regions denote 95% confidence intervals. LCPO loses performance with  $n_b < 500$ .
+
+## 6 DISCUSSION AND LIMITATIONS
+
+**Network Capacity.** In general, online learning methods with bounded parameter counts will reach the function approximator’s (neural network’s) maximum representational capacity. LCPO is not immune from this, as we do not add parameters with more context traces. However, neither are prescient agents. To isolate the effect of this capacity and CF, we compare against prescient agents, rather than single agents trained on individual tasks or context traces (He et al., 2020). This ensures a fair evaluation that does not penalize online learning for reaching the capacity ceiling. If the maximum capacity has been reached, it may be beneficial to remove significantly old samples from  $B_n$  to allow LCPO to forget such contexts, thereby favoring flexibility instead of stability.
+
+**Exploration.** LCPO focuses on mitigating catastrophic forgetting in non-stationary RL. An orthogonal challenge in this setting is efficient exploration, i.e., to explore when the context distribution has changed but only once per new context. Our experiments used automatic entropy tuning for exploration (Haarnoja et al., 2018b); while empirically effective, this was not designed for non-stationary problems. LCPO may benefit from a better exploration methodology such as curiosity-driven exploration (Pathak et al., 2017).
+
+**Efficient Buffer Management.** We used Reservoir Sampling (Vitter, 1985), which maintains a uniformly random buffer of all observed state-context samples so far. Future work could explore strategies that selectively store or drop samples based on their context, e.g., to maximize sample diversity.
+
+## 7 CONCLUSION
+
+We proposed and evaluated LCPO, a simple approach for online learning in non-stationary context-driven environments. LCPO requires two conditions: (1) the non-stationarity must be induced by an exogenous observed context process; and (2) a similarity metric is required that can inform us if two contexts come from noticeably different distributions (OOD detection). This is less restrictive than prior approaches that require either explicit or inferred task labels. Our experiments showed that LCPO outperforms baselines on several environments with real and synthetic context processes.
+
+ Rest of paper (reference and Appendix) is removed.

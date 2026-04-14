@@ -1,0 +1,355 @@
+
+
+{0}------------------------------------------------
+
+# OS-ATLAS: A FOUNDATION ACTION MODEL FOR GENERALIST GUI AGENTS
+
+Zhiyong Wu<sup>1\*</sup>, Zhenyu Wu<sup>1,2\*</sup>, Fangzhi Xu<sup>1\*</sup>, Yian Wang<sup>2\*</sup>, Qiushi Sun<sup>3</sup>, Chengyou Jia<sup>1</sup>,  
+Kanzhi Cheng<sup>1</sup>, Zichen Ding<sup>1</sup>, Liheng Chen<sup>3</sup>, Paul Pu Liang<sup>4</sup>, Yu Qiao<sup>1</sup>
+
+<sup>1</sup>Shanghai AI Laboratory <sup>2</sup>Shanghai Jiaotong University
+
+<sup>3</sup>The University of Hong Kong <sup>4</sup>MIT
+
+wuzhiyong@pjlab.org.cn
+
+<https://osatlas.github.io/>
+
+## ABSTRACT
+
+Existing efforts in building GUI agents heavily rely on the availability of robust commercial Vision-Language Models (VLMs) such as GPT-4o and GeminiPro-Vision. Practitioners are often reluctant to use open-source VLMs due to their significant performance lag compared to their closed-source counterparts, particularly in GUI grounding and Out-Of-Distribution (OOD) scenarios. To facilitate future research in this area, we developed OS-Atlas —a foundational GUI action model that excels at GUI grounding and OOD agentic tasks through innovations in both data and modeling. We have invested significant engineering effort in developing an open-source toolkit for synthesizing GUI grounding data across multiple platforms, including Windows, Linux, MacOS, Android, and the web. Leveraging this toolkit, we are releasing the largest open-source cross-platform GUI grounding corpus to date, which contains over 13 million GUI elements. This dataset, combined with innovations in model training, provides a solid foundation for OS-Atlas to understand GUI screenshots and generalize to unseen interfaces. Through extensive evaluation across six benchmarks spanning three different platforms (mobile, desktop, and web), OS-Atlas demonstrates significant performance improvements over previous state-of-the-art models. Our evaluation also uncovers valuable insights into continuously improving and scaling the agentic capabilities of open-source VLMs.
+
+## 1 INTRODUCTION
+
+With the recent adoption of large language models (LLMs), the fantasy of building digital agents (Wu et al., 2024)—similar to *JARVIS* in The Iron Man—to automate daily tasks is evolving from science fiction into a tangible reality. Many current agents make decisions based on textual descriptions of the environments, such as HTML and accessibility trees, which is often lengthy (Zheng et al., 2024a), noisy (Cheng et al., 2024; WebAIM, 2024), and hard to acquire in practice. More recent studies (Cheng et al., 2024; Hong et al., 2024b; Li et al., 2024) have explored the use of large vision-language models (VLMs) to develop graphical user interfaces (GUI) agents capable of performing complex tasks simply by analyzing the screen - an information-complete medium for agent’s decision-making, allowing for greater flexibility. At the core of a GUI agent lies an **action model** that enables **GUI grounding** - the process of transforming natural language instructions into executable actions within the operating system (e.g., clicking somewhere on the screen).
+
+Despite their advancements, existing open-source VLM-based GUI action models have been criticized for their poor performance in GUI grounding and generalizing to Out-Of-Distribution (OOD) scenarios (Lu et al., 2024b; Chai et al., 2024), significantly restricting their applicability in real-world situations. The ineffectiveness of current models can be attributed to two primary factors.
+
+First, most existing VLMs are rarely pretrained on GUI screenshot images. While some early efforts have focused on gathering screenshots corpus for websites (Lee et al., 2022; Chen et al., 2024b)
+
+\* Equal Contribution.
+
+{1}------------------------------------------------
+
+![Figure 1: OS-Atlas model modes and performance comparison. The left side shows three modes: Grounding Mode (Planner + Grounding), Action Mode (Linux, Windows, MacOS, Web, Desktop, Mobile, Zero-shot OOD Generalization), and Agent Mode (Optimize + Specific Agent Tasks). The right side is a radar chart comparing OS-Atlas (blue) with other models (yellow, green, red, purple) across six benchmarks: Action (Web), Action (Desktop), Action (Mobile), Agent (Web), Agent (Desktop), and Agent (Mobile).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: OS-Atlas model modes and performance comparison. The left side shows three modes: Grounding Mode (Planner + Grounding), Action Mode (Linux, Windows, MacOS, Web, Desktop, Mobile, Zero-shot OOD Generalization), and Agent Mode (Optimize + Specific Agent Tasks). The right side is a radar chart comparing OS-Atlas (blue) with other models (yellow, green, red, purple) across six benchmarks: Action (Web), Action (Desktop), Action (Mobile), Agent (Web), Agent (Desktop), and Agent (Mobile).
+
+Figure 1: (Left) The OS-Atlas model operates in three distinct modes to cater to various research needs. In Grounding mode, OS-Atlas predicts element coordinates based on user instructions and can be integrated with a planner module to create a complete agent. In Action mode, OS-Atlas functions independently to solve step-level agent tasks universally across different platforms and applications, even in zero-shot OOD scenarios. In Agent mode, OS-Atlas undergoes further supervised fine-tuning to address specific agent tasks. (Right) Overall performance comparisons between OS-Atlas and other state-of-the-art models.
+
+and mobile applications (He et al., 2020; Wang et al., 2021), there remains a significant lack of a large-scale, open-source corpus of screenshots that encompasses multiple platforms (Windows, MacOS, Linux, iOS, Android), a variety of applications, and different resolution sizes. Given that all GUIs operate under similar design principles, we believe that pre-training on such a comprehensive corpus would enable GUI agents to achieve better GUI grounding, especially in OOD generalization.
+
+Second, the heterogeneity of content and format in existing datasets (Zhang et al., 2024c; Chen et al., 2024c), along with the issue of action naming conflicts, further undermines generalization. In current datasets, the same action is often labeled with different names across platforms. For instance, the “tap” action on mobile devices and the “click” action on desktop platforms are logically equivalent yet labeled differently. This inconsistency can create confusion during model training and ultimately result in decreased performance.
+
+In this work, we are motivated to build a strong foundation action model to facilitate the development of future generalist GUI agents. Toward this goal, we make the following contributions:
+
+1. We have developed and released the first multi-platform GUI grounding data synthesis toolkit. This toolkit enables the automatic synthesis of GUI grounding data across various platforms, including Windows, macOS, Linux, Android, and the Web. By doing so, it significantly reduces the engineering efforts required for data curation in future research.
+2. Leveraging this data toolkit, we curated and open-sourced the largest multi-platform GUI grounding corpus to date, which comprises over 2.3 million distinct screenshots and more than 13 million GUI elements. Notably, our corpus includes desktop grounding data that has not been present in previous works. To facilitate evaluation of GUI grounding, we identify and re-annotate 11.32% incorrect samples in the popular benchmark ScreenSpot (Cheng et al., 2024) and release ScreenSpot-V2.
+3. Through the above data innovation and an approach to resolving action naming conflicts during training, we developed OS-Atlas, a highly accurate foundation action model that operates universally across all GUIs. OS-Atlas can function in three different modes when developing GUI agents as depicted in Figure 1.
+4. We present the most comprehensive evaluation of GUI agents to date, covering six benchmarks across three different platforms: desktop, mobile, and web. As shown in Figure 1, OS-Atlas demonstrates a superior performance improvement over previous SOTA models. This strong performance indicates that OS-Atlas can serve as an open-source alternative to powerful commercial VLMs, such as GPT-4o, for developing future GUI agents.
+
+## 2 RELATED WORK
+
+**GUI Agents and Large Action Models.** Autonomous agents powered by LLMs, known as language agents (Weng, 2023; Summers et al., 2023), have recently garnered significant attention due
+
+{2}------------------------------------------------
+
+to their interactive capabilities (Wang et al., 2023; Sun et al., 2023; Hong et al., 2024a; Durante et al., 2024). Recent efforts have begun to enable agents to interact with operating systems via programs (Sun et al., 2024) or API calls (Wu et al., 2024; Zhang et al., 2024a). However, the closed-source nature of most commercial software imposed significant limitations, as agents don’t have access to their internal APIs or codes. Consequently, research shifts toward GUI-based agents that interact with digital devices through human-like mouse and keyboard actions (Cheng et al., 2024; Hong et al., 2024b; Zheng et al., 2024a). To facilitate effective agent interactions, Large Action Models (LAMs) have been developed to address general agentic tasks by interpreting human intentions and predicting actions in the form of function-calling (Zhang et al., 2024c;b; Zeng et al., 2023; Yin et al., 2023). Nevertheless, progress is hindered by the limited quantity and vast diversity of available agent data (Li et al., 2024; Xu et al., 2024). Specifically, LAMs focusing on GUI interactions remain underexplored, with only a few attempts made to train GUI grounding models or agents (Cheng et al., 2024; Hong et al., 2024b; Gou et al., 2024).
+
+To the best of our knowledge, OS-Atlas is the first LAM specifically designed for GUI agents.
+
+**GUI Executable Language Grounding.** The core functionality of an LAM is to convert natural language (NL) instructions into actions and associated parameters (e.g., element coordinates), commonly known as GUI Executable Language Grounding, or simply GUI grounding. Existing GUI grounding training data can be divided into two types: referring expression grounding (REG) (Liu et al., 2023) and instruction grounding (IG) (Li et al., 2020). REG focuses on locating specific elements on the screen based on explicit references in the language instructions, such as “click the Open button.” Collecting REG data from webpages is straightforward through crawling and parsing (Cheng et al., 2024; Chen et al., 2024b). However, when it comes to other platforms (e.g., desktop and mobile), it presents significant challenges and often requires substantial human effort.
+
+Compared to REG, IG data is more crucial for real-world applications. IG can be considered a superset of REG, as it also includes actions that do not require specific coordinates, such as “Type”. Moreover, the instructions in IG data are often nuanced and lack explicit element identification. For instance, an instruction like “delete the last file” requires reasoning to identify the targeted action type and element. IG data is often limited in size and diversity (Zhang et al., 2024b; Zheng et al., 2024b), due to the need for human annotation during collection (Li et al., 2024).
+
+OS-Atlas tackles these data-related challenges by developing a multi-platform infrastructure for collecting GUI grounding data. A concurrent study by Gou et al. (2024) also addresses these challenges; however, their focus is limited to scaling web data.
+
+## 3 OS-ATLAS
+
+To establish a robust foundation action model for GUI agents, we propose enhancements from both data (§ 3.2) and methodological (§ 3.3) perspectives. Leveraging these innovations, we trained OS-Atlas, the first foundation action model specifically designed for GUI agents.
+
+### 3.1 TASK FORMULATION AND TRAINING
+
+Our training process consists of two consecutive phases: (1) GUI Grounding Pre-training, which equips VLMs with the knowledge to understand GUI screenshots and identify elements on the screen, and on top of it, (2) Action Fine-tuning, which transforms instructions into executable GUI actions. The framework overview can be found in Figure 2.
+
+**GUI Grounding Pre-training.** This phase requires a large, high-quality, and diverse set of <screenshot, element referring expression or instruction, element coordinate> triplets, where the coordinates are represented as either points or bounding boxes. Models use the screenshot and the referring expression or instruction to predict the corresponding element coordinates. To facilitate large-scale pre-training, we have collected the largest multi-platform GUI reference corpus to date and synthesized a set of instruction grounding data using VLMs, as detailed in § 3.2. As shown in Table 1, our pre-training corpus covers 5 distinct platforms and includes over 2.3 million unique screenshots containing more than 13 million elements. We denote the pre-trained model as *OS-Atlas-Base*.
+
+{3}------------------------------------------------
+
+![Figure 2: Overall training pipeline of OS-Atlas. The diagram shows two main stages: GUI Grounding Pretraining and Action Fine-tuning. GUI Grounding Pretraining uses data from Web, Desktop, and Mobile platforms to build OS-Atlas-Base. Action Fine-tuning uses a task input (screenshot, thought, action) to build the Unified Action Space, which is then used to build OS-Atlas. The VLM component is used in both stages.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram illustrates the training pipeline for OS-Atlas. It is divided into two main stages: **GUI Grounding Pretraining** and **Action Fine-tuning**.
+
+- GUI Grounding Pretraining:** This stage involves collecting data from three platforms: **Web** (e.g., "North" with 849,830 elements, >2M screenshots), **Desktop** (e.g., "Value 20.3" with 407,681 elements, >13M elements), and **Mobile** (e.g., "Search Bar" with 452,173 elements, diverse platforms). This data is used to train a **VLM** (Vision Language Model) to produce **OS-Atlas-Base**.
+- Action Fine-tuning:** This stage involves a task input consisting of a screenshot, a thought, and an action. This is processed by a **VLM** to produce a **Unified Action Space**. The Unified Action Space is divided into **Basic Action** (CLICK [s, y], SCROLL [dx], TYPE [text]) and **Custom Action** (LONG\_PRESS [s, y], SELECT [s]). This is then used to train the final **OS-Atlas** model.
+
+Figure 2: Overall training pipeline of OS-Atlas. The diagram shows two main stages: GUI Grounding Pretraining and Action Fine-tuning. GUI Grounding Pretraining uses data from Web, Desktop, and Mobile platforms to build OS-Atlas-Base. Action Fine-tuning uses a task input (screenshot, thought, action) to build the Unified Action Space, which is then used to build OS-Atlas. The VLM component is used in both stages.
+
+Figure 2: Overall training pipeline of OS-Atlas. We first perform large-scale pre-training using 13 million GUI grounding data collected to build OS-Atlas-Base. Next, we conduct multitask fine-tuning on agent data, resulting in OS-Atlas.
+
+**Action Fine-tuning.** To enable OS-Atlas to solve OS tasks effectively, we compile existing agent datasets for multi-task imitation learning. Specifically, we use  $\langle \text{screenshot}, \text{task instruction}, \text{action history} \rangle$  triplets as model input and train the model to predict the corresponding action. Each action can be further represented as  $\langle \text{thoughts}, \text{action type}, \text{action parameters} \rangle$  (e.g., coordinates) triplets. In our preliminary investigation, we discovered that fine-tuning with multiple diverse datasets can introduce conflicts between actions, which degrade performance (see § 5.3). To address this issue, we propose the use of a unified action space during training (see § 3.3).
+
+### 3.2 GROUNDING DATA COLLECTION
+
+As shown in Table 1, existing GUI grounding corpora predominantly focus on web-page screenshots, as these can be easily obtained using web crawlers (Cheng et al., 2024; Hong et al., 2024b; Chen et al., 2024b) or on mobile screenshots (You et al., 2024; Zhang et al., 2024d), leaving a significant gap for desktop screenshots. Furthermore, many of these corpora are either not open-sourced or are available only in relatively small scales. To lay a solid foundation for GUI agents, we have developed and open-sourced the first cross-platform GUI grounding data collection platform, along with a dataset comprising 13 million GUI grounding instances that cover Windows, macOS, Linux, Android, and the Web. However, due to significant discrepancies between these platforms, we were required to create distinct infrastructures for each one, which presents unique challenges in ensuring consistent data quality and compatibility across different environments.
+
+**Web.** We crawled about 4 million web pages from the latest URLs obtained from FineWeb (Penedo et al., 2024), a cleaned and deduplicated English dataset derived from CommonCrawl. For each webpage, we extracted all visible clickable elements from the HTML code — including buttons, scroll bars, search bars, hyperlinks, and SVG images with titles — along with their referring expressions and coordinates derived from the associated HTML attributes. Unlike previous methods (Cheng et al., 2024) that primarily focused on processing only the upper portions of websites, we render entire websites and then segment them into 1920x1080 resolution screenshots. This approach enhances the diversity of our web data by capturing a more comprehensive view of each webpage.
+
+By excluding all error pages (e.g., 404 errors), we initially curated 3.7 million webpage screenshots and 37 million elements. However, upon human examination, we identified numerous low-quality
+
+| Dataset | #Screenshots |  |  | Open Source | #Elements |
+|-|-|-|-|-|-|
+|  | Web | Mobile | Desktop |  |  |
+| SeeClick | 270K | 94K | - | ✓ | 3.3M |
+| Ferret-UI | - | 124K | - | ✗ | <1M |
+| GUICourse | 73K | 9K | - | ✓ | 10.7M |
+| CogAgent | 400K | - | - | ✗ | 70M |
+| <b>OS-Atlas</b> | <b>1.9M</b> | <b>285K</b> | <b>54K</b> | <b>✓</b> | <b>13.58M</b> |
+
+Table 1: Statistics of the grounding data we collected compared to existing efforts. (For open-source datasets, we only count the number of data made publicly available.)
+
+{4}------------------------------------------------
+
+samples within this dataset. To address this issue, we implemented rule-based data filtering to exclude webpages that were either incompletely rendered or contained poorly distributed elements (e.g., all elements clustered at the bottom of the screen). Additionally, we restricted the maximum number of elements per webpage to 10 to encourage diversity. As a result of these stringent filtering criteria, we obtained a cleaned corpus consisting of 1.6 million screenshots and 7.7 million elements.
+
+**Desktop & Mobile.** Capturing desktop and mobile screenshots is significantly more complex than collecting web screenshots. Previous methods primarily relied on manual collection, which resulted in a relatively small dataset. However, large-scale automated data collection presents the following challenges: (1) the substantial engineering efforts required to set up a simulation environment for data collection within a real operating system, and (2) the necessity of designing a program to mimic human interactions with the operating system, thereby changing system states to obtain new screenshots.
+
+For Android, we utilize AndroidEnv (Toyama et al., 2021) to create a simulation environment, and for Linux, we employ OSWorld (Xie et al., 2024). Given the difficulties associated with virtualizing Windows and MacOS, we deploy the data synthesis platform on physical machines to collect data from these two operating systems. On these platforms, we leverage A11y tree to collect grounding data. Due to the differences in A11y tree APIs and tools supported by each operating system, we utilize *pyatspi* to access the A11y tree on Ubuntu, *pywinauto* on Windows, and *ApplicationServices* on macOS. We then simulate human-computer interactions by sampling actions from the obtained A11y tree. In our simulation environment, we employ two different exploration methods: Depth-First Search (DFS) and Random Walk. We apply a similar data filtering pipeline to the grounding data obtained as we did for the webpages.
+
+**Instruction Grounding Data Collection.** In addition to the large-scale automated collection of referring expression data, we also annotated existing trajectory datasets using GPT-4o to obtain instruction grounding data. Given a high-level task instruction along with the before-and-after interface screenshots of an action, we instruct GPT-4o to carefully analyze the changes in the interface to derive a sub-instruction for the current action. Specifically, we employ Set-of-Mark prompting (Yang et al., 2023) to indicate the locations of the operated elements, which helps GPT-4o better comprehend the screenshots. We annotated the training sets of four trajectory datasets collected from both web and mobile platforms, namely Mind2Web (Deng et al., 2023b), AMEX (Chai et al., 2024), and AITZ (Zhang et al., 2024d). We also utilize instruction grounding data from two publicly available datasets: AndroidControl (Li et al., 2024) and Wave-UI<sup>1</sup>.
+
+### 3.3 UNIFIED ACTION SPACE
+
+Our preliminary investigation found that blindly mixing data from different sources for multitask fine-tuning can significantly harm performance due to action space conflicts. For instance, the action “click” in a desktop environment is logically equivalent to the “tap” operation on a mobile device; training with such conflicts can confuse the model. To address this issue, we propose a unified action space that standardizes the format of all existing datasets. Our unified action space comprises both Basic Actions and Custom Actions. The prompt can be found in Table 6.
+
+**Basic Actions.** These are standardized and available across all platforms. They provide essential functionality and are defined with a specific format, ensuring consistency and reliability. In the current design, we have three basic actions: click, type, and scroll. This design significantly reduces the size of action space when fine-tuning, and facilitates knowledge sharing across platforms and apps.
+
+**Custom Actions.** These are unique to each user’s platform and device. They enable the model to support new and unseen actions defined by users. The design of custom actions is crucial to OS-Atlas’s good out-of-distribution performance, as they allow for on-demand extensions to support previously unseen tasks and actions. Typical custom actions include open\_app (to open the specified application) and drag (to move an object to another location).
+
+<sup>1</sup><https://huggingface.co/datasets/agentsea/wave-ui>. We remove entries from ScreenSpot (Cheng et al., 2024), Mind2Web, and Omniact to avoid data contamination in downstream evaluation.
+
+{5}------------------------------------------------
+
+## 4 EXPERIMENTS: GROUNDING TASKS
+
+### 4.1 EVALUATION DETAILS
+
+**Benchmarks.** We begin by conducting a comprehensive evaluation of the GUI grounding performance of OS-Atlas-Base. Our evaluation utilizes ScreenSpot (Cheng et al., 2024), which assesses single-step GUI grounding capabilities across multiple platforms. During the evaluation, we identified approximately 11.32% percent annotation errors in the ScreenSpot dataset. To enhance the accuracy of our grounding evaluation, we corrected these errors and re-annotated certain examples, ensuring that the total number of test samples remains unchanged. In recognition of ScreenSpot’s contributions, we have named the revised grounding dataset ScreenSpot-V2.
+
+**Settings.** Following Gou et al. (2024), we evaluate under two settings: 1) *the Grounding Mode Setting*, which utilizes a planner model (e.g., gpt-4o) before grounding. The instructions from ScreenSpot are treated as subtask instructions and input into the planner to generate more detailed instructions for the grounding models. 2) *the Standard Setting* without a planner, which directly uses the original instructions from ScreenSpot.
+
+**Models.** We consider two distinct backbone models: Qwen2-VL (Wang et al., 2024), which is trained explicitly with GUI data, and InternVL-2 (Chen et al., 2024d) which is trained without GUI data. These models also differ in their handling of image resolutions. InternVL-2-4B employs AnyRes (Liu et al., 2024; You et al., 2024) to resize images and segment larger images into smaller patches, which are then encoded independently using vision encoders. In contrast, Qwen2-VL-7B supports arbitrary image resolutions by directly mapping an image into a dynamic number of visual tokens. We denote our model as OS-Atlas-Base-4/7B, based on the backbones being used. Further details regarding the training setups can be found in Appendix E.
+
+**Baselines.** We focus on VLMs that are explicitly trained with GUI data, including Fuyu (Bavishi et al., 2023), CogAgent (Hong et al., 2024b), Qwen2-VL (Wang et al., 2024), SeeClick (Cheng et al., 2024), and even a concurrent work UGround (Gou et al., 2024). We omit general VLMs such as GPT-4V, as they are well-studied and perform poorly on ScreenSpot (Cheng et al., 2024).
+
+**Metrics.** We follow previous practices by using grounding accuracy on ScreenSpot, where a prediction is considered correct if the predicted location falls within the ground truth element’s bounding box. However, this metric does not capture more fine-grained grounding errors. Therefore, we also use Intersection over Union (IoU), a widely used metric for measuring localization accuracy in object detection. IoU quantifies the overlap between the predicted bounding box and the ground truth bounding box.
+
+### 4.2 RESULTS AND ANALYSIS
+
+As shown in Table 2, under both settings, OS-Atlas-Base significantly outperforms previous grounding models on ScreenSpot across mobile, desktop, and web platforms, achieving state-of-the-art results. A similar trend is observed in ScreenSpot-V2 (see Appendix B). Notably, even for VLMs like Qwen2-VL, which have been pre-trained on GUI screenshots, incorporating GUI grounding pre-training can further enhance grounding capabilities. To gain deeper insights into the reasons behind this strong performance, we conducted a series of analyses under the standard setting (without a planner), including those in § 5.3, using InternVL-2-4B due to GPU constraints.
+
+**The Effect of Grounding Data Scaling.** We plot the changes in grounding accuracy and IoU of OS-Atlas-Base-4B on ScreenSpot throughout the training process. As illustrated in Figure 3, grounding accuracy and IoU exhibit a clear positive correlation with the scaling of data, particularly in the case of IoU and the web domain, where we have nearly 10 million elements. The correlation is relatively weak in grounding accuracy because it cannot capture finer-grained errors. On one hand, this suggests the significant potential of continuously scaling the grounding data to further enhance performance. On the other hand, it underscores the need for more challenging benchmarks and improved metrics to effectively track performance improvements.
+
+{6}------------------------------------------------
+
+![Figure 4: Bar charts showing ablation studies and performance on ScreenSpot for Web, Desktop, and Mobile domains. Each chart compares OS-Atlas-Base -4B with variations excluding instruction grounding (IG) for mobile and desktop. The metrics are Text and Icon/Widget performance.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 4 consists of three bar charts labeled (a) Web, (b) Desktop, and (c) Mobile. Each chart compares the performance of OS-Atlas-Base -4B with three ablation variants: 'w/o IG' (without instruction grounding), 'w/o IG, Mobile', and 'w/o IG, Desktop'. The y-axis represents performance scores from 0 to 100. The legend indicates that light blue bars represent 'Text' performance and dark blue bars represent 'Icon/Widget' performance.
+
+| Domain | Model Variant | Text (%) | Icon/Widget (%) |
+|-|-|-|-|
+| (a) Web | OS-Atlas-Base -4B | 82.61 | 63.11 |
+|  | w/o IG | 83.48 | 61.17 |
+|  | w/o IG, Mobile | 70.00 | 50.49 |
+|  | w/o IG, Desktop | 50.49 | 50.49 |
+| (b) Desktop | OS-Atlas-Base -4B | 72.16 | 45.71 |
+|  | w/o IG | 62.89 | 39.29 |
+|  | w/o IG, Mobile | 32.99 | 28.57 |
+|  | w/o IG, Desktop | 28.57 | 28.57 |
+| (c) Mobile | OS-Atlas-Base -4B | 85.71 | 58.52 |
+|  | w/o IG | 84.98 | 54.59 |
+|  | w/o IG, Mobile | 17.58 | 10.04 |
+|  | w/o IG, Desktop | 10.04 | 10.04 |
+
+Figure 4: Bar charts showing ablation studies and performance on ScreenSpot for Web, Desktop, and Mobile domains. Each chart compares OS-Atlas-Base -4B with variations excluding instruction grounding (IG) for mobile and desktop. The metrics are Text and Icon/Widget performance.
+
+Figure 4: Ablation studies and performance on ScreenSpot. IG/Mobile/Desktop refers to instruction grounding, mobile, and desktop grounding data, respectively.
+
+| Planner | Grounding Models | Mobile |  | Desktop |  | Web |  | Avg. |
+|-|-|-|-|-|-|-|-|-|
+|  |  | Text | Icon/Widget | Text | Icon/Widget | Text | Icon/Widget |  |
+| - | Fuyu | 41.00 | 1.30 | 33.00 | 3.60 | 33.90 | 4.40 | 21.31 |
+|  | CogAgent | 67.00 | 24.00 | 74.20 | 20.00 | 70.40 | 28.60 | 49.58 |
+|  | SeeClick | 78.00 | 52.00 | 72.20 | 30.00 | 55.70 | 32.50 | 55.75 |
+|  | InternVL-2-4B | 9.16 | 4.80 | 4.64 | 4.29 | 0.87 | 0.10 | 4.32 |
+|  | Qwen2-VL-7B | 61.34 | 39.29 | 52.01 | 44.98 | 33.04 | 21.84 | 42.89 |
+|  | UGround-7B | 82.80 | 60.30 | 82.50 | 63.60 | 80.40 | 70.40 | 74.15 |
+|  | OS-Atlas-Base-4B | 85.71 | 58.52 | 72.16 | 45.71 | 82.61 | 63.11 | 70.13 |
+|  | OS-Atlas-Base-7B | <b>93.04</b> | <b>72.93</b> | <b>91.75</b> | <b>62.86</b> | <b>90.87</b> | <b>74.27</b> | <b>82.47</b> |
+| GPT-4o | SeeClick | 83.52 | 59.39 | 82.47 | 35.00 | 66.96 | 35.44 | 62.89 |
+|  | UGround-7B | 93.40 | 76.90 | <b>92.80</b> | <b>67.90</b> | 88.70 | 68.90 | 82.71 |
+|  | OS-Atlas-Base-4B | <b>94.14</b> | 73.80 | 77.84 | 47.14 | 86.52 | 65.53 | 76.81 |
+|  | OS-Atlas-Base-7B | 93.77 | <b>79.91</b> | 90.21 | 66.43 | <b>92.61</b> | <b>79.13</b> | <b>85.14</b> |
+
+Table 2: Grounding accuracy on ScreenSpot. The best results are in bold.
+
+**Ablation.** We first remove the instruction grounding (IG) data from the pre-training phase to conduct a more controlled ablation analysis. Next, we further exclude mobile and desktop data to investigate whether pre-training solely on web data can generalize to other platforms. The results presented in Figure 4 reveal the following insights: (1) Referring expression data is nearly sufficient for training a strong grounding model and can be easily scaled compared to instruction grounding data. (2) Despite the similarities between different GUI platforms, pre-training solely on web data struggles to generalize to other platforms. This emphasizes the importance of our data infrastructure in facilitating the scaling of desktop and mobile referring expression data.
+
+![Figure 3: Two line graphs showing the effect of grounding data scaling on IoU (%) and Action Acc. (%) across training steps for Web, Desktop, and Mobile domains.](01da0d212fb571933f10f96556157745_img.jpg)
+
+Figure 3 contains two line graphs. The top graph shows 'IoU (%)' on the y-axis (ranging from 20 to 50) against 'Training Steps' on the x-axis (ranging from 600 to Final). The bottom graph shows 'Action Acc. (%)' on the y-axis (ranging from 50 to 80) against 'Training Steps' on the x-axis (ranging from 600 to Final). Both graphs compare three domains: Web (green line with circles), Desktop (orange line with squares), and Mobile (blue line with diamonds). In both metrics, the Web domain consistently shows the highest performance, followed by Mobile, and then Desktop.
+
+| Training Steps | Web IoU (%) | Mobile IoU (%) | Desktop IoU (%) | Web Acc. (%) | Mobile Acc. (%) | Desktop Acc. (%) |
+|-|-|-|-|-|-|-|
+| 600 | 38 | 38 | 25 | 65 | 68 | 52 |
+| 1200 | 42 | 39 | 28 | 70 | 71 | 55 |
+| 1800 | 45 | 40 | 29 | 71 | 72 | 58 |
+| 2400 | 46 | 41 | 31 | 71 | 73 | 62 |
+| 3000 | 47 | 42 | 32 | 73 | 74 | 58 |
+| 3600 | 48 | 42 | 32 | 74 | 74 | 60 |
+| Final | 48 | 41 | 33 | 74 | 74 | 62 |
+
+Figure 3: Two line graphs showing the effect of grounding data scaling on IoU (%) and Action Acc. (%) across training steps for Web, Desktop, and Mobile domains.
+
+Figure 3: The effect of grounding data scaling on two metrics. The performances on three different domains are reported.
+
+### 4.3 APPLICATION: GROUNDING MODE
+
+We evaluate how OS-Atlas-Base work under the grounding mode in Figure 1: it can serve as a replacement for the grounding module of an existing GUI agent, thereby enhancing overall performance. In this study, we benchmark our approach on the challenging OS agent testbed, OSWorld (Xie et al., 2024). OSWorld is an interactive environment just like our computers, where the agent must
+
+{7}------------------------------------------------
+
+interact with the operating system at each step and wait for a response before proceeding to the next step. Refer to Figure 8 for a concrete example from the benchmark. Following their best practices, we constructed a screenshot-based GUI agent using GPT-4o. Given a specific task, the agent generates a detailed, step-by-step plan to accomplish it. It then executes this plan by generating actions and coordinates at each step. We substitute these coordinates with those generated by an external grounding model, either OS-Atlas-Base or SeeClick.
+
+As shown in Table 3, although GPT-4o with OS-Atlas-Base as the grounding module still lags behind human performance, it significantly outperforms other grounding methods such as SeeClick and Set-of-Mark (SoM). This demonstrates the potential of OS-Atlas-Base as a standalone grounding module for developing future GUI agents.
+
+| Models | OS | Calc | Impress | Writer | Successful Rate |  | Chrome | VSC | GIMP | WF | Avg. |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  |  |  |  | VLC | TB |  |  |  |  |  |
+| GPT-4o + SoM | 20.83 | 0.00 | 6.77 | 4.35 | 6.53 | 0.00 | 4.35 | 4.35 | 0.00 | 3.60 | 4.59 |
+| GPT-4o | 8.33 | 0.00 | 6.77 | 4.35 | 16.10 | 0.00 | 4.35 | 4.35 | 3.85 | 5.58 | 5.03 |
+| + SeeClick | 16.67 | 0.00 | 12.76 | 4.35 | 23.52 | 6.67 | 10.86 | 8.70 | 11.54 | 7.92 | 9.21 |
+| + OS-Atlas-Base-4B | 20.83 | 2.23 | 14.89 | 8.70 | 23.52 | 13.33 | 15.22 | 13.04 | 15.38 | 7.92 | 11.65 |
+| + OS-Atlas-Base-7B | 25.00 | 4.26 | 17.02 | 8.70 | 29.41 | 26.67 | 19.57 | 17.39 | 19.23 | 8.91 | 14.63 |
+| Human | 75.00 | 61.70 | 80.85 | 73.91 | 70.59 | 46.67 | 78.26 | 73.91 | 73.08 | 73.27 | 72.36 |
+
+Table 3: Successful rate on OS World benchmark, divided by apps (domains). Workflow (WF) is a special domain that requires navigation across multiple apps.
+
+## 5 EXPERIMENTS: AGENT TASKS
+
+### 5.1 EXPERIMENT SETUPS
+
+**Training details.** Given that there are currently relatively few agent benchmarks, especially in the desktop domain, we have only utilized three datasets — AMEX (Chai et al., 2024) (mobile), AITZ (Zhang et al., 2024d) (mobile), and Mind2Web (Deng et al., 2023a) (web) — to train our model, leaving a significant number of available benchmarks for OOD testing. For the sake of simplicity in notation, we denote our model as OS-Atlas-4/7B, which reflects the different backbone models utilized: InternVL-2-4B and Qwen2-VL-7B.
+
+**Evaluation Benchmarks.** We examine five distinct agent benchmarks across three different platforms: AndroidControl (Li et al., 2024) and GUI-Odyssey (Lu et al., 2024a) for mobile agents; GUI-Act-Web (Chen et al., 2024a) and OmniAct-Web (Kapoor et al., 2024) for web agents; and OmniAct-Desktop for Windows environments. We only use the test split from these benchmarks for evaluation. Detailed statistics for these benchmarks can be found in Appendix C. Following common practices (Cheng et al., 2024; Deng et al., 2023a; Zhang et al., 2024d), we evaluate all benchmarks at the subtask granularity, as described in § 3.1. This involves allowing the model to predict actions for each step based on the task instruction, the associated screenshot, and action history (if available).
+
+**Settings and Baselines.** We evaluate under two different settings to demonstrate two different practical applications of foundation action models like OS-Atlas: (1) zero-shot OOD setting (the *Action Mode* in Figure 1). In this setting, action models are benchmarked on unseen tasks, domains, or applications in a zero-shot manner, mimicking real-world usage scenarios for GUI agents.; (2) supervised fine-tuning setting (the *Agent Mode*): In this setting, researchers fine-tune models on downstream tasks to create agents specifically tailored for their intended applications.
+
+In the zero-shot OOD setting, we use GPT-4o as the baseline, as existing VLMs perform poorly under this setting. For the supervised fine-tuning setting, we select InternVL-2, Qwen2-VL, and the grounding model, SeeClick, as our backbone for training.
+
+**Metrics.** We evaluate our models using three commonly used metrics for GUI agents that assess the accuracy of action type prediction, coordinate prediction, and step success rate, denoted as *Type*, *Grounding*, and *SR*, respectively. *Type* measures the exact match score between the predicted action types (e.g., CLICK, SCROLL) and the ground truth, often referred to as Type EM in the literature.
+
+{8}------------------------------------------------
+
+| Models | GUI-Act-Web |  |  | OmniAct-Web |  |  | OmniAct-Desktop |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | Type | Grounding | SR | Type | Grounding | SR | Type | Grounding | SR |
+| Zero-shot OOD Setting |  |  |  |  |  |  |  |  |  |
+| GPT-4o | 77.09 | 45.02 | 41.84 | 79.33 | 42.79 | 34.06 | 79.97 | <b>63.25</b> | 50.67 |
+| <b>OS-Atlas-4B</b> | 79.22 | 58.57 | 42.62 | 46.74 | 49.24 | 22.99 | 63.30 | 42.55 | 26.94 |
+| <b>OS-Atlas-7B</b> | <b>86.95</b> | <b>75.61</b> | <b>57.02</b> | <b>86.12</b> | <b>69.35</b> | <b>59.99</b> | <b>90.24</b> | 62.87 | <b>56.73</b> |
+| Supervised Fine-tuning Setting |  |  |  |  |  |  |  |  |  |
+| InternVL-2-4B | 81.42 | 47.03 | 36.17 | 47.51 | 51.34 | 24.39 | 67.00 | 44.47 | 29.80 |
+| Qwen2-VL-7B | 89.36 | 90.66 | 82.27 | 89.22 | 85.94 | 78.58 | 96.27 | 94.52 | 91.77 |
+| SeeClick | 88.79 | 78.59 | 72.34 | 86.98 | 75.48 | 68.59 | 96.79 | 70.22 | 72.69 |
+| <b>OS-Atlas-4B</b> | <b>89.36</b> | <b>89.16</b> | <b>81.06</b> | <b>88.56</b> | <b>82.00</b> | <b>73.91</b> | <b>96.51</b> | <b>85.53</b> | <b>84.78</b> |
+| <b>OS-Atlas-7B</b> | <b>89.08</b> | <b>91.60</b> | <b>82.70</b> | <b>97.15</b> | <b>95.41</b> | <b>93.56</b> | <b>97.15</b> | <b>95.85</b> | <b>94.05</b> |
+
+Table 4: Results on web and desktop tasks. InternVL-2/Qwen2-VL and OS-Atlas-4/7B differ in that the former utilizes the original checkpoints, while the latter is fine-tuned on OS-Atlas-Base.
+
+| Models | AndroidControl-Low |  |  | AndroidControl-High |  |  | GUI-Odyssey |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | Type | Grounding | SR | Type | Grounding | SR | Type | Grounding | SR |
+| Zero-shot OOD Setting |  |  |  |  |  |  |  |  |  |
+| GPT-4o | <b>74.33</b> | 38.67 | 28.39 | <b>63.06</b> | 30.90 | 21.17 | 37.50 | 14.17 | 5.36 |
+| <b>OS-Atlas-4B</b> | 64.58 | 71.19 | 40.62 | 49.01 | 49.51 | 22.77 | 49.63 | 34.63 | 20.25 |
+| <b>OS-Atlas-7B</b> | 73.00 | <b>73.37</b> | <b>50.94</b> | 57.44 | <b>54.90</b> | <b>29.83</b> | <b>60.42</b> | <b>39.74</b> | <b>26.96</b> |
+| Supervised Fine-tuning Setting |  |  |  |  |  |  |  |  |  |
+| InternVL-2-4B | 90.94 | 84.05 | 80.10 | 84.09 | 72.73 | 66.72 | 82.13 | 55.53 | 51.45 |
+| Qwen2-VL-7B | 91.94 | 86.50 | 82.56 | 83.83 | 77.68 | 69.72 | 83.54 | 65.89 | 60.23 |
+| SeeClick | 93.00 | 73.42 | 75.00 | 82.94 | 62.87 | 59.11 | 70.99 | 52.44 | 53.92 |
+| <b>OS-Atlas-4B</b> | 91.92 | 83.76 | 80.64 | 84.69 | 73.79 | 67.54 | 83.47 | 61.37 | 56.39 |
+| <b>OS-Atlas-7B</b> | <b>93.61</b> | <b>87.97</b> | <b>85.22</b> | <b>85.22</b> | <b>78.48</b> | <b>71.17</b> | <b>84.47</b> | <b>67.80</b> | <b>61.98</b> |
+
+Table 5: Results on mobile tasks. InternVL-2/Qwen2-VL and OS-Atlas-4/7B differ in that the former utilizes the original checkpoints, while the latter is fine-tuned on OS-Atlas-Base. AndroidControl-Low refers to the scenario where both low-level and high-level instructions are provided as inputs, while AndroidControl-High indicates that only high-level instructions are given.
+
+*Grounding* evaluates the performance of GUI grounding in downstream tasks. *SR* represents the step-wise success rate, where a step is deemed successful only if both the predicted action and its associated arguments (e.g., coordinates for a click action) are correct. Appendix D provides detailed information on how these metrics are calculated.
+
+### 5.2 RESULTS
+
+The performances are presented in Table 4, 5. OS-Atlas achieved SOTA performance across three different platforms, six distinct datasets, and two evaluation settings. In comparison with GPT-4o, our model demonstrated superior capabilities in addressing unseen tasks across all six OOD evaluation datasets, even the desktop domain models haven’t seen during action fine-tuning. This suggests that in the realm of GUI agents, OS-Atlas has the potential to be a robust open-source alternative to leading commercial VLMs. Additionally, the results of the SFT setting further confirm that OS-Atlas can serve as a robust foundation for researchers to train their custom GUI agents.
+
+### 5.3 ANALYSIS
+
+In this paper, we present two key research contributions: the development of a data infrastructure for grounding data synthesis and the proposal of a unified action space. We conduct experiments to analyze the significance of these factors in enhancing the zero-shot OOD performance of a foundational action model.
+
+First, we investigate the effect of grounding pre-training by training OS-Atlas directly from the original VLMs, which we refer to as w/o pre-training. As illustrated in Figure 5, omitting the
+
+{9}------------------------------------------------
+
+![Figure 5: Ablation studies on the zero-shot OOD setting. (a) Step-wise Success Rate and (b) Grounding Acc. across Web, Desktop, and Mobile platforms for OS-Atlas-4B, w/o Pre-training, and w/o Unify Action.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 5 consists of two bar charts. Chart (a) shows 'Step-wise Success Rate' and Chart (b) shows 'Grounding Acc.'. Both charts compare three models: OS-Atlas-4B (dark blue), w/o Pre-training (medium blue), and w/o Unify Action (light blue) across three platforms: Web, Desktop, and Mobile. The y-axis for both charts represents 'Performances (%)' from 0 to 40 for (a) and 0 to 60 for (b).
+
+| Platform | Model | (a) Step-wise Success Rate (%) | (b) Grounding Acc. (%) |
+|-|-|-|-|
+| Web | OS-Atlas-4B | ~33 | ~53 |
+|  | w/o Pre-training | ~26 | ~37 |
+|  | w/o Unify Action | ~28 | ~48 |
+| Desktop | OS-Atlas-4B | ~28 | ~42 |
+|  | w/o Pre-training | ~10 | ~13 |
+|  | w/o Unify Action | ~25 | ~37 |
+| Mobile | OS-Atlas-4B | ~28 | ~51 |
+|  | w/o Pre-training | ~26 | ~50 |
+|  | w/o Unify Action | ~17 | ~42 |
+
+Figure 5: Ablation studies on the zero-shot OOD setting. (a) Step-wise Success Rate and (b) Grounding Acc. across Web, Desktop, and Mobile platforms for OS-Atlas-4B, w/o Pre-training, and w/o Unify Action.
+
+Figure 5: Ablation studies on the zero-shot OOD setting. The results are reported respectively across three platforms.
+
+pre-training stage significantly degrades performance, particularly on the desktop and web platforms, where we have very limited data available for fine-tuning (7k samples for web and none for desktop). These results highlight the critical importance of the data infrastructure for grounding data synthesis; with this infrastructure in place, we can easily improve OOD downstream performance simply by scaling the pre-training corpus.
+
+Next, we investigate the impact of removing the unified action space during fine-tuning, denoted as w/o unified action. For each fine-tuning dataset, we adhere to the optimal action space design proposed in SOTA models. As illustrated in Figure 5, we again observe a noticeable drop in performance. This validates our hypothesis that the conflicting action spaces indeed degrade model performance. Quantitatively, we find that employing our unified action space reduces the number of unique action types from 17 to 10, effectively resolving several naming conflicts, such as between “tap” and “click”, “press\_home” and “home”, as well as “type” and “input”.
+
+### 5.4 OS-ATLAS-PRO
+
+To ensure that most datasets remain available for OOD evaluation, OS-Atlas is initially trained using a limited selection of 3 agent datasets. To fully leverage its potential for broader applications, we use all 7 previously mentioned agent datasets for multitask fine-tuning. We report the average Success Rate (SR) across three domains: Web (GUI-Act-Web and OmniAct-Web), Mobile (AndroidControl-Low/High and GUI-Odyssey), and Desktop (OmniAct-Desktop). As illustrated in Figure 6, large-scale multitask fine-tuning significantly enhances model performance, thereby ensuring a better user experience when deployed in real-world applications.
+
+## 6 CONCLUSION
+
+In this paper, we present OS-Atlas, a foundation action model for GUI agents. OS-Atlas demonstrates exceptional performance in tackling open-environment GUI tasks across six complex benchmarks. This strong performance highlights the potential of OS-Atlas as an open-source alternative to powerful commercial VLMs, such as GPT-4o, for the development of future GUI agents.
+
+![Figure 6: OS-Atlas-Pro evaluation results. Two bar charts comparing OS-Atlas-4B and OS-Atlas-Pro-4B (top) and OS-Atlas-7B and OS-Atlas-Pro-7B (bottom) across Web, Desktop, and Mobile platforms.](64bacf564ff025df294b6d30341c76df_img.jpg)
+
+Figure 6 consists of two bar charts. The top chart compares OS-Atlas-4B (light blue) and OS-Atlas-Pro-4B (dark blue) across Web, Desktop, and Mobile platforms. The bottom chart compares OS-Atlas-7B (light blue) and OS-Atlas-Pro-7B (dark blue) across the same platforms. The y-axis for both charts represents 'Avg. Performance(%)'.
+
+| Platform | Model | Avg. Performance (%) |
+|-|-|-|
+| Web | OS-Atlas-4B | 77.49 |
+|  | OS-Atlas-Pro-4B | 79.23 |
+| Desktop | OS-Atlas-4B | 84.78 |
+|  | OS-Atlas-Pro-4B | 92.99 |
+| Mobile | OS-Atlas-4B | 68.19 |
+|  | OS-Atlas-Pro-4B | 70.93 |
+| Web | OS-Atlas-7B | 88.13 |
+|  | OS-Atlas-Pro-7B | 89.80 |
+| Desktop | OS-Atlas-7B | 94.05 |
+|  | OS-Atlas-Pro-7B | 97.04 |
+| Mobile | OS-Atlas-7B | 72.79 |
+|  | OS-Atlas-Pro-7B | 78.13 |
+
+Figure 6: OS-Atlas-Pro evaluation results. Two bar charts comparing OS-Atlas-4B and OS-Atlas-Pro-4B (top) and OS-Atlas-7B and OS-Atlas-Pro-7B (bottom) across Web, Desktop, and Mobile platforms.
+
+Figure 6: OS-Atlas-Pro evaluation results.
+
+ Rest of paper (reference and Appendix) is removed.

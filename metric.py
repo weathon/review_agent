@@ -14,6 +14,69 @@ def round_to_scale(x):
     return min(SCALE, key=lambda v: abs(v - x))
 
 
+def linear_regression_with_ci(x, y, confidence=0.95):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    fit = stats.linregress(x, y)
+    n = len(x)
+    t_crit = stats.t.ppf((1 + confidence) / 2, n - 2)
+    slope_ci = (
+        float(fit.slope - t_crit * fit.stderr),
+        float(fit.slope + t_crit * fit.stderr),
+    )
+    intercept_ci = (
+        float(fit.intercept - t_crit * fit.intercept_stderr),
+        float(fit.intercept + t_crit * fit.intercept_stderr),
+    )
+
+    x_mean = np.mean(x)
+    ssx = np.sum((x - x_mean) ** 2)
+    y_hat = fit.intercept + fit.slope * x
+    residual_std = np.sqrt(np.sum((y - y_hat) ** 2) / (n - 2))
+
+    def mean_ci(xs):
+        xs = np.asarray(xs, dtype=float)
+        se_mean = residual_std * np.sqrt((1 / n) + ((xs - x_mean) ** 2) / ssx)
+        center = fit.intercept + fit.slope * xs
+        delta = t_crit * se_mean
+        return center, center - delta, center + delta
+
+    return {
+        "slope": float(fit.slope),
+        "intercept": float(fit.intercept),
+        "rvalue": float(fit.rvalue),
+        "pvalue": float(fit.pvalue),
+        "stderr": float(fit.stderr),
+        "intercept_stderr": float(fit.intercept_stderr),
+        "slope_ci": slope_ci,
+        "intercept_ci": intercept_ci,
+        "mean_ci": mean_ci,
+    }
+
+
+def bootstrap_metric_ci(x, y, metric_fn, confidence=0.95, n_bootstrap=5000, seed=42):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    rng = np.random.default_rng(seed)
+    values = []
+
+    for _ in range(n_bootstrap):
+        indices = rng.integers(0, len(x), size=len(x))
+        x_sample = x[indices]
+        y_sample = y[indices]
+        if np.all(x_sample == x_sample[0]) or np.all(y_sample == y_sample[0]):
+            continue
+        values.append(metric_fn(x_sample, y_sample))
+
+    if not values:
+        raise RuntimeError("Bootstrap CI failed because every resample was degenerate.")
+
+    alpha = 1 - confidence
+    lower = float(np.quantile(values, alpha / 2))
+    upper = float(np.quantile(values, 1 - alpha / 2))
+    return lower, upper
+
+
 def split_half_baseline(df, gt_score_cols):
     """Estimate human reliability via all unique split-half partitions per paper."""
     half_a, half_b = [], []
@@ -105,9 +168,15 @@ def analyze_and_plot(path):
     sp_raw, sp_raw_p = stats.spearmanr(pred, gt_avg)
     pe_raw, pe_raw_p = stats.pearsonr(pred, gt_avg)
     sp_rnd, sp_rnd_p = stats.spearmanr(pred_rounded, gt_avg)
+    sp_raw_ci = bootstrap_metric_ci(pred, gt_avg, lambda a, b: stats.spearmanr(a, b).statistic)
+    pe_raw_ci = bootstrap_metric_ci(pred, gt_avg, lambda a, b: stats.pearsonr(a, b).statistic)
+    sp_rnd_ci = bootstrap_metric_ci(pred_rounded, gt_avg, lambda a, b: stats.spearmanr(a, b).statistic)
     mae_raw = np.mean(np.abs(pred - gt_avg))
     mae_rounded = np.mean(np.abs(pred_rounded - gt_avg))
+    mae_raw_ci = bootstrap_metric_ci(pred, gt_avg, lambda a, b: np.mean(np.abs(a - b)))
+    mae_rounded_ci = bootstrap_metric_ci(pred_rounded, gt_avg, lambda a, b: np.mean(np.abs(a - b)))
     bias_raw = np.mean(pred - gt_avg)
+    raw_regression = linear_regression_with_ci(gt_avg, pred)
     one_vs_rest = one_vs_rest_baseline(df, gt_score_cols)
     split_half = split_half_baseline(df, gt_score_cols)
 
@@ -171,11 +240,34 @@ def analyze_and_plot(path):
     # ── CLI Output ──
     print(f"\n  Papers: {len(df)}")
     print(f"  {'─'*45}")
-    print(f"  Spearman (raw):        {sp_raw:.4f}  (p={sp_raw_p:.4f})")
-    print(f"  Spearman (rounded):    {sp_rnd:.4f}  (p={sp_rnd_p:.4f})")
-    print(f"  Pearson (raw):         {pe_raw:.4f}  (p={pe_raw_p:.4f})")
-    print(f"  MAE (raw):             {mae_raw:.4f}")
-    print(f"  MAE (rounded):         {mae_rounded:.4f}")
+    print(
+        f"  Spearman (raw):        {sp_raw:.4f}  "
+        f"(95% CI {sp_raw_ci[0]:.4f}, {sp_raw_ci[1]:.4f}; p={sp_raw_p:.4f})"
+    )
+    print(
+        f"  Spearman (rounded):    {sp_rnd:.4f}  "
+        f"(95% CI {sp_rnd_ci[0]:.4f}, {sp_rnd_ci[1]:.4f}; p={sp_rnd_p:.4f})"
+    )
+    print(
+        f"  Pearson (raw):         {pe_raw:.4f}  "
+        f"(95% CI {pe_raw_ci[0]:.4f}, {pe_raw_ci[1]:.4f}; p={pe_raw_p:.4f})"
+    )
+    print(
+        f"  Regression slope:      {raw_regression['slope']:.4f}  "
+        f"(95% CI {raw_regression['slope_ci'][0]:.4f}, {raw_regression['slope_ci'][1]:.4f})"
+    )
+    print(
+        f"  Regression intercept:  {raw_regression['intercept']:.4f}  "
+        f"(95% CI {raw_regression['intercept_ci'][0]:.4f}, {raw_regression['intercept_ci'][1]:.4f})"
+    )
+    print(
+        f"  MAE (raw):             {mae_raw:.4f}  "
+        f"(95% CI {mae_raw_ci[0]:.4f}, {mae_raw_ci[1]:.4f})"
+    )
+    print(
+        f"  MAE (rounded):         {mae_rounded:.4f}  "
+        f"(95% CI {mae_rounded_ci[0]:.4f}, {mae_rounded_ci[1]:.4f})"
+    )
     print(f"  Mean bin MAE (raw):    {mean_bin_mae_raw:.4f}")
     print(f"  Mean bin MAE (rounded):{mean_bin_mae_rounded:.4f}")
     print(f"  Weighted MAE (raw):    {wmae_raw:.4f}")
@@ -213,6 +305,11 @@ def analyze_and_plot(path):
     n_pos, n_neg = gt_binary.sum(), len(gt_binary) - gt_binary.sum()
     if n_pos > 0 and n_neg > 0:
         auroc = roc_auc_score(gt_binary, pred)
+        auroc_ci = bootstrap_metric_ci(
+            gt_binary,
+            pred,
+            lambda y_true, y_score: roc_auc_score(y_true, y_score),
+        )
         fpr, tpr, thresholds = roc_curve(gt_binary, pred)
         # Human baseline AUROC: use individual reviewer scores (not the average)
         # Each individual score is an independent prediction of the paper's accept/reject label
@@ -230,13 +327,26 @@ def analyze_and_plot(path):
         n_indiv_neg = len(human_indiv_labels) - n_indiv_pos
         if n_indiv_pos > 0 and n_indiv_neg > 0:
             human_auroc = roc_auc_score(human_indiv_labels, human_indiv_scores)
+            human_auroc_ci = bootstrap_metric_ci(
+                human_indiv_labels,
+                human_indiv_scores,
+                lambda y_true, y_score: roc_auc_score(y_true, y_score),
+            )
             human_fpr, human_tpr, _ = roc_curve(human_indiv_labels, human_indiv_scores)
         else:
             human_auroc = None
+            human_auroc_ci = None
             human_fpr, human_tpr = None, None
-        print(f"  AUROC (score→A/R):     {auroc:.4f}")
+        print(
+            f"  AUROC (score→A/R):     {auroc:.4f}  "
+            f"(95% CI {auroc_ci[0]:.4f}, {auroc_ci[1]:.4f})"
+        )
         if human_auroc is not None:
-            print(f"  AUROC (human indiv):   {human_auroc:.4f}  ({len(human_indiv_scores)} individual scores)")
+            print(
+                f"  AUROC (human indiv):   {human_auroc:.4f}  "
+                f"(95% CI {human_auroc_ci[0]:.4f}, {human_auroc_ci[1]:.4f}; "
+                f"{len(human_indiv_scores)} individual scores)"
+            )
         # Find optimal threshold (Youden's J)
         j_scores = tpr - fpr
         best_idx = np.argmax(j_scores)
@@ -249,8 +359,10 @@ def analyze_and_plot(path):
         print(f"  AUPRC (score→A/R):     {auprc:.4f}  (baseline={baseline_rate:.4f})")
     else:
         auroc = None
+        auroc_ci = None
         auprc = None
         human_auroc = None
+        human_auroc_ci = None
         fpr, tpr = None, None
         human_fpr, human_tpr = None, None
         print(f"  AUROC/AUPRC: N/A (only one class present: {n_pos} Accept, {n_neg} Reject)")
@@ -293,15 +405,16 @@ def analyze_and_plot(path):
     ax.scatter(gt_avg, pred, c=colors, s=80, edgecolors="white", linewidth=0.8, zorder=3)
     mn, mx = min(min(pred), min(gt_avg)) - 0.5, max(max(pred), max(gt_avg)) + 0.5
     ax.plot([mn, mx], [mn, mx], "k--", alpha=0.3)
-    m, b = np.polyfit(gt_avg, pred, 1)
     xs = np.linspace(mn, mx, 100)
-    ax.plot(xs, m * xs + b, color="#3498db", alpha=0.6)
+    fit_center, fit_lower, fit_upper = raw_regression["mean_ci"](xs)
+    ax.fill_between(xs, fit_lower, fit_upper, color="#3498db", alpha=0.15, zorder=1)
+    ax.plot(xs, fit_center, color="#3498db", alpha=0.7, zorder=2)
     ax.set_xlabel("Human Average Score", fontsize=12)
     ax.set_ylabel("Agent Predicted Score", fontsize=12)
     ax.set_title("Raw Scores", fontsize=13)
     ax.set_xlim(mn, mx); ax.set_ylim(mn, mx); ax.set_aspect("equal")
     ax.grid(True, alpha=0.2)
-    ax.text(0.05, 0.95, f"Spearman: {sp_raw:.3f}\nPearson: {pe_raw:.3f}\nMAE: {mae_raw:.3f}\nBias: {bias_raw:+.3f}\nWithin 1 human std: {within_1std}/{len(df)} ({within_1std/len(df):.0%})\nn = {len(df)}",
+    ax.text(0.05, 0.95, f"Spearman: {sp_raw:.3f} [{sp_raw_ci[0]:.3f}, {sp_raw_ci[1]:.3f}]\nPearson: {pe_raw:.3f} [{pe_raw_ci[0]:.3f}, {pe_raw_ci[1]:.3f}]\nSlope: {raw_regression['slope']:.3f} [{raw_regression['slope_ci'][0]:.3f}, {raw_regression['slope_ci'][1]:.3f}]\nMAE: {mae_raw:.3f} [{mae_raw_ci[0]:.3f}, {mae_raw_ci[1]:.3f}]\nBias: {bias_raw:+.3f}\nWithin 1 human std: {within_1std}/{len(df)} ({within_1std/len(df):.0%})\nn = {len(df)}",
             transform=ax.transAxes, fontsize=10, va="top",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8))
     ax.legend(handles=legend_dots, fontsize=9, loc="lower right")
@@ -341,7 +454,13 @@ def analyze_and_plot(path):
     # Bottom-left: ROC curve
     if has_curves:
         ax3 = axes[1, 0]
-        ax3.plot(fpr, tpr, color="#3498db", lw=2, label=f"Agent (AUROC={auroc:.3f})")
+        ax3.plot(
+            fpr,
+            tpr,
+            color="#3498db",
+            lw=2,
+            label=f"Agent (AUROC={auroc:.3f} [{auroc_ci[0]:.3f}, {auroc_ci[1]:.3f}])",
+        )
         ax3.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")
         ax3.scatter([fpr[best_idx]], [tpr[best_idx]], color="#e74c3c", s=100, zorder=5,
                     label=f"Optimal threshold={best_thresh:.2f}")
@@ -403,8 +522,16 @@ def analyze_and_plot(path):
     # Bottom-right: Human AUROC curve (individual scores)
     ax6 = axes[1, 2]
     if has_curves and human_auroc is not None:
-        ax6.plot(human_fpr, human_tpr, color="#f39c12", lw=2.5,
-                 label=f"Human Indiv (AUROC={human_auroc:.3f})")
+        ax6.plot(
+            human_fpr,
+            human_tpr,
+            color="#f39c12",
+            lw=2.5,
+            label=(
+                f"Human Indiv (AUROC={human_auroc:.3f} "
+                f"[{human_auroc_ci[0]:.3f}, {human_auroc_ci[1]:.3f}])"
+            ),
+        )
         ax6.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")
         ax6.set_xlabel("False Positive Rate", fontsize=12)
         ax6.set_ylabel("True Positive Rate", fontsize=12)

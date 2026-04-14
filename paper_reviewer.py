@@ -24,6 +24,7 @@ from review_agents.openrouter_utils import (
     call_openai,
     extract_cost,
     get_client,
+    OPENROUTER_BASE_URL,
     ollama_client,
     resolve_openai_client_and_model,
 )
@@ -52,8 +53,8 @@ PROVIDER = "zai"
 
 #base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "qwen/qwen3.5-flash-02-23"
-MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
-# MODEL_NEUTRAL = "ollama:qwen3.5:397b-cloud"
+# MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
+MODEL_HARSH = "ollama:qwen3.5:397b-cloud"
 # MODEL_SPARK = "ollama:qwen3.5:397b-cloud"
 MODEL_NEUTRAL = "qwen/qwen3.5-plus-02-15"
 MODEL_SPARK = "qwen/qwen3.5-plus-02-15"
@@ -61,9 +62,8 @@ MODEL_RELATED_WORK = f"{base_model}:online"
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
 # MODEL_MERGER = f"ollama:glm-5:cloud" 
-MODEL_HUMAN_FINDER = f"claude:claude-haiku-4-5"
 MODEL_HUMAN_MERGER = f"claude:claude-sonnet-4-6"
-MODEL_MERGER = f"z-ai/glm-5" 
+MODEL_HUMAN_SCORER = f"claude:claude-sonnet-4-6"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 DEFAULT_CALIBRATION_PATH = Path(__file__).parent / "calibration.md"
@@ -79,54 +79,74 @@ _error_logger.addHandler(_error_handler)
 class ScoreSchema(BaseModel):
     score: float
 
-
+import numpy as np
+from openai import OpenAI
 def _make_search_mcp_server(search_path: str):
     from claude_agent_sdk import create_sdk_mcp_server, tool
+    with open("tools/human_reviews_embeddings.pkl", "rb") as f:
+        import pickle
+        db = pickle.load(f)
+    
+    filenames = list(db.keys())
+    vectors = np.array(list(db.values()))
 
     abs_search_path = os.path.abspath(search_path)
-    all_files: list[str] = []
-    all_file_paths: list[str] = []
+    indexed_files: list[tuple[str, str]] = []
     for root, _dirs, files in os.walk(abs_search_path):
         for file_name in files:
             if file_name.endswith(".txt") or file_name.endswith(".md"):
                 file_path = os.path.join(root, file_name)
                 with open(file_path, "r", errors="replace") as file_handle:
-                    all_files.append(file_handle.read())
-                    all_file_paths.append(file_path)
+                    content = file_handle.read()
+                if content.strip():
+                    indexed_files.append((content, file_path))
 
-    tokenized = [doc.split(" ") for doc in all_files if doc.strip()]
+    tokenized = [content.split(" ") for content, _file_path in indexed_files]
     if not tokenized:
         return None
 
     bm25 = BM25Okapi(tokenized)
-
+    or_client = OpenAI(api_key=os.getenv("OPENROUTER_API_KEY"), base_url=OPENROUTER_BASE_URL)
     @tool(
         "search_file",
-        "Search for a pattern in a directory using the BM25 index. Returns the top n matching files with their first 1000 chars.",
-        {"query": str, "path": str, "n": int},
+        "Search for a pattern in a directory using the BM25 index or Embedding. Returns the top n matching files with their first 1000 chars. To use embedding, set mode as 'e' and to use BM25 set mode as 'b'.",
+        {"query": str, "n": int, "mode": str},
     )
     async def _search_file_tool(args: dict) -> dict:
-        query = args["query"]
-        path = os.path.abspath(args["path"])
-        n = args.get("n", 5)
-        if path != abs_search_path:
-            print(f"  [search_file] WARNING: Attempt to search path '{path}' which is outside the indexed path '{abs_search_path}'")
-            return {
-                "content": [{"type": "text", "text": f"ERROR: Path '{path}' is not indexed. Expected: {abs_search_path}"}],
-                "is_error": True,
-            }
-        tokenized_query = query.split(" ")
-        doc_scores = bm25.get_scores(tokenized_query)
-        top_indices = doc_scores.argsort()[-n:][::-1]
-        results = []
-        for idx in top_indices:
-            file_path = os.path.abspath(all_file_paths[idx])
-            score = doc_scores[idx]
-            with open(file_path, "r", errors="replace") as file_handle:
-                content = file_handle.read()
-            results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
-        text = "\n---\n".join(results) if results else "No relevant files found."
-        return {"content": [{"type": "text", "text": text}]}
+        if args.get("mode", "b") == "b":
+            query = args["query"]
+            tokenized_query = query.split(" ")
+            doc_scores = bm25.get_scores(tokenized_query)
+            top_indices = doc_scores.argsort()[-args["n"]:][::-1]
+            results = []
+            for idx in top_indices:
+                file_path = os.path.abspath(indexed_files[idx][1])
+                score = doc_scores[idx]
+                with open(file_path, "r", errors="replace") as file_handle:
+                    content = file_handle.read()
+                results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+            text = "\n---\n".join(results) if results else "No relevant files found."
+            return {"content": [{"type": "text", "text": text}]}
+        else:
+            query_embedding = or_client.embeddings.create( 
+                model="google/gemini-embedding-001",
+                input=args["query"],
+                encoding_format="float" 
+            )
+            query_vector = np.array(query_embedding.data[0].embedding)
+            similarities = vectors @ query_vector.T
+            top_indices = similarities.argsort()[-args["n"]:][::-1]
+            results = []
+            for idx in top_indices:
+                file_path = os.path.abspath(f"./human_reviews/{filenames[idx]}")
+                score = similarities[idx]
+                with open(file_path, "r", errors="replace") as file_handle:
+                    content = file_handle.read()
+                results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+            text = "\n---\n".join(results) if results else "No relevant files found."
+            return {"content": [{"type": "text", "text": text}]}
+
+
 
     return create_sdk_mcp_server(
         name="search",
@@ -583,7 +603,6 @@ async def run_scorer(
             "mcp__scorer_fs__read_file",
             "mcp__scorer_fs__grep_files",
             "mcp__scorer_fs__glob_files",
-            "Agent",
         ] + (["mcp__search__search_file"] if search_mcp else []),
         permission_mode="bypassPermissions",
         disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
@@ -847,7 +866,8 @@ def _resolve_calibration_inputs(
     if resolved_path is None:
         return calibration_context, cal_dir
 
-    cal_dir_candidate = resolved_path.parent / "cal"
+    cal_dir_candidate = resolved_path.parent / "human_reviews"
+    # cal_dir_candidate = resolved_path.parent / "cal"
     if cal_dir_candidate.is_dir():
         return "", str(cal_dir_candidate)
     if resolved_path.exists():
@@ -904,7 +924,6 @@ async def review_paper(
         print(f"  Spark Finder:   {MODEL_SPARK}")
     if not skip_related_work:
         print(f"  Related Work:   {MODEL_RELATED_WORK}")
-    print(f"  Merger:         {MODEL_MERGER}")
     print(f"  Scorer:         claude-sonnet-4-6 (Agent SDK)\n")
     print(f"Score source: {'merger output' if merger_output_score else 'scorer'}")
 
@@ -958,7 +977,7 @@ async def review_paper(
         f"{'─' * 40}\n"
         f"{related_work}\n\n"
         f"{separator}\n"
-        f"FINAL CONSOLIDATED REVIEW ({MODEL_MERGER} via OpenRouter)\n"
+        f"FINAL CONSOLIDATED REVIEW ({MODEL_HUMAN_MERGER} via OpenRouter)\n"
         f"{separator}\n\n"
         f"{final_review}\n\n"
         f"{separator}\n"
@@ -1045,7 +1064,7 @@ if __name__ == "__main__":
         print(f"  Neutral ({'Ollama' if MODEL_NEUTRAL.startswith('ollama:') else 'Claude Agent SDK' if MODEL_NEUTRAL.startswith('claude:') else 'OpenRouter'}):           {MODEL_NEUTRAL}")
         print(f"  Spark Finder ({'Ollama' if MODEL_SPARK.startswith('ollama:') else 'Claude Agent SDK' if MODEL_SPARK.startswith('claude:') else 'OpenRouter'}):      {MODEL_SPARK}")
         print(f"  Related Work (OpenRouter):      {MODEL_RELATED_WORK}")
-        print(f"  Merger (OpenRouter):            {MODEL_MERGER}")
+        print(f"  Merger (OpenRouter):            {MODEL_HUMAN_MERGER}")
         print(f"  Scorer:                         claude-sonnet-4-6 (Agent SDK)")
         sys.exit(0 if "--help" in sys.argv else 1)
 

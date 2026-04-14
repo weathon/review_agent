@@ -40,13 +40,14 @@ class _Tee:
 
 sys.stdout = _Tee(sys.stdout, _log_file)
 sys.stderr = _Tee(sys.stderr, _log_file)
-
+import dotenv
+dotenv.load_dotenv()
 
 from paper_reviewer import (
     MODEL_HARSH,
     MODEL_NEUTRAL,
     MODEL_RELATED_WORK,
-    _get_client,
+    get_client,
     decision_match,
     match_label,
     run_pipeline,
@@ -163,7 +164,7 @@ async def review_single_paper(
 
     print(f"  Paper length: {len(paper_content):,} chars")
 
-    client = _get_client()
+    client = get_client()
 
     result = await run_pipeline(
         paper_path=str(paper_path),
@@ -247,7 +248,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     if calibration_path:
         cal_path = Path(calibration_path)
         # Check for cal/ directory (RAG mode) next to calibration_path
-        cal_dir_candidate = cal_path.parent / "cal"
+        cal_dir_candidate = cal_path.parent / "human_reviews"
         if cal_dir_candidate.is_dir():
             cal_dir = str(cal_dir_candidate)
             print(f"\nUsing RAG calibration: {cal_dir} (Agent SDK scorer)")
