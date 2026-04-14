@@ -84,8 +84,8 @@ async def review_paper(paper_id):
     async with ClaudeSDKClient(options=options) as sdk_client:
         await sdk_client.query(f"{formatted_prompt}")
         async for message in sdk_client.receive_response():
-            if isinstance(message, AssistantMessage):
-                print(message.content)
+            # if isinstance(message, AssistantMessage):
+            #     print(message.content)
             if isinstance(message, ResultMessage):
                 cost += message.total_cost_usd
                 review_text = message.result
@@ -114,11 +114,11 @@ async def review_paper(paper_id):
 
     with open(save_path.replace(".csv", f"/{paper_id}.txt"), "w") as f:
         f.write(review_text)
-
-import tqdm
 if __name__ == "__main__":
+    import tqdm
+    import random
     os.makedirs(save_path.replace(".csv", ""), exist_ok=True)
-
+    random.shuffle(papers_to_review)
     for paper in tqdm.tqdm(papers_to_review):
         asyncio.run(review_paper(paper))
 

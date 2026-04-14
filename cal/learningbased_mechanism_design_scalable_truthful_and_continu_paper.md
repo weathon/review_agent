@@ -1,0 +1,323 @@
+
+
+{0}------------------------------------------------
+
+# LEARNING-BASED MECHANISM DESIGN: TRUTHFUL, EXPRESSIVE AND EFFICIENT CONTINUUM APPROACHES FOR UTILITY MAXIMIZATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Mechanism design is a crucial topic at the intersection of computer science and economics. This paper addresses the automated mechanism design problem by leveraging machine learning and neural networks. The objective is to design a **truthful, expressive and efficient** mechanism that maximizes the platform’s expected utility, given that the players’ types are drawn from a pre-specified distribution. We present a general mechanism design model that captures two critical features: hidden information and strategic behavior. Subsequently, we propose the **PFM-Net** framework, which parameterizes the menu mechanism class by function approximation and identifies an optimal mechanism through ingenious optimization techniques. We also provide both theoretical and empirical justifications for the advantages of our approach. Experimental results demonstrate the effectiveness of PFM-Net over traditional and learning-based baselines, enabling the PFM-Net framework to serve as a new paradigm for automated mechanism design.
+
+## 1 INTRODUCTION
+
+Designing a truthful mechanism that maximizes the platform’s expected utility is a fundamental problem in computational economics, with important application in market design and resource allocation (Börgers et al., 2015; Golowich et al., 2018). In a typical mechanism design problem, the market consists of two kinds of players: platforms (sellers) and customers (buyers), both with given utility functions. The utility functions are determined by the item price, item allocation and the player’s own value of items. Typically, the mechanism is required to possess truthfulness (or equivalently, “strategy-proof” & “DSIC and IR”) (Likhodedov & Sandholm, 2005) such that the customers have the incentive to report their types honestly and are always willing to participate.
+
+The seminal work of (Myerson, 1981) solved the optimal strategy of selling one item with independent bidder valuations, yet analytical results have been limited to specific simple settings thereafter (Manelli & Vincent, 2006; Giannakopoulos & Koutsoupias, 2014). The machine learning approach to this problem has become the mainstream method, which can be classified into three categories. **VCG-based approaches** (Sandholm & Likhodedov, 2015) define a parameterized class of truthful mechanisms and then optimize within this class. **Regret-based approaches** (Dütting et al., 2019; Ivanov et al., 2022) capture a broad class of mechanisms by incorporating untruthfulness (i.e., regret) as a penalty in the loss function to optimize the mechanism. **Discretization-based approaches** (Duan et al., 2024b; Wang et al., 2024b), including menu-based and mixed integer programming-based methods, discretize the allocation or type space to approximate the optimal mechanism while preserving truthfulness.
+
+Each of these existing approaches has notable drawbacks. **VCG-based methods** are inherently limited in expressive power, making them insufficient to find the optimal mechanism. **Regret-based methods** suffer from untruthfulness, which makes outcomes unpredictable and the mechanism potentially unstable. **Discretization-based approaches** often needs an exponential number of parameters to capture the full type space or allocation space, which becomes prohibitively expensive even for problems with moderate size.
+
+{1}------------------------------------------------
+
+**Our Contributions** In this paper, we close the joint gaps of *truthfulness*, *full expressive power* and *efficiency* in general multi-player mechanism design. We propose a machine learning-based framework called **PFM-Net** (Parameterized Full-Menu Network) to derive the optimal mechanism.
+
+To achieve this, we first construct a general mechanism design setting in a quasi-linear context, which generalizes auction settings and other scenarios, such as welfare-maximizing platforms. We then characterize truthful mechanisms within this setting, demonstrating that the class of truthful mechanisms is equivalent to the class of menu mechanisms with convex pricing functions, substantially generalizing the results of Rochet (1987) and Hammond (1979).
+
+Building on this characterization, we utilize representations of convex functions, such as **PICNN** (Amos et al., 2017) and **GroupMax** (Warin, 2023), to construct the pricing network. We also derive a training procedure to train the optimal parameterized function, with the objective function formulated as a penalized utility function of the platform. Experimental results validate the effectiveness of PFM-Net framework, by demonstrating that such framework obtain the ability to capture the non-trivial component even in the moderate-sized problems while other methods fail, highlighting its superior performance in moderate-sized problems and its empirical success in avoiding the curse of dimensionality and enabling the PFM-Net framework to serve as a new paradigm for automated mechanism design<sup>1</sup>.
+
+## 2 PROBLEM SETTING
+
+**The model** In this paper, we consider a generalized mechanism design model in the quasi-linear context. There are  $n$  players,  $m$  items as well as **one** platform in this model. Denote  $[n] = \{1, 2, \dots, n\}$  as the players set and  $[m] = \{1, 2, \dots, m\}$  as the items set. Each player  $i$  has her hidden type  $t_i \in \mathcal{T}_i \subseteq \mathbb{R}^m$ , and the type space  $\mathcal{T}_i$  for player  $i$  is public knowledge, assuming to be convex and compact.<sup>2</sup> We denote  $\mathcal{T} = \times_{i \in [n]} \mathcal{T}_i$  for simplicity. The  $j$ 'th element of  $t_i$ ,  $t_{ij}$ , represents the player  $i$ 's preference for item  $j$ . Specifically, let  $x_i \in \mathbb{R}^m$  be the allocation of items to player  $i$ . The valuation of the bundle  $x_i$  to player  $i$  when her type is  $t_i$ ,  $v_i(x_i; t_i) = \langle t_i, x_i \rangle + c_i(x_i)$ , where  $c_i : \mathcal{X}_i \rightarrow \mathbb{R}$  is a publicly-known, continuous and differentiable-almost-everywhere regularization term, and  $\mathcal{X}_i$  is the feasible allocation set of player  $i$ . By this form, we only assume that the "hidden part" in valuations,  $\langle t_i, x_i \rangle$ , is bi-linear on the allocations and hidden types. Note that in this model, the elements in both allocations and types can be positive or negative.<sup>3</sup>
+
+The allocations would bring utilities to the platform as well. Denote  $\mathbf{x} = \{x_i\}_{i \in [n]}$  and  $\mathbf{t} = \{t_i\}_{i \in [n]}$  as the allocation profile and type profile of players. We assume no hidden information of the platform, but we allow that the platform's valuation  $v_0(\mathbf{x}, \mathbf{t})$  may depend on type profile  $\mathbf{t}$ , in addition to the allocation profile  $\mathbf{x}$ . Function  $v_0(\mathbf{x}; \mathbf{t})$  is assumed to be continuous and differentiable-almost-everywhere on  $\mathbf{x}$  as well.
+
+**Quasi-linear utilities** We assume quasi-linear utilities for all players as well as the platform. It means that one-unit of utility can be arbitrarily transformed among players and the platform through one-unit of money paid to or charged from players.<sup>4</sup> Denote  $p_i \in \mathbb{R}$  as the payment charged from ( $p_i > 0$ ) or paid to ( $p_i < 0$ ) player  $i$ , the quasi-linear utilities for player  $i$  and platform are,
+
+$$u_i(x_i, p_i; t_i) = v_i(x_i; t_i) - p_i, \quad i \in [n], \quad u_0(\mathbf{x}, \mathbf{p}; \mathbf{t}) = v_0(\mathbf{x}; \mathbf{t}) + \gamma \sum_{i \in [n]} p_i,$$
+
+where  $v_0(\mathbf{x}; \mathbf{t})$  is the valuation of platform when the allocation is  $\mathbf{x}$  given the player types  $\mathbf{t}$ , and  $\gamma \geq 0$  is a parameter representing how the platform evaluates different outcomes with respect to money and valuations. Both  $v_0$  and  $\gamma$  are public knowledge, thus excluded from the inputs of  $u_0$ . The
+
+<sup>1</sup>We leave further related works to Appendix A.
+
+<sup>2</sup>A set in Euclidean space is compact if and only if it is closed and bounded.
+
+<sup>3</sup>A positive allocation means the platform allocates the item to the player; while a negative allocation means the platform buys the item from the player. A positive type means the item are "good" for the player such that it increases the valuation of players owing the item; while a negative type means the item are "bad" for player, e.g., pollution, risk and so on.
+
+<sup>4</sup>In the mechanism design literature, quasi-linear utilities and the allowance of money transfer are often indispensable for implementation of truthful mechanisms. (Nisan et al., 2007, §9.3)
+
+{2}------------------------------------------------
+
+formulation of the platform's utility generalizes the social-welfare-oriented platform ( $v_0(\mathbf{x}; \mathbf{t}) = \sum_{i \in [n]} v_i(\mathbf{x}_i; \mathbf{t}_i)$ ,  $\gamma = 0$ ) or revenue-oriented platform ( $v_0(\mathbf{x}; \mathbf{t}) \equiv 0$ ,  $\gamma = 1$ ), as well as the affine combination of social-welfare and revenue. Throughout this paper, we assume that all players and the platform are expected utility maximizers.
+
+**Allocation constraints** We allow hard constraints that represent the *feasible allocation set* to each player. Let  $\mathcal{X}_i \subseteq \mathbb{R}^m$  be a convex, non-empty set that describes the feasible allocations for player  $i$ . It means that when the platform assigns allocations  $\mathbf{x}$  to players, the platform should guarantee that  $\mathbf{x}_i \in \mathcal{X}_i$ , for all  $i \in [n]$ .  $\mathcal{X}_i = \mathbb{R}^m$  means there is no constraint on allocating to player  $i$ . Denote  $\mathcal{X} = \times_{i \in [n]} \mathcal{X}_i$  as the possible allocation set. Note that this model implicitly means that the constraints are endogenous from players, rather exogenous from the platform.<sup>5</sup> We require two technical assumptions:  $\mathbf{0} \in \mathcal{X}_i$  and  $c_i(\mathbf{0}) = 0, \forall i$ . It means that  $\mathbf{0}$  is an outside option for all players, with utility normalized to 0. But we also note that these assumptions can be removed without loss of generality.
+
+**Truthful direct mechanisms** We focus on truthful direct mechanisms in this study. Revelation principle states that focusing on this type of mechanisms is without loss of generalities (Myerson, 1979). In other words, restricting on direct mechanisms do not lose expressiveness. Below we omit the input  $(t_1, \dots, t_n)$  sometimes when the context is clear. According to convention,  $(t_1, \dots, t_{i-1}, t'_i, t_{i+1}, \dots, t_n)$  is abbreviated as  $(t'_i, t_{-i})$  and  $(t_1, \dots, t_n)$  is abbreviated as  $\mathbf{t}$ . We first present the formal definitions of direct mechanisms for completeness.
+
+**Definition 2.1** (Direct Mechanisms). A direct mechanism  $M^d = (\mathbf{x}, \mathbf{p})$  consists of an allocation rule  $\mathbf{x}: \mathcal{T} \rightarrow \mathcal{X}$  and a payment rule  $\mathbf{p}: \mathcal{T} \rightarrow \mathbb{R}^n$ . The mechanism works as follows,
+
+- Step 1. The platform requests all players for their types at the same time, and receive the players' report  $\mathbf{t} = (t_1, \dots, t_n) \in \mathcal{T}$ .
+- Step 2. The allocations to players are computed by  $\mathbf{x}(\mathbf{t})$ . Each player  $i$  is allocated with bundle  $\mathbf{x}_i$ .
+- Step 3. The payments (or payoffs) of players are computed by  $\mathbf{p}(\mathbf{t})$ . Each player  $i$  is charged by  $p_i$  (or paid  $-p_i$ ) amount of money.
+
+We say a direct mechanism is truthful, if it satisfies two conditions: individual rationality (IR) and incentive compatibility (IC):
+
+$$v_i(\mathbf{x}_i(\mathbf{t}); t_i) - p_i(\mathbf{t}) \geq 0, \quad \forall \mathbf{t} \in \mathcal{T}, i \in [n] \quad (\text{IR})$$
+
+$$v_i(\mathbf{x}_i(\mathbf{t}); t_i) - p_i(\mathbf{t}) \geq v_i(\mathbf{x}_i(\mathbf{t}'_i, \mathbf{t}_{-i}); t_i) - p_i(\mathbf{t}'_i, \mathbf{t}_{-i}), \quad \forall \mathbf{t} \in \mathcal{T}, \mathbf{t}'_i \in \mathcal{T}_i, i \in [n] \quad (\text{IC})$$
+
+The IR condition states that, players are always happy to participate on this mechanism. The RHS in (IR) means that the utility of outside option for each player is  $(\mathbf{t}_i, \mathbf{0}) + c_i(\mathbf{0}) = 0$ . The IC condition states that, truthful telling is a dominant strategy for each player. For simplicity, we abbreviate truthful direct mechanism as *truthful mechanism* later on this paper.
+
+**Our goal** The goal of this problem is to find a truthful mechanism that maximizes the expected utility of the platform. Regarding the expectation, we assume that the platform holds a prior over the (possibly correlated) joint distribution of players' types, i.e.,  $\mathcal{F} \in \Delta(\mathcal{T})$ . Similar with many learning-based algorithm, we do not require the full knowledge of the distribution  $\mathcal{F}$ . Instead, the minimum requirement is an access to a sampling oracle, that enables i.i.d. samples of  $\{t^k\}_{k \in [K]} \stackrel{i.i.d.}{\sim} \mathcal{F}$  with arbitrary sample size  $K \geq 1$ , which would be utilized by our algorithm.
+
+Formally, the platform's optimization problem is stated as follows.
+
+$$\max_{\substack{\mathbf{x}: \mathcal{T} \rightarrow \mathcal{X} \\ \mathbf{p}: \mathcal{T} \rightarrow \mathbb{R}^n}} \mathbb{E}_{\mathbf{t} \sim \mathcal{F}} [u_0(\mathbf{x}(\mathbf{t}), \mathbf{p}(\mathbf{t}); \mathbf{t})] \quad \text{s.t.} \quad (\text{IC}), (\text{IR})$$
+
+**Automated mechanism design** Since the control variables in this problem is infinitely-dimensional<sup>6</sup>, finding an analytical optimal solution becomes extremely hard. In this paper, we
+
+<sup>5</sup>More discussions about allocation constraints are provided in Appendix F.1
+
+<sup>6</sup>Specifically, the control variables are  $\mathbf{x}(\cdot)$  and  $\mathbf{p}(\cdot)$  in mechanism design problem, which are functions on a continuous domain and thus infinitely-dimensional.
+
+{3}------------------------------------------------
+
+follow the framework of *automated mechanism design* (Sandholm, 2003), which parameterizes the mechanism, as a parameterized class, and find the optimal mechanism within this class.
+
+Formally, let  $\theta \in \mathbb{R}^{n_\theta}$  be the parameters represented in the allocation rule and payment rule. The mechanism is then represented as  $\mathbf{x}(t; \theta)$  and  $p(t; \theta)$ , where  $\mathbf{x}(\cdot; \cdot)$  and  $p(\cdot; \cdot)$  are determined only by network architecture. The problem then reduces to finding the optimal parameter  $\theta$ ,
+
+$$\max_{\theta \in \mathbb{R}^{n_\theta}} \mathbb{E}_{t \sim \mathcal{F}} [u_0(\mathbf{x}(t; \theta), p(t; \theta); t)] \quad \text{s.t.} \quad (IC), (IR)$$
+
+**Desirable properties** Before the formal contents, we shall emphasize what desirable properties an ideal approach should possess: **potentially exact truthfulness, full expressive power and efficiency in moderate-size problem**. More discussions on these properties are presented in Appendix F.2.
+
+## 3 CHARACTERIZATION OF TRUTHFUL MECHANISMS
+
+As is inspired by Wang et al. (2024b) and Dütting et al. (2024), we focus on the menu mechanism class in this paper. We will show that a specific class of menu mechanism characterizes the class of truthful mechanisms in this section. Due to space limits, the formal definition of the menu mechanism is leaved to Appendix B.
+
+For completeness, we briefly introduce *menu mechanisms* in few words. Consider a mechanism design problem with one player, with type space  $\mathcal{T}$  and feasible allocation set  $\mathcal{X}$ . A menu  $\mathcal{M}^m = (\mathcal{X}^m, p^m)$  specifies a subset of feasible allocation,  $\emptyset \neq \mathcal{X}^m \subseteq \mathcal{X}$ , and a pricing rule,  $p^m : \mathcal{X}^m \rightarrow \mathbb{R}$ . The mechanism discloses the menu to the player at first, then the player buy the utility-maximizing allocation  $\mathbf{x} \in \mathcal{X}^m$  and pay  $p^m(\mathbf{x})$  money, which depends on her private type  $t \in \mathcal{T}$ . The case of multi-players is similar. In that case, the platform plays the mechanism with each player independently, with the only difference that the mechanism to each player  $i$  can depend on the types of all other players  $t_{-i}$ .
+
+With a little abuse of notations, we also call  $\mathcal{M}^m$  as a menu mechanism with menu  $\mathcal{M}^m$ . If  $\mathcal{X}^m = \mathcal{X}$  always hold, such menu mechanism is called *full-menu mechanism*. Since the properties of *truthfulness* and *full expressiveness* are originally defined for direct mechanisms, it naturally leads to a question that, can we extend such properties to menu mechanisms? Though not intuitive, we shall emphasize that a menu mechanism  $\mathcal{M}^m$  can be easily transformed into a direct mechanism  $\mathcal{M}^d$ . The insight is following: as long as the platform knows the exact types of players, the platform can simulate the player's behaviors as if players' are rationally playing the game. The formal definition is also leaved to Appendix B.
+
+As we can transform each menu mechanism to a direct mechanism, we shall regard them as the "equivalent" mechanism, then consider the properties of menu mechanisms as the properties of "equivalent direct mechanisms". To begin with, we firstly give some definitions that define the equivalence relation between menu mechanisms and direct mechanisms. Note that it's easy to verify below-defined equivalence relation forms an equivalent class in set theory.
+
+**Definition 3.1** (Equivalent mechanisms).
+
+- We say two direct mechanisms  $\mathcal{M}_1^d$  and  $\mathcal{M}_2^d$  are equivalent, if their allocation rules and payment rules are equal on the domain  $\mathcal{T}$ , except a set of probability zero. (The probability is measured by  $\mathcal{F}$ .)
+- We say two menu mechanisms  $\mathcal{M}_1^m$  and  $\mathcal{M}_2^m$  are equivalent, if after we transform  $\mathcal{M}_1^m$  into direct mechanisms  $\mathcal{M}_1^d$  as above,  $\mathcal{M}_1^d$  and  $\mathcal{M}_2^d$  are equivalent. <sup>7</sup> We can similarly define equivalent relation between a menu mechanism and a direct mechanism.
+- Let  $\mathcal{M}^M$  be a class of (direct or menu) mechanisms. Denote  $\{-i\} = \{1, 2\} \setminus \{i\}$ , we call a pair of mechanism class  $\mathcal{M}_1^M$  and  $\mathcal{M}_2^M$  are equivalent, if for any  $i \in \{1, 2\}$  and any mechanism  $\mathcal{M}_i \in \mathcal{M}_i^M$ , there is another  $\mathcal{M}_{-i} \in \mathcal{M}_{-i}^M$  such that  $\mathcal{M}_i$  and  $\mathcal{M}_{-i}$  are equivalent.
+
+<sup>7</sup>Note that it does not indicate that the pricing functions in  $\mathcal{M}_1^m$  and  $\mathcal{M}_2^m$  are equivalent, as there can be dummy candidates.
+
+{4}------------------------------------------------
+
+Note that when two mechanism classes are equivalent, these classes have exactly same expressive power. With more abuse of notations, we regard an equivalent class of direct mechanisms or menu mechanisms as same mechanism, denoted by  $\mathcal{M}$ .
+
+Before the formal statement, we also give some technical definitions that will be used to characterize the mechanism class.
+
+**Definition 3.2** (pricing rule decomposition). Under the situation with one player, allocation constraint  $\mathcal{X}$  and regularity cost  $c(x)$ , we say a *full-menu mechanism*  $\mathcal{M}^m = \langle \mathcal{X}, p^m \rangle$  satisfies pricing rule decomposition, if following holds for some  $f^m : \mathcal{X} \rightarrow \mathbb{R}$ ,
+
+- $p^m(x) = c(x) + f^m(x)$
+- $f^m(x)$  is convex.
+
+Under the situation with  $n$  players, allocation constraint  $\{\mathcal{X}_i\}_{i \in [n]}$  and regularity cost  $\{c_i(x)\}_{i \in [n]}$ , we say a *full-menu mechanism*  $\mathcal{M}^m = \{\mathcal{M}_i^m\}$  satisfies pricing rule decomposition, if  $\mathcal{M}_i^m$  satisfies pricing rule decomposition for all player  $i$ , whatever  $t_{-i}$  is. (Note that  $\mathcal{M}_i^m$  may depend on  $t_{-i}$ .)
+
+**Definition 3.3** (no-buy-no-pay). Under the situation with one player, we say a *full-menu mechanism*  $\mathcal{M}^m = \langle \mathcal{X}, p^m \rangle$  satisfies no-buy-no-pay, if  $p^m(\mathbf{0}) \leq c(\mathbf{0}) = 0$ .
+
+Under the situation with  $n$  player, we say a *full-menu mechanism*  $\mathcal{M}^m = \{\mathcal{M}_i^m\}$  satisfies no-buy-no-pay, if  $\mathcal{M}_i^m$  satisfies no-buy-no-pay for all player  $i$ , whatever  $t_{-i}$  is.
+
+Now we give a formal statement to show the IC properties for menu mechanisms. Specifically, we have following characterization for these mechanism classes (multi-player version):
+
+**Theorem 3.4.** *Following mechanism classes are equivalent:*<sup>8</sup>
+
+- The class  $\mathcal{M}^{D,IC}$  of direct mechanisms  $\mathcal{M}^d = (\mathbf{x}, \mathbf{p})$  with IC property,
+- The class  $\mathcal{M}^M$  of menu mechanisms  $\mathcal{M}^m$ , where  $\mathcal{M}^m = \{\mathcal{M}_i^m\}_{i \in [n]}$  and  $\mathcal{M}_i^m = \{\mathcal{X}_i^m, p_i^m\}$ ,
+- The class  $\mathcal{M}^{F,M,p}$  of full-menu mechanisms  $\mathcal{M}^f$ , where  $\mathcal{M}^f = \{\mathcal{M}_i^f\}_{i \in [n]}$  and  $\mathcal{M}_i^f = \{\mathcal{X}_i, p_i^f\}$ , satisfying **pricing rule decomposition**.
+
+The above theorem states that, when we focus on designing IC mechanisms, restricting mechanism within the menu mechanism class  $\mathcal{M}^M$  (or full-menu mechanism class with pricing rule decomposition,  $\mathcal{M}^{F,M,p}$ ) is without loss of generality. Next we will show that the IR constraints can be resolved in a similar way.
+
+**Theorem 3.5.** *Following mechanism classes are equivalent:*
+
+- The class  $\mathcal{M}^{D,T}$  of truthful direct mechanisms  $\mathcal{M}^d = (\mathbf{x}, \mathbf{p})$  (IC & IR),
+- The class  $\mathcal{M}^{F,M,pn}$  of full-menu mechanisms  $\mathcal{M}^f$ , where  $\mathcal{M}^f = \{\mathcal{M}_i^f\}_{i \in [n]}$  and  $\mathcal{M}_i^f = \{\mathcal{X}_i, p_i^f\}$ , satisfying **pricing rule decomposition and no-buy-no-pay**.
+
+## 4 METHODOLOGY
+
+Inspired by Theorem 3.5, we only need to find the optimal mechanism within the mechanism class  $\mathcal{M}^{F,M,pn}$ , without considering truthfulness constraints. The property of full expressive power has also been preserved.
+
+**Mechanism representation** The only degrees of freedom in  $\mathcal{M}^{F,M,pn}$  lies in the flexible pricing rule. We begin with parameterizing the pricing rule (i.e., parameterizing the full-menu mechanism). Denote  $\mathcal{M}^{PFM}$  as the class of **Parameterized Full-Menu** mechanisms,  $\Theta$  as the set of parameters to parameterize this class (e.g., weights and bias in a neural network) and  $\theta \in \Theta$  as a parameter
+
+<sup>8</sup>Hammond (1979) derived the relation between IC mechanism and menu mechanism, while Rochet (1987) derived the convex utility function in truthful mechanism, we argue that our characterization results are different from theirs and in fact more general. See Appendix A for more details.
+
+{5}------------------------------------------------
+
+![Figure 1: Overview of the algorithm. The diagram illustrates the training and testing process. In the training phase, a 'Players' type distribution' is sampled to create a 'Player Dataset'. This dataset is processed by a 'Parameterized Mechanism' which includes a 'Pricing function f(t, theta)' and three 'Representations' (MoA, Group Max, PICNN). The mechanism is optimized alternately for 'Players' Objective OBJ*(a*, theta)' and 'Platform's Objective OBJ(a, theta, x*)'. The optimization involves 'Players' allocations a*' and 'Platform's allocations x', with a 'Penalize on difference' step. The process continues 'Until convergence' to find 'Optimal Mechanism Parameters theta*'. In the testing phase, a 'Testing Player' is sampled and processed by the 'Trained Mechanism' (Pricing function f(t, theta*)) to produce 'Players' Objective OBJ*(a*, theta*)' and 'Players' allocations a*'. A legend indicates that blue arrows represent 'Take as known constants', green arrows represent 'Optimization variables', and yellow arrows represent 'Mechanism variables'.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Figure 1: Overview of the algorithm. The diagram illustrates the training and testing process. In the training phase, a 'Players' type distribution' is sampled to create a 'Player Dataset'. This dataset is processed by a 'Parameterized Mechanism' which includes a 'Pricing function f(t, theta)' and three 'Representations' (MoA, Group Max, PICNN). The mechanism is optimized alternately for 'Players' Objective OBJ\*(a\*, theta)' and 'Platform's Objective OBJ(a, theta, x\*)'. The optimization involves 'Players' allocations a\*' and 'Platform's allocations x', with a 'Penalize on difference' step. The process continues 'Until convergence' to find 'Optimal Mechanism Parameters theta\*'. In the testing phase, a 'Testing Player' is sampled and processed by the 'Trained Mechanism' (Pricing function f(t, theta\*)) to produce 'Players' Objective OBJ\*(a\*, theta\*)' and 'Players' allocations a\*'. A legend indicates that blue arrows represent 'Take as known constants', green arrows represent 'Optimization variables', and yellow arrows represent 'Mechanism variables'.
+
+Figure 1: The overview of our algorithm. In the training process, we first sample a sufficiently large data set from the given player type distribution. Our characterization demonstrates the pricing function  $f$  to be convex, therefore a representation of convex function is chosen to express  $f$ . We train the mechanism by alternately optimizing the platform and players' objective function, while gradually increasing the penalty of difference between the two allocation matrices to reach platform-player consensus (which represents the full mechanism) and the convergence of parameter optimization. In the testing step, we fix the near-optimal mechanism parameters  $\theta^*$  and test the sampled players utilities as the final result.
+
+instance. Specifically, the pricing rule is parameterized as follows,
+
+$$p_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta) = c_i(\mathbf{x}_i) + f_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta)$$
+
+By *pricing rule decomposition*, we know that an optimal  $f_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta)$  should be convex on  $\mathbf{x}_i$  within  $\mathcal{M}^{PM,pn}$ , therefore, we also restrict  $f_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta)$  to be convex within  $\mathcal{M}^{PFM}$ .
+
+To do this, we need an expressive convex representation of convex function class. There are many such options for this goal. We implement maximum-of affine functions (MoA, Balázs et al. (2015)), log-sum-exp functions (LSE, Kim & Kim (2022)), Partial Input Convex Neural Networks (PICNN, Amos et al. (2017)), Group Max neural networks (GroupMax, Warin (2023)). See more details in Appendix G.2.
+
+Notice that *no-buy-no-pay* property requires that  $f_i(\mathbf{0}; \mathbf{t}_{-i}; \theta) \leq 0$ . To resolve this requirement, we hard-code this constraint within  $\mathcal{M}^{PFM}$ . A general way is to replace  $f_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta)$  with
+
+$$\hat{f}_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta) = f_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta) - f_i(\mathbf{0}; \mathbf{t}_{-i}; \theta),$$
+
+where the second term in RHS represents a normalization constant. We can easily verify that  $\hat{f}_i(\mathbf{0}; \mathbf{t}_{-i}; \theta) = 0$ . Other hard-coding approaches for specific models are represented in appendix Appendix G.2.
+
+**Learning-based algorithm** We leave the derivations of our algorithm to Appendix E. Figure 1 briefly present the procedure of our algorithm (both training and inference).
+
+**Real-time inference** After learning the mechanism  $\theta^*$ , the ultimate goal for this mechanism is to operate effectively on an unseen type profile  $\mathbf{t}$ . To achieve this, we can directly compute the utility-maximizing allocations for each player  $i$  by optimizing her utility:  $\mathbf{x}_i^* \in \arg \max_{\mathbf{x}_i \in \mathcal{X}_i} u_i(\mathbf{x}_i; p_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta^*); t_i)$ , and charge payment  $p_i(\mathbf{x}_i^*; \mathbf{t}_{-i}; \theta^*)$  for player  $i$ .
+
+## 5 JUSTIFICATION OF PFM-NET
+
+In this section, we justify the advantages of PFM-Net both theoretically and empirically.
+
+**Truthfulness.** The truthfulness of  $\mathcal{M}^{PFM}$  is a direct corollary of Theorem 3.5. as  $\mathcal{M}^{PFM} \subseteq \mathcal{M}^{PM,pn}$ .
+
+{6}------------------------------------------------
+
+**Universal approximation properties.** We show the universal approximation property of  $\mathcal{M}^{PFM}$  in this part. We leave the formal definition of universal approximators to Appendix B.2.
+
+Kim & Kim (2022) studied the universal approximator properties of parameterized MoA functions for approximating convex functions. A straightforward argument shows that even we restricting  $f(0) \leq 0$ , the universal approximation property remains valid:
+
+**Proposition 5.1.** *The mechanism class  $\mathcal{M}^{PFM}$  is a universal approximator for the mechanism class  $\mathcal{M}^{PM,pm}$ , if the pricing functions are represented by MoA, LSE, GroupMax, or GroupLSE.*
+
+However, what truly concerns us is not the convex pricing function itself, but the expected utility of the platform. Next, we demonstrate that if the full-menu mechanism class  $\mathcal{M}^1$  is a universal approximator for another full-menu mechanism class  $\mathcal{M}$  under the  $L_\infty$  norm, then the expected utility retains the universal approximation property as well. We begin with some technical definitions.
+
+**Definition 5.2** (Non-degenerate distribution). Let  $\mathcal{X}$  be a full-dimensional subspace of  $\mathbb{R}^d$ . We say that  $\mathcal{D}$  is a non-degenerate distribution over  $\mathcal{X}$ , if for any subset  $\mathcal{X}_0 \subseteq \mathcal{X}$ , we have  $\Pr_{x \sim \mathcal{D}}[x \in \mathcal{X}_0] > 0$  indicates that  $\mu(\mathcal{X}_0) > 0$ , where  $\mu(\cdot)$  is Lebesgue measure.
+
+**Definition 5.3** (Maximum expected utility). Let  $\mathcal{M}$  be a mechanism class represented by convex function  $p(x; t) \in \mathcal{M}$ ,  $\mathcal{T}$  and  $\mathcal{X}$  are compact subset of Euclidean spaces  $\mathbb{R}^d$ ,  $t \sim \mathcal{D}$  be some non-degenerate distribution over  $\mathcal{T}$ , and  $v_0(x; t), \lambda \geq 0$  are the valuation and the quasi-linear parameter of the platform. We define the maximal expected utility within class  $\mathcal{M}$ ,  $\text{MEU}(\mathcal{M})$ , as follows,
+
+$$\text{MEU}(\mathcal{M}) = \sup_{\substack{p \in \mathcal{M} \\ x: \mathcal{T} \rightarrow \mathcal{X}}} \mathbb{E}_{t \sim \mathcal{D}} [v_0(x(t); t) + \lambda \cdot p(x(t); t)] \quad (1)$$
+
+subject to the constraints:
+
+$$x(t) \in \arg \max_{x \in \mathcal{X}} \langle x, t \rangle - p(x; t), \quad \forall t \in \mathcal{T}$$
+
+The formal statement is follows:
+
+**Theorem 5.4.** *Assume that  $\mathcal{M}^1$  is a universal approximator of  $\mathcal{M}$  under following technical conditions,*
+
+1.  $v_0(x; t)$  is continuous on  $\mathcal{X}$  and  $\mathcal{T}$  (thus continuous consistently).
+2. The pricing function  $p(x, t)$  is  $\varepsilon_1$ -strongly convex on  $x$  for some  $\varepsilon_1 > 0$ , when  $p \in \mathcal{M}$ .
+
+Then,  $\text{MEU}(\mathcal{M}^1) = \text{MEU}(\mathcal{M})$ .
+
+Theorem 5.4 indicates that using convex representations such as MoA, LSE, GroupMax, and GroupLSE does not result in any loss of expected utility of platform, since the objective of mechanism design problem is a specific form of Equation (1). Although we assume the strong convexity of the optimal pricing rule  $p(x_i; t_{-i})$ , we note that this is only a technical condition, which is not strong because  $\varepsilon_1$  can be chosen so small that strong convex function can be arbitrary close to any convex function in bounded domain. We believe that the theorem also holds even if this condition is moved.
+
+**Efficiency in expressive power** In this section, we examine whether a reasonable number of parameters can approximate a wide range of full-menu mechanisms with a small error. It is clear that the entire class of convex functions can not be fully approximated well by polynomial number of parameters and suffer from curse of dimensionality inevitably with smoothness prior only (Bengio et al., 2005).
+
+Thus, we shift to an alternative solution concept. We argue that our method could practically exhibit greater expressive power compared to existing approaches. We compare our approaches to discretization-based methods (e.g., Wang et al. (2024b)) and AMA-based methods (e.g., Curry et al. (2023)).
+
+**COMPARISON WITH DISCRETIZATION-BASED METHODS** It is widely believed that realistic high-dimensional problems often exhibit favorable structures that can be effectively captured using sub-exponential numbers of parameters. One promising approach is to leverage network structures, and neural networks are commonly regarded as an ideal tool for approximating high-dimensional functions.
+
+{7}------------------------------------------------
+
+Our methods utilize the PICNN and GroupMax network architectures to approximate the pricing function. However, it remains unclear how to effectively combine network architectures with discretization-based approaches.<sup>9</sup> Without the flexibility of network architectures, discretization-based approaches are particularly susceptible to the curse of dimensionality (Bellman, 1966).
+
+**COMPARISON WITH AMA-BASED METHODS** An AMA mechanism is determined by positive weights  $\mathbf{w} = (w_1, \dots, w_n) \in \mathbb{R}_+^n$  of players as well as a shift function  $\lambda(x)$  on allocations. The formal definition of how AMA mechanism would work in our model is leaved to Appendix B.3. We have following comparison:
+
+**Proposition 5.5.** *Consider an AMA mechanism  $M^{\text{AMA}}$  with positive weights  $w_1, \dots, w_n$  and a shift function  $\lambda(\mathbf{x})$ . Assume more that an oracle  $\mathcal{O}^{\text{AMA}}$  of AMA mechanism exists that can run the mechanism  $M^{\text{AMA}}$  under input  $\mathbf{t}$ . Formally,  $\mathcal{O}^{\text{AMA}}$  receives  $M^{\text{AMA}}$  (or equivalently,  $\mathbf{w}$  and  $\lambda$ ) and  $\mathbf{t}$  as inputs, and output the resulting allocation  $\mathbf{x}$  and payment  $\mathbf{p}$ .*
+
+*Given any AMA mechanism  $M^{\text{AMA}}$ , we can explicitly construct a full-menu mechanism  $M^F$  with pricing functions  $\{p_i^f(\mathbf{x}; \mathbf{t}_{-i})\}_{i \in [n]}$ , that receives type profile  $\mathbf{t}$ , outputs the full menu  $p_i : \mathcal{X}_i \rightarrow \mathbb{R}, i \in [n]$ , and is equivalent to  $M^{\text{AMA}}$ .*
+
+*Additionally, querying  $\{p_i(\mathbf{x}_i)\}_{i \in [n]}$  at some point  $\mathbf{x} \in \mathcal{X}$  needs polynomial-time computation and  $O(n)$  black-box queries of the oracle  $\mathcal{O}^{\text{AMA}}$ .*
+
+Proposition 5.5 states that, our framework can efficiently simulate AMA mechanisms.
+
+In the reverse direction, it is well-known that the AMA mechanism class lacks full expressive power (Carbajal et al., 2013). Given that PFM-Net exhibits full expressive power, there must exist an instance of PFM-Net that cannot be expressed by an AMA mechanism.
+
+## 6 EXPERIMENTS
+
+In this section, we conduct empirical experiments that evaluate the effectiveness of PFM-Net. The pricing functions are parameterized by MoA , PICNN (Amos et al., 2017) and GroupMax (Warin, 2023).
+
+### 6.1 BASELINES METHODS
+
+We present the manually defined baselines and learning-based baselines we compared in this part. The **manually defined baselines** include,
+
+1. **VCG (Vickrey, 1961)**: The most classical mechanism with strong versatility.
+2. **Item-wise Myerson**: Item-wise Myerson is a auction baseline used in Dütting et al. (2019), that sells the  $m$  items independently and optimally to the players.
+3. **Bundle-OPT**: this mechanism bundles all items together at a specific price when selling items to buyers. The price is parameterized, and the optimal price is selected for each setting by one-dimensional grid search. This mechanism is particularly effective when there is only one player in the game. This baseline is also used in Curry et al. (2023).
+
+The **learning-based baselines** include:
+
+1. **Lottery-AMA (Curry et al., 2023)**: Lottery-AMA is an AMA-based approach that sets bidder weights, along with the discretization of the allocation menu and shift values, as learnable parameters. We also made appropriate extensions to fit it into our actual experimental setting.
+2. **UM-GemNet**: An extension of GemNet (Wang et al., 2024b) that can fit our generalized mechanism design setting. GemNet is a menu-based approach that discretizes the menu for each bidder, which is computed by a fully-connected neural network taking others' types as input.<sup>10</sup>
+
+<sup>9</sup>Although GemNet incorporates a network, we emphasize that their network is solely used to output a set of allocation points to form the menu. The menu itself inherently discretizes the allocation space.
+
+<sup>10</sup>We point out that in original implementation of GemNet, there is an integer-programming based transformation after the training of GemNet, which is used to transform GemNet such that it's menu compatible. We do not incorporate this transformation in our implementations of both UM-GemNet and PFM-Net.
+
+{8}------------------------------------------------
+
+Table 1: The experimental results of selling multiple goods to one buyer. The distribution  $t \sim U([0, 1]^m)$ .  $S_m$  represents the experiments of selling  $m$  goods. The values represent the expected utility of the seller, with the maximum value on bold.
+
+| Methods & Settings | $S_2$ | $S_3$ | $S_5$ | $S_{10}$ | $S_{15}$ | $S_{20}$ |
+|-|-|-|-|-|-|-|
+| PICNN-1 | 0.5472 | 0.8695 | 1.5740 | 3.4527 | 5.4444 | 7.5291 |
+| GroupMax-1 | <b>0.5476</b> | <b>0.8751</b> | 1.5746 | 3.4568 | 5.4567 | 7.5784 |
+| GroupMax-3 | 0.5468 | 0.8705 | <b>1.5774</b> | <b>3.4838</b> | <b>5.5525</b> | <b>7.6225</b> |
+| UM-GemNet | 0.5442 | 0.8726 | 1.5560 | 3.4411 | 5.4284 | 7.5167 |
+| Lottery-AMA | 0.5402 | 0.7952 | 1.0932 | - | - | - |
+| Item-wise Myerson | 0.5000 | 0.7500 | 1.2500 | 2.5000 | 3.7500 | 5.0000 |
+| Bundle-OPT | 0.5441 | 0.8599 | 1.5557 | 3.4491 | 5.4543 | 7.5290 |
+| OPT | 0.5491 | 0.8757 | - | - | - | - |
+
+Note that all of these baseline models were originally implemented in the context of auction settings. In our experiments, we made slight modifications to the implementations of lottery-AMA and GemNet to ensure their applicability to scenarios that extend beyond traditional auction problems.
+
+### 6.2 EXPERIMENTAL SETTINGS
+
+#### 6.2.1 SELLING TO SINGLE BUYER
+
+In this experiment, we consider the problem of selling  $m$  items to a single buyer. The bidder's type distribution is  $t \text{ i.i.d. } U([0, 1]^m)$ . The buyer has an allocation constraint of  $\mathcal{X} = [0, 1]^m$ , meaning that the quantity of each item purchased cannot exceed 1. Both the buyer and the platform have no intrinsic valuation for the allocations, i.e.,  $v_0(\mathbf{x}) = c_1(\mathbf{x}) = 0, \forall \mathbf{x}$ . Therefore, the platform's expected utility is equivalent to its expected revenue. We denote  $S_m$  as the problem involving  $m$  items in this setting.
+
+We implement MoA, 1-layer PICNN, 1-layer GroupMax, and 3-layer GroupMax architectures within PFM-Net. As baselines, we also implement UM-GemNet and lottery-AMA as learning-based baselines, alongside two simple baselines: item-wise Myerson and Bundle-OPT. We compare the performance of these methods for  $m = 2, 3, 5, 10, 15, 20$ .
+
+The expected revenues for different settings are presented in Table 1, with the optimal value for each setting highlighted in bold. Note that optimal values (OPT) have only been found in special cases, namely for two or three items by Manelli & Vincent (2006). The OPT for two items is computed analytically, while for three items it is computed numerically with random 1, 000, 000 samples.
+
+The MoA-based PFM-Net and lottery-AMA do not perform well for larger-scale problems, so some results are omitted.
+
+#### 6.2.2 SOCIAL PLANNER OF A MARKET
+
+In this experiment, we consider the problem faced by a social planner aiming to maximize social welfare by designing a market. Let there be  $n$  agents and  $m$  goods in a market. The agents' types are generated independently and identically distributed (i.i.d.) from either a uniform distribution  $U([-1, 1])$  or a normal distribution  $\mathcal{N}(0, 1)$ . We denote  $P_{n,m}^F$  as the problem with  $n$  agents and  $m$  goods, where the types are i.i.d. from distribution  $F$ . Specifically,  $F = U$  represents the uniform distribution, and  $F = N$  represents the normal distribution.
+
+We set the allocation constraint for each agent as  $\mathcal{X}_i = [-1, 1]^m$ , indicating that each agent can either buy or sell the goods in the market, with a maximum amount of 1. We incorporate a regularity term to describe diminishing marginal utility, i.e., each agent has a regularization term  $c_i(\mathbf{x}) = -\frac{1}{2}\|\mathbf{x}\|^2$  for allocation  $\mathbf{x}$ . Specifically, the utility of agent  $i$  is given by:
+
+$$u_i(\mathbf{x}_i; \mathbf{t}_i; p_i) = v_i(\mathbf{x}_i; \mathbf{t}_i) - p_i, \quad v_i(\mathbf{x}_i; \mathbf{t}_i) = \langle \mathbf{x}_i, \mathbf{t}_i \rangle - \frac{1}{2}\|\mathbf{x}_i\|^2$$
+
+{9}------------------------------------------------
+
+Table 2: The experimental results of social planners in a market.  $P_{n,m}^F$  represents a society with  $n$  agents,  $m$  items and types are i.i.d. distributed from distribution  $F$ .  $F = N$  represents normal distribution with mean 0 and standard deviation 1, and  $F = U$  represents uniform distribution in  $[-1, 1]$ . Allocation constraints of players are  $\mathcal{X}_i = [-1, 1]^m$ . The utility of the platform is the social welfare, minus a penalty capturing the disobey of market clearance. The values represent the expected utility of the social planner, with the maximum value on bold.
+
+| Methods & Settings | $P_{2,5}^U$ | $P_{2,5}^N$ | $P_{2,5}^U$ | $P_{2,5}^N$ | $P_{3,5}^U$ | $P_{3,5}^N$ |
+|-|-|-|-|-|-|-|
+| GroupMax-1 | <b>0.3853</b> | <b>1.1399</b> | <b>1.0165</b> | <b>2.6812</b> | <b>1.6512</b> | <b>4.2900</b> |
+| UM-GemNet | 0.3261 | 0.9013 | 0.8949 | 2.4251 | 1.4367 | 3.7948 |
+| VCG | 0 | 0.8603 | 0 | 1.7188 | 0 | 2.5846 |
+| OPT | 0.4167 | 1.2348 | 1.1101 | - | - | - |
+
+The social planner is oriented towards maximizing social welfare and therefore has no direct utility over monetary exchanges. The market must also satisfy the market clearance condition, which requires that the total quantity of each item remains unchanged before and after the mechanism. In our model, we assume that the social planner incurs a quadratic cost for any violation of the market clearance condition. Specifically, the utility of the social planner is:
+
+$$u_0(\mathbf{x}; \mathbf{t}; \mathbf{p}) = \sum_{i=1}^n v_i(x_i; t_i) - \frac{1}{2} \sum_{j=1}^m \left( \sum_{i=1}^n x_{ij} \right)^2$$
+
+where the term  $\frac{1}{2} \left( \sum_{i=1}^n x_{ij} \right)^2$  represents the platform's effort cost when the total surplus or demand of item  $j$  is  $\sum_{i=1}^n x_{ij}$ .
+
+We compare the performance of 1-layer GroupMax, GemNet, and VCG in settings with 5 items and 1, 2, or 3 players, under both uniform and normal distribution assumptions. The expected utilities for the different settings are presented in Table 2, with the optimal value for each setting highlighted in bold.
+
+### 6.3 EXPERIMENTAL ANALYSIS
+
+**Selling to single buyer** We find that the performance of all methods exceeds the strong baseline of Bundle-OPT when  $m \leq 5$ , except for lottery-AMA. This is not surprising, as Bundle-OPT involves only a single parameter, making it an easy baseline to learn. In the case of  $m = 2$ , these methods also nearly approach the optimal mechanism. However, when  $m \geq 5$ , we observe that UM-GemNet performs very similarly to Bundle-OPT. In comparison, the 3-layer GroupMax significantly outperforms both UM-GemNet and Bundle-OPT, suggesting that the GroupMax network learns some nontrivial components beyond the simple mechanism of selling the full bundle at a fixed price, whereas UM-GemNet does not. These findings support our conjecture that UM-GemNet, as well as other discretization-based methods, are vulnerable to problems of moderate size. More in-depth analysis of the “non-trivial components” in the learned pricing rule is provided in Appendix G.3.
+
+**Social planner of a market** The performance of GroupMax exceeds that of GemNet and VCG across all settings. We derive the optimal solution (OPT) in cases where the analytical optimal solution exists. Additionally, we find that the value with  $n \geq 2$  players is greater than  $n$  times the value with a single player, except in the case of VCG. This observation is due to the insight that if one player wants to buy an item (i.e.,  $t > 0$ ), and another player is willing to sell it (i.e.,  $t < 0$ ), they can reach an agreement that enhances social welfare. Specifically, in all scenarios, the value obtained by PFM-Net with  $n$  players exceeds  $n$  times the optimal value achieved with a single player. In a demonstration of the pricing rule of GroupMax in Appendix G.3, we randomly selected three type profiles and examined the learned pricing rule for player 1. We observed that the pricing rule significantly changes with the types of other players, indicating that PFM-Net successfully learns a conditional pricing rule based on the other players' types.<sup>11</sup>
+
+<sup>11</sup>A more detailed analysis of both experiments is provided in Appendix G.3.
+
+ Rest of paper (reference and Appendix) is removed.

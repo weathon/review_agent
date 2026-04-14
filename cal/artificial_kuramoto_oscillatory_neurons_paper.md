@@ -1,0 +1,275 @@
+
+
+{0}------------------------------------------------
+
+# ARTIFICIAL KURAMOTO OSCILLATORY NEURONS
+
+Takeru Miyato<sup>1</sup>, Sinday Löwe<sup>2</sup>, Andreas Geiger<sup>1</sup>, Max Welling<sup>2</sup>
+
+<sup>1</sup> University of Tübingen, Tübingen AI Center <sup>2</sup> University of Amsterdam
+
+## ABSTRACT
+
+It has long been known in both neuroscience and AI that “binding” between neurons leads to a form of competitive learning where representations are compressed in order to represent more abstract concepts in deeper layers of the network. More recently, it was also hypothesized that dynamic (spatiotemporal) representations play an important role in both neuroscience and AI. Building on these ideas, we introduce Artificial Kuramoto Oscillatory Neurons (*AKOrN*) as a dynamical alternative to threshold units, which can be combined with arbitrary connectivity designs such as fully connected, convolutional, or attentive mechanisms. Our generalized Kuramoto updates bind neurons together through their synchronization dynamics. We show that this idea provides performance improvements across a wide spectrum of tasks such as unsupervised object discovery, adversarial robustness, calibrated uncertainty quantification, and reasoning. We believe that these empirical results show the importance of rethinking our assumptions at the most basic neuronal level of neural representation, and in particular show the importance of dynamical representations. Code: <https://github.com/autonomousvision/akorn>. Project page: [https://takerum.github.io/akorn\\_project\\_page/](https://takerum.github.io/akorn_project_page/).
+
+## 1 INTRODUCTION
+
+Before the advent of modern deep learning architectures, artificial neural networks were inspired by biological neurons. In contrast to the McCulloch-Pitts neuron (McCulloch & Pitts, 1943) which was designed as an abstraction of an integrate-and-fire neuron (Sherrington, 1906), recent building blocks of neural networks are designed to work well on modern hardware (Hooker, 2021). As our understanding of the brain is improving over recent years, and neuroscientists are discovering more about its information processing principles, we can ask ourselves again if there are lessons from neuroscience that can be used as design principles for artificial neural nets.
+
+In this paper, we follow a more modern dynamical view of neurons as oscillatory units that are coupled to other neurons (Muller et al., 2018). Similar to how the binary state of a McCulloch-Pitts neuron abstracts the firing of a real neuron, we will abstract an oscillating neuron by an  $N$ -dimensional unit vector that rotates on the sphere (Löwe et al., 2023). We build a new neural network architecture that has iterative modules that update  $N$ -dimensional oscillatory neurons via a generalization of the well-known non-linear dynamical model called the Kuramoto model (Kuramoto, 1984).
+
+The Kuramoto model describes the synchronization of oscillators; each Kuramoto update applies forces to connected oscillators, encouraging them to become aligned or anti-aligned. This process is similar to binding in neuroscience and can be understood as distributed and continuous clustering. Thus, networks with this mechanism tend to compress their representations via synchronization.
+
+We incorporate the Kuramoto model into an artificial neural network, by applying the differential equation that describes the Kuramoto model to each individual neuron. The resulting artificial Kuramoto oscillatory neurons (*AKOrN*) can be combined with layer architectures such as fully connected layers, convolutions, and attention mechanisms.
+
+We explore the capabilities of *AKOrN* and find that its neuronal mechanism drastically changes the behavior of the network. *AKOrN* strongly binds object features with competitive performance to slot-based models in object discovery, enhances the reasoning capability of self-attention, and increases robustness against random, adversarial, and natural perturbations with surprisingly good calibration.
+
+{1}------------------------------------------------
+
+![Figure 1: A diagram illustrating the proposed artificial Kuramoto oscillatory neurons (AKOrN). On the left, three small plots show the evolution of a 64x64 grid of oscillators over time, transitioning from a noisy state to a synchronized wave-like pattern. Below these is a line graph of Energy (E) versus time (t), showing a sharp drop from approximately -4000 to -5500. In the center, a 3x3 grid of circles represents the oscillators, with arrows indicating their phase and color indicating their state. On the right, a vector diagram shows a green vector c_i and a blue vector x_i on a circle, with an angle Omega_i between them.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: A diagram illustrating the proposed artificial Kuramoto oscillatory neurons (AKOrN). On the left, three small plots show the evolution of a 64x64 grid of oscillators over time, transitioning from a noisy state to a synchronized wave-like pattern. Below these is a line graph of Energy (E) versus time (t), showing a sharp drop from approximately -4000 to -5500. In the center, a 3x3 grid of circles represents the oscillators, with arrows indicating their phase and color indicating their state. On the right, a vector diagram shows a green vector c\_i and a blue vector x\_i on a circle, with an angle Omega\_i between them.
+
+Figure 1: Our proposed artificial Kuramoto oscillatory neurons (*AKOrN*). The series of pictures on the left are  $64 \times 64$  oscillators evolving by the Kuramoto updates (Eq. (2)), along with a plot of the energies computed by Eq. (3). Each single oscillator  $x_i$  is an  $N$ -dimensional vector on the sphere and is influenced by (1) connected oscillators through the weights  $J_{ij}$ , (2) conditional stimuli  $c_i$ , and (3)  $\Omega_i$  that determines the natural frequency of each oscillator. See Fig. 10 for details on  $C$  and  $J$ .
+
+## 2 MOTIVATION
+
+It was recognized early on that neurons interact via lateral connections (Hubel & Wiesel, 1962; Somers et al., 1995). In fact, neighboring neurons tend to cluster their activities (Gray et al., 1989; Mountcastle, 1997), and clusters tend to compete to explain the input. This “competitive learning” has the advantage that information is compressed as we move through the layers, facilitating the process of abstraction by creating an information bottleneck (Amari & Arbib, 1977). Additionally, the competition encourages different higher-level neurons to focus on different aspects of the input (i.e. they specialize). This process is made possible by synchronization: like fireflies in the night, neurons tend to synchronize their activities with their neighbors’, which leads to the compression of their representations. This idea has been used in artificial neural networks before to model “binding” between neurons, where neurons representing features such as square, blue, and toy are bound by synchronization to represent a square blue toy (Mozer et al., 1991; Reichert & Serre, 2013; Löwe et al., 2022). In this paper, we will use an  $N$ -dimensional generalization of the famous Kuramoto model (Kuramoto, 1984) to model this synchronization.
+
+Our model has the advantage that it naturally incorporates spatiotemporal representations in the form of traveling waves (Keller et al., 2024), for which there is ample evidence in the neuroscientific literature. While their role in the brain remains poorly understood, it has been postulated that they are involved in short-term memory, long-range coordination between brain regions, and other cognitive functions (Rubino et al., 2006; Lubenov & Siapas, 2009; Fell & Axmacher, 2011; Zhang et al., 2018; Roberts et al., 2019; Muller et al., 2016; Davis et al., 2020; Benigno et al., 2023). For example, Muller et al. (2016) finds that oscillatory patterns in the thalamocortical network during sleep are organized into circular wave-like patterns, which could give an account of how memories are consolidated in the brain. Davis et al. (2020) suggest that spontaneous traveling waves in the visual cortex modulate synaptic activities and thus act as a gating mechanism in the brain. In the generalized Kuramoto model, traveling waves naturally emerge as neighboring oscillators start to synchronize (see on the left in Fig. 1, and Fig. 10 in the Appendix).
+
+Another advantage of using dynamical neurons is that they can perform a form of reasoning. Kuramoto oscillators have been successfully used to solve combinatorial optimization tasks such as k-SAT problems (Heisenberg, 1985; Wang & Roychowdhury, 2017). This can be understood by the fact that Kuramoto models can be viewed as continuous versions of discrete Ising models, where phase variables replace the discrete spin states. Many authors have argued that the modern architectures based on, e.g., transformers lack this intrinsic capability of “neuro-symbolic reasoning” (Dziri et al., 2024; Bounsi et al., 2024). We show that *AKOrN* can successfully solve Sudoku puzzles, illustrating this capability. Additionally, *AKOrN* relates to models in quantum physics and active matter (see appendix B.1).
+
+In summary, *AKOrN* combines beneficial features such as competitive learning (i.e., feature binding), reasoning, robustness and uncertainty quantification, as well as the potential advantages of traveling waves observed in the brain, while being firmly grounded in well-understood physics models.
+
+{2}------------------------------------------------
+
+## 3 THE KURAMOTO MODEL
+
+The Kuramoto model (Kuramoto, 1984) is a non-linear dynamical model of oscillators, that exhibits synchronization phenomena. Even with its simple formulation, the model can represent numerous dynamical patterns depending on the connections between oscillators (Breakspear et al., 2010; Heitmann et al., 2012).
+
+In the original Kuramoto model, each oscillator  $i$  is represented by its phase information  $\theta_i \in [0, 2\pi)$ . The differential equation of the Kuramoto model is
+
+$$\dot{\theta}_i = \omega_i + \sum_j J_{ij} \sin(\theta_j - \theta_i), \quad (1)$$
+
+where  $\omega_i \in \mathbb{R}$  is the natural frequency and  $J_{ij} \in \mathbb{R}$  represents the connections between oscillators: if  $J_{ij} > 0$  the  $i$  and  $j$ -th oscillator tend to align, and if  $J_{ij} < 0$ , they tend to oppose each other.
+
+While the original Kuramoto model describes one-dimensional oscillators, we use a *multi-dimensional vector version* of the model (Olfati-Saber, 2006; Zhu, 2013; Chandra et al., 2019; Lipton et al., 2021; Markdahl et al., 2021) with a symmetry-breaking term into neural networks. We denote oscillators by  $\mathbf{X} = \{\mathbf{x}_i\}_{i=1}^C$ , where each  $\mathbf{x}_i$  is a vector on a hypersphere:  $\mathbf{x}_i \in \mathbb{R}^N$ ,  $\|\mathbf{x}_i\|_2 = 1$ .  $N$  is each single oscillator dimension called *rotating dimensions* and  $C$  is the number of oscillators. While each  $\mathbf{x}_i$  is time-dependent, we omit  $t$  for clarity. The oscillator index  $i$  may have multiple dimensions: if the input is an image, for example, each oscillator is represented by  $\mathbf{x}_{c,h,w}$  with  $c, h, w$  indicating channel, height and width positions, respectively.
+
+The differential equation of our vector-valued Kuramoto model is written as follows:
+
+$$\dot{\mathbf{x}}_i = \Omega_i \mathbf{x}_i + \text{Proj}_{\mathbf{x}_i} \left( \mathbf{c}_i + \sum_j \mathbf{J}_{ij} \mathbf{x}_j \right) \text{ where } \text{Proj}_{\mathbf{x}_i}(\mathbf{y}_i) = \mathbf{y}_i - \langle \mathbf{y}_i, \mathbf{x}_i \rangle \mathbf{x}_i \quad (2)$$
+
+Here,  $\Omega_i$  is an  $N \times N$  anti-symmetric matrix and  $\Omega_i \mathbf{x}_i$  is called the natural frequency term that determines each oscillator's own rotation frequency and angle. The second term governs interactions between oscillators, where  $\text{Proj}_{\mathbf{x}_i}$  is an operator that projects an input vector onto the tangent space of the sphere at  $\mathbf{x}_i$ . We show a visual description of  $\text{Proj}_{\mathbf{x}_i}$  and a relation between the vector valued Kuramoto model and the original one in the Appendix A.1.  $\mathbf{C} = \{\mathbf{c}_i\}_{i=1}^C, \mathbf{c}_i \in \mathbb{R}^N$  is a data-dependent variable, which is computed from the observational input or the activations of the previous layer. In this paper, every  $\mathbf{c}_i$  is set to be constant across time, but it can be a time-dependent variable.  $\mathbf{c}_i$  can be seen as another oscillator that has a unidirectional connection to  $\mathbf{x}_i$ . Since  $\mathbf{c}_i$  is not affected by any oscillators,  $\mathbf{c}_i$  strongly binds  $\mathbf{x}_i$  to the same direction as  $\mathbf{c}_i$ , i.e. it acts as a bias direction (see Fig. 10 in the Appendix). In physics lingo,  $\mathbf{C}$  is often referred to as a "symmetry breaking" field.
+
+The Kuramoto model is Lyapunov if we assume certain symmetric properties in  $\mathbf{J}_{ij}$  and  $\Omega_i$  (Aoyagi, 1995; Wang & Roychowdhury, 2017). For example, if  $\mathbf{J}_{ij} = J_{ij} \mathbf{I}$ ,  $J_{ij} = J_{ji} \in \mathbb{R}$ ,  $\Omega_i = \Omega$ , and  $\Omega \mathbf{c}_i = 0$ , each update is guaranteed to minimize the following energy (proof is found in Sec F):
+
+$$E = -\frac{1}{2} \sum_{i,j} \mathbf{x}_i^T \mathbf{J}_{ij} \mathbf{x}_j - \sum_i \mathbf{c}_i^T \mathbf{x}_i \quad (3)$$
+
+Fig. 1 on the left shows how the oscillators and the corresponding energy evolve with a simple Gaussian kernel as the connectivity matrix. Here, we set  $\mathbf{C}$  as a silhouette of a fish, where  $\mathbf{c}_i = 1$  on the outer silhouette and  $\mathbf{c}_i = 0$  on the inner silhouette. The oscillator state is initially disordered, but gradually exhibits collective behavior, eventually becoming a spatially propagating wavy pattern. We include animations of visualized oscillators, including oscillators of trained AKORN models used in our experiments, in the Supplementary Material.
+
+We would like to note that we found that even without symmetric constraints, the energy value decreases relatively stably, and the models perform better across all tasks we tested compared to models with symmetric  $\mathbf{J}$ . A similar observation is made by Effenberger et al. (2022) where heterogeneous oscillators such as those with different natural frequencies are helpful for the network to control the level of synchronization and increase the network capacity. From here, we assume no symmetric constraints on  $\mathbf{J}$  and  $\Omega$ . Having asymmetric (a.k.a. non-reciprocal) connections is aligned with the biological neurons in the brain, which also do not have symmetric synapses.
+
+{3}------------------------------------------------
+
+![Diagram of the proposed Kuramoto-based network architecture. An input image is processed through a 'Preprocess' block to generate initial conditional stimuli C^(0) and initial oscillators X^(0). The network consists of L blocks. Each block contains a 'Kuramoto Layer' and a 'Readout' module. The Kuramoto Layer takes the current oscillators X^(t) and conditional stimuli C^(t) as input and produces updated oscillators X^(t+1). The Readout module takes the updated oscillators X^(t+1) and produces the next conditional stimuli C^(t+1). The final output of the network is X^(L) and C^(L).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Diagram of the proposed Kuramoto-based network architecture. An input image is processed through a 'Preprocess' block to generate initial conditional stimuli C^(0) and initial oscillators X^(0). The network consists of L blocks. Each block contains a 'Kuramoto Layer' and a 'Readout' module. The Kuramoto Layer takes the current oscillators X^(t) and conditional stimuli C^(t) as input and produces updated oscillators X^(t+1). The Readout module takes the updated oscillators X^(t+1) and produces the next conditional stimuli C^(t+1). The final output of the network is X^(L) and C^(L).
+
+Figure 2: Our proposed Kuramoto-based network (here, for image processing). Each block consists of a Kuramoto-layer and a readout module described in Sec 4.  $C^{(L)}$  is used to make the final prediction of our model. Similar network structures are proposed in (Bansal et al., 2022; Geiping et al., 2025).
+
+## 4 NETWORKS WITH KURAMOTO OSCILLATORS
+
+We utilize the artificial Kuramoto oscillator neurons (*AKOrN*) as a basic unit of information processing in neural networks (Fig. 2). First, we transform an observation with a relatively simple function to create the initial conditional stimuli  $C^{(0)}$ . Next,  $X^{(0)}$  is initialized by either  $C^{(0)}$ , a fixed learned embedding, random vectors, or a mixture of these initialization schemes. The block is composed of two modules: the Kuramoto layer and the readout module, which together process the pair  $\{X, C\}$ . The Kuramoto layer updates  $X$  with the conditional stimuli  $C$ , and the readout layer extracts features from the final oscillatory states to create new conditional stimuli. We denote the number of layers by  $L$ , and  $l$ -th layer’s output by  $\{X^{(l)}, C^{(l)}\}$ .
+
+**Kuramoto layer** Starting with  $X^{(l,0)} := X^{(l-1)}$  as initial oscillators, where the second superscript denotes the time step, we update them by the discrete version of the differential equation (2):
+
+$$\Delta x_i^{(l,t)} = \Omega_i^{(l)} x_i^{(l,t)} + \text{Proj}_{x^{(l,t)}}(c_i^{(l-1)} + \sum_j J_{ij}^{(l)} x_j^{(l,t)}) \quad (4)$$
+
+$$x_i^{(l,t+1)} = \Pi \left[ x_i^{(l,t)} + \gamma \Delta x_i^{(l,t)} \right], \quad (5)$$
+
+where  $\Pi$  is the normalizing operator  $x/\|x\|_2$  that ensures that the oscillators stay on the sphere.  $\gamma > 0$  is a scalar controlling the step-size of the update, which is learned in our experiments. We call this update a Kuramoto update or a Kuramoto step from here. We optimize both  $\Omega^{(l)}$  and  $J^{(l)}$  given the task objective.
+
+We update the oscillators  $T$  times. We denote the oscillators at  $T$  by  $X^{(l,T)}$ . This oscillator state is used as the initial state of the next block:  $X^{(l)} := X^{(l,T)}$ .
+
+**Readout module** We read out patterns encoded in the oscillators to create new conditional stimuli  $C^{(l)}$  for the subsequent block. Since the oscillators are constrained onto the (unit) hyper-sphere, all the information is encoded in their directions. In particular, the relative direction between oscillators is an important source of information because patterns after certain Kuramoto steps only differ in global phase shifts (see the last two patterns in Fig. 10 in the Appendix). To capture phase invariant patterns, we take the norm of the linearly processed oscillators:
+
+$$C^{(l)} = g(m) \in \mathbb{R}^{C' \times N}, m_k = \|z_k\|_2, z_k = \sum_i U_{ki} x_i^{(l,T)} \in \mathbb{R}^{N'}, \quad (6)$$
+
+where  $U_{ki} \in \mathbb{R}^{N' \times N}$  is a learned weight matrix,  $g$  is a learned function, and  $m = [m_1, \dots, m_{N'}]^T \in \mathbb{R}^{N'}$ .  $N'$  is typically set to the same value as  $N$ . In this work,  $g$  is just the identity function, a linear layer, or at most a three-layer neural network with residual connections. Because the module computes the norm of (weighted)  $X^{(l,T)}$ , this readout module includes functions that are invariant to the global phase shift in the solution space. Unless otherwise specified, we set  $C' = C$  and  $K = C \times N$  in all our experiments.
+
+{4}------------------------------------------------
+
+### 4.1 CONNECTIVITIES
+
+We implement artificial Kuramoto oscillator neurons (*AKOrN*) within convolutional and self-attention layers. We write down the formal equations of the connectivity for completeness, however, they simply follow the conventional operation of convolution or self-attention applied to oscillatory neurons flattened w.r.t the rotating dimension  $N$ . In short, convolutional connectivity is local, and attentive connectivity is dynamic input-dependent connectivity.
+
+**Convolutional connectivity** To implement *AKOrN* in a convolutional layer, oscillators and conditional stimuli are represented as  $\{\mathbf{x}_{c,h,w}, \mathbf{c}_{c,h,w}\}$  where  $c, h, w$  are channel, height and width positions, and the update direction is given by:
+
+$$\mathbf{y}_{c,h,w} := \mathbf{c}_{c,h,w} + \sum_d \sum_{h',w' \in R[H',W']} \mathbf{J}_{c,d,h',w'} \mathbf{x}_{d,(h+h'),(w+w')}, \quad (7)$$
+
+where  $R[H', W'] = [1, \dots, H'] \times [1, \dots, W']$  is the  $H' \times W'$  rectangle region (i.e. kernel size) and  $\mathbf{J}_{c,d,h',w'} \in \mathbb{R}^{N \times N}$  are the learned weights in the convolution kernel where  $(c, d), (h', w')$  are output and input channels, and height and width positions.
+
+**Attentive connectivity** Similar to Bahdanau et al. (2014); Vaswani et al. (2017), we construct the internal connectivity in the QKV-attention manner. In this case, oscillators and conditional stimuli are represented by  $\{\mathbf{x}_{l,i}, \mathbf{c}_{l,i}\}$  where  $l$  and  $i$  are indices of tokens and channels, respectively. The update direction becomes:
+
+$$\mathbf{y}_{l,i} := \mathbf{c}_{l,i} + \sum_{m,j} \mathbf{J}_{l,m,i,j} \mathbf{x}_{m,j} = \mathbf{c}_{l,i} + \sum_{m,j} \sum_{k,h} \mathbf{W}_{h,i,k}^O A_h(l, m) \mathbf{W}_{h,k,j}^V \mathbf{x}_{m,j} \quad (8)$$
+
+$$A_h(l, m) = \frac{e^{d_h(l, m)}}{\sum_m e^{d_h(l, m)}}, \quad d_h(l, m) = \sum_a \left\langle \sum_i \mathbf{W}_{h,a,i}^Q \mathbf{x}_{l,i}, \sum_i \mathbf{W}_{h,a,i}^K \mathbf{x}_{m,i} \right\rangle \quad (9)$$
+
+where  $\mathbf{W}_{h,i,k}^O, \mathbf{W}_{h,k,j}^V, \mathbf{W}_{h,a,i}^Q, \mathbf{W}_{h,a,i}^K \in \mathbb{R}^{N \times N}$  are learned weights of head  $h$ . Since the connectivity is dependent on the oscillator values and thus not static during the updates, it is unclear whether the energy defined in Eq. (3) is proper. Nonetheless, in our experiments, the energy and oscillator states are stable after several updates (see the Supplementary Material, which includes visualizations of the oscillators of trained *AKOrN* models and their corresponding energies over timesteps).
+
+## 5 RELATED WORKS
+
+Many studies have historically incorporated oscillatory properties into artificial neural networks (Baldi & Pineda, 1991; Wang & Terman, 1997; Ketz et al., 2013; Neil et al., 2016; Chen et al., 2021b; Rusch & Mishra, 2020; Labourie & Zenke, 2022; Rusch et al., 2022; van Gerven & Jensen, 2024). The Kuramoto model, a well-known oscillator model describing synchronization phenomena, has been rarely explored in machine learning, particularly in deep learning. However, several works motivate us to use the Kuramoto model as a mechanism for learning binding features. For example, although tested only in fairly synthetic settings, Liboni et al. (2023) show that cluster features emerge in the oscillators of the Kuramoto model with lateral connections without optimization. Ricci et al. (2021) studies how data-dependent connectivity can construct synchrony on synthetic examples. Nguyen et al. (2024) relates the over-smoothing to the notion of phase-synchrony and uses the model to mitigate over-smoothing phenomena in graph neural networks. Also, a line of works on neural synchrony (Reichert & Serre, 2013; Löwe et al., 2022; Stanić et al., 2023; Zheng et al., 2023; Löwe et al., 2023; Gopalakrishnan et al., 2024) shares the same philosophy with *AKOrN*. Zheng et al. (2023) model synchrony by using temporal spiking neurons based on biological neuronal mechanisms. Löwe et al. (2023) extend the concept of complex-valued neurons—used by Reichert & Serre (2013); Löwe et al. (2022) to abstract temporal neurons—into multidimensional neurons. They show that, together with a specific activation function called  $\chi$ -binding that implements the ‘winner-take-all’ mechanism at the single neuron level (Löwe et al., 2024), the multidimensional neurons learn to encode binding information in their orientations. Those synchrony-based models are shown to work well on relatively synthetic data but have been struggling to scale to natural images. Löwe et al. (2023) show that their model can work with a large pre-trained self-supervised learning (SSL) model as a feature extractor, but its performance improvement is limited compared to slot-based models.
+
+{5}------------------------------------------------
+
+![Figure 3: Object discovery performance on synthetic datasets. Three bar charts show FG-ARI and MBO scores for ItrConv, ItrSA, AKOrN^min, and AKOrN^att across Tetros, dSprites, CLEVR, and Shapes datasets. AKOrN^att consistently outperforms other models.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 3: Object discovery performance on synthetic datasets. Three bar charts show FG-ARI and MBO scores for ItrConv, ItrSA, AKOrN^min, and AKOrN^att across Tetros, dSprites, CLEVR, and Shapes datasets. AKOrN^att consistently outperforms other models.
+
+Figure 3: Object discovery performance on synthetic datasets.
+
+![Figure 4: Visual comparison of object discovery features. The figure shows Input, ItrSA, AKOrN, and GTmask for two examples. AKOrN's features are more closely aligned with the ground truth masks than ItrSA's.](0e62b4ac2303ba5f3ff10123a7c0f273_img.jpg)
+
+Figure 4: Visual comparison of object discovery features. The figure shows Input, ItrSA, AKOrN, and GTmask for two examples. AKOrN's features are more closely aligned with the ground truth masks than ItrSA's.
+
+Figure 4: *AKOrN* learns more object-bound features than the non-Kuramoto model counterpart.
+
+| Model | CLEVRTex |  | OOD |  | CAMO |  |
+|-|-|-|-|-|-|-|
+|  | FG-ARI | MBO | FG-ARI | MBO | FG-ARI | MBO |
+| *MONet (Burgess et al., 2019) | $19.8 \pm 1.0$ | - | $37.3 \pm 1.0$ | - | $31.5 \pm 0.9$ | - |
+| SLATE (Singh et al., 2022) | $44.2 \pm N_A$ | $50.9 \pm N_A$ | - | - | - | - |
+| *Slot-Attention (Locatello et al., 2020) | $62.4 \pm 2.3$ | - | $58.5 \pm 1.9$ | - | $57.5 \pm 1.0$ | - |
+| Slot-diffusion (Wu et al., 2023) | $69.7 \pm N_A$ | $61.9 \pm N_A$ | - | - | - | - |
+| Slot-diffusion+BO (Wu et al., 2023) | $78.5 \pm N_A$ | $68.7 \pm N_A$ | - | - | - | - |
+| *DTI (Monnier et al., 2021) | $79.9 \pm 1.4$ | - | $73.7 \pm 1.0$ | - | $72.9 \pm 1.9$ | - |
+| *I-SA (Chang et al., 2022) | $79.0 \pm 3.9$ | - | $83.7 \pm 0.9$ | - | $57.2 \pm 13.3$ | - |
+| BO-SA (Jia et al., 2023) | $80.5 \pm 2.5$ | - | $86.5 \pm 0.2$ | - | $63.7 \pm 6.1$ | - |
+| ISA-TS (Biza et al., 2023) | $92.9 \pm 0.4$ | - | $84.4 \pm 0.8$ | - | $86.2 \pm 0.8$ | - |
+| <i>AKOrN</i> <sup>att</sup> | $88.5 \pm 0.9$ | $59.7 \pm 0.9$ | $87.7 \pm 0.3$ | $60.8 \pm 0.6$ | $77.0 \pm 0.5$ | $53.4 \pm 0.7$ |
+
+Table 1: Object discovery performance on CLEVRTex and its variants (OOD, CAMO). *AKOrN* is compared among models trained from scratch. \*Numbers taken from Jia et al. (2023).
+
+Slot-based models (Le Roux et al., 2011; Burgess et al., 2019; Greff et al., 2019; Locatello et al., 2020) are the most-used model for object-centric (OC) learning. Their discrete nature of representations is shown to be a good inductive bias to learn such OC representations. However, similarly to synchrony-based models, these models struggle on natural images and are therefore often combined with powerful, pre-trained SSL models such as DINO (Caron et al., 2021). Our proposed continuous Kuramoto neurons can be a building block of the SSL network itself, and we show that they learn better object-centric features than well-known SSL models. Our work is the first work that demonstrates that a synchrony-based model is solely scaled up to natural images.
+
+*AKOrN*s perform particularly well on object discovery tasks when implemented in self-attention layers. Self-attention updates with normalization have been shown mathematically to cluster token features (Geshkovski et al., 2024). Our work combines this clustering behavior of transformers with the clustering induced by the synchronization of the Kuramoto neurons, resulting in *AKOrN* being the first competitive method to slot-based approaches.
+
+Finally, there exist several works on interpreting self-attention in the context of the Hopfield networks (Ramsauer et al., 2020; Hoover et al., 2023). Energy transformer (Hoover et al., 2023) introduces a symmetrized attention mechanism to guarantee the update minimizing certain energy. However, we find such symmetric models worsen the performance in our reasoning task. Our Kuramoto-based models differ from these approaches: unit-norm-constrained neurons with asymmetric connections in  $\mathbf{J}$ , and their symmetry-breaking term  $\mathbf{C}$ . These elements contribute to performance improvement over the approach by (Hoover et al., 2023) and conventional self-attention in the reasoning task of our experiments.
+
+{6}------------------------------------------------
+
+![Figure 5: Visualization of clusters on (Left) PascalVOC and (Right) COCO2017. The figure shows a 5x4 grid of images. The first column is the 'Input' image. The next three columns show the results of clustering using 'DINO', 'AKOrN', and 'GTMask' (Ground Truth Mask). The left side shows results for PascalVOC (bus, car, cat, horse, sheep) and the right side shows results for COCO2017 (person, dog, bird, horse, sheep).](9ebd85380ef496499e5f23ec0d9cd744_img.jpg)
+
+Figure 5: Visualization of clusters on (Left) PascalVOC and (Right) COCO2017. The figure shows a 5x4 grid of images. The first column is the 'Input' image. The next three columns show the results of clustering using 'DINO', 'AKOrN', and 'GTMask' (Ground Truth Mask). The left side shows results for PascalVOC (bus, car, cat, horse, sheep) and the right side shows results for COCO2017 (person, dog, bird, horse, sheep).
+
+Figure 5: Visualization of clusters on (Left) PascalVOC and (Right) COCO2017.
+
+## 6 EXPERIMENTS
+
+### 6.1 UNSUPERVISED OBJECT DISCOVERY
+
+Unsupervised object discovery is the task of finding objects in an image without supervision. Here, we test *AKOrN* on five synthetic datasets (Tetrominoes, dSprites, CLEVR (Kabra et al., 2019), Shapes, CLEVRTex (Karazija et al., 2021)) and two real image datasets (PascalVOC (Everingham et al., 2010), COCO2017 (Lin et al., 2014)) (see the Appendix C for details). Among the five synthetic datasets, CLEVRTex has the most complex objects and backgrounds. We further evaluate the models trained on the CLEVRTex dataset on two variants (OOD, CAMO). The materials and shapes of objects in OOD differ from those in CLEVRTex, while CAMO (short for camouflage) features scenes where objects and backgrounds share similar textures within each scene.
+
+As baselines, we train models that are similar to ResNet (He et al., 2016) and ViT (Dosovitskiy et al., 2021), but iterate the convolution or self-attention layers multiple times with shared parameters. This allows us to evaluate the impact of our proposed, Kuramoto-based iterative updates. We denote these baselines as Iterative Convolution (ItConv) and Iterative Self-Attention (ItSA), respectively. Fig. 11 in the Appendix shows diagrams of each network. In *AKOrN*,  $C$  is initialized by the patched features of the images, while each  $x_i$  is initialized by random oscillators sampled from the uniform distribution on the sphere. We train the *AKOrN* model and baselines with the self-supervised SimCLR (Chen et al., 2020) objective.
+
+We train each model from scratch on the five synthetic datasets. For the two real image datasets, we first train *AKOrN* on ImageNet (Krizhevsky et al., 2012) and directly evaluate that ImageNet-pretrained model on both datasets without fine-tuning. When evaluating, we apply clustering to the final block’s output features (In *AKOrN*, it is  $C^{(L)}$ ). We use agglomeration clustering with average linkage, which we found to outperform K-means for both the baseline models and *AKOrN*. We evaluate the clustering results by foreground adjusted rand index (FG-ARI) and Mean-Best-Overlap (MBO). FG-ARI measures the similarity between the ground truth masks and the computed clusters, only for foreground objects. MBO first assigns each cluster to the highest overlapping ground truth mask and then computes the average intersection-over-union (IoU) of all pairs. See C.1.1 for details. For PascalVOC and COCO2017, we show instance-level MBO ( $MBO_i$ ) and class-level ( $MBO_c$ ) segmentation results.
+
+{7}------------------------------------------------
+
+| Model | PascalVOC |  | COCO2017 |  |
+|-|-|-|-|-|
+|  | $MBO_i$ | $MBO_c$ | $MBO_i$ | $MBO_c$ |
+| (slot-based models) |  |  |  |  |
+| Slot-attention | 22.2 | 23.7 | 24.6 | 24.9 |
+| SLATE (Singh et al., 2021) | 35.9 | 41.5 | 29.1 | 33.6 |
+| (DINO + slot-based model) |  |  |  |  |
+| DINOSAUR (Seitzer et al., 2023) | 44.0 | 51.2 | 31.6 | 39.7 |
+| Slot-diffusion (Wu et al., 2023) | 50.4 | 55.3 | 31.0 | 35.0 |
+| SPOT (Kakogeorgiou et al., 2024) | 48.3 | 55.6 | <b>35.0</b> | <b>44.7</b> |
+| (transformer + SSL) |  |  |  |  |
+| MAE (He et al., 2022) | 34.0 | 38.3 | 23.1 | 28.5 |
+| MoCoV3 (Chen et al., 2021a) | 47.3 | 53.0 | 28.7 | 36.0 |
+| DINO (Caron et al., 2021) | 47.2 | 53.5 | 29.4 | 37.0 |
+| <b>AKOrN</b> | <b>52.0</b> | <b>60.3</b> | 31.3 | 40.3 |
+
+Table 2: Object discovery on PascalVOC and COCO2017.
+
+Because the patched feature resolution is small due to patchification, the obtained cluster assignments are coarse. To compute finer cluster assignments, we introduce an upsampling method called *up-tiling*. This involves shifting the input image slightly along the horizontal and/or vertical axes to generate multiple feature maps. These feature maps are then interleaved to create a higher-resolution feature map. See Section C.1.2 in the Appendix for the methodological details of this up-tiling.
+
+**AKOrN binds object features** Fig. 3 shows that *AKOrN*s improve the object discovery performance over their non-Kuramoto counterparts in every dataset. Interestingly, we observe that convolution is less effective than attention. In Fig. 4, we see that the Kuramoto models’ clusters are well-aligned with the individual objects, while clusters of the ItrSA model often span across objects and background, and are sensitive to the texture of the background and the specular highlight on the floor (more clustering results are shown in Figs 32-34 in the Appendix).
+
+Tab. 1 shows a comparison to existing works on CLEVRTex and its variants. All other methods are slot-based. Among the distributed representation models, *AKOrN* is the first method that is shown to be competitive with slot-based models on the complex CLEVRTex dataset.
+
+**AKOrN scales to natural images** Fig. 5 shows *AKOrN* binds object features on natural images much better than DINO (Caron et al., 2021). We show a benchmark comparison on Pascal VOC and COCO2017 in Tab. 2. The proposed *AKOrN* model outperforms existing SSL models including DINO, MoCoV3, and MAE on both datasets, showing that it learns more object-bound features than conventional transformer-based models. On Pascal, *AKOrN* is considerably better than other models including models trained from scratch and models trained on features of a pretrained DINO model. On COCO, *AKOrN* again outperforms methods that are trained from scratch and is competitive to DINOSAUR and Slot-diffusion, but is outperformed by the recent SPOT model.
+
+### 6.2 SOLVING SUDOKU
+
+To test *AKOrN*’s reasoning capability, we apply it on the Sudoku puzzle datasets (Wang et al., 2019; Palm et al., 2018). The training set contains boards with 31-42 given digits. We test models in in-distribution (ID) and out-of-distribution (OOD) scenarios. The ID test set contains 1,000 boards sampled from the same distribution, while boards in the OOD set contain much fewer given digits (17-34) than the train set. To initialize  $\mathbf{C}$ , we use embeddings of the digits 0-9 (0 for blank, 1-9 for given digits). The initial  $x_i$  takes the value  $c_i / \|c_i\|_2$  when a digit is given, and is randomly sampled from the uniform distribution on the sphere for blank squares. The number of Kuramoto steps during training is set to 16. We also train a transformer model with 8 blocks.
+
+**AKOrN solves Sudoku puzzles** *AKOrN* perfectly solves all puzzles in the ID test set, while only Recurrent Transformer (R-Transformer (Yang et al., 2023)) achieves this (Tab. 3). On the OOD set, *AKOrN* achieves  $89.5 \pm 2.5$  which is better than all other existing approaches including IRED (Du et al., 2024), an energy-based diffusion model. *AKOrN* again strongly outperforms its non-Kuramoto counterparts, ItrSA and Transformer.
+
+{8}------------------------------------------------
+
+![Figure 4: Performance comparison of ID and OOD test sets. (a) Loss (L) vs. Steps for ID Test (red) and OOD Test (blue). (b) Loss (L) vs. Steps for ID Test (red) and OOD Test (blue) on a different scale. (c) Board Acc. (%) vs. Teval for AKoR (green) and TrSA (blue).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4 consists of three subplots. Subplot (a) shows the loss (L) on the y-axis (ranging from -22000 to -16000) against Steps on the x-axis (ranging from 0 to 60). A red line represents the ID Test loss, which starts around -18000 and stabilizes around -19000. A blue line represents the OOD Test loss, which starts around -19000 and stabilizes around -21000. A vertical dashed line is at Step 20. Subplot (b) shows the loss (L) on the y-axis (ranging from -20200 to -19800) against Steps on the x-axis (ranging from 0 to 60). A red line represents the ID Test loss, which starts around -19900 and stabilizes around -20100. A blue line represents the OOD Test loss, which starts around -20000 and stabilizes around -20100. A vertical dashed line is at Step 20. Subplot (c) shows the Board Acc. (%) on the y-axis (ranging from 0 to 50) against Teval on the x-axis (ranging from 16 to 128). A green line represents the AKoR method, which starts around 15% and increases to about 45%. A blue line represents the TrSA method, which starts around 15%, peaks at about 35% at Teval=32, and then decreases to about 10% at Teval=128.
+
+Figure 4: Performance comparison of ID and OOD test sets. (a) Loss (L) vs. Steps for ID Test (red) and OOD Test (blue). (b) Loss (L) vs. Steps for ID Test (red) and OOD Test (blue) on a different scale. (c) Board Acc. (%) vs. Teval for AKoR (green) and TrSA (blue).
+
+Figure 6: (a) Transition of the energy in Eq. (3) over # Kuramoto steps on the Sudoku datasets. The semi-transparent lines are actual energy values averaged across examples, and the solid ones connect the troughs. The dotted vertical line indicates # Kuramoto steps set during training. (b) A zoomed-in version of each plot. (c) The effect of test-time extension on # Kuramoto steps.
+
+![Figure 1: A line graph showing Board Accuracy (%) on the y-axis (ranging from 50 to 90) versus #Random samples on the x-axis (values: 1, 16, 256, 4096). The graph shows a single green line representing the proposed method, which starts at approximately 55% accuracy for 1 sample and increases to about 90% for 4096 samples. The line is smooth and shows a consistent upward trend.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 1: A line graph showing Board Accuracy (%) on the y-axis (ranging from 50 to 90) versus #Random samples on the x-axis (values: 1, 16, 256, 4096). The graph shows a single green line representing the proposed method, which starts at approximately 55% accuracy for 1 sample and increases to about 90% for 4096 samples. The line is smooth and shows a consistent upward trend.
+
+Figure 7: Improvement of board accuracy on Sudoku Puzzles. We show the accuracy by the post-selection of predictions based on the  $E$  values described in Sec. 6.2.  $T_{\text{eval}}$  is set to 128.
+
+**Test-time extension of the Kuramoto steps** Just as we humans use more time to solve harder problems, AKoRn's performance improves as we increase the number of Kuramoto steps. As shown in Fig. 6 (a,b), on the ID test set, the energy fluctuates but roughly converges to a minimum after around 2 steps. On the OOD test set, however, the energy continues to decrease further. Fig. 6 (c) shows that increasing the number of Kuramoto steps at test time improves accuracy significantly (17% to 52%), while increasing the step count of standard self-attention provides a limited improvement on the OOD test (14% to 34%) and leads to lower performance on the ID set (99.3% to 95.7%).
+
+**The energy value tells the correctness of the boards.** The energy value defined in Eq (3) is a good indicator of the solution's correctness. In fact, we observe that predictions with low-energy oscillators states tend to be correct (see Fig. 28). We utilize this property to improve the performance. For each given board, we sample multiple predictions with different initial oscillators and select the lowest-energy prediction as the model's answer, which we call *Energy-based voting* (*E-vote*). We see in Fig. 7 that by increasing the number of sampled predictions, the model's board accuracy improves. This result implies that the Kuramoto layer behaves like *energy-based models*, even though its parameters are optimized solely based on the task objective. We found that just averaging the predictions of different states (i.e., majority voting) does not give better answers.
+
+### 6.3 ROBUSTNESS AND CALIBRATION
+
+We test AKORn’s robustness to adversarial attacks and its uncertainty quantification performance on CIFAR10 and CIFAR10 with common corruptions (CC, Hendrycks & Dietterich (2019)). We train two types of networks: a convolutional AKORn ( $AKORn^{conv}$ ) and AKORn with both convolution and self-attention ( $AKORn^{mix}$ ). The former has three convolutional Kuramoto layers. The latter replaces the last block with an attentive Kuramoto block. We use AutoAttack (Caron et al., 2021) to evaluate the model’s adversarial robustness.
+
+**AKOrNs are resilient against gradient-based attacks** The model is heavily regularized and achieves both good adversarial robustness and robustness to natural corruptions (Tab. 4). This is re-
+
+{9}------------------------------------------------
+
+![Figure 8: Robustness performance on random noise examples. The figure includes two image examples on the left showing a bird and a truck under strong noise. On the right is a bar plot of Accuracy (%) for ResNet-18 and Diffenderf'21 models. The x-axis labels are 'ResNet-18', 'Diffenderf'21', 'J=0', 'Omega=0', 'No random osc.', and 'Full'. The y-axis ranges from 0 to 50. The bars show accuracy for different ablation levels of AKOrN, with green bars indicating improved performance as more elements are added.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 8: Robustness performance on random noise examples. The figure includes two image examples on the left showing a bird and a truck under strong noise. On the right is a bar plot of Accuracy (%) for ResNet-18 and Diffenderf'21 models. The x-axis labels are 'ResNet-18', 'Diffenderf'21', 'J=0', 'Omega=0', 'No random osc.', and 'Full'. The y-axis ranges from 0 to 50. The bars show accuracy for different ablation levels of AKOrN, with green bars indicating improved performance as more elements are added.
+
+Figure 8: Robustness performance on random noise examples. Each bar plot shows classification accuracy on CIFAR10 with strong random noise ( $\|\epsilon\|_\infty = 64/255$ ). The left two pictures are examples of images with that  $\epsilon$ . Green bars show accuracy when we ablate each element of  $AKOrN$ .
+
+| Model | ↑ Accuracy |  | ↓ ECE |  |
+|-|-|-|-|-|
+|  | Clean | Adv | CC | CC |
+| Bartoldson et al. (2024) | 93.68 | 73.71 | 75.9 | 20.5 |
+| Diffenderf et al. (2021) | 96.56 | 0.00 | 92.8 | 4.8 |
+| ViT | 91.44 | 0.00 | 81.0 | 9.6 |
+| ResNet-18 | 94.41 | 0.00 | 81.5 | 8.9 |
+| $AKOrN^{\text{conv}}$ | 88.91 | *58.91 | 83.0 | 1.3 |
+| $AKOrN^{\text{mix}}$ | 91.23 | *51.56 | 86.4 | 1.4 |
+
+Table 4: Robustness to adversarial examples by AutoAttack (Adv) and common corruptions (CC) on CIFAR10. \*The attack is done by AutoAttack with EoT (Athalye et al., 2018).  $\|\epsilon\|_\infty$  is set to  $8/255$ . Expected Calibration Error (ECE) measures the alignment between confidence of the prediction and accuracy. The top two methods are selected from the highest-accuracy methods on <https://robustbench.github.io/>.
+
+![Figure 9: Confidence vs Accuracy plots on CIFAR10 with common corruptions. The figure contains four scatter plots for Bartoldson'24, Diffenderf'21, ResNet-18, and AKOrN^mix. Each plot shows Accuracy (y-axis) vs Confidence (x-axis) from 0 to 100. A dashed diagonal line represents perfect calibration. The AKOrN^mix plot shows a very tight correlation between confidence and accuracy, indicating excellent calibration.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+Figure 9: Confidence vs Accuracy plots on CIFAR10 with common corruptions. The figure contains four scatter plots for Bartoldson'24, Diffenderf'21, ResNet-18, and AKOrN^mix. Each plot shows Accuracy (y-axis) vs Confidence (x-axis) from 0 to 100. A dashed diagonal line represents perfect calibration. The AKOrN^mix plot shows a very tight correlation between confidence and accuracy, indicating excellent calibration.
+
+Figure 9: Confidence vs Accuracy plots on CIFAR10 with common corruptions.
+
+markable, since conventional neural models need additional techniques such as adversarial training and/or adversarial purification to achieve good adversarial robustness. In contrast,  $AKOrN$  is robust by design, even when trained on only clean examples.
+
+**K-Nets are well-calibrated and robust to strong random noise** We found that  $AKOrN$ s are robust to strong random noise (Fig. 8) and give good uncertainty estimation (on the bottom right in Fig. 9). Surprisingly, there is an almost perfect correlation between confidence and actual accuracy. This is similar to observations in generative models (Grathwohl et al., 2020; Jaini et al., 2024), where conditional generative models give well-calibrated outputs. Since  $AKOrN$ ’s energy is not learned to model input distribution, we cannot tightly relate ours to such generative models. However, we speculate that  $AKOrN$ ’s energy roughly approximates the likelihood of the input examples, and thus the oscillator state fluctuates according to the height of the energy, which would result in good calibration.
+
+## 7 DISCUSSION & CONCLUSION
+
+We propose  $AKOrN$ , which integrates the Kuramoto model into neural networks and scales to complex observations, such as natural images.  $AKOrN$ s learn object-binding features, can reason, and are robust to adversarial and natural perturbations with well-calibrated predictions. We believe our work provides a foundation for exploring a fundamental shift in the current neural network paradigm.
+
+In the current formulation of  $AKOrN$ , each oscillator is constrained onto the sphere and each single oscillator cannot represent the ‘presence’ of the features like the rotating features in Löwe et al. (2023). Because of that,  $AKOrN$  would not perform well on memory tasks, where the model needs to remember the presence of events. This norm constraint also does not align with real biological neurons that have firing and non-firing states. Relaxing the hard norm constraint of the oscillator would be an interesting future direction in terms of both biological plausibility and applicability to a much wider range of tasks such as long-term temporal processing.
+
+ Rest of paper (reference and Appendix) is removed.

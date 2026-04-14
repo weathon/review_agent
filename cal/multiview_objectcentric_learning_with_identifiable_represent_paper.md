@@ -1,0 +1,395 @@
+
+
+{0}------------------------------------------------
+
+# MULTI-VIEW OBJECT-CENTRIC LEARNING WITH IDENTIFIABLE REPRESENTATIONS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Modular object-centric representations are key to unlocking human-like reasoning capabilities. However, addressing challenges such as object occlusions to obtain meaningful object-level representations presents both theoretical and practical difficulties. We introduce a novel multi-view probabilistic approach that aggregates view-specific slots to capture *invariant content* information while simultaneously learning disentangled global *viewpoint-level* information. Our model resolves spatial ambiguities and provides theoretical guarantees for learning identifiable representations, setting it apart from prior work focusing on single-view settings and lacking theoretical foundations. Along with our identifiability analysis, we provide extensive empirical validation with promising results on both benchmark and proposed large-scale datasets carefully designed to evaluate multi-view methods.
+
+## 1 INTRODUCTION
+
+The ability to capture the notion of *objectness* in learned representations is believed to be a critical aspect for developing situation-aware AI systems with human-like *system-1* reasoning capabilities (Lake et al., 2017). Recent advances in object-centric representation learning have shown great potential in this direction (Locatello et al., 2020b; Kori et al., 2023; Löwe et al., 2024). The goal of object-centric learning (OCL) is to enable agents to learn representations of respective objects in an observed scene in the context of their environment, as opposed to learning global representations as in the case of traditional generative models such as variational auto-encoders (Kingma & Welling, 2013). Object-centric approaches enable agents to learn spatially disentangled representations, which is an important step in compositional scene generation (Bengio et al., 2013; Lake et al., 2017; Battaglia et al., 2018; Greff et al., 2020) and understanding of causal (and physical) interactions between the objects (Marcus, 2003; Gerstenberg et al., 2021; Gopnik et al., 2004).
+
+Most of the recent progress in OCL has been limited to learning scene representations from single-viewpoints (Locatello et al., 2020b; Engelcke et al., 2021; Singh et al., 2021; Kori et al., 2023; Chang et al., 2022; Seitzer et al., 2022; Löwe et al., 2024). While these approaches may learn meaningful object-specific representations, they face insurmountable challenges due to spatial ambiguities; learning from single viewpoints cannot capture effective representations due to partially or fully occluded objects. Li et al. (2020) previously proposed an intriguing approach to address some of the spatial ambiguities. They take a view-conditional OCL perspective, which makes their approach reliant on the availability of paired viewpoint conditioning and corresponding images. Here, we take a step forward, exploring *multi-view object-centric learning* (MVOCL), allowing us to exploit objects’ inherent geometry and semantics to establish correspondences across views.
+
+Another issue with many of the earlier OCL methods (including (Li et al., 2020)) is that they lack rigorous formalisation of their underpinning explicit and implicit assumptions; Kori et al. (2024); Brady et al. (2023); Lachapelle et al. (2023) make an effort to formalise these assumptions and provide conditions under which these methods result in learning identifiable slot representations. Similarly, formalisations in MVOCL are unexplored, and the theoretical guarantees under which the partially or fully occluded slot representations are identifiable have not been studied before. In this work, we consider learning the joint distribution over all viewpoints, as opposed to view-conditional OCL (Li et al., 2020); our model provides the additional advantage of not being dependent on camera/viewpoint information. Inspired by Kori et al. (2024); Kivva et al. (2022), we take the perspective of imposing latent structure to achieve identifiable slot representations under viewpoint
+
+{1}------------------------------------------------
+
+![Figure 1: Diagram illustrating the MVPSA pipeline. On the left, three images of an environment with four objects (O1, O2, O3, O4) are shown from different viewpoints. Each image is processed by a 'Content Encoder' and a 'View Encoder'. The Content Encoder outputs 'Local GMMs' (represented by colored ellipses) and an 'Aggregate GMM p(c)' (a scatter plot of colored points). The View Encoder outputs a 'View GMM p(v)' (a scatter plot of colored points). On the right, 'Sampled Slot Contents(c)' and a 'Sampled View' are shown as vertical bars of colored segments. These are passed through a 'Generator' to produce a rendered scene x_i^1 from a new viewpoint.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Diagram illustrating the MVPSA pipeline. On the left, three images of an environment with four objects (O1, O2, O3, O4) are shown from different viewpoints. Each image is processed by a 'Content Encoder' and a 'View Encoder'. The Content Encoder outputs 'Local GMMs' (represented by colored ellipses) and an 'Aggregate GMM p(c)' (a scatter plot of colored points). The View Encoder outputs a 'View GMM p(v)' (a scatter plot of colored points). On the right, 'Sampled Slot Contents(c)' and a 'Sampled View' are shown as vertical bars of colored segments. These are passed through a 'Generator' to produce a rendered scene x\_i^1 from a new viewpoint.
+
+Figure 1: The figure illustrates a scene with four objects  $\mathcal{O}^s = \{\mathcal{O}_1, \mathcal{O}_2, \mathcal{O}_3, \mathcal{O}_4\}$ , observed from three different viewpoints, each described with a set of clearly visible objects as  $\mathcal{O}^1 = \{\mathcal{O}_1, \mathcal{O}_4\}$ ,  $\mathcal{O}^2 = \{\mathcal{O}_1, \mathcal{O}_3, \mathcal{O}_4\}$ ,  $\mathcal{O}^3 = \{\mathcal{O}_1, \mathcal{O}_2, \mathcal{O}_3\}$ . The corresponding images are passed through content and view encoders, resulting in local slot and global view GMMs,  $q(s | x)$  and  $p(v)$ , respectively. The local slot distribution is further aggregated to marginalise viewpoint information, resulting in a content GMM  $q(c | s)$ , which is then accumulated across all samples, resulting in our optimal prior  $p(c)$ . During image generation, we sample content from  $p(c)$  and view information from  $p(v)$ , passing them through the generator, resulting in a rendered scene from the desired viewpoint.
+
+ambiguities. In line with Kori et al. (2024), we show that the spatial Gaussian mixture before latent distribution across viewpoints can encourage the identifiability of object-centric representations under viewpoint ambiguities without additional auxiliary data.
+
+**Contributions:** Our main contributions in this work can be summarised as follows: (i) We propose a multi-view probabilistic slot attention MVPSA for learning identifiable object-centric representations from multiple viewpoints, resolving spatial ambiguities such as partial occlusions (§ 3); (ii) We prove that our object-centric representations are identifiable in the case of partial or full occlusions without additional view information up to an equivalence relation with a mixture model specification (§ 4); (iii) We provide conclusive empirical evidence of our identifiability results, including visual verification on synthetic 2-dimensional data; we also demonstrate the scalability of the proposed method on two new, carefully designed large-scale datasets MVMOVI-C and MVMOVI-D (§ 6). The datasets constitute a contribution on their own and are released to facilitate future work.
+
+## 2 PRELIMINARIES
+
+**Probabilistic Slot Attention (PSA)** as introduced by Kori et al. (2024), presents a distinct interpretation of the slot attention algorithm proposed by Locatello et al. (2020b). In PSA, a set of feature embeddings  $\mathbf{z} \in \mathbb{R}^{N \times d}$  per input  $\mathbf{x}$  is taken as input, and an iterative Expectation Maximization (EM) algorithm is applied over these embeddings. This process results in a Gaussian Mixture Model (GMM) characterized by mean ( $\boldsymbol{\mu} \in \mathbb{R}^{K \times d}$ ), variance ( $\boldsymbol{\sigma}^2 \in \mathbb{R}^{K \times d}$ ), and mixing coefficients ( $\boldsymbol{\pi} \in [0, 1]^{K \times 1}$ ). The goal of PSA is to learn a spatial GMM for each scene, where each mean in the GMM corresponds to a specific object. In summary, PSA employs the initial mean sampled from the prior distribution and initial variance initialized with unit vector, then iteratively updates the mean based on assignment probabilities ( $A_{nk}$ ) using Equation 2, and adjusts the variance accordingly. These updates are performed for  $T$  iterations. Given that the variance is updated using closed-form updates, the objective function in the case of PSA is the negative log-likelihood of  $p(\mathbf{x} | \boldsymbol{\mu}(T)_{1:K}, \boldsymbol{\sigma}_{1:K}^2(T), \boldsymbol{\pi}_{1:K}(T))$  for scene  $\mathbf{x} \in \mathcal{X} \subseteq \mathbb{R}^{H \times W \times C}$  with  $H, W, C$  corresponding to image dimensions, where the mean, variance, and mixing coefficients are updated at each iteration as described in Equation 2. Unlike slot attention (Locatello et al., 2020b), PSA learns the distribution over slots rather than just the mean where the soft assignments are determined as follows:
+
+{2}------------------------------------------------
+
+108  
+109  
+110  
+111  
+112  
+113  
+114  
+115  
+116  
+117  
+118  
+119  
+120  
+121  
+122  
+123  
+124  
+125  
+126  
+127  
+128  
+129  
+130  
+131  
+132  
+133  
+134  
+135  
+136  
+137  
+138  
+139  
+140  
+141  
+142  
+143  
+144  
+145  
+146  
+147  
+148  
+149  
+150  
+151  
+152  
+153  
+154  
+155  
+156  
+157  
+158  
+159  
+160  
+161
+
+![Figure 2: Graphical model for multi-view probabilistic slot attention. (a) MVPSA: A plate labeled K contains node mu_c. A plate labeled N contains nodes u and z. A plate labeled M contains nodes s, x, v, and v. A plate labeled V contains node mu_v. Arrows show dependencies: mu_c to z, sigma_c to z, u to z, pi_c to u, pi_v to v, mu_v to v, sigma_v to v, v to x, x to s, s to u, and z to x. (b) Aggregate Content Posterior: A plate labeled MK contains node mu_hat. A plate labeled N contains nodes u and z. Arrows show dependencies: mu_hat to z, sigma_hat to z, and pi_hat to u.](7055f51feb10ea4ea48b27c36f085286_img.jpg)
+
+Figure 2: Graphical model for multi-view probabilistic slot attention. (a) MVPSA: A plate labeled K contains node mu\_c. A plate labeled N contains nodes u and z. A plate labeled M contains nodes s, x, v, and v. A plate labeled V contains node mu\_v. Arrows show dependencies: mu\_c to z, sigma\_c to z, u to z, pi\_c to u, pi\_v to v, mu\_v to v, sigma\_v to v, v to x, x to s, s to u, and z to x. (b) Aggregate Content Posterior: A plate labeled MK contains node mu\_hat. A plate labeled N contains nodes u and z. Arrows show dependencies: mu\_hat to z, sigma\_hat to z, and pi\_hat to u.
+
+Figure 2: **Graphical model for multi-view probabilistic slot attention.** (a) MVPSA - every scene in a dataset consists of  $V$  images of an environment observed from different viewpoints, with dataset  $\{\{\mathbf{x}_v^i\}_{v=1}^V\}_{i=1}^M$ , each image is encoded into a respective view information vector  $\mathbf{v} \in \mathbb{R}^{d_v}$  resulting in a GMM distribution with  $V$  components and latents  $\{\mathbf{s}^v\}_{v=1}^V$ , where  $\mathbf{s}^v \in \mathbb{R}^{N \times d_s}$ , to which a local GMM with  $K$  components is fit via EM algorithm. The resulting  $V$  GMM distributions are further aggregated with convex combination, marginalising the effects of view information, resulting in a view invariant content  $\mathbf{c}$  GMM with  $K$  components. (b) View invariant aggregate content distribution is obtained by marginalising out data from obtained content distribution resulting in:  $q(\mathbf{c}) = \sum_{i=0}^M q(\mathbf{c} | \mathbf{s}, \mathbf{x})/M$ . We demonstrate  $q(\mathbf{c})$  and  $p(\mathbf{v})$  are tractable and non-degenerate.
+
+$$A_{nk} = \frac{\pi(t)_k \mathcal{N}(\mathbf{z}_n; \boldsymbol{\mu}(t)_k, \boldsymbol{\sigma}(t)_k^2)}{\sum_{j=1}^K \pi(t)_j \mathcal{N}(\mathbf{z}_n; \boldsymbol{\mu}(t)_j, \boldsymbol{\sigma}(t)_j^2)}; \hat{A}_{nk} = A_{nk} / \sum_{l=1}^N A_{lk}; \pi(t+1)_k = \sum_{n=1}^N A_{nk}/N; \quad (1)$$
+
+$$\boldsymbol{\mu}(t+1)_k = \sum_{n=1}^N \hat{A}_{nk} \mathbf{z}_n; \boldsymbol{\sigma}(t+1)_k^2 = \sum_{n=1}^N \hat{A}_{nk} (\mathbf{z}_n - \boldsymbol{\mu}(t+1)_k)^2 \quad (2)$$
+
+**Identifiable representations.** A model is considered identifiable when different training iterations yield consistent latent distributions, thereby resulting in identical model parameters (Khemakhem et al., 2020a;c). In the context of a parameter space  $\Theta$  and a family of mixing functions  $\mathcal{F}$ , identifiability of the model on the dataset  $\mathcal{X}$  is established if, for any  $\theta_1, \theta_2 \sim \Theta$  and  $f_{\theta_1}, f_{\theta_2} \sim \mathcal{F}$ , the condition  $p(f_{\theta_1}^{-1}(\mathbf{x})) = p(f_{\theta_2}^{-1}(\mathbf{x}))$  holds for all  $\mathbf{x} \in \mathcal{X}$ , implying  $\theta_1 = \theta_2$ . However, in practical scenarios, exact equality or “strong” identifiability is often unnecessary, as establishing relationships to transformations, which can be manually recovered, proves equally effective. This concept leads to the notion of weak identifiability, where relationships are recovered up to affine transformations (Khemakhem et al., 2020c; Kivva et al., 2022). Similar identifiability relations have been elucidated for OCL in prior works (Brady et al., 2023; Lachapelle et al., 2023; Kori et al., 2024; Mansouri et al., 2023). The notion of  $\sim_s$  equivalence relation is elaborated in Dfn. 1.
+
+**Definition 1.** ( $\sim_s$  equivalence (Kori et al., 2024)) Let  $f_\theta : \mathcal{S} \rightarrow \mathcal{X}$  denote a mapping from slot representation space  $\mathcal{S}$  to image space  $\mathcal{X}$  (satisfying Assumption 2), the equivalence relation  $\sim_s$  w.r.t. to parameters  $\theta \in \Theta$  is defined as:  $\theta_1 \sim_s \theta_2 \Leftrightarrow$
+
+$$\exists \mathbf{P}, \mathbf{H}, \mathbf{c} : f_{\theta_1}^{-1}(\mathbf{x}; \mathbf{v}) = \mathbf{P}(f_{\theta_2}^{-1}(\mathbf{x}; \mathbf{v})\mathbf{H} + \mathbf{a}), \forall \mathbf{x} \in \mathcal{X}, \quad (3)$$
+
+where  $\mathbf{P} \in \mathcal{P} \subseteq \{0, 1\}^{K \times K}$  is a permutation matrix,  $\mathbf{H} \in \mathbb{R}^{d \times d}$  is an affine matrix, and  $\mathbf{a} \in \mathbb{R}^d$ .
+
+## 3 MULTI-VIEW FORMALISM
+
+Let  $\mathbf{x}^{1:V} = \{\mathbf{x}^1, \dots, \mathbf{x}^V\} \in \mathcal{X} = \mathcal{X}^1 \times \dots \times \mathcal{X}^V$ ,  $V$  views of the same scene observed from different viewpoints with an observational space  $\mathcal{X} \subseteq \mathbb{R}^{V \times H \times W \times C}$ . We consider  $[V]$  as a shorthand notation for  $\{1, \dots, V\}$ . Let  $\mathcal{O}^e = \mathcal{O}^1 \cup \dots \cup \mathcal{O}^V$  correspond to an abstract notion of object sets of an environment, while  $\mathcal{O}^v, \forall v \in [V]$  is an object set present in a considered viewpoint  $v$ . Importantly, we consider that the number of objects per viewpoint can vary, i.e.,  $|\mathcal{O}^1 \cup \dots \cup \mathcal{O}^V| \geq |\mathcal{O}^v| \forall v \in [V]$ , allowing for partial or full occlusion in some viewpoints. Let  $\mathbf{v}^{1:V} \in \mathcal{V} = \mathcal{V}^1 \times \dots \times \mathcal{V}^V \subseteq \mathbb{R}^{V \times d_v}$  be inferred viewpoint-specific information<sup>1</sup>, while  $\mathbf{s}_{1:K}^{1:V} \in \mathcal{S} = \mathcal{S}^1 \times \dots \times \mathcal{S}^V \subseteq \mathbb{R}^{V \times K \times d_s}$  correspond
+
+<sup>1</sup>We abuse the terminology by considering viewpoint, lighting, object dimension, to be encoded in a vector  $\mathbf{v}$ . Note that the  $\mathbf{v}$  is inferred by the model.
+
+{3}------------------------------------------------
+
+to a viewpoint-specific slot representation. Let  $\mathbf{c}_{1:K} \in \mathcal{C} \subseteq \mathbb{R}^{K \times d_c}$  capture the notion of an *aggregate*, effectively accumulating the object knowledge across viewpoints. For any subset  $A$  of  $[V]$ , we represent scene observations as  $\mathbf{x}^A = \{\mathbf{x}^i : \forall i \in A\} \in \times_{i \in A} \mathcal{X}^i$ . In this framework, the inferred viewpoints and the specific slots for each viewpoint are denoted as  $\mathbf{v}^A = \{\mathbf{v}^i : \forall i \in A\} \in \times_{i \in A} \mathcal{V}^i$ , and  $\mathbf{s}_{1:K}^A = \{\mathbf{s}_{1:K}^i : \forall i \in A\} \in \times_{i \in A} \mathcal{S}^i$ , respectively. We define  $p_A(\mathbf{c})$  as the distribution of  $\mathbf{c}$  over  $A$ . A more comprehensive summary of notations and terminologies is provided in App. A.
+
+In modelling, without loss of generality, we consider access to a certain subset  $A \subseteq [V]$ , ensuring the model’s applicability across different scenarios. Furthermore, to simplify notation, we sometimes do not include the superscript denoting the full set of views, thereby using  $\mathbf{x} = \mathbf{x}^A$ ,  $\mathbf{s}_{1:K} = \mathbf{s}_{1:K}^A$ , and  $\mathbf{v} = \mathbf{v}^A$  interchangeably. Likewise, if we do not specify the subscripts for  $\mathbf{c}$  and  $\mathbf{s}$ , it implies they represent the entire collection of objects, specifically as  $\mathbf{s} = \mathbf{s}_{1:K}^A$  and  $\mathbf{c} = \mathbf{c}_{1:K}$ . Lastly, given that the function  $f$  operates on two distinct types of inputs, its inverse is denoted by  $f^{-1}(\mathbf{x}; \mathbf{v})$ , which signifies the reversal of  $f$  applied to data points  $\mathbf{x}$  conditioned on variable  $\mathbf{v}$ .
+
+**Assumption 1.** (View-point sufficiency) For any set  $A \subseteq [V]$ , we consider set  $A$  to be view-point sufficient iff  $|\mathcal{O}^A| = |\mathcal{O}^c|$ . This basically means that all the objects are visible across all the considered views  $A$ , even when the individual view may not contain all the object information.
+
+**Example 1.** Based on illustrated example in Figure 1, the scene is composition of four objects  $\mathcal{O}^c = \{\mathcal{O}_1, \mathcal{O}_2, \mathcal{O}_3, \mathcal{O}_4\}$ , view point subset  $A = [V] = \{1, 2, 3\}$  is considered to be view point sufficient since  $\bigcup_{v \in A} \mathcal{O}^v = \{\mathcal{O}_1, \mathcal{O}_4\} \cup \{\mathcal{O}_1, \mathcal{O}_3, \mathcal{O}_4\} \cup \{\mathcal{O}_1, \mathcal{O}_2, \mathcal{O}_3\} = \mathcal{O}^c$ .
+
+**View model.** We model view as an image-level property, which we infer with the posterior  $q_\theta(\mathbf{v}^v | \mathbf{x}^v) \forall v \in A^2$ . It is important to note that we use the same set of parameters  $\theta$  across all viewpoints in  $A$  for inferring view information  $\mathbf{v}$ . Given the access to a discrete set of viewpoints  $A$ , we consider prior over a view distribution to be a GMM represented by  $p(\mathbf{v}) = \sum_{v=1}^{|A|} \pi_v \mathcal{N}(\mathbf{v}; \mu_v, \sigma_v^2)$ .
+
+**Viewpoint specific slots.** We extract object-level slot representations for a given image from all viewpoints; we model the slot distribution as an image conditional model described as  $q(\mathbf{s}_{1:K}^A | \mathbf{x}^A)$ , refer Figure 2a for a graphical model for the same. Similar to Probabilistic Slot Attention, we consider local GMM by fitting the individual posterior  $q(\mathbf{s}^v | \mathbf{x}^v)$ , with expectation-maximisation algorithm, resulting in the estimation of distribution parameters with closed-form updates. The resulting likelihood is described in 4, where  $(\mu_i, \sigma_i^2, \pi_i)$  are mean, diagonal covariance, and mixing coefficients of an  $i^{th}$  image for the considered view  $v$  with  $K$  components.
+
+$$q(\mathbf{s}_{1:K}^A | \mathbf{x}_{1:K}^A, \mu_i, \sigma_i^2, \pi_i) = \prod_{v=1}^{|V|} \sum_{k=1}^K \pi_{ik} \mathcal{N}(\mathbf{s}_k^v; \mu_{ik}, \sigma_{ik}^2) \quad (4)$$
+
+**Representation matching.** Similar to most object-centric learning approaches, the resulting view conditional slot representations are permutation invariant. To handle this invariance property, we use permutation matching function with a permutation matrix  $\mathbf{P}$ ,  $\mathbf{m}_s : \mathcal{S}^A \rightarrow \mathcal{S}^A$  such that  $\mathbf{m}_s(\mathbf{s}_{1:K}^A) = \bigcup_{v=1}^{|A|} \mathbf{P} \mathbf{s}_{1:K}^v$  mapping from a given vector space to the vector space with the transformed axis. Here, we consider the content of the first Viewpoint to be the base representation and match other contents from other viewpoints to align with it. We utilise Hungarian matching, as illustrated in Locatello et al. (2020b); Emami et al. (2022); Wang et al. (2023); Kori et al. (2023), to permute object indices to align them w.r.t base representations, learning the permutation matrix  $\mathbf{P}$ .
+
+**Content aggregator.** We consider  $g : \mathcal{S} \rightarrow \mathcal{C}$  as a content aggregator function, which marginalises the effect of view conditioning. To achieve this, we align the content representations from all viewpoints  $v \in A$  and perform a convex combination of these representations using the mixing coefficients of the view-specific posterior, as defined in Equation 4. Once the content representations and mixing coefficients are aligned with respect to the base representations (represented by  $\mathbf{s}_{1:K}^1, \tilde{\pi}^{1:V}$ ), the convex combination in our context accounts for potential object occlusions, which may cause objects to be absent in particular views 5. the convex combination ensures that only active representations are combined, resulting in a GMM with mixing coefficients  $\pi_k = \left( \sum_{v=1}^{|A|} \tilde{\pi}_k^v \right) / |A|$  and the parameters described in 6. The resulting MVPSA is illustrated in Algorithm 1.
+
+<sup>2</sup>We consider the parametric form of  $q$  to be Gaussian.
+
+{4}------------------------------------------------
+
+**Intuition.** Considering an example 1, given well trained model, for images  $\mathbf{x}^1, \mathbf{x}^2, \mathbf{x}^2$ , the resulting matched slots and mixing coefficients correspond to  $\mathbf{s}^1 = \{\mathbf{s}_{\mathcal{O}_1}^1, \mathbf{s}_r^1, \mathbf{s}_b^1, \mathbf{s}_{\mathcal{O}_4}^1, \mathbf{s}_b^1\}$ ,  $\mathbf{s}^2 = \{\mathbf{s}_{\mathcal{O}_1}^2, \mathbf{s}_r^2, \mathbf{s}_{\mathcal{O}_3}^2, \mathbf{s}_{\mathcal{O}_4}^2, \mathbf{s}_b^2\}$ ,  $\mathbf{s}^3 = \{\mathbf{s}_{\mathcal{O}_1}^3, \mathbf{s}_{\mathcal{O}_2}^3, \mathbf{s}_{\mathcal{O}_3}^3, \mathbf{s}_b^3, \mathbf{s}_b^3\}$ , where  $\mathbf{s}_{\mathcal{O}_i}^v$ ,  $\mathbf{s}_r^v$ , and  $\mathbf{s}_b^v$  correspond to slot vector for object  $\mathcal{O}_i$ , random slot vector and background information, respectively, with mixing coefficients  $\boldsymbol{\pi}^1 = \{1, 0, 0, 1, 1\}$ ,  $\boldsymbol{\pi}^2 = \{1, 0, 1, 1, 1\}$ , and  $\boldsymbol{\pi}^3 = \{1, 1, 1, 0, 1\}$ . Proposed aggregation merges the slot information ignoring the random content vectors  $\mathbf{c}_r^v$ , resulting in  $\mathbf{c}_{\mathcal{O}_1} = (\mathbf{s}_{\mathcal{O}_1}^1 + \mathbf{s}_{\mathcal{O}_1}^2 + \mathbf{s}_{\mathcal{O}_1}^3)/3$ ,  $\mathbf{c}_{\mathcal{O}_4} = (\mathbf{s}_{\mathcal{O}_4}^1 + \mathbf{s}_{\mathcal{O}_4}^2)/2$  and so on.
+
+$$g(\tilde{\mathbf{s}}_{1:K}^{1:V}, \tilde{\boldsymbol{\pi}}^{1:V}) = \sum_{v=1}^{|A|} \frac{\tilde{\boldsymbol{\pi}}_{1:k}^v}{\sum_{v=1}^{|A|} \tilde{\boldsymbol{\pi}}_{1:k}^v} \tilde{\mathbf{s}}_{1:K}^v; \quad (5)$$
+
+$$\mathbb{E}(\mathbf{c}_k) = \sum_{v=1}^{|A|} \frac{\tilde{\boldsymbol{\pi}}_k^v}{\sum_{v=1}^{|A|} \tilde{\boldsymbol{\pi}}_k^v} \mathbb{E}(\tilde{\mathbf{s}}_k^v); \quad \text{Var}(\mathbf{c}_k) = \sum_{v=1}^{|A|} \left( \frac{\tilde{\boldsymbol{\pi}}_k^v}{\sum_{v=1}^{|A|} \tilde{\boldsymbol{\pi}}_k^v} \right)^2 \text{Var}(\tilde{\mathbf{s}}_k^v); \quad (6)$$
+
+**Optimal content prior.** We rely on the fact that marginalising the effect of datapoints from posterior (aggregate posterior) is an optimal prior (Hoffman & Johnson, 2016; Kori et al., 2024). This results in the optimal content prior  $p(\mathbf{c})$  to be an aggregate of posteriors  $\int \int q(\mathbf{c} | \mathbf{s}^A, \mathbf{x}^A) ds^A dx^A$ . This imposes the structure to content distribution, rather than constraining the distribution to be close to posterior as in VAEs (Kingma & Welling, 2013), this results in the optimal prior by design, without the need for additional variational approximations. Given that GMMs are universal density approximates given enough components (even GMMs with diagonal covariances), the resulting aggregate posterior  $q(\mathbf{c}) = p(\mathbf{c})$  is highly flexible and multi-modal.
+
+**Lemma 1** (Optimal Mixture). *Given the a local content distribution  $q(\mathbf{c}_{1:K} | \mathbf{s}_{1:K}^A, \mathbf{x}^A)$  (per-scene  $\mathbf{x}^A \in \{\mathbf{x}_i^A\}_{i=1}^M$ ), which can be expressed as a GMM with  $K|A|$  components, the aggregate posterior  $q(\mathbf{c})$  is obtained by marginalizing out  $\mathbf{x}, \mathbf{s}$  is a non-degenerate GMM with  $MK|A|$  components:*
+
+$$p(\mathbf{c}) = q(\mathbf{c}) = \frac{1}{M|A|} \sum_{i=1}^M \sum_{v=1}^{|A|} \sum_{k=1}^K \hat{\boldsymbol{\pi}}_{ik} \mathcal{N}(\mathbf{c}; \hat{\boldsymbol{\mu}}_{ik}, \hat{\boldsymbol{\sigma}}_{ik}^2). \quad (7)$$
+
+*Proof Sketch.* The result is obtained by integrating the product of involved latent posterior densities  $q(\mathbf{c} | \mathbf{s}^A) q(\mathbf{s}^A | \mathbf{x}^A) p(\mathbf{x}^A)$ . Further, we verify if the mixing coefficients sum to one in the new mixture, proving aggregated posterior to be well-defined.  $\square$
+
+**Mixing function and training objective.** In line with Kori et al. (2024), our theory does not rely on the additivity of the decoder structure; instead, we consider both additive and non-additive mixing functions denoted as  $f_d : \mathcal{C} \times \mathcal{V}^v \rightarrow \mathcal{X}^v$ . For additive decoders, we use a spatial-broadcasting (Greff et al., 2019) and MLP decoders, and for non-additive mixing function, we use auto-regressive transformers (Vaswani et al., 2017). We use the same network  $f_d$  across all views, with trainable parameters  $\theta$ , which models the conditional distribution  $p(\mathbf{x}^v | \mathbf{c}, \mathbf{v}^v)$ . Probabilistically, the generative model for a view set  $A$  can be described by a graphical model in figure 2a, resulting in the likelihood 8. To train our model in an end-to-end fashion, we maximise the log-likelihood of the joint distribution  $p(\mathbf{x}^A)$ , which results in the evidence lower bound (ELBO), Eq. 10. Here, we consider the distribution form of  $p(\mathbf{x}^v | \mathbf{c}, \mathbf{v}^v)$  to be Gaussian with learnable mean with isotropic covariance, similarly we consider  $q(\mathbf{v}^v | \mathbf{x})$  to be Gaussian with estimated mean and diagonal covariance.
+
+$$p_A(\mathbf{x}^{1:V}) = \int \int p_A(\mathbf{x}^{1:V} | \mathbf{c}_{1:K}, \mathbf{v}^{1:V}) p_A(\mathbf{c}_{1:K}) p(\mathbf{v}^{1:V}) d\mathbf{v}^{1:V} d\mathbf{c}_{1:K} \quad (8)$$
+
+$$\log p(\mathbf{x}^A) \geq \int \int q(\mathbf{v}^A | \mathbf{x}^A) p(\mathbf{c}_{1:K}) \log p(\mathbf{x}^A | \mathbf{c}_{1:K}, \mathbf{v}^A) \frac{p(\mathbf{v}_{1:K}^A)}{q(\mathbf{v}^A | \mathbf{x}^v)} d\mathbf{v}^A d\mathbf{c}_{1:K} \quad (9)$$
+
+$$= \mathbb{E}_{\mathbf{c}, \mathbf{v}} [\log p(\mathbf{x}^A | \mathbf{c}, \mathbf{v})] - \text{KL} (q(\mathbf{v} | \mathbf{x}^A) \| p(\mathbf{v})) \quad (10)$$
+
+{5}------------------------------------------------
+
+## 4 THEORETICAL ANALYSIS
+
+In this section, we leverage the properties of the MVPSA method proposed in Section 3 to theoretically demonstrate the learning of identifiable representations under challenging viewpoint ambiguities. In summary, we show three main results; firstly, we show that aggregate content representations ( $\mathbf{c}$ ) are identifiable without supervision (up to an equivalence relation). Secondly, we show that these representations are invariant to the choice of viewpoints under viewpoint sufficiency. Finally, we show that the trained model results in an approximate representational equivariance up to an affine transformation, i.e., for any two viewpoint sub-sets  $A, B \subseteq [V] \ni A \neq B$ , the resulting content distribution  $p_A(\mathbf{c})$  can be recovered by  $p_B(\mathbf{c})$  up to an affine transformation.
+
+**Assumption 2 (Weak Injectivity).** Let  $f: \mathcal{Z} \rightarrow \mathcal{X}$  be a mapping between latent space and image space, where  $\dim(\mathcal{Z}) \leq \dim(\mathcal{X})$ . The mapping  $f_d$  is weakly injective if there exists  $\mathbf{x}_0 \in \mathcal{X}$  and  $\delta > 0$  such that  $|f^{-1}(\{\mathbf{x}\})| = 1, \forall \mathbf{x} \in B(\mathbf{x}_0, \delta) \cap f(\mathcal{Z})$ , and  $\{\mathbf{x} \in \mathcal{X} : |f^{-1}(\{\mathbf{x}\})| = \infty\} \subseteq f(\mathcal{Z})$  has measure zero w.r.t. to the Lebesgue measure on  $f(\mathcal{Z})$  (cf. Kivva et al. (2022)).
+
+**Theorem 1 (Mixture of Concatenated Slots).** Let  $P_s$  denote a permutation equivariant PSA function such that  $f_d(\mathbf{z}^v, P_s^v) = P f_s(\mathbf{z}^v, \mathbf{s}^v)$ , where  $P \in \{0, 1\}^{K \times K}$  is an arbitrary permutation matrix. Let  $\mathbf{c} = (g(\mathbf{s}_1^A, \cdot), \dots, g(\mathbf{s}_K^A, \cdot)) \in \mathbb{R}^{Kd}$  be the concatenation of  $K$  individual content vectors, where each vector is an aggregate of all the slots obtained from considered viewpoints in a viewpoint-set  $A \subseteq [V]$  (cf. Kori et al. (2024)). Due to the nature of the aggregator function, the individual content vector is Gaussian distributed within a  $K$ -component mixture:  $\mathbf{c}_k \sim \mathcal{N}(\boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k) \in \mathbb{R}^d, \forall k \in \{1, \dots, K\}$ . Then,  $\mathbf{c}$  is also GMM distributed with  $K$  mixture components:
+
+$$p(\mathbf{c}) = \sum_{p=1}^{K!} \pi_p \mathcal{N}(\mathbf{c}; \boldsymbol{\mu}_p, \boldsymbol{\Sigma}_p), \quad \text{where } \boldsymbol{\pi} \in \Delta^{K!-1}, \quad \boldsymbol{\mu}_p \in \mathbb{R}^{Kd}, \quad \boldsymbol{\Sigma}_p \in \mathbb{R}^{Kd \times Kd}. \quad (11)$$
+
+**Theorem 2. (Affine Equivalence of aggregate content)** For any subset  $A \subseteq [V]$ , such that  $|A| > 0$ , given a set of images  $\mathbf{x}^A \in \mathcal{X}^A$  and a corresponding aggregate content  $\mathbf{c} \in \mathcal{C}$  and a non-degenerate content posterior  $q(\mathbf{c} | \mathbf{s}^A)$ , considering two mixing function  $f_d, \tilde{f}_d$  satisfying assumption 2, with a shared image, then  $\mathbf{c}$  are identifiable up to  $\sim_s$  equivalence.
+
+**Intuition.** Considering an example 1, with two perfectly trained models  $f_d$  and  $\tilde{f}_d$ . Resulting aggregate contents are described as  $\mathbf{c} = f_d^{-1}(\mathbf{x}^A; \mathbf{v}^A) = \{\mathbf{c}_{O_1}, \mathbf{c}_{O_2}, \mathbf{c}_{O_3}, \mathbf{c}_{O_4}, \mathbf{c}_{O_5}\}$  and  $\tilde{\mathbf{c}} = \tilde{f}_d^{-1}(\mathbf{x}^A; \mathbf{v}^A) = \{\tilde{\mathbf{c}}_{O_2}, \tilde{\mathbf{c}}_{O_4}, \tilde{\mathbf{c}}_{O_3}, \tilde{\mathbf{c}}_{O_1}, \tilde{\mathbf{c}}_{O_5}\}$  for  $A = [V] = \{1, 2, 3\}$ .  $\sim_s$  equivalence states that there exists a permutation matrix  $P$  which aligns the object order in  $\tilde{\mathbf{c}}$  to match with  $\mathbf{c}$  and there exists an invertible affine mapping  $A$  such that  $\tilde{\mathbf{c}}_{O_k} = A \mathbf{c}_{O_k} \forall k \in \{1, 2, 3, 4\}$ .
+
+*Proof Sketch.* To prove the following result, we follow multiple steps as described below: (i). We demonstrate the distribution  $p(\mathbf{c})$  obtained as a result of lemma 1 is non-degenerate and a valid distribution. (ii). With the above results, we demonstrate invertibility restrictions on mixing functions. (iii). Finally, we constrain the subspace to affine, demonstrating  $\sim_s$  of aggregate content  $\mathbf{c}$ .  $\square$
+
+**Theorem 3. (Invariance of aggregate content)** For any subset  $A, B \subseteq [V]$ , such that  $|A| > 0, |B| > 0$  and both  $A, B$  satisfy an assumption 1, we consider aggregate content to be invariant to viewpoints if  $f_A \sim_s f_B$  for data  $\mathcal{X}^A \times \mathcal{X}^B$ .
+
+**Intuition.** Considering an example 1, with  $A = \{1, 3\}, B = \{2, 3\}$ , such that both sets  $A, B$  are viewpoint sufficient. Let  $f_A$  and  $f_B$  correspond to perfectly trained models on  $\mathcal{X}^A$  and  $\mathcal{X}^B$  respectively. Resulting aggregate slots are described as  $\mathbf{c} = f_A^{-1}(\mathbf{x}^A; \mathbf{v}^A) = \{\mathbf{c}_{O_1}, \mathbf{c}_{O_2}, \mathbf{c}_{O_3}, \mathbf{c}_{O_4}, \mathbf{c}_{O_5}\}$  and  $\tilde{\mathbf{c}} = f_B^{-1}(\mathbf{x}^B; \mathbf{v}^B) = \{\tilde{\mathbf{c}}_{O_2}, \tilde{\mathbf{c}}_{O_4}, \tilde{\mathbf{c}}_{O_3}, \tilde{\mathbf{c}}_{O_1}, \tilde{\mathbf{c}}_{O_5}\}$ . Content invariance states that there exists a permutation matrix  $P$  which aligns the object order in  $\tilde{\mathbf{c}}$  to match with  $\mathbf{c}$ , and there exists an invertible affine mapping  $A$  such that  $\tilde{\mathbf{c}}_{O_k} = A \mathbf{c}_{O_k}$ , even when the model is trained on completely different scenes with same objects.
+
+*Proof Sketch.* To prove the following result, we extend the proof of Theorem 2, and first establish that there exist two inevitable affine functions  $h_A, h_B$  for mixing functions  $f_A, f_B: \mathcal{C} \times \mathcal{V} \rightarrow \mathcal{X}$  to
+
+{6}------------------------------------------------
+
+map representations  $\mathbf{c}$  with a given view set  $\mathbf{v}^A$  to observations  $\mathbf{x}^A$ . Later, we show that, in the case of invariance, an affine mapping exists from  $h_A$  to  $h_B$ .  $\square$
+
+**Theorem 4. (Approximate representational equivariance)** For a given aggregate content  $\mathbf{c}$ , for any two views  $\mathbf{v}, \tilde{\mathbf{v}} \sim p_A(\mathbf{v})$ , resulting in respective scenes  $\mathbf{x} \sim p_A(\mathbf{x} | \mathbf{v}, \mathbf{c})$  and  $\tilde{\mathbf{x}} \sim p_A(\mathbf{x} | \tilde{\mathbf{v}}, \mathbf{c})$ , for any homeomorphic transformation  $h_x \in \mathcal{H}_x$  such that  $h_x(\mathbf{x}) = \tilde{\mathbf{x}}$ , there exists another homeomorphic transformation  $h_v \in \mathcal{H}_v$  such that  $\mathcal{H}_v \subseteq \mathcal{H}_x \subseteq \mathbb{R}^{\dim(\mathbf{x})}$  and  $\mathbf{v} = h_v^{-1}(f_d^{-1}(h_x(\mathbf{x}); \mathbf{c}))$ .
+
+**Remark 1.** Note that we do not claim viewpoint equivariance here. Instead, we say that the transformation function transforming the view representations  $\mathbf{v}$  as an effect of the homeomorphic transformation of  $\mathbf{x}$  lies in the same subspace of input transformations.
+
+**Remark 2.** Implications of this result: the homography matrix  $H$  between two cameras with non-degenerate relative pose matrix, with fixed intrinsic camera matrices and non-zero translation and rotation matrix is a homeomorphic transformation (Hartley & Zisserman, 2003).
+
+**Intuition.** In the scenario when the cameras are positioned such that they have overlapping fields of view, and their relative pose (rotation and translation) must avoid degeneracies like aligning on the same plane or mapping points to infinity. This results in the transformation between views being smooth, invertible, and consistent. If the scene is planar or depth variations are minimal, the homography can capture the transformation accurately without the need for inverse rendering. Notably, the cameras should have non-zero rotation and translation to avoid collapsing the scene, and their intrinsic parameters must be known or identical to prevent distortions. When the scenario satisfies all the above properties, the 2D homography transformation  $H$  between two camera views can be learned as a homeomorphic transformation.
+
+*Proof Sketch.* We prove the following result by following the steps in theorem 3, over a view distribution  $p(\mathbf{v})$  but for a fixed content vector  $\mathbf{c}$ .  $\square$
+
+## 5 RELATED WORKS
+
+**Identifiable representation learning.** Learning meaningful representations from unlabeled data has long been a primary objective of deep learning (Bengio et al., 2013). Several approaches, such as those proposed by (Higgins et al., 2017; Kim & Mnih, 2018; Eastwood & Williams, 2018; Mathieu et al., 2019), relied on independence assumptions between latent variables to learn disentangled representations. However, Hyvärinen & Pajunen (1999); Locatello et al. (2019) demonstrated the provable impossibility of unsupervised methods for learning independent latent representations from i.i.d. data. Which is tackled by restricting mixing functions to conformal maps (Buchholz et al., 2022) or volume-preserving transformations (Yang et al., 2022), or with additional data assumptions (Zimmermann et al., 2021; Locatello et al., 2020a; Brehmer et al., 2022; Ahuja et al., 2022; Von Kügelgen et al., 2021), or by imposing structure in the latent space as in nonlinear Independent Component Analysis (ICA) (Hyvärinen et al., 2019; Khemakhem et al., 2020a,b), resulting in identifiable models. In the context of nonlinear ICA, Dilokthanakul et al. (2016) introduced a VAE model with a GMM prior, and Willetts & Paige (2021) empirically demonstrated the effectiveness of the GMM prior, which was later rigorously proven by Kivva et al. (2022). Kori et al. (2024) use this notion of latent GMM in the context of OCL, achieving identifiability guarantees for object-centric representations. Here, we use this notion in the context of multiview object-centric representations, tackling the issues with spatial ambiguities and uncertainties in bindings.
+
+**Multiview nonlinear ICA.** It has been noted that addressing the challenge of nonlinear Independent Component Analysis (ICA) can involve incorporating a learnable clustering task within the latent representations, thereby imposing asymmetry in the latent distribution (Willets & Paige, 2021; Kivva et al., 2022). Moreover, the study by Gresele et al. (2020) delves into multiview nonlinear ICA, particularly in scenarios involving corrupted observations, where they aim to recover invariant representations while accounting for certain ambiguities. Along similar lines, Daunhawer et al. (2023); Von Kügelgen et al. (2021) explore the concept of style-content identification using contrastive learning, focusing on addressing the multiview nonlinear ICA problem. Here, we work along similar lines by emphasising the learning of invariant content and identifiable object-centric representations. We achieve this by formulating a reconstruction objective where the enforced invariance and equivariance stem from the underlying probabilistic graphical model rather than relying on a contrastive learning
+
+{7}------------------------------------------------
+
+![Figure 3: Identifiability of q(c) and q(s). The figure shows five plots. The first plot, 'Data Samples', shows two images of a scene with objects, with two specific points highlighted in green and red boxes. The subsequent four plots, 'Run #1' through 'Run #4', show 2D scatter plots of latent space coordinates z1 and z2. Each plot displays blue contours representing the recovered marginalised slot distribution q(s) and orange contours representing the recovered marginalised content distribution q(c). The contours are consistent across the four runs, demonstrating the model's ability to recover the latent structure.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3: Identifiability of q(c) and q(s). The figure shows five plots. The first plot, 'Data Samples', shows two images of a scene with objects, with two specific points highlighted in green and red boxes. The subsequent four plots, 'Run #1' through 'Run #4', show 2D scatter plots of latent space coordinates z1 and z2. Each plot displays blue contours representing the recovered marginalised slot distribution q(s) and orange contours representing the recovered marginalised content distribution q(c). The contours are consistent across the four runs, demonstrating the model's ability to recover the latent structure.
+
+Figure 3: **Identifiability of  $q(c)$  and  $q(s)$ .** First image illustrates 2 datapoints observed from 2 different viewpoints enclosed in green and red boxes, respectively. Recovered marginalised slot distribution ( $q(s)$ —blue contours) and marginalised content distribution ( $q(c)$ —orange contours), across 4 runs of MVPSA. As detailed in CASE STUDY 1, we used a 2D synthetic dataset with 5 total ‘objects’, with each observation containing at most 3. This provides strong evidence of recovery of the latent space up to affine transformations, empirically verifying our claims in Theorem 2.
+
+Table 1: Comparing identifiability of  $q(s)$ ,  $q(c)$ , and  $p(v)$  scores wrt existing OCL methods.
+
+| METHOD | CLEVR-AUG |  |  | CLEVR-MV |  |  | GQN |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | SMCC $\uparrow$ | INV-SMCC $\uparrow$ | MCC $\uparrow$ | SMCC $\uparrow$ | INV-SMCC $\uparrow$ | MCC $\uparrow$ | SMCC $\uparrow$ | INV-SMCC $\uparrow$ | MCC $\uparrow$ |
+| AE | $0.26 \pm .01$ | - | $0.26 \pm .02$ | $0.32 \pm .02$ | - | $0.29 \pm .02$ | $0.29 \pm .02$ | - | $0.22 \pm .02$ |
+| SA | $0.45 \pm .05$ | - | $0.28 \pm .02$ | $0.47 \pm .03$ | - | $0.29 \pm .01$ | $0.38 \pm .02$ | - | $0.29 \pm .01$ |
+| FSA | $0.48 \pm .03$ | - | $0.28 \pm .01$ | $0.49 \pm .02$ | - | $0.32 \pm .02$ | $0.38 \pm .02$ | - | $0.29 \pm .01$ |
+| MuMON | $0.56 \pm .04$ | $0.57 \pm .01$ | - | $0.61 \pm .03$ | $0.62 \pm .02$ | - | $0.61 \pm .03$ | $0.62 \pm .02$ | - |
+| <b>MVPSA</b> | <b><math>0.64 \pm .01</math></b> | <b><math>0.66 \pm .01</math></b> | <b><math>0.63 \pm .04</math></b> | <b><math>0.67 \pm .01</math></b> | <b><math>0.66 \pm .01</math></b> | <b><math>0.69 \pm .04</math></b> | <b><math>0.59 \pm .01</math></b> | <b><math>0.63 \pm .01</math></b> | <b><math>0.52 \pm .03</math></b> |
+
+objective. Similar to the noiseless setting in Gresele et al. (2020), we demonstrate the recovery of invariant content representations using different subsets of viewpoints.
+
+**Object-centric learning.** Extending nonlinear ICA from representation learning to object-specific representational learning has been heavily explored before (Burgess et al., 2019; Engelcke et al., 2019; Greff et al., 2019) by employing an iterative variational inference approach (Marino et al., 2018), whereas Van Steenkiste et al. (2020); Lin et al. (2020) adopt more of a generative perspective, studied the effect of object binding and scene composition empirically. Recently, the use of iterative attention mechanisms has gained a significant interest (Locatello et al., 2020b; Engelcke et al., 2021; Singh et al., 2021; Wang et al., 2023; Singh et al., 2022; Emami et al., 2022). Most of these works operate in a single-view setting, which causes fundamental issues of viewpoint ambiguities in terms of occlusions and uncertainties in binding. Recent methods including Eslami et al. (2018); Arsalan Soltani et al. (2017); Tobin et al. (2019); Wu et al. (2016) consider single object from multiple views to tackle this particular problem, additionally Kosiorek et al. (2018); Hsieh et al. (2018); Li et al. (2020) explore multi-object binding in videos and multiple views, tackling object binding issues across frames. Despite their empirical effectiveness, most of these works lack formal identifiability guarantees. In line with recent efforts analysing theoretical guarantees in object-centric representations (Lachapelle et al., 2023; Brady et al., 2023; Kori et al., 2024), we formally investigate the modelling assumptions and their implications for achieving identifiability guarantees in the context of multi-object, multiview object-centric representation learning settings.
+
+## 6 EMPIRICAL EVALUATION
+
+Given the work’s theoretical focus, experimentally, we aim to provide strong empirical evidence of our identifiability, invariance, and equivariance claims in a multiview setting. We also extend our experiments to standard imaging benchmarks along with large-scale images with high variability, demonstrating the framework’s scalability and applicability in high-dimensional settings.
+
+**Experimental setup.** We consider standard benchmark datasets from OCL literature, including CLEVR-MV, CLEVR-AUG, GQN (Li et al., 2020), and proposed datasets MV-MoViC, MV-MoViD which are multiview versions of MoViC dataset with fixed and scene-specific cameras (Greff et al., 2022). To verify our claims on (i) identifiability claim, we train our model on a given view subset  $A \subseteq [V]$  and compare view averaged SMCC measures as described in Kori et al. (2024), (ii) invariance claim, we train multiple models on different subsets of viewpoints  $A, B \subseteq [V]$  and compare the aggregate content representations across models, quantifying the similarities with SMCC, we consider
+
+{8}------------------------------------------------
+
+![Figure 4: Viewpoint invariance for q(c). The figure consists of four subplots. The first subplot, titled 'Data Samples', shows three rows of images. Each row contains three small images of a scene with objects (a green star, a red circle, a blue square) enclosed in green, red, and blue boxes, representing different viewpoints. The subsequent three subplots show 2D scatter plots of recovered marginalised aggregate content distributions q(c) in the z1-z2 space. The first distribution is labeled q_A={r,g}(c), the second q_A={r,b}(c), and the third q_A={b,g}(c). Each distribution shows a cluster of points with a color gradient (purple to orange) representing the density of the content.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+432                Data Samples
+
+433
+
+434
+
+435
+
+436
+
+437
+
+438
+
+439
+
+440
+
+441
+
+Figure 4: Viewpoint invariance for q(c). The figure consists of four subplots. The first subplot, titled 'Data Samples', shows three rows of images. Each row contains three small images of a scene with objects (a green star, a red circle, a blue square) enclosed in green, red, and blue boxes, representing different viewpoints. The subsequent three subplots show 2D scatter plots of recovered marginalised aggregate content distributions q(c) in the z1-z2 space. The first distribution is labeled q\_A={r,g}(c), the second q\_A={r,b}(c), and the third q\_A={b,g}(c). Each distribution shows a cluster of points with a color gradient (purple to orange) representing the density of the content.
+
+442
+
+443
+
+444
+
+445
+
+446
+
+Figure 4: **Viewpoint invariance for  $q(c)$** . First image illustrates 3 datapoints observed from 3 different viewpoints enclosed in green, red, blue boxes, respectively). Recovered marginalised aggregate content distribution  $q(c)$  when trained with different view pairs  $\{(green, red), (red, blue), (green, blue)\}$  are illustrated in later figures. As the resulting distributions with different datasets only vary by an affine transformation, providing strong evidence for Theorem 3.
+
+447
+
+448
+
+449
+
+450
+
+451
+
+this measure to be invariant SMCC (INV-SMCC), and finally, (iii) for subspace equivariance, we consider a trained model with a view subset  $A \subseteq [V]$  and compute MCC of view information  $v$  by applying random homeomorphic transformations on samples  $x^A \sim \mathcal{X}^A$  (which can also be done by considering samples  $x^B \sim \mathcal{X}^B$ , where cameras relative position satisfy the required constraints 2).
+
+452
+
+453
+
+454
+
+455
+
+456
+
+457
+
+**Models & baselines.** We consider two ablations with two types of decoders: (i) additive with MLPs and spatial broadcasting CNNs and (ii) non-additive decoders, which include transformer models. In all cases, we use LeakyReLU activations to satisfy the weak injectivity conditions (Assumption 2). In terms of object-centric learning baselines, we compare with standard additive autoencoder setups following (Brady et al., 2023), slot-attention (SA) (Locatello et al., 2020b), probabilistic slot-attention (PSA) (Kori et al., 2024), and MULMON (Li et al., 2020).
+
+458
+
+459
+
+460
+
+461
+
+462
+
+463
+
+464
+
+465
+
+466
+
+467
+
+468
+
+469
+
+470
+
+471
+
+**CASE STUDY 1: ILLUSTRATION OF IDENTIFIABILITY RESULTS.** To definitively show the validity of our claims about identifiability (Theorem 2, Theorem 3, and Theorem 4), we created a synthetic scenario for modeling. This setup enables us to visually examine both the aggregate posterior distributions and the prior distributions in detail. The process used for generating data is thoroughly explained in App. C.1. In Figure 3, we display the distributions of marginalized slots and the aggregate content distribution  $q(s)$  and  $q(c)$ , comparing different runs that are either rotated, skewed, or mirrored with respect to each other. To quantitatively measure the same, we computed SMCC and observed it to be  $0.95 \pm 0.01$ , empirically verifying our Theorem 2. Furthermore, to illustrate the invariance of distribution  $q(c)$  across viewpoints (Theorem 3), we consider three different viewpoints. We use all possible pairs to learn  $q(c)$  distributions as illustrated in Figure 4, where the distributions from second to last sub-figures are learned wrt viewpoints described by  $\{g, r\}$ ,  $\{r, b\}$ , and  $\{g, b\}$ , respectively. Similar to our previous findings, these distributions were also found to be rotated, skewed, or mirrored relative to each other, with an observed SMCC of  $0.87 \pm 0.11$ , further confirming the claims in Theorem 3.
+
+472
+
+473
+
+474
+
+475
+
+476
+
+477
+
+478
+
+479
+
+480
+
+481
+
+482
+
+483
+
+**CASE STUDY 2: IMAGING APPLICATIONS.** In this section, we demonstrate the generalizability and scalability of our method to higher-dimensional image settings. We first evaluate the framework on synthetic benchmarks, specifically focusing on CLEVR-MV, CLEVR-AUG, and GQN with simple objects. Given the *true generative factors* are unobserved, we derive our quantitative assessments from multiple runs. The results are shown in Table 1, confirming the validity of our theory on imaging datasets. Regarding the baseline comparisons that utilize a single viewpoint, the INV-SMCC mirrors the SMCC due to its inherent design (i.e., aggregation of a set with a single element is the same element). Moreover, in the case of MULMON, the model does not estimate view information, but use the observed view conditioning, rendering the MCC metric inapplicable. Figure 5 showcases how the number of viewpoints impacts the identifiability of the  $s$ ,  $v$ , and  $c$  variables; the involved experiments reflect the increase in performance with an increase in the number of views to a certain extent, across all three benchmark datasets.
+
+484
+
+485
+
+Additionally, we applied our methodology to our proposed MV-MoViC and MV-MoViD datasets. The latter enables us to examine how the model performs when the assumption detailed in 1 is not satisfied. To evaluate model behaviour in an environment with consistent objects but with different
+
+{9}------------------------------------------------
+
+Table 2: Identifiability and generalisability analysis on MV-MoViC dataset.
+
+| METHOD | IN-DOMAIN RESULTS |  |  |  | OUT-OF-DOMAIN RESULTS |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | mBO $\uparrow$ | SMCC $\uparrow$ | INV-SMCC $\uparrow$ | MCC $\uparrow$ | mBO $\uparrow$ | SMCC $\uparrow$ | INV-SMCC $\uparrow$ | MCC $\uparrow$ |
+| SA-MLP | $0.28 \pm 0.091$ | $0.36 \pm 0.004$ | - | $0.38 \pm 0.004$ | $0.26 \pm 0.08$ | $0.38 \pm 0.006$ | - | $0.43 \pm 0.016$ |
+| PSA-MLP | $0.30 \pm 0.022$ | $0.38 \pm 0.002$ | - | $0.43 \pm 0.012$ | $0.30 \pm 0.03$ | $0.40 \pm 0.005$ | - | $0.43 \pm 0.019$ |
+| <b>MVPSA-MLP</b> | $0.28 \pm 0.021$ | $0.52 \pm 0.021$ | $0.61 \pm 0.023$ | $0.54 \pm 0.026$ | $0.27 \pm 0.02$ | $0.51 \pm 0.029$ | $0.58 \pm 0.031$ | $0.52 \pm 0.021$ |
+| SA-TRANSFORMER | $0.34 \pm 0.014$ | $0.36 \pm 0.016$ | - | $0.46 \pm 0.009$ | $0.33 \pm 0.041$ | $0.36 \pm 0.043$ | - | $0.45 \pm 0.008$ |
+| PSA-TRANSFORMER | $0.37 \pm 0.021$ | $0.38 \pm 0.007$ | - | $0.47 \pm 0.007$ | $0.37 \pm 0.033$ | $0.39 \pm 0.016$ | - | $0.45 \pm 0.008$ |
+| <b>MVPSA-TRANSFORMER</b> | $0.38 \pm 0.008$ | $0.44 \pm 0.003$ | $0.46 \pm 0.001$ | $0.53 \pm 0.011$ | $0.36 \pm 0.017$ | $0.46 \pm 0.033$ | $0.46 \pm 0.018$ | $0.55 \pm 0.082$ |
+
+scenarios, we conducted in-domain and out-of-domain (OOD) evaluations. For in-domain analysis, the model is trained and assessed on the same viewpoint group  $A = [1, 2, 3]$ . Conversely, for OOD evaluation, we consider the previously trained model, but test it against a new set of viewpoints  $B = [3, 4, 5]$ . The findings presented in Table 2 regarding the MV-MoViC dataset reveal that the SMCC, INV-SMCC, and MCC metrics show similar performance across both domains. This indicates that the distributional characteristics remain unchanged when both the training and testing environments contain the same objects. The MV-MoViD dataset analysis can be found in App. F.
+
+![Figure 5: Influence of Number of viewpoints on identifiability for synthetic datasets. The figure contains three bar charts for Dataset-CLEVR-aug, Dataset-CLEVR-mv, and Dataset-GON. Each chart plots mBO (blue), SMCC (orange), and INV-SMCC (green) for 100, 200, and 300 viewpoints. In all cases, the metrics increase with the number of viewpoints, with INV-SMCC generally showing the highest values.](6b32b7b928d34eeccb15c29cdf9d2cb3_img.jpg)
+
+Figure 5: Influence of Number of viewpoints on identifiability for synthetic datasets. The figure contains three bar charts for Dataset-CLEVR-aug, Dataset-CLEVR-mv, and Dataset-GON. Each chart plots mBO (blue), SMCC (orange), and INV-SMCC (green) for 100, 200, and 300 viewpoints. In all cases, the metrics increase with the number of viewpoints, with INV-SMCC generally showing the highest values.
+
+Figure 5: Influence of Number of viewpoints on identifiability for synthetic datasets.
+
+## 7 CONCLUSION & DISCUSSION
+
+Understanding when object-centric representations are both unambiguous and identifiable is essential for developing large-scale models with provable correctness guarantees. Unlike most existing work on identifiability, which largely focuses on single-view setups, we offer identifiability guarantees in multi-view scenarios. Building upon the approach by Kori et al. (2024), we use distributional assumptions for latent slot and view representations, drawing inspiration from mixture model-based structures. To achieve this, we propose a model that is viewpoint-agnostic and does not require additional view-conditioning information.
+
+Our model specifically guarantees the identifiability of view-specific slot representations, viewpoint-invariant content representations, and view representations, all without the need for additional supervision (up to an equivalence relation). We visually validate our theoretical claims using illustrative 2D data points. We then empirically demonstrate the model’s identifiability properties on multiple object-centric benchmarks, highlighting its ability to resolve view ambiguities in imaging applications. Furthermore, we showcase the scalability of our approach on large-scale datasets and more complex decoders using realistic datasets and transformer decoders, respectively, demonstrating its capacity to scale effectively with both data volume and decoder complexity.
+
+**Limitations & future work.** We recognize that our assumptions, particularly regarding the *viewpoint sufficiency*, are strong and may not always hold in practice. However, we did not observe limiting effects of this assumption on the proposed MV-MoViD dataset. A more extensive analysis of this assumption and its implications in real-world applications is left for future work. We would also highlight that the *weak injectivity* of the mixing function may not always hold for different types of architectures. While generally applicable, the piecewise-affine functions we use may not always capture valid assumptions for real-world problems, e.g., when the model is misspecified. Nevertheless, to the best of our knowledge, our theoretical results on multi-object, multi-view identifiability are unique and capture key concepts in multi-view object-centric representation learning, opening various new avenues for future research.
+
+ Rest of paper (reference and Appendix) is removed.

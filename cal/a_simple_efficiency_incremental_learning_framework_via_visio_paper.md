@@ -1,0 +1,355 @@
+
+
+{0}------------------------------------------------
+
+# A SIMPLE EFFICIENCY INCREMENTAL LEARNING FRAMEWORK VIA VISION-LANGUAGE MODEL WITH MULTI-ADAPTERS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Incremental Learning (IL) aims to learn new tasks while preserving previously acquired knowledge. Integrating the zero-shot learning capabilities of pre-trained vision-language models into IL methods has marked a significant advancement. However, these methods face three primary challenges: (1) the need for improved training efficiency; (2) reliance on a memory bank to store previous data; and (3) the necessity of a strong backbone to augment the model’s capabilities. In this paper, we propose **SimE**, a **Simple** and **Efficient** framework that employs a vision-language model with an adapter designed specifically for the IL task. We report a remarkable phenomenon: there is not always a direct positive correlation between the number of adaptive adapter connections and the model’s IL capabilities. While increasing the number of adapter connections between transformer blocks positively impacts model performance, adding more adaptive connections within transformer blocks during smaller incremental steps does not enhance, and may even degrade the model’s IL ability. Such improvements only occur at more advanced incremental stages. Extensive experimental results show that SimE surpasses traditional methods by 9.6% on TinyImageNet and outperforms other CLIP-based methods by 5.3% on CIFAR-100. Notably, SimE, with only thousands of parameters and no memory bank, outperforms ZSCL, which has 140 million parameters, and surpasses CoOP, which requires a memory bank of size 1000. Furthermore, we conduct a systematic study to enhance the utilization of the zero-shot capabilities of CLIP. We suggest that the backbone encoder in SimE should use the image encoder from CLIP pre-trained on larger datasets, such as LAION-2B, and larger model architectures, such as ViT-L/14, for IL tasks.
+
+## 1 INTRODUCTION
+
+Deep learning models have achieved significant success when fully trained on domain-specific tasks. However, in real-world scenarios, new data often come from diverse sources. Training a deep learning model on such new data typically leads to the model forgetting previously learned information—a phenomenon known as catastrophic forgetting (Goodfellow et al., 2013). To address this issue, Incremental Learning (IL) methods have been proposed, drawing inspiration from the human ability to learn continuously. These methods enable models to preserve existing knowledge while acquiring new skills (De Lange et al., 2021; Masana et al., 2022). Traditional IL approaches, which start training from scratch (Li & Hoiem, 2017; Serra et al., 2018; Rebuffi et al., 2017), fail to leverage the zero-shot learning capabilities of pre-trained vision-language models. For example, Contrastive Language-Image Pre-training (CLIP) models (Radford et al., 2021), trained on extensive datasets, exhibit strong feature extraction abilities. Consequently, integrating CLIP’s zero-shot learning capabilities into continual learning approaches has become a subject of keen interest (Thengane et al., 2022; Ding et al., 2022; Zheng et al., 2023; Zhou et al., 2022; Wang et al., 2023; Yu et al., 2024).
+
+Despite the success of recent CLIP-based IL methods, several challenges remain. For example, the CoOP framework (Zhou et al., 2022) preserves historical knowledge by utilizing a memory bank that is periodically accessed and updated during IL tasks. However, the ever-expanding volume of accumulated data can overburden the memory bank, thereby constraining CoOP’s capacity for lifelong learning. In contrast, Continual CLIP (Thengane et al., 2022) leverages a frozen pre-trained
+
+{1}------------------------------------------------
+
+![Figure 1: The overall framework of SimE. The diagram is divided into four panels: A, B, C, and D. Panel A shows a vertical sequence of tasks: Task 1, Task 2, ..., Task i, ..., Task t. Panel B details the learning process for Task 1, showing three stages: Adapter (finetuning the image encoder), Prototype 1 (computing prototypes), and Test 1 (evaluating performance). Panel C shows the process for subsequent tasks i (1 < i < t), where only the prototype and classifier are updated while the image encoder remains frozen. Panel D illustrates four image encoder architectures: Single-Adapter, Dual-Adapter, Single-Frozen, and Dual-Frozen, showing how adapters and frozen components are used to extract features.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: The overall framework of SimE. The diagram is divided into four panels: A, B, C, and D. Panel A shows a vertical sequence of tasks: Task 1, Task 2, ..., Task i, ..., Task t. Panel B details the learning process for Task 1, showing three stages: Adapter (finetuning the image encoder), Prototype 1 (computing prototypes), and Test 1 (evaluating performance). Panel C shows the process for subsequent tasks i (1 < i < t), where only the prototype and classifier are updated while the image encoder remains frozen. Panel D illustrates four image encoder architectures: Single-Adapter, Dual-Adapter, Single-Frozen, and Dual-Frozen, showing how adapters and frozen components are used to extract features.
+
+Figure 1: **The overall framework of SimE.** The green represents trainable and the grey denotes frozen components. **A)** illustrates the incremental learning tasks, which include  $t$  tasks. Specifically, we finetune the trainable parameters in SimE for task 1, while freezing all the parameters in SimE for the remaining tasks. **B)** The learning process for Task 1 can be divided into three stages: in the Adapter stage, the image encoder is finetuned using adapters; in the Prototype 1 stage, prototypes are computed based on the finetuned image encoder, and the classifier is updated; in the Test 1 stage, the classification performance of the model is evaluated. **C)** In the computation process for subsequent tasks  $i$  ( $1 < i < t$ ), all weights are frozen, only the prototypes are computed, and the classifier is updated. **D)** depicts the architectures of various image encoders.
+
+CLIP to facilitate the model’s continual learning capability, eliminating the need for replay memory but also limiting CLIP’s zero-shot capabilities. Additionally, ZSCL (Zheng et al., 2023) employs parameter regularization through knowledge distillation to maintain the model’s performance across IL tasks. However, ZSCL is not entirely efficient for IL endeavors, as it requires a substantial number of finetuning parameters to learn new data features and demands significant GPU resources during training. Moreover, the efficacy of CLIP’s feature extraction is significantly influenced by the pre-trained datasets and the size of its backbone architecture (e.g., ViT). Despite this, there has been no systematic exploration into optimizing CLIP’s zero-shot learning potential, which also affects the performance of IL methods. Collectively, the main challenges faced by these approaches include: **(1) the need for enhanced training efficiency; (2) reliance on a memory bank to store previous data; and (3) the need for a robust backbone to enhance the model’s capabilities.**
+
+To address these challenges, we introduce **SimE** (see Fig.1), a Simple and Efficient IL framework that combines a vision-language model with an adapter designed for efficient IL tasks. The adapter (Houlsby et al., 2019; Chen et al., 2022) is a lightweight module inserted into transformer blocks, enabling finetuning of the pre-trained model using minimal parameters. During training, the pre-trained model’s parameters are frozen; we finetune only the adapter’s trainable parameters, enhancing the model’s parameter efficiency and adaptability without requiring a memory bank. We conduct a comprehensive evaluation of various backbones and pre-trained datasets to ascertain the most effective CLIP configurations for IL tasks using SimE. CLIP offers a spectrum of backbones, ranging from base to large models, as described by Radford et al. (2021), each with its own set of parameters. Additionally, the scope of pre-trained datasets is vast, as evidenced by works such as Gadre et al. (2024) and Cherti et al. (2023), which span from 400 million to 2 billion samples. Our systematic investigation delves into the influence of these disparate backbones and pre-trained datasets on the performance of CLIP in IL scenarios.
+
+{2}------------------------------------------------
+
+![Figure 2: Comparison of previous and current finetuning approaches. The diagram shows four panels (A, B, C, D) illustrating different adapter configurations within a transformer block. Panel A shows the AdaptFormer approach with a single adapter module (AdaptMLP) in the skip connection. Panels B, C, and D show the Multi-Adapter approach with multiple trainable adapter modules (AdaptMLP, AdaptAttn, and AdaptAll) in different positions. Modules in green are trainable, while those in gray are frozen. A legend indicates 'Trainable' in green and 'Frozen' in gray.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2: Comparison of previous and current finetuning approaches. The diagram shows four panels (A, B, C, D) illustrating different adapter configurations within a transformer block. Panel A shows the AdaptFormer approach with a single adapter module (AdaptMLP) in the skip connection. Panels B, C, and D show the Multi-Adapter approach with multiple trainable adapter modules (AdaptMLP, AdaptAttn, and AdaptAll) in different positions. Modules in green are trainable, while those in gray are frozen. A legend indicates 'Trainable' in green and 'Frozen' in gray.
+
+Figure 2: **Comparison of previous and current finetuning approaches: The previous approach, AdaptFormer (A), is contrasted with our Multi-Adapter finetuning (B, C, and D).** The modules colored in green are trainable, while those in gray are frozen. In AdaptFormer and Multi-Adapter, the AdaptMLP, AdaptAttn, and AdaptAll modules are parameterized by a bottom-up bottleneck module with trainable parameters, whereas the original MLP and Self-Attention modules remain frozen. The AdaptFormer consists of the original frozen branch coupled with AdaptMLP. In contrast, our Multi-Adapter incorporates various trainable modules alongside the frozen branch for enhanced adaptability. And  $B \times$  is represented by  $B$  Blocks.
+
+In SimE, by simply combining CLIP and AdaptFormer, we observe that increasing the number of adapters between transformer blocks can improve model performance. To explore better methods of adapter connections, we propose a new adapter design named Multi-Adapter (see Fig.2), which aims to increase the number of adaptive connections beyond the constraints imposed by the AdaptFormer architecture. Surprisingly, we find that within transformer blocks, increasing the number of adaptive connections in smaller incremental steps does not enhance, and may even degrade the model’s IL capabilities. This improvement only occurs in larger incremental stages. Extensive experiments across various settings demonstrate the effectiveness of SimE on IL tasks. Our contributions can be summarized as follows:
+
+- We introduce SimE, which surpasses existing baseline IL models in class-incremental learning tasks. SimE is distinguished by its efficiency in three key areas: GPU usage, the number of trainable parameters, and memory size (as illustrated in Fig.5). Furthermore, SimE achieves competitive or superior accuracy with fewer additional parameters compared to other methods leveraging pre-trained models. (as shown in Fig.4(a)).
+- We propose Multi-Adapter to explore better methods of adapter connections and observe a significant phenomenon: there is not always a direct positive correlation between the number of adaptive connections and the model’s IL capabilities. While increasing the number of adapter connections between transformer blocks positively impacts model performance, within transformer blocks, adding more adaptive connections in smaller incremental steps does not enhance, and may even degrade the model’s IL ability. Such improvement only occurs at more advanced incremental stages.
+- We conduct a systematic study to enhance the utilization of the zero-shot capabilities of CLIP under SimE, pinpointing the most suitable backbone for CIFAR-100 and TinyImageNet. We advocate for the use of CLIP models that have been pre-trained on expansive datasets, such as LAION-2B, and possess larger architectures like ViT-L/14, to facilitate IL processes via SimE.
+
+{3}------------------------------------------------
+
+## 2 RELATED WORK
+
+**Conventional Continual Learning Methods:** Traditional continual learning methods can be divided into three categories: regularization-based, architecture-based, and replay-based approaches. Regularization-based methods (Aljundi et al., 2018; Kirkpatrick et al., 2017; Li & Hoiem, 2017) mitigate forgetting by incorporating regularization terms into the loss function, encouraging the model to retain weights important for previous tasks. However, these methods may diminish the model’s ability to learn new categories effectively. Architecture-based methods (Mallya & Lazebnik, 2018; Serra et al., 2018; Wang et al., 2020) adjust the network’s structure to accommodate new tasks by expanding it or altering its configuration. While effective, these methods may not be ideal for task-agnostic continual learning and can lead to increased memory usage. Replay-based methods (Rebuffi et al., 2017; Buzega et al., 2020; Cha et al., 2021) involve storing and periodically revisiting data from previous tasks to help the model retain prior knowledge. Although useful, these methods can raise privacy concerns and may be less effective with smaller data buffers. Moreover, traditional continual learning models are typically trained from scratch, which may limit the maximum achievable performance by not leveraging pre-trained models.
+
+**Continual Learning Methods Using CLIP:** Recently, pre-trained models have been increasingly adopted in continual learning due to their powerful feature extraction capabilities (Wang et al., 2022c;b; Thengane et al., 2022). CLIP (Radford et al., 2021), renowned for its impressive zero-shot abilities, excels in feature extraction through contrastive learning on vast amounts of image-text pairs. Consequently, several studies (Thengane et al., 2022; Ding et al., 2022; Zheng et al., 2023; Zhou et al., 2022; Wang et al., 2023; Yu et al., 2024) have integrated CLIP into continual learning models to enhance performance. Continual-CLIP (Thengane et al., 2022) directly applies CLIP to continual learning without any finetuning, maintaining CLIP’s feature extraction capacity but potentially suffering from domain gaps between pre-trained datasets and downstream tasks. LwF-VR (Ding et al., 2022) and ZSCL (Zheng et al., 2023) finetune the entire model using traditional continual learning methods to adapt to specific tasks. This process is computationally expensive due to the large size of pre-trained models and may also lead to the forgetting of previously learned knowledge. Thus, the finetuning strategy significantly impacts model performance.
+
+**Continual Learning Methods Using Adapter Finetuning:** Adapters were initially introduced in natural language processing (Houlsby et al., 2019) to finetune pre-trained models for specific tasks by modifying a minimal set of weights. This approach has gained traction across various fields due to its notable efficiency (Chen et al., 2022; Dong et al., 2024). In the realm of continual learning, recent studies (Liu et al., 2023; Ermis et al., 2022b;a; Yu et al., 2024) have explored integrating adapters, placing them after the encoder or within the model’s blocks. These adapters enable learning new tasks with a limited number of trainable parameters while preserving the core feature extraction functions. AdaptFormer (Chen et al., 2022), known for its lightweight parameterization, enhances model efficiency but is limited by the number of adaptive connections it can establish. In this paper, we introduce a Multi-Adapter that expands the number of adaptive connections, thereby extending the model’s flexibility.
+
+## 3 THE SIME FRAMEWORK VIA VISION-LANGUAGE MODELS WITH ADAPTERS
+
+In this section, we first introduce the definition of the incremental learning (IL) task. Next, in Section 3.1, we present SimE, a framework that combines the image encoder in vision-language models with an adapter. Then, we introduce the formulation of the Multi-Adapter in Section 3.2. Finally, in Section 3.3, we describe implementations of SimE using the image encoder from CLIP and the adapters from AdaptFormer and Multi-Adapter. Incremental learning (IL) methods enable a model to learn new tasks while retaining knowledge from previous ones.
+
+Consider a sequence of tasks  $\mathcal{D} = D_1, D_2, \dots, D_T$ , where the  $t$ -th task is defined as  $D_t = (\mathbf{x}_i^t, \mathbf{y}_i^t)_{i=1}^{m_t}$ . Here,  $D_t$  contains  $m_t$  samples  $\mathbf{x}_i^t$  and their corresponding labels  $\mathbf{y}_i^t$ . During the learning of task  $D_t$ , we have access only to the data from  $D_t$ ; the data from previous tasks  $D_1, D_2, \dots, D_{t-1}$  are unavailable. Furthermore, we focus on task-agnostic class-incremental learning (class-IL), where historical data cannot be used for rehearsal, and the task ID is not known during inference. In this setting, the model must learn to classify samples from all classes seen so far without explicit information about which task a sample belongs to.
+
+{4}------------------------------------------------
+
+### 3.1 SiME FORMULATION
+
+SiME is structured into three primary phases: data pre-processing, feature extraction, and image classification. In the initial phase, raw image data are transformed into a format compatible with the model's requirements. This is followed by the feature extraction phase, where an encoder—specifically the image encoder from a pre-trained vision-language model equipped with an adapter and prototype extractors—processes the formatted images. The process culminates in the image classification phase, where a fully connected (FC) layer acts as the classifier. This classifier is intricately designed to support class-incremental learning (class-IL), facilitating the seamless incorporation of new classes.
+
+**The Encoder.** Image encoders are utilized to extract visual features from preprocessed images. Commonly used image encoder architectures include ResNet and ViT. Taking ViT as an example, the  $i$ th block of basic transformer module can be described as follows: 1) self-attention  $f_i : \mathcal{A}_i \rightarrow \mathcal{A}_i$ , which computes the attention among elements and learns global information through their interactions; 2) MLP  $g_i : \mathcal{A}_i \rightarrow \mathcal{H}$ , which applies nonlinear transformations to the input sequence to enhance the model's expressive capacity. Formally, this can be represented as:
+
+$$i \text{ th Self-Attention: } \mathbf{a}_i = f_i(\theta_i, \mathbf{x}_i), \quad i \text{ th MLP: } \mathbf{h}_i = g_i(\phi_i, \mathbf{a}_i). \quad (1)$$
+
+Here,  $\mathbf{h}_i$  contains the visual features of the original image  $\mathbf{x}_i$ , Self-Attention and MLP are instantiated with the parameters  $\theta_i$  and  $\phi_i$  respectively. For the pre-trained encoder, both  $\theta_i$  and  $\phi_i$  are pre-trained weights that are frozen.
+
+**The Adapter.** An adapter is a lightweight module designed to finetune pre-trained models for downstream datasets with a minimal number of additional parameters. The parameters of adapters are trainable and will be updated during the finetuning process, while the weights of pre-trained models are frozen. The adapter in the  $i$ th blocks extracts features as  $d_i : \mathcal{A}_i \rightarrow \mathcal{H}_i$ ,
+
+$$i \text{ th Adapter: } \mathbf{h}_i = d_i(\tilde{\eta}_i, \mathbf{x}_i). \quad (2)$$
+
+Here, adapter  $i$  is instantiated with parameters  $\tilde{\eta}_i$ , where  $\tilde{\eta}_i$  are trainable. The visual features extracted by the adapter are integrated into the pre-trained encoder, enhancing its ability to extract visual features of downstream datasets. It is noteworthy that, unlike the modules of the pre-trained encoder, both the number and positions of adapters are variable. By introducing adapter into pre-trained encoder, we get the general form of the encoder with adapter  $E(\mathbf{x})$ :
+
+$$E(\mathbf{x}) = \sum_i^B (g_i(\phi_i, f_i(\theta_i, \mathbf{x}_i)) + d_i(\tilde{\eta}_i, \mathbf{x}_i)), \quad (3)$$
+
+where  $B$  is the number of the block in the encoder. Especially, when  $i = 0$ , the  $\mathbf{x}_i$  is the reprocessed image  $\mathbf{x}$ .
+
+**The Prototype extractor.** In image classification, we follow Snell et al. (2017), setting the average features of the classes as the weights of the classifier. For the  $t$ -th task ( $t = 2, \dots, T$ ), we do not update the weights of  $E(\mathbf{x})$  in Eq.3; instead, we use the  $E(\mathbf{x})$  directly to calculate the average value of features and set it as prototypes in datasets  $\{\mathbf{x}_1^t, \dots, \mathbf{x}_{n_t}^t\}_{i=1}^{n_t}$ :
+
+$$p_k = \frac{1}{K} \sum_{j=1}^{|D^t|} I(y_j = k) E(\mathbf{x}_j), \quad (4)$$
+
+where  $p_k \in \mathbb{R}^d$  is the prototype of increment class  $k$  in  $t$ -th task,  $K = \sum_{j=1}^{|D^t|} I(y_j = k)$ ,  $I(\cdot)$  is the indicator function.  $p_k$  contains the average features of class  $k$ , implying that the images of class  $k$  should exhibit the greatest similarity with  $p_k$  among all prototypes.
+
+**The Classifier.** In Class IL, the classifier is dynamic and can be implemented in various ways(Mai et al., 2021; Wang et al., 2023). In this paper, we use a FC layer as our classifier(Snell et al. (2017). For the  $t$ -th task, the classifier is an FC layer  $W_t \in \mathbb{R}^{D \times (N+M)}$ , where  $D$  is the feature dimension,  $N$  is the number of classes at  $(t-1)$ -th task,  $M$  is the number of increment classes in  $t$ -th task. We use the training set data  $\mathbf{x}_{\text{pro}} = \{\{\mathbf{x}_i^t, y_i^t\}_{i=1}^{n_t}\}$  from the  $t$ -th task to calculate the prototype  $W_{\text{pro}} = \text{mean}(E(\mathbf{x}_{\text{pro}}))$ , where  $n_t$  is the number of samples in the training set of the  $t$ -th task, then update the FC layer  $W_t$ :  $W_t = W_{t-1} + W_{\text{pro}}$ , where  $W_{t-1} \in \mathbb{R}^{D \times N}$  and  $W_{\text{pro}} \in \mathbb{R}^{D \times M}$ . The
+
+{5}------------------------------------------------
+
+cosine similarity for classification is then calculated as:
+
+$$f(\mathbf{x}) = \left( \frac{\mathbf{W}}{\|\mathbf{W}\|_2} \right)^\top \left( \frac{E(\mathbf{x})}{\|E(\mathbf{x})\|_2} \right) \quad (5)$$
+
+given that prototype  $p_i$  is most similar to instances of class  $i$ , it is expected that the classifier will assign a higher probability to the correct class label.
+
+### 3.2 MULTI-ADAPTER FORMULATION
+
+We propose the Multi-Adapter, which comprises three adapter sub-modules: AdaptAtten, AdaptMLP, and AdaptAll as shown in Fig.2. The sub-modules AdaptAtten, AdaptMLP, and AdaptAll share the same structure, each containing a down-projection, a non-linear activation function (e.g., ReLU) and an up-projection. Thus, we can derive a more specific form of the  $i$ th adapter  $r_i : \mathcal{C}_i \rightarrow \tilde{\mathcal{S}}$ ,
+
+$$\mathbf{s}_{ij} = r_{ij}(\tilde{\mathbf{h}}_{ij}, \mathbf{c}_{ij}), \text{ where } \mathbf{c}_{ij} = \begin{cases} \mathbf{a}_i & j = 1 \text{ and } \mathbf{s}_{ij} = \mathbf{h}_i; \mathbf{r}_{ij} \text{ is AdaptMLP} \\ \mathbf{x}_i & j = 2 \text{ and } \mathbf{s}_{ij} = \mathbf{a}_i; \mathbf{r}_{ij} \text{ is AdaptAtten} \\ \mathbf{h}_i & j = 3 \text{ and } \mathbf{s}_{ij} = \mathbf{h}_i; \mathbf{r}_{ij} \text{ is AdaptAll} \end{cases}, \quad (6)$$
+
+here  $\mathbf{c}_{ij}$  can be equal to the initial input  $\mathbf{x}_i$  or an intermediate variable  $\mathbf{a}_i$ , and  $j \in \{1, 2, 3\}$ , correspond to AdaptMLP, AdaptAtten, and AdaptAll, respectively. Thus, the  $i$ th block in ViT can be represented as a combination of the pre-trained modules and the adapter sub-modules:
+
+$$E'(c) = \sum_i^B \sum_j^Z (f_{ij}(\theta_{ij}, g_{ij}(\phi_{ij}, \mathbf{c}_{ij})) + r_{ij}(\tilde{\mathbf{h}}_{ij}, \mathbf{c}_{ij})), \quad (7)$$
+
+where  $B$  is the number of the block in the encoder and  $Z$  is a subset of  $\{1, 2, 3\}$  ( $Z \subseteq \{1, 2, 3\}$ ). Especially, when  $i = 0$ , the  $\mathbf{c}_{0j}$  is the reprocessed image  $\mathbf{x}$ . By identifying the trainable parameters, the adapter can be instantiated. Lastly, the optimisation of adapter for domain adaptation can see in Appendix A.
+
+### 3.3 REALIZATIONS OF SIMES VIA CLIP WITH DIFFERENT ADAPTERS
+
+In SimE, there are numerous implementations for the encoder and adapter. Here, we first employ the CLIP visual encoder as the encoder and AdaptFormer or Multi-Adapter as the adapter to establish a toy model of SimE. Subsequently, we explore various specific implementations of SimE. **CLIP** (Radford et al., 2021) is a powerful visual-language contrastive learning model comprising an image encoder and a text encoder. It is trained on 400 million image-text pairs and possesses strong feature extraction capabilities. In this paper, we employ the CLIP pre-trained visual encoder as our backbone, i.e., we instantiate our encoder using the CLIP pre-trained weights  $\theta$  and  $\phi$ . Additionally, there exist CLIP models pre-trained on different datasets, corresponding to different encoder instances. It is noteworthy that during the continual learning process, the pre-trained weights of CLIP are frozen and do not participate in weight updates. **Adaptformer** Chen et al. (2022) containing a down-projection  $W_{\text{down}} \in \mathbb{R}^{D \times K}$  to reduce the feature dimension, a non-linear activation function(ReLU) and an up-projection  $W_{\text{up}} \in \mathbb{R}^{R \times D}$  to project the features back to their original dimension, where  $D$  is the feature dimension and  $R$  is the dimension of bottleneck. The specific form of the AdaptFormer is:
+
+$$d_t(\tilde{\mathbf{h}}_i, \mathbf{h}_i) = \alpha \text{ReLU}(\mathbf{h}_i \cdot W_{\text{down}}) \cdot W_{\text{up}} \quad (8)$$
+
+Here  $\alpha$  is the scaling factor in the residual connection, which is set to 0.1 by default in AdaptFormer. **Multi-Adapter** is represented by Eq.7. The Adaptformer is a special case in **Multi-Adapter** and we employ the same down-up projects in Eq.8 to initialize the Multi-Adapter.
+
+## 4 EXPERIMENTAL RESULTS
+
+In this section, we begin by comparing the performance of the proposed SimE method with that of other Class-Incremental Learning (CIL) methods. Next, we evaluate the efficiency of these models by examining their number of trainable parameters, GPU usage, and memory bank size. Furthermore, we conduct ablation experiments to investigate the impact of various components within SimE. Lastly, the details of the experimental settings are provided in Appendix B.
+
+{6}------------------------------------------------
+
+![Figure 3: Three line graphs showing the last accuracy of every task in 10 steps for different CIL methods. The left graph is for CIFAR100 with ViT-L/14 backbone, the middle graph is for CIFAR100 with ViT-L/16 backbone, and the right graph is for TinyImageNet with ViT-L/16 backbone. In all cases, the 'Ours' method (red line) maintains higher accuracy than other methods (iTAML, ARCLIP, DER, CoOp, Continual-CLIP, Fren-time, iCaRL, LwF) as tasks increase from 1 to 10.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3: Three line graphs showing the last accuracy of every task in 10 steps for different CIL methods. The left graph is for CIFAR100 with ViT-L/14 backbone, the middle graph is for CIFAR100 with ViT-L/16 backbone, and the right graph is for TinyImageNet with ViT-L/16 backbone. In all cases, the 'Ours' method (red line) maintains higher accuracy than other methods (iTAML, ARCLIP, DER, CoOp, Continual-CLIP, Fren-time, iCaRL, LwF) as tasks increase from 1 to 10.
+
+Figure 3: Last accuracy of every Task in 10 steps. The Last accuracy of Task  $t$ ,  $t \in \{1, 2, \dots, 10\}$  is the Top-1 accuracy over all the previous Tasks (i.e., Tasks 1, 2, ...,  $t$ ). The results in **left** and **middle** are conducted on CIFAR100. The result of "Ours" in **left** is based on ViT-L/14 and in **middle** and **right** are based on ViT-B/16.
+
+### 4.1 COMPARISON ON THE ACCURACY OF DIFFERENT CIL METHODS
+
+**SimE outperforms most Other CIL methods at various steps on both CIFAR-100 and Tiny-ImageNet datasets.** First, we compare the performance of our method with other CIL methods across all tasks and present the results in Tab.1, where the best results are highlighted in grey. The results, measured by the average accuracy across tasks, show that our method achieves the highest scores among recent state-of-the-art methods, demonstrating the significant effectiveness of incorporating adapters into a pre-trained model. Specifically, our method and other CLIP-based methods (CoOp(Zhou et al., 2022), Continual-CLIP(Thengane et al., 2022)) have a substantial advantage over traditional continual learning methods initially, reflecting the superior feature extraction capabilities of pre-trained models.
+
+However, the accuracy of other CLIP-based methods drops quickly as training progresses, indicating that they are severely affected by domain gaps or catastrophic forgetting. Our method not only outperforms CLIP-based methods at the start, showing that finetuning helps the model adapt to downstream tasks, but also exhibits a slower decline in performance because it retains the original feature extractor, thus preserving the pre-trained model’s prior knowledge. In addition to splitting CIFAR-100 into 10 tasks, we also experimented with 20 and 50 tasks and have listed the results in Tab.1. Our method consistently performs the best across all settings, outperforming current state-of-the-art methods by at least 3%. Furthermore, we conducted experiments on TinyImageNet, where we split the dataset into multiple tasks with 100 classes as base classes, and reported these results in Tab.1. Our method remains superior in most settings, further demonstrating its effectiveness.
+
+Table 1: Comparison on the accuracy of different CIL methods. The Average and Last accuracy of different CIL methods on CIFAR100 and TinyImageNet benchmark. Among them, UCIR(Hou et al., 2019), PASS(Zhu et al., 2021), DyTox(Douillard et al., 2022), and DER(Yan et al., 2021) train from scratch, while the remaining methods use CLIP ViT-B/16 as the backbone, where  $\dagger$  indicates the result based on the CLIP ViT-L/14 pre-trained on Laion-2B. The 100 classes of TinyImageNet are used as base classes. The best results are coloured grey.
+
+| Methods | CIFAR100 |  |  |  |  |  | TinyImageNet |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | 10 Steps |  | 20 Steps |  | 50 Steps |  | 5 Steps |  | 10 Steps |  | 20 Steps |  |
+|  | Avg | Last | Avg | Last | Avg | Last | Avg | Last | Avg | Last | Avg | Last |
+| UCIR(Hou et al., 2019) | 58.66 | 43.39 | 58.17 | 40.63 | 56.86 | 37.09 | 50.30 | 39.42 | 48.58 | 37.29 | 42.84 | 30.85 |
+| PASS(Zhu et al., 2021) | 65.46 | 53.23 | 59.69 | 43.13 | 39.23 | 18.89 | 61.54 | 46.66 | 57.05 | 41.54 | 54.62 | 44.55 |
+| DyTox(Douillard et al., 2022) | 67.33 | 51.68 | 67.30 | 48.45 | 64.39 | 43.47 | 55.58 | 47.23 | 52.26 | 42.79 | 46.18 | 36.21 |
+| DER(Yan et al., 2021) | 74.64 | 64.35 | 73.98 | 62.55 | 72.05 | 59.76 | - | - | - | - | - | - |
+| CLIP(Radford et al., 2021) | 74.47 | 65.92 | 75.20 | 65.74 | 73.67 | 65.94 | 69.62 | 65.30 | 69.55 | 65.59 | 69.49 | 65.30 |
+| Fren-time | 79.35 | 70.97 | 73.32 | 64.55 | 71.28 | 59.07 | 77.02 | 70.39 | 73.48 | 65.97 | 69.65 | 64.68 |
+| iCaRL(Rebuffi et al., 2017) | 65.86 | 48.04 | 60.64 | 40.56 | 47.69 | 32.90 | 60.97 | 48.77 | 57.60 | 44.00 | 54.79 | 42.26 |
+| LwF(Li & Hoiem, 2017) | 75.17 | 66.72 | 75.95 | 66.72 | 76.49 | 66.72 | 70.49 | 66.43 | 70.55 | 66.43 | 70.51 | 66.43 |
+| Continual-CLIP(Thengane et al., 2022) | 78.81 | 70.75 | 74.54 | 63.54 | 71.02 | 59.45 | 77.56 | 70.89 | 74.12 | 67.05 | 69.94 | 63.89 |
+| LwF-VKD(Ding et al., 2022) | 82.15 | 73.65 | 80.39 | 69.58 | 79.92 | 67.36 | 80.27 | 73.57 | 78.61 | 71.62 | 77.18 | 68.30 |
+| ZSCL(Zheng et al., 2023) | 85.94 | 77.10 | 85.67 | 76.61 | 84.16 | 73.88 | 79.35 | 75.37 | 79.32 | 75.37 | 79.29 | 75.37 |
+| SimE(Ours) | 91.66 | 86.03 | 92.27 | 86.64 | 91.64 | 85.35 | 86.47 | 83.33 | 86.41 | 83.33 | 86.39 | 83.33 |
+| SimE(Ours) $\dagger$ |  |  |  |  |  |  |  |  |  |  |  |  |
+
+We further compare the results of each task with traditional and CLIP-based CIL methods, as shown in Fig.3 & Tab.5, and our method consistently outperforms other methods across all tasks. Additionally, in Fig.3 & Fig.6, we compare the performance of each task on CIFAR100 and TinyImageNet, revealing differences in the generalization ability of the backbone across different datasets. Consequently,
+
+{7}------------------------------------------------
+
+![Figure 4: Comparison on the efficiency of different CIL methods. The figure consists of six subplots (a-f) showing various metrics for different CIL methods. (a) Training parameters (Milio), (b) GPU usage (GFP), (c) Memory bank size, (d) Training parameters (Milio) vs Bottleneck dimension, (e) Avg accuracy (%) vs The number of adapters, and (f) Training parameters (Milio) vs The number of steps. Dotted orange lines represent Last accuracy (%) and Avg accuracy (%).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4 consists of six subplots (a-f) comparing different CIL methods. Subplots (a), (b), and (c) compare methods: Lwf, Lwf-VR, ZSCL, Bwarp-CL, and Ours. Subplots (d) and (e) show the impact of bottleneck dimension and number of adapters for the proposed method. Subplot (f) compares Ours with ZSCL and Bwarp-CL across different numbers of steps.
+
+| Method | Training parameters (Milio) | Last accuracy (%) | Avg accuracy (%) |
+|-|-|-|-|
+| Lwf | ~100 | ~65 | ~75 |
+| Lwf-VR | ~100 | ~75 | ~80 |
+| ZSCL | ~100 | ~70 | ~78 |
+| Bwarp-CL | ~40 | ~70 | ~78 |
+| Ours | ~10 | ~80 | ~85 |
+
+| Method | GPU usage (GFP) | Last accuracy (%) | Avg accuracy (%) |
+|-|-|-|-|
+| Lwf | ~25 | ~65 | ~75 |
+| Lwf-VR | ~25 | ~75 | ~80 |
+| ZSCL | ~20 | ~70 | ~78 |
+| Bwarp-CL | ~15 | ~70 | ~78 |
+| Ours | ~10 | ~80 | ~85 |
+
+| Method | Memory bank size | Last accuracy (%) | Avg accuracy (%) |
+|-|-|-|-|
+| Lwf | ~2000 | ~65 | ~75 |
+| PCML | ~1000 | ~75 | ~80 |
+| CoGP | ~1000 | ~70 | ~78 |
+| ITAML | ~2000 | ~70 | ~78 |
+| ABL | ~2000 | ~70 | ~78 |
+| Ours | ~100 | ~80 | ~85 |
+
+| Bottleneck dimension | Training parameters (Milio) | Last accuracy (%) | Avg accuracy (%) |
+|-|-|-|-|
+| 1 | ~0.5 | ~80 | ~85 |
+| 2 | ~0.5 | ~75 | ~80 |
+| 3 | ~0.5 | ~75 | ~80 |
+| 4 | ~0.5 | ~75 | ~80 |
+| 5 | ~0.5 | ~75 | ~80 |
+| 6 | ~0.5 | ~75 | ~80 |
+| 7 | ~0.5 | ~75 | ~80 |
+| 8 | ~0.5 | ~75 | ~80 |
+
+| The number of adapters | Training parameters (Milio) | Last accuracy (%) | Avg accuracy (%) |
+|-|-|-|-|
+| 3 | ~0.5 | ~75 | ~80 |
+| 6 | ~0.5 | ~75 | ~80 |
+| 9 | ~0.5 | ~75 | ~80 |
+| 12 | ~0.5 | ~75 | ~80 |
+
+| The number of steps | Method | Training parameters (Milio) | Last accuracy (%) | Avg accuracy (%) |
+|-|-|-|-|-|
+| 10 | Ours | ~150 | ~80 | ~85 |
+| 10 | ZSCL | ~150 | ~75 | ~80 |
+| 10 | Bwarp-CL | ~150 | ~75 | ~80 |
+| 20 | Ours | ~150 | ~80 | ~85 |
+| 20 | ZSCL | ~150 | ~75 | ~80 |
+| 20 | Bwarp-CL | ~150 | ~75 | ~80 |
+| 50 | Ours | ~150 | ~80 | ~85 |
+| 50 | ZSCL | ~150 | ~75 | ~80 |
+| 50 | Bwarp-CL | ~150 | ~75 | ~80 |
+
+Figure 4: Comparison on the efficiency of different CIL methods. The figure consists of six subplots (a-f) showing various metrics for different CIL methods. (a) Training parameters (Milio), (b) GPU usage (GFP), (c) Memory bank size, (d) Training parameters (Milio) vs Bottleneck dimension, (e) Avg accuracy (%) vs The number of adapters, and (f) Training parameters (Milio) vs The number of steps. Dotted orange lines represent Last accuracy (%) and Avg accuracy (%).
+
+Figure 4: Comparison on the efficiency of different CIL methods. The dotted line and right axis coloured orange present the Last accuracy and Avg accuracy. (a)(b)(c) denote the Training parameters, GPU usage, Memory bank size and Last accuracy of different CIL methods respectively. (d)(e) is the Training parameters and Avg accuracy of Ours under different bottleneck dimensions and number of adapters. (f) show the comparison between Ours and other CIL methods in training parameters and Avg accuracy. All the experiments are conducted on CIFAR100, and (a)-(e) are conducted in 10steps.
+
+we conduct further experiments to identify the optimal backbone for different datasets, as detailed in Sec. 4.4.
+
+### 4.2 COMPARISON ON THE EFFICIENCY OF DIFFERENT CIL METHODS
+
+We compare the efficiency of our proposed SiME method with other Class-Incremental Learning (CIL) methods by examining the number of trainable parameters, GPU usage, and replay data size. The experimental settings are the same as those described in Appendix B and the results are shown in Fig. 4. As illustrated in Fig. 4(a) and Fig. 4, our method requires only thousands of trainable parameters while achieving competitive results compared to other CIL methods that utilize millions of parameters, significantly reducing training costs. Furthermore, as shown in Fig. 4(b) and Fig. 4(c), our method uses only one-third of the parameters and does not require a buffer to store replay data. We also study the influence of the bottleneck dimension and the number of adapters, as depicted in Figures Fig. 4(d) and Fig. 4(e). Despite varying these parameters, our method still achieves competitive performance with minimal trainable parameters. These results demonstrate that our method can achieve performance comparable to or even exceeding that of other CIL methods with minimal training costs, thereby strongly validating the efficiency of the proposed SiME method.
+
+### 4.3 ABLATION STUDY ON THE INFLUENCE OF ADAPTER COMPONENTS IN SiME
+
+**The influence of adapter connection between transformer blocks.** We investigated the impact of the position and number of adapters inserted between transformer blocks, presenting the results in Fig. 5 & Tab. 6 & Tab. 7. In our notation, "1-3" indicates that adapters are inserted only into the first three blocks of the feature extractor. From Fig. 5, it is evident that inserting the same number of adapters into the earlier blocks significantly improves model performance. This suggests that learning primary features plays a more crucial role in model finetuning. Additionally, we varied the number of adapters between transformer blocks from 0 to 12. Inserting adapters into every block (totaling 12 adapters) consistently yielded the best performance across all steps. Therefore, a larger number of adapters between transformer blocks leads to better model performance, indicating that increasing the number of adapter connections between transformer blocks positively impacts model outcomes.
+
+**The influence of adapter connection within transformer blocks.** We also tested different implementations of the Multi-Adapter by inserting adapters within all 12 transformer blocks. The results
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+are reported in Tab.2 & Fig.7 & Tab.8 & Tab.9. Interestingly, we found that in smaller incremental steps, increasing the number of adaptive connections within transformer blocks does not improve model performance; in fact, it can even degrade it. The previously observed positive correlation only occurs in larger incremental steps. This suggests that a higher number of adapter connections within transformer blocks does not necessarily lead to better outcomes. In SimE, we explore the optimal implementation of adapters across various task configurations.
+
+![Figure 5: Influence of adapters' position and number between transformer blocks. (a) Avg accuracy on different numbers of adapters. (b) Last accuracy on different numbers of adapters. (c) Averaged Avg accuracy on different numbers of adapters. (d) Averaged Last accuracy on different numbers of adapters. All results are based on CIFAR100.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 5 consists of four subplots. Subplots (a) and (b) are line graphs showing accuracy (Avg and Last) versus the number and position of adapters (e.g., 1-3, 4-6, 7-9, 10-12, 1-6, 4-9, 7-12). Subplots (c) and (d) are bar charts showing averaged accuracy (Avg and Last) versus the number of adapters (3, 6, 9, 12) for different adapter positions (10, 20, 50 steps). In all plots, the 'Long' series (orange) generally outperforms the 'Short' series (blue).
+
+Figure 5: Influence of adapters' position and number between transformer blocks. (a) Avg accuracy on different numbers of adapters. (b) Last accuracy on different numbers of adapters. (c) Averaged Avg accuracy on different numbers of adapters. (d) Averaged Last accuracy on different numbers of adapters. All results are based on CIFAR100.
+
+Figure 5: Influence of adapters' position and number between transformer blocks. The x-axis represents the number of adapters in the encoder, with the numerical ranges indicating the positions of the adapters. For example, "1-3" signifies that adapters are inserted in the first 3 blocks. The accuracy shown in (c) and (d) represents the average results for different adapter positions with the same number of adapters. All results are based on CIFAR100.
+
+Table 2: The results of different implementations of Multi-Adapter. The structures of Adapter-MLP, Adapter-Atten and Adapt-All are shown in Fig.2. "Para" refers to trainable parameters, with "M" standing for million. All experiments are conducted on CIFAR100 and the best results are coloured grey
+
+| Adapt-MLP | Adapt-Atten | Adapt-All | Para(M) | 10 steps |  | 20 steps |  | 50 steps |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  |  |  | Avg | Last | Avg | Last | Avg | Last |
+| ✗ | ✗ | ✗ | 0 | 79.69 | 70.08 | 80.41 | 70.08 | 80.80 | 70.08 |
+| ✓ | ✗ | ✗ | 1.19 | 85.60 | 76.70 | 85.30 | 76.02 | 84.09 | 73.77 |
+| ✓ | ✓ | ✗ | 1.19 | <b>85.94</b> | <b>77.10</b> | <b>85.67</b> | <b>76.61</b> | 84.16 | 73.88 |
+| ✓ | ✗ | ✓ | 1.19 | 85.77 | 76.83 | 85.48 | 76.16 | 84.16 | 73.86 |
+| ✓ | ✓ | ✗ | 2.38 | 85.73 | 76.79 | 85.42 | 76.09 | <b>84.76</b> | <b>74.66</b> |
+| ✓ | ✓ | ✓ | 2.38 | 85.84 | 76.98 | 85.36 | 76.03 | 84.75 | 74.69 |
+| ✓ | ✗ | ✓ | 2.38 | 85.63 | 76.65 | 85.12 | 75.66 | 84.75 | 74.76 |
+| ✓ | ✓ | ✓ | 3.57 | 85.54 | 76.51 | 85.05 | 75.53 | 85.00 | 75.16 |
+
+### 4.4 ABLATION STUDIES ON THE INFLUENCE OF CLIP COMPONENTS IN SIMe
+
+**The influence of pre-trained datasets.** CLIP has attracted significant attention due to its powerful zero-shot capabilities, leading many studies to retrain CLIP from scratch on other image-text pair datasets, such as Datacomp (Gadre et al., 2024) and LAION (Schuhmann et al., 2022). These datasets are comparable in size to or even larger than the original pre-training dataset (WIT-400M). We evalu-
+
+{9}------------------------------------------------
+
+ated their performance on CIFAR-100 and TinyImageNet. As shown in Tab.3, pre-training models on larger datasets generally enhances their feature extraction capabilities, leading to better generalization. However, there are instances where smaller pre-trained datasets yield higher accuracy, indicating that dataset quality and preprocessing techniques also significantly impact model performance.
+
+Table 3: The influence of CLIP pre-trained datasets. WIT-400M is the closed-source dataset of OpenAI while others are from Open\_CLIP. All results are conducted on ViT-B/16 and the 100 classes of TinyImageNet are used as base classes. The best results are coloured grey.
+
+| Blocks | CIFAR100 |  |  |  |  |  | TinyImageNet |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | 10 steps |  | 20 steps |  | 50 steps |  | 10 steps |  | 20 steps |  | 50 steps |  |
+|  | Avg | Last | Avg | Last | Avg | Last | Avg | Last | Avg | Last | Avg | Last |
+| WIT-400M(Radford et al., 2021) | 85.60 | 76.70 | 85.30 | 76.02 | 84.09 | 73.77 | 79.35 | 75.37 | 79.32 | 75.37 | 79.29 | 75.37 |
+| Laion-400M(Schuhmann et al., 2022) | 87.14 | 79.54 | 86.86 | 78.82 | 85.95 | 77.63 | 80.62 | 78.01 | 80.46 | 77.48 | 81.06 | 79.22 |
+| Laion-2B(Schuhmann et al., 2022) | 88.34 | 81.33 | 88.47 | 80.89 | 87.91 | 80.09 | 81.98 | 79.99 | 81.83 | 79.77 | 82.78 | 81.63 |
+| DataComp-1B(Gadre et al., 2024) | 88.04 | 80.77 | 87.89 | 79.88 | 87.57 | 79.25 | 81.38 | 79.11 | 81.49 | 78.70 | 82.51 | 80.89 |
+| CommonPool-1B(Gadre et al., 2024) | 86.96 | 78.74 | 86.58 | 77.88 | 86.21 | 77.10 | 80.13 | 76.95 | 80.26 | 76.69 | 81.24 | 78.70 |
+
+**The influence of ViT backbone size.** In addition to examining pre-trained datasets, we investigated the impact of different ViT backbones in CLIP. Our default model uses ViT-B/16. As shown in Tab.4, increasing the backbone size significantly improves model performance. Specifically, the accuracy of ViT-L consistently surpasses that of ViT-B across various settings, demonstrating superior feature extraction capabilities. When the model size is held constant, the size of the image patches plays a crucial role in feature extraction, with smaller patch sizes better capturing semantic information. In contrast, the size of the images during pre-processing has a relatively minor impact on model performance.
+
+Table 4: The influence of CLIP ViT backbones size. The experiments use the corresponding data preprocessing while "336px" indicates the images are resized to 336. All experiments conducted on CIFAR100 and the best results are highlighted in grey.
+
+| Blocks | 10 steps |  | 20 steps |  | 50 steps |  |
+|-|-|-|-|-|-|-|
+|  | Avg | Last | Avg | Last | Avg | Last |
+| ViT-B/16 | 85.94 | 77.10 | 85.67 | 76.61 | 84.16 | 73.88 |
+| ViT-B/32 | 83.60 | 74.43 | 82.02 | 71.74 | 81.18 | 70.06 |
+| ViT-L/14-336px | 88.53 | 80.85 | 88.02 | 80.45 | 89.12 | 81.65 |
+| ViT-L/14 | <b>88.79</b> | <b>81.44</b> | <b>88.57</b> | <b>81.01</b> | <b>89.73</b> | <b>82.60</b> |
+
+## 5 CONCLUSION
+
+In this paper, we propose SimE, a simple yet efficient incremental learning (IL) framework. SimE utilizes a pre-trained model as the encoder and incorporates adapters for finetuning, thereby achieving robust feature extraction capabilities while adapting to IL tasks without the need to store replay data. Our experiments demonstrate that SimE achieves competitive results, validating its effectiveness. To explore better methods of adapter connections, we introduce the Multi-Adapter and observe a remarkable phenomenon: there is not always a direct positive correlation between the number of adaptive adapter connections and the model's IL capabilities. Specifically, while increasing the number of adapter connections between transformer blocks positively impacts model performance, adding more adaptive connections within transformer blocks during small incremental steps does not enhance, and may even degrade the model's IL ability. Such improvements occur only at more advanced incremental stages. We also conducted a systematic study on CLIP and identified the optimal CLIP model for CIFAR-100 and TinyImageNet. Based on our findings, we recommend that SimE's backbone encoder utilize the image encoder from CLIP models pre-trained on larger datasets like LAION-2B and larger architectures such as ViT-L/14 for CIL tasks. In future work, we will explore combining SimE with different pre-trained large models and various types of adapters for other tasks.
+
+ Rest of paper (reference and Appendix) is removed.

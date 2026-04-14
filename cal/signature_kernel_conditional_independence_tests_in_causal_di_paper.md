@@ -1,0 +1,307 @@
+
+
+{0}------------------------------------------------
+
+# SIGNATURE KERNEL CONDITIONAL INDEPENDENCE TESTS IN CAUSAL DISCOVERY FOR STOCHASTIC PROCESSES
+
+**Georg Manten\* & Cecilia Casolo\***
+
+Technical University of Munich  
+Helmholtz Munich  
+Munich Center for Machine Learning  
+{georg.manten, cecilia.casolo}@tum.de
+
+**Emilio Ferrucci**
+
+Mathematical Institute  
+University of Oxford  
+emilio.rossiferrucci@maths.ox.ac.uk
+
+**Søren Wengel Mogensen**
+
+Department of Automatic Control  
+Lund University  
+swn.fi@cbs.dk
+
+**Cristopher Salvi**
+
+Department of Mathematics  
+Imperial College London  
+c.salvi@imperial.ac.uk
+
+**Niki Kilbertus**
+
+Technical University of Munich  
+Helmholtz Munich  
+Munich Center for Machine Learning  
+niki.kilbertus@tum.de
+
+## ABSTRACT
+
+Infering the causal structure underlying stochastic dynamical systems from observational data holds great promise in domains ranging from science and health to finance. Such processes can often be accurately modeled via stochastic differential equations (SDEs), which naturally imply causal relationships via ‘which variables enter the differential of which other variables’. In this paper, we develop conditional independence (CI) constraints on coordinate processes over selected intervals that are Markov with respect to the acyclic dependence graph (allowing self-loops) induced by a general SDE model. We then provide a sound and complete causal discovery algorithm, capable of handling both fully and partially observed data, and uniquely recovering the underlying or induced ancestral graph by exploiting time directionality assuming a CI oracle. Finally, to make our algorithm practically usable, we also propose a flexible, consistent signature kernel-based CI test to infer these constraints from data. We extensively benchmark the CI test in isolation and as part of our causal discovery algorithms, outperforming existing approaches in SDE models and beyond.
+
+## 1 INTRODUCTION
+
+Understanding cause-effect relationships from observational data can help identify causal drivers for disease progression in longitudinal data and aid the development of new treatments, act upon the underlying influences of stock prices to support lucrative trading strategies, or speed up scientific discovery by uncovering interactions in complex biological systems such as gene regulatory pathways. Causal discovery (or causal structure learning) has received continued attention from the scientific community for at least two decades (Glymour et al., 2019; Spirtes et al., 2000; Vowels et al., 2022) with a notable uptick in previous years particularly regarding differentiable score-based methods (Zheng et al., 2018; Brouillard et al., 2020; Charpentier et al., 2022; Hägele et al., 2023; Lorch et al., 2021; Annadani et al., 2023; Zheng et al., 2020), building on score matching algorithms (Rolland
+
+---
+
+\*Equal contribution
+
+{1}------------------------------------------------
+
+et al., 2022; Montagna et al., 2023b;a), and other deep-learning based approaches (Chen et al., 2022; Ke et al., 2023; Yu et al., 2019; Ke et al., 2020). Many of these approaches aim at improving the scalability of causal discovery in the number of variables and observations as well as at incorporating uncertainty or efficiently making use of interventional data.
+
+However, causal discovery from time series data has received much less attention and been mostly neglected in these recent advances. At a fundamental level, causal effects in dynamical systems can only ‘point into the future’, which should make causal discovery in time resolved data intuitively simpler. Nevertheless, except for restricted settings, this promise has not been realized methodologically and causal discovery in time series, especially for systems evolving in continuous time, remains a major challenge (Singer, 1992; Runge et al., 2019; Lawrence et al., 2021; Runge et al., 2023).
+
+**Data generating process.** We assume data to follow a stochastic process  $X := (X^1, \dots, X^d)$ , with  $X^k$  taking values in  $\mathbb{R}^{n_k}$  ( $n_k \geq 1$ ), and  $X$  satisfying the following system of stationary, path-dependent SDEs
+
+$$\begin{cases} dX_t^k = \mu^k(X_{[0,t]})dt + \sigma^k(X_{[0,t]})dW_t^k, \\ X_0^k = x_0^k \end{cases} \quad \text{for } k \in [d] := \{1, \dots, d\}. \quad (1)$$
+
+We call this the **SDE model**. The subscript  $[0, t]$  at  $X$  means that  $\mu^k$  (the ‘drift’) and  $\sigma^k$  (the ‘diffusion’) are functions of the entire solution up to time  $t$ , i.e., they are defined on  $C([0, +\infty), \mathbb{R}^n)$  (or some suitable subspace thereof), where  $n := n_1 + \dots + n_d$ . Each  $W^k$  is an  $m_k$ -dimensional Brownian motion, and  $\sigma^k$  maps to  $n_k \times m_k$ -dimensional matrices. The noises  $W^k$  together with the (possibly random) initial conditions  $x_0^k$  are jointly independent. Therefore, the diffusion  $\sigma$  of the entire system is block-diagonal (see equation 8). We refer to Rogers & Williams (2000) for details, Evans (2006) for a concise introduction, and Appendix A.2 for more intuition and discussion of the assumptions made here. Hence, the SDE together with a distribution over initial conditions defines our data generating process. Individual observations are paths, which in practice translate to stochastic, potentially irregularly sampled time series observations for  $X_{[0,T]}^k$  with a maximum observation time  $T$ , see Figure 1. Appendix A.1 contains an overview table of the notations used.
+
+**Induced causal graph.** Eq. (1) naturally implies cause-effect relationships: we call  $i \in [d]$  a parent of  $j \in V := [d]$  ( $i \in \text{pa}_j^G$ ) when either  $\mu^j$  or  $\sigma^j$  is not constant in the  $i$ -th argument. These parental relationships define a directed graph  $\mathcal{G} = (V, E)$ , which we call **dependence graph** of the SDE model. The **goal of causal discovery** is to infer the graph  $\mathcal{G}$  induced by the SDE model from a sample of observed solution paths, depicted in Figure 1. Here, we only consider data generating processes leading to directed graphs without cycles of length greater than one (i.e., only ‘loops’  $X^k \rightarrow X^k$  are allowed). We still call these directed acyclic graphs (DAGs) for simplicity.
+
+**Limitations and requirements.** The key limitation of our setting is the assumption of acyclicity (except for self-loops). We discuss fundamental issues arising from dropping the acyclicity constraint in Appendix A.3. Further, we focus on stationary SDE models, i.e., the coefficients in eq. (1) are not explicitly time-dependent, motivated by the requirement that causal relationships do not change over time. Despite these limitations, our setting is the first to simultaneously satisfy the following criteria for causal discovery in continuous time systems: (a) It does not rely on the ‘discrete-time’ assumption, i.e., that all variables are observed at the same, typically homogeneously spaced, time points (neither in the underlying model nor the actual observations). Instead, different variables can be observed at different, irregularly spaced time points in our setting. (b) We can handle partially observed systems with unobserved confounders. (c) Path-dependence ( $\mu^k, \sigma^k$  may depend on the entire previous history  $X_{[0,t]}$  of paths), including delayed SDEs, is typically not captured in existing approaches (Peters et al., 2022). (d) Beyond ‘additive observation noise’ it incorporates ‘driving noise’, where causal dependence may stem from the diffusion, not captured by the means of observed paths.
+
+![Figure 1: Illustration of causal discovery in the SDE model. (A) shows the SDE equation dX_t^k = mu^k(X_{[0,t]})dt + sigma^k(X_{[0,t]})dW_t^k and the initial conditions X_0^k = x_0^k. (B) shows a plot of solution paths for variables X^1, X^2, X^3, X^4 over time, with X^1 and X^2 being observed at different times. (C) shows the resulting dependence graph with nodes X^1, X^2, X^3, X^4 and directed edges representing causal relationships, including self-loops on X^1 and X^2.](0a12cc47f3c5ca76c39d5943ba8661bd_img.jpg)
+
+Figure 1: Illustration of causal discovery in the SDE model. (A) shows the SDE equation dX\_t^k = mu^k(X\_{[0,t]})dt + sigma^k(X\_{[0,t]})dW\_t^k and the initial conditions X\_0^k = x\_0^k. (B) shows a plot of solution paths for variables X^1, X^2, X^3, X^4 over time, with X^1 and X^2 being observed at different times. (C) shows the resulting dependence graph with nodes X^1, X^2, X^3, X^4 and directed edges representing causal relationships, including self-loops on X^1 and X^2.
+
+Figure 1: Illustration of causal discovery in the SDE model (A), leveraging conditional independencies in the observed samples (B) to infer the dependence graph of the SDE (C).
+
+{2}------------------------------------------------
+
+**Contributions.** Our main contributions include (a) developing CI constraints on coordinate processes over selected intervals that we prove to be Markov with respect to the acyclic dependence graph (with self-loops) induced by a general SDE model. (b) We then propose an efficient constraint based causal discovery algorithm and prove it to be sound and complete, assuming a CI-oracle, for both fully and partially observed data. Unlike existing constraint based methods in static settings, our algorithm uniquely recovers the full underlying graph or induced ancestral graph by exploiting the direction of time. (c) Finally, we propose a flexible, practical CI test on path space, rendering our method highly practicable. (d) We extensively demonstrate the test’s efficacy and achieve superior performance in causal discovery compared to existing methods.
+
+## 2 BACKGROUND AND RELATED WORK
+
+**Causal discovery on time series.** While virtually all causal discovery methods on time series exploit that the direction of time constrains edges to point forward, except for [Laumann et al. \(2023\)](#), most existing work assumes observations to be sampled on a regular time grid with a discrete (auto-regressive) law, where past observations  $(X_{t-\tau}, \dots, X_{t-1})$  determine the present  $X_t = f(X_{t-\tau}, \dots, X_{t-1}, \varepsilon_t)$  for some fixed lag  $\tau$ , which can be seen as a static structural causal model (SCM) over an ‘unrolled graph’ with variables at different time steps considered as distinct nodes ([Assaad et al., 2022; Hasan et al., 2023; Peters et al., 2017](#)). Based on the seminal work ([Granger, 1969](#)), various Granger-type approaches leverage the assumption that past values of a variable can help predict future values to detect lagged causal influences both for linear ([Diks & Panchenko, 2006; Granger, 1980](#)) and non-linear ([Marinazzo et al., 2008; Shojaie & Fox, 2022; Runge, 2020; Pamfil et al., 2020](#)) functional relationships. While non-parametric constraint-based methods for such discrete-time models ([Runge et al., 2019; 2020; 2023](#)) can handle partial observations, they are also fundamentally limited by the ‘discrete-time’ assumption making them unfit for irregularly sampled observations of continuous time systems, path-dependence, or diffusion dependence. Furthermore, they require numerous tests across all time points and rely on the correct estimation of a fixed ‘lookback window’  $\tau$ . The fundamental problems of the ‘discrete-time’ assumption have also been discussed in [Runge \(2018\)](#).
+
+Other work focuses on the (static) equilibrium behavior of differential equations ([Mooij et al., 2013; Bongers et al., 2018; Bongers & Mooij, 2018](#)), exploiting invariance in mass-action kinetics ([Peters et al., 2022](#)), or attempts to directly learn the full dynamical law via non-convex optimization of heavily overparameterized neural network models ([Alice et al., 2021; 2022; Bellot et al., 2022; Wang et al., 2024](#)). The latter are fundamentally limited by the fixed functional modeling structures and therefore also unable to model partially observed settings. Albeit its limited applicability to fully-observed, Markovian SDE models, SCOTCH ([Wang et al., 2024](#)), which uses a variational formulation to infer posterior distributions over possible graphs, is the current state-of-the-art baseline.
+
+Constraint-based methods for continuous-time stochastic processes mostly rely on (conditional) local independence, an asymmetric independence relation ([Schweder, 1970; Mogensen et al., 2018](#)), which can be used to infer a (partial) causal graph in, e.g., point process models ([Didelot, 2008; Meek, 2014; Mogensen et al., 2018; Mogensen & Hansen, 2020](#)). However, besides the limitation to drift-dependencies, there exists no practical test of local independence for diffusions. The only work that actually tests local independence from data is ([Christgau et al., 2023](#)), which is heavily restricted to counting processes.
+
+In this work, we overcome the challenges of irregular and partial observations, path- and diffusion dependence, and practical applicability by transforming CI statements of the form
+
+$$X_I^\perp \!\!\! \perp \!\!\! X_J^I \mid X_K^K, \quad (2)$$
+
+for disjoint  $I, J, K \subseteq [d]$  between subsets of coordinate-processes  $X^I, X^J, X^K$  over intervals  $\mathcal{I}, \mathcal{J}, \mathcal{K} \subseteq [0, T]$  into a practical hypothesis test using the signature kernel and the arrow of time.
+
+**Conditional independence tests.** As a key building block of graphical models, there is a large literature on conditional independence tests, i.e., testing the null hypothesis  $H_0 : X \perp \!\!\! \perp Y \mid Z$ . When  $Z$  is discrete, CI testing reduces to a series of unconditional tests for each value of  $Z$  ([Tsamardinos & Boroudakis, 2010](#)). For continuous  $Z$ , nonparametric kernel-based methods often either check independence of residuals after kernel (ridge) regressing  $X$  and  $Y$  on  $Z$  ([Shah & Peters, 2020; Lundborg et al., 2022; Zhang et al., 2011; Daudin, 1980; Strobl et al., 2019](#)), or measure the distance
+
+{3}------------------------------------------------
+
+between joint and marginal kernel mean embeddings (Muandet et al., 2017; Park & Muandet, 2020). For example, KCIP (Doran et al., 2014) phrases it as a two-sample test of the null  $H_0 : P(X, Y, Z) = P(X)P(Y|Z)P(Z)$  and simulates samples from  $P(X|Z)P(Y|Z)P(Z)$  via a permutation of the data that approximately preserves  $Z$ . Lee & Honavar (2017) improve on KCIP with an unbiased estimate of Maximum Mean Discrepancy (MMD) (Gretton et al., 2006). Other permutation-based approaches require large sample sizes (Sen et al., 2017) or rely on densities (Kim et al., 2022), unfit for our setting.
+
+Laumann et al. (2023) develop a CI test for functional data using the Hilbert-Schmidt conditional independence criterion (HSCIC) (Park & Muandet, 2020) and a permutation test (Berrett et al., 2019), which they use as part of the PC-algorithm (Glymour et al., 2019) for causal discovery. Even though their approach assumes  $P_{X|Z}$  to be known (not the case in our setting), it is inapplicable under partial observations, and does not exploit the arrow of time (to identify graphs beyond the Markov equivalence class), we benchmark the work by Laumann et al. (2023) against our method in the experiments. CI testing faces fundamental practical challenges, such as the exponential growth in the number of values to condition on as dimensionality of  $Z$  increases, and theoretical limits, as any CI test’s power is bounded by its size (Shah & Peters, 2020; Lundborg et al., 2022). This ‘no free lunch’ statement underscores the need for carefully selecting the right test. Most existing approaches assume Euclidean spaces and do not generalize to path-valued random variables without densities, a gap we fill by combining kernel-based permutation tests (KCIP, SDCIT) with the signature kernel for a tailored CI test on path space and proving its consistency.
+
+**Signature kernels.** Signature kernels (Király & Oberhauser, 2019; Salvi et al., 2021a), a universal class for sequential data, have received attention recently for their efficiency in handling path-dependent problems (Lemercier et al., 2021; Salvi et al., 2021c; Cochrane et al., 2021; Salvi et al., 2021b; Cirone et al., 2023; Issa et al., 2023; Pannier & Salvi, 2024). The definition of the signature kernel requires an initial algebraic setup, which we keep as concise as possible—yet self-contained—here and refer the reader to Cass & Salvi (2024, Chapter 2) for more details. We provide some more informal intuition of signatures in Appendix A.4. Let  $\langle \cdot, \cdot \rangle_1$  be the Euclidean inner product on  $\mathbb{R}^d$ . Denote by  $\otimes$  the standard outer product of vector spaces. For any  $n \in \mathbb{N}$ , we denote by  $\langle \cdot, \cdot \rangle_n$  on  $(\mathbb{R}^d)^{\otimes n}$  the canonical Hilbert-Schmidt inner product defined for any  $a = (a_1, \dots, a_n)$  and  $b = (b_1, \dots, b_n)$  in  $(\mathbb{R}^d)^{\otimes n}$  as  $\langle a, b \rangle_n = \prod_{i=1}^n \langle a_i, b_i \rangle_1$ . Define the direct sum of vector spaces  $T(\mathbb{R}^d) := \bigoplus_{n=1}^{\infty} (\mathbb{R}^d)^{\otimes n}$ , where it is understood that the direct sum runs over finitely many non-zero levels. The inner product  $\langle \cdot, \cdot \rangle_n$  on  $(\mathbb{R}^d)^{\otimes n}$  can then be extended by linearity to an inner product  $\langle \cdot, \cdot \rangle$  on  $T(\mathbb{R}^d)$  defined for any  $a = (a_0, a_1, \dots)$  and  $b = (b_0, b_1, \dots)$  in  $T(\mathbb{R}^d)$  as  $\langle a, b \rangle = \sum_{n=0}^{\infty} \langle a_n, b_n \rangle_n$ . Other choices of linear extensions have been studied in Cass et al. (2023). We denote by  $\mathcal{T}(\mathbb{R}^d)$  the Hilbert space obtained by completing  $T(\mathbb{R}^d)$  with respect to  $\langle \cdot, \cdot \rangle$ .
+
+The *signature transform* is a classical path-transform from stochastic analysis. For any sub-interval  $[s, t] \subset [0, T]$  and any continuous path  $X \in C_p([0, T], \mathbb{R}^d)$  of finite  $p$ -variation, with  $1 \leq p < 3$ , it is (canonically) defined as  $S(X)_{s,t} := (1, S(X)_{s,t}^{(1)}, \dots, S(X)_{s,t}^{(n)}, \dots) \in \mathcal{T}(\mathbb{R}^d)$ , where  $S(X)_{s,t}^{(n)} \in (\mathbb{R}^d)^{\otimes n}$  is the  $n$ -fold iterated integral  $S(X)_{s,t}^{(n)} = \int_{s < u_1 < \dots < u_n < t} dX_{u_1} \otimes dX_{u_2} \otimes \dots \otimes dX_{u_n}$ . Given two arbitrary sub-intervals  $[a, b], [c, d] \subset [0, T]$ , the *signature kernel*  $K_S : C_p([s, t], \mathbb{R}^d) \times C_p([s', t'], \mathbb{R}^d) \rightarrow \mathbb{R}$  is a positive definite kernel on continuous paths of bounded variation defined as
+
+$$K_S(X, Y) = \langle S(X)_{s,t}, S(Y)_{s',t'} \rangle. \quad (3)$$
+
+Salvi et al. (2021a, Thm. 2.5) shows that  $K_S(X, Y) = f(t, t')$ , where  $f : [s, t] \times [s', t'] \rightarrow \mathbb{R}$  is the solution of the following path-dependent integral equation:
+
+$$f(t, t') = 1 + \int_s^t \int_{s'}^{t'} f(u, v) dX_u dY_v)_1, \quad \text{with } f(0, \cdot) = f(\cdot, 0) = 1. \quad (4)$$
+
+This ‘kernel trick’ allows us to evaluate the signature kernel without explicit computation of the signature transform by solving the partial differential equation (PDE) in eq. (4). We refer to Salvi et al. (2021a) for a numerical approximation scheme to solve this hyperbolic PDE and its error rates and to Appendix A.4 for more mathematical details on the applicability in our setting. In our experiments, we use the JAX library `sigkerax` to efficiently solve eq. (4).
+
+In summary, the signature kernel is a universal kernel that takes (multi-variate) continuous paths—potentially on different intervals—as input, is efficiently computable, and performs well in capturing characteristics of sequential data (Lee & Oberhauser, 2023).
+
+{4}------------------------------------------------
+
+## 3 METHODOLOGY
+
+We start with our constraint-based causal discovery algorithms, where we assume an oracle for CI testing on path space for eq. (2) in Section 3.1. In Section 3.2 we then introduce the signature kernel CI test and state its consistency, which requires a new proof that does not rely on densities. Our test, applicable to arbitrary stochastic processes, time series, or functional data, performs well empirically in our extensive experiments in Section 4 making it a contribution of independent interest.
+
+### 3.1 CAUSAL DISCOVERY IN THE ACYCLIC SDE MODEL
+
+Throughout this section, we assume access to a CI oracle for eq. (2), where  $X_{[a,b]}^H$  denotes the  $C([a, b], \mathbb{R}^{|H|})$ -valued random variable  $\omega \mapsto ([a, b] \ni t \mapsto (X_t^h(\omega) - X_a^h(\omega))_{h \in H})$ . Asymptotically, such an oracle can be replaced in practice by a consistent finite-sample CI test for path-valued random variables (see Section 3.2). More specifically, we test the independence of increments, not the independence of the processes on consecutive intervals, meaning that we consider path-valued random variables  $\omega \mapsto ([a, b] \ni t \mapsto (X_t^h(\omega) - X_a^h(\omega))_{h \in H})$ , effectively decoupling initial conditions from subsequent increments. For simplicity and since this minor subtlety is naturally handled by the signature kernel as the signature transform is translation invariant (meaning  $S(X(t))_{a,b} = S(X(t) - X(a))_{a,b}$ ), we denote these paths by  $X_t^{h \in H}$ .
+
+In Appendix A.3, we prove that when allowing for cycles in the SDE model, constraint-based causal discovery of the full graph is impossible using arbitrary expressions of the form in eq. (2) despite the flexibility of these conditional independencies. This impossibility result is a key motivation to study the acyclic setting still allowing for loops, which are crucial in dynamic settings as variables should be allowed to depend on themselves infinitesimally into the past.
+
+We will use the oracle in the following ways for intervals  $[0, s]$  and  $[s, s + h]$  with  $h > 0$ :
+
+- $X^i$  is *symmetrically CI* of  $X^j$  given  $X^K$  on  $[0, T]$  if  $X_{[0,T]}^i \perp\!\!\!\perp X_{[0,T]}^j \mid X_{[0,T]}^K$ ; we then write  $X^i \perp\!\!\!\perp_{\text{sym}} X^j \mid X^K$
+- $X^i$  is *future-extended h-locally CI* of  $X^j$  given  $X^K$  at  $s$  if  $X_{[0,s]}^i \perp\!\!\!\perp X_{[s,s+h]}^j \mid X_{[0,s]}^j, X_{[0,s+h]}^K$ <sup>1</sup> we then write  $X^i \perp\!\!\!\perp_{s,h}^+ X^j \mid X^K$
+- $X^i$  is *conditionally h-locally self-independent* given  $X^K$  at  $s$  if  $X_{[0,s]}^i \perp\!\!\!\perp X_{[s,s+h]}^i \mid X_{[0,s+h]}^K$ ; we then write  $X^i \perp\!\!\!\perp_{s,h}^{\circ} \mid X^K$
+
+The key idea to leverage the unidirectional flow of time is to split the observed paths into ‘past’ and ‘future’ at some time  $t \in [0, T]$ . Therefore, we define the *lifted dependence graph*  $\tilde{\mathcal{G}} = (\tilde{V}, \tilde{E})$  by setting  $\tilde{V} := V_0 \sqcup V_1$ , where  $\sqcup$  denotes disjoint union and  $V_0, V_1$  are two copies of  $V$ , whose elements we subscript with 0 and 1; we include an edge  $(i_0 \rightarrow i_1) \in \tilde{E}$  if and only if there is a loop  $(i \rightarrow i) \in E$ , and for each edge  $(i \rightarrow j) \in E$  with  $i \neq j$ , include edges  $(i_0 \rightarrow j_0), (i_1 \rightarrow j_1), (i_0 \rightarrow j_1) \in \tilde{E}$ , see Figure 2. Conversely, we say that the graph with edges  $E$  is obtained by *collapsing* the graph with edges  $\tilde{E}$ . Intuitively,  $V_0$  contains all ‘past’ and  $V_1$  all ‘future’ variables with the same edges among them (causal relations) with additional edges from ‘past’ to ‘future’. We can now establish the following Markov property.
+
+**Proposition 3.1** (Markov property). *Assume the dependence graph  $\mathcal{G}$  of the SDE model is acyclic except for loops and associate  $X_{[0,s]}^i$  with  $i_0 \in V_0$  and  $X_{[s,s+h]}^i$  with  $i_1 \in V_1$ . Then  $\tilde{\mathcal{G}}$  is acyclic and the independence relation  $\perp\!\!\!\perp_{s,h}^+$  satisfies the global Markov property w.r.t. d-separation in  $\tilde{\mathcal{G}}$ .*
+
+Our proof (see Appendix A.6) leverages the structure of the SDE-generating mechanism, which factorizes according to the dependence graph, thereby allowing us to formally establish the global
+
+<sup>1</sup>The ‘+’ denotes conditioning on the future of  $X^K$ , not common in the literature (Florens & Fougere, 1996).
+
+![Figure 2: The lifted dependence graph G-tilde (right) for a DAG G (left). The DAG G has nodes X^1, X^2, X^3, X^4. X^1 has a self-loop and directed edges to X^2 and X^3. X^2 has a directed edge to X^3. X^3 has a directed edge to X^4. The lifted graph G-tilde has nodes X_0^1, X_1^1, X_0^2, X_1^2, X_0^3, X_1^3, X_0^4, X_1^4. It includes all edges from G (e.g., X_0^1 to X_0^2, X_1^1 to X_1^2) and additional edges from past to future (e.g., X_0^1 to X_1^2, X_0^2 to X_1^3, X_0^3 to X_1^4). Nodes are color-coded: X^1 (red), X^2 (orange), X^3 (green), X^4 (blue).](61374b1b60dadda31f7e83db5cbdde10_img.jpg)
+
+Figure 2: The lifted dependence graph G-tilde (right) for a DAG G (left). The DAG G has nodes X^1, X^2, X^3, X^4. X^1 has a self-loop and directed edges to X^2 and X^3. X^2 has a directed edge to X^3. X^3 has a directed edge to X^4. The lifted graph G-tilde has nodes X\_0^1, X\_1^1, X\_0^2, X\_1^2, X\_0^3, X\_1^3, X\_0^4, X\_1^4. It includes all edges from G (e.g., X\_0^1 to X\_0^2, X\_1^1 to X\_1^2) and additional edges from past to future (e.g., X\_0^1 to X\_1^2, X\_0^2 to X\_1^3, X\_0^3 to X\_1^4). Nodes are color-coded: X^1 (red), X^2 (orange), X^3 (green), X^4 (blue).
+
+Figure 2: The lifted dependence graph  $\tilde{\mathcal{G}}$  (right) for a DAG  $\mathcal{G}$  (left) with colors highlighting the correspondence of selected edges.
+
+{5}------------------------------------------------
+
+Markov property using arguments from stochastic analysis. With an oracle for eq. (2) and a faithfulness type assumption (for more details see Appendix A.8), we now develop new constraint-based causal discovery algorithms that infer the full dependence graph instead of just equivalence classes.
+
+**Discovering the full DAG  $\mathcal{G}$ .** To discover the full graph including loops we propose Algorithm 1 that makes use of the time-ordering via our  $h$ -local independence models (consider  $s, h > 0$  arbitrary but fixed).
+
+**Theorem 3.2.** *Algorithm 1 is sound and complete for the SDE model, assuming acyclicity except for loops and faithfulness: its output is the true dependence graph  $\mathcal{G}$ .*
+
+The proof (see Appendix A.7) establishes completeness by identifying a separating set and leveraging the global Markov property in Proposition 3.1; soundness is shown via the faithfulness assumption. In particular, our proof does not require the ‘strong faithfulness’ assumption, but a weaker version, ‘parent faithfulness’, suffices—see Appendix A.8 for a detailed discussion of faithfulness in our setting.
+
+Algorithm 1: Causal discovery for acyclic SDEs.
+
+```
+
+1:  $\tilde{V} \leftarrow \{k_0, k_1 \mid k \in V\}$ 
+2:  $\tilde{E} \leftarrow \{i_0 \rightarrow j_0, i_1 \rightarrow j_1 \mid i, j \in V, i \neq j\}$ 
+    $\cup \{i_0 \rightarrow j_1 \mid i, j \in V\}$ 
+3: for  $c = 0, \dots, d - 2$  do ▷ edge recovery w/o loops
+4:   for  $i, j \in \tilde{V}, i \neq j$  do
+5:     for  $K \subseteq \tilde{V} \setminus \{i, j\}, |K| = c,$ 
+        s.t.  $(k_0 \rightarrow j_1) \in \tilde{E}$  for  $k \in K$  do
+6:       if  $X^{i_1} \not\perp_{s, h}^+ X^j \mid X^K$  then
+7:          $\tilde{E} \leftarrow \tilde{E} \setminus \{i_0 \rightarrow j_0, i_1 \rightarrow j_1, i_0 \rightarrow j_1\}$ 
+8: 7:  $\mathcal{G} = (V, E) \leftarrow \text{collapse}(\tilde{V}, \tilde{E})$ 
+9: 8: for  $k \in V$  do ▷ removing loops
+10:    if  $X^k \not\perp_{s, h}^{\circ} X^{\text{pa}} \setminus \{k\}$  then
+11:       $E \leftarrow E \setminus \{k \rightarrow k\}$ 
+12: return  $\mathcal{G}$ 
+
+```
+
+**Discovering and post-processing the CPDAG.** In Algorithm 1, we leverage our Markov property with respect to the lifted graph that also incorporates time directionality to infer the full graph. We now show that we can also use the symmetric criterion  $\perp_{\text{sym}}$  to recover the ‘Markov equivalence class’—all graphs that are Markov equivalent to  $\mathcal{G}$ —via the completed partially directed acyclic graph (CPDAG) of  $\mathcal{G}$  (Peters et al., 2017, Def. 6.24). Loosely speaking, the CPDAG has the same adjacencies as  $\mathcal{G}$ , but some edges may remain undirected. Due to space limitations, we present the required global Markov property with respect to  $\perp_{\text{sym}}$  in Appendix A.9. This Markov property allows us to apply the sound and complete PC algorithm to infer the CPDAG assuming an CI oracle for  $\perp_{\text{sym}}$ , and faithfulness (Spirtes et al., 2000). While Algorithm 1 is strictly more informative (returns  $\mathcal{G}$  instead of just its CPDAG), the reliability of  $\perp_{s, h}^+$  in practice might be negatively affected compared to  $\perp_{\text{sym}}$  by (a) conditioning on larger sets, (b) shorter time segments (potentially losing information), and (c) the additional choice of parameters  $s, h$ . Hence, in real-world applications inferring the CPDAG using  $\perp_{\text{sym}}$  may be more robust than inferring  $\mathcal{G}$  fully using  $\perp_{s, h}^+$ . Building on these potential benefits, we also develop a post-processing procedure for the CPDAG that again leverages the directionality of time to provably also orient all remaining unoriented edges.
+
+**Corollary 3.3** (post-processing). *Let  $\mathcal{G} = (V, E)$  be the dependence graph of the acyclic (except for loops) SDE model and  $\tilde{\mathcal{G}} = (V, \tilde{E})$  its CPDAG. Then we have  $X_{[0, T]}^j \not\perp X_0^k$  but  $X_{[0, T]}^i \perp X_0^j$  for all  $(i, j) \in E \subset \tilde{E}$  with  $(j, i) \in \tilde{E}$  and  $i \neq j$ .*
+
+The proof in Appendix A.10 relies on the joint independence of Brownian motions  $dW_t^k$  and initial conditions  $X_0^k$ . Corollary 3.3 directly motivates an alternative algorithm for causal discovery of  $\mathcal{G}$ , written out as Algorithm 2 in Appendix A.10, by first constructing the CPDAG (PC algorithm with  $\perp_{\text{sym}}$ ) followed by testing unconditionally the yet unoriented edges as in Corollary 3.3.
+
+**Partially observed setting.** Finally, we consider the partially observed setting, where only  $\{X_t^{v_k}\}_{v_k \in V_{obs}, t \in [0, 1]}$  of the process  $\{X_t^{v_i}\}_{v_i \in V_{obs} \cup V_L, t \in [0, 1]}$  from the model in eq. (1) with DAG  $\mathcal{G} = (V_{obs} \sqcup V_L, E)$  are observed. Asymmetric local independence based methods for causal discovery are challenged by requiring exponentially many oracle calls in the partially observed setting (Mogensen & Hansen, 2022; Mogensen, 2025). However, since our symmetric conditional independence constraint satisfies the global Markov property with respect to the induced acyclic directed mixed graph (ADMG)  $\mathcal{G}_{obs} = (V_{obs}, E')$  (also known as latent projection, with potentially arbitrary unobserved processes) over the observed variables, we can take inspiration from the Fast Causal Inference (FCI) algorithm (Zhang, 2008) by first running its skeleton-discovery-part and then again leveraging the direction of time to uniquely infer the edge-type  $\{\leftarrow, \rightarrow, \leftrightarrow\}$  for found adjacencies. This reduces the typical partial ancestral graph output of FCI (representing an equivalence class of
+
+{6}------------------------------------------------
+
+ancestral graphs) to a single, maximally informative graph (as informative as an ancestral graph can be). We provide all details in Appendix D.
+
+### 3.2 SIGNATURE KERNEL CONDITIONAL INDEPENDENCE TEST
+
+Our theoretical results in Section 3.1 assume a CI oracle. To make our algorithms usable in practice, we now propose a flexible CI test for path-valued random variables on different time intervals for expressions of the form eq. (2). Recent work using the signature kernel is limited to unconditional hypothesis tests (Chevyrev & Oberhauser, 2022) or only use it as a heuristic measure of conditional independence (not developing a hypothesis test) (Salvi et al., 2021c), and both do not use the time order. Using terms of the signature to detect causality (not specifically with hypothesis testing) was also proposed by Giusti & Lee (2020); Glad & Woolf (2021). Hence, we are the first to combine ideas from kernel-based CI tests and the signature kernel for a practically usable, consistent CI test on path space. While the existing consistency proof for KCIPT (also applying to SDCIT) (Doran et al., 2014) relies on the existence of densities, we prove consistency for testing on path-valued random variables in Appendix A.14 requiring novel arguments. We discuss the sensitivity of constraint-based causal discovery on errors in the CI test in Appendix A.12. Given  $n$  samples of path segments  $X_T^{(i)}, Y_J^{(i)}, Z_K^{(i)}$  on intervals  $\mathcal{I}, \mathcal{J}, \mathcal{K} \subset [0, T]$  for  $i \in [n]$ , we compute the Gram matrices  $k_{XX}, k_{YY}, k_{ZZ} \in \mathbb{R}^{n \times n}$  using the signature kernel  $K_S$  and run a kernel-based permutation CI test like KCIPT (Doran et al., 2014) or SDCIT (Lee & Honavar, 2017) to test  $X_T \perp\!\!\!\perp Y_J \mid Z_K$ .<sup>2</sup> The theoretical foundation combined with the strong empirical performance of our CI test suggest that it may be of independent interest outside of causal discovery applications.
+
+## 4 EXPERIMENTS
+
+In this section, after introducing the baselines and implementation details, we empirically evaluate our CI test in a variety of settings. We then demonstrate strong performance in various causal discovery tasks and also outperform traditional methods in a real-world finance case study.
+
+**Baselines.** We compare against CCM (Sugihara et al., 2012), PCMCI (Runge et al., 2019), Granger causality (Granger, 1969), a kernel-based approach (Lau) (Laumann et al., 2023), and SCOTCH (Wang et al., 2024), a variational neural SDE method. CCM, Granger, and PCMCI are well-established methods for time series, while Lau and SCOTCH represent the latest advances in causal discovery for functional data and SDE models, respectively. CCM and Granger are limited to bivariate cases, while Lau is only applicable to unconditional tests here. Details are in Appendix C.
+
+**Implementation details and metrics.** We use `sigkerax` for the signature kernel with an RBF kernel with length scale selected via a median heuristic (see Appendix B.1). For bivariate cases, the causal structure is  $X^1 \rightarrow X^2$ , for  $d > 2$ , we draw Erdős-Rényi DAGs. Performance is measured by Structural Hamming Distance (SHD, Appendix B.8). For  $\perp_{s,h}^+$ ,  $s = 0.1 \cdot T$  (and a fixed  $T = 1$ ) performed best (Table 5). The SDE model is
+
+$$dX_t = (AX_t + c)dt + \text{Diag}(BX_t + d)dW_t, \quad \text{with } A, B \in \mathbb{R}^{d \times d}, c, d \in \mathbb{R}^d. \quad (5)$$
+
+except for the 2-dimensional non-linear SDE, which is given by
+
+$$d \begin{pmatrix} X_t^1 \\ X_t^2 \end{pmatrix} = \begin{pmatrix} -r\omega \sin(\omega t) \\ r\omega \tanh(X_t^2) \end{pmatrix} dt + \text{Diag}(d^T) dW_t. \quad (6)$$
+
+**Computational complexity.** Due to space constraints, we defer the computational complexity analysis of our CI test, the causal discovery algorithm, and the signature kernel evaluations in Appendix B.9. The overall computation is dominated by finding the permutation that leaves  $Z$  (approximately) invariant in the permutation based CI tests (KCIPT, SDCIT).
+
+**Choosing (conditional) independence tests.** In initial experiments on two- and three-dimensional structures (e.g., forks, colliders, chains) detailed in Appendix B.2, we found bootstrapped SDCIT and HSIC to be the best performing variants of kernel-based (C)I tests (see Figure 6 and Tables 6 to 8 for details) and use them for all subsequent experiments.
+
+<sup>2</sup>While time observations within a process are not i.i.d., the  $n$  process samples are i.i.d. realizations of the SDE model, see Appendix A.13 for details.
+
+{7}------------------------------------------------
+
+Table 1: SHD ( $\times 10^2$ ) comparison of SigKer to the baselines in four bivariate SDE settings: linear, path-dependence, non-linear, and diffusion dependence. We ran SCOTCH for different sparsity parameters  $\lambda$  and numbers of epochs  $n_e$ ; there is no clear trend in either parameter, but  $\lambda = 100, n_e = 2000$  performed best overall. Different learning rates performed worse across the board.
+
+| $\times 10^2$ | $(\lambda, n_e)$ | linear |  | path-dependence |  | non-linear |  | diffusion dependence |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  | $n = 200$ | $n = 400$ | $n = 200$ | $n = 400$ | $n = 200$ | $n = 400$ | $n = 200$ | $n = 400$ |
+| CCM |  | $176 \pm 7$ | $166 \pm 8$ | $186 \pm 5$ | $194 \pm 3$ | $120 \pm 10$ | $106 \pm 10$ | $100 \pm 10$ | $84 \pm 10$ |
+| Granger |  | $92 \pm 5$ | $87 \pm 5$ | $85 \pm 5$ | $95 \pm 6$ | $103 \pm 5$ | $103 \pm 5$ | $105 \pm 5$ | $111 \pm 4$ |
+| PCMCI |  | $89 \pm 9$ | $100 \pm 10$ | $91 \pm 4$ | $125 \pm 15$ | $41 \pm 8$ | $55 \pm 15$ | $98 \pm 13$ | $75 \pm 23$ |
+| SCOTCH | 100, 1k | $74 \pm 14$ | $77 \pm 17$ | $50 \pm 12$ | $46 \pm 12$ | $64 \pm 15$ | $80 \pm 10$ | $75 \pm 14$ | $62 \pm 10$ |
+| SCOTCH | 50, 2k | $79 \pm 18$ | $44 \pm 17$ | $23 \pm 12$ | $73 \pm 23$ | $83 \pm 11$ | $73 \pm 13$ | <b><math>25 \pm 13</math></b> | $44 \pm 28$ |
+| SCOTCH | 100, 2k | $50 \pm 17$ | $36 \pm 19$ | $64 \pm 19$ | $55 \pm 15$ | $85 \pm 7$ | $91 \pm 9$ | $33 \pm 16$ | <b><math>9 \pm 8</math></b> |
+| <b>SigKer</b> |  | <b><math>14 \pm 4</math></b> | <b><math>7 \pm 3</math></b> | <b><math>5 \pm 2</math></b> | <b><math>6 \pm 2</math></b> | <b><math>28 \pm 5</math></b> | <b><math>5 \pm 2</math></b> | $72 \pm 6$ | $63 \pm 5$ |
+
+**Power analysis of the unconditional test.** We first demonstrate consistently superior performance of our unconditional independence test (HSIC) SigKer (ours) over the only existing baseline for this setting from Laumann et al. (2023) (Lau) in the linear SDE-setting eq. (5) (with  $B \equiv 0, d_i = 0.4$ ), reaching test power near 1 already for  $n \geq 40$  when the causal interaction  $a_{21}$  (strength of  $X^1 \rightarrow X^2$ ) is comparable to  $X^2$ 's self-dependence ( $a_{22}$ ) in Figure 3.
+
+Figure 7 further highlights SigKer's robustness even with high data missingness, and Figure 8 demonstrates its effectiveness on fractional Brownian motions outside the semi-martingale framework. We are not aware of other CI tests that apply to such settings—establishing it as state-of-the-art CI test for stochastic processes.
+
+**Leveraging the direction of time.** Next, we leverage time to orient the edge in the much-studied bivariate causal-discovery setting ( $X^1 \rightarrow X^2$ ) via our  $\perp_{s,h}^+$  constraint with  $K = \emptyset$  for a variety of settings: (i) linear SDEs with dependence in the drift, (ii) diffusion, (iii) or path-dependent, as well as (iv) nonlinear interactions. Table 1 shows that SigKer decisively dominates all baselines in all settings for different sample sizes except diffusion dependence. In this setting, SCOTCH is better for *specific hyperparameter settings*, while performing worse for others. Crucially, one cannot 'cross-validate' or otherwise select such hyperparameters for the causal-discovery task in a data-driven fashion without ground-truth knowledge. The lack of robustness (different optimal hyperparameters for different sample sizes) renders SCOTCH unreliable in practice even for diffusion dependence.
+
+Specifically, we draw the settings for these experiments as follows: for linear drift interactions we sample  $a_{21} \sim \mathcal{U}([1, 2.5])$ ,  $a_{11}, a_{22} \sim \mathcal{U}([-0.5, 0.5])$ ,  $a_{12} = 0, B \equiv 0, d_i \sim \mathcal{U}([0.1, 0.2])$  in a two-dimensional linear SDE model eq. (5). For linear diffusion interactions we draw  $a_{11}, a_{22} \sim \mathcal{U}([0.5, 1])$  and  $a_{21} \sim \mathcal{U}([1, 4.5])$ , the rest set to zero in a two-dimensional linear SDE model eq. (5). For path-dependence, we simulate  $dX_t^2 = \mu^2(X_{[0,t]}^1)dt + d_2 dW_t^1$  via a three-dimensional SDE eq. (5) with  $B \equiv 0, c \equiv 0, a_{23}, a_{31} \sim \mathcal{U}([-3.5, -1] \cup [1, 3.5])$  and  $d = (d_1, d_2, 0)^\top, d_i \sim \mathcal{U}([0.1, 0.2])$ , the rest set to zero. For the nonlinear SDEs we use eq. (6) with  $\omega \sim \mathcal{U}([6\pi, 8\pi])$ ,  $r \sim \mathcal{U}([0.5, 1])$ ,  $d_i \sim \mathcal{U}([2, 2.5])$ .
+
+**Causal discovery.** For causal discovery, we sample 40 linear SDEs from eq. (5) (with  $a_{ij} \sim \mathcal{U}([-2, -1] \cup [1, 2])$  for  $j \neq i$  and  $a_{ii} \sim \mathcal{U}([-0.5, 0.5])$ ) with random DAG adjacency structures for  $d \in \{3, 5, 10, 20, 50\}$  and use  $n = 200$  sample paths from each SDE as input for the algorithms. Table 2 shows that
+
+Table 2: SHD ( $\times 10^2$ ) comparison of SigKer to PCMCI and SCOTCH (different  $\lambda$  and  $n_e$ ) in causal discovery. Means and standard errors are over 40 SDE instances.
+
+|  | $d = 3$ | $d = 5$ | $d = 10$ | $d = 20$ | $d = 50$ |
+|-|-|-|-|-|-|
+| PCMCI | $29 \pm 16$ | $243 \pm 37$ | $793 \pm 84$ | $3530 \pm 159$ | $19.6k \pm 857$ |
+| SCOTCH 100, 2k | $188 \pm 28$ | $417 \pm 86$ | $250 \pm 61$ | $1525 \pm 1160$ | $10275 \pm 6176$ |
+| SCOTCH 200, 2k | $110 \pm 21$ | $270 \pm 48$ | $530 \pm 223$ | <b><math>370 \pm 174</math></b> | <b><math>538 \pm 70</math></b> |
+| SCOTCH 200, 1k | $400 \pm 17$ | $1370 \pm 29$ | $6425 \pm 80$ | $705 \pm 77$ | $7863 \pm 2670$ |
+| $\perp_{s,h}^+$ | $26 \pm 5$ | $80 \pm 8$ | $284 \pm 19$ | $1026 \pm 40$ | $4946 \pm 133$ |
+| $\perp_{\text{sym}}$ tp.p. | $13 \pm 4$ | <b><math>38 \pm 7</math></b> | <b><math>157 \pm 15</math></b> | $725 \pm 439$ | $4593 \pm 93$ |
+| $\perp_{\text{sym}}$ only | $57 \pm 84$ | $147 \pm 11$ | $436 \pm 19$ | $1294 \pm 48$ | $6005 \pm 98$ |
+
+![Figure 3: A line graph showing test power (y-axis, 0.00 to 1.00) versus ratio a21/a22 (x-axis, 0.0 to 2.0). The graph compares SigKer (ours) with other methods (Lau) for different sample sizes n. SigKer methods (n=20, 40, 80) show significantly higher test power, reaching near 1.00 power as the ratio increases. Lau methods (n=20, 40, 80) show lower test power, with n=80 reaching about 0.75 power at ratio 2.0. Shaded regions represent standard errors.](2396add2849eccefcbcfbe1c7142a253_img.jpg)
+
+Figure 3: A line graph showing test power (y-axis, 0.00 to 1.00) versus ratio a21/a22 (x-axis, 0.0 to 2.0). The graph compares SigKer (ours) with other methods (Lau) for different sample sizes n. SigKer methods (n=20, 40, 80) show significantly higher test power, reaching near 1.00 power as the ratio increases. Lau methods (n=20, 40, 80) show lower test power, with n=80 reaching about 0.75 power at ratio 2.0. Shaded regions represent standard errors.
+
+Figure 3: Test power for  $X_{[0,t]}^1 \perp X_{[0,t]}^2$  over  $\frac{a_{21}}{a_{22}}$ . Lines (shades) are means (standard errors) over 1000 SDE instances.
+
+{8}------------------------------------------------
+
+![Figure 4: Four directed acyclic graphs (DAGs) illustrating causal discovery under partial observations. The 'ground truth' graph shows A and B pointing to C, and C pointing to D, with a dashed circle U pointing to C. The 'FCI' graph shows A and B pointing to C, and C pointing to D, with a dashed circle U pointing to C. The 'SCOTCH' graph shows A and B pointing to C, and C pointing to D, with a dashed circle U pointing to C. The 'ours' graph shows A and B pointing to C, and C pointing to D, with a dashed circle U pointing to C.](acfc53eca625d62b38aa2563efa95c3e_img.jpg)
+
+Figure 4: Four directed acyclic graphs (DAGs) illustrating causal discovery under partial observations. The 'ground truth' graph shows A and B pointing to C, and C pointing to D, with a dashed circle U pointing to C. The 'FCI' graph shows A and B pointing to C, and C pointing to D, with a dashed circle U pointing to C. The 'SCOTCH' graph shows A and B pointing to C, and C pointing to D, with a dashed circle U pointing to C. The 'ours' graph shows A and B pointing to C, and C pointing to D, with a dashed circle U pointing to C.
+
+Figure 4: An example graph demonstrating the advantage of our approach under partial observations.
+
+our Algorithm 1 (denoted by  $\perp_{s,h}^+$ ) and Algorithm 2 ( $\perp_{\text{sym}}^+ + \text{pp}$  and  $\perp_{\text{sym}}$  the result before post-processing) clearly outperform PCMCI and SCOTCH up to  $d = 10$ . SCOTCH’s heavy dependence on hyperparameter choices for  $\lambda$  (graph sparsity) and  $n_e$  (the number of epochs), can sometimes render it superior when charitably picking the best setting. However, since good values particularly for  $\lambda$  cannot be known up front nor selected in a data-driven fashion, one must interpret SCOTCH’s performance more conservatively—arguably in terms of its worst case performance over a set of reasonable hyperparameter settings. Hence, SigKer—free of any hyperparameter choices—broadly outperforms the state-of-the-art, such as SCOTCH even in the setting SCOTCH was specifically tailored to (SDE models). Unlike such methods, our approach continues to work well for other data generating mechanisms as our CI test handles stochastic processes beyond the SDE model.
+
+**Summary and discussion of results.** Our CI test for  $\perp_{s,h}^+$  reliably detects the direction of time and outperforms strong baselines (CCM, Granger, PCMCI), consistently improving with larger sample sizes (Table 1). SigKer also dominates PCMCI in causal discovery across dimensions and consistently beats most hyperparameter settings of SCOTCH. While isolated hyperparameter settings for SCOTCH perform better than SigKer in diffusion dependence and high-dimensional causal discovery, its strong dependence on hyperparameters, particularly the sparsity parameter  $\lambda$ , renders it unreliable in practice. Finally, SCOTCH and PCMCI are tailored to Markovian SDEs (or SDEs with a fixed lag). Instead, our CI test is broadly applicable and effective across data modalities which we further demonstrate empirically in a functional data example where both PCMCI and SCOTCH fail to detect path-dependence, see Table 10.
+
+**The partially observed setting.** One of the main benefits of constraint-based causal discovery (especially with a non-parametric test) is the ability to handle partial observations. Score-based methods like SCOTCH are fundamentally challenged in this setting, since there could in principle be infinitely many unobserved variables, impossible to model, e.g., with neural-network based approaches. We showcase this advantage on the challenging example graph in Figure 4, where SCOTCH falsely infers an adjacency  $A \text{---} D$  in 88 out of 100 runs, whereas our algorithm correctly handles the unobserved confounder and only (falsely) predicts this adjacency in 8 instances.
+
+**Real-world pairs trading example.** To demonstrate the applicability of our developed methods on real-data, we evaluate pairs trading strategies on ten stocks from the VBR Small-Cap ETF over a three-year period (2010/01/01–2012/12/31). We only provide a concise summary of our results here and refer to Appendix B.7 for more details on this proof-of-concept study. We assess our method’s effectiveness by quantifying the profit-and-loss (P&L) profile of the generated pairs trading strategy as a substitution for ground truth. Pairs were selected based on pairwise p-values from different hypothesis tests: 1) cointegration via the Augmented Dickey-Fuller (ADF) test, 2) Granger causality, and 3) our method. Table 3 shows that our strategy’s P&L substantially outperforms the baselines in total return, APR, Sharpe ratio, and maxDDD while being almost on par with ADF & Granger in the fifth relevant metric maxDD. This case-study highlights the broad applicability and potential downstream impact of the findings in this work.
+
+Table 3: SigKer outperforms baselines in most pairs trading performance metrics.  $\uparrow / \downarrow$  indicates ‘higher/lower is better’.
+
+|  | return $\uparrow$ | APR $\uparrow$ | Sharpe $\uparrow$ | maxDD $\downarrow$ | maxDDD $\downarrow$ |
+|-|-|-|-|-|-|
+| ADF | 0.004 | 0.004 | 0.090 | 0.087 | 230 |
+| Granger | -0.010 | -0.011 | -0.230 | 0.056 | 219 |
+| ADF & Granger | 0.008 | 0.008 | 0.242 | <b>0.022</b> | 153 |
+| SigKer | <b>0.076</b> | <b>0.077</b> | <b>1.500</b> | 0.027 | 21 |
+
+## 5 CONCLUSION AND FUTURE WORK
+
+We introduce constraint based causal discovery algorithms for both fully and partially observed data in the form of stochastic processes, proving them to be sound and complete assuming a CI oracle.
+
+{9}------------------------------------------------
+
+These are based on novel Markov properties corresponding to the developed CI constraints with respect to the induced dependence graph. Our algorithms critically leverage the directionality of time to uniquely identifying the full underlying graph or induced ancestral graph, critically improving over existing constraint-based algorithms in the static case that only output equivalence classes. Our framework also efficiently captures path- or diffusion-dependence. Finally, we propose a practical and consistent kernel-based CI test on path-space leveraging recent advances in signature kernels that empirically outperforms existing alternatives across a wide range of settings also beyond the SDE model such as functional data and fractional Brownian motions.
+
+Due to the identified fundamental limitations in the cyclic setting, we limit ourselves to acyclic (except for self-loops) dependence graphs and assume causal relationships to not change over time. Relaxing both of these assumptions and assessing how much of the causal structure can in principle be learned in the cyclic settings are immediate interesting directions for future work. We highlight that the field of causality represents just one of the many potential applications of our conditional independence test for path-valued random variables. Exploring applications in different domains is a worthwhile direction for future work that could also catalyze new methodological developments.
+
+## REPRODUCIBILITY STATEMENT
+
+Significant effort was made to ensure reproducibility, both for the theoretical and experimental results. The complete proofs of Proposition 3.1, Theorem 3.2, Corollary 3.3 can be found in Appendix A.6 Appendix A.7, Appendix A.10, respectively. Additionally, we discuss the limitations and requirements in Section 1, which outlines the assumptions made throughout the paper. Details regarding implementation and metrics can be found in Section 4, along with further information on the data-generating mechanism and results evaluation throughout Section 4. The implementation of baselines is described in Appendix C, and details on the real-world pairs trading example can be found in Appendix A.11. We will also make all code used to produce the results in this paper openly available.
+
+## ACKNOWLEDGMENTS AND DISCLOSURE OF FUNDING
+
+This work is supported by the DAAD programme Konrad Zuse Schools of Excellence in Artificial Intelligence, sponsored by the Federal Ministry of Education and Research. This work was supported by the Helmholtz Association’s Initiative and Networking Fund on the HAICORE@FZJ partition. Emilio Ferrucci is supported by UKRI EPSRC Programme Grant EP/S026347/1. Søren Wengel Mogensen is supported by Independent Research Fund Denmark (DFF-International Postdoctoral Grant 0164-00023B) and a member of the ELLIIT Strategic Research Area at Lund University.
+
+## REFERENCES
+
+- Hananeh Alice, Fabian J Theis, and Niki Kilbertus. Beyond predictions in neural odes: Identification and interventions. *arXiv preprint arXiv:2106.12430*, 2021. 3
+- Hananeh Alice, Till Richter, Mikhail Solonin, Ignacio Ibarra, Fabian Theis, and Niki Kilbertus. Sparsity in continuous-depth neural networks. *Advances in Neural Information Processing Systems*, 35:901–914, 2022. 3
+- Holly Andersen. When to expect violations of causal faithfulness and why it matters. *Philosophy of Science*, 80(5):672–683, 2013. doi: 10.1086/673937. 23
+- Yashas Annadani, Nick Pawlowski, Joel Jennings, Stefan Bauer, Cheng Zhang, and Wenbo Gong. Bayesdag: Gradient-based posterior sampling for causal discovery. *arXiv preprint arXiv:2307.13917*, 2023. 1
+- Charles K Assaad, Emilie Devijver, and Eric Gassier. Discovery of extended summary graphs in time series. In *Uncertainty in Artificial Intelligence*, pp. 96–106. PMLR, 2022. 3
+- Alexis Bellot, Kim Branson, and Mihaela van der Schaar. Neural graphical modelling in continuous-time: consistency guarantees and algorithms. In *International Conference on Learning Representations*, 2022. URL <https://openreview.net/forum?id=SsHBkfeRF9L>. 3
+
+ Rest of paper (reference and Appendix) is removed.

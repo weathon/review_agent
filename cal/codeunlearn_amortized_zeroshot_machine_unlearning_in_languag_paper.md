@@ -1,0 +1,349 @@
+
+
+{0}------------------------------------------------
+
+# CODEUNLEARN: AMORTIZED ZERO-SHOT MACHINE UNLEARNING IN LANGUAGE MODELS USING DISCRETE CONCEPT
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Language Models (LMs) offer extensive knowledge across various domains, but they may inadvertently memorize sensitive, unauthorized, or malicious data, such as personal information in the medical and financial sectors. Machine unlearning methods aim to remove specific information from models after training to address this. However, current approaches require additional model training or struggle to effectively erase particular data points and their associated context due to LMs’ complex, dense, and continuous nature. In this study, we propose a novel amortized unlearning approach using codebook features and Sparse Autoencoders (SAEs). By leveraging a bottleneck to decompose the activation space and regulate information flow, our method efficiently unlearns targeted information while preserving the model’s performance on unrelated data. To the best of our knowledge, this is the first work that successfully enables unlearning specific topics with contextual relevance in an LM, marking a significant step towards real-world applications of machine unlearning.
+
+## 1 INTRODUCTION
+
+Large language Models (LLMs) have been widely used in various applications, generating text responses that attempt to create the equivalent of human conversations OpenAI et al. (2024). These models leverage vast scientific literature to facilitate and accelerate interdisciplinary research Taylor et al. (2022) while drawing upon large datasets of human-generated content to provide professional advice. However, in many cases, such data is a double-edged sword. Including personal information or sensitive scientific knowledge can be beneficial or, conversely, harmful. For instance, Soice et al. (2023) discusses how LLMs, when used by non-experts, can enable the creation of biological agents, posing both potential benefits and significant risks.
+
+In response to these concerns, machine unlearning has emerged as a promising research area focused on selectively removing specific data points or information from a trained model. This approach helps mitigate the misuse of sensitive data and addresses privacy concerns. Existing solutions, such as Sharded, Isolated, Sliced, and Aggregated (SISA) training Bourtoule et al. (2020), primarily involve partitioning the training data into disjoint shards and retraining models on these individual shards. Although effective in certain scenarios, these methods are often time-consuming, resource-intensive, and lack scalability when applied to large models like LLMs. Moreover, traditional approaches typically require specialized data structures or full retraining, making them impractical for dynamic or complex tasks.
+
+Given these limitations, there is an increasing demand for zero-shot unlearning methods, which aim to remove specific information without retraining or specialized data structures. Unlike traditional unlearning techniques that rely on retraining portions of the model, zero-shot unlearning seeks to directly eliminate the influence of specific data points or pieces of information from the model’s learned representation—without additional computational steps or parameter adjustments. Moreover, zero-shot unlearning is inherently more scalable, especially for large models like LLMs, as it avoids the inefficiencies associated with data partitioning and retraining.
+
+Our approach builds upon using discrete representations as the latent space for unlearning. Discrete representations, generated through Vector Quantization (VQ) van den Oord et al. (2018), offer a
+
+{1}------------------------------------------------
+
+natural structure for organizing the latent space to enable selective information removal. Discrete representations can be seen as a form of disentanglement, a concept rooted in classical research Bengio et al. (2014), which emphasizes learning representations that disentangle the various factors of variation in data. This allows for the separation of different explanatory sources within the data.
+
+Additionally, Elhage et al. (2022) explores how neurons in models can represent multiple superposed features, introducing the concept of using dictionaries to disentangle these superpositions. Building on this notion, we propose employing discrete representations to disentangle the model’s internal structure, thereby enabling selective unlearning. By tracking and modifying discrete codes within the latent space, we aim to achieve efficient and targeted removal of sensitive or unwanted information.
+
+Our contributions are as follows:
+
+- we propose a novel zero-shot unlearning method based on discrete latent representations.
+- we demonstrate how Vector Quantization (VQ) can structure the latent space, facilitating the selective removal of information in an amortized manner.
+- we extend our method beyond traditional machine unlearning techniques, primarily designed for classification tasks, to handle complex language tasks associated with language models, addressing a broader scope of applications.
+- Our approach provides a baseline for unlearning in language models and validates the effectiveness of our method.
+
+## 2 RELATED WORK
+
+Machine unlearning methodologies have been developed to tackle the challenges of efficiently removing data from trained models. Among the early influential frameworks is the Sharded, Isolated, Sliced, and Aggregated (SISA) approach Bourtoule et al. (2020), which partitions data into independent shards. By retraining only the specific shards containing the data to be unlearned, SISA reduces the computational burden. Extensions of this approach include Ginart et al. (2019), which applies partitioning to linear models, and Brophy & Lowd (2021), which adapts it for random forests. Schelter et al. (2021) further extended the concept to decision trees, minimizing retraining through hierarchical partitioning. In the graph learning domain, Chen et al. (2022b) developed methods to forget specific nodes or edges, while Chen et al. (2022a) focused on removing sensitive user data from recommendation systems.
+
+While these methods are effective for structured models, they struggle to scale to large, complex models like Language Models. Additionally, the retraining costs, though reduced, remain significant, and the reliance on specific architectures limits their generalizability to more dynamic tasks.
+
+In a different direction, Kurmanji et al. (2023) introduced SCRUB, which treats the original model as a teacher and trains a student model to mimic it on retained data while ‘forgetting’ specific information. Warnecke et al. (2023) proposed unlearning entire groups of features and labels using influence functions, providing closed-form updates to model parameters for more efficient data removal.
+
+Influence functions Guo et al. (2023); Sekhari et al. (2021); Mehta et al. (2022) also offer an alternative by measuring the effect of individual data points on a model’s predictions and adjusting parameters accordingly, providing more direct methods for unlearning.
+
+Recently, zero-shot unlearning methods have emerged, focusing on removing information without retraining, making them highly efficient for large models. Shah et al. (2024) introduced a method for editing model computations to ‘forget’ specific information. While this is effective for tasks like token classification, it may struggle with the more complex context and semantics in LLMs, underscoring the need for scalable, adaptable unlearning techniques tailored to these models.
+
+In parallel, recent advances in sparse and discrete latent representations, such as *codebook features*, have been explored for better interpretability and control of neural activations. Multiple codebooks, as introduced in Tamkin et al. (2023), have been applied to attention heads in transformer architectures. In this setup, each attention head operates with its own codebook, independently selecting codes and concatenating their outputs to form the final layer representation. This design allows the
+
+{2}------------------------------------------------
+
+model to represent a broader set of features by combining the outputs of different codebooks. However, this can lead to a superposition effect Elhage et al. (2022), where features are linearly encoded, enabling the model to simulate more extensive networks. Although this enhances representational capacity, tracking individual code contributions becomes challenging, making it difficult to isolate and remove specific patterns during unlearning.
+
+## 3 METHODOLOGY
+
+To address the challenges of zero-shot machine unlearning, we propose a novel approach that leverages *codebook features* to bottleneck latent representations within a language model, enabling the targeted unlearning of specific knowledge by altering related codebook embeddings. Initially introduced by Tamkin et al. (2023), codebook features efficiently compress the activation space of neural networks by introducing a sparse discrete bottleneck. This bottleneck can be further optimized to isolate the codes most relevant to specific topics in the input, offering deeper insight and control over the model’s response and interpretation. By utilizing this discrete latent representation, we can more effectively identify and remove the specific information encoded in the codebook corresponding to the input’s targeted knowledge.
+
+The following section details our approach to employing *codebook features* to efficiently identify and unlearn specific areas of related information in a zero-shot manner. This process ensures that the model can no longer effectively handle prompts that contain the target information to unlearn.
+
+![Diagram of the CodeUnlearn process. The left side shows the architecture: Layer Activations lead to Multi-Head Attention, which is then added to the original activations via a residual connection (+). This is followed by a search for the top s codes (code_top1, code_top2, ..., code_top_s), which are then summed (Σ) to produce the final output. The right side shows the codebook C, which contains code vectors and their embeddings. Some codes are activated by phrases like '...in love with...', '....or material love', and '...human love rising...'. The process involves removing code_1 from the codebook, resulting in a modified codebook C'.](d244183a8ff3d94b0dcf30140f51020d_img.jpg)
+
+The diagram illustrates the CodeUnlearn process. On the left, a flowchart shows the sequence: Layer Activations → Multi-Head Attention → (+) → Search for Top  $s$  code →  $\{code_{top1}, code_{top2}, \dots, code_{tops}\}$  → Sum Top  $s$  codes  $\rightarrow \sum$ . On the right, a 'Codebook  $C$ ' is shown with entries for  $code_1, code_2, \dots, code_{top1}, code_{top2}, \dots, code_k$ , each with an associated embedding. Phrases like '...in love with...', '....or material love', and '...human love rising...' are linked to specific codes (e.g.,  $code_{top1}, code_{top2}$ ) labeled as 'codes activated'. An arrow indicates the action 'Remove  $code_1$  from codebook', leading to a modified 'Codebook  $C'$ ' where  $code_1$  is absent.
+
+Diagram of the CodeUnlearn process. The left side shows the architecture: Layer Activations lead to Multi-Head Attention, which is then added to the original activations via a residual connection (+). This is followed by a search for the top s codes (code\_top1, code\_top2, ..., code\_top\_s), which are then summed (Σ) to produce the final output. The right side shows the codebook C, which contains code vectors and their embeddings. Some codes are activated by phrases like '...in love with...', '....or material love', and '...human love rising...'. The process involves removing code\_1 from the codebook, resulting in a modified codebook C'.
+
+Figure 1: **CodeUnlearn**—Our Amortized Zero-Shot Machine Unlearning for Language Models. **Left:** Discrete latent bottlenecking in the transformer architecture. After applying the residual connection, the multi-head attention output is discretized using a discrete embedding vocabulary, referred to as the codebook. This approach prevents information leakage via the residual connection, ensuring that the codebook effectively regulates and interprets the network’s behavior. **Right:** Zero-shot machine unlearning is achieved by removing the discrete codes in the codebook that correspond to the targeted information.
+
+### 3.1 CODEBOOK FEATURES
+
+The core concept behind employing codebook features is to transform the original activations from a hidden layer into a representation regulated by a codebook. Let  $a \in \mathbb{R}^F$  represent the activation vector from a hidden layer, where  $F$  denotes the dimensionality of the activations. We use a codebook  $C = \{c_k\}_{k=1}^K \in \mathbb{R}^{K \times F}$ , where  $K$  represents the number of code vectors. The codebook offers
+
+{3}------------------------------------------------
+
+a compressed, discrete representation of the original activations. To perform this transformation, we calculate the cosine similarity between the activation  $a$  and each code vector  $c_k$  in the codebook:
+
+$$\text{cosineSim}(a, c_k) = \frac{a \cdot c_k}{\|a\| \|c_k\|}, \quad (1)$$
+
+for each code vector  $c_k$  in the codebook. We then identify the top  $S$  (where  $S \geq 1$ ) most similar code vectors corresponding to the activation  $a$ . The index set  $\Omega$  of these top  $S$  code vectors is defined as:
+
+$$\Omega = \text{Top}_S (\{k \mid k \in \{1, \dots, K\}, \text{cosineSim}(a, c_k)\}). \quad (2)$$
+
+The output of the codebook transformation is given by:
+
+$$\hat{a} = \sum_{k \in \Omega} c_k, \quad (3)$$
+
+where  $\Omega$  is the index set of the  $S$  most similar code vectors, selected based on the highest cosine similarity scores. In the unlearning procedure, the activated codes corresponding to  $a$  are identified as the targets for removal.
+
+### 3.2 CODEBOOK SETTINGS
+
+**Single Codebook** As shown in Figure 1, to maintain interpretability, we focus on using a single codebook, positioning it after the multi-head attention layer and residual connection to prevent information leakage. This placement is a deliberate design choice. Residual connections in transformer architectures are designed to propagate unaltered features, which, while beneficial for model stability and gradient flow, can bypass bottleneck layers like the codebook. By applying the codebook transformation after the residual connection, we ensure that all information passed downstream is regulated through the discrete latent representation. This strict information bottleneck prevents the model from retaining unlearned or sensitive information outside the control of the codebook, thereby enforcing a clean separation of learned and unlearned representations.
+
+However, in a single codebook setup, selecting only  $S = 1$  leads to a significant drop in model performance, as a single codebook feature is insufficient to capture the complexity of the activation space. In Cai (2024), the author rigorously demonstrates that treating word vectors as mappings allows a finite vocabulary to achieve infinite approximation through composition. Based on this insight, we employ  $S > 1$  in our approach. While this may slightly affect code discretization and information clarity, it strikes a balance between model performance and interpretability.
+
+### 3.3 CODEBOOK WITH SPARSE AUTOENCODERS
+
+Our goal is to decompose the activation space into sparse, interpretable features rather than reconstructing the original input. To accomplish this, we incorporate the Sparse Autoencoder (SAE) concept. The SAE applies a linear transformation encoder with a ReLU activation function to project the activations into a higher-dimensional space, effectively decomposing and sparse features. A linear transformation decoder is employed used to reconstruct the activations.
+
+In line with the SAE structure, we introduce a linear transformation encoder with ReLU before the codebook and a linear transformation decoder after the codebook. The sparsity introduced by the encoder and decoder offers a significant advantage:
+
+The encoder maps the activation vector  $a \in \mathbb{R}^d$  to a sparse representation:
+
+$$h_{enc} = \text{ReLU}(W_{enc}a + b_{enc}), \quad (4)$$
+
+where  $W_{enc} \in \mathbb{R}^{d \times F}$  and  $b_{enc} \in \mathbb{R}^F$  represent the encoder's weights and biases. The sparse representation  $h_{enc}$  is passed through the codebook transformation, as described in Section 3.1.
+
+The decoder then reconstructs the original activation from the transformed representation:
+
+$$\hat{a} = W_{dec}\hat{h}_{enc} + b_{dec}, \quad (5)$$
+
+where  $W_{dec} \in \mathbb{R}^{F \times d}$  and  $b_{dec} \in \mathbb{R}^d$  are the decoder's weights and biases.
+
+This autoencoder framework complements the codebook by ensuring that learned representations remain interpretable and sparse, enabling efficient and targeted unlearning.
+
+{4}------------------------------------------------
+
+### 3.4 TRAINING THE CODEBOOK
+
+**Reconstruction Loss** As with the Sparse Autoencoder (SAE) and codebook models, we utilize the Mean Squared Error (MSE) loss as the primary loss function. The MSE loss can be expressed as:
+
+$$\mathcal{L}_{\text{MSE}} = \frac{1}{N} \sum_{i=1}^N \|a_i - \hat{a}_i\|_2^2, \quad (6)$$
+
+where  $N$  is the number of samples,  $a_i$  is the original activation, and  $\hat{a}_i$  is the reconstructed activation obtained from the decoder.
+
+Additionally, to promote sparsity and enforce more distinct and sparse internal feature representations within each codebook vector, we introduce an  $L_1$  penalty term on the codebook activations. This encourages the model to represent each code with sparser and more well-separated internal features. The overall loss function incorporating this sparsity constraint is defined as:
+
+$$\mathcal{L}_{\text{Codebook}} = \frac{1}{N} \sum_{i=1}^N \|a_i - \hat{a}_i\|_2^2 + \lambda \sum_{k \in \Omega} \sum_{f=1}^F |c_k^f|, \quad (7)$$
+
+where  $\Omega$  represents the set of indices for the top  $S$  most similar code vectors,  $c_k$  refers to the  $k$ -th codebook vector,  $F$  denotes the dimensionality of the code vectors, and  $\lambda$  is a regularization coefficient that controls the strength of the  $L_1$  penalty term. In our experiments, we set  $\lambda$  to  $1 \times 10^{-6}$  to balance sparsity with reconstruction accuracy.
+
+**Joint Training for Machine Unlearning** Both the SAE and codebook features are used to reconstruct the input  $a$ , but this presents a critical issue in the context of machine unlearning: one could easily remove the codebook layer, reverting the model to its original state, which negates the unlearning process. To address this, it is vital to ensure that the model is trained so that the downstream components are entirely dependent on the output of the codebook. At the same time, the upstream layers must learn to generate activations that conform to the codebook's representations. This joint training approach ensures that the entire model relies on the codebook's representation, making it harder to bypass or remove without degrading performance. The joint loss function for this training process is defined as:
+
+$$\mathcal{L}_{\text{joint}} = \mathcal{L}_{\text{Codebook}} + \mathcal{L}_{\text{CE}}, \quad (8)$$
+
+where  $\mathcal{L}_{\text{Codebook}}$  refers to the reconstruction loss for the codebook, and  $\mathcal{L}_{\text{CE}}$  represents the Cross-Entropy loss for the original language modeling or task-specific objective.
+
+![Diagram illustrating the unlearning process in a language model. An input sentence is processed by a 'Model' block containing codebook vectors (code_154, code_980, code_top9). A subset of these codes is identified for removal based on p-values (e.g., code_154, code_980). These codes are removed from the codebook. The model is then retrained on the remaining codes (code_top9, code_top9+1). The output is compared against a target dataset (D_T) and a control dataset (D_T-bar). The target dataset contains sentences about 'love' and 'repented with tears for having yielded to another!'. The control dataset contains sentences about 'hate' and 'repented with tears for having yielded to another!'. The model's performance is evaluated on both datasets, showing a significant decrease in performance on the target dataset after unlearning.](4d7f667796a8cdcdd745e953ac11e289_img.jpg)
+
+The diagram illustrates the unlearning process. At the top, an 'Input' is shown. Below it, a 'Model' block contains a sequence of codebook vectors: `code_154`, `code_980`, and `code_top9`. A box labeled  $D_T$  contains two sentences: "She had made efforts to love him, and she had repented with tears for having yielded to another!" and "She had made efforts to hate him, and she had repented with tears for having yielded to another!". A box labeled  $D_{\bar{T}}$  contains the same two sentences. A box labeled  $\Omega_{p < 0.05}$  contains `code_154` and `code_980`. An arrow points from this box to a circle labeled "Remove  $c_k \in \Omega_{p < 0.05}$ ". Below the circle, the model is shown again, but now it contains `code_top9` and `code_top9+1`. To the right, two boxes show the model's output in French: "Elle avait fait des efforts pour l'aimer, et elle avait repenti avec des larmes pour s'être rendue à un autre!" and "Elle avait fait des efforts pour le mettre en état, et elle avait repris des larmes pour s'être rendue à un autre!".
+
+Diagram illustrating the unlearning process in a language model. An input sentence is processed by a 'Model' block containing codebook vectors (code\_154, code\_980, code\_top9). A subset of these codes is identified for removal based on p-values (e.g., code\_154, code\_980). These codes are removed from the codebook. The model is then retrained on the remaining codes (code\_top9, code\_top9+1). The output is compared against a target dataset (D\_T) and a control dataset (D\_T-bar). The target dataset contains sentences about 'love' and 'repented with tears for having yielded to another!'. The control dataset contains sentences about 'hate' and 'repented with tears for having yielded to another!'. The model's performance is evaluated on both datasets, showing a significant decrease in performance on the target dataset after unlearning.
+
+Figure 2: **Unlearning a Target Topic in a Language Model.** The zero-shot unlearning process begins by identifying codes enriched in data subsets with the target topic ( $D_T$ ) as opposed to the subset without it ( $D_{\bar{T}}$ ). Codes with p-values less than 0.05 are removed from the codebook. After this removal, the model exhibits significantly decreased performance on target information inputs.
+
+{5}------------------------------------------------
+
+### 3.5 CODE RETRIEVAL
+
+As shown in Figure 2, after training, the codebook encodes a set of representative codes  $C = \{c_k\}_{k=1}^K \in \mathbb{R}^{K \times F}$  that are sparse and represent different features. To perform unlearning, we retrieve the codes activated for specific inputs and identify which codes are enriched for a particular topic. The model can effectively unlearn the associated information by deleting the corresponding enriched codes from the codebook. The key steps involve retrieving these relevant codes for each input and determining their relationship to the target topic.
+
+Because of the nature of the attention mechanism, the activation of these codes also depends on the surrounding context. This means we are not just identifying individual words that activate specific codes but retrieving codes that represent the broader topic within the input context. To unlearn a specific topic  $T$ , consider a dataset  $D_T$  with samples related to topic  $T$ , alongside with the remaining irrelevant data set  $D_R$ . We create a control dataset  $D_{\bar{T}}$  by replacing words associated with  $T$  in  $D_T$  with unrelated words, ensuring the context remains consistent. By comparing the code activations between  $D_T$  and  $D_{\bar{T}}$ , we can identify and search for the codes linked to topic  $T$ .
+
+For each code  $c_k$  activated in the dataset, we compute its frequency in both datasets by considering the top  $S'$  activated codes:
+
+$$f_k(D_T) = \frac{1}{N_T} \sum_{i=1}^{N_T} \mathbb{I}(k \in \Omega_T(a_i)), \quad (9)$$
+
+$$f_k(D_{\bar{T}}) = \frac{1}{N_{\bar{T}}} \sum_{j=1}^{N_{\bar{T}}} \mathbb{I}(k \in \Omega_{\bar{T}}(a_j)), \quad (10)$$
+
+where  $\Omega_T(a_i)$  represents the set of indices of the top  $S'$  activated codes for activation  $a_i$  in dataset  $D_T$ , and  $\Omega_{\bar{T}}(a_j)$  is similarly defined for  $D_{\bar{T}}$ .  $N_T$  and  $N_{\bar{T}}$  denote the sample sizes of  $D_T$  and  $D_{\bar{T}}$ , respectively.  $\mathbb{I}$  is the indicator function that checks whether code  $k$  is in the set of activated codes. The hyperparameter  $S'$  controls the number of top activated codes considered, thereby influencing the number of codes to be removed.
+
+To quantify the enrichment of code  $c_k$  for topic  $T$ , we use the following formula:
+
+$$R(c_k, T) = \log_2 \left( \frac{f_k(D_T) + \epsilon}{f_k(D_{\bar{T}}) + \epsilon} \right), \quad (11)$$
+
+where  $\epsilon$  is a small constant added to avoid division by zero. When  $R(c_k, T)$  is positive, it indicates that the code  $c_k$  is enriched in dataset  $D_T$  relative to  $D_{\bar{T}}$ . However, if the frequency of  $c_k$  in  $D_{\bar{T}}$  is zero and its frequency in  $D_T$  is very low, such codes should not be removed, as they are likely accidental activations. Removing these codes could lead to unintended side effects, as they may not be strongly related to the topic  $T$  despite being present in the dataset.
+
+Therefore, we used a chi-squared test to calculate the p-value of  $R(c_k, T)$  to determine if the code  $c_k$  is enriched for topic  $T$ . For those codes with p-values smaller than 0.05, we regard them as enriched codes in  $D_T$  and remove them from the codebook. We define the set of enriched codes as  $\Omega_{R>0, p<0.05} = \{c_k \mid R(c_k, T) > 0 \text{ and } p \leq 0.05\}$ .
+
+### 3.6 UNDERSTANDING ZERO-SHOT UNLEARNING
+
+The term "Zero-shot" in this work refers to the unlearning phase of the proposed method. Specifically, after the initial training, the model can unlearn targeted knowledge without requiring additional data, retraining, or fine-tuning. The process leverages the already learned representations stored in the codebook to identify and remove the information associated with the target topic. This is achieved by directly modifying the entries in the codebook rather than adjusting model parameters through retraining.
+
+It is important to note that while the initial training phase involves data and learning, no additional datasets or external supervision are necessary during unlearning. The training data used to construct the codebook is sufficient for both the representation learning and unlearning phases. This design ensures computational efficiency during unlearning, particularly for large-scale models, as no additional parameter updates or gradient computations are involved.
+
+{6}------------------------------------------------
+
+### 3.7 METRICS
+
+In our work, we not solely assess the absolute drop in performance within the topic or non-topic datasets but also need to compare the relative decline between them. Instead, to fairly compare the models and the datasets, we used normalized percentage improvement to evaluate the performance of the unlearning procedure. The performance improvement percentage is set to 0 for the zero-shot model and 1 for the codebook model, which is the upper bound. In contrast, the performance drop percentage is set to 1 for the zero-shot model and 0 for the codebook model. We use four evaluation metrics to assess the effectiveness of the unlearning procedure and the overall quality of the remaining information in the output. These metrics include: We use four evaluation metrics to assess the impact of the unlearning procedure on translation quality and semantic preservation: BLEUPapineni et al. (2002), METEORBanerjee & Lavie (2005), BERTScoreZhang et al. (2020), and Bart-ScoreYuan et al. (2021). BLEU offers a general accuracy measure, and METEOR builds on BLEU by considering synonymy and word order, often providing a more sensitive quality assessment. BERTScore leverages contextual embeddings to evaluate semantic similarity, crucial for detecting whether unlearning procedures change the sentence’s meaning. Bart-Score evaluates fluency and informativeness using pre-trained BART models, with scores reflecting log-likelihood, so close to zero indicates better quality. BERTScore and Bart-Score offer insight into more subtle changes, and percentage change trends are prioritized for a comprehensive analysis.
+
+## 4 EXPERIMENTS AND RESULTS
+
+### 4.1 EXPERIMENT SETUP
+
+We evaluated the proposed CodeUnlearn framework by applying it to a large language model (LLM) trained on English-to-French translation tasks. Specifically, we used the T5-small model Raffel et al. (2023), a 60-million-parameter transformer architecture. The task was conducted on the Opus Books dataset (*opus\_books/en-fr*), a collection of literary texts with a vocabulary size of 25k. The dataset was split into 80% for training, 10% for validation, and 10% for testing.
+
+The codebook, consisting of 25,000 codes with 512 dimensions, was integrated into the third encoder layer. This layer was chosen based on prior studies Templeton et al. (2024) suggesting that intermediate layers capture high-level features, making them ideal for unlearning.
+
+### 4.2 DATASET CONSTRUCTION AND UNLEARNING PROCESS
+
+The dataset was split into three subsets: **Training set** (for initial model training and embedding codebook features), **Validation set** (for evaluating performance after unlearning specific topics), and **Test set** (for assessing generalization and unintended degradation on non-target topics).
+
+For the unlearning procedure, we created:
+
+- $D_T$ : 500 prompts containing the target topic (e.g., *love*), sampled from validation and test sets.
+- $D_T$ : A control dataset where target-topic words in  $D_T$  were replaced with unrelated terms, preserving structure and context.
+- $D_R$ : Prompts unrelated to the target topic, used for evaluating non-target performance.
+
+We performed the unlearning procedure by progressively deleting codes related to the target topics. Seven values of  $S'$  were tested, ranging from  $S' = 8(1 \times S)$  to  $S' = 104(13 \times S)$ , corresponding to deletions of approximately 0.064% to 0.828% of the total codes in the codebook.
+
+{7}------------------------------------------------
+
+Table 1: Examples of unlearning on topic ‘*love*’. The French translations illustrate the model’s progressive degradation as more codes are deleted. Initially, the target word “*l’aimer*” (to love him) is preserved. As codes are removed ( $S' = 8$  and  $S' = 24$ ), the replacement words (*l’avoir acquisité*, meaning “to have acquitted him”; *le recevoir*, meaning “to receive him”) begin to diverge from the original meaning. By  $S' = 72$ , the translation (*le mettre en état*, meaning “to put him in a state”) becomes completely unrelated, reflecting effective forgetting of the *love* concept.
+
+|  | Content |
+|-|-|
+| <b>English</b> | She had made efforts to <b>love</b> him, and she had repented with tears for having yielded to another! |
+| <b>Ground Truth</b> | Elle avait fait des efforts pour <b>l’aimer</b> , et elle s’était repentie en pleurant d’avoir cédé à un autre. |
+| <b>Codebook Model</b> | Elle avait fait des efforts pour <b>l’aimer</b> , et elle avait repris des larmes pour avoir renoncé à un autre! |
+| $S' = 8$ , delete 16 codes | Elle avait fait des efforts pour <b>l’aimer</b> , et elle avait repris des larmes pour <b>l’avoir acquisité</b> d’un autre! |
+| $S' = 24$ , delete 52 codes | Elle avait fait des efforts pour <b>le recevoir</b> , et elle avait repris des larmes pour <b>avoir renoncé</b> à un autre. |
+| $S' = 72$ , delete 133 codes | Elle avait fait des efforts pour <b>le mettre en état</b> , et elle avait <b>repris des larmes pour s’en rendre</b> à un autre. |
+
+Table 2: Unlearning Results for Different Topics
+
+| Topic(N) | Dataset | Score (Normalized Improvement Drop(%)) |  |  |  |
+|-|-|-|-|-|-|
+|  |  | BLEU↓ | METEOR↓ | BERT – P↓ | BART↓ |
+| <b>Love(207)</b> | $D'_T$ | 0.16 ( <b>-112.52</b> ) | 0.39 ( <b>-117.76</b> ) | 0.80 ( <b>-118.88</b> ) | -4.80 ( <b>-143.96</b> ) |
+|  | $D_R$ | 0.18 ( <b>-37.80</b> ) | 0.42 ( <b>-57.82</b> ) | 0.81 ( <b>-58.25</b> ) | -5.71 ( <b>-35.06</b> ) |
+| <b>Julien(255)</b> | $D'_T$ | 0.19 ( <b>-113.12</b> ) | 0.42 ( <b>-138.47</b> ) | 0.80 ( <b>-134.60</b> ) | -5.15 ( <b>-164.68</b> ) |
+|  | $D_R$ | 0.16 ( <b>-65.70</b> ) | 0.39 ( <b>-64.38</b> ) | 0.80 ( <b>-94.63</b> ) | -6.10 ( <b>-94.60</b> ) |
+| <b>Captain(137)</b> | $D'_T$ | 0.20 ( <b>-72.10</b> ) | 0.47 ( <b>-140.71</b> ) | 0.83 ( <b>-84.44</b> ) | -5.16 ( <b>-87.90</b> ) |
+|  | $D_R$ | 0.19 ( <b>-9.72</b> ) | 0.44 ( <b>-9.04</b> ) | 0.82 ( <b>-9.66</b> ) | -5.97 ( <b>-0.53</b> ) |
+| <b>Poor(151)</b> | $D'_T$ | 0.18 ( <b>-70.61</b> ) | 0.43 ( <b>-70.78</b> ) | 0.81 ( <b>-60.84</b> ) | -5.03 ( <b>-79.81</b> ) |
+|  | $D_R$ | 0.20 ( <b>-26.64</b> ) | 0.47 ( <b>-12.48</b> ) | 0.83 ( <b>-14.20</b> ) | -5.81 ( <b>-36.01</b> ) |
+| <b>Wish(217)</b> | $D'_T$ | 0.15 ( <b>-144.83</b> ) | 0.33 ( <b>-249.51</b> ) | 0.78 ( <b>-182.02</b> ) | -4.95 ( <b>-309.34</b> ) |
+|  | $D_R$ | 0.16 ( <b>-87.65</b> ) | 0.39 ( <b>-94.51</b> ) | 0.81 ( <b>-74.16</b> ) | -6.02 ( <b>-133.35</b> ) |
+| <b>White(179)</b> | $D'_T$ | 0.12 ( <b>-157.45</b> ) | 0.38 ( <b>-218.04</b> ) | 0.80 ( <b>-403.04</b> ) | -4.85 ( <b>-119.99</b> ) |
+|  | $D_R$ | 0.16 ( <b>-10.09</b> ) | 0.49 ( <b>-22.99</b> ) | 0.83 ( <b>-47.65</b> ) | -6.12 ( <b>-27.15</b> ) |
+| <b>Black(190)</b> | $D'_T$ | 0.16 ( <b>-85.16</b> ) | 0.40 ( <b>-138.04</b> ) | 0.80 ( <b>-115.56</b> ) | -4.70 ( <b>-62.91</b> ) |
+|  | $D_R$ | 0.19 ( <b>-16.12</b> ) | 0.47 ( <b>-2.15</b> ) | 0.83 ( <b>-3.01</b> ) | -5.78 ( <b>-97.36</b> ) |
+
+### 4.3 RESULTS AND ANALYSIS
+
+**Unlearning Conceptual Topics (e.g., *love*)** Table 1 showcases example outputs after unlearning *love*. Minor inaccuracies appear when  $S' = 8$  (16 codes deleted). By  $S' = 72$  (133 codes deleted), the translation diverges significantly from the original meaning, effectively forgetting the *love* concept while introducing interference in sentence comprehension. Following unlearning, the model attempts to rely on other similar codes; however, the meanings of these codes are significantly different. As a result, the unlearned target topic interferes, hindering the model’s ability to comprehend the entire sentence fully. This highlights the nuanced balance between forgetting the target and preserving overall sentence coherence.
+
+{8}------------------------------------------------
+
+![Figure 3: Performance Drop after Unlearning on the Topic 'Love'. Four line graphs (a-d) showing Normalized Improvement for BLEU, Meteor, Bert-P, and Bart models across different unlearning levels (8-16 to 104-207).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 3 consists of four line graphs (a-d) showing Normalized Improvement across different models (BLEU, Meteor, Bert-P, Bart) after unlearning on the topic 'Love'. The X-axis represents the Model (baseline, 8-16, 24-52, 40-74, 56-103, 72-133, 88-173, 104-207). The Y-axis represents Normalized Improvement (ranging from -0.2 to 1.0). Two lines are plotted: Improvement % (Topic) in blue and Improvement % (Not-Topic) in red. In all cases, the Topic improvement drops significantly as more codes are removed, while the Not-Topic improvement remains relatively stable.
+
+| Model | Unlearning Level | Improvement % (Topic) | Improvement % (Not-Topic) |
+|-|-|-|-|
+| a) BLEU | baseline | 1.0 | 1.0 |
+|  | 8-16 | 0.7 | 1.0 |
+|  | 24-52 | 0.45 | 0.95 |
+|  | 40-74 | 0.4 | 0.9 |
+|  | 56-103 | 0.2 | 0.85 |
+|  | 72-133 | 0.1 | 0.88 |
+|  | 88-173 | 0.2 | 0.8 |
+|  | 104-207 | -0.1 | 0.6 |
+| b) Meteor | baseline | 1.0 | 1.0 |
+|  | 8-16 | 0.7 | 0.95 |
+|  | 24-52 | 0.4 | 0.9 |
+|  | 40-74 | 0.3 | 0.88 |
+|  | 56-103 | 0.1 | 0.68 |
+|  | 72-133 | -0.05 | 0.75 |
+|  | 88-173 | -0.02 | 0.65 |
+|  | 104-207 | -0.15 | 0.45 |
+| c) Bert-P | baseline | 1.0 | 1.0 |
+|  | 8-16 | 0.7 | 0.98 |
+|  | 24-52 | 0.4 | 0.95 |
+|  | 40-74 | 0.2 | 0.88 |
+|  | 56-103 | -0.1 | 0.7 |
+|  | 72-133 | -0.15 | 0.7 |
+|  | 88-173 | 0.0 | 0.65 |
+|  | 104-207 | -0.15 | 0.4 |
+| d) Bart | baseline | 1.0 | 1.0 |
+|  | 8-16 | 0.7 | 1.15 |
+|  | 24-52 | 0.45 | 1.15 |
+|  | 40-74 | 0.48 | 1.18 |
+|  | 56-103 | 0.45 | 0.8 |
+|  | 72-133 | -0.1 | 0.65 |
+|  | 88-173 | -0.05 | 0.68 |
+|  | 104-207 | -0.4 | 0.6 |
+
+Figure 3: Performance Drop after Unlearning on the Topic 'Love'. Four line graphs (a-d) showing Normalized Improvement for BLEU, Meteor, Bert-P, and Bart models across different unlearning levels (8-16 to 104-207).
+
+Figure 3: **Performance Drop after Unlearning on the Topic 'Love'.** Performance Drop after Unlearning on the Topic 'Love'. The X-axis shows the model variations, with the first column as the original model. Columns 2 to 8 represent increasing levels of unlearning, with the number indicating the top  $S$  codes used and removed. The Y-axis represents the percentage change in various metrics compared to the original model. As more codes are deleted, the model's performance on the target topic declines rapidly, while performance on non-topic content remains more stable.
+
+Figure 3 visualizes performance degradation as more codes related to *love* are deleted. BLEU and BERTScore metrics show a consistent decline on target prompts ( $D_T^P$ ), while performance on non-target prompts ( $D_R$ ) remains relatively stable, indicating effective unlearning with minimal impact on unrelated content.
+
+![Figure 4: Performance Drop after Unlearning on the Topic 'Julien'. Four line graphs (a-d) showing Normalized Improvement for BLEU, Meteor, Bert-P, and Bart models across different unlearning levels (8-15 to 104-255).](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 4 consists of four line graphs (a-d) showing Normalized Improvement across different models (BLEU, Meteor, Bert-P, Bart) after unlearning on the topic 'Julien'. The X-axis represents the Model (baseline, 8-15, 24-56, 40-103, 56-139, 72-172, 88-215, 104-255). The Y-axis represents Normalized Improvement (ranging from -0.4 to 1.0). Two lines are plotted: Improvement % (Topic) in blue and Improvement % (Not-Topic) in red. In all cases, the Topic improvement drops significantly as more codes are removed, while the Not-Topic improvement remains relatively stable.
+
+| Model | Unlearning Level | Improvement % (Topic) | Improvement % (Not-Topic) |
+|-|-|-|-|
+| a) BLEU | baseline | 1.0 | 1.0 |
+|  | 8-15 | 0.45 | 1.0 |
+|  | 24-56 | 0.25 | 0.85 |
+|  | 40-103 | 0.25 | 0.6 |
+|  | 56-139 | 0.15 | 0.6 |
+|  | 72-172 | 0.05 | 0.6 |
+|  | 88-215 | -0.05 | 0.4 |
+|  | 104-255 | -0.1 | 0.35 |
+| b) Meteor | baseline | 1.0 | 1.0 |
+|  | 8-15 | 0.35 | 0.95 |
+|  | 24-56 | 0.25 | 0.7 |
+|  | 40-103 | 0.15 | 0.65 |
+|  | 56-139 | -0.05 | 0.6 |
+|  | 72-172 | -0.1 | 0.55 |
+|  | 88-215 | -0.2 | 0.45 |
+|  | 104-255 | -0.3 | 0.4 |
+| c) Bert-P | baseline | 1.0 | 1.0 |
+|  | 8-15 | 0.15 | 0.85 |
+|  | 24-56 | 0.15 | 0.55 |
+|  | 40-103 | 0.05 | 0.5 |
+|  | 56-139 | 0.0 | 0.5 |
+|  | 72-172 | 0.05 | 0.4 |
+|  | 88-215 | -0.25 | 0.2 |
+|  | 104-255 | -0.35 | 0.1 |
+| d) Bart | baseline | 1.0 | 1.0 |
+|  | 8-15 | -0.1 | 1.1 |
+|  | 24-56 | -0.05 | 0.65 |
+|  | 40-103 | -0.15 | 0.45 |
+|  | 56-139 | -0.3 | 0.55 |
+|  | 72-172 | -0.2 | 0.4 |
+|  | 88-215 | -0.35 | 0.55 |
+|  | 104-255 | -0.4 | 0.0 |
+
+Figure 4: Performance Drop after Unlearning on the Topic 'Julien'. Four line graphs (a-d) showing Normalized Improvement for BLEU, Meteor, Bert-P, and Bart models across different unlearning levels (8-15 to 104-255).
+
+Figure 4: **Performance Drop after Unlearning on the Topic 'Julien'.** Similar to the 'love' topic, we tested the unlearning procedure on the name 'Julien'.
+
+{9}------------------------------------------------
+
+**Unlearning Personal Names (e.g., *Julien*)** To test the unlearning of personal information, we targeted the name *Julien*. Names carry specific semantic significance in language models, much like critical topics, making *Julien* an ideal test case to assess the method’s effectiveness in removing personal information, such as names, while preserving performance on unrelated content. Figure 4 shows that sentences containing *Julien* experienced a sharp performance drop after unlearning. This demonstrates the capability to handle both conceptual topics and specific entities effectively.
+
+![Figure 5: Metrics after unlearning topic 'love' and test on 'like'. The figure contains four line graphs (a, b, c, d) showing normalized improvements across various models (baseline, 8-16, 24-52, 40-74, 56-103, 72-133, 88-173, 104-201). Each graph compares 'Improvement % (Topic)' (blue line with circles) and 'Improvement % (Not-Topic)' (red line with diamonds). In all cases, the 'Not-Topic' improvement remains relatively high, while the 'Topic' improvement drops significantly after the baseline.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 5 consists of four subplots: (a) BLEU Normalized Improvements across Models, (b) Meteor Normalized Improvements across Models, (c) Bert-P Normalized Improvements across Models, and (d) Bert Normalized Improvements across Models. Each plot shows two data series: 'Improvement % (Topic)' represented by a blue line with circular markers, and 'Improvement % (Not-Topic)' represented by a red line with diamond markers. The x-axis for all plots lists models: baseline, 8-16, 24-52, 40-74, 56-103, 72-133, 88-173, and 104-201. The y-axis represents 'Normalized Improvements' ranging from 0.0 to 1.0 (or 1.2 in subplot d). In all subplots, the 'Not-Topic' series starts at 1.0 and shows a gradual decline, while the 'Topic' series starts at 1.0 and shows a much sharper decline, ending at significantly lower values (e.g., around 0.3 in (a) and (b), and around 0.2 in (c) and (d)).
+
+Figure 5: Metrics after unlearning topic 'love' and test on 'like'. The figure contains four line graphs (a, b, c, d) showing normalized improvements across various models (baseline, 8-16, 24-52, 40-74, 56-103, 72-133, 88-173, 104-201). Each graph compares 'Improvement % (Topic)' (blue line with circles) and 'Improvement % (Not-Topic)' (red line with diamonds). In all cases, the 'Not-Topic' improvement remains relatively high, while the 'Topic' improvement drops significantly after the baseline.
+
+Figure 5: **Metrics after unlearning topic ‘*love*’ and test on ‘*like*’**, The model unlearned the ‘*love*’ topic but also deteriorated the performance on the ‘*like*’ topic, which suggests that the unlearning procedure removes not only the specific target information but also the relevant context.
+
+**Performance on Synonyms (e.g., *like* for *love*)** We evaluated the synonym *like* after unlearning *love*. Figure 5 indicates that the model’s performance on *like* also deteriorated, highlighting that the unlearning process extends to semantically related contexts. This demonstrates that CodeUnlearn effectively addresses contextual knowledge beyond isolated data points.
+
+**Comprehensive Topic Analysis** In addition to *love* and *Julien*, we tested other topics such as *Captain*, *Poor*, *Wish*, *White*, and *Black*. Results in Table 2 confirm that CodeUnlearn scales effectively to diverse topics, with significant degradation on target prompts and relatively small impact on unrelated data.
+
+## 5 CONCLUSION
+
+In this work, we introduced CodeUnlearn, a novel framework for zero-shot machine unlearning in Large Language Models (LLMs). Leveraging codebook features and Sparse Autoencoders (SAEs), we devised a method that effectively isolates and removes specific knowledge, ensuring that the targeted data and its contextual associations are erased from the model. Unlike previous methods, which required retraining or were limited to classification tasks, CodeUnlearn operates amortized and zero-shot, providing an efficient and scalable solution for unlearning in complex, generative models like LLMs. Our approach uses a discrete concept representation to regulate the flow of information in a language model, enabling the unlearning of specific topics while preserving overall model performance on unrelated tasks. The results show that CodeUnlearn successfully mitigates the model’s ability to reproduce the unlearned information without requiring additional training, achieving substantial unlearning effectiveness and maintaining interpretability.
+
+ Rest of paper (reference and Appendix) is removed.

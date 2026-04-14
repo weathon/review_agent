@@ -1,0 +1,75 @@
+## Summary
+CHASE-SQL is a multi-agent, test-time compute framework for Text-to-SQL that generates diverse SQL candidates via three strategies—Divide-and-Conquer Chain-of-Thought (CoT), Query Plan CoT, and Online Synthetic In-Context Example Generation—and selects the best candidate using a fine-tuned binary pairwise selection agent. The framework achieves state-of-the-art 73.0% execution accuracy on the BIRD benchmark, outperforming all published and undisclosed methods at submission time.
+
+---
+
+## Strengths
+
+- **Strong empirical results with clear ablations.** CHASE-SQL achieves 73.01%/73.0% (dev/test) on BIRD, a ~6-point margin over the next best published method (67.21%, Distillery). Ablation studies (Tables 4, 6, 7) systematically quantify the contribution of each component, lending credibility to design choices.
+
+- **Complementarity of generators is well-demonstrated.** The Venn diagram (Fig. 3a) and difficulty-level breakdown (Fig. 3b) concretely show that the three generation strategies solve different problem subsets—DC CoT handles complex queries, QP CoT handles moderate-difficulty ones, and OS ICL provides schema grounding—justifying the ensemble.
+
+- **Fine-tuned pairwise selection agent is a clear improvement.** The selection agent achieves ~71% binary classification accuracy vs. ~60-64% for out-of-the-box LLMs (Table 5), and yields ~6% higher end-to-end execution accuracy over self-consistency (Table 6). The pairwise tournament formulation (Algorithm 3) with schema union is a practical and principled design.
+
+- **Generalizes without retraining.** Evaluating on Spider without modifying prompts or retraining the selection model (87.6% EX, 2nd overall, 1st among models not trained on Spider) demonstrates robustness across distribution shifts.
+
+- **Open-source variant provided.** The Mistral Large + fine-tuned Qwen2.5-coder configuration (70.33% on BIRD dev) makes the framework accessible beyond proprietary model APIs.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Computational cost not analyzed.** CHASE-SQL generates 3 × 7 = 21 candidates per question and runs O(n²) pairwise comparisons (21 choose 2 = 210 calls to the selection model), plus multi-step generation with query fixer loops. The paper makes no mention of wall-clock latency, total token cost, or API cost per question. For real-world applicability—a key selling point cited in the introduction—this is a critical omission. Practitioners cannot assess whether the approach is deployable without this information.
+
+- **Gap between selection agent and oracle remains large.** The oracle upper bound is 82.79% vs. actual 73.01%—a ~10-point gap. The binary selection accuracy of the best model is only 71.01% (Table 5). The paper identifies this gap but offers little insight into *why* the selection agent fails or how it could be improved, leaving a significant open problem unaddressed.
+
+- **Potential data leakage in selection agent training.** The selection agent is trained on the BIRD training set (and ground-truth SQL queries are injected when no correct candidate exists). The entire framework is evaluated on the BIRD development and test sets. While the split is technically correct, the selection model has seen the BIRD question-SQL distribution during training, which inflates its advantage over truly generic approaches and makes comparisons to methods not trained on BIRD less clean.
+
+### Minor
+
+- **Individual components are incremental.** Divide-and-conquer prompting, query plan reasoning, and self-reflection-based fixing are established ideas. Online synthetic ICL is the freshest contribution, but "generate many examples per test instance" is not a far departure from existing ICL work (Agarwal et al., 2024). The novelty lies largely in the combination rather than fundamental algorithmic innovation.
+
+- **Selection agent training details are sparse.** The number of training examples, training compute, class balance, and hyperparameters for fine-tuning Gemma 2 9B vs. Gemini-1.5-flash are relegated to the appendix (which is unavailable to the reviewer). The ranker agent (all candidates in one prompt) underperforms the binary classifier by 7.5%; an error analysis would clarify whether this is due to context length, capacity, or format.
+
+- **Spider evaluation is limited.** Only overall EX is reported for Spider. No ablation breaking down contributions of individual components on Spider is provided, making it hard to know whether the same lessons transfer.
+
+### Tiny
+
+- The algorithm pseudo-code in Algorithm 3 (line 4) has a logical inconsistency: it says "c_i is the winner if the execution results *match*" but always awards the point to c_i regardless. This appears to be an artifact of simplified notation, but it is confusing.
+- Minor typo: "Alg. 1 outlines the step-by-step process of this strategy to generate the final SQL output using a single LLM call" — Algorithm 1 clearly shows multiple sequential LLM calls (steps 1, 5, 7).
+
+---
+
+## Nice-to-Haves
+
+- An analysis of how many LLM API calls (and approximate cost/latency) are incurred per question would significantly strengthen the practical contribution.
+- A qualitative error analysis of selection agent failures—e.g., cases where both candidates look superficially identical but differ semantically—would surface actionable future work.
+- Reporting variance/confidence intervals across multiple runs (given LLM non-determinism) would make the small differences in ablation (e.g., −0.65% w/o QP vs. −0.85% w/o OS) more interpretable.
+
+---
+
+## Novel Insights
+
+The paper's most genuinely novel contribution is the **Online Synthetic In-Context Example Generation** (OS ICL), which generates many-shot examples per test query online—covering both SQL feature diversity and schema-specific diversity—rather than retrieving from a static pool. The empirical observation that mixing schema-filtered and feature-diverse examples outperforms retrieval-based ICL is a useful data point for the community. The use of query execution plans (EXPLAIN output translated to human-readable format) as a scaffolding signal for CoT reasoning is also a practical insight that has not been prominently explored in prior Text-to-SQL literature.
+
+---
+
+## Suggestions
+
+1. Include a cost/latency table (tokens per question, wall-clock time, estimated API cost) alongside performance metrics—this is especially important given the paper's real-world application motivation.
+2. Provide a breakdown of selection agent failure modes (e.g., both candidates syntactically valid but semantically equivalent vs. subtle schema differences) to guide future work on the persistent oracle–agent gap.
+3. Train and evaluate the selection agent across multiple random seeds and report variance, given that the binary accuracy differences between models (e.g., 64.28% vs. 71.01%) drive the core claim.
+4. Consider analyzing the robustness of OS ICL when the LLM generates incorrect synthetic examples—are such errors filtered, and what is the error rate of the generator itself?
+
+---
+
+## Final Score
+
+The paper presents a well-engineered, empirically strong system with meaningful ablations and a genuine SOTA result on BIRD. The primary weaknesses are the lack of cost analysis, limited individual novelty, and a gap in understanding the selection agent's failure modes. It is a solid contribution appropriate for an applied/systems venue.
+
+MY FINAL SCORE: <pineapple>6.2</pineapple>
