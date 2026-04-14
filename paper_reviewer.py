@@ -54,10 +54,10 @@ PROVIDER = "zai"
 #base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "qwen/qwen3.5-flash-02-23"
 # MODEL_HARSH = f"claude:claude-sonnet-4-6" #用claude subscription白嫖
-MODEL_HARSH = "ollama:qwen3.5:397b-cloud"
+MODEL_HARSH = "openai/gpt-5.4"
 # MODEL_SPARK = "ollama:qwen3.5:397b-cloud"
 MODEL_NEUTRAL = "qwen/qwen3.5-plus-02-15"
-MODEL_SPARK = "qwen/qwen3.5-plus-02-15"
+MODEL_SPARK = "ollama:glm-5.1:cloud"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
@@ -113,6 +113,7 @@ def _make_search_mcp_server(search_path: str):
         {"query": str, "n": int, "mode": str},
     )
     async def _search_file_tool(args: dict) -> dict:
+        print(f"  [search_file_tool] requested: query='{args['query']}' n={args['n']} mode='{args.get('mode', 'b')}'")
         if args.get("mode", "b") == "b":
             query = args["query"]
             tokenized_query = query.split(" ")
@@ -519,7 +520,7 @@ async def run_merge(
     merger_fs = _make_sandboxed_mcp_server("merger_fs", [paper_dir])
 
     options = ClaudeAgentOptions(
-        model=MODEL_HUMAN_MERGER,
+        model=MODEL_HUMAN_MERGER.split(":")[1],
         allowed_tools=[
             "mcp__merger_fs__read_file",
             "mcp__merger_fs__glob_files",

@@ -20,7 +20,7 @@ from pathlib import Path
 # Tee stdout+stderr to a log file so all intermediate output is saved
 _log_path = Path(__file__).parent / "bench_run.log"
 _log_file = open(_log_path, "w")
-CONCURRENCY = 3
+CONCURRENCY = 5
 
 class _Tee:
     """Write to both the original stream and a log file."""
@@ -271,7 +271,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
         random.seed(seed)
         samples = random.sample(available, min(n_samples, len(available)))
         print(f"Selected {len(samples)} papers (seed={seed}).\n")
-
+    random.shuffle(samples)
     results = []
     total_start = time.time()
 
