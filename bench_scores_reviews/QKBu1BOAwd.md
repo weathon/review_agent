@@ -1,113 +1,134 @@
 ## Summary
-DRAFT proposes an iterative framework for refining tool documentation for LLMs via self-driven trial-and-error interaction. The method decomposes documentation improvement into three phases—Experience Gathering (Explorer), Learning from Experience (Analyzer), and Documentation Rewriting (Rewriter)—augmented by a diversity-promoting exploration strategy (similarity constraint + self-reflection) and a tool-adaptive termination mechanism (BLEU + embedding similarity). Experiments on ToolBench and RestBench across three LLMs show consistent gains in Correct Path Rate and Win Rate, with supporting evidence from tool retrieval and human evaluations.
+
+DRAFT is a framework that iteratively refines tool documentation for LLMs through a three-phase self-driven loop: an Explorer probes the tool with diverse queries and captures execution results, an Analyzer identifies discrepancies between documentation and observed behavior and proposes targeted revision suggestions, and a Rewriter synthesizes these inputs to produce an updated documentation version plus directions for the next exploration round. The process is governed by a diversity-promoting exploration strategy (cosine similarity constraint + self-reflection) and a tool-adaptive termination mechanism (BLEU + embedding cosine similarity convergence). Experiments on ToolBench and RestBench with three LLMs (GPT-4o, GPT-4o-mini, Llama-3-70B) consistently outperform static documentation rewriting baselines, with secondary benefits demonstrated on tool retrieval.
 
 ---
 
 ## Strengths
 
-- **Genuine novelty in the application of execution feedback to documentation refinement.** Prior work (e.g., EasyTool) rewrites documentation one-shot using LLMs without grounding in actual tool execution traces. DRAFT uniquely grounds each revision in real tool responses (e.g., actual parameter errors, return field structures), enabling documentation that reflects actual tool behavior rather than a paraphrase of the original. This is a meaningful and underexplored direction.
+- **Consistent, non-trivial gains across heterogeneous LLMs and datasets.** On ToolBench (I3-Instruction), CP% improvements over EasyTool reach 5–7 points across all three tested LLMs (Table 1), and on RestBench-TMDB the gains are even larger (e.g., GPT-4o: 79→88 CP%). The fact that gains transfer to GPT-4o-mini and Llama-3-70B using documentation refined with GPT-4o specifically demonstrates that the refined documentation captures model-agnostic usability improvements, not just idiosyncrasies of the backbone.
 
-- **Diversity-promoting exploration is a principled design.** The combination of embedding-based similarity constraint (Eq. 2) with self-reflection for regeneration is a thoughtful mechanism that addresses coverage failure in naive iterative exploration. The ablation in Table 2 confirms it matters: removing it drops CP% from 88 to 84 and Win% from 71 to 69 on TMDB with GPT-4o.
+- **Cross-model generalization with a weaker backbone (Figure 7).** The paper tests Llama-3-70B as a refinement backbone—a weaker, open-source model—and shows that its refined documentation still benefits all three evaluation models on RestBench-TMDB. This is a practically important finding: organisations without GPT-4o access can still benefit from DRAFT.
 
-- **Tool-adaptive termination addresses a genuine over-iteration failure mode.** Figure 6 shows a non-monotonic performance curve across iterations, confirming that running too many refinements degrades performance. The mechanism is ablated in Table 2 (drop to 80% CP / 68% Win without it), giving direct empirical backing rather than just a theoretical claim.
+- **Secondary retrieval benefit (Table 3).** Showing that DRAFT-refined documentation improves both sparse (BM25) and dense (Contriever) tool retrieval is a meaningful bonus, demonstrating that the improvements reflect genuine semantic enrichment rather than being a narrow inference-time artifact.
 
-- **Multi-stage evaluation is distinctive.** The paper validates improvements not only on downstream tool-use task performance (Table 1) but also on tool retrieval quality (Table 3) and human comprehension (Table 4). The retrieval analysis is particularly compelling: it shows that rewritten documentation is semantically improved even independent of any generation task, reducing concerns that gains are task-specific artifacts.
+- **A notable cross-class result (Table 1, ToolBench).** GPT-4o-mini + DRAFT achieves 47 CP% on ToolBench, exceeding the raw GPT-4o at 37 CP%. This is a striking concrete demonstration of the practical value of documentation quality.
 
-- **Cross-model transfer shows documentation improvements are model-agnostic.** DRAFT documentation refined with GPT-4o improves performance of GPT-4o-mini and Llama-3-70B (Table 1). On ToolBench, GPT-4o-mini + DRAFT (47% CP) even surpasses GPT-4o without DRAFT (37% CP), suggesting that documentation quality is a meaningful bottleneck worth targeting.
+- **Human evaluation confirms improved completeness and accuracy.** Table 4 shows strong human preference for DRAFT documentation, especially on ToolBench (68% DRAFT vs 4% raw for completeness, 56% vs 0% for accuracy). The zero raw-preferred accuracy on ToolBench is notable.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None identified.
+None.
 
 ### Major
 
-- **Missing single-pass-with-feedback ablation undermines the core claim about iteration.** The paper's central claim is that *iterative* trial-and-error refinement is necessary. However, the ablation in Table 2 only removes the diversity or termination mechanisms—it never compares DRAFT against a single-pass rewrite in which the Rewriter is given a batch of tool execution results at once without iteration. Without this, it is impossible to determine whether the iterative loop adds value beyond simply exposing the model to tool output once. This is the most critical missing experiment.
+- **Missing single-pass rewrite with execution traces baseline.** The paper's central thesis is that *iterative* trial-and-error is essential for documentation quality. However, the critical missing comparison is: give the backbone LLM the tool's original documentation plus a set of real execution traces (i.e., the same observations DRAFT generates), and ask it to rewrite the documentation in a single pass. Without this ablation, the paper cannot substantiate the claim that iteration—rather than simply having execution feedback at all—drives the improvement. EasyTool is a static rewrite without execution feedback, but it is not a single-shot rewrite *with* execution feedback. This gap directly undermines the necessity of the iterative framework.
 
-- **Win% evaluation is underspecified.** Win% is the primary metric for three out of six experimental columns in Table 1, yet the paper describes it only as computed by a "ChatGPT-based evaluator" (Section 3.1) with no disclosure of: which specific model was used, the prompt template, whether evaluation was blinded to method identity, whether position/order of outputs was randomized, or any measure of evaluator consistency. This is a major reproducibility and validity concern.
+- **No ablation removing the Analyzer module.** DRAFT's modular decomposition (Explorer → Analyzer → Rewriter) is presented as a contribution. However, there is no ablation comparing against simply feeding the Explorer's execution traces directly to a Rewriter without the intermediate Analyzer pass. Without this ablation, it is unclear whether the Analyzer's structured suggestion layer adds value over an end-to-end "observe and rewrite" prompt.
 
-- **Algorithm 1 has a structural issue and confusing termination logic.** As written, when the break condition fires at Line 16 (`if Δ > τ then Break`), execution jumps out of the loop *before* Line 19 executes (`D̃ ← D̃ ∪ t_i`). This means the final converged documentation `t_i` is never added to the output set. The algorithm as presented returns all *pre-convergence* versions but not the converged one—which is the opposite of the intended behavior. Additionally, naming Δ the "degree of change" when it is computed as a similarity metric (BLEU + cosine sim, where higher = more similar = *less* change) is internally inconsistent. The paper says "we consider the iterative process to have converged when there is minimal change," which matches the logic (high Δ = converge), but the terminology inverts intuition. This should be corrected and clarified.
-
-- **No computational cost analysis.** DRAFT makes multiple sequential LLM calls per tool (Explorer → Analyzer → Rewriter) across up to 5 iterations. No API call counts, token consumption, wall-clock times, or cost estimates are reported. Given that gains on ToolBench with GPT-4o are +6% CP and +1% Win over EasyTool, the cost-benefit tradeoff is a meaningful practical question. This is especially important because EasyTool is described as a single-pass rewrite, which would be substantially cheaper.
+- **Algorithm 1 contains a pseudocode bug.** In Lines 15–18, when the convergence condition (Δ > τ) is satisfied at iteration *i*, the algorithm breaks *before* reaching Line 19, meaning t_i (the converged version) is never added to the output set D̃. The last version added would be t_{i-1}. Conversely, if no convergence is detected and all *I* rounds complete, D̃ accumulates t_1 through t_I—multiple intermediate versions per tool—rather than a single refined documentation. The intended semantics (use only the final version per tool) are not implemented as written, and the paper should clarify or correct this.
 
 ### Minor
 
-- **Cross-model generalization claim is stronger than the evidence.** The only experiment with an alternative backbone is Figure 7, using Llama-3-70B on RestBench-TMDB only. The paper concludes from this that the approach generalizes across models, but one dataset and one alternative backbone are insufficient to substantiate "robust cross-model generalization capabilities." Testing on at least RestBench-Spotify and ToolBench would meaningfully strengthen this claim.
+- **Termination criterion is unvalidated.** The claim that BLEU + cosine similarity convergence "prevents overfitting" is not empirically confirmed. Figure 6 shows performance peaks and then declines, but the paper does not demonstrate that the adaptive termination mechanism actually halts at or near the peak iteration for each tool. A concrete analysis—e.g., showing the round at which the mechanism fires vs. the round of peak performance—would substantiate this claim.
 
-- **Ablation covers mechanisms but not modules.** The ablation (Table 2) validates the diversity and termination mechanisms, but there is no ablation isolating the Analyzer module. A Rewriter-only variant (using `(t_{i-1}, e_i, r_i)` directly without the Analyzer's intermediate suggestions `s_i`) would clarify whether the Analyzer is adding value beyond the information already available. Similarly, the exploration directions `d_i` produced by the Rewriter are not independently evaluated.
+- **Query diversity ≠ behavioral coverage.** The similarity constraint (Eq. 2) enforces semantic dissimilarity between generated *queries*, not between *API parameter configurations* or *response regimes*. Two semantically distinct queries may invoke identical tool behavior, while two semantically similar queries may exercise different parameter paths. For tools where important edge cases arise from parameter combinations, boundary values, or authorization conditions, the proposed diversity mechanism may leave meaningful behavioral regions unexplored. This is not acknowledged.
 
-- **Retrieval results are not uniformly positive.** Contriever on Spotify @10 slightly decreases from 49.6 to 49.2 with DRAFT, and BM25 on Spotify @1 is unchanged (43.9 vs 43.9). The paper does not discuss these non-improvements, which suggests the benefits may be tool/dataset-dependent.
+- **No cost or efficiency reporting.** DRAFT requires multiple LLM calls (Explorer + Analyzer + Rewriter) per iteration per tool, potentially up to five rounds. The paper provides no reporting on average API call counts, token usage, wall-clock time, or total refinement cost per tool. For a practically motivated system, this absence makes it impossible to assess the cost–benefit trade-off relative to one-shot methods like EasyTool.
 
-- **Human evaluation is small-scale and lacks agreement statistics.** Only 3 annotators evaluate 50 cases, with no inter-annotator agreement (e.g., Fleiss' κ) reported. For RestBench accuracy, 70% of cases are labeled "Equal," which suggests either the task is difficult to judge or many cases show no clear improvement—this deserves discussion rather than being passed over.
+- **Cross-model generalization evidence is narrower than claimed.** The abstract states "robust cross-model generalization capabilities." In reality, the main experiments use three models from two provider families (GPT-4o, GPT-4o-mini, Llama-3-70B), and the backbone generalization experiment (Figure 7) covers only one additional backbone (Llama-3-70B) on one dataset (RestBench-TMDB). The word "robust" is not warranted by this evidence. The explanation offered (shared transformer structure, pretraining corpora) is speculative and untested.
+
+- **Retrieval results are mixed.** Table 3 shows gains on TMDB with both retrievers but Contriever @10 on Spotify slightly *decreases* (49.6→49.2). The paper interprets this section positively without acknowledging the mixed pattern; the claim should be softened to "can improve retrieval in most settings."
+
+- **Ablation scope is limited.** Table 2 reports ablations for only one dataset (TMDB) and one model (GPT-4o) in the main paper. The performance drops for w/o diversity and w/o adaptive are modest (88→84 and 88→80 CP%), and without variance, it is unclear whether these are robust. The paper states appendix results show similar trends, which partially addresses this.
+
+- **No limitations section.** The paper does not discuss when DRAFT may fail or should not be used: tools with rare dangerous failure modes, stateful or rate-limited APIs, tools that cannot be safely probed, or cases where exploration quality is poor because initial documentation is nearly empty. These are important practical caveats.
 
 ### Tiny
 
-- **EasyTool backbone model mismatch.** The paper uses GPT-4o as DRAFT's backbone and compares against EasyTool, which uses "ChatGPT" (presumably GPT-3.5 or earlier). This comparison is not apples-to-apples in terms of the rewriting model's capability, which inflates the apparent advantage. Rerunning EasyTool with GPT-4o would give a cleaner comparison.
+- **§2.5 contains unsubstantiated claims.** "Dynamically maintaining an accurate and up-to-date representation of evolving features" is listed as a strength (§2.5) but is never tested—no experiment with temporally evolving tools is presented. This should be framed as a potential benefit or future direction rather than an established strength.
 
-- **ToolBench subset claim scope.** Since only the I3-Instruction subset is used, claims about ToolBench performance should be scoped accordingly.
+- **High "Equal" rates in human evaluation are not discussed.** Table 4 shows Equal rates of 44–70% on several criteria for RestBench. While DRAFT is still clearly preferred, the substantial "Equal" proportion implies improvements are real but not dramatic in many cases; acknowledging this candidly would strengthen the paper's credibility.
+
+- **The termination threshold τ and similarity threshold φ are not sensitivity-tested.** The paper uses τ=0.75 and φ=0.9 without showing how performance changes with alternative values, making it unclear how sensitive results are to these choices.
 
 ---
 
 ## Nice-to-Haves
 
-- **Compare against in-context few-shot demonstrations from explored examples.** A natural alternative to rewriting documentation is to provide the Explorer's gathered (query, result) pairs directly as few-shot demonstrations during inference. This would not modify the documentation and is simpler to deploy. If DRAFT significantly outperforms this, it provides a strong practical argument for the documentation-rewriting approach.
+- **Documentation length control.** Longer documentation can trivially provide more information. Reporting average length before and after refinement, and optionally including a length-matched baseline, would confirm that DRAFT improves information *density* rather than just quantity.
 
-- **Task-completion metric beyond path correctness.** CP% measures whether the model's tool-call sequence contains the ground-truth subsequence, not whether the final user query is answered correctly. A model could follow the right tool path but misuse the returned results. Adding a task-completion or answer-quality metric would strengthen the claim of practical benefit.
+- **Iteration trajectory visualization.** A case study showing what concretely changes in the documentation across iterations—what is added, removed, or restructured—would make the improvement mechanism transparent and provide intuition beyond aggregate metrics.
 
-- **Sensitivity analysis for termination threshold τ.** The paper sets τ = 0.75 without discussion of how sensitive results are to this value. A small sweep would validate the chosen value and inform practitioners deploying DRAFT on new tool sets.
+- **Failure case analysis.** Win% is not 100%, meaning DRAFT occasionally produces worse documentation. Characterising when and why refinement degrades performance would increase trust in deployment.
 
-- **Trajectory visualization across iterations.** The paper shows a single before/after snapshot (Figure 2 right panel). Showing how the documentation evolves iteration-by-iteration for a concrete example would directly substantiate the claim that each iteration adds meaningful signal rather than noise.
+- **Hyperparameter sensitivity study.** A sensitivity analysis for τ (e.g., 0.6, 0.75, 0.9) and φ (e.g., 0.8, 0.9, 0.95) would support reproducibility across different tool domains.
 
-- **Documentation length and completeness/conciseness tradeoff analysis.** The paper claims DRAFT produces documentation that is simultaneously more complete and more concise. These can be in tension. Tracking average documentation length across iterations and its relationship to performance would clarify whether gains come from enriched content, streamlined content, or both.
+- **Testing a more distinct model family** (e.g., Mistral, Qwen) for cross-model generalization would substantially strengthen that finding.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged for removal; treat with caution.*
 
-- **Figure 1(c) labeling concern (Harsh Critic).** The critic flagged that Figure 1(c) appears to show raw documentation winning 92.5% of the time, which contradicts the paper's claims. This is almost certainly a parsing artifact from the text extraction of the figure—the column headers (Raw vs. Improved) were likely swapped in parsing. The paper's narrative, its Table 1 results, and the figure caption all consistently claim that DRAFT-improved documentation is preferred. This should not be treated as a genuine paper flaw.
+- **"No statistical significance / confidence intervals"** (harsh critic, major): WEAKENED to minor. Single-run evaluation with expensive API-based LLM benchmarks is the norm in this community. The lack of variance reporting is a limitation, but it does not invalidate results where gains are consistently 5–10+ CP points across multiple datasets and models.
 
-- **"Causal claim under-justified" / other bottlenecks not separated (Harsh Critic).** The critic argues the introduction must first prove documentation is the *dominant* bottleneck over planning errors, schema complexity, etc. This is scope creep: the paper's contribution is to show that documentation quality *is* a meaningful bottleneck worth addressing, not that it is the only one. Showing consistent downstream gains is sufficient justification. Removed.
+- **"Analyzer and Rewriter use the same LLM is a problem"** (harsh critic): REMOVED. Using the same backbone for all roles is standard practice in LLM agent papers. The paper need not justify this choice.
 
-- **Section 2.5 "marketing-oriented" (Harsh Critic).** Critique of the tone of a summary section—this is a style/formatting nitpick. Removed.
+- **"text-embedding-ada-002 is dated / proprietary"** (harsh critic): REMOVED. Using an available, well-established embedding API is a reasonable engineering choice. Criticising the specific embedding model as a weakness is not substantive.
 
-- **"No constraints on hallucinated rewrites" (Harsh Critic).** Speculative concern about the Rewriter fabricating tool behavior not observed in exploration. While theoretically valid, the paper does not claim to prevent hallucination and this falls outside stated scope. Additionally, the Rewriter is always conditioned on actual tool execution traces (r_i), which grounds its rewrites. Removed as a separate weakness; the human evaluation (Table 4, accuracy dimension) provides partial empirical evidence against systematic hallucination.
+- **"No formal objective is defined"** (harsh critic): REMOVED. This is an empirical systems paper; formal objectives are not expected.
 
-- **"Natural-language feedback is asserted better than scalar feedback without direct evidence" (Harsh Critic).** The paper discusses this design choice in the context of the broader LLM feedback literature (Section 4, Learning from Feedback) and provides sufficient conceptual justification. Not requiring an ablation of scalar vs. NL feedback is reasonable scope given the paper's focus. Removed.
+- **"The method reads as advocacy in §2.5"** (harsh critic): REMOVED as style nitpick; the substance (evolving tools not tested) is captured under Tiny weaknesses.
 
-- **"Fully automated / dynamically maintaining / explainability are over-claims" (Harsh Critic).** These are summary statements about the system's properties, not empirical claims being advanced as contributions. Critiquing them as insufficiently proven is a style nitpick on how system features are described. Removed.
+- **"Figure 1(c) is potentially confusing"** (harsh critic): REMOVED. The confusion appears to be a PDF-to-text rendering artifact, not a genuine paper flaw; the caption clearly states the figure highlights that DRAFT documentation is more favored.
 
-- **Generic "missing limitations section" as a standalone weakness.** The absence of a dedicated limitations section is a presentation preference; the paper discusses several limitations inline (e.g., performance degradation from over-iteration, cost savings from termination). Removed as a standalone weakness, though the cost/safety concerns are kept in the main weaknesses.
+- **"EasyTool comparison is unfair because DRAFT uses more compute"** (harsh critic): WEAKENED to Minor (subsumed into cost reporting weakness). The comparison itself is intentionally asymmetric in favour of EasyTool (simpler, cheaper); the authors' stronger claim is that even with a harder comparison, iterative feedback adds value. This is an acceptable scientific choice.
 
-- **"Related work is not sufficiently comparative" (Harsh Critic).** Vague and not specific enough to act on. Removed per instructions (no missing related works).
+- **"The problem statement mixes multiple failure modes"** (harsh critic): REMOVED. Categorising documentation failure modes (incompleteness, redundancy, inaccuracy) is appropriate motivational framing, not a methodological flaw.
+
+- **"DRAFT cannot guarantee correctness for unobserved tool behaviors / overconfident docs"** (harsh critic safety concern): REMOVED as outside the paper's stated contribution scope; not expected for this type of paper.
 
 ---
 
 ## Novel Insights
 
-The spark finder's observation about providing explored examples as few-shot in-context demonstrations at test time (rather than baking them into documentation) is the most actionable novel insight from the synthesis. This baseline is not in the paper, and if it performs comparably to DRAFT, the justification for the more expensive documentation-rewriting pipeline weakens significantly. Conversely, if DRAFT outperforms it, that result would be one of the strongest possible empirical arguments for the paper's approach—since it would show that reformulating knowledge into persistent documentation is better than retaining raw interaction traces. This experiment is missing and is the single highest-leverage addition the authors could make to the paper. A secondary insight is that the retrieval gain analysis (Table 3) implicitly validates that DRAFT's documentation improvements are not specific to any generation model or prompt style, because retrieval is a model-agnostic downstream task—this is a stronger form of generalization evidence than the cross-model generation experiments, and the paper undersells it.
+The most genuinely novel observation in this paper—partially surfaced by reviewers but underemphasised by the authors—is the **information-asymmetry gap between execution feedback and documentation text**. Human-authored documentation fails not because of bad writing, but because its authors cannot exhaustively probe tools in the way an automated framework can. DRAFT demonstrates that systematically inducing diverse tool executions and using the gap between observed outputs and documented behaviour as a revision signal is more effective than documentation rewriting guided purely by linguistic analysis. The secondary finding that documentation refined by a weaker open-source backbone (Llama-3-70B) still generalises to improve stronger models suggests that the informational content captured through tool interaction is largely model-agnostic—an insight with implications for building shared, model-independent tool interfaces. The key open question the paper leaves unaddressed is whether the **iterative** structure is necessary or whether a single, well-designed batch of diverse execution traces is sufficient for a one-shot rewrite to achieve equivalent gains.
 
 ---
 
 ## Suggestions
 
-1. **Add a single-pass-with-feedback baseline.** Run the Rewriter once using a batch of N Explorer traces (where N = average iterations in DRAFT) without the iterative loop. This is the minimal ablation to justify the iterative architecture and should be straightforward to implement.
+1. **Add a single-shot baseline with execution traces.** Run one round of DRAFT's exploration to collect N diverse execution examples, then ask the backbone to rewrite the documentation once using all examples simultaneously. Compare this to the iterative DRAFT. This is the most important missing experiment and should be in the main paper.
 
-2. **Add in-context few-shot demonstration baseline.** At inference time, prepend the (query, parameters, result) triples collected by DRAFT's Explorer to the prompt without modifying the documentation. Compare performance against DRAFT documentation. This tests whether documentation rewriting provides persistent, generalizable benefit over ephemeral context augmentation.
+2. **Add an Analyzer ablation.** Compare DRAFT against a version where the Rewriter is given execution traces directly (no Analyzer intermediate step). This tests whether the structured suggestion layer contributes.
 
-3. **Fully specify the Win% evaluator.** Publish the exact model name (version), evaluation prompt, position randomization protocol, and any cross-run consistency check. Without these details, Win% results cannot be reproduced or verified.
+3. **Fix Algorithm 1.** Either move Line 19 (̃D update) so it fires before the convergence break (and only the final version per tool is retained), or explicitly specify that D̃ stores only the last accepted documentation per tool and clarify the pseudocode accordingly.
 
-4. **Fix Algorithm 1 output logic.** Move Line 19 (`D̃ ← D̃ ∪ t_i`) to before the break check, or add explicit handling to output `t_{i-1}` when convergence is triggered, and rename Δ to something like "stability score" or "convergence score" to avoid the "degree of change" terminology inversion.
+4. **Report average iteration counts and token/API cost per tool** in a table alongside performance, so readers can assess practical efficiency.
 
-5. **Report cost per tool.** Add a table showing average API calls, tokens consumed, and approximate monetary cost per tool for DRAFT vs. EasyTool. Even rough estimates would allow practitioners to make an informed tradeoff decision.
+5. **Add a figure or table** showing the round at which adaptive termination fires per tool vs. the round of peak performance, to validate the termination mechanism's effectiveness.
 
-6. **Rerun EasyTool with GPT-4o backbone.** Use the same backbone for EasyTool to make the comparison model-controlled. If DRAFT still outperforms, the advantage is attributable to iteration and feedback rather than model capability.
-
-7. **Extend Figure 7 to all datasets.** Using Llama-3-70B as backbone on TMDB, Spotify, and ToolBench (rather than just TMDB) would meaningfully substantiate the cross-model generalization claim.
+6. **Add a limitations section** covering: poor initial documentation stalling exploration, stateful/rate-limited APIs, tools that cannot be safely probed, and cost at scale.
 
 ---
 
-**Overall assessment:** DRAFT addresses a real and underappreciated problem—that human-written API documentation is often misaligned with LLM comprehension—and the core idea of using actual tool execution feedback to iteratively improve documentation is genuinely novel and practically significant. Empirical results are consistent across models and benchmarks, and the multi-dimensional evaluation (task performance + retrieval + human judgment) is a notable strength. The paper is held back primarily by the absence of a critical ablation (single-pass-with-feedback), underspecification of the Win% evaluator, and an algorithmic presentation issue in Algorithm 1. These are fixable gaps, and if addressed, the paper would stand on substantially stronger footing. As submitted, the work is promising and above the workshop tier, but the missing ablation is a genuine threat to the core narrative and should be resolved before the contribution can be considered fully established.
+## Evaluation on Key Axes
+
+**Originality:** Moderate. The application of iterative self-refinement to *tool documentation* via *actual tool execution feedback* is a genuinely novel angle; the individual components (self-refinement, similarity-based diversity, convergence detection) are not new. The integration is the contribution, and it is well-motivated.
+
+**Importance of research question:** High. Documentation quality is a genuine bottleneck for LLM agents, and the problem is practically significant at scale.
+
+**Claims well supported:** Partially. The claim that DRAFT improves tool-use performance is well supported. The claim that the *iterative* framework is necessary (vs. a single-shot rewrite with execution feedback) is not supported due to the missing baseline.
+
+**Soundness of experiments:** Moderate. Multiple datasets, multiple models, and a secondary retrieval analysis are solid. However, the missing single-shot baseline, limited ablation scope, and absent variance reporting reduce confidence in the sufficiency of the experimental validation.
+
+**Clarity of writing:** Good. The high-level idea and staged decomposition are clear. Method details (algorithm correctness, evaluation criteria for the Analyzer) are under-specified relative to ICLR standards.
+
+**Value to the research community:** Moderate-to-good. A practical, plug-and-play documentation improvement pipeline that benefits both retrieval and execution is immediately deployable. The cross-model generalization finding enhances this value.
+
+**Contextualization relative to prior work:** Adequate. The distinction from EasyTool (no execution feedback) is clear; the paper could more sharply position against broader self-improvement and active probing literature.

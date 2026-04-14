@@ -1,88 +1,106 @@
 ## Summary
-This paper presents a large-scale empirical benchmark comparing 1D (MolFormer/LLM), 2D (MPNN), and 3D (Equiformer v2) molecular representations for Bayesian Optimization in materials discovery. Across four datasets (QM7, QM9, GEOM MoleculeNet, GEOM DRUGS) with multiple surrogates (GP, LLA), the authors find that simpler 1D and 2D representations generally match or outperform 3D, and that 3D representations require considerably more training data to close the gap. The benchmark spans over 2100 runs and also investigates transfer learning and sample-complexity regimes.
+
+This paper presents a large-scale benchmark (2100+ runs across 4 datasets and 35 setups) comparing 1D, 2D, and 3D molecular representations within a Bayesian optimization (BO) framework for materials discovery. Using MolFormer (1D/LLM), MPNN (2D), and Equiformer v2 (3D) combined with GP and Laplace-approximation surrogates, the paper finds that simpler representations generally match or outperform 3D equivariant GNNs, that 3D models require substantially more training data to be competitive, and that transfer learning is a viable strategy across modalities. The practical takeaway is that 1D and 2D representations offer a better cost-performance tradeoff for the surveyed tasks.
 
 ---
 
 ## Strengths
-- **Fills a genuine, documented gap in BO benchmarking**: Prior BO benchmarks for molecular discovery (Olympus, Summit, Griffiths et al. 2024) explicitly omit 3D representations. This work is the first systematic study that adds equivariant GNNs (Equiformer v2) to the comparison, across both GP and LLA surrogates—a non-trivial engineering effort not attempted elsewhere.
-- **Sample complexity analysis has a concrete mechanistic anchor**: The finding in Section 5.2 that 3D (equivariant) models are substantially less data-efficient than 2D models is grounded in existing theory (Elesedy & Zaidi, 2021) and is demonstrated across all four datasets with four training-set sizes. This is the most original and actionable finding in the paper.
-- **Multi-axis evaluation**: The study simultaneously varies representation dimensionality, surrogate type (GP vs. LLA), data regime (four sizes), and task type (single-property vs. transfer learning), producing structured evidence rather than a single-condition comparison.
-- **Reproducibility practice**: 15 seeds per condition with reported standard errors, and an anonymous code repository, are above the norm for this class of benchmarking paper.
+
+- **Sample-complexity analysis (Section 5.2) is a concrete and novel contribution.** Systematically varying training-set size from 500 to 50,000 and demonstrating that 3D models consistently lag 2D models at low-data regimes—while the gap narrows at ≥10,000 samples—directly operationalizes a mechanistic reason for 3D's underperformance in BO settings and advances beyond prior benchmarks that simply report end-to-end BO curves.
+
+- **Benchmark breadth and statistical rigor are above average for this class of paper.** Four datasets spanning three orders of magnitude in size (QM7 ~7K to GEOM DRUGS ~318K), two surrogate families, and 15 random seeds with reported standard errors represent genuine experimental investment. The use of the normalized GAP metric to enable cross-dataset aggregation is sensible.
+
+- **Inclusion of a transfer-learning condition alongside single-property prediction** adds a useful and underexplored dimension to BO benchmarking, showing that multitask pretraining can approach task-specific training quality—a practically relevant finding for practitioners who cannot afford extensive labeled data for every target property.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None. The core empirical findings are real, but a central methodological confound severely limits the scope of the strongest headline claims (see Major #1).
+None.
 
 ### Major
 
-- **The 1D vs. 3D comparison conflates representation dimensionality with model scale and pretraining**. MolFormer is a masked language model pretrained on 1.1 billion SMILES strings (Ross et al. 2022), while the 2D/3D GNNs are constrained to ~1.5 million parameters trained from scratch on the benchmark tasks. The paper never accounts for this asymmetry. The dominant finding—"LLM/1D outperforms 2D and 3D"—is therefore at least as likely to reflect large-scale pretraining as it is to reflect anything about 1D representation dimensionality. This conflation is not minor: it makes the paper's central framing ("is 3D a step too far?") largely unanswerable from the presented experiments as the comparison is not isolating the dimensionality axis. The 2D vs. 3D comparison (both at ~1.5M parameters) is the paper's most internally fair comparison, and its conclusions should be foregrounded accordingly.
+- **Unmatched model scale between MolFormer and the GNNs fundamentally confounds the 1D-vs-3D conclusion.** The paper constrains MPNN and Equiformer v2 to ~1.5M parameters trained on QM9, while MolFormer is a pretrained masked language model trained on orders-of-magnitude more data. The headline finding "LLMs consistently outperform 2D and 3D models" cannot be attributed to representation dimensionality; it may simply reflect that a heavily pretrained large model beats smaller, less-pretrained models. Without a comparably pretrained 3D foundation model (e.g., Uni-Mol, pretrained SchNet/DimeNet) or a size-matched non-pretrained SMILES model as ablation, the 1D-vs-higher-dimensional comparison is uninterpretable for the paper's stated research question.
 
-- **No computational cost measurements, despite cost being a core claim**. The paper repeatedly argues that 3D's "computational overhead" outweighs its gains—this framing appears in the abstract, introduction, results, and conclusion. Yet no wall-clock times, GPU hours, or FLOPs are reported anywhere. The cost claim is entirely qualitative. For a paper whose thesis is explicitly about cost–accuracy trade-offs, this is not a stylistic gap: without cost numbers, the trade-off cannot be evaluated.
+- **The chosen target properties are largely topology-determined, making the claim that "3D features are not useful" severely underscoped.** Atomization energy (QM7), HOMO-LUMO gap (QM9), and absolute energy (GEOM) are properties well-predicted from 2D graph topology. Tasks where 3D is genuinely differentiating—stereo-isomer discrimination, protein–ligand binding affinity, conformer-dependent solvation energy, or reaction selectivity—are absent. The paper's general-sounding conclusion ("3D is not useful") only holds for the specific properties tested, and the text does not adequately qualify this. The practical recommendation to chemists is therefore misleading for any workflow where 3D geometry is intrinsically necessary.
 
-- **Conformer handling for 3D models is never described**. GEOM datasets provide multiple conformers per molecule. The paper does not state which conformer is used for Equiformer v2 inputs—lowest-energy, random, or some other selection. This decision materially affects 3D model performance; if ground-truth minimum-energy conformers are used, 3D has an oracle advantage unavailable in real BO settings. If poor conformers are used, 3D's underperformance may reflect data quality rather than dimensionality. The confound directly undermines the interpretation of 3D vs. 2D results.
+- **Acquisition function is never specified, yet is a critical BO hyperparameter.** Sections 2.1 and 4 introduce BO and describe the BO loop (including an "acquisition function" box in Fig. 1) but never state whether EI, UCB, Thompson sampling, or greedy selection was used. Different acquisition functions impose different exploration–exploitation regimes and may interact asymmetrically with representation quality and uncertainty calibration. This omission makes the results neither fully reproducible nor interpretable from the manuscript alone.
 
-- **Task selection bias undermines the generality of the main conclusion**. All four benchmark targets—atomization energy (QM7), HOMO-LUMO gap (QM9), absolute energy (MoleculeNet/DRUGS)—are quantum mechanical scalar properties that are primarily determined by molecular topology and composition, not by specific 3D conformation. The paper itself acknowledges in the conclusion that "future research should focus on tasks where 3D information might be more important, e.g. protein docking." This acknowledgment, however, is not sufficient: it means the paper's headline "3D is a step too far" is tested only on tasks where 3D is not theoretically expected to win. The finding is valid for these tasks, but should not be presented as a general verdict on 3D representations in BO.
+- **Cost-benefit claims are stated without any empirical cost data.** The paper repeatedly claims that 3D's "computational overhead outweighs predictive performance" and uses this as a primary reason for practitioners to avoid 3D. However, no wall-clock times, GPU hours, inference latency, or memory measurements are reported anywhere. Without these numbers, the cost-benefit argument is assertion, not evidence.
 
-- **The acquisition function is never specified**. Section 4 describes datasets, feature extractors, and surrogates in detail, but never names the acquisition function (EI, UCB, Thompson sampling, etc.) or its hyperparameters. For a BO benchmark, this is a reproducibility-critical omission that prevents independent replication of any individual run.
+- **The conformer selection protocol for 3D inputs is undescribed.** GEOM provides multiple conformers per molecule; the paper never states which conformer is selected, how (lowest energy, random, RDKit-generated), or whether quality was checked. Since 3D model performance is known to be sensitive to conformer quality, using suboptimal conformers would artificially degrade 3D performance—directly undercutting the validity of the comparison. This is especially important for GEOM DRUGS, which the paper cites as a dataset emphasizing conformational flexibility.
+
+- **Internal inconsistency between Section 5.1 and the Conclusion regarding QM9/LLM performance.** Section 5.1 explicitly states: "Contrary to all other datasets, LLMs performed worse than 2D and 3D models" for QM9. The Conclusion states: "Across all datasets examined LLMs consistently outperformed both 2D and 3D models." These are mutually contradictory. The Conclusion also contains a likely typo: the QM9 explanation reads "the task may have been the most dependent on information not captured by 2D and 3D representations," which should read "not captured by 1D representations" given the context. These inconsistencies undermine the reliability of the narrative synthesis.
 
 ### Minor
 
-- **Only one 3D architecture tested**. The paper draws conclusions about "3D representations" using only Equiformer v2. Poor results could reflect architecture-specific failure modes (e.g., insufficient expressive power for the GP/LLA interface, initialization sensitivity) rather than a dimensionality-level verdict. Including even one additional 3D model (SchNet, DimeNet) would substantially strengthen the claim.
+- **Section 5.2 (sample complexity) omits the LLM/1D baseline.** The 2D-vs-3D comparison is shown for varying training sizes, but since the paper's headline claim involves 1D/LLM dominance, excluding MolFormer from this analysis leaves unanswered whether the LLM's advantage is robust at low data regimes or only emerges once it has sufficient fine-tuning data. This is a material gap given the stated research question.
 
-- **Factual inconsistency between abstract/conclusion and body**: The abstract and conclusion state "LLMs consistently outperformed" all methods, but Section 5.1 explicitly says "LLMs performed worse than 2D and 3D models" on QM9. This is not a minor phrasing issue—it is a factual contradiction that misleads readers who read only the abstract or conclusion.
+- **Transfer learning results are restricted to QM7 and QM9** (as confirmed by Fig. 5's caption), omitting MoleculeNet and GEOM DRUGS—the larger, more complex datasets where generalization across properties is presumably more valuable. The claim "foundation models prove a good tool to leverage in molecular optimization" is unsupported at the scale where it would most matter.
 
-- **Transfer learning analysis is incomplete and overclaims**: Section 5.3 and Fig. 5 show transfer learning results only for QM7 and QM9. Yet the text draws general conclusions about transfer learning and invokes "foundation model" potential. The claim "Foundation models prove a good tool" is overstated from two datasets with a limited fine-tuning protocol (only the final layer).
+- **Training convergence of 3D models is not verified.** Equivariant GNNs like Equiformer v2 are known to be more difficult to optimize than MPNNs, and constraining both to ~1.5M parameters does not guarantee comparable training quality. Training loss curves or validation metrics confirming convergence for all modalities at each data regime are absent, leaving open whether 3D gaps reflect representation limits or optimization failures.
 
-- **Potential MolFormer data leakage not investigated**: MolFormer was pretrained on 1.1 billion SMILES from ZINC and PubChem. QM9 and MoleculeNet molecules are small, well-known, and could plausibly appear in those corpora. If so, MolFormer's strong performance could partly reflect memorization rather than generalization. A membership overlap check is warranted.
-
-- **Sample complexity analysis (Section 5.2) excludes the 1D/LLM comparison**: Despite MolFormer being a key performer, the sample complexity plots compare only 2D vs. 3D. If the paper's goal is a comprehensive 1D/2D/3D benchmark, omitting LLM from this axis is inconsistent.
-
-- **GP kernel on learned embeddings is not specified**. For the GP surrogate using pretrained/trained feature embeddings, the kernel (RBF, Matérn, ARD, etc.) is never stated. This matters because kernel choice interacts with embedding geometry and directly affects uncertainty calibration.
+- **The experimental setup section is ambiguous about whether feature extractors are trained separately per dataset.** The text says "The models were trained on QM9," but BO is also run on QM7, MoleculeNet, and DRUGS. It is unclear whether 3D/2D models trained solely on QM9 are applied to other datasets (introducing domain shift) or whether separate training occurs per dataset. The current wording is inconsistent, and this matters for interpreting cross-dataset comparisons.
 
 ### Tiny
 
-- **Laplace approximation notation is inconsistent**: The paper writes $p(\theta|\Omega_t) \approx \mathcal{N}(\theta_*, \Sigma_*^{-1})$ and then defines $\Sigma_*^{-1} = -\nabla_\theta^2 \log p(\theta|\Omega_t)$, treating $\Sigma_*^{-1}$ simultaneously as a covariance parameter and as the Hessian. Standard convention is to write $\Sigma_* = H^{-1}$ where $H$ is the (positive-definite) negative log-posterior Hessian. The current notation will confuse readers.
-- **"35 setups per dataset" is never broken down**. The abstract and introduction cite this number prominently, but the main text never enumerates the exact combination of representation × surrogate × regime × seed that generates the count. An explicit table in the appendix would make the benchmark auditable.
-- **GAP metric notation inconsistency**: The definition uses $y_i$, $y_0$, $y_*$ but the body text refers to $y^*$. Minor but worth fixing.
+- The GAP metric is defined using both $y^*$ and $y_*$ inconsistently in the notation.
+- The paper lacks a dedicated Limitations section, which would clarify the offline virtual-library setting versus true closed-loop experimental BO and the scope of the 3D conclusions.
+- The sentence in Section 5.1 (QM9 paragraph) citing "information not captured by 2D and 3D representations" when the intended referent is clearly "1D representations" needs correction.
 
 ---
 
 ## Nice-to-Haves
 
-- **Include at least one genuinely conformation-dependent task** (e.g., docking score, stereoselective reaction yield, conformer-dependent binding affinity). Even a single dataset where 3D is theoretically expected to win would transform the negative results into a more principled and bounded statement rather than a potentially task-specific finding.
-- **Uncertainty calibration evaluation**: BO performance depends on calibrated posteriors, not just point prediction accuracy. Reliability diagrams or ECE plots per model type would help distinguish whether 3D underperforms because its features are uninformative vs. because its uncertainty estimates are poorly calibrated—a distinction with distinct implications for practitioners.
-- **Matched-pretraining controls**: A pretrained 2D GNN foundation model (e.g., from graph self-supervised pretraining) alongside a pretrained 3D model compared to MolFormer would allow cleaner disentanglement of the pretraining vs. dimensionality effect.
-- **Additional 3D architectures (SchNet, DimeNet, or SphereNet)** to ensure the 3D conclusions generalize beyond Equiformer v2.
-- **Per-subset breakdowns**: Reporting results for subsets of molecules by size, flexibility, or chirality would help practitioners understand when (not just whether) 3D helps.
+- **Uncertainty calibration analysis (reliability diagrams) per model type.** BO acquisition quality depends jointly on predictive accuracy and calibrated uncertainty. Demonstrating whether 3D models produce well-calibrated uncertainty would clarify whether the 3D gap is fixable via better calibration methods or reflects a deeper representational mismatch.
+- **Ablation separating pretraining from architecture for the LLM.** A non-pretrained transformer operating on SMILES (same architecture as MolFormer but trained only on QM9) would allow the paper to decompose "1D representation advantage" from "massive pretraining advantage."
+- **Low-budget BO regime analysis (first 50–100 steps highlighted).** For expensive-oracle settings that motivate BO in the first place, the early optimization phase is most relevant; the main figures currently emphasize 1000-step convergence.
+- **Correlation of 3D model relative performance with molecular characteristics** (conformational flexibility, rotatable bond count) to make the "when does 3D help" question actionable rather than purely dataset-dependent.
 
 ---
 
 ## Removed Points
+
 *These points are flagged to be removed; treat them with caution.*
 
-- **"Why do nobody use them" is too informal** (Harsh Critic, Introduction): This is a pure style/tone complaint with no scientific content. Removed.
-- **Fingerprints are described as "unique identifiers"** (Harsh Critic, Section 2.3): While technically ECFP fingerprints can have collisions, the characterization is conventional shorthand used throughout cheminformatics and does not affect any experimental result. Removed as inconsequential.
-- **Comparison with Tanimoto GP is "unfair"**: The Tanimoto GP uses simple fingerprints and is explicitly used as a baseline *to prove a stronger point* for alternative methods. Any asymmetry favors the baseline, which strengthens rather than undermines the authors' claims. Removed per editorial rules.
-- **Writing quality nitpicks** (subject-verb agreement, mid-sentence cuts in parsed PDF): These are artifacts of PDF text extraction or minor grammatical issues that do not affect scientific content. Removed as formatting/style nitpicks.
-- **Requests for theoretical proofs of sample complexity bounds** (Spark Finder): This is an empirical benchmarking paper; demanding sample complexity theorems is not standard for this paper's scope or community setting. Moved to Nice-to-Have at most.
-- **Criticism that "MoleculeNet is not a standard headline target"**: The paper uses absolute energy from GEOM's augmented version of MoleculeNet, and GEOM is a published dataset. This is a legitimate benchmark target. Removed.
+- **[REMOVED] Criticism that the related work section insufficiently covers 3D GNN property prediction literature and foundation model pretraining scale comparisons.** Per instructions, missing related work claims are not evaluated since external sources cannot be verified.
+- **[REMOVED] Criticism demanding theoretical/mechanistic causal analysis of why 3D underperforms.** The paper explicitly scopes to an empirical benchmark; requiring theoretical proofs imposes standards not expected for empirical systems papers at ICLR.
+- **[REMOVED] Criticism about "real-world chemistry datasets" vs. offline benchmarks.** This is a minor stylistic/framing nitpick; offline virtual-library BO is a standard and accepted evaluation paradigm in the community.
+- **[REMOVED] Criticism about LLA choice vs. deep ensembles, MC dropout, sparse GPs, etc.** LLA is an established, principled Bayesian NN approximation with prior BO-specific validation (Kristiadi et al., 2023/2024); critiquing the surrogate choice is outside the paper's stated scope of comparing representations. The paper cites Li et al. 2024 as motivation for the two-hidden-layer LLA architecture.
+- **[REMOVED] Criticism about "ensuring best 10 observations remain in virtual library" being a "problematic design choice."** This is a standard BO benchmarking technique to ensure the global optimum is always reachable during the BO loop; it is not a flaw.
+- **[REMOVED] Criticism that "multiple conformers per molecule" should be tested.** Testing single-conformer vs. multi-conformer inputs is outside the stated scope and would be a distinct methodological contribution. (The missing description of *which* conformer is selected—flagged under Weaknesses—is distinct from this.)
+- **[REMOVED] Strength: "The paper is well-written / the topic is important / the benchmark is extensive."** These are generic and apply to any paper in the area.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel finding beyond the benchmark results themselves is the *sample-complexity asymmetry* between 2D and 3D representations in BO: the paper provides converging evidence, consistent with equivariant model theory (Elesedy & Zaidi 2021), that equivariant 3D GNNs require substantially more training data before matching 2D performance, and that this crossover threshold (~10,000 examples in the cleaner comparisons) is well above what is typically available in realistic molecular BO campaigns with expensive oracle evaluations. This finding is actionable and not obvious: 3D models might be expected to learn more efficiently due to stronger inductive biases, but the data requirements of equivariance appear to dominate in practice. However, a clean mechanistic explanation—separating equivariance overhead from conformer noise and architecture-specific factors—remains an open question the paper does not fully answer.
+The most genuinely novel observation that emerges from cross-reading the reviews and paper is the **interaction between representation dimensionality and data regime as a structured, quantified phenomenon in BO** (Section 5.2). Prior work had noted qualitatively that equivariant models can be data-hungry, but grounding this within the BO loop—where the surrogate is incrementally updated—reveals a compounding effect: not only do 3D models need more data to reach parity with 2D models in supervised learning, but the BO acquisition step must compensate for a worse-calibrated surrogate early in optimization. The sample-complexity crossover observed above 10,000 training observations provides a concrete threshold that practitioners can use. This finding, if validated with proper conformer controls and cost measurements, has the potential to be a durable empirical result. The remaining insights (LLM dominance, transfer learning viability) are unfortunately confounded or underdeveloped as detailed above.
 
 ---
 
 ## Suggestions
 
-1. **Reframe the headline finding**: Present the key contribution as "2D outperforms 3D under realistic BO data budgets" (the most defensible and interesting result), rather than "1D/LLM outperforms everything," since the latter conflates pretraining scale with representation dimensionality.
-2. **Report wall-clock time or GPU hours for each model class**—even a single table in the appendix comparing training and inference time per step would make the cost–accuracy trade-off argument empirically grounded.
-3. **Explicitly state the acquisition function, its hyperparameters, and the GP kernel** in the main experimental setup section.
-4. **Describe conformer selection policy for 3D models** (e.g., "we use the lowest-energy conformer from GEOM's precomputed ensemble") and, ideally, include a sensitivity analysis with random conformer selection.
-5. **Fix the abstract/conclusion claim about "consistent LLM outperformance"** to acknowledge the QM9 exception, and qualify all major claims to specify that results hold for topology-dominated quantum chemistry properties under the data budgets studied.
-6. **Add a breakdown table of the 35 setups** (representation × surrogate × task type × data regime) so the benchmark scope is auditable.
+1. **Include a pretrained 3D baseline (e.g., Uni-Mol) or a non-pretrained 1D transformer** to isolate representation dimensionality from pretraining scale in the LLM comparisons. This is the single highest-priority revision.
+2. **Add at least one conformer-sensitive task** (stereo-isomer property discrimination, docking score, conformer-dependent solvation) so the scope of "3D is not needed" can be properly bounded.
+3. **State the acquisition function explicitly** and, if multiple were tested, report sensitivity to acquisition function choice.
+4. **Report wall-clock time per BO iteration** (or at minimum per feature-extraction call) for each modality to make the cost-benefit claim empirical rather than qualitative.
+5. **Describe the conformer selection protocol** (tool, energy criterion, number of conformers retained) and ideally include a brief ablation or discussion of how conformer quality affects 3D performance.
+6. **Harmonize the QM9/LLM finding** between Section 5.1 and the Conclusion, and fix the misidentified representation in the QM9 explanation.
+7. **Extend transfer learning experiments to MoleculeNet and GEOM DRUGS** to support the "foundation model" framing.
+8. **Include LLM/1D in the sample-complexity figure** (Section 5.2) to complete the picture of all modalities' data efficiency.
+
+---
+
+## Paper Evaluation
+
+| Axis | Assessment |
+|---|---|
+| **Originality** | Moderate. No new algorithm or methodology; the benchmark itself is the contribution. Including 3D representations in BO benchmarking fills a genuine gap, but the experimental design leaves the most interesting comparisons confounded. |
+| **Importance of research question** | High. Representation choice in molecular BO is a concrete, practically significant question with direct implications for computational chemistry pipelines. |
+| **Claims well-supported** | Partially. The "2D ≥ 3D" finding is reasonably supported across datasets and settings, but the "1D/LLM dominates" claim is critically confounded by pretraining scale. The cost-benefit claim lacks empirical cost data entirely. |
+| **Soundness of experiments** | Moderate. The scale and seed count are commendable, but missing protocol details (acquisition function, conformer selection) and the confound between model scale and representation type reduce confidence in the conclusions. |
+| **Clarity of writing** | Below expectations for ICLR. Internal inconsistencies (QM9/LLM contradiction between Section 5.1 and Conclusion), missing method details, and ambiguous training setup descriptions impair reproducibility and interpretation. |
+| **Value to the research community** | Moderate. The sample-complexity finding and transfer learning analysis are actionable. However, the headline takeaway as currently presented ("3D is not useful") risks being misapplied by practitioners working on tasks where 3D geometry is intrinsically necessary, because no such tasks are tested. |
+| **Contextualized relative to prior work** | Adequate. The paper correctly identifies that existing BO benchmarks skip 3D representations and positions itself accordingly. The connection to broader supervised-learning literature on 3D vs. 2D molecular modeling is thin. |

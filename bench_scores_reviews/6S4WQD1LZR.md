@@ -1,20 +1,20 @@
 ## Summary
 
-This paper establishes universal approximation theorems for deep transformers operating as "in-context learners" over an arbitrary (even infinite) number of tokens. The authors model token contexts as probability measures equipped with the Wasserstein distance and prove that, for any fixed approximation precision ε, a single transformer with **fixed embedding dimension** (d + 3d') and **fixed number of heads** (proportional only to the output dimension d') can uniformly approximate any continuous in-context mapping over the space of measures. Two main results are proved: Theorem 1 for the unmasked (bidirectional) setting via an elegant Stone–Weierstrass argument using a generalized Laplace-like transform, and Theorem 2 for the masked (causal) setting, which requires additional Lipschitz-context and identifiability assumptions handled via a space-time lifting.
+This paper establishes that deep transformers are universal approximators for continuous in-context mappings when contexts are modeled as probability measures over token embeddings. The key contribution is handling an arbitrary (even infinite) number of tokens with a single architecture of **fixed embedding dimension and fixed number of heads (proportional to the output dimension, independent of both precision ε and token count n)**. Results are proved for both unmasked (e.g., ViT-type) and masked causal (e.g., autoregressive NLP) settings, with the latter requiring a novel "space-time lifting" and additional regularity assumptions on contexts.
 
 ---
 
 ## Strengths
 
-- **Fixed embedding dimension independent of context length and precision.** Unlike Yun et al. (2019), which requires the embedding dimension to grow with the number of tokens, and unlike other related universality results that require width to scale with approximation precision, the paper establishes that a single fixed-width transformer is expressive enough for all context sizes simultaneously. This directly addresses a well-identified gap in transformer expressivity theory and is stated precisely in Theorem 1.
+- **Genuinely new separation of architectural hyperparameters from precision and token count.** Prior work (Yun et al., 2019) requires embedding dimension to grow with token count n; this paper achieves universality with fixed width by moving to a measure-theoretic formulation. The contrast is explicit and clearly articulated, and the difference is substantial rather than incremental.
 
-- **Elegant and technically non-trivial proof via a measure-valued Laplace transform.** The point-separation step in Proposition 1 reduces to showing injectivity of a novel generalized Laplace-like transform L(μ) (Eq. 16). This is a mathematically clean argument and the algebraic structure exploited—products of elementary in-context functions via depth and MLP approximation of componentwise multiplication (Lemma 3)—is a genuine technical contribution that explains why depth is essential in a way not seen in standard MLP universality proofs.
+- **Space-time lifting for causal attention (Section 2.3).** Encoding token order via a time coordinate and restoring permutation invariance in the measure-theoretic domain is a non-obvious and elegant device. The result that the discrete causal formula (Eq. 3) is exactly recovered from the space-time empirical measure formulation directly validates the construction.
 
-- **Space-time lifting for the causal/masked case.** The introduction of time as an auxiliary dimension to restore permutation invariance in causal attention (Section 2.3, Eq. 12–13) is a natural and original idea that resolves the structural obstruction of causality in a clean way. The formalism is self-consistent: Lemma 12 shows compositions of causal identifiable maps stay in that class, enabling the parallel with the unmasked proof.
+- **Injectivity of the Laplace-like transform as the proof's technical lynchpin (Lemma 1).** The separation argument in Proposition 1—reducing density (Stone-Weierstrass) to injectivity of L(μ)(a,c) = ∫ e^{c⟨a,y⟩}⟨a,y⟩ / ∫ e^{c⟨a,z⟩}dμ dμ(y)—is a nontrivial and interesting technical contribution, not a routine application of standard machinery.
 
-- **Sharpness analysis of the identifiability assumption.** The paper does not merely impose identifiability for technical convenience but proves (Lemma 13) that uniform approximability by masked transformers *forces* identifiability of the target map, making Definition 3 both necessary and sufficient for the setting. This tightness result meaningfully characterizes the limits of causal transformer expressivity.
+- **Proof strategy for approximating products via depth (Lemmas 2–3).** Attention layers do not form a multiplicative algebra; the paper's workaround—building an algebra of "cylindrical functions" via elementary single-head attention units, then approximating componentwise multiplication via MLP depth—is conceptually clean and honestly described with explicit architectural bounds (d_tok(θ_ℓ) ≤ d + 3d', H(θ_ℓ) ≤ d').
 
-- **Unified formalism spanning finite and infinite contexts.** The measure-theoretic reformulation (Eq. 9) captures finite empirical measures and continuous measures under the same framework, providing a principled "mean-field" view of transformers that could serve as a foundation for future convergence and optimization analyses.
+- **Honest and precise accounting of limitations.** The paper identifies, in the main body, that (i) the result is non-quantitative, (ii) head count grows with output dimension, (iii) token norm growth through layers is not bounded, and (iv) the masked case requires identifiability and Lipschitz-in-time contexts—with Remark 1 proving identifiability is *sharp* and not improvable.
 
 ---
 
@@ -25,82 +25,86 @@ None.
 
 ### Major
 
-- **Non-quantitative result: no bound on depth or parameter growth.** The paper explicitly acknowledges in Section 3.1 that there is "no explicit control over the dependency of the number of MLP parameters ξ_ℓ on ε," and no bound on how many layers L are needed. Likewise, token magnitudes may grow unboundedly across layers ("our construction does not provide any a priori bound on how the magnitude of the tokens grows through the layers"), which also means the MLP approximation of the squaring operator in Lemma 3 is applied over a domain that is not a priori controlled. This is more than a minor limitation: without any depth-ε or width-ε trade-off, the result is a pure existence theorem that cannot be used to reason about model scaling, approximation efficiency, or practical construction. The paper positions itself as a step toward understanding transformer capabilities, but a universality result with no complexity bound provides very limited information about whether the architecture is efficient or the construction feasible.
+- **Non-quantitative approximation bounds.** There is no control on the depth L or MLP parameter count as a function of ε. The paper explicitly states this (Section 3.1: "we have no explicit control over the dependency of the number of MLP parameters ξ_ℓ on ε") and defers quantitative bounds to future work. For a universality theorem at ICLR, this is a genuine gap: without rates, one cannot distinguish a vacuously true existence result from a practically useful approximation guarantee. The paper argues that MLP squaring approximation "should behave well," but provides no bound, and there is no analysis of whether token norms stay bounded through the construction, creating the possibility of a numerically unstable construction. This gap is particularly salient given that depth L is the free variable being used to achieve approximation.
 
-- **The H = d' heads constraint, each with d_head = 1, is an architecturally unusual outcome.** The theorem guarantees a "fixed number of heads" but this number scales linearly with the *output* dimension d'. For high-dimensional outputs, this could mean a large number of scalar-output heads, which is far from standard multi-head attention configurations. The claim that "embedding dimension and number of heads are independent of precision" is technically accurate but requires the qualification that they grow with target dimension—a qualification that should appear prominently in the abstract and contributions section, not only in Section 3.1.
+- **Identifiability condition for the masked case is sharp but not connected to practice.** Theorem 2 requires the target map to be "identifiable" (Definition 3), which the paper proves is tight. However, the paper provides no analysis of whether standard ICL tasks—next-token prediction, in-context regression, or sequence completion—actually produce identifiable maps in the measure-theoretic sense. Without at least one worked example or structural result showing that natural tasks satisfy identifiability, the masked result risks being a theorem about a carefully circumscribed class with unclear intersection with practical settings.
 
 ### Minor
 
-- **Masked setting restrictions substantially narrow practical scope.** Theorem 2 requires (a) Lipschitz contexts (Definition 1)—with a Lipschitz constant C that blows up as min token time gaps δ shrink—making the theorem non-uniform over sequences of growing length with denser timestamps; (b) causal identifiability; and (c) the atom-at-zero condition $\bar\mu(\{0\}) \geq \sigma$ (which excludes density-valued time marginals, as acknowledged in Remark 2). While the paper addresses (c) via Remark 2's fixed-marginal variant and (b) via Remark 1's sharpness argument, the combination of these restrictions makes the masked universality theorem substantially weaker in scope than its unmasked counterpart. The contrast between the two settings is not sufficiently flagged in the introduction and contributions summary.
+- **Incomplete continuity justification in Proposition 1 (point 1).** The proof sketch states that γ_λ is continuous "because the denominator...is not always zero." Non-vanishing is necessary but not sufficient; continuity of the ratio jointly in (μ, x) under the weak* × ℓ² topology also requires that numerator and denominator vary continuously—which follows from weak*-continuity of integration against bounded continuous functions on compact Ω, but this step is not stated. Since the entire theorem hinges on Proposition 1, this argument should be completed in the main text, not left implicit.
 
-- **No coverage of modern positional encodings (RoPE) in the causal setting.** As the paper notes, RoPE is excluded from the current formulation. Since virtually all deployed causal language models use relative or rotary positional encodings, and since the masked theorem's practical relevance depends on encoding positional information faithfully, this is a genuine limitation—not merely a technicality. The paper appropriately labels it as future work, but its importance warrants more discussion than a single sentence in the Conclusion.
+- **Architectural gap: normalization layers are omitted.** The paper states upfront (Section 2) that normalization is omitted "for simplicity," but does not discuss whether the universality results extend when normalization is included or whether its omission is essential for the proof machinery. LayerNorm is a core component of practical transformers and changes the representational geometry; the paper should at minimum argue why the omission is harmless or identify it more explicitly as a scope limitation.
 
-- **Injectivity of L(μ) (Lemma 1) receives no main-text intuition.** The entire point-separation argument—the most novel and critical ingredient enabling Stone–Weierstrass—is delegated entirely to Appendix B.1. Since this is the crux of why the transform separates measures (presumably via a connection to Cramér–Wold/Radon-type identifiability), an ICLR audience deserves at least a sentence explaining the key idea. Without this, the central density argument appears to work "by magic."
+- **"Slight adjustments" for RoPE likely understated.** The conclusion says extending to RoPE requires "slight adjustments." RoPE modifies the attention kernel in a position-dependent way that changes the form of the inner products ⟨Q^h x, K^h y⟩ used throughout the measure-theoretic formulation. Whether the injectivity of the Laplace-like transform and the algebra structure are preserved under RoPE-modified kernels is not obvious and may require non-trivial new arguments. The characterization as "slight" should be hedged.
+
+- **Central proof ingredients too compressed for expert verification.** Lemma 1 (injectivity of L) and Lemma 5 (compactness of X_σ^σ) are the two results on which the unmasked and masked theorems respectively hinge, yet both are deferred to appendices with only sketch-level intuition in the main text. The paper would benefit from at least one additional key step of the injectivity argument appearing in the main body.
 
 ### Tiny
 
-- **Proposition 1 continuity explanation is slightly imprecise.** The denominator ∫e^{c(⟨x,a⟩+b)(⟨z,a⟩+b)}dμ(z) is not merely "not always zero"—it is strictly positive for all μ ∈ 𝒫(Ω) and x ∈ Ω because the exponential integrand is everywhere positive and μ is a probability measure. The argument is correct but stated loosely.
+- **Notation inconsistency in Section 4.** Definition 1 uses C for the Lipschitz constant and σ for the mass-at-0 threshold, introducing Lip_C^σ. The reduced space is then written X_σ^σ, which silently sets C = σ. This conflation should be made explicit (e.g., X_{C,σ}^σ with C = σ as a specific choice).
 
-- **Wasserstein motivation vs. weak\* theorem statement.** The introduction and abstract emphasize Wasserstein continuity as the natural notion of smoothness, but Theorem 1 is stated using weak\* topology. On compact domains these topologies coincide for probability measures, and the paper does note this in the notation section, but the relationship should be stated explicitly near Theorem 1 to avoid confusion.
+- **Equation (7) uses ○ where ◇ seems intended.** The in-context composition operator ◇ is defined in Eq. (5)–(6) specifically to track how context updates propagate. Eq. (7) reverts to ○ for some compositions, which is either an overloading or a notational inconsistency that should be clarified.
 
 ---
 
 ## Nice-to-Haves
 
-- Even a coarse informal discussion of how depth L might scale with ε (e.g., by analogy to MLP approximation of the squaring function) would help readers calibrate whether the construction is exponential or polynomial in 1/ε. The paper hints that the MLP approximation of squaring "should be well-behaved," but this remains unsubstantiated.
+- **Even a single synthetic empirical illustration.** The paper mentions in Appendix D that the framework covers in-context regression. Showing a concrete transformer construction reproducing known behavior (e.g., linear regression in context, following Akyürek et al. 2022 / von Oswald et al. 2023) would bridge theory and practice and make the abstract claim about "performing regression within context" concrete.
 
-- A concrete worked example—such as approximating the mean map μ ↦ ∫y dμ(y) or in-context linear regression—would make the construction tangible and reveal whether token magnitudes stay controlled in practice for simple cases.
+- **Theorem-level comparison table with prior universality results.** A summary comparing Yun et al. (2019), Nath et al. (2024), Alberti et al. (2023), and this work across: number of heads, embedding dimension vs. n, topology of approximation, function class approximated, and whether masking is handled—would make the novelty immediately parseable.
 
-- A comparison table contrasting the hypotheses and conclusions of Theorem 1 vs. Theorem 2 would make the distinction between the two settings immediately legible and highlight the price paid for causality.
+- **Discussion of which practical tasks satisfy identifiability.** Even an informal argument that standard autoregressive prediction tasks satisfy Definition 3 would substantially increase the impact of Theorem 2.
 
-- Extending or providing further discussion on whether the Lipschitz-context assumption for the masked setting can be weakened when timestamps have a fixed regular structure (e.g., uniform spacing), and how the constant C depends on the minimum time separation δ as sequence length grows.
+- **Explicit corollary for ICL regression in the main text.** Appendix D shows transformer universality for regression operators; promoting this as a corollary to the main text would make the connection to in-context learning concrete for ICLR readers.
+
+- **Discussion of trainability gap.** The paper's conclusion briefly notes the connection to Chizat & Bach (2018) but does not elaborate. A short paragraph on whether the specific constructions produced by the proof are gradient-accessible would be valuable, even if speculative.
 
 ---
 
 ## Removed Points
 
-*These points are flagged for removal; treat them with caution.*
+*These points were flagged for removal; treat them with caution.*
 
-- **Harsh Critic: Title overselling** — The abstract is precise and immediately frames universality as an approximation-theoretic result over continuous measure-valued contexts. The title is a fair high-level summary for ICLR.
+- **[REMOVED – intended design, not a flaw]** Harsh Critic: "unmasked theorem does not address order-sensitive behaviors." The permutation-equivariant unmasked setting is precisely the stated scope (ViT-type models). The paper correctly and explicitly states this; it is not a gap.
 
-- **Harsh Critic: Novelty relative to existing work is "diffuse"** — The paper cleanly identifies what it achieves over Yun et al. (2019): fixed embedding dimension, arbitrary context length, fixed heads. This gap is stated precisely.
+- **[REMOVED – likely OCR/parsing artifact]** Harsh Critic: "d_cok notation vs. d_tok." The paper clearly establishes d_tok as the token dimension; the apparent "d_cok" in Lemmas 2 and 3 is almost certainly a parsing error, not an authorial inconsistency.
 
-- **Harsh Critic: Empirical measure loses "multiplicity/order information"** — This is inherent to the measure-theoretic setup and intended. The paper is explicit that permutation invariance is the appropriate structure in the unmasked case; the formalism is not a defect but the point.
+- **[REMOVED – generic, applies to all theory papers]** Spark Finder: "no comparison experiment with Yun et al.'s construction." Empirical comparisons between universal approximation constructions are not a standard expectation for theory papers in this setting.
 
-- **Harsh Critic: Normalization layers omitted** — The paper states this is "for simplicity," which is standard in transformer theory papers (Yun et al. also omit normalization). Not a defect for a universality result at this level of generality.
+- **[REMOVED – paper correctly states this]** Reviewer 2: "abstract claims 'fixed number of heads' but heads scale with output dimension d'." The abstract reads "a fixed number of heads (proportional to the dimension)"—this is accurate. The head count does not scale with ε or n; it scales with the output dimension d', which is a fixed property of the target task, not of the approximation regime. The abstract is correctly calibrated.
 
-- **Harsh Critic: Practical mismatch of construction is a fatal flaw** — This is a pure expressivity paper; demanding a practical construction or connection to training dynamics is out of scope. The Conclusion explicitly and appropriately separates expressivity from learnability.
-
-- **Spark Finder: Requires numerical experiments benchmarking against Yun et al.** — This is a theory paper. No experiments are expected or standard for such results at ICLR theory tracks. Moving to nice-to-have is appropriate.
-
-- **Harsh Critic / Spark Finder: Demanding theoretical bounds as prerequisite for publication** — Non-quantitative universality theorems are published routinely; quantitative bounds would be a significant additional contribution, but their absence does not invalidate the result. Retained as a major weakness rather than a fatal flaw.
+- **[REMOVED – asymmetric comparison favorable to baseline is intentional]** No specific instance here, but any critique of omitting normalization as making the result "stronger than the real model" is moot: the omission, if anything, weakens the guarantee relative to practice.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel insight in this paper—beyond proving the universality theorem itself—is the identification of a **generalized Laplace-like transform** L(μ) (Eq. 16) that is injective on 𝒫(Ω) and can be realized as the output of a single attention head. This provides a new mechanism for measure identification via attention that is distinct from all prior approaches (which relied on fixed-size token representations). Combined with the observation that **products of elementary in-context functions can be realized via depth** (since attention cannot directly multiply), this yields a novel interplay between depth and approximation power specific to the transformer architecture—explaining why depth, not width, is the essential resource in this setting. The space-time lifting for causal attention, while technically natural, also provides a clean framework that may be of independent interest for studying other sequential architectures over continuous-time processes.
+The most genuinely novel technical insight is the use of a generalized Laplace-like transform L(μ)(a,c) = ∫ e^{c⟨a,y⟩}⟨a,y⟩ / ∫ e^{c⟨a,z⟩}dμ dμ(y) to separate probability measures, which converts the hard problem of point-separation on an infinite-dimensional space P(Ω) into a question about injectivity of a moment-generating-function-type map. This is cleanly different from moment-matching arguments used in other universality proofs. The second notable structural insight is that the *lack* of a multiplicative algebra structure in shallow attention—a limitation relative to MLP universality—is precisely what forces depth: the paper is the first to make this architectural necessity explicit and to show that depth (rather than width) is the correct resource for compensating for this algebraic deficiency. The space-time lifting technique also merits attention as a general method for handling causality in measure-theoretic settings beyond transformers.
 
 ---
 
 ## Suggestions
 
-1. **Provide main-text intuition for Lemma 1.** Even one sentence explaining why L(μ) injects measures (e.g., via moment-generating-function uniqueness or connection to Cramér–Wold) would substantially improve the paper's accessibility and trust in the core argument.
+1. **Prove at least a coarse depth bound.** Even an exponential bound L = O(exp(1/ε)) would distinguish the result from a vacuous existence claim and significantly increase its value for the theory community.
 
-2. **Quantify or bound the depth–precision relationship informally.** Trace the MLP approximation of x ↦ x² through the squaring error rate (e.g., Yarotsky-type bounds) to give at least a heuristic depth–ε trade-off.
+2. **Complete the continuity argument in Proposition 1.** Explicitly state that weak*-continuity of ∫ f dμ in μ (for bounded continuous f on compact Ω) is being used in the denominator and numerator of γ_λ, and that this implies joint continuity in (μ, x).
 
-3. **Clarify the H = d' / d_head = 1 constraint prominently.** Add a direct comparison to standard architectures (e.g., H = 8, d_head = 64) to help readers gauge whether the theorem's architectural parameters are within or far from practice.
+3. **Promote Appendix D's regression result to a main-text corollary.** This is the clearest connection to in-context learning as studied empirically, and it is currently invisible from the main body.
 
-4. **Discuss uniform-in-n scope of Theorem 2.** Explicitly state that as sequence length grows with dense timestamps (small δ), the Lipschitz constant C in the masked theorem grows as Radius(Ω)/δ, potentially making the set of approximable contexts shrink with n. This clarification is necessary for the "arbitrary number of tokens" claim to be properly qualified in the masked case.
+4. **Address the identifiability condition concretely.** Show that at least one standard autoregressive task (e.g., stationary process next-token prediction) satisfies Definition 3, or explain why the condition may generically fail and what that implies for the practical scope of Theorem 2.
 
-5. **Add a compact summary of the masked-setting assumptions.** A brief itemized list of what "Lipschitz context + identifiability + support condition" means operationally (e.g., "no abrupt distributional jumps in the prefix, no dependence on absolute position when prefix distribution coincides") would help practitioners assess applicability.
+5. **Add a brief note on whether the normalization omission is essential or incidental.** If LayerNorm can be absorbed into the MLP blocks without breaking the proof architecture, state this explicitly; if not, identify it clearly as a technical limitation requiring future work.
 
 ---
 
-**Overall character of the paper:** This is a technically sophisticated and original theory paper making a genuine advance over prior transformer universality results. The unmasked theorem (Theorem 1) is strong and the proof technique is elegant and non-trivial. The masked theorem (Theorem 2) is a meaningful extension but carries heavier assumptions that limit its practical reach. The paper's primary limitations—non-quantitative bounds and the absence of standard positional encodings in the causal setting—are acknowledged by the authors. The result is clearly above the threshold of theoretical interest for ICLR, though the non-quantitative nature and the masked-setting restrictions prevent it from being a definitive account of causal transformer expressivity.
+## Evaluation
 
-- **Novelty:** High. The fixed-dimension universality over measure spaces with the Laplace-transform injection mechanism is new.
-- **Technical soundness:** High. The proof strategy is rigorous and the sharpness analysis (Lemma 13) adds credibility.
-- **Empirical support:** N/A (pure theory paper; none expected).
-- **Significance:** Moderate to high. A foundational result for transformer theory, with the non-quantitative nature somewhat limiting immediate impact.
-- **Clarity:** Good overall, with specific gaps around Lemma 1's motivation and the relative scope of the two theorems.
+| Axis | Assessment |
+|------|-----------|
+| **Originality** | High. The measure-theoretic formulation for arbitrary token count, the Laplace-transform injectivity argument, and the space-time lifting for causal attention are all non-routine contributions that distinguish this work from prior universality results. |
+| **Importance of research question** | High. Expressivity of transformers under arbitrary context length is a foundational open question; this paper makes meaningful progress. |
+| **Claims well supported** | Moderate. The mathematical structure is sound and the proof strategy is clearly laid out, but the key lemmas (injectivity, compactness) are deferred, the continuity argument in Proposition 1 is incomplete as stated, and the lack of quantitative bounds limits the strength of the supporting evidence. |
+| **Soundness of approach** | Good. The Stone-Weierstrass strategy is well-chosen and the algebraic structure of the argument is clean. The identifiability sharpness result (Lemma 13) is notably rigorous. |
+| **Clarity of writing** | Good for the unmasked section; the masked section (Section 4) is denser and suffers from notational overloading that makes it harder to follow. |
+| **Value to the research community** | Solid. The unmasked theorem is a genuine theoretical advance and the proof techniques (especially Laplace transform separation and depth-for-multiplication) may find broader use. The masked result is narrower but still contributes. |
+| **Contextualization relative to prior work** | Adequate in the body; a comparison table at the theorem level would make the advances more immediately legible. |

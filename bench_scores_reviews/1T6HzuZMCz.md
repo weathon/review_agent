@@ -1,101 +1,88 @@
 ## Summary
-The paper proposes a Mixed-Integer Quadratic Programming (MIQP) framework that constructs interpretable surrogate models for Gaussian process (GP) posteriors by assigning new data points to clusters sharing a common parameter value. The clustering objective minimizes a weighted squared error against the GP posterior mean, with weights derived from the full posterior precision matrix Σ⁻¹. Two structured variants are developed: (1) spatially connected graph partitioning via a DAG-based connectivity formulation, and (2) axis-aligned decision tree learning via split/assignment constraints. Experiments on the California Housing dataset and three UCI datasets demonstrate modest improvements over k-means and CART respectively.
+
+This paper proposes a unified MIQP-based clustering framework for building interpretable global surrogate models of Gaussian Process (GP) posteriors. The core idea is to assign new data points to clusters whose members share a common parameter, with cluster assignments optimized by maximizing the log-density of the variational GP posterior. Graph partitioning (for spatial data) and decision tree learning are derived as constrained special cases of this formulation. Experiments on the California Housing dataset and three regression benchmarks demonstrate lower weighted-RMSE compared to k-means and CART, respectively.
 
 ---
 
 ## Strengths
 
-- **GP-posterior-aware objective with full covariance.** Unlike standard surrogate tree fitting that regresses on raw labels or posterior means, the objective in Eq. (4)–(5) uses the full Σ⁻¹ precision matrix, downweighting uncertain points and capturing posterior correlations. This is a principled and differentiating design choice that most surrogate/distillation methods in the area do not make.
+- **Principled probabilistic objective.** The surrogate loss in Eq. (4)–(5) is derived from the variational GP posterior log-density rather than an ad-hoc distance metric. The inverse-covariance weighting means predictions in high-uncertainty regions contribute less to the objective, which is a non-trivial and principled design choice that distinguishes the method from simple tree distillation onto GP mean outputs.
 
-- **Novel DAG-based connected-cluster formulation.** Theorem 4.3 — that a connected undirected graph corresponds exactly to a DAG with one leaf — provides a clean and novel algebraic basis for encoding spatial contiguity as linear MIQP constraints. This is a technically creative contribution that does not appear in prior optimal-tree or spatially-constrained clustering literature.
+- **Unifying formulation.** Theorem 4.2 and 4.3 formally show that both spatially-connected graph partitioning and axis-aligned decision trees are representable as linear constraint sets atop the same MIQP core. The DAG-based connectivity encoding for graph partitioning (Theorem 4.3) is a non-obvious technical bridge that makes this unification possible.
 
-- **Unified framework spanning two distinct surrogate types.** Both graph partitioning and decision tree learning are derived from the same core MIQP objective by adding structured linear constraints. The paper also handles non-Gaussian likelihoods (Poisson, Bernoulli) in the tree experiments, demonstrating some generality.
+- **Honest marginalisation analysis.** Section 4.1 explicitly derives the marginalised objective (Eq. 7), identifies the log-determinant complexity penalty that should in principle discourage over-clustering, and transparently explains why it is dropped for computational reasons. This level of candour about the approximation is valuable.
 
-- **Transparent acknowledgment of the log-determinant gap.** The paper openly derives the marginalised objective including the log|W⊤Σ⁻¹W| term in Eq. (7) and explicitly states it is dropped for tractability. This honesty is commendable, even though the implications are not fully analyzed.
+- **Acknowledgment of scalability limits.** The paper explicitly reports that the MIQP solver failed to prove optimality within hours, and that graph partitioning fails for l = 8 within the time limit. This honesty is appreciated, though it simultaneously highlights an important unresolved challenge.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None identified.
+None identified. The core formulation is mathematically coherent, but the experimental validation falls well short of substantiating the claims.
 
 ### Major
 
-- **Only CART as a decision-tree baseline — insufficient to support the core claim.** The paper explicitly positions itself within the optimal-tree literature and even surveys it in the related work (OCT, MurTree, DL8.5, etc.). Yet Table 1 compares only against CART, a 1984 greedy heuristic. It is trivially expected that exact search beats greedy search given enough time. The paper never answers the key question: does the GP-posterior-weighted objective produce better trees than an optimal tree method (e.g., OCT or MurTree) using the same depth and time budget but fitting to GP posterior means with standard MSE? Without this comparison it is impossible to attribute gains to the GP-posterior objective rather than to the use of exact optimization per se.
+- **Only CART as a tree baseline.** The related work section cites a rich set of optimal tree methods (Bertsimas & Dunn 2017, MurTree, GOSDT, BinOCT, etc.) but the experiments compare only against greedy CART. For a paper whose explicit contribution is an MIQP-based optimal regression tree that outperforms CART because CART is a heuristic, the relevant comparison is against other MIQP/exact optimal tree solvers. Without this, it is impossible to assess whether the GP-weighted objective adds value over simply applying an existing optimal tree solver to the GP posterior mean.
 
-- **Motivating claim about distribution shift (Figure 1 / Section 1) is never experimentally validated.** Section 1 states: "Compared to a decision tree trained directly on observed data, a surrogate model performs better when the distribution of new inputs differs from the training data." This is the primary motivation for the entire surrogate framework, yet it is never tested. In the decision-tree experiments, both methods see the same 10% evaluation set; there is no experiment with shifted new-input distributions. This undermines the foundational rationale.
+- **No out-of-sample evaluation.** For the graph partitioning experiment the paper explicitly states "new inputs were identical to the inputs used for training," meaning all reported loss values are in-sample. The stated motivation in the introduction—that surrogates are useful when test distributions differ from training distributions—is never tested. For the decision tree experiments, 10-fold cross-validation is used, but it is not clearly stated whether the GP is refitted in each fold, whether CART is also trained as a surrogate to GP posterior means (rather than to original labels), or whether the 10% surrogate-building split is re-drawn per fold. Without this precision the evaluation cannot be reproduced or trusted.
 
-- **No ablation on the covariance structure — the central technical contribution.** The paper's key novelty over plain weighted regression is retaining off-diagonal terms in Σ⁻¹. Section 4.1 even notes that ignoring covariance reduces the method to weighted regression on (X, μ). Yet neither the graph partitioning nor the tree experiments include a comparison between: (a) full Σ⁻¹ objective, (b) diagonal weighting only, (c) unweighted MSE, (d) clustering of posterior mean directly. Without this ablation it is unclear whether the full covariance adds any practical value.
+- **No ablation on the covariance-weighted objective.** The central technical novelty is that cluster assignments account for posterior covariance via Σ⁻¹. The paper even derives the simplification to diagonal weights (Section 4.1: "By discarding the covariance among new inputs, our approach becomes equivalent to a regression model trained on the complete data (X, μ) with a weighted squared error"). Yet no experiment compares full Σ⁻¹, diagonal-only, and unweighted objectives. Without this ablation it is impossible to know whether the probabilistic formulation contributes anything over fitting a tree to GP mean predictions.
 
-- **Scalability is severely limited and inadequately addressed.** The graph partitioning experiment fails to find even a feasible solution for l=8 within 5 hours on 20K points. For the Abalone dataset (n≈4K), the MIQP needs up to 5 hours. The paper offers only a brief disclaimer in the Limitation section without proposing principled approximations (e.g., LP relaxations with rounding, warm-starting from CART, or hierarchical decomposition) or bounding the regime in which the method is feasible. As written, the approach is computationally inapplicable to most real-world GP settings.
-
-- **MIP optimality gaps are never reported.** Table 1 and the graph partitioning results explicitly state "feasible solutions that were not proven optimal." The paper never reports how far these solutions are from the optimum (MIP gap). Given that solving to optimality is the entire motivation for the MIQP approach, reporting only "feasible solutions of unknown quality" substantially weakens the empirical case.
+- **Severe and unexplored scalability.** No proven-optimal solution is found in any experiment, with runtimes of 1–5 hours on problems with 44–418 surrogate samples and depth-3 trees. The graph partitioning formulation fails entirely for l = 8 despite using the granularity aggregation (which reduces the effective problem size). No warm-starting strategy, approximate rounding, or decomposition is explored. For ICLR, an MIQP-based method that cannot be solved to optimality even on small problems and provides no characterisation of the optimality gap is difficult to assess practically.
 
 ### Minor
 
-- **Notation in Eq. (8) appears to have an indexing error.** Eq. (8) is written as `n_0 α_i ≤ w_{i1} + ... + w_{il} ≤ n α_i`, where α_i is a cluster-level indicator. But from Eq. (5), `w_{i1} + ... + w_{il} = 1` for each data point i by definition. If i indexes clusters here, the sum should be over data points (∑_j w_{ji}), not over cluster assignments of a single point. This ambiguity should be resolved with explicit notation; it affects whether the cluster-size constraint is correctly formulated.
+- **Potential subscript error in Eq. (8).** The paper states that "the *i*-th non-empty cluster contains at least n₀ data points" and enforces this via n₀αᵢ ≤ wᵢ₁ + ⋯ + wᵢₗ ≤ nαᵢ, where αᵢ indicates whether the *i*-th cluster is empty. However, under the notation established in Eq. (5), wᵢⱼ = 1 if data point *i* belongs to cluster *j*, so the sum wᵢ₁ + ⋯ + wᵢₗ equals 1 for every data point *i* (enforced by Eq. 5). If *i* is here the cluster index, the sum should run over data points belonging to that cluster, i.e., w₁ᵢ + ⋯ + wₙᵢ. This appears to be a substantive subscript inversion that would make the stated constraint trivially satisfied rather than a minimum cluster-size control.
 
-- **The surrogate is evaluated on the same inputs used to construct it.** In Section 5.2, 10% of data are used both to build the surrogate tree and to evaluate its loss. It is unclear whether the loss in Table 1 is in-sample (on the 10% build set) or out-of-sample. For graph partitioning, new inputs are explicitly identical to training inputs. The paper should clarify and ideally evaluate surrogate fidelity on a held-out set distinct from the surrogate-building set.
+- **Optimality gap never reported.** All experiments note "feasible solutions that were not proven optimal." Without any gap statistic (e.g., the ratio of upper to lower bound at termination), it is impossible to judge how far the returned solutions are from optimal, and thus whether the objective improvements over CART are meaningful or artifacts of solver incompleteness.
 
-- **No visualization of learned decision trees.** The paper's central claim is enhanced interpretability, yet no learned tree structure, split rules, or leaf values are shown anywhere. Without seeing the tree, interpretability claims about rule clarity, feature reuse, or split semantics cannot be evaluated.
+- **Statistical significance of improvements in Table 1.** The improvement for Abalone is 0.0961 ± 0.00274 (CART) vs. 0.0932 ± 0.00362 (MIQP), where the standard deviations substantially overlap. No paired test or significance measure is reported, so the claimed superiority for that dataset is not clearly established.
 
-- **Big-M bound construction is unspecified.** Eq. (6) requires a universal M such that [-M, M]^l contains v̂(ω) for all ω. No constructive bound or practical heuristic is given. Tight big-M values are essential for solver performance and numerical stability in MIQP formulations; this is a standard concern in the MIP literature.
+- **Fixed-depth tree structure not highlighted in claims.** The paper requires specifying the binary tree structure in advance, which means it optimises splits within a given skeleton. This is materially different from full structure learning and should be clearly stated in the abstract and introduction rather than relegated to a brief remark in Section 4.3.
 
 ### Tiny
 
-- The paper does not report whether GP hyperparameters (lengthscale, noise) were optimized on the training split or the full dataset, and whether the 10% surrogate-building set was excluded from GP training. These protocol details affect the validity of the comparison.
+- The semantics of Eq. (4) warrant one sentence of clarification: L(ω, v) is the log-density of the constrained latent approximation Wv under q(f), used as a score; ω is not a random variable in the GP posterior.
+- The formula for Σ in Eq. (1) uses K_uf to mean the n × m matrix (rows = new inputs, columns = inducing points), which reverses the more common convention; this should be noted explicitly to avoid confusion.
 
 ---
 
 ## Nice-to-Haves
 
-- A warm-starting strategy using CART solutions as initial feasible points for the MIQP could dramatically reduce solve times and should be straightforward to implement.
-- Reporting cluster statistics alongside loss (e.g., actual cluster count achieved, cluster size distribution, tree depth utilization) would better connect quantitative results to the interpretability motivation.
-- A small experiment with covariate-shifted new inputs would directly demonstrate the advantage claimed in Figure 1 and Section 1, and would substantially strengthen the paper's narrative.
-- A comparison to spatially-constrained clustering baselines (e.g., REDCAP, Max-P regionalization) would be a more appropriate baseline for the graph partitioning experiment than unconstrained k-means, though k-means can serve as a lower bar.
+- **Visualise learned trees.** Showing actual MIQP-learned decision trees alongside CART trees on the same data would make the interpretability claims concrete and tangible.
+- **Warm-starting from CART.** Initialising the MIQP with the CART solution as a feasible starting point is a standard technique for MIP tree solvers and could substantially reduce solver time.
+- **Scalability characterisation.** A table or curve showing solver time and optimality gap as a function of n (number of points), l (clusters), and tree depth would be very valuable for practitioners.
+- **Out-of-sample surrogate fidelity plot.** A scatter plot of GP posterior mean vs. surrogate prediction on held-out data is the most basic sanity check for a surrogate and would strengthen the empirical narrative.
+- **Quantifying interpretability.** Reporting simple structural metrics—number of non-empty leaves, average path length, cluster size distribution—would give concrete evidence that interpretability is preserved alongside accuracy.
 
 ---
 
 ## Removed Points
-*These points were flagged for removal or significant weakening. Treat with caution.*
 
-- **[REMOVED] Missing related works (harsh critic Section 2).** Per review instructions, missing related work is excluded since we cannot confirm external references.
+*These points were raised in the sub-reviews but are removed or heavily discounted as per the synthesis rules; treat them with caution.*
 
-- **[REMOVED] K-means comparison is unfair (harsh critic Section 5.1).** K-means lacks both connectivity constraints and GP posterior information; the comparison is intentionally asymmetric in favor of k-means to make a stronger point for the proposed method. This pattern — giving the baseline an intentional advantage — should not be flagged as a weakness.
-
-- **[REMOVED] Σ formula uses K_{uf} on both sides (harsh critic Section 3.1).** This is almost certainly a PDF-to-text parsing artifact. The standard SVGP formula is well-known and the paper's content is otherwise consistent with it.
-
-- **[REMOVED] Ethics statement is too thin.** For an algorithmic methods paper, the level of ethical discussion provided is reasonable for the current norms of the community. Generic calls for deeper ethics engagement are not appropriate here.
-
-- **[WEAKENED → Minor] Probabilistic interpretation of Eq. (4).** The paper says "the posterior probability of v and ω can be approximated by" L(ω,v). While technically the wording is loose (L is the log density of f evaluated at Wv, not a posterior over (v,ω)), the phrase "can be approximated by" provides sufficient hedging. The optimization goal is clear regardless of this framing.
-
-- **[WEAKENED → Nice-to-Have] Claim that no optimal tree solves weighted regression.** The paper states "to the best of our knowledge, no existing work...has yet satisfied this requirement" (weighted squared error with continuous leaf values). While the optimal-tree literature is large, this specific combination with full GP covariance weights is indeed not addressed by the cited prior work. This is partially a novelty claim, partially a framing issue; it should be stated more narrowly but need not be removed.
-
-- **[WEAKENED → Tiny] Minimum-cluster-size constraint is equated with interpretability (harsh critic).** The paper explicitly frames smaller parameter count as one component of interpretability. This is a valid proxy, and the paper does not claim it is exhaustive. Demanding a formal user-grounded interpretability study is not standard in this sub-field.
+- **Harsh critic: K_uf covariance formula is dimensionally suspicious.** After tracing the paper's convention (K_uf defined as the Gram matrix of (Z, X), used throughout as n × m via symmetric-index convention), the formula is internally consistent; this is a notational choice, not an error.
+- **Harsh critic: Distribution-shift claim is an unsupported empirical claim.** Figure 1 and the surrounding text present this as conceptual motivation and illustration, not an empirical claim requiring validation. Removing as scope creep.
+- **Harsh critic: Ethics statement is "too thin."** This is a venue-style concern; substance of the ethics statement is not a technical weakness.
+- **Harsh critic: No user study or formal interpretability metric.** User studies are not standard for algorithmic surrogate-model papers at ICLR. The claim to interpretability rests on using fewer parameters and structured forms (trees, connected regions), which is a conventional definition in the XAI literature.
+- **All reviewers: Missing related work on global distillation, LIME/SHAP as baselines.** The paper's contribution is specifically the GP-posterior-weighted objective; comparing against global LIME or SHAP (which target individual predictions) is outside scope. Per synthesis rules, missing-reference criticisms are removed as they cannot be verified.
+- **Harsh critic: Comparison against k-means is unfair because k-means lacks spatial constraints.** This asymmetry favours the baseline (k-means, unconstrained), making the comparison conservative and intentionally so. Not a weakness.
+- **Harsh critic: Overstatement of "interpretability" in title/abstract.** While the claim of interpretability could be better operationalised, this is a common usage in the surrogate-model literature and not a factual error.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel technical insight in this paper is the combination of two ideas that have not appeared together before: (1) using the full variational GP posterior precision Σ⁻¹ — not just diagonal variance weights — as the Mahalanobis metric for surrogate fitting, which captures output correlations across nearby inputs when constructing clusters; and (2) encoding spatial connectivity through the DAG-with-one-leaf equivalence (Theorem 4.3), enabling linear MIQP constraints for connected-region clustering without cut-based or flow-based relaxations. The synthesis of these into a single problem formulation is the paper's primary intellectual contribution, even if its empirical validation does not yet fully substantiate its practical value.
+The most non-obvious insight in the paper is the identification of a log-determinant complexity term (Eq. 7) that naturally arises when marginalising the cluster-value parameters v—this term acts as a penalty against over-clustering but is non-quadratic and thus discarded. This represents a precise characterisation of why GP-derived clustering cannot be solved with a pure quadratic objective without some additional cluster-count control mechanism, and it motivates the min-size constraint (Eq. 8) as a tractable substitute. If the notation error in Eq. (8) is resolved and an ablation confirms the penalty's practical significance, this observation could form the basis of a deeper theoretical contribution about surrogate complexity.
 
 ---
 
 ## Suggestions
 
-1. **Add at least one optimal-tree baseline** (e.g., OCT or a depth-3 MurTree) with the same time budget, fitting to GP posterior means with standard MSE, to isolate the value of the full covariance objective vs. exact optimization alone. This is the single most important addition.
-
-2. **Run the ablation: full Σ⁻¹ vs. diagonal vs. unweighted.** A small table or figure showing loss under these three objective variants would directly validate the paper's core novelty claim. This can be done on existing datasets with modest compute.
-
-3. **Report MIP optimality gaps** (e.g., Gurobi's reported MIPGap at termination) for all experiments. This is a one-line addition to the reporting and is essential for interpreting feasibility-only results.
-
-4. **Fix or clarify the indexing in Eq. (8).** Explicitly state the summation is over data points j for each cluster i, i.e., ∑_j w_{ji}, to remove the apparent contradiction with Eq. (5).
-
-5. **Show at least one learned decision tree** (structure, split features/thresholds, leaf values) for one fold of one dataset to ground the interpretability claims concretely.
-
-6. **Include a small covariate-shift experiment** — even a toy 1D GP example — where new inputs are drawn from a different region than training inputs, directly demonstrating the motivation of Section 1 / Figure 1.
-
----
-
-**Evaluation summary:** The paper offers a technically novel and principled core idea, but its empirical support is the weakest component by a significant margin. With only one baseline per experiment (CART, k-means), no ablations on the key design choice (covariance structure), no validation of the central motivating claim (distribution shift), unreported optimality gaps, and severe scalability limitations that go unresolved, the paper does not currently provide enough evidence for its claims to meet the ICLR bar. The novelty is real and the technical framework is sound; the paper would be substantially stronger with the ablations and additional baselines described above.
+1. **Fix or clarify Eq. (8).** Verify and correct the subscript convention for the cluster-size constraint; confirm in the appendix that the implementation matches the intended semantics.
+2. **Add an optimal-tree baseline.** Implement or call an existing MIQP/exact tree solver (e.g., the Bertsimas & Dunn formulation) on the same GP posterior means; this directly tests whether the GP-weighted objective provides value beyond optimal tree learning with standard regression targets.
+3. **Report optimality gaps.** For every experiment, report the Gurobi MIP gap at termination so readers can assess solution quality.
+4. **Clarify CART comparison protocol.** State explicitly: (a) whether CART is trained on original labels or GP posterior means, (b) whether the GP is re-fitted in each CV fold, and (c) how the 90/10 split interacts with cross-validation.
+5. **Add covariance ablation.** Compare full Σ⁻¹, diagonal Σ⁻¹, and identity (unweighted) on the decision-tree datasets; this is the minimal experiment needed to validate the paper's core methodological claim.
+6. **Provide out-of-sample evaluation.** For at least one dataset, evaluate the surrogate on held-out inputs not used during the clustering phase and report fidelity to GP posterior predictions on those points.

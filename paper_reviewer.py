@@ -480,9 +480,7 @@ async def run_merge(
         skip_related_work=skip_related_work,
     )
 
-    if pred_score:
-        with open("prompts/merger_score.txt", "r", encoding="utf-8") as f:
-            merger_system_prompt += "\n\n" + f.read()
+   
 
     review_num = 1
     reviews_section = f"# Review {review_num}: Harsh Critic\n{harsh_review}\n\n"
@@ -563,7 +561,21 @@ async def run_merge(
         #     if isinstance(message, ResultMessage):
         #         cost += message.total_cost_usd or 0
         #         final_review = block.text.split("<cake>")[-1].split("</cake>")[0].strip()
+        if pred_score:
+            with open("prompts/merger_score.txt", "r", encoding="utf-8") as f:
+                score_prompt = f.read()
 
+            print("  [merger] directly score ...")
+
+            await sdk_client.query(score_prompt)
+            async for message in sdk_client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            review_text += block.text
+                if isinstance(message, ResultMessage):
+                    cost += message.total_cost_usd or 0
+            final_score = review_text.split("<pineapple>")[-1].split("</pineapple>")[0].strip()
         if not skip_score:
             # score pass
             with open("prompts/scorer_agent.txt", "r", encoding="utf-8") as f:
@@ -584,6 +596,9 @@ async def run_merge(
             final_score = -1
     if not review_text.strip():
         raise ValueError("merger agent returned empty output")
+        
+    with open("scorer_debug.log", "a", encoding="utf-8") as f:
+        f.write(review_text)
 
     # Cost is not tracked for Claude SDK calls (subscription-based)
 

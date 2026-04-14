@@ -1,122 +1,96 @@
----
-
 ## Summary
 
-This paper investigates whether a model-free Deep Repeated ConvLSTM (DRC) agent, trained on Sokoban, internally performs decision-time planning. The authors apply a three-step concept-based interpretability methodology: (1) linear probing for planning-relevant concepts (Agent Approach Direction C_A and Box Push Direction C_B), (2) qualitative analysis of iterative plan formation over internal compute ticks, and (3) causal interventions on internal representations to steer agent behavior. They further show that the emergence of these concept representations during training correlates with the onset of planning-like behavior (benefiting from extra test-time compute), and perform a qualitative analysis suggesting the learned algorithm resembles parallelized bidirectional search.
+This paper presents mechanistic evidence that a Deep Repeated ConvLSTM (DRC) agent, despite being model-free, learns to internally plan in Sokoban. The authors define two planning-relevant concepts — Agent Approach Direction (C_A) and Box Push Direction (C_B) — and show via linear probing that the agent's hidden states linearly encode these concepts far better than raw observations. They further demonstrate through causal interventions that these representations steer multi-step behavior, and that concept representation quality co-emerges with the ability to benefit from additional test-time compute. A qualitative analysis suggests the learned algorithm resembles parallelized bidirectional search.
 
 ---
 
 ## Strengths
 
-- **Convergent three-line evidence methodology.** The paper triangulates its central claim using three distinct approaches — linear probing, qualitative plan visualization over internal ticks, and causal intervention — rather than relying on any single method. Each pillar provides meaningfully different types of evidence. The methodology is articulated clearly enough to be reusable on other agents and environments, which is a standalone contribution.
+- **Strong causal evidence via targeted interventions.** Unlike most interpretability papers that stop at correlation, Section 6.1 intervenes on specific concept vectors to steer the agent to follow suboptimal multi-step plans, achieving success rates of 94.6–98.8% (Agent-Shortcut) and 56.2–80.6% (Box-Shortcut) vs. random-probe baselines near 4–34%. Crucially, Figures 7–8 show the agent's *decoded internal plan* changes before its behavior does, suggesting the representations are upstream of action selection rather than merely epiphenomenal.
 
-- **Striking probe performance gap over baselines.** The 1×1 hidden-state probes achieve Macro F1 of ~0.85 (C_A) and ~0.95 (C_B) versus observation baselines of ~0.25, across all three layers. The size of this gap, and the fact that the minimal improvement from 1×1 to 3×3 probes applies to hidden states but not the baseline, strongly supports spatially localized linear representations of future-trajectory concepts in the agent's cell state.
+- **Test-time compute correlation as mechanistic fingerprint (Figure 9).** The tight co-emergence of probe F1 scores and extra-compute benefit across 50 training checkpoints provides an independent, behaviorally grounded validation that goes beyond the probing results alone. This is not merely correlation-as-evidence: it grounds the abstract planning claim in a concrete capability that practitioners already associate with planning.
 
-- **Causal intervention results are substantive.** Table 1 reports Agent-Shortcut success rates of 94.6–98.8% and Box-Shortcut rates of 56.2–80.6%, against random probe baselines of 27.8–33.7% and 4.1–31.5% respectively. The fact that the interventions modify not just behavior but the decoded internal plan (Figures 7 and 8) goes meaningfully beyond pure behavioral steering and provides the strongest causal evidence in the paper.
+- **Novel three-step methodology for investigating model-free planning.** The probe → plan formation → causal dependence framework is concrete, reproducible, and transferable to other architectures and domains — a genuine methodological contribution that fills a gap distinct from purely behavioral planning assessments.
 
-- **Training dynamics linking concept emergence to behavioral capability.** Figure 9 shows a strong correlation between probe F1 and the percentage of extra levels solved via extra test-time compute, measured across 50 training checkpoints. This links the mechanistic findings to a functional behavioral signature, providing co-emergence evidence that neither probing alone nor behavioral benchmarks alone could provide.
-
-- **Breadth of supplementary results.** Appendices extend the analysis to out-of-distribution Sokoban levels (missing agents, extra boxes), Mini PacMan, and ResNet agents — a scope substantially broader than the main text suggests and that lends credibility to the generality of the phenomenon.
+- **Out-of-distribution generalization of decoded plans.** The appendices show the agent's C_A/C_B representations decode sensibly in OOD conditions: levels without the agent present, levels with extra boxes, and levels with dynamically appearing walls. This suggests the planning representations generalize in a way consistent with model-like behavior and is not merely a memorized policy over training-distribution states.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None. The core claim — that a DRC agent linearly encodes future-trajectory concepts, that these are causally involved in behavior, and that they co-emerge with planning-like capability — is substantially supported. The paper's overclaiming does not invalidate the evidence it provides.
+None.
 
 ### Major
 
-- **Intervention evidence is limited to handcrafted shortcut levels, not natural Sokoban puzzles.** The causal claims in Section 6.1 rest entirely on two families of carefully engineered levels (Agent-Shortcut and Box-Shortcut) designed so that exactly two routes exist differing in length. The paper does not demonstrate that concept-vector interventions alter behavior on standard, unmodified Boxoban levels — for instance, redirecting which target a box is planned toward in a naturally occurring level. Without this, it is unclear whether the representations have planning-level causal influence in the general case, or whether the interventions exploit the engineered simplicity of the test levels. This substantially limits the strength of the causal claim.
+- **Definitional circularity in C_A and C_B — the core epistemological gap.** Both concepts are defined by the agent's own future behavior over the remainder of the episode. The probe therefore measures whether the hidden state predicts what the agent *will in fact do*, not whether the agent is evaluating alternatives or predicting consequences of counterfactual actions. Representing a future trajectory is not equivalent to planning under the paper's own three-part characterization (formulate, evaluate, act). The intervention results establish causal *sufficiency* — that perturbing these representations changes behavior — but do not establish that in normal (unperturbed) operation the representations are *upstream* of decision-making rather than reflections of a decision already computed elsewhere. This distinction is central to the paper's strongest claim ("the agent is internally planning"), and the paper does not provide a direct information-flow analysis or path-tracing experiment to resolve it. The paper acknowledges the behavior-dependence of concept labels in Section 3.2, but does not subsequently argue why this does not undermine the planning interpretation.
 
-- **The "bidirectional search" claim is supported only by cherry-picked visual examples without quantification.** Section 5 and Figure 1 claim the agent uses "parallelized bidirectional search" — a specific algorithmic characterization. This is supported by approximately five hand-selected examples. No automated metric is provided over a large episode sample (e.g., temporal ordering of arrow emergence near targets vs. boxes across ticks, statistics on backward-vs-forward frontier growth). Without such analysis, this claim functions as an illustrative hypothesis rather than a demonstrated finding. The paper should substantially downgrade this framing or provide quantitative backing.
+- **Absence of a non-planning agent baseline.** The paper does not probe a feedforward ConvNet, a DRC with frozen recurrence, or a DRC trained for significantly fewer steps at matched task performance for C_A/C_B. Without this, it is impossible to know whether high probe F1 is specific to the planning behavior attributed to DRC agents, or whether any competent Sokoban policy — even a reactive one — encodes its own future trajectory and would yield similar probe scores. This is the single most straightforward experiment to conduct, and its absence means the paper cannot rule out the interpretation that these representations are an inevitable correlate of high competence on a deterministic task rather than a signature of planning specifically.
 
-- **The core interpretive ambiguity between "encoding future behavior" and "planning" is underresolved.** C_A and C_B are defined from the agent's *actual future behavior* in the episode. This means probes predicting them are, at least in part, decoding the agent's committed future trajectory or implicit policy summary — which a competent reactive policy would also produce. The critical question — whether the agent's representations *determine* upcoming action selection via an internal search process, or merely *reflect* a compressed policy state — is raised but not resolved. A key missing control is probing a matched feedforward (non-recurrent) agent for C_A and C_B: if a feedforward agent also achieves high F1, the iterative-search interpretation is significantly weakened; if it cannot, the recurrent-computation hypothesis is strongly supported. Section 5 acknowledges the qualitative nature of the evidence and defers to Section 6, but the intervention experiments (see Major weakness above) are themselves limited to engineered levels.
-
-- **Single trained agent; generalization across seeds and checkpoints is unaddressed.** The paper states "the agent we study" with a single training run of 250M transitions. The mechanistic claims are presented as properties of "DRC agents" generally, but the analysis is conducted on one checkpoint of one seed. Whether the identified concepts, probe F1 levels, and intervention success rates are reproducible across training seeds or sensitive to training idiosyncrasies is unknown. In mechanistic interpretability work, this is a meaningful limitation.
+- **Bidirectional search claim is primarily qualitative.** The paper's most specific mechanistic hypothesis — that the agent uses "parallelized bidirectional search" — rests on visual inspection of selected examples in Figure 1 and appendix figures. There is no quantitative test: no measurement of where in the board plan arrows first appear across ticks, no comparison of expansion order against forward-only or backward-only heuristics, no aggregate statistics over many episodes. Given the specificity of the claim, this gap is noticeable. The paper honestly describes Section 5 as "qualitative evidence," but the abstract and introduction treat the algorithmic identification as a contribution, warranting stronger support.
 
 ### Minor
 
-- **Observation baseline is structurally weaker than hidden-state probes.** The baseline probes receive static observations $x_t$ without any recurrent history. Because the hidden state captures temporal context accumulated over an episode, the comparison is asymmetric in a way that could overstate the implied representational specificity. A recurrent baseline — e.g., probing a randomly-initialized ConvLSTM run on the same observations — would provide a fairer comparison.
+- **Box-Shortcut intervention gap unexplained.** Box-Shortcut success rates (56.2% at Layer 1, up to 80.6% at Layer 3) lag substantially behind Agent-Shortcut (94.6–98.8%). The paper notes the results are above the random baseline but does not analyze *why* C_B interventions are less effective — whether C_B is less linearly separable, whether action selection relies more directly on C_A, or whether the intervention method is less aligned with how box planning is encoded. Understanding this gap would sharpen the mechanistic picture.
 
-- **The "forced stationary" protocol may introduce distribution shift.** The 5-step "thinking" protocol (Section 5, Figure 6) forces the agent to remain stationary before acting, a situation absent from training. The observed improvement in probe F1 over these extra ticks may partly arise because the unrolled dynamics land in a more stereotyped hidden-state regime rather than purely reflecting deeper internal search. The paper does not discuss this confound.
+- **Training co-emergence correlation is suggestive but not controlled.** Figure 9 shows correlation between probe F1 and extra-compute benefit across training checkpoints. However, both quantities increase with training competence, so the correlation may partly reflect an underlying confounder (overall policy quality). The paper does not control for baseline episode success rate. A partial correlation or ablation controlling for overall performance would make this evidence more compelling.
 
-- **"Iterative computation" inference from cross-layer probe uniformity is underdetermined.** Section 4.2 infers that similar probe performance across layers implies "iterative computation" that refines plans across layers. But similar cross-layer decodability is also consistent with simple feature copying, residual skip connections, or parallel encoding at all layers. This interpretation is plausible but not entailed by the data.
-
-- **Training dynamics analysis (Figure 9) is limited to the first 50M of 250M training transitions without justification.** The paper does not explain why the emergence analysis covers only the first 20% of training. If the phenomenon saturates early, this should be stated explicitly.
+- **Intervention on handcrafted levels limits external validity.** The causal intervention experiments use bespoke Agent-Shortcut and Box-Shortcut levels designed to expose binary routing choices. It is not shown whether similar interventions steer behavior on natural Boxoban levels. Appendix B.3 reports intervention results for levels the agent cannot normally solve, which partially addresses this, but the community would benefit from seeing intervention effects on randomly sampled natural levels.
 
 ### Tiny
 
-- **"Unlikely to overfit" based on parameter count alone is not a sound argument.** The claim that 160/1440-parameter probes are "unlikely to overfit" does not follow from parameter count; overfitting depends on dataset structure, class correlations, and imbalance. The argument is unnecessary given the test-set evaluation design.
+- **The "first mechanistic evidence" priority claim in the abstract needs more careful scoping.** This is a strong assertion that ICLR reviewers will scrutinize closely. Given the related work discussion already references Jenner et al. (2024) on look-ahead in chess agents, the claim should either be more precisely delimited (e.g., "first mechanistic evidence of full decision-time planning, including plan evaluation and action guidance, in a model-free RL agent") or hedged appropriately.
 
-- **"Confirms spatial bijection" overstates the 1×1 to 3×3 comparison.** Section 4.2 says the minimal 1×1 to 3×3 improvement "confirms" a spatial bijection. This is consistent with localization but does not exclude distributed redundancy across positions. The language should be softened to "supports" or "is consistent with."
-
-- **The AS vs. BS intervention success gap is noted but unexplained.** Table 1 shows systematically lower Box-Shortcut success rates, yet the paper attributes this to no specific cause. As the paper explicitly discusses both concepts as planning representations, this asymmetry — which might indicate that box-push dynamics are encoded more robustly or in a more distributed way — deserves at least brief analysis.
+- **Intervention mechanics (Equation 1) are under-justified.** Adding the probe weight vector w_k to the cell state to encourage class k is a practice from representation engineering, but the paper does not explain why this should cleanly "set" the representation rather than create a perturbation that incidentally pushes the logit above threshold. A brief justification or citation to representation engineering literature would clarify the assumptions.
 
 ---
 
 ## Nice-to-Haves
 
-- **Probe a feedforward (non-recurrent) agent on C_A and C_B.** This is the single most impactful experiment missing from the paper. A competent feedforward policy would also produce future trajectory regularities, but cannot engage in iterative internal search. If it achieves comparable probe F1, the iterative planning interpretation is threatened; if its F1 is significantly lower, the argument becomes substantially stronger.
+- **Quantify the bidirectional search hypothesis.** Track when and where plan arrows (as decoded by probes) first appear across internal ticks on a large sample of episodes. Compute histograms showing whether new arrows appear preferentially near boxes (forward search) or near targets (backward search) at early ticks. Even a simple spatial heatmap split by tick number would substantially strengthen this claim.
 
-- **Demonstrate concept-vector interventions on standard Boxoban levels.** Showing that interventions can redirect planned box routes on naturalistic levels (e.g., changing which target a box is steered to) would substantially strengthen the causal claim beyond the engineered shortcut setup.
+- **Lesion experiment on planning-demanding vs. planning-light levels.** Corrupting or suppressing C_A/C_B representations should disproportionately harm performance on levels requiring long-horizon planning (where box moves are irreversible and route selection matters) compared to levels solvable with minimal lookahead. This would establish causal *necessity* as a complement to the causal *sufficiency* already demonstrated by interventions.
 
-- **Ablation: zero out or add noise to C_A/C_B directions and measure solve-rate degradation.** This would test whether the representations are causally necessary (not just influenceable), complementing the existing additive-steering interventions.
+- **Controlled plan-revision experiment.** Measure whether the agent revises its decoded plan more frequently when the initial plan is infeasible (blocked route, deadlock configuration) versus when the initial plan is already valid. This would provide systematic evidence for the "plan evaluation" criterion beyond the qualitative examples in Figure 1(A)–(B).
 
-- **Provide aggregate statistics on plan formation patterns.** Report over hundreds of episodes: what fraction show backward extension from targets, what fraction show forward extension from boxes, what fraction show plan revision, and at which ticks. This would move the bidirectional search hypothesis from anecdote to empirical finding.
-
-- **Include an explicit code/model release statement.** Standard ICLR reproducibility expectation; not currently mentioned.
-
-- **Partial correlation analysis in Figure 9.** Does probe F1 predict extra-compute benefit above and beyond total solve rate? Controlling for training progress would make the co-emergence argument stronger.
+- **Expand discussion of stochastic-environment generalization limits.** Since C_A and C_B rely on deterministic future trajectories, a brief discussion of how or whether the methodology would transfer to stochastic or partially observable environments would help contextualize the scope.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged for removal; treat them with caution.*
 
-- **"Priority claim of first mechanistic evidence is irresponsible"** (Harsh Critic): The paper does state "first mechanistic evidence" and "first non-behavioral evidence," and these claims appear defensible within the paper's stated scope (concept-level mechanistic evidence, model-free RL, non-behavioral). While the paper could use slightly more cautious language, removing this as an overclaim is appropriate given the paper does qualify its methods and scope.
+- **Harsh Critic: "The analogy to RL-trained LLMs and DeepSeek-R1 is speculative."** The connection is framed as motivation for why understanding emergent planning is important, not as a claim about mechanistic equivalence. This is a reasonable framing choice, not a substantive error. *Removed.*
 
-- **"Label leakage through policy determinism"** (Harsh Critic): In complex Sokoban environments with PSPACE-complete difficulty and four boxes, future trajectories are not trivially predictable from current state alone. The concern that near-deterministic policies trivially predict future labels does not apply strongly here. The observation-baseline comparison already addresses a substantial part of this.
+- **Harsh Critic: "DRC model-free label is confused with non-modeling."** The paper's central question is precisely whether a model-free agent implicitly learns model-like planning, and the paper engages this directly in Section 2.1. *Removed.*
 
-- **"DeepSeek-R1 comparison feels trend-chasing"** (Harsh Critic): This is rhetorical/stylistic criticism about a motivational aside. Not a scientific weakness.
+- **Harsh Critic: "Standard deviations insufficient — significance tests or confidence intervals required."** Reporting ±1 SD over five seeds is standard practice for this type of paper. For the probing results, the gap between agent hidden states and the observation baseline is large enough to be clearly significant without formal testing. *Removed.*
 
-- **"Broader impact not discussed"** (Harsh Critic): Not a standard requirement for an interpretability/RL paper at ICLR and is too generic to constitute a scientific weakness.
+- **Harsh Critic: "Limited scope to one architecture/domain is a weakness."** The paper is explicit that it is a focused case study, and the additional results in appendices (PacMan, ResNet, DRC variants) extend generality. Demanding multi-architecture coverage in the main text would be scope creep for an interpretability study. *Weakened to nice-to-have context.*
 
-- **"Much of the qualitative evidence is cherry-pickable examples"** (Spark Finder, re: Figure 5 static plans): Figure 5 is presented explicitly as illustrative examples, and the paper does not make statistical claims based solely on them. The quantitative probe results are the evidentiary foundation.
+- **Harsh Critic / Positive Reviewer: "Inference from 1x1 vs. 3x3 probe comparison to spatial localization is overstated."** The paper's reasoning is sound: if representations were distributed across neighboring cells, adding the 3x3 neighborhood would improve the probe meaningfully; the fact that it does not strongly (relative to the baseline improvement) supports localization. This is a reasonable inference from a sensible experimental design. *Removed.*
 
-- **"Probe has an unfair comparison because it lacks temporal context"** duplicates the minor weakness above and is partially addressed by the existing observation baseline (which does capture the static state). The residual concern is kept as a Minor weakness above.
+- **Multiple reviewers: demands for related work citations that reviewers allege are missing.** Per policy, missing related work is not flagged, as the reviewers may lack current knowledge. *Removed.*
+
+- **Harsh Critic: "Broader impact section is thin."** This is a formatting/completeness nitpick that does not affect the scientific contribution. *Removed.*
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel observation across all three reviews — and underemphasized even by the authors — is the **asymmetry between Agent-Shortcut (up to 98.8%) and Box-Shortcut (up to 80.6%) intervention success rates**, which the paper does not explain. This asymmetry suggests that the planning representations for self-movement (C_A) and for object dynamics (C_B) may be qualitatively different in terms of how causally potent, robustly encoded, or distributed they are — a distinction that could illuminate hierarchical structure in the learned planning algorithm. The second notable insight is that probe F1 improvement during "forced stationary" extra compute ticks plateaus after ~12 ticks out of 15 (Figure 6), suggesting the agent's search process has a natural depth limit. If this depth limit scales with architecture depth or tick count, it would be a mechanistically informative finding about what DRC agents can and cannot plan ahead.
+The most genuinely novel observation emerging from the synthesis of these reviews is the tension between *causal sufficiency* and *causal necessity* in the paper's intervention experiments. The paper demonstrates that concept representations can be perturbed to steer long-horizon behavior (causal sufficiency) and that high-quality representations co-emerge with planning-like capacity during training. However, the reviews collectively highlight that these results do not establish that the representations are *upstream* drivers of action in normal operation, as opposed to downstream encodings of a plan computed elsewhere in the network. The specific architectural property that makes DRC amenable to this analysis — spatial correspondence between the ConvLSTM cell state and the Sokoban grid — is also what creates the circularity concern: a spatially structured recurrent network trained on a deterministic task will, by design, accumulate information about its future trajectory in spatially aligned representations, whether or not it is "planning" in the evaluative sense. Resolving this circularity via information-flow or path-tracing analysis would not just improve this paper; it would clarify what mechanistic evidence for planning can and cannot establish in future work.
 
 ---
 
 ## Suggestions
 
-1. **Add feedforward-agent probing as a control experiment** — this single addition would most directly address the "amortized policy vs. online planning" ambiguity and substantially strengthen the paper's core claim.
+1. **Add a non-planning baseline probe comparison.** Train the same probing pipeline on a matched-performance feedforward Sokoban agent or a DRC with recurrence disabled (frozen hidden state). If C_A/C_B probe F1 scores drop substantially, this directly supports the claim that planning-specific computation is responsible for the representations. If they don't drop, the paper must grapple with why.
 
-2. **Demonstrate concept-vector interventions on 50–100 standard Boxoban levels**, even informally, to show the causal results are not an artifact of the shortcut-level design.
+2. **Explicitly address the upstream/downstream question.** Even without full mechanistic circuit analysis, the paper could test whether the plan decoded at tick *t* predicts the agent's action better than the plan decoded at tick *t-1* after controlling for external observation content — a simple measure of whether the representation "leads" the behavior or merely reflects it.
 
-3. **Quantify the bidirectional search observation** with at minimum one automated metric over a large episode sample (e.g., the temporal ordering of arrow emergence near boxes vs. targets across ticks), and reframe this as a "consistent with bidirectional search" hypothesis rather than a demonstrated algorithmic characterization.
+3. **Quantify the bidirectional search claim.** Aggregate across many episodes the spatial distribution of newly appearing arrows at each internal tick, split by proximity to boxes vs. targets. This converts a qualitative hypothesis into a falsifiable quantitative test.
 
-4. **Analyze and report on the C_A vs. C_B intervention asymmetry** — even a short paragraph on why box-push planning is harder to steer than agent-movement planning would be mechanistically informative and turn a confusing gap in Table 1 into a finding.
+4. **Analyze the C_B intervention gap.** Investigate whether Box-Shortcut lower success is due to probe linear separability, representation geometry, or reliance on C_A for action selection. Even a brief ablation comparing intervention magnitude vs. success rate for C_A and C_B would shed light on the asymmetry.
 
-5. **Add a partial-correlation analysis to Figure 9**, controlling for total solve rate, to show that probe F1 independently predicts extra-compute benefit.
-
-6. **Justify the 50M-transition window** in Section 6.2 or extend the emergence analysis to the full 250M training run.
-
-7. **Clarify the single-seed limitation** in the limitations section, and ideally report that key quantitative results (probe F1, intervention success rates) hold across at least 2–3 independent training seeds.
-
----
-
-**Overall evaluation:**
-
-- *Novelty*: High. Providing mechanistic (concept-level) evidence of planning in a model-free RL agent, using the combination of probing + causal intervention + training-dynamics analysis, is a genuinely new approach to a longstanding question.
-- *Technical soundness*: Moderate. The probing and intervention methodology is well-executed, but the central interpretive ambiguity (planning vs. amortized policy) is not fully resolved, and the causal evidence is limited to engineered environments.
-- *Empirical support*: Moderate-to-strong for the probing and intervention claims; weak for the bidirectional-search algorithmic characterization.
-- *Significance*: High in principle — mechanistic understanding of emergent planning has broad implications for both interpretability and RL — but the significance is somewhat constrained by the single-agent, single-environment setting and the unresolved core ambiguity.
-- *Clarity*: Good overall, but the paper would benefit from more careful epistemic calibration between "we provide evidence consistent with" and "we show/confirm/demonstrate."
+5. **Calibrate the abstract's priority claim** to match the actual contribution: the paper provides strong convergent evidence (probing + causal intervention + training co-emergence) that a model-free RL agent encodes and causally uses representations consistent with a planning vocabulary — a more precise statement than "the first mechanistic evidence that model-free RL agents can plan."

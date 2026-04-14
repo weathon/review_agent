@@ -1,112 +1,116 @@
 ## Summary
 
-This paper empirically compares Kolmogorov-Arnold Networks (KAN) and Multi-Layer Perceptrons (MLP) on ten synthetic 1D functions spanning six regularity categories: regular (smooth), continuous but non-differentiable, jump-discontinuous, singular, coherently oscillatory, and noisy. The authors match parameter counts between architectures and vary training sample sizes, reporting that KAN outperforms MLP on regular and severe-singularity/oscillation functions while MLP is generally superior on locally irregular (non-differentiable, jump) functions. The paper also finds that KAN is orders of magnitude slower than MLP in wall-clock time and that noise generally obscures the locally irregular features from both architectures.
+This paper presents a controlled empirical benchmark comparing Kolmogorov-Arnold Networks (KAN) and Multi-Layer Perceptrons (MLP) on ten hand-curated 1D functions spanning six regularity classes: regular/smooth, continuous-but-non-differentiable, jump-discontinuous, singular, coherently-oscillatory, and noisy variants thereof. The authors match parameter counts between architectures and study the effects of training sample size and optimizer choice (Adam vs. L-BFGS). The central finding is that KAN does not uniformly outperform MLP: KAN appears superior on regular and singular/oscillatory functions, while MLP prevails on cusp and jump-discontinuity functions. The paper is an explicit extension of the authors' prior work (Shen et al., 2024) on KAN noise sensitivity.
 
 ---
 
 ## Strengths
 
-- **Function-type taxonomy as a diagnostic lens.** The explicit categorization of test functions into six regularity classes (Table 1) provides a structured framework for understanding architecture-specific failure modes, which is more informative than a single aggregated benchmark.
+- **Structured function taxonomy with controlled parameter matching:** The six-category classification is practically motivated, and Table 2 shows near-exact parameter parity (118 vs. 120, and 238 vs. 240 parameters). Matching parameters rather than relying on ad hoc choices is a deliberate and methodologically sound choice that is missing from many KAN vs. MLP comparisons in the literature.
 
-- **Optimizer and wall-clock time analysis.** The inclusion of Tables 3 and 4, comparing Adam and L-BFGS for both architectures with actual training times, is a concrete practical contribution. Showing that KAN with L-BFGS is up to 70× slower than MLP — even when convergence in epochs favors KAN — is a result that practitioners need to know and that is often omitted from KAN studies.
+- **Concrete optimizer sensitivity findings with runtime data:** Tables 3 and 4 provide quantitative evidence that KAN with L-BFGS incurs 30–70× wall-clock overhead versus MLP (e.g., 588s vs. 8.3s for f₇). This is a specific, practically consequential finding that practitioners comparing architectures need but seldom find explicitly reported.
 
-- **Differentiated noise analysis.** Separating the noisy-function analysis into regular, localized-irregularity, and severe-discontinuity sub-categories, and finding that noise has little additional effect on already-difficult singularity/oscillation functions, is a non-obvious and practically meaningful observation.
+- **Non-trivial asymmetric performance pattern:** The empirical result that KAN is worse on cusp/jump functions (f₃–f₆) but better on singular/oscillatory functions (f₇–f₁₀) is not an obvious or foregone conclusion. It distinguishes between function types that other comparative studies treat uniformly and offers a structurally interesting—if underanalyzed—observation about spline-based inductive biases.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-
-*(None that individually invalidate the entire paper, but the combination of Major weaknesses below substantially undermines the reliability of the reported conclusions.)*
+None identified.
 
 ### Major
 
-- **Critical text–figure inconsistency for jump functions (f₅, f₆).** Section 3.3 states unambiguously: "Results show that the MLP outperforms the KAN." The Figure 3 caption, however, states the opposite: "In all cases, KAN (red dashed line) fits the target function much better than MLP." These two claims are directly contradictory on the same experiment. This is not a minor labeling slip — the jump-function result is one of the paper's four main comparative findings. Without knowing which is correct, readers cannot trust either the text or the figures for this category. Numerical tables reporting final test loss are needed to settle this, and the paper has none.
+- **Figure 3 caption directly contradicts Section 3.3 text.** The text (Section 3.3) states: "Results show that the MLP outperforms the KAN" for jump functions f₅ and f₆. The alt-text/caption of Figure 3 states: "In all cases, KAN (red dashed line) fits the target function (green squares) much better than MLP (blue dashed line)." These claims are logically incompatible. This contradiction is not a parser artifact—both appear explicitly in the extracted document. It creates fundamental ambiguity about what the actual experimental result is for one of the paper's most important function categories, and directly undermines the reliability of the reported findings.
 
-- **Optimizer confounder for coherent oscillation functions.** For f₉ in Figure 8, KAN is evaluated with L-BFGS while MLP is evaluated with Adam (the per-model best), and the conclusion is drawn that "KAN consistently surpasses MLP." This is a best-of-each comparison, not a clean architectural comparison. Presenting it as evidence of architectural superiority without clearly labeling it as a practical best-system comparison conflates optimizer-architecture interaction with architectural capability. The conclusion in Section 5 ("KAN exhibits superior performance over MLP for regular functions or functions with severe discontinuities") inherits this confound.
+- **Optimizer mismatch confounds the architectural comparison for f₉.** Figure 8's caption confirms that for f₉, the comparison is MLP (Adam) vs. KAN (L-BFGS). The paper then concludes "KAN consistently surpasses MLP" on coherent oscillations. Since L-BFGS is the better-performing optimizer for KAN on f₉ (per Figure 7), this comparison attributes to *architecture* an advantage that is at least partly attributable to *optimizer*. The same mismatch appears in Figure 11(g) for the noisy f₉ comparison. Claims about architectural superiority on oscillatory functions are therefore not cleanly supported.
 
-- **Dangling cross-reference to non-existent "section D."** Section 3.5 reads: "taking a similar approach as described in section D." No such section exists anywhere in the paper. This indicates the paper is incomplete or was not proofread, and raises doubts about whether the experimental protocol for Sections 3.5 and 4.3 is fully described.
+- **No statistical reliability analysis.** All results appear to be single training runs with no reporting of variance across seeds, initializations, or data subsamples. Neural network training is stochastic, and the performance gaps in many of the figures are moderate. Without multiple runs and summary statistics, it is not possible to distinguish genuine architectural differences from initialization noise. This is a baseline methodological requirement for empirical comparisons at ICLR.
 
-- **Noise model never formally defined.** Section 4 uses "noise level 10" and SNR values (SNR=10, SNR=0, SNR=4) interchangeably without ever specifying: (a) additive vs. multiplicative noise, (b) distribution (Gaussian, uniform?), (c) what "noise level 10" means dimensionally, (d) whether test loss is evaluated against the clean target or the noisy observations. These choices fundamentally affect the interpretation of all Section 4 results and are a reproducibility failure.
+- **Limited novelty relative to stated prior work.** The paper explicitly states: "This research continues directly and naturally from our recent study on the efficacy of KANs in fitting noisy functions (Shen et al., 2024)." The additional contribution—extending from noisy regular functions to a broader taxonomy of irregular functions—is incremental, and the paper does not articulate a clear mechanistic advance or conceptual insight that goes beyond cataloging performance across function types. The absence of any explanatory analysis (see below) makes this feel like a dataset-of-experiments extension rather than a standalone contribution.
 
-- **All results are single runs.** No variance across random seeds or noise realizations is reported. For shallow neural networks fitted on 1D toy functions, optimization noise and initialization can materially affect outcomes. Conclusions such as "KAN achieves a lower test loss with low noise levels but performs worse under high noise conditions" are drawn from what appears to be single-realization evidence. This is inadequate for any quantitative claim at ICLR.
+- **No mechanistic explanation for observed performance patterns.** The paper documents that KAN underperforms on cusps and jumps but does not explain why. Is it the smooth B-spline basis that cannot represent discontinuities efficiently? Grid resolution? Optimization landscape geometry near non-smooth targets? Without any mechanistic analysis—even informal—the findings remain a list of empirical observations rather than actionable insights. ICLR expects understanding, not just measurements.
 
 ### Minor
 
-- **Exclusive focus on 1D univariate functions.** The Kolmogorov-Arnold theorem is fundamentally a statement about *multivariate* function representation: KAN's theoretical motivation is the decomposition of f: [0,1]ⁿ → ℝ into combinations of univariate functions. Testing only 1D functions reduces KAN to a spline approximator and bypasses the architectural regime where KAN's structure should theoretically matter. The paper briefly acknowledges that multiplication nodes in KAN 2.0 matter "minimally" for the tested functions, but this observation actually underscores the limitation rather than addressing it.
+- **Shallow and narrow architecture search.** Only single-hidden-layer MLPs ([1,39,1] and [1,79,1]) are evaluated. Multi-layer MLPs are the dominant baseline in modern deep learning and are known to behave differently on approximation tasks. The results may not generalize to the architectures practitioners actually use.
 
-- **Wall-clock inefficiency downplayed in the conclusion.** The conclusion emphasizes that "KAN exhibits a faster convergence rate than MLP across all tested functions" (measured in epochs) without any corresponding acknowledgment of the 10–70× wall-clock overhead. A reader taking the conclusion at face value would have a seriously misleading impression of KAN's practical utility.
+- **Computational cost is measured but underemphasized in conclusions.** Tables 3 and 4 clearly show that KAN with L-BFGS is orders of magnitude slower than MLP. The conclusion's summary of findings does not foreground this tradeoff. For a paper whose audience includes practitioners deciding between architectures, the efficiency cost is as important as the accuracy result.
 
-- **Training loss vs. test loss not disentangled.** Only test loss is reported in the convergence curves. For functions where KAN performs worse (f₃–f₆), it is impossible to determine whether the cause is poor optimization, underfitting, or overfitting. This distinction matters for understanding the architectural inductive bias and for suggesting remedies.
+- **Noise model is insufficiently specified.** Section 4 introduces noise levels of 0, 2, 4, and 10, and Figure 11 uses SNR=0, 4, 10, but the main text never formally defines the noise distribution (Gaussian? uniform?), how SNR is computed relative to the signal, or whether noise is applied to inputs or outputs only. This makes the noisy-function experiments difficult to reproduce or interpret precisely.
 
-- **KAN grid resolution fixed without ablation.** Grid=3, k=3 is used throughout. This is KAN's most direct capacity control. For singular and oscillatory functions — exactly where spline resolution should matter most — no ablation is presented. The reader cannot tell whether KAN's failures are architectural or a result of under-specified hyperparameters.
+- **"Severe discontinuities" is a misleading category label.** In Section 4, singularities (f₇, f₈) and coherently oscillatory functions (f₉, f₁₀) are grouped under "severe discontinuities." These are qualitatively distinct: singularities have well-defined limits that diverge, while coherent oscillations have no limit. Conflating them under one label may obscure differences in behavior.
 
 ### Tiny
 
-- The paper contains no formal experimental setup section. Sampling domain, test-set construction, MSE vs. other loss definitions, and stopping criteria are scattered across subsections or omitted entirely.
-- Section 3.3 defines jump locations as "x = ±0.5" but Table 1 defines f₅ as {1 if |x| < 0.5, else 0}, which is symmetric — this is not an error but the language in 3.3 could cause confusion.
+- The section header "KOMOGOROV-ARNOLD THEOREM" in Section 2 contains a typo ("Komogorov" missing one 'l').
 
 ---
 
 ## Nice-to-Haves
 
-- **Multivariate test functions (2D/3D).** Adding at least one 2D benchmark would engage KAN's actual theoretical regime and make the comparison meaningfully broader.
-- **Training-time-normalized convergence curves.** Plotting test loss against wall-clock time (in addition to epochs) would give an honest picture of the efficiency-accuracy tradeoff.
-- **Mechanistic analysis of learned KAN activations.** Visualizing KAN's learned spline activations for representative functions — especially where it fails (f₃–f₆) versus succeeds (f₇–f₁₀) — would reveal whether the splines are adapting meaningfully and provide genuine insight beyond the empirical tally.
-- **Bias–variance or train/test decomposition.** Separate curves showing training loss and test loss would help readers understand whether KAN's disadvantage on irregular functions stems from optimization difficulty or overfitting.
-- **Theoretical hypothesis paragraph.** A brief discussion hypothesizing *why* smooth B-spline activations (KAN) might struggle at cusps and jump discontinuities while piecewise-linear activations (ReLU MLP) adapt more easily would substantially increase the paper's depth.
+- **Hyperparameter ablation for KAN (grid size, spline order k).** Only grid=3, k=3 is tested throughout. Since grid resolution directly controls the B-spline's ability to represent sharp features, ablating this setting would clarify whether the observed weaknesses of KAN on jumps and cusps are fundamental to the architecture or an artifact of the chosen configuration.
+
+- **Compute-budget-matched comparisons.** Parameter count matching is a first step, but given the 10–70× runtime gap shown in Tables 3–4, a comparison at equal wall-clock time or equal number of function evaluations would give a more practically relevant picture of the accuracy–efficiency tradeoff.
+
+- **Extension to multivariate functions.** The Kolmogorov-Arnold theorem and KAN's theoretical motivation are specifically about multivariate compositional structure. Including even a few bivariate test cases (e.g., f(x₁,x₂) = sin(x₁)/x₂ with a singularity at x₂=0) would strengthen the paper's connection to KAN's theoretical basis and expand the scope of conclusions.
+
+- **Zoomed visualizations near irregular points.** Global function-fitting plots make it difficult to assess whether either architecture is capturing local behavior near cusps, jump locations, or singularities. Inset zoomed views near x=0 (for f₃, f₇, f₉) and x=±0.5 (for f₅, f₆) would provide clearer diagnostic evidence.
+
+- **Visualization of learned KAN activation functions.** A claimed advantage of KAN is interpretability. Showing the learned univariate activations for a few cases (e.g., whether KAN learns a 1/x-shaped activation for f₇) would both validate or challenge the interpretability claim and provide mechanistic insight into how KAN represents different function types.
 
 ---
 
 ## Removed Points
 
-*These points are flagged for removal — treat with caution.*
+*These points were raised by sub-reviewers but are removed or substantially weakened here for the stated reasons — treat them with caution.*
 
-- **Critic: "The function definitions are potentially confusing — f₅ uses threshold x < 0.5 suggesting one-sided behavior."** Table 1 clearly defines f₅ = {1 if |x| < 0.5, 0 otherwise}, which is symmetric. This is a misread by the critic.
+- **Criticism: The paper should evaluate on high-dimensional or real-world datasets.** Removed as scope creep. The paper explicitly scopes its contribution to controlled function regularity benchmarks. Evaluating whether KAN does X well should not be penalized for not also doing Y. Multivariate extension is listed as a nice-to-have but is not a core flaw given the stated scope.
 
-- **Critic: Requesting SIREN / Fourier-feature MLP baselines.** The paper's stated scope is a KAN-vs-MLP comparison. Adding sinusoidal baselines would be useful context but is outside the paper's framing and represents scope creep rather than a genuine weakness of the paper's contribution.
+- **Criticism: Formal contributions are not enumerated in the introduction.** Removed as a pure presentation nitpick. The paper's structure makes the contributions inferrable even without a bullet-pointed list.
 
-- **Critic: "The functions are too easy for Section 3.1."** f₁ and f₂ serve as calibration/sanity checks for a category labeled "regular." Their simplicity is the point. Demanding harder regular functions misunderstands the section's role.
+- **Criticism: The regularity taxonomy is not grounded in formal approximation theory (Sobolev, Hölder, BV).** Removed as an unjustified rigor demand for an empirical paper. The informal categorization is serviceable for the experiments and is pedagogically clear. A formal measure-theoretic taxonomy is not standard practice in this subfield.
 
-- **Critic: "Severe discontinuities is inaccurate terminology."** The paper uses this as a collective label for its own subcategory of singular/oscillatory functions across restricted domains. This is a taxonomic style choice, not a factual error.
+- **Criticism: Comparisons where the worse optimizer is used for MLP are "unfair."** Removed — using the weaker optimizer for the *stronger-performing* architecture (MLP) would only strengthen the paper's claims where MLP wins. The cases where the concern is real (optimizer mismatch favoring KAN) are already captured as a genuine Major weakness above.
 
-- **Critic: "Claims about KAN 2.0 are not operationalized."** The paper explicitly states that multiplication nodes matter "minimally for the functions used in this paper" and that lower versions of PyKAN are acceptable. This is addressed.
+- **Criticism: References to Shen et al. 2024 and other cited works may not exist.** Removed per instruction — if cited, assumed to exist.
 
-- **Positive reviewer Strength: "Timely topic / KANs were recently introduced."** This is generic and applies to any contemporaneous benchmarking paper.
+- **Criticism: The title is too narrow.** Removed as a formatting/style concern.
 
-- **Positive reviewer Strength: "Controlled experimental setup (matching parameter counts)."** While this is a genuine effort, it is standard practice in architecture comparison papers and does not distinguish this paper specifically, especially given the optimizer confound noted above.
+- **Weakness claimed: "KAN exhibits faster convergence across all tested functions" is unsupported.** Partially mitigated — the paper text in Section 5 does make this claim, and the figure descriptions are largely consistent with it (Figure 4: "KAN consistently achieves lower loss than MLP"). The convergence advantage appears consistently observed, even if it must be tempered by the lack of statistical confidence.
 
 ---
 
 ## Novel Insights
 
-The observation that noise has comparatively little *additional* effect on the test loss for already-difficult singularity and coherent oscillation functions (Section 4.3) is the paper's most genuinely non-obvious finding. The intuition — that approximation error already dominates before any noise is added — is plausible and, if confirmed with proper statistical rigor, would be a useful empirical result for practitioners applying KAN or MLP to highly irregular scientific data. However, this insight is currently stated qualitatively without the statistical support needed to be trusted.
+The most interesting and underexploited observation in this paper is the asymmetry between the two main failure modes: KAN underperforms on functions with localized, bounded irregularities (cusps and jumps), yet outperforms on functions with globally extreme behavior (singularities and densely oscillatory near unreachable points). This asymmetry is not explained anywhere in the paper but hints at a genuine inductive bias story: spline-based activations may be well-suited for capturing globally steep or monotone-local behavior but ill-suited for capturing bounded, localized transitions. If the paper could articulate and test this mechanistic hypothesis — e.g., by examining whether increasing grid density helps on cusps but not jumps, or whether the spline coefficients exhibit pathological behavior near discontinuities — it would transform a catalog of observations into an explanatory contribution.
 
 ---
 
 ## Suggestions
 
-1. **Resolve the text–Figure 3 contradiction immediately.** Add a numerical table reporting mean test loss at convergence for each model on f₅ and f₆. This is the highest-priority fix.
+1. **Immediately resolve the Figure 3 vs. Section 3.3 contradiction.** Check whether the figures show KAN or MLP winning on jump functions and align caption, figure, and text to reflect the actual data. This is the single most urgent correction.
 
-2. **Define the noise model precisely.** Specify in a single paragraph: distribution, parameterization, how "noise level" maps to that parameter, whether test loss targets clean or noisy observations, and whether results are averaged over multiple noise draws.
+2. **Fix the optimizer mismatch for f₉.** Either run MLP and KAN under the same best optimizer for each (with clear reporting) or present a full 2×2 optimizer × architecture factorial design for the affected functions, so architectural and optimizer effects can be disentangled.
 
-3. **Run each experiment with ≥5 random seeds.** Report mean ± std on all test-loss comparisons. For the noisy experiments, additionally average over noise realizations.
+3. **Run each experiment with at least 5 random seeds and report mean ± std.** This applies to all learning curves and final test loss values. Even condensed to a supplementary table, this would substantially increase the evidential value of the comparisons.
 
-4. **Fix or remove the "section D" reference** and ensure the experimental protocol for Sections 3.5 and 4.3 is self-contained.
+4. **Add a mechanistic analysis section.** For the most striking results (KAN's failure on jump functions and success on singularities), provide at least an ablation: vary grid size for KAN on f₅/f₆ and f₇/f₈, and report whether increasing grid resolution closes the gap on jumps. This would directly test the hypothesis that spline resolution (rather than architecture fundamentals) drives the observed differences.
 
-5. **Clearly separate "best optimizer per architecture" comparisons from "fixed optimizer" comparisons.** Figure 8 is a best-of-each comparison; label it as such and present a fixed-optimizer parallel plot as an ablation.
+5. **Define the noise model precisely** in Section 4, specifying distribution, parameterization of noise levels, and whether test loss is evaluated against clean or noisy labels.
 
-6. **Provide an ablation over KAN grid sizes** (e.g., grid ∈ {3, 5, 10, 20}) for at least one function from each regularity category to establish that grid=3 is not artificially handicapping KAN.
-
-7. **Rewrite the conclusion's convergence claim** to prominently note that "faster convergence in epochs" comes with 10–70× higher wall-clock cost, and quantify the tradeoff explicitly.
+6. **Foreground the computational cost tradeoff** in the abstract and conclusion. The 10–70× runtime overhead of KAN is a practically critical result that deserves equal prominence to the accuracy comparisons.
 
 ---
 
-**Evaluation axes:**
+## Evaluation
 
-- **Novelty:** Low-to-moderate. The function taxonomy is a structured contribution, but the overall experimental setup is straightforward benchmarking with no architectural or theoretical innovation.
-- **Technical soundness:** Weak. The combination of a text–figure contradiction, an optimizer confounder for a key function class, a dangling section reference, and an undefined noise model constitutes a set of methodological gaps that are difficult to overlook.
-- **Empirical support:** Weak. Single runs, no confidence intervals, qualitative conclusions drawn from visual inspection of plots, and unresolved inconsistencies undermine confidence in all reported results.
-- **Significance:** Limited. All conclusions come from 1D toy functions; the primary regime where KAN's theory would differentiate it from MLP (multivariate decomposition) is entirely untested. The practical utility of the findings is unclear.
-- **Clarity:** Below acceptable. The missing section reference, undefined noise model, and text–figure contradiction suggest the paper was not carefully proofread prior to submission.
+| Axis | Assessment |
+|------|------------|
+| **Originality** | Low-to-moderate. The function taxonomy is useful, but the paper is explicitly incremental relative to the authors' prior work (Shen et al., 2024), and the empirical KAN-vs-MLP comparison space is now crowded. No new methodology, theoretical insight, or analytical framework is introduced. |
+| **Importance of research question** | Moderate. Knowing when KAN helps vs. hurts relative to MLP is practically relevant for the many researchers now considering KAN as an alternative. |
+| **Claim support** | Weak. The Figure 3 contradiction, optimizer mismatch for f₉, and absence of multi-seed statistics mean several headline claims cannot be taken at face value without correction. |
+| **Soundness of experiments** | Weak. Parameter matching is careful, but the absence of statistical analysis, the shallow-architecture restriction, and the optimizer mismatch undermine the controlled-comparison framing. |
+| **Clarity of writing** | Adequate. The structure is easy to follow, but the Figure 3 contradiction, imprecise noise model, and misleading category label ("severe discontinuities") are genuine clarity failures. |
+| **Value to research community** | Limited in current form. The asymmetric performance pattern across regularity classes is potentially useful, but the methodological issues mean practitioners cannot fully trust the results without replication. |
+| **Contextualization relative to prior work** | Adequate acknowledgment of the negative KAN literature; the explicit framing as an extension of Shen et al. 2024 is honest, though it weakens the novelty claim. |

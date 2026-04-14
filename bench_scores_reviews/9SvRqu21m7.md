@@ -1,106 +1,96 @@
 ## Summary
 
-Multi-Student Distillation (MSD) distills a conditional teacher diffusion model into *K* single-step student generators, each responsible for a disjoint partition of the conditioning space. Because only one student is invoked at inference time, the framework increases effective model capacity without adding inference cost. The authors instantiate MSD on top of DMD/DMD2-style distribution-matching and adversarial distillation, introduce a Teacher Score Matching (TSM) pretraining stage to enable distillation into architecturally smaller students, and report state-of-the-art one-step FID of 1.20 on ImageNet-64×64 and 8.20 on zero-shot COCO2014.
+Multi-Student Distillation (MSD) is a framework for distilling a conditional diffusion teacher into K specialized one-step student generators, each responsible for a disjoint subset of the conditioning space. At inference, routing selects a single student per query, preserving one-model latency while distributing capacity across students. The paper additionally proposes Teacher Score Matching (TSM) as a pretraining stage enabling smaller-architecture students that cannot inherit teacher weights. Applied to DMD/DMD2-style distillation on ImageNet-64×64 and zero-shot COCO text-to-image, MSD achieves state-of-the-art one-step FID scores of 1.20 and 8.20 respectively.
 
 ---
 
 ## Strengths
 
-- **State-of-the-art results on two established benchmarks with the same inference budget.** FID 1.20 on ImageNet-64×64 (surpassing DMD2's 1.28, StyleGAN-XL's 1.52, and even the teacher's SDE FID of 1.36) and 8.20 on zero-shot COCO2014 are clear, measurable improvements over strong single-student baselines. The latency table (Table 2) shows the text-to-image result is achieved at the same 0.09 s/prompt as all baselines, directly substantiating the "no additional inference cost" claim.
+- **State-of-the-art FID with a conceptually simple modification.** Using K=4 same-sized students with ADM, MSD reaches FID 1.20 on ImageNet-64×64 — surpassing DMD2 (1.28), StyleGAN-XL (1.52), CTM (1.92), and even the multi-step EDM teacher (1.36 SDE). This is a notable leap that cannot be attributed to a single obvious confound given the ablations provided.
 
-- **Non-trivial filtering design for DM (Sec. 4.2).** The decision to apply partitioned conditioning only to the KL loss while reusing the full paired dataset for the regression loss is a concrete and nontrivial design choice. The paper provides a mechanistic hypothesis (shared-weight gradient updates from out-of-partition data) and references an ablation (App. B.2) demonstrating that naïve paired-data filtering leads to worse performance. This is one of the paper's most practically important engineering contributions.
+- **TSM enables a qualitatively new regime: smaller-student distillation.** Without TSM, 4 smaller (42% fewer parameters) students fail to converge; naive post-distillation gives FID 11.67. With TSM, the same 4 students achieve FID 2.88. The ablation directly demonstrates TSM's necessity and magnitude of impact, making this a specific and well-evidenced contribution.
 
-- **TSM initialization enabling smaller-student distillation.** The three-stage pipeline (TSM → DM → ADM) addresses a documented failure mode: direct one-step distillation of architecturally smaller students from scratch fails to converge, while TSM pretraining on teacher score matching provides a viable initialization. The paper backs this with a concrete comparison: smaller students without TSM "fail to reach even proper convergence," and post-output distillation from existing one-step checkpoints shows a significant FID drop (11.67 in Table 1 vs. 2.88 with TSM).
+- **Batch-size ablation provides genuine mechanistic evidence.** Table 3 shows MSD with 4 students at B=32 (FID 2.53) outperforms a single student at B=128 (FID 2.60). This directly rules out the hypothesis that MSD gains arise solely from a larger effective batch size during training, providing evidence that condition-space partitioning itself contributes.
 
-- **Batch-size-controlled ablation (Table 3).** The paper directly compares 4 students with B=32 per student (FID 2.53) against 1 student with B=128 (FID 2.60), showing MSD is superior even under matched effective batch size. This rules out the most obvious confound and provides principled evidence that the gain is not purely a data-throughput artifact.
+- **Asymmetric data filtering for DM stage is a practically insightful design.** The discovery that using the full paired dataset for the regression loss (rather than filtering it by partition) is critical to avoid mode collapse — despite breaking strict partition specialization — is a concrete, non-obvious finding with its own ablation in Appendix B.2.
 
-- **Student-count scaling trend.** Table 3 shows a consistent improvement: 1 student (FID 2.60) → 2 (2.49) → 4 (2.37) → 8 (2.32), suggesting the framework scales gracefully with more students and is not a one-shot trick.
+- **Honest limitations section.** The authors explicitly acknowledge simple channel reduction, separate training inefficiency, heuristic partitioning, and unexplored generalization to other distillation families.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None. The core empirical claims are well-supported by the experimental results.
+None.
 
 ### Major
 
-- **Total training compute is not transparently accounted for.** The paper states it uses "significantly less resources per student" than single-student counterparts, but never reports total GPU-hours, wall-clock time, or total data passes for MSD versus DMD/DMD2 baselines. This matters because four students trained with roughly comparable per-student compute as the baseline could represent substantially more total training than the single-student baseline. Without this disclosure, it is impossible to determine whether the FID improvement reflects specialization or simply more total optimization. The batch-size ablation (Table 3) controls for effective batch size but not for total training compute. A complete training cost table in the main paper is necessary for fair comparison.
+- **Missing equivalent-total-capacity single-student baseline.** The paper's central claim is that MSD "increases model capacity without incurring more inference cost" via specialization. The natural competing hypothesis is: a single student with K× parameters (matching MSD's total) would achieve comparable or better quality. Without this comparison, it is impossible to determine whether MSD's gains arise from the specialization/routing mechanism per se or simply from more total parameters. This is arguably the most important missing experiment for substantiating the paper's core claim.
 
-- **Text-to-image partition strategy is underspecified and underanalyzed.** The paper describes the text conditioning split as: encode with SD v1.5 text encoder, pool over the temporal dimension, then "divide into 4 disjoint subsets along 4 quadrants." This description is insufficient: in a high-dimensional pooled embedding space, "4 quadrants" is not a well-defined operation — it presumably refers to a split along two chosen dimensions, but which dimensions and why are not stated. This is a reproducibility concern and a methodological gap. The paper notes that K-means on prompt embeddings yielded "vastly uneven sizes" and was thus not used, but gives no analysis of how the actual quadrant split behaves semantically or how many training prompts fall in each partition. Without this, one cannot assess whether the improvement in COCO FID is robust or driven by a few well-covered partitions.
+- **Training supervision imbalance not fully controlled.** In Stage 1 (DM), each of K students receives regression supervision over the *entire* paired dataset, not just its partition. Consequently, total regression updates across K students is K× that of a single-student DMD baseline. The batch-size ablation (Table 3) controls for batch size but not for total regression data consumed. A single-student DMD baseline trained with K× paired data or K× optimizer steps would be needed to rule out the possibility that MSD gains in Stage 1 stem from increased supervision budget rather than specialization.
 
-- **The mechanism behind the performance gain is not rigorously isolated.** The paper's central claim is that specialization — each student handling a simpler sub-distribution — is the key driver of improvement. The batch-size ablation addresses one confound, but two others remain uncontrolled: (1) total training compute across all students, and (2) total stored parameters. The paper's explanation ("each student sees a simpler mapping") is plausible but is supported only by the scaling trend and the toy experiment, neither of which isolates specialization from capacity or compute. A more principled ablation (e.g., a single student trained for matched total compute, or matched with all partitions' data concatenated) would substantially strengthen the mechanistic claim.
-
-- **Smaller-student text-to-image contribution is preliminary and the claim is overstated.** The smaller-student experiment on text-to-image uses only a single student trained on a dog-related subset (~1.2M prompts) and is evaluated qualitatively in Figure 5 only. No FID or quantitative metric on any held-out benchmark is reported. The paper explicitly acknowledges this as "preliminary exploration" due to "limited computational resources," which is fair, but the abstract and introduction present MSD's ability to distill smaller text-to-image students as a validated contribution. This claim should be scoped more explicitly.
+- **Text prompt partitioning is underspecified and lacks sensitivity analysis.** Prompts are routed by pooling SD v1.5 text embeddings and assigning them to one of 4 quadrants — a purely geometric, semantically arbitrary split. Unlike the ImageNet case where k-means vs. sequential splitting is ablated, no analogous analysis exists for the COCO setting. The paper acknowledges k-means yields uneven clusters for text, but does not report cluster sizes, balance, or semantic coherence for the quadrant split used. Since routing determines which training data each student sees and which student serves each inference query, the text results rest on an unvalidated foundation.
 
 ### Minor
 
-- **Latency reduction from smaller students is modest and the gap is not adequately explained.** A 42% reduction in parameters yields only 7% lower latency; a 71% reduction yields 23% lower latency. The paper attributes this to "simple channel reduction" and lists it as a known limitation (Sec. 6.1, point 3). However, since this directly undermines the "faster inference" motivation for the smaller-student track, it deserves more than a brief limitation note. No guidance is given on what architectural choices would yield better latency scaling, and no experiments on alternative compression strategies are shown, even in the appendix.
+- **FID as sole metric for text-to-image generation, where the gain is small.** The COCO improvement from DMD2 to MSD is 8.35 → 8.20, a difference that is at or below the known noise floor of FID on standard COCO evaluation. Adding CLIP score, precision/recall, or IS would provide corroborating evidence that the gain is real and not an artifact of FID's sensitivity to distribution geometry.
 
-- **TSM necessity is asserted but not quantitatively demonstrated in the main paper.** The paper says smaller students "fail to reach even proper convergence" without TSM, and this is a critical claim for Section 4.3. However, no training curves, FID-vs-iteration plots, or stepwise ablation (e.g., random initialization + DM vs. TSM + DM) are shown in the main text. The comparison shown (11.67 vs. 2.88 in Table 1) conflates TSM absence with a different "post-distillation" pipeline, making it hard to isolate TSM's contribution cleanly.
+- **Latency reduction from smaller students is substantially smaller than parameter reduction.** A 42% smaller student achieves only 7% lower latency; a 71% smaller student achieves 23% lower latency. This large gap is acknowledged in limitations (Sec. 6.1.3) as resulting from simple channel reduction, but it substantially weakens the practical pitch of "faster inference via smaller students." The 5% latency speedup for 83% smaller T2I students further underscores this.
 
-- **Per-partition generation quality is not reported.** With consecutive-class or quadrant-based splitting, there is no analysis of whether all students perform comparably or whether aggregate FID masks large variance across partitions. Classes near the boundaries of consecutive-class splits (e.g., class 250 and class 251 handled by different students) may not share semantic affinity; per-student FID would reveal whether this creates quality discontinuities.
+- **Student-count scaling ablation is confounded.** Table 3 keeps per-student batch size fixed while increasing K, so more students produce a larger effective batch. The FID trend (2.60→2.49→2.37→2.32 for K=1→2→4→8) thus conflates capacity benefits with batch-size benefits. A fixed-effective-batch, fixed-total-data ablation varying only K would cleanly isolate the specialization effect.
+
+- **Smaller-student text-to-image result is qualitative only.** The 83% smaller T2I student is trained solely on a dog-prompt subset and evaluated only visually (Fig. 5), with no quantitative metric and no coverage of the full prompt space. The paper is transparent that this is "preliminary exploration," but it weakens the claim that MSD enables competitive smaller-student generation in general T2I settings.
 
 ### Tiny
 
-- The ℓ₁ distance metric used in the toy experiment (Figure 3) is not defined in the main text (matched-pair distance? set-level distance?), making the toy result harder to interpret rigorously.
+- **Per-partition or per-student quality analysis is absent.** Reporting only aggregate FID conceals whether quality is uniform across partitions. Boundary classes or heterogeneous partitions might underperform systematically, which would be important information for practitioners designing MSD systems.
 
-- The exact differences between the DM, DMD, and DMD2 configurations used in each table entry are spread across Section 3.2 and experiment sections without a unified reference, making cross-table comparisons somewhat opaque.
+- **Total training compute not reported.** Training K students (with K fake score models and K discriminators in ADM) has substantially higher total cost than a single-student baseline. Providing a compute table — even in the appendix — would help practitioners calibrate the cost/quality tradeoff.
 
 ---
 
 ## Nice-to-Haves
 
-- **Train a single student with matched total training compute (or total data passes) as the 4-student MSD.** This would clarify whether the FID gain is from specialization or more total optimization. It does not require a 4× larger model (which would violate the inference constraint), just a single same-size model trained with 4× iterations/data.
-
-- **Per-partition FID breakdown.** A heatmap or table showing each student's FID on its assigned partition would reveal whether improvement is uniform or concentrated, and whether boundary classes or boundary prompts are problematic.
-
-- **Quantified routing overhead.** While the 0.09 s latency for text-to-image already implies the overhead is negligible, explicitly reporting the cost of embedding, pooling, and partition lookup would make this claim rigorous and help practitioners deploying on different hardware.
-
-- **Failure case visualization for boundary prompts.** Showing examples of prompts near quadrant boundaries in text embedding space, and whether they generate coherently, would strengthen the robustness argument for the text-to-image case.
-
-- **Multiple-run variance estimate for near-SOTA FID margins.** The gain of 1.28 → 1.20 on ImageNet-64×64 is small in absolute terms. While single-run FID is standard in the field, even a brief note on evaluation stability (e.g., re-evaluating the same checkpoint with different sampling seeds) would build confidence.
+- Validate MSD on a substantially different distillation family (e.g., consistency models or flow-matching-based methods) to empirically ground the "conceptually applicable to any distillation method" claim.
+- Explore overlapping or soft routing to assess whether disjoint hard routing imposes a quality penalty at partition boundaries or on ambiguous prompts.
+- Report precision/recall alongside FID to confirm that FID gains in ADM setting do not come at the cost of diversity (mode coverage).
+- Investigate whether a smaller number of wider students or architectural diversity (depth vs. width reduction) can improve the latency-quality tradeoff for smaller students beyond simple channel reduction.
 
 ---
 
 ## Removed Points
 
-*These points are flagged as removed; treat them with caution if revisiting.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **"No statistical significance / confidence intervals required"** (Harsh Critic): Single-run FID evaluation is the norm for large-scale image generation benchmarks in this field. Requiring multi-run CI is not standard practice in this community at this scale and should not be a blocking concern. Retained only as a Nice-to-Have.
+- **Harsh Critic — Fake score tracking instability per-student:** The concern that per-student fake score tracking becomes more unstable under partitioned training is speculative. The paper uses the alternating update regime from DMD/DMD2, which is already validated for this setting, and no empirical instability is documented.
 
-- **"Lack of novelty compared to MoE specialization"** (Harsh Critic): The paper is transparent that the MoE idea is borrowed; its contribution is adapting it to one-step distillation, designing a compatible filtering scheme for DM losses, and demonstrating it works. Applying a known idea to a new, non-trivial domain with a working training recipe is a valid ICLR contribution.
+- **Harsh Critic — ADM GAN sensitivity analysis:** Demanding a systematic analysis of discriminator capacity, per-student discriminator partitioning, and GAN stabilization hyperparameters is not standard practice for empirical systems papers in this field. The paper follows the DMD2 protocol and achieves state-of-the-art results; that is sufficient evidence of stability.
 
-- **"Comparison to teacher FID is misleading because ADM changes diversity"** (Harsh Critic): This is a known limitation of FID as a metric for all GAN/adversarial methods and applies equally to all baselines. It does not specifically undermine MSD's comparison relative to other methods.
+- **Harsh Critic — "Orthogonal" framing should be a hypothesis:** The paper does not claim to have combined MSD with efficient architectures — it says this is a "promising future direction" (Sec. 2). The "orthogonal" framing refers to conceptual independence, not an empirical claim that has been demonstrated. This is standard positioning language.
 
-- **"Eq. (2) derivation assumptions should be discussed"** (Harsh Critic): This is background material from prior work (DMD/DMD2), not a new contribution by the authors. Demanding derivation details here is out of scope.
+- **Harsh Critic — Routing/conditional generation literature underdeveloped:** Asking the paper to cover routing, retrieval-based specialization, and modular generative systems as related work is scope creep. MSD's primary contribution is in the distillation training loop; routing is a minor implementation detail (lookup table for classes, embedding quadrant for text). The paper adequately covers the relevant distillation and MoE literature.
 
-- **"Claim that routing in class-conditional generation is not trivial"** (Harsh Critic): For ImageNet class labels, routing is simply an index lookup — this criticism was clearly misapplied. The text-to-image routing concern is valid (kept above), but the class-conditional case is trivially handled.
+- **Harsh Critic — Terminological ambiguity (DM/DMD/DMD2):** The paper explicitly defines "DM" as the collective term for the techniques in Section 3.2 ("We use distribution matching (DM) to refer to all relevant techniques introduced in this section") and uses "ADM" for the adversarial extension. This is clearly defined and consistently applied.
 
-- **"4× parameter single-student baseline is the most critical missing experiment"** (Spark Finder): The paper's stated goal and primary motivation is to improve generation quality *without increasing inference cost*. A 4× larger single student would increase inference latency and is therefore outside the paper's scope. This is not a missing baseline within the paper's framing; it is scope creep. The total-compute-matched ablation (kept above) is the appropriate within-scope version of this concern.
+- **Harsh Critic — "Drop-in framework" generality overclaim:** The abstract and introduction use the qualifier "conceptually applicable," and the limitations section explicitly flags that testing on other methods is left for future work. This framing is appropriate.
 
-- **Missing related works** (not evaluated): Per instructions, no external sources are available to confirm or deny the existence of specific works; these points are not evaluated.
+- **Positive Reviewer — Storage/memory for edge devices as major weakness:** The paper explicitly notes (Sec. 5.4) that storage is often cheap and positions MSD for server-side high-quality generation. Criticizing edge-device applicability goes beyond the paper's stated target setting.
+
+- **Spark Finder — Scaling saturation analysis as needed:** Table 3 shows the 1→2→4→8 student trend, and the paper acknowledges the confound with batch size. A deeper theoretical characterization of scaling behavior is interesting but not required for the paper's empirical claims.
 
 ---
 
 ## Novel Insights
 
-The most interesting observation in the paper — and something under-analyzed — is that a very crude partition (consecutive ImageNet class indices, or arbitrary quadrant splits in text embedding space) achieves nearly the same gain as semantically motivated K-means clustering (2.37 vs. 2.39). This suggests that the benefit of MSD may arise less from *semantic coherence* of the partition and more from a simpler statistical effect: each student sees a lower-entropy conditional distribution, making the one-step score-matching problem locally easier regardless of semantic grouping. If true, this would have implications for how MSD should be designed at scale — more students with arbitrary partitioning may dominate a few students with carefully curated partitions. The paper does not pursue this direction, and a dedicated experiment varying partition coherence while controlling for number of students and total compute would be a substantive contribution to understanding one-step distillation capacity limits.
+The finding that sequential class ordering performs essentially identically to k-means clustering on pretrained embeddings (FID 2.37 vs 2.39, Table 3), while random splitting is meaningfully worse (2.45), is more informative than it first appears. It suggests the key driver of MSD's benefit is *reduction in data diversity per student* rather than *semantic coherence* of the partition per se — consecutive ImageNet classes already share implicit WordNet-based semantic locality, so "simple" sequential splitting inadvertently captures the important structure. This interpretation challenges the "specialization" narrative somewhat and, if correct, implies MSD would benefit from any partition that avoids placing maximally dissimilar classes in the same student. It also suggests that for text-conditional generation, where diversity within any partition is high regardless of strategy, the quality gains may be structurally smaller — consistent with the more modest COCO improvement (8.35→8.20) compared to ImageNet (1.28→1.20). This latent "diversity reduction per student" framing would better unify the paper's observations than the current capacity framing.
 
 ---
 
 ## Suggestions
 
-1. **Report total training GPU-hours for MSD and all single-student baselines in a single table.** Even an approximate comparison (e.g., "total compute was roughly X% more than DMD2") in the main paper would substantially improve the fairness analysis.
-
-2. **Specify the quadrant-split construction precisely:** state which two dimensions of the pooled text embedding are used, why those dimensions were chosen, and include a 2D scatter plot of training prompts colored by assigned partition.
-
-3. **Add a convergence curve comparison (with/without TSM) to the main paper.** Even a single plot showing FID vs. training iteration for TSM+DM vs. random-init+DM for smaller students would make the TSM necessity argument rigorous.
-
-4. **Report per-student FID for at least one setting** (e.g., 4-student ImageNet DM) to demonstrate quality uniformity across partitions.
-
-5. **Either remove or downscope the smaller-student text-to-image contribution to a proof-of-concept**, and adjust the abstract/introduction to accurately reflect that this direction is validated only on ImageNet-64×64 at the full-benchmark level.
-
----
-
-**Overall assessment:** MSD is an empirically strong paper with a clean idea, genuine SOTA results, and a practically useful training recipe. The DM filtering design and TSM initialization are meaningful technical contributions beyond the core "partition and distill" idea. The paper's primary vulnerability is analytical rather than empirical: the mechanism driving gains is not fully isolated, the text-to-image partition strategy is underspecified, and total training cost is not disclosed. These are substantive gaps that weaken the paper's scientific rigor without invalidating its core results. Novelty is moderate — the idea is a well-motivated adaptation of a known paradigm — but the execution and empirical payoff are high. The paper is a solid contribution but would benefit significantly from the analyses described above before its claims can be considered fully substantiated.
+- **Run the equivalent-capacity single-student baseline** (one student with K× parameters or K× training steps): this is the most important missing comparison and directly validates the specialization claim.
+- **Report total training FLOPs or GPU-hours** alongside per-student counts to enable fair cost-quality comparison with single-student baselines.
+- **Provide a matched-regression-data ablation** for the DM stage: train a single-student DMD with the same total number of paired-data regression steps as K-student MSD to isolate the specialization effect from the supervision-budget increase.
+- **Add CLIP score and/or precision/recall** for the COCO evaluation to corroborate the FID gain of 8.35→8.20, which is too small to be trusted on FID alone.
+- **Quantify routing overhead for text-to-image inference** (embedding pass + quadrant lookup) and include it in the reported latency figure to ensure the 0.09s claim is complete.
+- **Provide per-student or per-partition FID** for at least the ImageNet setting to reveal whether quality is uniform or concentrated in particular partitions.

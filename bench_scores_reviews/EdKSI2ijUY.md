@@ -1,88 +1,116 @@
 ## Summary
-LMRL-Gym is a benchmark and open-source research framework for evaluating reinforcement learning algorithms in multi-turn language model interactions. It comprises 8 tasks split between Interactive Dialogue tasks (20 Questions, Guess My City, Car Dealer) and RL Capability tests (Maze, Text-Nav, Wordle, Chess, Endgames), covering both offline and online RL settings. The benchmark is accompanied by implementations of BC, MC Returns, ILQL, and PPO, with the primary goal of enabling rapid iteration on RL algorithm development for LLMs.
+LMRL-Gym introduces a benchmark and open-source research framework for multi-turn reinforcement learning with large language models. It provides 8 tasks spanning interactive dialogue (20 Questions, Guess My City, Car Dealer) and RL capability tests (Maze, Text-Nav, Wordle, Chess, Endgames), each paired with offline datasets and online simulators. The framework includes implementations of BC, filtered BC, MC Returns, ILQL, and PPO baselines, enabling the community to develop and evaluate multi-turn RL methods beyond single-turn RLHF settings.
 
 ---
 
 ## Strengths
 
-- **Structured RL capability taxonomy:** The decomposition of tasks along five explicit capability axes (strategic decision-making, credit assignment, partial observability, trajectory stitching, complex language) in Figure 2 is a genuine methodological contribution that distinguishes this benchmark from existing NLP evaluations or text-game suites. Most prior benchmarks evaluate final task performance; this one deliberately exposes algorithmic bottlenecks.
+- **Paired FO/PO task variants are a concrete diagnostic design choice.** The Maze FO/PO and Text-Nav FO/PO pairs allow direct isolation of partial observability effects — something most prior text-game benchmarks do not systematically provide. The symbolic-vs-text Maze ablation (Appendix H) is a similarly concrete and insightful diagnostic that empirically shows where language wrapping degrades RL performance.
 
-- **Informative empirical contrast between task categories:** The finding that ILQL dominates the RL Capability tasks (especially Maze and Text-Nav) via trajectory stitching, yet is *outperformed by the simpler MC Returns on all three Interactive Dialogue tasks*, is a concrete and non-obvious finding that reveals a meaningful algorithmic gap. This points to a specific research problem: scalable TD-learning for open-vocabulary dialogue.
+- **Simultaneous provision of offline datasets and online simulators.** Unlike most prior text-game or dialogue benchmarks that support only one modality, LMRL-Gym provides both. This directly enables fair head-to-head comparison of offline and online RL methods — a distinguishing feature that makes the benchmark more practically useful for algorithm development.
 
-- **Language vs. symbolic performance gap:** The comparison of RL on the symbolic Maze vs. the language-based Maze—where online/offline Q-learning reaches optimality in the symbolic setting but degrades substantially under partial observability in language—precisely isolates language complexity as a bottleneck, not just RL difficulty in general.
+- **Empirical result that small RL-finetuned models close the gap to GPT-4 on capability tasks.** Table 2 shows that GPT-2-scale models trained with ILQL substantially outperform GPT-4 few-shot prompting on structured tasks like Maze, Text-Nav, and Wordle, providing concrete evidence that RL fine-tuning adds value beyond scale on goal-directed tasks. The divergence in dialogue tasks (where GPT-4 dominates) is a genuinely informative finding that motivates further algorithm development.
 
-- **Scope and accessibility commitment:** Supporting both offline and online RL, releasing datasets, simulators, code, and hyperparameters, and targeting GPT-2-scale models to ensure accessibility for resource-limited researchers is a substantive service to the community. The dataset sizes (up to 1M for Wordle, 625K for Chess) are large enough to support serious offline RL experimentation.
+- **Inclusion of diverse capability targets in a single benchmark suite.** By explicitly mapping tasks to properties (trajectory stitching, credit assignment, partial observability, strategic decision-making, complex language), LMRL-Gym distinguishes itself from text-game benchmarks that test only task completion without diagnostic intent. This structuring is a meaningful contribution even if the mapping needs tightening (see weaknesses).
 
 ---
 
 ## Weaknesses
 
-- **GPT-2 scale severely limits the conclusions.** All agent models are GPT-2 (up to 1.5B parameters). The paper acknowledges this briefly but frames it as a minor "limitation." In practice, this is a central constraint on every result: the relative ranking of algorithms, the difficulty of tasks, the behavior of ILQL vs. MC Returns, and the failure of Chess may all change substantially at 7B+ scale where emergent capabilities appear. A benchmark paper whose central claim is enabling *algorithmic* progress needs to demonstrate that its algorithmic rankings are at least qualitatively stable across model scale, even on one or two tasks. Without this, LMRL-Gym may be diagnosing properties of GPT-2-scale RL optimization rather than properties of algorithms in general.
+### Fatal
+None.
 
-- **No variance estimates in Table 2.** All results are single point estimates with no confidence intervals, standard deviations, or multi-seed statistics. Multi-turn RL training—especially PPO—is notoriously unstable. Without error bars, it is impossible to determine whether, e.g., the difference between ILQL (82.9) and MC Returns (87.1) on 20Qs is a meaningful algorithmic signal or run-to-run variance. For a paper whose stated value proposition is enabling *reliable* algorithm comparison, this is a significant methodological gap that undermines the core utility claim.
+### Major
 
-- **Chess task shows no meaningful RL improvement and is left undiagnosed.** Table 2 shows all methods score between 42.9 and 48.0 on Chess, tightly clustered around the dataset average of 50. No algorithm achieves a normalized score above 50, meaning no method exceeds the average offline trajectory. The paper briefly attributes PPO's slight edge to instability and calls for "better offline TD-based RL methods," but does not investigate *why* RL fails entirely on Chess at this scale—whether it is due to sparse rewards, long horizons, the combinatorially large move space, or the token-level action representation. An uninformative task that no method meaningfully solves undermines the diagnostic claim: it reveals a failure mode but does not illuminate it.
+- **No statistical reporting undermines the benchmark's core purpose.** Table 2 reports single normalized scores with no confidence intervals, standard deviations, or multi-seed evaluation for any method on any task. For a benchmark whose explicit purpose is to "gauge progress on algorithm design" and identify which RL algorithms outperform others, this is a critical gap. It is impossible to determine whether differences such as ILQL at 83.7 vs. PPO at 85.5 on PO Text-Nav, or BC variants at 47.2 vs. 48.0 on Chess, represent genuine algorithmic differences rather than noise. The benchmark cannot reliably rank methods without this information.
 
-- **ILQL underperformance on dialogue tasks is headline-without-story.** The observation that ILQL underperforms MC Returns on all three dialogue tasks is one of the paper's key findings, yet the analysis is limited to one sentence: "it is harder to scale full TD-learning" on complex text tasks. There is no diagnostic of whether the failure stems from Q/V network instability, distributional shift, hyperparameter sensitivity, or the token-level Bellman backup being poorly conditioned on long open-vocabulary sequences. For a benchmark meant to drive algorithm development, this finding needs a tighter diagnosis so researchers know *what* to fix.
+- **Inconsistency between Figure 2 capability labels and the prose undermines the benchmark's central diagnostic claim.** Figure 2 shows Chess with no credit assignment checkmark, but Section 4.2 explicitly states "The Chess, Endgames, Maze and Text-Nav tasks test credit assignment, because the RL algorithm must learn to assign credit to good actions." This is a factual internal contradiction. Additionally, Endgames does not appear in the Figure 2 table at all despite being discussed alongside Chess throughout Section 4.2. If the capability-to-task mapping — the key structural claim that distinguishes LMRL-Gym from generic benchmark suites — contains errors, the paper's diagnostic framing is weakened.
 
-- **GPT-4 scoring exactly 0 on Chess and Endgames is suspicious.** The paper uses this result to conclude that "RL fine-tuning enables goal-directed behaviors that GPT-4 cannot achieve via prompting." However, a frontier model capable of legal chess play getting 0/100 almost certainly reflects a prompting or game-state formatting failure rather than a genuine inability. If the conclusion about RL's superiority over GPT-4 on capability tasks is partly an artifact of poor GPT-4 prompting for these specific game formats, the claim is misleading. The paper should investigate this before drawing strong conclusions.
+- **Simulator validity for dialogue tasks is only partially addressed.** The paper verifies naturalness through a 40-user study (Appendix A) but natural-sounding dialogue is not the same as strategic validity or resistance to reward hacking. The paper itself acknowledges the benchmark's goal is to test whether RL algorithms can learn to "accomplish tasks in an intentional and goal-directed manner" against the simulator. If the dialogue simulator can be exploited through non-human-like patterns, high-reward policies may not correspond to meaningful persuasion or information-gathering strategies. The paper mentions automatic checks for 20Qs/Guess (where correct guessing is verifiable), and acknowledges that "natural conversations... indicate the robustness of the Buyer model to hacking," but this chain of inference is weak — naturalness is a necessary but not sufficient condition for non-exploitability in Car Dealer. No targeted adversarial audit or reward-hacking analysis is provided.
 
-- **Trajectory stitching claim is asserted but not empirically verified.** The paper designates all RL Capability tasks as testing trajectory stitching capability, but never demonstrates that the best-performing RL policy achieves returns *above any individual trajectory in the offline dataset*. Without showing that RL exceeds the offline dataset ceiling, the stitching property is an assumed design feature, not a demonstrated benchmark characteristic.
+- **GPT-4 scoring 0 on Chess and Endgames is unexplained and potentially misleading.** Table 2 shows GPT-4 at 0 on both Chess and Endgames, while GPT-2-scale RL models score in the 45–77 range. If this is because GPT-4 emits illegal moves that receive zero reward (a formatting/interface issue), it would reflect benchmark design rather than a meaningful capability gap. The paper does not explain the mechanism behind these 0 scores, which is essential for interpreting one of the most striking results in Table 2. If the 0 reflects interface mismatch rather than inability, the claim that "RL fine-tuning significantly outperforms GPT-4 on capability tasks" is substantially compromised for Chess and Endgames.
+
+### Minor
+
+- **The claim that offline RL "consistently outperforms" filtered BC is overstated.** Section 6 states offline RL "consistently outperform... the filtered BC policies," but Table 2 shows ILQL at 46.3 on Car Dealer, below filtered BC's 54.8. On Chess, differences are negligible (BC: 47.2, %BC: 42.9, MC: 46.5, ILQL: 47.3). The results are generally favorable for RL but not uniformly so; the narrative should be more calibrated.
+
+- **No training curves for any method.** The paper notes PPO instabilities in Section 6 but provides no learning curves. For a benchmark paper aimed at guiding algorithm development, the absence of convergence information — including whether methods plateau, overfit the simulator, or destabilize — reduces the practical value for researchers choosing algorithms.
+
+- **Dataset size imbalance across tasks complicates interpretation.** Table 1 shows sizes ranging from 1.24k (Maze) to 1M (Wordle). A method that performs well on Wordle may benefit from large data scale; a method that struggles on Maze or Car Dealer may reflect data scarcity rather than algorithmic weakness. The paper does not discuss or control for this in its cross-task comparisons.
+
+- **Reward function details are deferred to appendices.** Reward structure (sparse vs. dense, shaping terms, how the Car Dealer reward is computed) is not summarized in the main text. For interpreting algorithm performance differences, reward signal density is critical context.
+
+### Tiny
+
+- **The speculative attribution of ILQL's superiority to trajectory stitching is asserted, not tested.** Section 6 states "ILQL's performance on these tasks is likely due to its unique ability to perform trajectory stitching," but no controlled ablation varying the proportion of suboptimal trajectories, or comparing ILQL vs. MC Returns on trajectory-stitching-specific setups, is provided. This is a plausible hypothesis, not an empirical finding.
+
+- **No qualitative examples in the main paper of RL-trained agent behavior vs. BC.** Appendix I contains examples, but since verifying that reward improvements correspond to meaningful behavioral changes (rather than simulator quirks) is central to the benchmark's validity, at least one illustrative comparison belongs in the main text.
 
 ---
 
 ## Nice-to-Haves
 
-- **Experiments at larger model scale (e.g., 7B).** Even a subset of tasks (e.g., Maze and 20Qs) with Llama-3-8B would substantially strengthen the claim that LMRL-Gym's algorithmic rankings are generalizable and relevant to modern practice.
+- **Scaling experiments with at least one 7B-class model on a subset of tasks.** The paper explicitly notes the GPT-2/FLAN-T5 scale limitation; even a partial experiment would strengthen confidence that algorithmic rankings generalize beyond the smallest viable models.
 
-- **Learning curves with multi-seed variance.** Plotting reward vs. training steps for PPO and ILQL across 3–5 seeds would simultaneously address the variance concern and provide diagnostic insight into PPO instability.
+- **Compute cost estimates for the full benchmark.** Given the accessibility motivation, a table indicating approximate GPU-hours for each method-task combination would directly serve the audience the paper targets.
 
-- **Trajectory stitching verification.** Adding a simple analysis showing that top-1% ILQL-generated trajectories exceed the return ceiling of any individual offline trajectory would concretely validate the stitching claim.
+- **Richer failure-mode analysis for the dialogue task gap.** ILQL underperforms MC Returns on all dialogue tasks but the cause (reward sparsity, value overestimation, simulator stochasticity, long text horizons?) is unanalyzed. A structured investigation, even qualitative, would make the finding actionable for future algorithm designers.
 
-- **Additional modern baselines (e.g., Decision Transformer, filtered variants of DPO applied to multi-turn).** Decision Transformer is already cited (Chen et al., 2021a); including it as a baseline would strengthen the algorithmic coverage given it is specifically designed for offline sequence RL.
-
-- **Dataset size ablations for smaller tasks.** Car Dealer (19K) and Maze (1.24K) are 1–2 orders of magnitude smaller than other tasks. A brief analysis of how algorithm rankings shift with data quantity would clarify whether the Car Dealer results reflect task difficulty or data scarcity.
-
-- **Visualizations of successful vs. failed trajectories.** Side-by-side conversation logs where RL succeeds vs. where BC fails would help readers assess whether models are learning genuine multi-turn strategies or exploiting simulator artifacts.
+- **Controlled analysis validating the trajectory stitching diagnostic.** Varying the fraction of suboptimal trajectories in the offline dataset and measuring ILQL vs. MC Returns performance would provide empirical grounding for the trajectory stitching characterization in Figure 2.
 
 ---
 
 ## Removed Points
+*These points are flagged for removal; treat them with caution.*
 
-*These points are flagged to be removed; treat them with caution.*
+- **Critic: "The abstract overstates scope; the benchmark mixes language and game tasks."** The paper is transparent about this in Sections 1 and 4. The abstract accurately says the benchmark "covers tasks in open-ended dialogue and text games." This is not an overstatement.
 
-- **"Sim2Real gap" as a weakness (Positive Review, Weakness 1; Spark Finder #2).** The paper explicitly and prominently states: "our goal is *not* to utilize this approach to benchmark whether LLMs are *good at talking to humans*, but rather as a way to test RL algorithms." Criticizing the absence of human-evaluated deployment performance directly contradicts the stated scope of the benchmark. Removed.
+- **Critic: "Insufficient comparison table in related work."** The paper provides adequate narrative differentiation in Section 2. Demanding a formal comparison table for every possible predecessor benchmark is a formatting preference, not a scientific requirement. Removed.
 
-- **"Reward function details in appendix" as a weakness (Positive Review, Weakness 3).** Placing reward function details in the appendix is standard practice in ML papers. The table in Section 4 provides summary statistics. Not a genuine weakness.
+- **Critic: "The claim that no prior work evaluates offline RL in this way is too broad."** The paper's exact phrasing is "evaluating offline RL capabilities, which is not done by prior works" (Section 2). This is a reasonable scoping claim about the specific combination (multi-turn + offline datasets + simulators). The critic's call to "exhaustively establish" this is unreasonable given that the paper is making a combined-contribution claim. Removed.
 
-- **"Missing non-RL agentic baselines (ReAct, CoT, tool-use)" as a weakness (Positive Review, Weakness 4).** The benchmark is explicitly designed to evaluate *RL training algorithms*. Demanding comparisons to inference-time prompting methods is scope creep: a benchmark about X should not be faulted for not evaluating Y. Could be a nice-to-have for supplementary insight but not a weakness.
+- **Critic: "POMDP framing is conceptually muddy."** The paper defines states as full token histories (which are Markovian from the agent's perspective) and separately introduces partially-observable variants. This is standard in the LLM-RL literature and not muddier than necessary. The distinction the critic wants is present in the paper's FO/PO task variants. Removed.
 
-- **Token-level vs. turn-level MDP as a methodological flaw (Harsh Critic, Section 3).** Token-as-action is the standard formulation in the RL-for-LLMs literature (Snell et al., 2022a; Ziegler et al., 2020; Stiennon et al., 2020). Criticizing this as "the hardest possible formulation without justification" misrepresents the field's standard practice. Removed.
+- **Critic: "Baseline coverage too narrow; should add Decision Transformer, conservative offline RL."** The paper implements BC, filtered BC, online filtered BC, MC Returns, ILQL, PPO, and GPT-4. For a benchmark paper at ICLR this is a reasonable algorithmic sweep. Demanding additional baselines not currently standard in LLM-RL evaluation is scope creep. Removed.
 
-- **"Circular data generation invalidates results" (Harsh Critic, Section 4.1).** The paper is transparent that training and evaluation use the same GPT-2-based simulator family, and explicitly states this design prioritizes accessibility for RL algorithm comparison rather than human fidelity. The user study validating naturalness partially addresses this. The concern about reward hacking is partially addressed by automatic checks for 20Qs/Guess My City and naturalness verification for Car Dealer. While the concern is not baseless, framing it as an invalidating circularity misrepresents the paper's stated purpose. The concern about simulator strategic fidelity (not just linguistic naturalness) is retained as a nice-to-have.
+- **Critic: "Pretraining contamination from cities, chess notation, Wordle not discussed enough."** The benchmark's explicit scope (Section 1, 4.3) is to evaluate RL algorithm improvements, not to measure world knowledge. Prior knowledge may affect BC performance but is orthogonal to whether RL improves over BC. This concern does not undermine the core contribution. Removed.
 
-- **"Contributions described narratively, not in bullet form" (Harsh Critic, Introduction).** Pure formatting nitpick. Removed.
+- **Critic: "PPO sample budget cap at <100k makes comparisons unfair."** The paper explicitly discloses this constraint (Section 5). Capped online RL as a baseline for offline methods is standard and, if anything, favors the offline baselines — making it a conservative comparison. Removed.
+
+- **Strength: "The paper is well-written and the topic is important."** Generic; applies to any acceptable ICLR submission. Removed.
 
 ---
 
 ## Novel Insights
 
-The most penetrating observation across the three reviews—not made explicitly by any one of them—is that the ILQL vs. MC Returns reversal between task categories (ILQL wins on capability tasks, MC Returns wins on dialogue) may be a more fundamental signal than the paper currently treats it: it suggests that Bellman-based TD-learning, despite its theoretical advantages for stitching, encounters a qualitative break when the action space is open-vocabulary and the reward signal is episodic and sparse over long natural-language sequences. This is distinct from simple "scaling difficulty" and points toward a specific algorithmic challenge: how to regularize token-level Q/V functions when dialogue states are high-dimensional and partially unstructured. Combined with the symbolic-vs-language Maze gap, the benchmark is inadvertently revealing that language complexity itself—not just RL difficulty—is a first-class algorithmic bottleneck that existing offline RL methods are not designed to handle. This is a genuinely useful insight for algorithm designers that the paper surfaces empirically but does not synthesize clearly.
+The spark finder's most useful observation — that the benchmark currently only provides rankings, not insights into *why* methods succeed or fail — deserves emphasis beyond what the paper itself articulates. The divergence between ILQL (strong on capability tasks, weak on dialogue) and MC Returns (strong on dialogue, weak on capability tasks) is one of the most substantive empirical findings in the paper, but the mechanism is completely unanalyzed. This gap points to a genuine open problem: TD-learning appears to break down when the action space is high-entropy natural language, but the specific failure mode (value overestimation, reward sparsity, stochastic simulator responses, compounding decoding errors) is unknown. A future version of this benchmark would be substantially more valuable if it included controlled experiments varying reward density, action entropy, and simulator stochasticity independently across tasks — precisely the kind of diagnostic experiment the paired FO/PO task structure is positioned to enable, but currently does not exploit.
 
 ---
 
 ## Suggestions
 
-1. **Report variance across multiple seeds for Table 2**, even on a subset of tasks. This is the single most important fix for the paper's core utility as a benchmarking tool—without it, observed algorithm differences cannot be trusted.
+1. **Add multi-seed evaluation to Table 2 immediately.** Without variance estimates, the benchmark cannot fulfill its stated purpose of distinguishing algorithms. This is not an optional enhancement; it is a prerequisite for the core claim.
 
-2. **Diagnose the Chess RL failure more explicitly.** Report the distribution of rewards achieved by each method (not just the mean), and investigate whether the issue is reward sparsity, long horizons, or the token-level move representation. If Chess is genuinely intractable for sub-2B parameter models, say so explicitly and propose a diagnostic protocol for when it becomes tractable.
+2. **Resolve and correct the Figure 2 vs. prose inconsistency on Chess/Endgames and credit assignment.** Determine whether Chess tests credit assignment (as the prose says) or does not (as Figure 2 shows) and update both to be consistent. Add Endgames to the Figure 2 table.
 
-3. **Verify or retract the GPT-4 Chess/Endgames score.** Ablate the GPT-4 prompting format for Chess (e.g., FEN notation vs. natural language description of board state) to confirm that a score of 0 reflects model capability rather than input formatting. The conclusion about RL superiority depends on this.
+3. **Explain the mechanism behind GPT-4 scoring 0 on Chess and Endgames.** Report whether illegal move generation, output format failures, or true strategic failure is responsible. If it is interface-driven, implement legal-move retry logic or prompt standardization and report revised GPT-4 numbers. The current result, if interface-driven, misrepresents a key comparison.
 
-4. **Add a brief empirical verification of trajectory stitching.** Show the return distribution of the offline dataset and demonstrate that ILQL-trained policies produce trajectories with returns exceeding the offline ceiling on at least one task. This converts an assumed benchmark property into a demonstrated one.
+4. **Include at least one qualitative trajectory comparison (RL vs. BC vs. best dialogue baseline) in the main paper** for Car Dealer, to demonstrate that reward improvement corresponds to meaningful behavioral change rather than simulator exploitation.
 
-5. **Provide a more detailed failure analysis of ILQL on dialogue tasks.** Report training curves, KL divergence from the BC initialization, and Q/V function loss curves to diagnose whether the failure is instability, distributional shift, or a fundamental representation issue. This would make the paper's key empirical finding actionable for the community.
+5. **Add training curves for PPO and ILQL** on at least two representative tasks (one dialogue, one capability) to expose convergence, instability, and saturation patterns — central information for practitioners adopting the benchmark.
 
 ---
 
-**Overall assessment:** LMRL-Gym fills a genuine and important gap—there is no existing benchmark that provides multi-task, multi-turn RL evaluation with simulator infrastructure, offline datasets, and explicit algorithmic capability targeting. The task design is thoughtful and the open-source commitment is commendable. However, as currently presented, the empirical foundation is fragile: results are single-run on GPT-2-scale models, the Chess task reveals a failure mode that is not adequately diagnosed, and the paper's most interesting finding (the ILQL/MC Returns reversal) lacks a mechanistic explanation. The paper is a solid infrastructure contribution that falls short of being a definitive empirical study. Addressing the variance reporting, the Chess diagnosis, and the GPT-4 anomaly would substantially strengthen the paper's credibility as a reliable algorithmic testbed.
+## Paper Evaluation
+
+| Axis | Assessment |
+|---|---|
+| **Originality** | Moderate. The specific combination of multi-turn dialogue tasks, structured RL capability tests with FO/PO pairs, offline datasets, and online simulators in one package is novel. Individual components are not. |
+| **Importance of research question** | High. Multi-turn RL for LLMs is a genuine and underserved gap; infrastructure for this is valuable. |
+| **Claims well supported** | Partially. Directional findings (RL > BC, ILQL wins on capability tasks, MC Returns wins on dialogue) are plausible but lack statistical support. The Figure 2 inconsistency undermines the benchmark's diagnostic framing. |
+| **Soundness of experiments** | Moderate. Single-run results, unexplained 0 scores for GPT-4 on Chess/Endgames, and limited model scale reduce confidence in the conclusions. |
+| **Clarity of writing** | Generally clear, but with internal inconsistencies (Figure 2 vs. prose) and key experimental details deferred to appendices. |
+| **Value to research community** | High potential, conditional on the infrastructure working as described and the statistical gaps being addressed. The framework and datasets are the primary contribution. |
+| **Contextualized relative to prior work** | Adequate. The paper correctly identifies its niche (multi-turn + offline RL) but the related work is more encyclopedic than analytical. |
+
+Overall, this is a useful and timely infrastructure contribution whose empirical validation does not yet meet the standard the paper's claims require. The benchmark design — particularly the FO/PO pairing and the symbolic-vs-text ablation — reflects genuine methodological thought. But the absence of statistical reporting is a fundamental gap for a paper whose purpose is to measure algorithmic progress, and the Figure 2 inconsistency and unexplained GPT-4 results require correction before the diagnostic claims can be trusted.

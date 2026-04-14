@@ -1,19 +1,18 @@
 ## Summary
-This paper introduces Head Relevance Vectors (HRVs), a method for assigning concept-level relevance scores to individual cross-attention heads in text-to-image (T2I) diffusion models. HRVs are constructed by running inference over 2,100 random prompts and accumulating argmax-based "wins" per head, per concept, across all timesteps. The paper validates these vectors via an ordered weakening analysis (MoRHF vs. LeRHF), and applies them to three tasks: disambiguating polysemous words in generation, enhancing Prompt-to-Prompt (P2P) for image editing, and reducing catastrophic neglect in multi-concept generation via Attend-and-Excite (A&E).
+
+This paper introduces Head Relevance Vectors (HRVs), a lightweight mechanistic interpretability tool for text-to-image (T2I) diffusion models that assigns relevance scores to individual cross-attention (CA) heads with respect to human-specified visual concepts. HRVs are constructed by running competitive argmax-based attribution over 2,100 random generations and are validated through an "ordered weakening analysis" (MoRHF vs. LeRHF). The paper then applies HRV-based concept strengthening and concept adjusting to three practical tasks: polysemous-word disambiguation, attribute-based image editing (P2P-HRV), and multi-concept generation (A&E-HRV).
 
 ---
 
 ## Strengths
 
-- **Head-level mechanistic interpretability for T2I diffusion models is genuinely novel.** Prior cross-attention control methods (P2P, PnP, A&E) operate at the layer or token-map level. This paper constructs explicit concept-aligned vectors over individual CA heads — a specific and previously absent granularity for diffusion model interpretability.
+- **Head-level interpretability grounded in intervention, not just correlation.** The ordered weakening analysis (MoRHF vs. LeRHF) goes beyond showing attention correlations and provides both qualitative image evidence and quantitative CLIP-score trajectories showing that weakening the most-relevant heads for a concept removes that concept faster than weakening the least-relevant heads. This is a concrete, if imperfect, causal test, and the pattern holds across 34 concepts and is extended to SDXL.
 
-- **The ordered weakening analysis (MoRHF vs. LeRHF) is a principled evaluation tool.** Rather than passive correlation, the paper uses an intervention-based test: concepts aligned with an HRV should disappear faster when the most-relevant heads are weakened first. The CLIP-score divergence plots across nine concepts (3 in main text, 6 in appendix) and 33+ qualitative examples provide meaningful, if not exhaustive, causal evidence for the HRV's concept-specificity.
+- **No fine-tuning required and model-agnostic construction.** HRVs are constructed entirely from forward passes over random images and are applicable to different model sizes (SD v1.4: 128 heads; SDXL: 1,300 heads) without any parameter updates, making the approach practically accessible and reducing overfitting risk.
 
-- **Pareto-optimal performance in image editing, including very large human preference margins.** P2P-HRV achieves Pareto-dominance over all five baselines across all three object-attribute editing tasks (Color, Material, Geometric Patterns). For image attributes (Image Style, Weather), it receives 2.39× and 2.53× the votes of the second-best method respectively — not a marginal gain. This is the strongest empirical contribution.
+- **Strong and diverse empirical gains across three task families.** The improvements are not confined to one application. P2P-HRV achieves Pareto-optimal CLIP + BG-DINO performance on all three object-attribute editing benchmarks and receives 2.39–2.53× more human preference votes over the next-best method for image-attribute editing. A&E-HRV improves consistently over A&E across all six metric–prompt-type combinations. Polysemy misinterpretation drops from 63.0% to 15.9%. These gains span multiple evaluation protocols (automated metrics + human evaluation), reducing the chance of metric gaming.
 
-- **Scalability to SDXL (1300 CA heads) is demonstrated.** Showing that the ordered weakening behavior persists in a 10× larger head space, with 45 qualitative examples in the appendix, provides meaningful evidence that the approach is not specific to a single architecture.
-
-- **Training-free, plug-and-play design.** HRV construction requires only inference-time forward passes, and concept steering is applied via simple CA map rescaling with no per-image optimization.
+- **Directly addresses well-known diffusion model failure modes.** The paper targets polysemy misinterpretation, difficult attribute edits (material, geometric patterns, weather, style), and catastrophic neglect—all recognized problems with existing SD-based pipelines—and provides a unified head-level framework that improves on separate task-specific baselines.
 
 ---
 
@@ -24,97 +23,91 @@ None identified.
 
 ### Major
 
-- **Core HRV construction design choices are unjustified and unablated.** The method uses argmax (not soft weighting), spatial average pooling (not max), and count-based updates (not margin-weighted). None of these choices have theoretical justification or empirical ablation. Why is argmax over average spatial attention the right relevance estimator? Could a single head contribute to multiple concepts in a single update? Are the resulting HRVs sensitive to whether argmax or soft assignments are used? Without any ablation on these fundamental choices, the HRV construction is a plausible heuristic without validated design.
+- **No ablation on HRV construction robustness (concept-words and sample count).** HRVs are built using GPT-4o-generated concept-word lists (10 words per concept). There is no experiment showing that (i) the HRVs remain stable if different synonyms or a different LLM are used, (ii) the HRVs converge with far fewer than 2,100 images, or (iii) manually curated word lists yield similar patterns to GPT-4o-generated ones. Because the entire downstream pipeline inherits from these choices, the absence of such ablations makes it impossible to judge whether HRVs reflect genuine model-internal concept specialization or are artifacts of the specific lexical proxy set. This is the most critical missing experiment.
 
-- **The −2 multiplication "weakening" is not simply suppression — it flips sign and amplifies.** The ordered weakening analysis is the primary tool used to validate the interpretability claim for the entire paper. The authors apply this operation to CA maps across all timesteps. However, multiplying by −2 does not just remove a head's contribution; it inverts it and doubles its magnitude, which can destabilize the denoising process in ways unrelated to the targeted concept. The paper gives no ablation over alternative weakening strengths (e.g., 0, 0.5, −1) or alternative zeroing approaches. If the dramatic CLIP score drops under MoRHF are partly due to general denoising destabilization rather than concept-specific erasure, the core interpretability claim is weakened.
+- **No head-level vs. layer-level ablation.** The core claim is that *head-level* granularity is meaningful and useful. However, the paper never compares against a layer-level baseline (e.g., weakening entire CA layers ordered by aggregate relevance, or applying the rescaling vector at the layer level rather than per-head). If operating at the layer level achieves comparable results, the head-level framing loses its main justification. This ablation is essential given the paper's positioning.
 
-- **No comparison to simpler head-selection baselines in any downstream task.** The fundamental claim is that HRV-guided, concept-specific head weighting provides meaningful control. However, none of the three applied tasks compare against uniform scaling of all heads for the target token, random head selection, or top-K binary masking. Without this, it is impossible to determine whether the continuous HRV structure matters or whether any head-level intervention of similar magnitude would produce equivalent results. This is the single most important missing experiment.
+- **Heuristic and unjustified intervention design.** Two central design choices lack ablations or theoretical motivation: (1) the ordered weakening multiplier is −2, which flips and magnifies the CA map rather than merely attenuating it — the paper does not test zeroing, soft attenuation, or replacement with baseline activations; (2) the concept adjusting formula uses coefficients 2 and −1 with no sensitivity analysis. Since these choices directly affect all three task results, readers cannot tell how robust the gains are to these hyperparameters.
 
-- **Polysemy task (Section 5.1) lacks any competitive baseline.** The reported improvement from 63.0% to 15.9% misinterpretation rate is striking, but the only comparison is SD vs. SD-HRV. Obvious alternatives — prompt engineering (e.g., "a vase in the color lavender, not the plant"), CLIP text-encoder disambiguation, or alternative CA control methods — are not tested. Without these, the magnitude of the gain cannot be properly contextualized, and it is unclear whether a lightweight textual fix would achieve similar results.
-
-- **Missing ablation on the steering coefficients (2 and −1) in concept adjusting.** These constants directly drive the downstream results in polysemy and editing tasks. The paper provides no sensitivity analysis or theoretical justification for why 2·HRV_desired − 1·HRV_undesired is the right formulation. This matters especially because the rescaling vector can go negative for some heads, and the behavior in that regime is not discussed.
-
-- **No systematic quantitative summary of the ordered weakening validation across all 34 concepts.** The main text shows 3 concepts; the appendix shows 9. A summary metric — e.g., area between MoRHF and LeRHF CLIP-score curves across all 34 concepts — would strongly substantiate the interpretability claim. As written, the reader cannot tell whether the shown concepts are representative or cherry-picked.
+- **Polysemy evaluation uses only 10 manually chosen cases.** The headline result — misinterpretation dropping from 63.0% to 15.9% — is computed over 10 cases × 10 seeds = 100 total images. This is a small and potentially cherry-picked set. At ICLR, a claim of this magnitude warrants a broader, ideally randomly sampled evaluation. The human evaluation protocol details (number of raters, inter-rater agreement) are deferred entirely to the appendix.
 
 ### Minor
 
-- **Concept vocabulary sensitivity is not evaluated.** HRVs depend entirely on GPT-4o's selection of 10 concept-words per concept. The paper shows in Appendix J that new concepts can be added, but does not test whether using different words (or fewer words) for existing concepts would change the HRVs substantially. This is important because HRVs may capture lexical statistics of the concept-word set as much as visual model structure.
+- **SDXL generalization claim is only partially supported.** Section 6.1 shows ordered weakening patterns for SDXL and provides supporting results in Appendix G, but does not apply P2P-HRV or A&E-HRV to SDXL. The generalization claim in the abstract and conclusion is therefore only partially substantiated — the analysis transfers, but it is unknown whether the downstream steering benefits transfer.
 
-- **SDXL downstream tasks are absent.** The scalability claim in Section 6.1 rests only on the ordered weakening analysis. None of the three applied tasks are demonstrated on SDXL. At minimum, one task should be shown on SDXL to substantiate the generalization claim.
+- **Timestep-invariance claim is too strong for the main-paper evidence.** Section 6.2 states that "generation timesteps do not significantly affect the head relevance patterns" based primarily on a t-SNE visualization. t-SNE is not a reliable tool for establishing the absence of an effect. The paper mentions cosine similarity plots in Appendix I, but the main-paper claim should be hedged or the quantitative evidence brought forward.
 
-- **Head overlap across concepts is not analyzed.** If many of the 34 concepts share the same high-relevance heads, the concept adjusting formulation could produce near-zero or sign-flipped rescaling vectors, undermining the method. A 128×34 HRV heatmap or inter-concept correlation matrix is conspicuously absent and would directly reveal whether heads specialize or are broadly shared.
+- **CLIP-based validation of HRVs is partially circular.** HRVs are constructed using concept-word proxies derived from the CLIP embedding space, and the ordered weakening analysis is then evaluated using CLIP image-text similarity to those same concept-words. The signal is real — image content does change — but the metric is not fully independent of the construction procedure. A complementary evaluation (e.g., human annotation of concept presence during ordered weakening) would break this circularity.
 
-- **Human evaluation methodology is underspecified in the main text.** Annotator count, inter-annotator agreement, and evaluation instructions are deferred to appendices for both the polysemy and image editing studies. Given that the polysemy result (63%→15.9%) is one of the headline claims, these details should appear in the main text.
-
-- **Computational cost of HRV construction is not reported.** The HRV construction iterates over 2,100 images × 128 heads × 50 timesteps. GPU hours and memory requirements are never reported, making it unclear whether this is practical for new model releases or different hardware settings.
+- **No analysis of head-assignment quality (entropy/coverage of HRVs).** The argmax assignment forces every head into exactly one concept per update. The paper does not report what fraction of heads have high-confidence, clean assignments vs. near-uniform relevance distributions. If most heads are diffusely assigned, the "alignment with human concepts" claim applies only to a subset that is never characterized.
 
 ### Tiny
 
-- The notation uses H ambiguously for both the number of CA heads (128) and the spatial height of the latent (e.g., "Q^(h) ∈ R^{H²×F}"), which creates unnecessary confusion when reading the method section.
+- **The notation** in Sections 3.2–3.3 uses *R* for spatial resolution in the CA map and *H* for the number of heads in the query shape, but *H* is also the number of heads globally. The paper should use distinct symbols (e.g., *S* for spatial dimension) to avoid ambiguity.
 
-- The main text defers too many experimental details to appendices, including method specifics for P2P-HRV and A&E-HRV; a self-contained description of these modifications would aid reproducibility.
+- **The exact U-Net indexing** of the 128 global head positions across multiple layers and resolutions is not spelled out in the main paper, making independent reimplementation harder than necessary.
 
 ---
 
 ## Nice-to-Haves
 
-- A layer-wise breakdown of HRVs would be informative: are high-relevance heads concentrated in specific U-Net layers or resolution levels, or spread uniformly? Given that SD's U-Net has cross-attention at multiple resolutions, this structural analysis could yield interesting mechanistic insights.
+- A prompt-engineering or simple-rephrasing baseline for the polysemy task (e.g., replacing "lavender" with "light purple") would contextualize how much of the gain requires HRVs vs. how much can be trivially recovered by rewording. This would not undermine the contribution but would make the claim more precise.
 
-- The t-SNE analysis in Section 6.2 (claiming timesteps do not significantly affect HRV patterns) is only weakly supported. A quantitative analysis — within-concept across-timestep cosine similarity vs. between-concept similarity — would make this finding credible and publishable on its own.
+- An analysis of whether a subset of timesteps (e.g., only early denoising steps) is sufficient for HRV construction, given that Section 6.2 suggests timestep variation is small. This could substantially reduce the computational cost of HRV construction.
 
-- Downstream experiments on SDXL (at least one task), to fully substantiate the generalization claim.
+- Reporting raw vote percentages and inter-rater agreement statistics alongside the normalized HP-scores in Table 1 would make the human evaluation easier to interpret.
 
-- A brief discussion of potential misuse (e.g., covert concept steering for content manipulation) would be appropriate for a paper about fine-grained semantic control.
+- Extension of at least one downstream task (e.g., image editing) to SDXL to demonstrate that the practical benefits of HRVs also scale to larger models.
 
 ---
 
 ## Removed Points
-*These points are flagged for removal — treat them with caution.*
+*These points are flagged for removal; treat them with caution.*
 
-- **"Insufficient engagement with attribution/probing literature"** (Reviewer 1): The paper's contribution is primarily empirical and applied; demanding deeper engagement with representation probing or causal mediation literature is scope creep for a paper positioned as a systems/application contribution to T2I control.
+- **"Missing related works" criticisms** (from harsh critic): Per review policy, we do not flag missing related works without access to external sources. Removed entirely.
 
-- **"Notation/conceptual inconsistency in spatial dimensions"** (Reviewer 1): The critic conflates H (number of heads, 128) with H (spatial height of latent, R). The paper is clear in context that R is the spatial dimension; the apparent inconsistency is a surface-level notation ambiguity, not a methodological error.
+- **Complaints about missing baselines (Direct Inversion, InfEdit, StyleDiffusion, etc.)** (from spark finder): Per review policy, criticisms claiming a cited or available method was omitted cannot be validated without external sources. The existing comparison set (SDEdit, P2P, PnP, MasaCtrl, FPE) is already reasonably broad. Moved to a soft nice-to-have at most.
 
-- **"Human preference scores normalized to P2P-HRV = 100 hides absolute rates"** (Reviewer 1): This is a formatting/presentation style choice, not a methodological flaw. The relative gaps and vote ratios (2.39×, 2.53×) are clearly reported.
+- **The -2 weakening "flips sign and is nonlocal, inducing artifacts"** (from harsh critic): This is partially addressed by the paper itself, which notes the weakening is inspired by P2P's rescaling technique and is tested across 34 concepts with consistent MoRHF/LeRHF separation. The concern about the specific choice is kept as a methodological weakness (ablation missing), but the framing that it necessarily induces unrelated artifacts is speculative and removed.
 
-- **"Prior T2I methods manipulate finer granularity than claimed"** (Reviewer 1): This is a related-work positioning dispute. The paper's specific claim is about head-level control as opposed to token-map or layer-level control; no cited prior work constructs concept-aligned head vectors in this way.
+- **Fairness concern about SDEdit being tested at only 0.5 and 0.7 noise strength** (from harsh critic): SDEdit's noise strength is its main hyperparameter; 0.5 and 0.7 bracket the typical useful range. There is no reason to believe additional values would flip the comparison, especially given the Pareto-optimal scatter plots. Removed.
 
-- **"Leakage through concept labels in polysemy section"** (Reviewer 1): The method intentionally requires identifying desired/undesired concepts, which is part of the user-control design. Calling this "leakage" mischaracterizes the intended use case.
+- **Concern that comparison with methods of "unfavorable" baseline tuning benefits the baseline** (from harsh critic re: P2P compatibility): The paper's method is P2P + HRV vs. standalone baselines. This is intentional — adding HRV on top of P2P is itself the contribution. The comparison is not unfair to competing methods. Removed.
 
-- **"HRVs must be reconstructed for each model version, limiting universality"** (Reviewer 2): The paper never claims cross-model HRV transfer. Re-constructing HRVs for a new model is a one-time cost and is not presented as a limitation by the authors. Criticizing a scope not claimed is not a valid weakness.
+- **Broader impact / dual-use discussion absence** (from harsh critic): While a more thorough discussion would be welcome, this is not a substantive weakness for ICLR in the absence of unusual risk. Removed as a standalone weakness; can be a tiny nice-to-have.
 
-- **"Comparison to nonce-word substitutions to distinguish concept grounding from lexical memorization"** (Reviewer 1): This is a sophisticated mechanistic interpretability control that goes well beyond the paper's stated scope of practical utility. Moving to nice-to-have would be appropriate, but this is a deep theoretical validation the paper does not claim to provide.
+- **Claim that the paper's framing as "mechanistic interpretability" is misleading** (from harsh critic): The paper explicitly situates its contribution as a head-level attribution and intervention framework. The interpretability literature has a broad spectrum, and the ordered weakening analysis is a legitimate (if imperfect) intervention-based validation. The framing is defensible; overstating this as a fatal framing error is inappropriate. Removed.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel conceptual insight surfaced by synthesizing the three reviews is the **head overlap problem** identified by Spark Finder: if the 34 concepts share substantial head overlap (i.e., many concepts have similarly high relevance scores for the same heads), then the concept adjusting formula (2·HRV_desired − 1·HRV_undesired) could systematically produce vectors with many near-zero or negative entries, potentially degrading rather than steering generation. The paper never analyzes inter-concept head overlap, which is both a significant methodological gap and an interesting scientific question — if heads are highly specialized per concept, that is strong evidence for the mechanistic claim; if they are highly shared, the steering mechanism's success would need a different explanation. A 128×34 HRV heatmap could resolve this and would constitute a substantive addition to the mechanistic interpretability literature.
+The most genuinely novel observation across the three reviews is the possibility that the argmax-based competitive assignment — rather than being merely an engineering convenience — may implicitly implement a kind of winner-take-all specialization test: heads are assigned to the concept whose key-projected embedding they most strongly correlate with, under conditions of diverse concurrent competition. Whether this actually produces sparse, semantically pure HRVs (as the downstream results suggest) or merely reflects prompt co-occurrence statistics is a deep open question that the paper raises but does not fully resolve. A related insight is that the timestep-invariance pattern (Section 6.2), if confirmed quantitatively, would suggest that concept-relevant CA heads maintain stable specialization throughout the denoising trajectory — a non-obvious property that has implications for understanding how semantic information flows through the diffusion U-Net over time.
 
 ---
 
 ## Suggestions
 
-1. **Add uniform-head-scaling and random-head-selection baselines to all three downstream tasks.** This is the highest-priority experiment — it directly validates whether HRV structure is necessary or whether any head-level intervention of similar magnitude produces the same effect.
+1. **Run the concept-word sensitivity ablation.** Swap GPT-4o-generated words for manually curated ones or for an alternative LLM, and report HRV cosine similarity between the two construction runs. Even a single concept tested across 3–4 different word-list variants would substantially increase confidence in robustness.
 
-2. **Ablate the −2 weakening multiplier** with values in {0, 0.5, 1.0, −1.0, −2.0} and show whether MoRHF/LeRHF divergence is specific to sign-flipping or holds for simpler suppression (multiplying by 0 or 0.5). If the result holds under zeroing, the interpretability validation is substantially more convincing.
+2. **Add a layer-level control baseline.** Replicate the ordered weakening and at least one task (e.g., image editing) using layer-level relevance aggregation instead of head-level. This is the single most important ablation for the paper's core claim of head-level granularity.
 
-3. **Add at least one competitive baseline to the polysemy experiment** — e.g., prompt engineering by appending an explicit concept clarifier. The current setup only demonstrates SD-HRV > SD, which leaves open whether any prompt modification would achieve the same result.
+3. **Ablate the −2 weakening coefficient and the {2, −1} concept-adjusting coefficients.** A simple sweep over {−1, −2, 0 (zeroing), 0.5} for weakening and over a few coefficient pairs for concept adjusting would directly inform both methodological rigor and practical reproducibility.
 
-4. **Report a summary metric for ordered weakening across all 34 concepts** — e.g., area under the MoRHF curve divided by area under the LeRHF curve — rather than displaying only 9 of 34 CLIP-score plots.
+4. **Expand the polysemy benchmark.** Sample 30–50 polysemous-word prompts semi-randomly (e.g., from a curated list of known CLIP ambiguities) rather than 10 manually chosen cases, and report human agreement statistics alongside the misinterpretation rate.
 
-5. **Include a 128×34 HRV heatmap** showing concept–head relevance structure. This would reveal whether heads specialize per concept (supporting the mechanistic claim) or are broadly shared (requiring alternative explanation).
-
-6. **Conduct a sensitivity analysis on the concept-word vocabulary**: test whether using different GPT-4o–generated words or varying the number of words per concept (e.g., 5 vs. 10 vs. 20) significantly changes downstream HRV quality.
-
-7. **Report GPU hours for HRV construction** and test whether a smaller image set (e.g., 500) produces HRVs of comparable quality, to assess practical adoption cost for new model versions.
+5. **Bring the cosine similarity timestep analysis from Appendix I into the main paper** (or at minimum replace the strong claim "do not significantly affect" with a hedged statement supported by the quantitative evidence in the appendix).
 
 ---
 
-**Evaluation summary:**
+## Paper Evaluation
 
-- *Novelty*: Moderate-to-strong. HRVs as concept-aligned head-level interpretability objects for T2I diffusion are a novel contribution; the downstream applications build on well-established baselines (P2P, A&E) in a principled way.
-- *Technical soundness*: Moderate. The HRV construction and the validation via ordered weakening both contain unjustified design choices that substantially weaken the mechanistic claims. The method works empirically but is under-analyzed.
-- *Empirical support*: Moderate-to-strong for image editing (Pareto-optimal, large human preference margins); weaker for polysemy (no competitive baseline) and multi-concept generation (modest 2–6% gains).
-- *Significance*: Moderate-to-strong. Bridging interpretability and controllability at the head level is a meaningful contribution to both communities.
-- *Clarity*: Generally clear at a high level; notation ambiguities and heavy reliance on appendices for key experimental details reduce reproducibility from the main text alone.
+| Axis | Assessment |
+|---|---|
+| **Originality** | Moderate-to-high. Head-level attribution vectors for T2I diffusion models constructed via competitive argmax over random generations are not a direct extension of prior work. The connection to ordered intervention (MoRHF/LeRHF) as a validation strategy is also a meaningful contribution. |
+| **Importance of research question** | High. Understanding which parts of cross-attention encode which concepts is a foundational question for controllable and trustworthy generation. |
+| **Claims well-supported** | Partially. The downstream task improvements are well-evidenced by multiple metrics and human evaluation. The core interpretability claim (heads genuinely align with concepts) is supported directionally but would benefit from ablations on construction robustness and a head-level vs. layer-level comparison. |
+| **Soundness of experiments** | Moderate. Baselines are appropriate and comparisons are reasonably fair. Key methodological choices (−2 coefficient, concept-adjusting formula) are unjustified empirically. The polysemy sample size is small. |
+| **Clarity of writing** | Good. The paper is accessible and the figures are informative. Some notation ambiguity exists (dual use of H), and key design decisions are insufficiently motivated in the main text. |
+| **Value to the research community** | High for practitioners working with SD-family models. HRVs are simple to compute, require no training, and yield meaningful control improvements. The code is released. |
+| **Contextualization relative to prior work** | Adequate. The distinction from prior whole-layer attention manipulation is drawn clearly. The paper could more sharply position HRVs relative to attention head importance estimation in the NLP and vision transformer literature. |

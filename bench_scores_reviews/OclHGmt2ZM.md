@@ -1,20 +1,18 @@
----
-
 ## Summary
 
-CMamba is a Mamba-based model for multivariate time series forecasting that addresses vanilla Mamba's lack of cross-channel dependency modeling. It introduces three components: (1) M-Mamba, a modified Mamba block tailored for time-series patches that removes the convolution branch, uses a feature-independent transition matrix A, and makes the skip connection D data-dependent; (2) GDD-MLP, a global data-dependent MLP for efficient cross-channel mixing; and (3) Channel Mixup, a training-time augmentation that linearly combines channels within a sample to reduce overfitting in channel-dependent models. Experiments across seven standard forecasting benchmarks show competitive performance with significantly lower computational overhead than attention-based channel-mixing alternatives.
+CMamba is a multivariate time series forecasting model that adapts the Mamba state space model to better handle cross-channel dependencies. It introduces three components: M-Mamba (a modified Mamba with feature-independent A and data-dependent D), GDD-MLP (a lightweight channel mixing module using pooled descriptors to generate data-dependent affine modulation weights), and Channel Mixup (an augmentation strategy that linearly combines channels within a sample to improve generalization of channel-dependent models). The model is evaluated on seven benchmark datasets and the channel modules are shown to transfer to other architectures.
 
 ---
 
 ## Strengths
 
-- **Demonstrated computational efficiency of GDD-MLP.** Table 5 provides direct FLOPs measurements showing a 0.35–1.35% overhead increase even for the 862-channel Traffic dataset. This concretely supports the efficiency claim over self-attention-based channel mixing, and is a specific, quantified contribution rather than a qualitative assertion.
+- **GDD-MLP and Channel Mixup as transferable modules (Table 4):** The demonstration that these two components improve four architecturally diverse models (iTransformer, PatchTST, RLinear, TimesNet) by an average of ~5% is a concrete and specific result that goes beyond the usual claim of a standalone model. The improvements for CI models (e.g., +17.8% MSE reduction for PatchTST on Electricity) are especially notable.
 
-- **Modular versatility validated across diverse architectures.** Table 4 shows consistent improvement when GDD-MLP and Channel Mixup are inserted into four architecturally distinct models — iTransformer (CD/Transformer), PatchTST (CI/Transformer), RLinear (CI/Linear), and TimesNet (CD/Conv) — with an average ~5% gain. The especially large gains on CI models (PatchTST: 17.8% MSE improvement on Electricity) suggest the modules address a genuine gap in CI architectures. This cross-model portability is a meaningful contribution that distinguishes the paper from pure CMamba-architecture engineering.
+- **Negligible computational overhead for channel modeling:** Table 5 shows that GDD-MLP adds only 1.35% FLOPs even for the 862-channel Traffic dataset, making the channel-dependent approach practical at scale. This distinguishes the work from heavier attention-based channel mixing like iTransformer.
 
-- **Insightful diagnosis of Mamba component suitability for time-series patching.** The ablation in Table 2 reveals that vanilla Mamba's convolution branch is indeed redundant in a patch-based regime, and that making the skip-connection D data-dependent provides incremental benefit. While the ablation is narrow (Weather only), the findings are conceptually coherent: patching already provides local aggregation, making conv redundant, and D-dependence addresses within-patch variation across channels. This is a non-obvious, empirically-grounded contribution that differs from simply transplanting Mamba to a new domain.
+- **Channel Mixup is a genuinely novel adaptation of the mixup paradigm:** Rather than interpolating across samples from different time windows (which disrupts temporal structure), the method mixes channels within the same sample, preserving shared temporal characteristics while synthesizing virtual training channels. This is a principled, non-obvious design choice backed by the ablation in Table 3 and the training curve analysis in Figure 4.
 
-- **Clear explanation and concrete ablation of Channel Mixup's role.** Table 3 directly demonstrates that GDD-MLP alone degrades performance on Traffic (MSE 0.479 → 0.525) while GDD-MLP + Channel Mixup recovers and surpasses the baseline (0.444). This is an honest and useful empirical finding, and the optimization loss curves in Fig. 4 visually corroborate the overfitting story.
+- **The data-dependence + global receptive field diagnosis is constructive:** The identification that standard MLP channel mixing is position-dependent and locally receptive (unlike self-attention) is a concise and action-guiding characterization. It motivates both GDD-MLP and Channel Mixup in a unified way, and Table 3 provides quantitative support—particularly the striking failure of GDD-MLP alone on Traffic (MSE 0.525 → 0.444 when combined with Channel Mixup), which is consistent with the overfitting/distribution-shift hypothesis.
 
 ---
 
@@ -25,85 +23,82 @@ None.
 
 ### Major
 
-- **Absence of Mamba-based baselines in Table 1.** The paper explicitly discusses S-Mamba, Bi-Mamba+, and Time-SSM in the Related Work section and even criticizes S-Mamba for "large computational overhead." Yet none of these appear in the main comparison table. For a paper whose core claim is a *better adaptation of Mamba* for multivariate forecasting, the absence of the closest competitors leaves the most important performance claim (superiority within the SSM family) entirely unsubstantiated.
+- **No direct comparison to Mamba-based time series forecasting baselines (S-Mamba, Bi-Mamba+, Time-SSM).** The paper explicitly positions itself as improving Mamba for multivariate forecasting and discusses these models in the related work section, yet the main results table (Table 1) contains zero Mamba-based competitors—only Transformer, Linear, and CNN models. The core claim that CMamba is a superior Mamba adaptation is therefore entirely unsubstantiated relative to its direct competition. This is the single most damaging gap for the paper's stated framing.
 
-- **Table 1 highlighting errors that misrepresent the state-of-the-art claim.** From the text-extracted table, CMamba's results are highlighted as best (red) in settings where they are not:
-  - ETTh2 MSE: CMamba 0.273 vs. ModernTCN 0.228 — ModernTCN is clearly better, yet CMamba is highlighted red.
-  - ETTm2 MSE: CMamba 0.468 vs. TimesNet 0.412 / RLinear 0.422 — CMamba is markedly worse, yet highlighted red.
-  The paper claims "top 1 in 65 out of 70 settings" — this count needs careful reexamination. These errors directly undermine the paper's primary empirical contribution claim.
+- **Traffic result in Table 1 contains a likely error that compromises the paper's empirical claims.** Table 1 reports CMamba on Traffic as MSE 0.444 / MAE 0.645 (highlighted as best), while iTransformer shows MSE 0.428 / MAE 0.262. On both metrics, iTransformer clearly outperforms CMamba on Traffic. Furthermore, CMamba's own ablation table (Table 3) reports MAE 0.265 for the full model on Traffic—inconsistent with the 0.645 in Table 1. This is almost certainly a table formatting error in Table 1, but as presented, it makes CMamba's "top 1 in 13/14 settings" claim untrustworthy. The authors must reconcile this discrepancy: if CMamba does not actually win on Traffic, the claim should be corrected.
 
-- **Ambiguity in GDD-MLP's cross-channel interaction mechanism.** Eq. 5 applies MLP_1 and MLP_2 to `Pooling(H_t)`, where pooling over the embedding dimension gives descriptors F^l ∈ R^{V×N}. The critical question — whether the MLP processes the full V×N descriptor *jointly* (enabling cross-channel information flow) or operates *independently per (v,n)* entry (reducing it to SE-style per-channel dynamic scaling with no actual cross-channel dependency) — is never made explicit in the paper. If the latter, GDD-MLP does not capture cross-channel dependencies at all, only performs dynamic per-channel modulation, which contradicts the central contribution claim. The paper must clarify the operating dimension of MLP_1/MLP_2 and provide evidence that cross-channel information flows through the weight generation process.
-
-- **Severe GDD-MLP failure on Traffic is under-analyzed.** Using GDD-MLP alone degrades MSE on Traffic from 0.479 to 0.525 (a ~10% regression). The paper attributes this to CD overfitting but provides no further analysis: no train/validation gap comparison, no exploration of whether the failure correlates with channel count (Traffic has 862 channels), and no discussion of when one can expect GDD-MLP to help vs. hurt. This failure mode is significant enough that practitioners cannot safely apply GDD-MLP standalone without Channel Mixup, and the conditions under which it is safe are unknown.
+- **Baseline results largely inherited from iTransformer without unified rerunning.** The paper explicitly states it "reuses most baseline results from iTransformer." For ICLR-level empirical claims, this introduces uncertainty: different implementations, preprocessing, tuning budgets, and normalization can materially affect results, particularly for models like PatchTST and DLinear whose optimal settings may differ from those used in iTransformer's paper. At minimum, the strongest Transformer-based competitors (iTransformer, PatchTST) should be rerun under the paper's exact protocol.
 
 ### Minor
 
-- **M-Mamba ablation is limited to a single dataset (Weather).** The three design choices (remove conv, feature-independent A, data-dependent D) are core architectural contributions of M-Mamba. Validating them only on Weather — where effect sizes are tiny (0.240→0.237 MSE) — is insufficient to support the strong architectural claim that "convolution operation and gated z-branch are redundant for time series forecasting." Multi-dataset validation is needed.
+- **M-Mamba ablation (Table 2) is too narrow to support architectural conclusions.** The ablation studies the three modifications only on the Weather dataset, with differences between cases ranging from 0.001 to 0.003 MSE—margins indistinguishable from noise given that no standard deviations are reported. These are insufficient to conclude "the convolution operation and the gated z-branch are redundant" in general. At minimum, two to three additional datasets should be covered.
 
-- **GDD-MLP equation block (Eq. 11) suggests a sequential layout inconsistent with Fig. 2's parallel illustration.** Eq. 11 feeds M-Mamba output directly into GDD-MLP with only a post-GDD-MLP residual, while Fig. 2(b) depicts them as parallel branches. The actual data flow needs to be unambiguously stated to ensure reproducibility.
+- **GDD-MLP is affine modulation (SE-style), not full cross-channel mixing—but is described as the latter.** Equation 6 implements H'_t = Weight_t ⊙ H_t + Bias_t where Weight and Bias are generated from pooled per-channel descriptors. This is channel recalibration: each channel's features are rescaled and shifted based on that channel's own summary statistics and shared MLP, with no direct channel-to-channel interaction. The paper repeatedly claims GDD-MLP "captures cross-channel dependencies," but that interaction is only implicit through the shared MLP weights and pooled global descriptors. The paper should describe the mechanism more precisely to avoid overclaiming.
 
-- **A ∈ R^3 for M-Mamba is stated but not explained.** The paper says "A ∈ R^3 in M-Mamba" without clarifying whether this means the state size S=3 or a different parameterization. If S=3, this is an unusually small state and the rationale for this choice is missing.
+- **No controlled ablation isolating the two claimed failure modes of standard MLP.** The paper argues MLP fails due to lacking *both* data-dependence and a global receptive field. However, the ablation only compares (a) plain MLP vs. (b) GDD-MLP, which adds both properties simultaneously. An intermediate ablation—e.g., a data-dependent but patch-local MLP, or a global but static (non-data-dependent) pooling-based MLP—would determine whether both properties are genuinely necessary or whether one dominates.
 
-- **No end-to-end runtime or memory comparison with key competitors.** While Table 5 reports FLOPs for GDD-MLP in isolation, the paper never reports end-to-end training/inference time or memory footprint against iTransformer or S-Mamba. Since efficiency is a primary motivation for GDD-MLP over self-attention, this comparison should be direct and system-level.
+- **Generalizability experiment (Table 4) covers only 2 of 7 datasets.** Table 4 tests GDD-MLP + Channel Mixup on Electricity and Weather, but Table 3 already shows that these modules behave very differently on Traffic (GDD-MLP alone causes +9.6% MSE degradation before Channel Mixup rescues it). Omitting Traffic and the ETT datasets from the generalizability claim leaves the most challenging case unaddressed.
+
+- **No vanilla Mamba forecasting baseline anywhere in main tables.** The paper argues vanilla Mamba components are unsuitable for multivariate forecasting, but never provides forecasting numbers for a vanilla Mamba applied to the same benchmarks. The central architectural claim lacks a quantitative starting point.
 
 ### Tiny
 
-- **Channel Mixup hyperparameter σ is not discussed in the main paper.** The distribution of λ is Gaussian with mean 0 and std σ, but σ's value and its sensitivity are deferred entirely to the appendix. Even a single sentence noting the default value and its robustness would help assess reproducibility from the main text.
+- **σ hyperparameter for Channel Mixup is not reported or ablated.** Algorithm 1 uses λ ~ N(0, σ²), and the choice of σ controls the degree of channel perturbation. Neither the value used nor a sensitivity analysis appears in the main text. This matters because too large σ could meaningfully distort labels.
 
-- **Notation inconsistency in Section 3.1.** The paper writes "X_{v,v}" for the sequence of channel v, which should presumably be "X_{:,v}." This is a minor typo but affects readability of the preliminary setup.
+- **Training objective (loss function) is never stated explicitly.** The paper reports MSE and MAE as metrics but never writes down the training loss. It is presumably MSE, but this should be stated.
+
+- **Notation inconsistency in Section 3.1:** The paper writes "X_{v,v} as the entire sequence of the channel indexed by v," but the intended notation should be X_{:,v} (all time steps, channel v). As written, both subscripts use the same index name, which is ambiguous.
 
 ---
 
 ## Nice-to-Haves
 
-- **Controlled experiment isolating data-dependence vs. global receptive field in GDD-MLP.** The paper argues MLP fails because it lacks *both* data-dependence *and* global receptive field. A 2×2 ablation (local/global × static/dynamic) would directly validate which factor drives performance and would substantially strengthen the paper's explanatory contribution.
+- **Visualization of GDD-MLP weights as a channel dependency matrix.** For a dataset with interpretable channels (e.g., ETT with physically meaningful quantities like HULL/MULL), visualizing which channels receive high/low modulation weights would validate that GDD-MLP learns semantically meaningful dependencies rather than acting purely as a regularizer.
 
-- **Sensitivity analysis for Channel Mixup σ.** Since the λ ~ N(0, σ²) can generate negative values and arbitrarily large perturbations, understanding how σ affects performance would help practitioners configure the method and clarify whether it is functioning as true channel mixup or as noise injection.
+- **Per-horizon Traffic breakdown.** Given the anomalies in the Traffic results, showing MSE and MAE across the four prediction horizons (96, 192, 336, 720) on Traffic would reveal whether any issues are horizon-specific and build confidence in the reported numbers.
 
-- **Analysis of GDD-MLP channel dependency patterns.** Weight heatmaps from GDD-MLP across correlated vs. uncorrelated channel pairs (e.g., in ETT where HULL/MULL relationships are explicitly cited as motivation) would provide interpretable validation that the module captures the claimed type of cross-channel dependency.
+- **Comparison of CMamba vs. iTransformer/PatchTST as look-back length grows (Figure 5).** Figure 5 only shows CMamba's trajectory. Showing that CMamba benefits more from longer look-back than Transformer baselines would validate the claimed long-range modeling advantage of the SSM design.
 
-- **Discussion of limitations in the conclusion.** The paper should acknowledge: (a) semantic risks of Channel Mixup for heterogeneous physical variables; (b) conditions under which GDD-MLP alone may degrade performance; (c) scope of efficiency claims (per-module FLOPs vs. end-to-end cost).
+- **Explicit limitations section** discussing: (a) Channel Mixup's potential unsuitability when channels represent physically incompatible quantities; (b) the observed fragility of GDD-MLP alone on distributional-shift datasets like Traffic; (c) whether M-Mamba's inductive bias (feature-independent A) could fail on datasets with highly heterogeneous channel dynamics.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged for removal; treat them with caution.*
 
-- **"Eq. 8 contradicts Algorithm 1" (Reviewer 2).** Eq. 8 describes the formula for one virtual channel X' ∈ R^{L×1} resulting from mixing channel i and j. Algorithm 1 implements the vectorized version that applies this to all V channels simultaneously (X' = X + λ * X[:,perm]), yielding shape L×V. These are not contradictory — one is a per-channel formula, the other the vectorized implementation.
+- **"No asymptotic complexity analysis given"** (Harsh Critic): Removed as a standalone weakness. The paper provides FLOPs analysis in Table 5 which is sufficient for an empirical systems paper. Requesting formal Big-O complexity beyond what is standard in this community is a scope-creep demand.
 
-- **"Table Traffic MAE shows CMamba=0.645 vs iTransformer=0.262, CMamba highlighted as best."** This is a PDF extraction artifact producing garbled column alignment on the Traffic row. The paper's text explicitly states CMamba performs well on Traffic ("as well as or better than iTransformer"), and the claim about 65/70 top-1 rankings — while needing verification — is likely based on the actual formatted table. This should be verified against the original PDF, not penalized as an authorial error.
+- **"Channel Mixup target mixing may violate domain semantics"** (Harsh Critic): Partially removed. The paper explicitly uses λ ~ N(0, σ²), meaning E[Y'] = Y_i — the original target is preserved in expectation. The concern about negative λ creating unphysical channels is valid but is mitigated by the distribution's properties; this is a novel design with reasonable justification.
 
-- **"GDD-MLP resemblance to SE-blocks overstates novelty" (Reviewer 2).** While the resemblance is real and the paper should acknowledge it, SE-blocks in CNNs operate on spatial feature maps and are not typically applied as cross-sequence channel mixers in temporal/sequence modeling. The application context and specific adaptation (avg+max pooling over patch×embedding for sequence-structured data) are different enough that this is not a fatal novelty concern. It is a reasonable acknowledgment to add, not a critical weakness.
+- **"Removing convolution may reduce expressive power rather than help"** (Harsh Critic): Removed. The ablation (Table 2, Cases ①–③) does show that removing conv improves or matches performance. The critic's concern about suboptimal tuning applies equally to all ablation studies and is not a specific fault here.
 
-- **"Semantic invalidity of Channel Mixup for heterogeneous channels" (Reviewer 1) — weakened.** The paper explicitly addresses this: channels share temporal characteristics (CI strategy effectiveness is cited), and λ ~ N(0,σ²) with mean 0 ensures the channel's own characteristics are preserved on average. The empirical ablation (Table 3) shows it consistently helps across heterogeneous datasets like Traffic and Weather. The concern is legitimate as a limitation to acknowledge, but does not invalidate the method.
+- **"Algorithm 1 replaces rather than augments"** (Harsh Critic): Removed. Replacing the original sample with the augmented one is standard augmentation practice (e.g., standard Mixup replaces both training examples with the mixed one). This is not unusual.
 
-- **"Requesting confidence intervals/variance statistics as a fatal weakness."** Across seven datasets and 70 settings with three runs, requesting standard deviations in the main table is desirable but not standard practice in the MTSF literature at current norms. The lack of variance reporting is a minor concern (especially given the small effect sizes in Table 2), not a major one.
+- **"Claim that channels-as-sequences is impractical lacks formal complexity comparison"** (Harsh Critic): Removed as a stand-alone weakness. The paper's strategy is to sidestep the complexity argument entirely by using a different mechanism; a formal complexity comparison to S-Mamba would be nice-to-have, not a core weakness.
 
-- **"Using baseline numbers from iTransformer weakens comparability"** — weakened. The paper explicitly reruns the three baselines (MICN, TimeMixer, ModernTCN) whose experimental settings differed from iTransformer's. Reusing others from iTransformer under confirmed-identical settings is acceptable practice in the MTSF literature.
+- **"MLP-Mixer-style architectures not discussed in related work"** (Harsh Critic): Removed. The paper engages appropriately with the relevant forecasting literature for its claims. Demanding comprehensive cross-domain related work coverage is excessive scope creep.
+
+- **"Requesting statistical significance tests (Diebold-Mariano, t-tests)"** (Review 2): Removed. Single-run or few-run evaluation without formal significance tests is the norm in the MTSF benchmarking community (iTransformer, PatchTST, TimeMixer all follow this convention). The paper does report 3-run means, which is already above the community standard.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel observation in this paper — beyond its own stated contributions — is the empirical finding that **vanilla Mamba's convolution branch becomes redundant *specifically because of patching***: patching already provides local temporal aggregation, making the conv1d redundant (and potentially harmful by creating conflicting inductive biases). This insight about the interaction between tokenization strategy and architectural redundancy has implications beyond CMamba — it suggests that researchers transplanting Mamba-style SSMs to other structured sequence domains should revisit which internal components are load-bearing given their specific tokenization. The Channel Mixup failure-then-recovery on Traffic (Table 3: 0.479 → 0.525 with GDD-MLP alone → 0.444 with both modules) also surfaced a useful empirical principle: channel-dependent methods appear to require explicit regularization at high channel counts, and within-sample channel augmentation is one effective form.
+The most genuinely novel observation across the three reviews is the **interaction between GDD-MLP and Channel Mixup as a co-dependent stability mechanism**: GDD-MLP alone severely degrades performance on the Traffic dataset (MSE jumps from 0.479 to 0.525), but when combined with Channel Mixup, performance recovers to 0.444—the best reported. This suggests that data-dependent channel modulation is inherently prone to distribution shift overfitting when applied without regularization, and that channel-within-sample augmentation specifically addresses this failure mode in a way that cross-sample augmentation (vanilla Mixup, shown in Figure 4) cannot. This is a non-obvious finding: the two modules are not independently beneficial but rather mutually enabling. A deeper theoretical analysis of *why* this co-dependence arises—why data-dependent channel gating is unstable without channel-space augmentation—would be a valuable direction for understanding the mechanism rather than merely its empirical effect.
 
 ---
 
 ## Suggestions
 
-1. **Add S-Mamba and Bi-Mamba+ to Table 1.** This is the most critical gap. At minimum, report CMamba vs. S-Mamba on a representative subset of datasets to substantiate the claim of improved Mamba adaptation.
+1. **Add S-Mamba and Bi-Mamba+ as baselines in Table 1.** These are direct competitors and their absence is the clearest vulnerability of the paper's claims. Even if the comparison is unfavorable on some datasets, transparency strengthens the paper.
 
-2. **Audit and correct Table 1 highlighting.** Verify the ETTh2 MSE and ETTm2 MSE rankings in the camera-ready version; if the numbers extracted here are accurate (ModernTCN 0.228 < CMamba 0.273 on ETTh2, TimesNet 0.412 < CMamba 0.468 on ETTm2), the highlighting must be corrected and the 65/70 count revised.
+2. **Resolve and explain the Traffic MAE discrepancy between Table 1 (0.645) and Table 3 (0.265).** If this is a formatting error in the PDF, correct it; if it reflects a real difference in experimental conditions, explain why. Update the "top 1 in 13/14 settings" count accordingly.
 
-3. **Clarify the operating dimension of MLP_1/MLP_2 in GDD-MLP.** Add one sentence (and ideally a shape annotation in an equation) specifying whether the MLP processes the V×N descriptor jointly across channels or per-patch/per-channel. If the intention is joint processing, make this explicit as the source of cross-channel information flow.
+3. **Extend Table 2 (M-Mamba ablation) to at least 2–3 additional datasets** (e.g., ETTh1, Electricity, Traffic) with the same prediction horizons, to establish whether the architectural conclusions generalize beyond Weather.
 
-4. **Extend the M-Mamba design ablation to at least 3 additional datasets** (e.g., ETTh1, Electricity, Traffic) to validate that removing the conv branch generalizes beyond Weather.
+4. **Rephrase GDD-MLP's mechanism more precisely** in the abstract and methodology: it performs data-dependent affine modulation (channel recalibration) rather than explicit cross-channel mixing. This is not a lesser contribution—SE-like recalibration is a well-validated paradigm—but overstating it invites justified skepticism.
 
-5. **Specify σ for Channel Mixup in the main paper** and include at least a brief sensitivity plot or range, as this is a key hyperparameter of a core contribution.
+5. **Extend Table 4 (generalizability) to all 7 datasets**, particularly Traffic, given that GDD-MLP alone degrades there. Showing that the combined module still helps (or understanding when it does not) would substantially strengthen the versatility claim.
 
-6. **Explicitly discuss the relationship to SE-Net/Squeeze-and-Excitation** in the related work or methodology, and articulate why GDD-MLP's formulation (avg+max pooling over N×E for temporal sequences) is better suited to the MTSF setting than a direct SE-block application.
-
----
-
-**Evaluation summary:** The paper addresses a real and timely problem with a computationally efficient design that shows genuine empirical promise. The modular portability result (Table 4) and the efficiency result (Table 5) are its cleanest contributions. However, the paper is held back by: missing Mamba-baseline comparisons that are essential to its core claim, apparent table-highlighting errors that call its performance numbers into question, and insufficient clarity on whether GDD-MLP actually achieves cross-channel information mixing versus per-channel dynamic scaling. Novelty is moderate; technical soundness is adequate but with reproducibility gaps; empirical support is broad in dataset coverage but has notable methodological gaps (narrow ablations, missing baselines). As submitted, it falls short of a confident acceptance at ICLR but has the elements of a solid paper with targeted revisions.
+6. **Report the σ value used for Channel Mixup** and include a sensitivity analysis (e.g., σ ∈ {0.1, 0.3, 0.5, 1.0}) in the appendix.

@@ -1,118 +1,92 @@
 ## Summary
-This paper introduces **situated faithfulness** — the ability of LLMs to dynamically calibrate trust between internal parametric knowledge and external contexts when the two conflict, as arises in RAG pipelines. To benchmark this, the authors evaluate several QA datasets paired with correct and incorrect contexts, contributing **RedditQA**, a new dataset featuring human-written real-world misinformation from Reddit. They propose two method classes — Self-Guided Confidence Reasoning (SCR) and Rule-Based Confidence Reasoning (RCR) — and a fine-tuning approach, **CR-DPO**, which trains Llama-3-8B via preference optimization over self-sampled confidence-reasoning traces, yielding an average +8.9% gain on situated faithfulness.
+This paper introduces **situated faithfulness** — the ability of LLMs to dynamically calibrate reliance on external context versus internal knowledge when the two conflict — and benchmarks it across multiple QA datasets, including a new dataset, **RedditQA**, containing human-written incorrect contexts sourced from Reddit posts. The authors propose two complementary approaches: Self-Guided Confidence Reasoning (SCR), where the model explicitly reasons about source trustworthiness, and Rule-Based Confidence Reasoning (RCR), which uses externally applied confidence-score heuristics. They further propose **Confidence Reasoning Direct Preference Optimization (CR-DPO)**, a fine-tuning method that substantially improves SCR on smaller models by learning from self-sampled paired reasoning traces.
 
 ---
 
 ## Strengths
 
-- **RedditQA fills a genuine benchmark gap.** Unlike all prior work (ClashEval, FaithEval, DynamicQA), which relies on synthetically perturbed incorrect contexts, RedditQA sources incorrect contexts from naturally occurring Reddit posts, providing a qualitatively different test of model robustness to misinformation-as-it-appears-in-the-wild. This is a substantive contribution that no concurrent benchmark offers.
+- **RedditQA fills a genuine gap.** Existing conflict benchmarks (ClashEval, FaithEval) rely on synthetically perturbed contexts. RedditQA introduces human-authored, naturally occurring factual errors from social media, providing a more realistic test bed for knowledge-conflict robustness. This is a concrete contribution not replicated elsewhere.
 
-- **The insight that calibration quality ≠ better decision-making is non-obvious and empirically substantiated.** Section 5.3 / Table 3 demonstrates that improving confidence calibration (via isotonic regression, threshold tuning, percentile correction, or self-consistency) does not reliably improve situated faithfulness. The explanation — that a well-calibrated confidence score can still be misaligned with the accuracy-maximizing decision rule — is conceptually precise and not a generic observation. This analysis is one of the most valuable contributions in the paper.
+- **CR-DPO self-sampling insight.** The finding that self-sampled reasoning paths outperform traces distilled from a stronger model (GPT-4o) is both counterintuitive and well-supported experimentally (Table 4, "-3 Tasks, SS" ablation). The mechanistic explanation — that confidence reasoning is grounded in the model's own knowledge, so importing another model's traces introduces hallucination — is convincing and broadly useful for the community.
 
-- **The SCR vs. RCR split across model capability levels provides actionable practical guidance.** The finding that strong models (GPT-4o, GPT-4o-mini) benefit from end-to-end SCR while weaker models (Llama-3-8B) are better served by RCR — especially InternalConf via sequence probability — offers concrete guidance for practitioners choosing methods. Tables 1 and 2 clearly support this pattern.
+- **Thorough failure analysis of RCR.** Section 5.3 goes beyond reporting numbers: it pinpoints three distinct failure modes of RCR (biased/flawed rules, miscalibrated confidence signals, rule-signal misalignment), supports each with targeted experiments (Table 3), and shows why even well-calibrated confidence scores can fail to maximize situated faithfulness. This is the kind of diagnostic analysis that advances understanding rather than just reporting results.
 
-- **CR-DPO ablations are unusually informative.** Table 4 isolates the contributions of CoT, DPO vs. SFT, training task diversity, and trace source (self-sampled vs. GPT-4o). The finding that self-sampled reasoning paths outperform GPT-4o-sourced traces — because confidence reasoning is grounded in the model's own knowledge, which a stronger model cannot share — is a surprising and theoretically motivated result.
-
-- **The RCR signal-rule misalignment taxonomy is a useful contribution.** The paper identifies three distinct failure modes for RCR: (1) flawed/biased rules, (2) noisy/biased confidence signals, and (3) structural misalignment between signal and rule objective. This structured diagnosis goes beyond simply reporting that RCR underperforms.
+- **Practical model-tier insight.** The finding that strong-reasoner models (GPT-4o) benefit most from prompting-based SCR while smaller models (Llama-3-8B) require fine-tuning (CR-DPO) to match RCR provides actionable deployment guidance that is empirically grounded across two model families.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None identified.
+None.
 
 ### Major
 
-- **The central model-capability finding rests on only three models, two of which are closely related GPT-4o variants.** The claim that "stronger reasoning models benefit more from SCR while weaker models benefit from RCR" is a key insight of the paper, but it is supported by exactly three data points: GPT-4o, GPT-4o-mini, and Llama-3-8B. GPT-4o and GPT-4o-mini are not independently diverse architectures. This is far too narrow a base to draw a general conclusion about model capability and method fit. Without additional models spanning a capability spectrum (e.g., Llama-3-70B, Mistral, Gemma), this finding remains suggestive, not established. The paper's framing should be substantially qualified.
+- **CR-DPO is evaluated on a single model (Llama-3-8B).** This is the paper's primary methodological contribution, yet it is never tested on any other open-weight model (e.g., Llama-3-70B, Mistral-7B, Qwen). The core claim — "CR-DPO enhances SCR for smaller models" — rests on a single data point. Without at least one additional model, it is impossible to determine whether the gains are specific to this architecture/scale or reflect a generalizable training principle. This significantly limits confidence in the main contribution.
 
-- **CR-DPO, the paper's central training contribution, is evaluated on a single model (Llama-3-8B).** All claims about CR-DPO's generality — to unseen tasks, to varying context types — are derived from one architecture and scale. Without evidence across even one additional open-source model, the method cannot be characterized as a general approach to improving SCR in smaller LLMs.
+- **The RCR-vs-SCR size-dependent claim rests on a single small model.** The paper's practical finding that "RCR outperforms SCR for weaker models while SCR outperforms RCR for stronger models" is supported by three models, but the "weaker" side is represented solely by Llama-3-8B. An intermediate model (e.g., Llama-3-70B or Qwen-14B) is needed to establish whether this is a smooth function of model capability or specific to the 8B regime. This matters because the claim is presented as a general principle.
 
-- **No measurement of general capability degradation after CR-DPO.** The paper does not evaluate whether CR-DPO hurts performance on standard benchmarks (e.g., MMLU, reasoning tasks). A model that improves situated faithfulness by learning to systematically distrust external contexts could be practically harmful if it simultaneously becomes overconfident in its parametric knowledge in general QA settings. This omission is a significant gap for any claim of practical utility.
-
-- **Heavy GPT-4o involvement in dataset construction creates potential evaluation circularity.** GPT-4o participates in claim filtering, question generation, context modification, and context verification for several datasets. GPT-4o and GPT-4o-mini are then among the primary evaluated models. This introduces a plausible stylistic or inferential alignment between training data generation and evaluation that is not analyzed. The paper does not quantify or mitigate this risk.
-
-- **The benchmark uses binary correct/incorrect contexts, limiting practical relevance.** All experiments pair each question with a completely correct or completely incorrect context. Real RAG pipelines encounter contexts that are partially correct, partially outdated, or partially relevant. The core claim of "situated faithfulness" in realistic deployment conditions is untested under this most natural setting. This is acknowledged nowhere as a limitation.
+- **RedditQA dataset statistics are absent from the main text.** The construction pipeline is described (Section 3.2.1), but the main paper does not report the final dataset size, number of examples discarded, or annotator count. Given that RedditQA is a headline contribution, these omissions make it difficult to assess benchmark robustness or reproduce the dataset.
 
 ### Minor
 
-- **No analysis of source-selection behavior.** The paper measures only final answer accuracy, yet its central framing is about *trust* and *confidence reasoning*. Without a breakdown of how often each method selects the internal vs. external answer across the four quadrants (internal correct/wrong × context correct/wrong), it is impossible to determine whether SCR succeeds by reasoning carefully or simply by defaulting to internal knowledge. A confusion-matrix-style analysis would make the "confidence reasoning" claim more than interpretively asserted.
+- **GPT-4o is used in RedditQA construction and is also one of the primary evaluated models.** GPT-4o generates the multiple-choice questions and assesses claim inaccuracy, then is evaluated on the resulting dataset. While direct contamination is unlikely, this methodological asymmetry warrants at least a discussion: does GPT-4o's familiarity with its own output style or prior influence the benchmark's difficulty distribution for that model?
 
-- **The Figure 2 CR-DPO example contains factual errors in reasoning.** The CR-DPO output states "Richard M. Daley served as the mayor of Chicago from 1955 to 1976" — this conflates Richard J. Daley (father, 1955–1976) with Richard M. Daley (son, 1989–2011). The final answer (Chicago) is correct, but the reasoning contains clear factual inaccuracies. As the paper's only qualitative success case for CR-DPO, this is concerning: it suggests the model learns to *argue against* misleading contexts more forcefully, not necessarily to reason from better-organized knowledge.
+- **No oracle upper bound is reported.** The formulation defines a theoretical upper bound for SF (Section 3.1), but Table 1/2 do not show an oracle that always selects the correct source (internal vs. context). Without this, it is unclear whether the best reported results (e.g., CR-DPO at 62.4% for Llama-3-8B) are close to the achievable ceiling or still far from it. An oracle would let readers contextualize the 8.9% CR-DPO improvement.
 
-- **RedditQA is multiple-choice while other datasets use open-ended QA.** Answer format can substantially affect model behavior under conflicting context (e.g., guessing probability, distractor salience). The "Total" metrics aggregate these into a single number without discussing whether this conflation is appropriate.
+- **OOD generalization boundary for CR-DPO is weak.** The model is trained on TriviaQA, NaturalQA, ConflictQA, and RedditQA, then called "OOD" on FreshQA and ClashEval. However, all these datasets are short-form world-knowledge QA of the same type. The OOD claim would be meaningfully stronger if tested on a different domain or question format (e.g., multi-hop, science QA, or domain-specific corpora).
 
-- **Dataset statistics for RedditQA are not reported in the main text.** Final dataset size, topic distribution, inter-annotator agreement, and filtering rates are deferred to an appendix. For a benchmark contribution at a venue like ICLR, these statistics should be prominent in the paper body.
-
-- **TACS(LR) is a substantially weakened approximation of the original TACS method.** The paper substitutes the original hidden-state classifier with an LLM prompting approach because hidden states are inaccessible for proprietary models. Conclusions drawn from TACS(LR) performing poorly (e.g., that preprocessing approaches fail) are conflated with conclusions about the original method. This should be framed much more carefully: TACS(LR) failing does not mean TACS fails.
+- **The SF metric's equal weighting of Acc_t and Acc_f is unjustified.** In realistic RAG pipelines, correct contexts likely far outnumber incorrect ones. Equal weighting inflates the practical importance of Acc_f. The paper should at minimum acknowledge this design choice and its implications, or report sensitivity under different priors (e.g., 80% correct / 20% incorrect).
 
 ### Tiny
 
-- The SF metric equally weights Acc_t and Acc_f, but in many real deployments, correct contexts are far more frequent than incorrect ones. This makes SF overweight robustness relative to utility. This is acceptable as a benchmark stress-test metric but is sometimes written as if it were a deployment objective.
+- **The pilot experiment justifying question-before-context ordering** (Section 4.1) is mentioned but not shown in the main paper. Since this ordering affects all SCR comparisons, a brief ablation in the main text would increase transparency.
 
-- The conclusion that "SCR operates more effectively in text space" is a plausible interpretation but is asserted mechanistically rather than demonstrated. It could equally be explained by end-to-end prompting avoiding brittle intermediate decomposition errors, which is a simpler explanation.
+- **Answer correctness operationalization is vague in the main text.** The paper says "e.g., an exact match with the ground truth" (Section 3.1) but the diverse datasets (RedditQA multiple-choice, FreshQA open-ended, etc.) likely use different matching procedures. This should be stated clearly in the main experimental setup rather than delegated to appendices.
 
 ---
 
 ## Nice-to-Haves
 
-- A scaling plot of model capability (e.g., MMLU score or benchmark-derived proxy) vs. SCR–RCR performance gap across more models would be highly impactful and provide genuine support for the capability-conditioned recommendation.
+- A SCR failure analysis for GPT-4o, analogous to the Llama-3-8B case study in Figure 2, would provide a more balanced picture of where even the best method breaks down.
 
-- An evaluation with partially correct or mixed-quality contexts would stress-test situated faithfulness under more realistic RAG conditions and substantially strengthen the practical relevance claim.
+- An analysis varying the proportion of correct vs. incorrect contexts at inference (e.g., 80%/20% vs. 50%/50%) would directly assess whether the proposed methods remain practically useful under realistic RAG priors.
 
-- A general capability evaluation (MMLU or similar) before and after CR-DPO would significantly increase confidence in the method's safety and deployability.
-
-- Evaluating CR-DPO on one additional open-source model (e.g., Llama-3-70B or Mistral-7B) would establish whether the training approach generalizes across architectures and scales.
-
-- A confusion matrix decomposing source-selection behavior per method (internal vs. external choice, conditioned on which source is correct) would directly validate or challenge the "confidence reasoning" interpretation of SCR's success.
+- A brief cost-benefit comparison (compute overhead of CR-DPO fine-tuning vs. gain relative to simply using GPT-4o-mini) would help practitioners decide when fine-tuning is warranted.
 
 ---
 
 ## Removed Points
-
 *These points are flagged for removal — treat them with caution.*
 
-- **"DIA is too weak a baseline to justify the +24.2% claim" (Harsh Critic):** DIA is an intentionally naive upper bound on standard RAG systems. The paper also compares against TACS and a full suite of RCR methods. Comparing against DIA to demonstrate the magnitude of the vulnerability is appropriate; the RCR methods serve as the more principled comparison. The asymmetry here is not unfair — it favors the baseline to make a stronger point about the problem severity.
+- **The Acc_f upper bound is mathematically incorrect (Harsh Critic).** The critic argues that a false context could still contain useful incidental evidence. In the paper's setup, however, "false context" is defined as one whose entailed answer is incorrect — the bound is an intuitive claim about the setup's design, not a universal theorem. The paper's explanation is clear enough for its purpose.
 
-- **"No confidence intervals or statistical significance" (Harsh Critic / Spark Finder):** Single-run evaluation is the standard norm for large-scale QA benchmarks with API models, and many of the reported differences are large (>5 percentage points). This does not meet the bar for a substantive weakness in this research community's standards.
+- **Criticism of the TACS-LR approximation as underestimating TACS baseline.** The paper explicitly justifies using TACS-LR for consistency with proprietary models (Section 4.3). This is a reasonable design choice and noted transparently; the critique does not undermine the paper's conclusions.
 
-- **"The upper bound of Acc_f is not valid without stronger assumptions" (Harsh Critic):** The paper's claim that "wrong contexts can't help a model answer questions it cannot answer" is a reasonable and approximately correct assumption given the experimental design, where false contexts are specifically constructed to point to wrong answers. While a false context could theoretically contain tangential helpful information, this is an edge case that does not undermine the benchmark design.
+- **"Situated faithfulness" is merely a renaming of existing concepts.** While neighboring concepts exist (robust context use, conflict-aware QA, selective retrieval reliance), the paper's unified framing, metric, and dual-class methodology provide a coherent contribution beyond simple renaming.
 
-- **"The related work does not deeply engage with calibration/uncertainty literature" (Harsh Critic):** The related work is selective but adequate for the paper's scope. Requiring an extensive survey of calibration literature imposes scope creep on a paper whose contribution is empirical and applied, not a theoretical contribution to calibration.
+- **Terminology: "faithfulness" is counterintuitive when it means ignoring the context.** The qualifier "situated" is explained in the introduction and is sufficiently clear; this is a stylistic preference, not a substantive flaw.
 
-- **"Concurrent work is not deeply compared" (Harsh Critic, multiple reviewers):** The paper cannot be penalized for not comparing against methods whose specifics are not established by an external reviewer; the paper positions against the concurrent work's benchmarks (which it uses in evaluation) and is explicit about what is and is not compared.
+- **The paper should compare with more models or a larger model zoo.** Three models spanning proprietary (GPT-4o, GPT-4o-mini) and open-weight (Llama-3-8B) is adequate for the paper's claims. Demanding more models without specific gaps is generic.
 
-- **Requests for missing related works:** Per review instructions, not included, as these cannot be verified without external sources.
+- **Pure formatting and style remarks from the harsh critic** (abstract phrasing, section-level writing quality) are removed per policy.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel insight in this paper — largely surfaced by the spark finder but empirically supported in Section 5.3 / Table 3 — is the **structural misalignment between confidence calibration and accuracy maximization in rule-based systems**. Improving a model's calibration (via isotonic regression, threshold tuning, etc.) does not reliably improve situated faithfulness because a well-calibrated confidence score need not track the binary source-selection decision optimally. This is a theoretically clean insight: calibration optimizes expected calibration error, while the situated faithfulness objective optimizes accuracy — and these are different optimization targets. This finding has implications beyond this paper for any system that uses predicted confidence as a proxy for decision-making in retrieval-augmented settings.
+The most genuinely novel analytical finding in this paper — beyond the proposed contributions themselves — is that **self-sampled reasoning paths are superior to distilled paths from stronger models for confidence reasoning tasks**. Standard wisdom in LLM fine-tuning holds that stronger-model data helps smaller models; this paper shows a principled exception: when the task requires grounding reasoning in the model's own factual beliefs, importing an external model's reasoning traces causes the smaller model to follow reasoning chains that contradict its own knowledge, inducing hallucination rather than calibration. This insight has broader implications for when model distillation is and is not appropriate as a fine-tuning strategy.
 
 ---
 
 ## Suggestions
 
-1. **Expand model coverage with at least one intermediate-capability open-source model** (e.g., Llama-3-70B or Mistral-7B) to substantiate the capability-conditioned SCR vs. RCR recommendation, and apply CR-DPO to at least one additional model beyond Llama-3-8B.
+1. **Test CR-DPO on at least one additional open-weight model** (e.g., Llama-3-70B or Mistral-7B). This is the most important gap; without it, the main contribution is a single-model result.
 
-2. **Add a general capability evaluation** (e.g., MMLU, ARC, or similar) before and after CR-DPO training to demonstrate the method does not degrade parametric knowledge or broad reasoning — this is essential for any practical deployment claim.
+2. **Report RedditQA size, discard rate, and annotator agreement in the main text** — even a single sentence with key statistics would substantially strengthen the dataset contribution's credibility.
 
-3. **Add a source-selection confusion matrix** breaking down how often each method selects internal vs. external answers conditioned on (internal correct × context correct/wrong), to provide evidence for the "confidence reasoning" interpretation rather than a "default to internal" alternative explanation.
+3. **Add an oracle baseline** to Tables 1 and 2 to contextualize how close the best methods are to the achievable upper bound.
 
-4. **Explicitly discuss the GPT-4o data generation circularity** in the main paper limitations section, and ideally provide a disaggregated analysis of GPT-4o performance on RedditQA vs. non-GPT-4o-generated datasets.
+4. **Conduct a brief experiment with a model in the intermediate scale range** (e.g., 30B–70B) to validate the SCR-vs-RCR size-dependence claim as a general trend rather than an artifact of a single architecture.
 
-5. **Report RedditQA's key statistics** (final N, domain distribution, inter-annotator agreement, discard rate) in the main body rather than the appendix, given this is a benchmark contribution.
-
-6. **Qualify the Figure 2 CR-DPO example**: either correct the factual dates in the reasoning or acknowledge that CR-DPO teaches adversarial argumentation rather than improved knowledge organization, as this distinction matters for interpreting what the model has learned.
-
-7. **Include at least one experiment with mixed-quality contexts** (partially correct, partially misleading) to probe the robustness of situated faithfulness methods in more realistic RAG conditions.
-
----
-
-**Evaluation axes:**
-- **Novelty:** Moderate-to-good. RedditQA and the SCR/RCR taxonomy are meaningful contributions. CR-DPO is technically a task-specific DPO application, not an algorithmic advance, but is a practical contribution. The calibration-vs-accuracy insight is genuinely novel.
-- **Technical soundness:** Moderate. The formulation is clean, but the experimental scope is narrow (3 models, 1 training model, binary context setup), and several core claims are under-supported by evidence.
-- **Empirical support:** Adequate for the narrower claims; insufficient for the broader generalization claims (capability-SCR/RCR relationship, CR-DPO generality).
-- **Significance:** Good. Knowledge conflicts in RAG are a real, growing problem. The datasets, methods, and analysis fill a genuine gap in the literature.
-- **Clarity:** Good. The paper is well-organized, tables are informative, and the SCR/RCR taxonomy is easy to follow. Key implementation details are too heavily deferred to appendices.
+5. **Address the GPT-4o construction bias concern** with a brief methodological note or, ideally, an inter-annotator agreement statistic from the human verification step.

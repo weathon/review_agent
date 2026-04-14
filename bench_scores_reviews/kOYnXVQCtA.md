@@ -1,110 +1,106 @@
 ## Summary
-DeeperForward modifies the Forward-Forward (FF) algorithm by replacing squared-sum goodness and vector-length normalization with mean goodness and layer normalization, enabling layer-wise local training on CNNs up to 17 layers — well beyond prior FF-based work limited to 4-layer networks. The paper also introduces parameter-free residual structures adapted for local learning, a Signal Integrating and Pruning (SIP) module for layer selection, and a pipeline model-parallel strategy. Experiments on CIFAR-10, MNIST, and Fashion-MNIST show meaningful improvements over existing FF-based methods, particularly an 8.11% gain on CIFAR-10 over the best reproduced FF baseline.
+
+DeeperForward proposes a redesign of the goodness function in the Forward-Forward (FF) training framework, replacing squared-sum goodness and vector-length normalization with mean goodness and LayerNorm/GroupNorm. The central claim is that this change addresses feature-scaling and deactivated-neuron pathologies that prevent FF-style local learning from working in deeper architectures. The method is demonstrated on VGG-like and ResNet-like CNNs of up to 17 layers, substantially outperforming prior FF-based baselines on CIFAR-10 (86.22% vs. 75.28% for CwComp at comparable depth), and is accompanied by a pipeline model-parallel strategy enabled by local updates.
 
 ---
 
 ## Strengths
 
-- **First FF-based method to demonstrate systematic depth scaling.** The paper includes a direct same-architecture, reproduced comparison: CwComp* at 14 layers achieves 75.28±0.54% on CIFAR-10, while CNN-ours at 14 layers achieves 81.76±0.30%, a clean apples-to-apples gain. Extending to a 17-layer ResNet reaches 86.22±0.17%, which far exceeds all prior FF-based work and confirms that the mean-goodness design genuinely enables deeper training, not merely a numerical increment.
+- **Concrete and isolated ablation evidence for mean goodness.** Table 4 shows a 6.84% CIFAR-10 accuracy improvement (79.38% → 86.22%) from the use of mean goodness over squared goodness within the same 17-layer ResNet architecture — a specific, non-trivial delta that substantiates the core claim.
 
-- **Mean goodness + layer normalization is a principled, targeted fix for two concrete failure modes of squared goodness.** The paper correctly identifies that squared goodness (i) suffers from feature-scaling issues (LN vs. vector-length normalization) and (ii) produces zero gradients for deactivated (zero-activation) neurons under ReLU (Eq. 3 vs. Eq. 6). The ablation in Table 4 supports this: removing mean goodness drops accuracy by 6.84 percentage points on CIFAR-10 within the same 17-layer ResNet.
+- **Actual depth scaling milestone within FF literature.** Prior layer-wise FF methods are universally shallow (2–4 layers). This paper is one of the first to report competitive training on 14- and 17-layer CNNs without block-wise backprop, which is a meaningful step for the local-learning subfield even if absolute accuracy still trails BP.
 
-- **Practical parallel training with concrete, measured efficiency gains.** The model-parallel strategy exploits local-update independence to pipeline layers across GPUs. Table 5 shows DeeperForward is faster than BP-DDP at 1 and 2 GPUs (36.38s vs. 51.98s single-GPU; 20.77s vs. 32.70s at 2 GPUs), with a concrete explanation for the 4-GPU bottleneck (load imbalance). This is not just a theoretical claim but a measured result.
+- **Clear mechanistic argument for decoupling.** The mean-goodness design has a coherent internal logic: LayerNorm fixes mean/std of the output to zero/one, making the pre-normalization mean a natural goodness statistic that is "erased" by normalization before being passed to the next layer. This is more principled than CwComp's batch normalization, which does not zero out the cross-layer signal, leading to observed overfitting in deeper CwComp reproductions (75.28% at 14 layers).
 
-- **Parameter-free residual structures adapted for local learning.** The addition and concatenation residual shortcuts (Eq. 10–11) are a practical adaptation that avoids learnable shortcut weights conflicting with local updates. The ablation shows residuals are the single largest contributor after mean goodness (86.08% with, 81.02% without).
+- **Honest benchmarking.** The authors reproduce CwComp on their own 14-layer CNN under matched conditions, directly exposing the overfitting issue (75.28%) rather than comparing against the original 4-layer results. They also openly acknowledge the gap with BP and the worsening under data augmentation.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None.
+None that outright invalidate the paper's contribution.
 
 ### Major
 
-- **CIFAR-100 comparison is uncontrolled for model capacity.** Table 2 shows ResNet-ours at 53.09% (below BP at 58.01%) and ResNet-CHx3-ours at 60.28% (above BP at 58.01%), but CHx3 triples channel count only for the proposed method, giving it substantially more parameters than the BP baseline. There is no experiment giving BP the same tripled parameter budget. Because the paper's own text notes that "inadequate allocation of neurons to each class results in sharp performance decline," the CIFAR-100 gain may be entirely attributable to parameter overprovisioning, not the training rule. This must be controlled to make the CIFAR-100 result interpretable.
+- **Table 4 appears to contain a formatting error that makes the ablation ambiguous.** Two rows show identical checkmarks (MEAN ✓, SIP ✓, RESIDUAL ✓) but yield 79.38% and 86.22% respectively. Since the text states "mean goodness achieves a substantial performance increase of 6.84%," the row at 79.38% must use squared goodness — meaning the MEAN column is mislabeled (should be ✗) for that row. This formatting error makes the ablation table misread at face value and needs to be corrected.
 
-- **Ablation does not disentangle layer normalization from mean goodness.** Table 4 removes both LN and mean goodness simultaneously (falling back to squared goodness + vector-length normalization). A row with "LN + squared goodness" is needed to determine whether the 6.84% gain is attributable to the normalization change, the goodness formulation, or their interaction. Without this, the paper's central mechanistic claim cannot be verified.
+- **Ablation conflates LayerNorm/GroupNorm with mean goodness, preventing attribution.** The "MEAN" checkmark toggles both the goodness statistic and the normalization scheme simultaneously (mean goodness + LayerNorm vs. squared goodness + vector-length norm). A reviewer cannot determine whether the 6.84% gain comes from the goodness statistic, the normalization choice, or their interaction. A row isolating LayerNorm with squared goodness, or mean goodness with vector-length normalization, is needed to validate the paper's core mechanistic claim.
 
-- **The gradient derivation for Eq. 6 — the paper's core claim about deactivated neurons — is absent.** The paper asserts that mean goodness yields "Δ W_ij = C x_i ∂L/∂g," i.e., a weight update independent of y_j, thereby avoiding dead-neuron stalling. This is one of the two main technical contributions, yet no derivation is provided in the main paper or appendix. The claim is plausible but must be shown, not asserted, given it underpins the entire motivation.
+- **The mathematical justification for solving deactivated neurons (Eq. 6) is incomplete and potentially incorrect.** The paper states ΔW_ij = Cx_i (∂L/∂g) and claims "C is a constant," arguing that this allows updates even when y_j = 0. However, if g = Σ_i y_i = Σ_i ReLU(Wx)_i, then ∂g/∂W_ij = x_i · 𝟙{y_j > 0}, which is still zero for a deactivated ReLU unit — identical to the squared goodness case. For the claim to hold, C must be something other than a constant (e.g., a straight-through estimator). The paper does not clarify this, and Appendix I (discussing dead neurons) is not visible to reviewers in the main paper. The empirical improvement is real (as evidenced by Table 4), but the theoretical justification in Section 3.1 is misleading or incomplete as written.
 
-- **Scaling beyond 17 layers fails, but this is buried in the appendix.** Section 4.5 mentions that 33- and 100-layer experiments "do not observe significant performance improvements" (Appendix D). A paper titled "DeeperForward" that plateaus at 17 layers has an unresolved depth-scaling problem. This result belongs in the main text with an analysis of why scaling stalls, not hidden in an appendix. As written, the "Deeper" promise in the title is only partially fulfilled.
+- **Depth plateau beyond 17 layers is acknowledged but undiagnosed.** The paper notes in Section 4.5 that 33- and 100-layer models yield no significant improvement (Appendix D), yet provides no analysis of why. A paper titled "DeeperForward" that cannot scale past 17 layers without degradation has an obligation to characterize this bottleneck — is it gradient vanishing through the residual shortcut? Layer-wise prediction pressure? Goodness signal collapse? Without this, "enhancing FF for deep networks" is only established up to a narrow depth range with no guidance on further scaling.
 
-- **Mathematical notation in Eq. 5 is inconsistent with the paper's stated design.** Eq. 5 defines g = ∑_i y_i (a scalar sum), but then writes z = (y − g)/√(σ² + ε), where subtracting a scalar sum from a vector is not standard layer normalization (which subtracts the mean). Eq. 7 correctly defines ŷ = (1/HWC)∑h (the mean). The discrepancy between Eq. 5 and Eq. 7 creates ambiguity about what "mean goodness" is at the core theoretical level. The notation should be corrected and made consistent.
+- **CIFAR-100 results reveal a fundamental architectural bottleneck.** The ResNet-ours achieves 53.09% vs. 58.01% for BP; recovering to 60.28% requires tripling channels (ResNet-CHx3). The paper acknowledges this in its limitations section, attributing it to "inadequate allocation of neurons to each class." This is not a minor caveat: the CW-Conv design ties channel count directly to class count, meaning the method as presented does not generalize gracefully to realistic multi-class problems without aggressive width inflation. This is a fundamental constraint on applicability.
 
 ### Minor
 
-- **Data augmentation gap is relegated to an appendix.** Section 4.2 acknowledges that "the improvement is limited after data augmentation, as detailed in Appendix C," but does not show or discuss these results. Data augmentation is standard practice; if augmentation substantially widens the gap with BP, this is a practically important limitation that deserves in-text analysis and not just a footnote reference.
+- **Eq. 5 notational inconsistency.** In Eq. 5, g = Σ_i y_i is defined as a sum, and then z = (y − g)/√(σ²+ε) subtracts a scalar sum from each element, which is not standard centering. The CNN version (Eq. 7) correctly uses the mean (1/(HWC) Σ h). The discrepancy between the scalar formulation in Section 3.1 and the convolutional formulation in Section 3.2 should be resolved with consistent notation.
 
-- **Parallel comparison conflates different parallelism paradigms.** Table 5 compares the proposed pipeline/model-parallel strategy against BP with DDP (data parallel). These paradigms have different tradeoffs. The paper does not report memory usage in the pipelined setting (FIFO queues buffer activations between stages), whether effective batch sizes are identical, or what a BP pipeline-parallel baseline would achieve. The memory savings claim (618.64 MB vs. 1314.49 MB) lacks methodology detail — it is unclear whether optimizer state and queue buffers are included.
+- **SIP module provides negligible improvement and introduces methodological ambiguity.** Table 3 shows gains of 0.06%, −0.01%, and +0.15% after SIP, which are practically insignificant. Moreover, the paper reports "best trial results" (not mean ± std) for SIP comparisons, a weaker standard than used elsewhere. The biological analogy to "synaptic pruning" is strained — SIP is essentially validation-set model selection over O(L²) layer-combination candidates. Whether the selected (Start, End) is stable across seeds is not reported.
 
-- **SIP's held-out data cost is unanalyzed.** The SIP module reserves 10,000 training samples (MNIST/F-MNIST) and 5,000 (CIFAR-10) purely for layer selection, not training. Given that SIP's accuracy gains are already marginal (Table 3: 86.45→86.51 on CIFAR-10), the trade-off between data held out and the selection benefit is not established.
+- **No data augmentation on main benchmarks limits practical relevance.** The paper acknowledges in Appendix C that the augmentation gap with BP is substantial, but this is not quantified in the main paper. If the method cannot benefit from standard augmentation — a cornerstone of modern training — this is a practical limitation that deserves more prominent discussion, not appendix treatment.
 
 ### Tiny
 
-- **Table 4 first row appears identical to last row in the extracted text** (both show "✓ ✓ ✓"), which is a formatting artifact from the paper's table — but the body text clarifies the intent. This should be corrected in the final version for unambiguous readability.
+- **Figure 1 "Ours" panel is misleading.** The diagram shows a single backward error signal L_e flowing through the network, visually resembling global backprop. The actual training uses independent local losses at each layer (Eq. 13), which is quite different. The figure should be updated to show per-layer local losses.
+
+- **Training objective framing.** The method uses local per-layer cross-entropy (Eq. 13), not classical FF positive/negative contrastive passes. The paper is largely transparent about this (Figure 1e, Section 3.3) but vacillates between calling itself "FF" and "FF-inspired local learning." Being explicit that the optimization is greedy local supervised training (with FF-inspired goodness as intermediate statistic) would clarify the contribution's position relative to the broader local-learning literature (DTP, decoupled greedy learning, etc.).
+
+- **Parallelism evidence is limited.** Table 5 covers only one dataset and architecture with no throughput-vs-depth scaling or comparison to pipeline-parallel BP baselines. The 4-GPU speedup (2.48× vs. DDP's 2.61×) is acknowledged but not analyzed. This section establishes feasibility rather than strong systems evidence.
 
 ---
 
 ## Nice-to-Haves
 
-- **Layer-by-layer accuracy curves for CwComp (14-layer) vs. DeeperForward (14-layer)** would directly illustrate the claimed "goodness leakage → overfitting in deeper layers" mechanism. The current Figure 5(d) shows per-layer accuracy for DeeperForward with/without residuals, but the most compelling visualization — CwComp collapsing in deeper layers vs. DeeperForward remaining stable — is absent.
+- **Ablation with standard data augmentation.** Showing whether the FF local-learning gap with BP under augmentation is specific to goodness design or is fundamental to local training would clarify the method's long-term trajectory.
 
-- **Quantitative dead-neuron statistics across layers.** Appendix I is referenced but absent from the main text. Reporting the fraction of zero-activation neurons per layer for squared vs. mean goodness across training epochs would make the deactivated-neuron claim falsifiable rather than asserted. A training-epoch heatmap of dead neurons for both variants would directly validate the method's core motivation.
+- **Neuron activation rate visualization.** A heatmap showing dead-neuron rates across layers for squared vs. mean goodness (as mentioned in Appendix I) would directly validate the paper's central mechanistic motivation and should be promoted to the main paper.
 
-- **Convergence analysis (total wall-clock time and total epochs to target accuracy)** alongside epoch-time comparisons. If DeeperForward requires substantially more epochs to converge than BP, the per-epoch efficiency advantage diminishes in total training time. This is especially relevant for comparing against BP-DDP holistically.
+- **Cross-layer goodness correlation analysis.** A quantitative measure of "goodness leakage" (correlation of goodness values between adjacent layers) for CwComp vs. DeeperForward would substantiate the decoupling claim empirically rather than arguing it by construction.
 
-- **Parameter counts for all compared model configurations.** The paper does not report parameter counts for any of its own architectures or those it reproduces. Given that channel count is a crucial sensitivity (CIFAR-100 results), parameter-matched comparisons would substantially strengthen the empirical claims.
+- **Scaling study for CIFAR-100.** A systematic analysis varying channels-per-class would determine whether the CIFAR-100 gap is an optimization failure or a capacity-allocation problem, informing future design of more class-count-agnostic architectures.
 
-- **An analysis of why data augmentation disproportionately hurts FF-style training.** Whether this is a fundamental limitation of greedy local objectives or a correctable design issue would be valuable to the community.
+- **Deeper layer diagnostics.** Gradient norms, feature rank, and goodness trajectories at 17 vs. 33 vs. 100 layers would explain the depth plateau and provide the community with concrete failure modes to address.
 
 ---
 
 ## Removed Points
 
-*These points are flagged as removed; treat them with caution.*
+*These points are flagged as removed — treat them with caution.*
 
-- **"DeeperForward is not a true FF algorithm because it uses local cross-entropy."** The paper explicitly frames DeeperForward as an FF-inspired extension; the use of local CE is stated and intentional. Criticizing it for departing from canonical FF semantics treats an acknowledged design choice as a hidden flaw. REMOVED.
+- **"The method is not really FF" as a core weakness.** The harsh critic devotes substantial space to arguing the method is "local supervised training, not FF." However, the paper itself is explicit about this departure: Figure 1(e) clearly labels the method as using a single forward pass with local error signal, distinct from FF's positive/negative passes. The paper positions itself as extending/inspiring from FF, not as a faithful reimplementation. The broader FF literature already includes many departures from Hinton's original formulation (CwComp, Trifecta, etc.). This is a framing preference, not a substantive flaw.
 
-- **Biological plausibility of layer normalization.** Reviewer 2 notes that LN requires computing population statistics, which is debated in the strict bio-plausibility literature. The paper acknowledges bio-plausibility as one motivation among several (efficiency, parallelism), and does not claim strict neuronal realism. Demanding that layer norm itself be biologically justified is scope creep. REMOVED.
+- **"Bio-plausibility is overstated."** The paper's primary motivation is removing update locking and enabling local parallelism, not strong neuroscientific realism. The harsh critic applies a more rigorous bio-plausibility standard than the paper claims to meet. The paper does acknowledge gradient-based optimization remains; removing this criticism is appropriate.
 
-- **Demanding a formal mathematical invariance proof that downstream layers cannot recover goodness.** This is a non-standard theoretical requirement for an empirical local-learning paper. REMOVED; noted as nice-to-have (goodness leakage quantification).
+- **"Missing related works."** Per review policy, references are not independently verifiable and claims of missing citations are excluded.
 
-- **Criticisms of the heterogeneous Table 1 comparisons with non-reproduced baselines (PEPITA, DTP, rec-LRA, etc.) as though they constitute the paper's primary claims.** The paper correctly identifies its main head-to-head as the CwComp* reproduced comparison. The broader table entries serve as historical context, as is standard in this literature. REMOVED as a major weakness (retained only as a contextual note).
+- **"Comparison with DTP/recLRA is across different architectures."** The comparison in Table 1 is context-setting across the broader local-learning landscape, not a primary claims table. The paper's main comparisons are within FF-type methods at matched depths (reproducing CwComp on the same 14-layer CNN). Cross-architecture comparisons in a survey table are standard practice.
 
-- **Requesting significance tests or confidence intervals beyond 5-run mean±std.** Five-run evaluation with standard deviations is the norm for this class of experiments. Demanding formal significance testing is not a standard expectation for CIFAR-scale empirical results in this community. REMOVED.
+- **"Memory comparison is unfair — should compare against activation checkpointing."** The memory advantage of local updates over standard BP is stated as a feasibility result, not a claim of superiority over all engineering baselines. Activation checkpointing is an optimization that independently applies to local methods too. This is an asymmetry favoring the baseline, and the paper does not claim to beat all BP memory-saving techniques.
 
-- **"Claims that a cited reference does not exist / a method is not yet released."** No such claims are made in the sub-reviews here, but the instruction is noted; none are applicable. N/A.
+- **"Benchmark suite is too small for ICLR."** CIFAR-10/MNIST/FMNIST are the dominant benchmarks in the FF/local-learning literature precisely because the methods are not yet competitive on ImageNet. Criticizing paper X for not solving what paper X acknowledges as future work is scope creep. The CIFAR-100 experiment is included. Demanding TinyImageNet/ImageNet without the architecture modifications to support it is not a reasonable bar within this subfield.
 
-- **"The paper should be evaluated as a general deep learning breakthrough, not just within FF."** The stated scope is explicitly FF-based local learning. Criticisms premised on matching SOTA BP performance are scope creep. REMOVED as a major weakness (retained as minor contextual note in Strengths).
+- **"The architecture's 'no FC layer needed' claim is unsubstantiated."** The paper says "experiments in Appendix E reveal that CW-Conv outperforms FC" and explicitly defers to the appendix. This is a design choice with supporting evidence — calling the claim "too strong" for having its evidence in an appendix is a formatting nitpick.
 
 ---
 
 ## Novel Insights
 
-The most insightful observation across the three reviews — not fully developed in the paper itself — is the **interaction between goodness decoupling and depth scaling as a double-edged design constraint**. The paper shows that CwComp's goodness leakage causes overfitting in deeper layers, while mean goodness with layer normalization fixes this. However, the paper also reveals (in Appendix D) that scaling beyond 17 layers yields no further gain, and CIFAR-100 results show that channel-per-class allocation is a hard bottleneck. Taken together, these findings suggest a deeper tension: the channel-grouping design that enables per-class goodness scores in CNNs fundamentally limits representational capacity per class and creates a hard ceiling on both depth and breadth scalability. This is not a criticism of the method within its stated scope, but an insight that points toward the next necessary architectural innovation for FF-based local learning to become truly general.
+The most valuable insight that emerges beyond standard benchmarking is the *coupling between normalization design and goodness signal stability across depth*. By showing that batch normalization in CwComp leaks goodness (empirically evidenced by overfitting at depth) while GroupNorm after mean-based goodness extraction prevents this, the paper implicitly suggests that the choice of normalization for FF-type training is not merely a performance tuning knob but a structural choice that determines whether deeper layers receive meaningful learning signal or inherit already-resolved information. This framing — that goodness decoupling is an architectural requirement for depth, not an optimization convenience — is a useful organizing principle that the local-learning community could build on when designing future deep forward-only architectures. The failure of the method beyond 17 layers and its class-count scaling bottleneck also implicitly point to a deeper open problem: local classification objectives may impose an information bottleneck that prevents rich intermediate representations from emerging, suggesting that future local-learning methods for deeper networks may need explicit mechanisms to promote representation diversity rather than per-layer discriminability.
 
 ---
 
 ## Suggestions
 
-1. **Add a controlled ablation row: LN + squared goodness, same architecture.** This single experiment would decompose the 6.84% gain and validate whether mean goodness or layer normalization (or both) is responsible.
+1. **Fix the Table 4 formatting error.** Correct the duplicate checkmark row so the ablation table unambiguously shows one row with and one row without mean goodness.
 
-2. **Show a parameter-matched BP baseline for CIFAR-100.** Train a ResNet-BP with the same tripled channel count and report its accuracy alongside ResNet-CHx3-ours. Without this, the CIFAR-100 result is uninterpretable.
+2. **Add a standalone ablation row for LayerNorm + squared goodness.** This is the minimum experiment needed to separate the normalization effect from the goodness statistic effect and validate the paper's core mechanistic claim.
 
-3. **Move 33-layer and 100-layer results into the main paper** with an analysis of why scaling stalls. A model claiming to enable "deeper" training must address where and why the depth ceiling lies.
+3. **Clarify Eq. 6 and the deactivated-neuron gradient argument.** Either derive ∂g/∂W_ij rigorously (addressing the ReLU indicator issue) or explicitly state that the method uses a straight-through estimator / ReLU relaxation. Move the Appendix I dead-neuron analysis (activation rate comparison) into the main paper, as it directly supports the central motivation.
 
-4. **Fix and clarify Eqs. 5–6.** Rewrite Eq. 5 so that g is explicitly the mean (1/N ∑ y_i), making it consistent with Eq. 7, and add a brief derivation (or clear appendix pointer) for Eq. 6 showing why the update is independent of y_j.
+4. **Standardize SIP reporting.** Report mean ± std (over five trials) in Table 3 instead of best-trial results, consistent with the rest of the paper.
 
-5. **Move augmentation results (currently Appendix C) into the main paper** and provide at least a paragraph analyzing why augmentation disproportionately hurts the local-learning approach relative to BP.
+5. **Provide a depth diagnostic.** Add a brief analysis in the main paper explaining why 33/100-layer models do not improve over 17 layers — gradient behavior, goodness signal collapse, or feature saturation — rather than deferring entirely to Appendix D.
 
-6. **Report per-layer accuracy curves for CwComp (14-layer) vs. DeeperForward (14-layer)** to directly visualize the goodness-leakage and overfitting claim that motivates the method.
-
----
-
-**Evaluation axes:**
-- **Novelty:** Moderate. Mean goodness replacing squared goodness is a targeted, principled change rather than a new paradigm, but it addresses a real failure mode and is not obvious.
-- **Technical soundness:** Partially solid. The core gradient claim (Eq. 6) is unproven, and the notation is inconsistent, but the overall design logic is coherent and supported by ablation.
-- **Empirical support:** Reasonably strong within the FF niche, particularly the CwComp*-14L direct comparison. The CIFAR-100 result is confounded by parameter mismatch. The depth-ceiling issue (no gain beyond 17 layers) is a genuine empirical gap.
-- **Significance:** Meaningful to the local-learning and bio-plausible training community; moderate for the broader ICLR audience. The efficiency results are a practical plus.
-- **Clarity:** Adequate overall; specific notational issues in the key equations undermine the precise technical argument.
+6. **Quantify the augmentation gap.** Include at minimum one row in Table 1 (or a new table) showing DeeperForward's accuracy under standard CIFAR-10 augmentation alongside the BP baseline, so readers can assess the practical cost of the representation-learning gap.

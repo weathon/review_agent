@@ -1,108 +1,118 @@
 ## Summary
-SPARK proposes a physics-guided vector-quantized memory bank for augmenting dynamical system training data, combined with a Fourier-enhanced graph ODE for long-horizon forecasting. The central idea is to pre-train a discrete codebook enriched with boundary conditions and physical parameters, then use nearest-neighbor retrieval in the codebook to create physics-consistent augmented samples, thereby improving robustness to data scarcity and distribution shift. The method is evaluated across five PDE/weather benchmarks and shows strong improvement over neural-operator and vision-backbone baselines.
+SPARK is a physics-guided augmentation framework for dynamical system modeling that addresses data scarcity and distribution shift. It builds a vector-quantized discrete memory bank conditioned on boundary information and physical parameters, augments training samples by mixing latent representations with retrieved codebook entries, and employs a Fourier-enhanced graph ODE for long-horizon prediction. Experiments span five benchmarks (Prometheus, ERA5, Navier-Stokes, Spherical-SWE, 3D Reaction-Diffusion) and include OOD and cross-domain transfer evaluations.
 
 ---
 
 ## Strengths
 
-- **Physics-guided discrete augmentation is a genuinely novel framing.** While VQ-VAEs and physics-informed neural networks both exist, fusing boundary positional encodings and physical-parameter channel attention into a shared discrete codebook, then using that codebook specifically for latent-space data augmentation, is a distinct contribution not present in prior operator-learning or scientific ML literature. The motivation—that discrete prototypes over physics conditions provide a structured interpolation space for OOD generalization—is concrete and falsifiable.
+- **SPARK genuinely functions as a plugin, supported by concrete evidence.** Figure 1 shows backbone+SPARK outperforming backbone across ViT, CNO, U-Net, and NMO on ERA5. Table 3 demonstrates SPARK applied to three distinct backbones (SimVP, PredRNN, Earthfarseer) with consistent improvements on SEVIR under varying data fractions. This is specific, multi-backbone validation that most augmentation papers do not provide.
 
-- **Demonstrated plugin utility across multiple backbones.** Figure 1 (ERA5 radar chart across ViT, CNO, U-Net, SwinT, NMO) and Table 3 (SimVP, PredRNN, Earthfarseer + SPARK on SEVIR transfer) provide direct evidence that SPARK improves diverse backbone architectures without architectural modification. This partially substantiates the plugin claim and sets SPARK apart from papers that only propose end-to-end models.
+- **Energy spectrum evaluation goes beyond standard MSE.** Figure 6 compares SPARK, Swin-T, and FNO on power spectra for Navier-Stokes, Spherical-SWE, and 3D Reaction-Diffusion. This is a physically meaningful diagnostic—important for the SciML community—and SPARK visibly recovers high-frequency structure that FNO and Swin-T miss.
 
-- **Breadth and difficulty of benchmark coverage.** Five heterogeneous datasets (Prometheus CFD, ERA5 atmospheric, Navier-Stokes, Spherical-SWE, 3D Reaction-Diffusion) plus a challenging sea ice transfer task represent a genuinely demanding evaluation regime for dynamical system modeling. Including both synthetic PDE and real-world meteorological data strengthens the generality claim.
+- **Cross-domain transfer experiment with controlled data fractions is a strong evaluation design.** Table 3 systematically varies target-domain data from 20% to 100% while transferring from ERA5 to SEVIR, and shows that SPARK+backbone consistently outperforms backbone alone (whereas vanilla backbone transfer can actually degrade performance at high data fractions). This directly tests the stated data-scarcity motivation.
 
-- **Near-zero OOD degradation on ERA5.** SPARK's degradation from in-distribution to OOD on ERA5 (0.0398 → 0.0401, Table 4) is remarkably small compared to competing OOD-specific methods (LEADS: 0.2367 → 0.4233; CODA: 0.1233 → 0.2367). If the OOD protocol is appropriately challenging, this result is a compelling empirical signal.
+- **Benchmark diversity is above average.** Five datasets spanning synthetic PDEs (Navier-Stokes, Spherical-SWE, 3D Reaction-Diffusion) and real meteorological data (ERA5, SEVIR), with both OOD and non-OOD splits, is a thorough empirical scope for a single paper.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None identified.*
+*None identified, but the combination of Major weaknesses below would significantly undermine confidence in the results without revisions.*
 
 ### Major
 
-- **No ablation studies.** The method combines at least four distinct components: (1) boundary positional encoding, (2) physical-parameter channel attention, (3) VQ memory bank augmentation, and (4) Fourier-enhanced graph ODE. No ablation table appears in the paper. This means the improvement observed in Table 1 cannot be attributed to any specific component. It is equally consistent with the result that the Fourier-enhanced graph ODE alone explains nearly all gains and the augmentation plugin contributes little. This is the single most important missing experiment for an ICLR submission about a plugin augmentation method.
+- **Complete absence of ablation study.** The method has four distinct components: boundary/parameter injection (§3.2), the VQ memory bank (Eq. 5–6), the memory-bank augmentation (Eq. 7), and the Fourier-enhanced graph ODE (§3.3). Table 1 only reports "Ours + SPARK" as a monolithic system; there is no table removing one component at a time. It is therefore impossible to determine whether the gains come from the augmentation mechanism (the paper's core claim), the bespoke downstream predictor, or some combination. This is the single most critical omission for an ICLR submission making component-level claims.
 
-- **OOD evaluation protocol is undefined.** The paper reports "w/ OOD" and "w/o OOD" across all tables but never specifies what is shifted: which physical parameters are out-of-range, by how much, whether shifts are interpolative or extrapolative, and whether OOD test environments contain unseen boundary geometries, unseen parameter values, or unseen time windows. Since OOD robustness is the central empirical claim, this omission makes the results difficult to interpret or reproduce, and prevents assessing whether the challenges are actually challenging.
+- **Unexplained ERA5 baseline discrepancy undermines comparison fairness.** In Table 1, FNO, UNO, and CNO report MSE of 0.7233, 0.6652, and 0.5243 on ERA5 (w/o OOD), while ViT achieves 0.0762 and NMO achieves 0.0432. Neural operators are specifically designed for PDE problems and typically outperform generic vision backbones on such tasks; a 20× gap versus vision models is anomalous and unexplained. Possible causes (unsuitable preprocessing, incompatible resolution, poor tuning) are never discussed. Until clarified, the ERA5 results cannot be trusted, which affects the headline comparison.
 
-- **Numerical inconsistency across tables undermines reproducibility.** SPARK's Prometheus MSE is reported as 0.0294/0.0308 (w/o OOD / w/ OOD) in Table 1 but as 0.0323/0.0328 in Table 4. Similarly, SPARK's ERA5 numbers differ between Table 1 (0.0322/0.0321) and Table 4 (0.0398/0.0401). These are not within rounding error and are unexplained. Either different model variants, data splits, or hyperparameter settings are used—none of which are disclosed. This raises questions about selective reporting and significantly weakens confidence in both tables.
+- **Augmented sample label preservation is conceptually unjustified.** Eq. (7) produces augmented inputs by interpolating a sample's latent representation with Top-K codebook entries from potentially different physical environments. The corresponding output label $\mathcal{Y}_i$ is the original future state, implicitly assumed to be preserved under this mixing. However, if the retrieved codes represent different boundary conditions or parameter regimes, the future dynamics associated with the mixed input could differ substantially from the original label. The paper does not address this, and it is a fundamental question for the validity of the augmentation scheme.
 
-- **The augmentation target semantics are undefined.** Equation 7 defines augmented latent inputs v_i by mixing node embeddings with codebook entries. The paper states these augmented samples are added to the training set, but never specifies the corresponding prediction target Y_i. If the original target is reused unchanged, this requires a justification that the augmented latent is label-preserving under physics-guided interpolation. Without this, the theoretical rationale for why augmented samples improve generalization rather than corrupt it is missing.
+- **OOD split definitions are absent for all datasets.** Table 1 reports w/o OOD and w/ OOD numbers, and Table 4 repeats this, but the paper never specifies what constitutes the OOD condition for each benchmark—whether it is an unseen parameter range, unseen boundary condition, unseen temporal period, or some combination. The near-zero OOD degradation for SPARK on ERA5 (0.0322 → 0.0321) raises the question of whether the OOD split is sufficiently challenging. Without defining the shift, the OOD claim cannot be evaluated.
 
-- **Suspicious ERA5 baseline performance.** Table 1 shows FNO (0.7233/0.9821), UNO (0.6652/0.7621), and CNO (0.5243/0.7821) having dramatically higher MSE on ERA5 than NMO (0.0432/0.0563) or the authors' method (0.0322/0.0321). These order-of-magnitude gaps for well-known methods on a standard atmospheric dataset—without any explanation of hyperparameter tuning, input normalization, or task adaptation—suggest potential misconfiguration of baselines. If these methods were not properly adapted to the ERA5 task (e.g., different input resolution, normalization, or rollout horizon), the reported improvement is inflated.
+- **No data scarcity experiments on primary benchmarks.** The abstract and introduction prominently motivate data scarcity, yet Table 1 uses full training data for all five benchmarks. The only scarcity experiment is Table 3, which conflates limited data with cross-domain transfer. A direct evaluation varying training data fraction (e.g., 10%, 25%, 50%) on Prometheus or Navier-Stokes is needed to validate the stated motivation.
 
 ### Minor
 
-- **Equation 7 normalization is inconsistent with K.** The augmented representation is $v_i = \lambda h_i + (1-\lambda)\sum_{n=1}^K e_n$. As written, the sum of K codebook entries is not normalized by K, so the scale of the second term grows with K. This is likely a typo (should be $\frac{1}{K}\sum$), but as stated it makes the interpolation invalid for K > 1.
+- **Notation conflicts impede reproducibility.** The symbol $\delta$ denotes physical parameters in Eq. (2) but appears as an activation/transform in Eq. (8) without redefinition. Similarly, Eq. (5) assigns $z_i$ via argmin (making it an index), yet it is described in the text as "the nearest neighbor code embedding." These inconsistencies are not merely cosmetic; they make it difficult to implement the method correctly.
 
-- **Equation 8 notation is under-specified.** The symbol δ in $q_i = \frac{1}{T_0}\sum_t \delta(\alpha_i^t \cdot v_t^i)$ is never defined (activation function? identity?), and the attention scores $\alpha_i^t$ lack normalization, making it unclear how the weighted average is computed. In Equation 9, $H^l$ appears in the ODE derivative but is not defined in this section; it is unclear whether it refers to layer-wise hidden states or historical observation embeddings.
+- **No VQ codebook diagnostics.** VQ-VAE methods are known to be prone to codebook collapse where only a small fraction of codes are ever used. The paper employs the standard straight-through estimator (sg[·]) but reports no codebook utilization, perplexity, or dead-code percentage. If the memory bank is degenerate, the augmentation mechanism would not function as claimed.
 
-- **Sea ice section lacks comparative quantitative evaluation.** Section 4.3 shows SPARK's training convergence curves (Figure 5) but does not report a comparison table of SPARK vs FNO vs U-Net on the sea ice task in terms of MSE, SSIM, or PSNR. The qualitative Figure 4 is suggestive but insufficient for a quantitative claim of superiority on this challenging task.
+- **Figure 5 (sea ice RQ2) is self-referential.** The quantitative evidence for RQ2 consists of SPARK's own training loss, SSIM, and PSNR curves over 80 epochs. These curves demonstrate that the model trains successfully but provide no comparison against baselines on the sea ice task. The qualitative Figure 4 compares against FNO and U-Net, but not against NMO (the strongest baseline in Table 1).
 
-- **Theoretical analysis is generic.** Theorems 1 and 2 are a standard mutual-information generalization bound and a PAC-Bayesian bound. Neither theorem depends on vector quantization, the specific augmentation formula (Eq. 7), the Fourier-enhanced ODE, or any property of the proposed architecture. The key step—showing that SPARK specifically reduces $I(\theta; \mathcal{D} | \mathcal{P})$ or $\text{KL}(Q\|P)$—is asserted rather than proved. As written, the theory justifies "any physics-informed prior helps" rather than "SPARK's design helps."
+- **Physical parameters are ill-defined for ERA5.** §3.2 conditions channel attention on "physical parameters $\delta$" (scalars like viscosity). For ERA5, the paper says it uses u, v, and humidity as "forcing terms"—these are dynamic spatiotemporal fields, not scalar parameters in the same sense as viscosity or diffusion coefficient. How these are projected into a single parameter vector for Eq. (2) is not explained.
+
+- **"Quantitative" vs. "quantized" title inconsistency.** The paper title says "quantitative augmentation" while the abstract, methodology, and conclusion consistently use "quantized augmentation" (referring to VQ-VAE). These are different concepts. The title should match the method.
 
 ### Tiny
 
-- The paper title says "Quantitative Augmentation" while the abstract and body consistently use "Quantized Augmentation." The former is an incorrect description of the method.
-- The scalability claim (Table 2) shows ERA5 MSE rising from 0.0302 to 0.0391 when model size drops from 24.56MB to 2.18MB—a 29% increase. Describing this as "stable" performance is overstated; the degradation is monotonic and non-negligible.
+- The theoretical section (§3.4) presents standard information-theoretic and PAC-Bayes generalization bounds with physical prior $\mathcal{P}$ substituted in. The conclusion that "physical priors reduce $I(\theta; \mathcal{D} | \mathcal{P})$" is stated as an implication of the theorem, but it is actually an assumption. The theorems do not analyze VQ discretization, the augmentation rule, or the Fourier graph ODE, and are not connected to any measurable quantity in the experiments. The theory as written does not add analytical insight specific to SPARK.
 
 ---
 
 ## Nice-to-Haves
 
-- **Sensitivity analysis on λ, K, and memory bank size M.** These three hyperparameters directly control the augmentation behavior, yet no analysis of sensitivity is provided. Even a small grid search over λ ∈ {0.1, 0.3, 0.5, 0.7} and K ∈ {1, 5, 10} would indicate whether the method is robust or tightly tuned.
-- **Memory bank interpretability.** A t-SNE/UMAP of learned codebook entries colored by physical parameters (e.g., viscosity bins, boundary condition type) would directly test whether the discrete codes correspond to physically meaningful regimes—this would strengthen the "physics-guided" framing.
-- **Controlled data scarcity experiments on primary benchmarks.** The transfer experiment (Table 3) tests data scarcity in a cross-domain setting. Systematically training with 5%, 10%, 20%, 50% of Prometheus or Navier-Stokes data and comparing with and without SPARK would more directly validate the data-scarcity claim.
-- **Computational cost comparison.** The method stacks a VQ-VAE pretraining stage on top of a Fourier graph ODE. A table comparing training/inference time and GPU memory against FNO/NMO baselines would clarify whether the improved accuracy justifies the added cost.
-- **Augmentation visualization.** Showing a decoded augmented sample (decoded from $v_i$) alongside the original and the nearest codebook neighbor would make the augmentation mechanism interpretable and would help readers assess physical plausibility of the generated samples.
-- **Physical constraint metrics.** Reporting conservation error (e.g., mass or energy conservation residuals) alongside MSE would strengthen the "physical consistency" claim beyond the visual energy-spectrum comparison.
+- **Compare augmentation against simple baselines (MixUp, noise injection).** The physics-guided memory bank mixing is the central novelty over standard augmentation; a direct comparison would strengthen the claim.
+
+- **Sensitivity analysis for key hyperparameters** ($\lambda$, $K$, memory bank size $M$). These are central to the augmentation behavior and their robustness across datasets is unknown.
+
+- **Training and inference time alongside Table 2.** Table 2 explores model size but omits wall-clock training/inference time and memory overhead. Since the method adds VQ pretraining, GNN encoding, and ODE solving on top of any backbone, cost transparency would help practitioners.
+
+- **Codebook visualization (t-SNE/UMAP colored by physical parameter).** Visualizing whether the learned codes organize by physically meaningful axes would provide qualitative evidence that the memory bank captures physics rather than memorizing training samples.
+
+- **Controlled OOD severity analysis.** Stratifying OOD splits by shift magnitude (e.g., small vs. large viscosity extrapolation) would make the robustness claims more precise and informative.
 
 ---
 
 ## Removed Points
-*These points are flagged for removal—treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **"First to propose" claim (Harsh Critic).** While the claim is poorly supported, removing it from the paper is a style fix, not a substantive weakness. The actual novelty of the combination stands on its own without this phrase. Not a reviewable weakness.
-- **KNN graph vs. physical topology (Harsh Critic).** The paper follows prior work on graph-based spatial modeling (Fan et al., 2019) in using KNN. This is standard practice in the GNN-for-PDEs literature. Criticizing KNN without evidence that mesh adjacency would perform better is scope creep.
-- **Physical parameter conditioning may be too weak (Harsh Critic §3.2).** The channel attention in Eq. (3) is a standard and well-motivated design (following Takamoto et al., 2023). Claiming it cannot capture higher-order interactions is speculative.
-- **Potential train-test information leakage (Harsh Critic).** The concern about physical parameters/boundary conditions at test time is reasonable in principle, but without evidence that the datasets actually hide this information at test time, this is conjecture rather than an identified flaw.
-- **Unfair comparison due to SPARK using more side information (Harsh Critic, Reviewer 2).** The baselines do not use boundary/parameter conditioning in Table 1; however, the asymmetry disadvantages SPARK's competitors, not SPARK—this makes SPARK's advantage conservative rather than inflated. Per the rules, this should be removed as a weakness.
-- **Confidence intervals on single-run results (Harsh Critic §4.2).** For large-scale PDE and weather benchmarks (ERA5, Prometheus), single-run evaluation is standard. This is a nice-to-have at best.
-- **Demand for theoretical proof of ODE stability under quantization (Harsh Critic, Reviewer 2).** Requesting a theoretical bound on how VQ error propagates through ODE integration is beyond standard expectations for an empirical systems paper at ICLR.
-- **Broader impact discussion (Harsh Critic).** This is a formatting/completeness issue rather than a scientific weakness.
-- **Why is transfer fine-tuning sometimes worse for baselines (Harsh Critic §4.5)?** The observation that SimVP without SPARK slightly degrades at higher SEVIR data fractions (Table 3) is a known phenomenon (negative transfer) and does not imply baseline misconfiguration.
+- **"Plugin claim is unvalidated"** (Harsh Critic, strong form): Removed. Figure 1 explicitly shows backbone+SPARK vs. backbone for multiple architectures on ERA5, and Table 3 applies SPARK to SimVP, PredRNN, and Earthfarseer. The plugin is validated, though the main Table 1 does not isolate it — which is a fair ablation concern but different from the plugin claim itself.
+
+- **Missing error bars / no statistical tests** (Harsh Critic): Removed. Single-run evaluation is the norm for large-scale benchmarks in this community. Multiple-run statistics are not standard practice for neural operator and dynamical systems benchmarks at ICLR scale.
+
+- **Ethics statement is perfunctory** (Harsh Critic): Removed. This is a style/formatting concern and ICLR does not mandate extensive societal impact statements for applied ML papers.
+
+- **Requests for missing related work citations** (Harsh Critic): Removed per instructions; external references cannot be verified.
+
+- **Title does not signal technical novelty precisely enough** (Harsh Critic): Removed as a pure style nitpick. The title issue kept is the substantive "quantitative" vs. "quantized" semantic confusion.
+
+- **Strength: "comprehensive empirical evaluation" / "well-written"** (Reviewer 2): Removed as generic. The specific strength retained is the breadth and design of the transfer experiment (Table 3), not generically "extensive experiments."
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel conceptual observation—under-discussed in the sub-reviews—is that the VQ discretization step serves a dual purpose: it compresses physics-rich representations for efficiency, and it implicitly defines a manifold of physically plausible states as the codebook. Augmentation then amounts to interpolating on this physics-constrained manifold rather than in unconstrained input space, which is a principled mechanism for generating physically plausible synthetic samples. This is a more interesting idea than standard latent-space mixup because the codebook geometry is shaped by physical priors. However, the paper does not articulate or test this interpretation explicitly—whether the VQ codebook actually organizes by physics modes (rather than arbitrary clusters) remains unvalidated. Demonstrating this (via codebook visualization colored by physical parameters) would substantially elevate the conceptual contribution.
+The most underappreciated aspect of the paper is the interaction between the physics-aware discrete memory bank and transfer learning. Table 3 reveals a striking asymmetry: vanilla backbone transfer from ERA5 to SEVIR **hurts** performance at higher data fractions (e.g., SimVP degrades 15.79% at 100% SEVIR, PredRNN degrades 8.70% at 100%), while SPARK+backbone transfer consistently helps. This suggests that SPARK's physics-conditioned quantization may act as a domain-invariant regularizer—filtering out ERA5-specific distributional artifacts that would otherwise cause negative transfer—rather than simply providing more training signal. This mechanism is not analyzed in the paper but is worth investigating: if true, it would explain why SPARK's benefit is largest in low-data regimes and implies a specific use case beyond generic augmentation.
 
 ---
 
 ## Suggestions
 
-1. **Add a full ablation table** as the highest priority. At minimum: (a) full SPARK, (b) SPARK without augmentation (just the Fourier ODE), (c) SPARK without Fourier ODE (just augmentation + standard predictor), (d) SPARK without boundary encoding, (e) SPARK without VQ (continuous latent). This directly answers what drives the improvement.
+1. **Add an ablation table** removing each of the four components (boundary encoding, parameter channel attention, VQ memory bank, Fourier graph ODE) on at least Prometheus and Navier-Stokes. This is the highest-priority revision.
 
-2. **Define the OOD protocol precisely** for each dataset—what parameter/condition is shifted, what range constitutes in-distribution vs. out-of-distribution, and whether test-time physical parameters are available. Add this as a table in the appendix.
+2. **Explain or fix the ERA5 FNO/UNO/CNO results.** If these operators genuinely perform poorly on this ERA5 formulation (e.g., because the task is on irregular grids), explain why and note that the comparison is one-sided in SPARK's favor for those methods — this actually makes SPARK's advantage over NMO more meaningful.
 
-3. **Reconcile and explain the number discrepancies** between Table 1 and Table 4 (Prometheus and ERA5). If the model configurations differ, state which variant is used in each table and why.
+3. **Define OOD splits precisely** in the experimental section or appendix: for each dataset, state what physical parameter ranges, boundary conditions, or temporal windows are held out, and quantify the shift magnitude.
 
-4. **Specify the augmentation target:** explicitly state that Y_i is held fixed during augmentation of X_i, and provide a justification (e.g., augmented and original samples share the same physics regime, so the same future trajectory is a valid target under the VQ interpolation).
+4. **Report codebook diagnostics** (% active codes, assignment entropy, average nearest-neighbor distance in codebook space) to validate that the VQ memory bank is functioning as intended rather than collapsing.
 
-5. **Fix Equation 7** to normalize by K: $v_i = \lambda h_i + \frac{1-\lambda}{K}\sum_{n=1}^K e_n$, or explicitly justify the un-normalized form.
+5. **Add at least one direct data scarcity curve** (training fraction vs. MSE) on a primary benchmark (e.g., Prometheus) to directly substantiate the data-scarcity claim from the abstract.
 
-6. **Audit ERA5 baselines.** Reproduce FNO/UNO/CNO on ERA5 with standard hyperparameters from their respective papers and report the configuration used. The order-of-magnitude error gap vs. NMO is suspicious and needs explanation.
+6. **Justify label preservation** in the augmentation (Eq. 7): either argue theoretically that interpolation in the learned physics-conditioned latent space preserves output labels, or test empirically that augmented samples have lower prediction error than purely random latent interpolations.
 
-7. **Define δ in Eq. 8** and clarify the attention mechanism (is $\alpha_i^t$ normalized? softmax over t?). Define H^l in Eq. 9 and clarify what dimension the DFT operates over for graph node features.
+7. **Fix the $\delta$ notation conflict** between §3.2 (physical parameters) and Eq. (8) (activation function), and reconcile the $z_i$ index vs. embedding ambiguity between Eq. (5) and the surrounding text.
 
 ---
 
-**Evaluation axes:**
+## Evaluation
 
-- **Novelty:** Moderate-to-good. The specific combination of physics-informed VQ augmentation for dynamical system OOD robustness is a concrete and original contribution. Individual components (VQ-VAE, boundary GNN, Fourier ODE) are established, but the integration and motivation are non-trivial.
-- **Technical soundness:** Weak. Multiple equations are under-specified, no ablations exist, and the theoretical analysis is disconnected from the proposed design. The method as written is not fully reproducible.
-- **Empirical support:** Mixed. The breadth of benchmarks and the plugin validation across backbones are genuine strengths. However, undefined OOD protocols, unexplained number inconsistencies across tables, and suspicious baseline results on ERA5 significantly weaken the evidential strength.
-- **Significance:** Moderate. The problem (OOD-robust PDE modeling under data scarcity) is important and practically relevant. If the ablations confirm that the augmentation plugin independently drives improvement, the significance is high; currently this is unestablished.
-- **Clarity:** Below acceptable ICLR standard. Key symbolic definitions are missing or inconsistent (δ, H^l, z_i as index vs. embedding), the augmentation procedure is not fully specified, and the absence of ablations leaves the contribution ambiguous.
+| Axis | Assessment |
+|---|---|
+| **Originality** | Moderate. The combination of VQ-VAE memory bank with physics-conditioned attention and graph ODE for augmentation in dynamical systems is novel in its integration, though each individual component (VQ, GNN, Neural ODE, Fourier operator) is well-established. The augmentation-for-OOD framing in physical systems is a fresh angle. |
+| **Importance of research question** | High. Robustness to distribution shift and data scarcity in physical system modeling are genuine bottlenecks in scientific ML with real deployment consequences. |
+| **Claims well supported** | Weak to moderate. The headline performance gains (Table 1) are plausible but tainted by unexplained baseline discrepancies (ERA5 operators) and complete absence of ablations. The plugin claim is supported. The data scarcity claim is not directly demonstrated on primary benchmarks. |
+| **Soundness of experiments** | Moderate concern. The five-benchmark comparison is broad, and the transfer experiment is well-designed. However, missing ablations, undefined OOD splits, and the ERA5 operator anomaly prevent confident interpretation. |
+| **Clarity of writing** | Adequate but with specific notation conflicts that impede reproduction (δ overloading, z_i as index vs. embedding, unclear spectral convolution definition on irregular graphs). |
+| **Value to the research community** | Moderate to high if ablations confirm that the VQ augmentation is the driver of gains. The transfer learning finding (SPARK mitigates negative transfer) is potentially the most valuable and least discussed result. |
+| **Contextualized relative to prior work** | Adequate at a high level; the paper covers the right related work categories. More discriminative positioning against retrieval-augmented and memory-based scientific ML would strengthen the novelty argument. |
