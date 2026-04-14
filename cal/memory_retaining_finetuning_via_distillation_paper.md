@@ -1,0 +1,274 @@
+
+
+{0}------------------------------------------------
+
+# MEMORY RETAINING FINETUNING VIA DISTILLATION
+
+## Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large language models (LLMs) pretrained on large corpora of internet text possess much of the world knowledge. Following pretraining, one often needs to conduct continued pretraining on certain capabilities such as math and coding, or “posttraining” (a.k.a., alignment) techniques to make the models follow users’ instructions and align them with human preferences. One challenge during these finetuning stages is that the model can lose the pretraining knowledge or forget certain capabilities (e.g., in-context learning ability). Moreover, although there exist strong open-weight LLMs such as Llama 3, both their pretraining and post-training data are not open to the public, making it difficult to mix the finetuning data with the models’ own pretraining data as a solution for mitigating forgetting. We propose *label annealing*, a method that mitigates forgetting during finetuning without requiring access to the original pretraining data. Label annealing distills pretraining knowledge during finetuning by adding a KL divergence term in the loss function, regularizing the divergence between the finetuned model’s predictions to those of the initial pretrained model. In mathematics and code finetuning, label annealing improves the model’s performance in target domains without sacrificing other capabilities of the pretrained model. In alignment finetuning, our method introduces a smooth tradeoff between the instruction-following capability and the pretraining knowledge. We complement our empirical investigation with a mathematical model with overparameterized linear regression that provides geometric intuition why label annealing would help.
+
+## 1 INTRODUCTION
+
+Language models pretrained on large volume of internet text possess much of the common world knowledge (Achiam et al., 2023; Team et al., 2023; Reid et al., 2024; Anthropic, 2024; Gunter et al., 2024; Touvron et al., 2023b; Dubey et al., 2024b; Yang et al., 2024a; Jiang et al., 2023). With the advancement of open-weight model, e.g., Llama series (Touvron et al., 2023a; Dubey et al., 2024a), an emerging paradigm is to finetune those open-weight models to adapt to a wide range of downstream applications such as mathematics (Lewkowycz et al., 2022; Azerbayev et al., 2024), programming (Rozière et al., 2024a), medicine (Yuan et al., 2024; Chen et al., 2023), and law (Colombo et al., 2024b;a), or to follow human instructions and preferences (Ouyang et al., 2022).
+
+One major challenge in finetuning is that the model may forget some old knowledge or capabilities. A standard solution is to mix the finetuning data with the upstream training data of the model. This is known as “experience replay” in the continual learning literature (Lopez-Paz & Ranzato, 2017; Chaudhry et al., 2019). Unfortunately, the training data of powerful open-weights models, e.g., Llama series (Dubey et al., 2024a; Touvron et al., 2023a), is never shared with the public, making it impossible to mix custom finetuning data with the original training data. Moreover, the emerging trend of learning specific knowledge or capability using synthetic data (Yang et al., 2024b; Zelikman et al., 2022; 2024) and the heavy use of expensive human annotation (Touvron et al., 2023a; Dubey et al., 2024a; Lightman et al., 2024) make it even harder to apply the experience replay solution. These trends necessitate finetuning methods that preserve the model’s old knowledge with only access to its weights.
+
+A simple idea is to add weight decay toward the initial weights instead of zeros (Loshchilov & Hutter, 2019; Kumar et al., 2023), constraining the model weights from diverging too far from their initialization. We show that this existing wisdom provides limited mitigation in the setting of language modeling, due to its inability to take finetuning data into consideration. Instead, we
+
+{1}------------------------------------------------
+
+![Diagram of the label annealing process. A 'Finetuning dataset' is input to both an 'Initial open-weight model' (blue box with a gear icon) and a 'Finetuning model' (orange box). The 'Initial open-weight model' outputs to 'KL divergence between predictions' (green box). The 'Finetuning model' outputs to 'Causal language modeling objective' (green box). Both green boxes are combined via a '+' sign to form the final 'Training with label annealing' (green box).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+```
+
+graph LR
+    Dataset[Finetuning dataset] --> InitialModel[Initial open-weight model]
+    Dataset --> FinetuningModel[Finetuning model]
+    InitialModel --> KLDivergence[KL divergence between predictions]
+    FinetuningModel --> CausalObjective[Causal language modeling objective]
+    KLDivergence --> Plus[+]
+    CausalObjective --> Plus
+    Plus --> Training[Training with label annealing]
+  
+```
+
+Diagram of the label annealing process. A 'Finetuning dataset' is input to both an 'Initial open-weight model' (blue box with a gear icon) and a 'Finetuning model' (orange box). The 'Initial open-weight model' outputs to 'KL divergence between predictions' (green box). The 'Finetuning model' outputs to 'Causal language modeling objective' (green box). Both green boxes are combined via a '+' sign to form the final 'Training with label annealing' (green box).
+
+Figure 1: **Label annealing** keeps a copy of the initial model and freezes it. During finetuning, it computes two forward passes, one with the finetuning model, and the other with the initial model. Then it regularizes the usual finetuning objective with the KL divergence between the output of two networks, mitigating forgetting that arises from finetuning.
+
+propose a *data-dependent* approach by distilling the knowledge (Hinton et al., 2015) from the initial model during the finetuning process. We refer to this approach as *label annealing*. Concretely, we load an independent copy of the initial model and keep it frozen during training. We then add a regularization term that penalizes the KL divergence between the predicted token probabilities of the finetuned model and those of the initial model (Figure 1).
+
+To demonstrate the effectiveness of label annealing, we design four empirical finetuning tasks: mathematics finetuning, code finetuning (Section 3.2), supervised instruction finetuning, and niche domain knowledge finetuning (Section 3.3). In each task, we design a specific finetuning dataset and some “target benchmarks”, those we wish to see improvement due to finetuning, as well as some “source benchmarks” that measures if the general capabilities are preserved. We show that label annealing can sometimes mitigate forgetting at no cost of sacrificing the target benchmarks performance, and in other cases, it introduces a smooth tradeoff between target and source benchmarks.
+
+We complement our empirical findings with a theoretical analysis of label annealing using an over-parameterized linear regression model (Section 4). We analyze the gradient descent solution of three finetuning techniques: direct fine-tuning,  $L_2$  regularization toward initialization, and label annealing (Theorem 1). We show that, direct finetuning discards the information contained in the initial weights that lies within the span of the finetuning data, therefore only preserving the initial knowledge outside that span. In contrast, label annealing introduces a regularization term that preserves the model’s knowledge both inside and outside the span of the finetuning data.
+
+To summarize, our key contributions are:
+
+- We identify the emerging task of mitigating forgetting when finetuning open-weight language models with only access to the model weights, and propose **label annealing** as a simple solution.
+- We provide empirical results across multiple domains, including math, coding, and alignment, demonstrating that label annealing improves performance in the target domains while maintaining or minimizing degradation in general capabilities.
+- We offer a clear theoretical explanation for why label annealing is more effective than direct finetuning or  $L_2$  regularization toward initialization, providing geometric intuitions for our findings.
+
+Label annealing is straightforward to implement, making it an attractive option for finetuning open-weight language models. From a scientific perspective, label annealing demonstrates that a model’s knowledge can be preserved during finetuning without access to the original training data.
+
+### 1.1 RELATED WORK
+
+**Continual learning and pretraining.** The field of continual learning emerged from early research in neural networks (McCloskey & Cohen, 1989; Ratcliff, 1990), which studied how systems could learn from sequentially presented information (Schlimmer & Fisher, 1986; Grossberg, 2012). A central challenge in this area is preventing “catastrophic forgetting” – where neural networks lose previously acquired capabilities when learning new tasks (Robins, 1995; French, 1999; Goodfellow et al., 2015; Kemker et al., 2018; Kirkpatrick et al., 2017). Researchers have developed various approaches to address this challenge, including: parameter regularization techniques to maintain critical network weights (Nguyen et al., 2017; Zenke et al., 2017; Kirkpatrick et al., 2017), methods that expand model architectures (Rusu et al., 2016; Golkar et al., 2019), and memory-based solu-
+
+{2}------------------------------------------------
+
+tions that retain examples from previous tasks (Rebuffi et al., 2017; Shin et al., 2017; Lopez-Paz & Ranzato, 2017). While traditional continual learning research has focused on clearly defined sequential tasks, our work examines the practical scenario of finetuning large-scale open-source language models (Dubey et al., 2024a; Jiang et al., 2023). In the context of language models, researchers have shown that additional pretraining can effectively adapt models to specialized domains like programming (Rozière et al., 2024b), healthcare (Chen et al., 2023), and mathematics (Lewkowycz et al., 2022; Shao et al., 2024; Azerbayev et al., 2024). This adaptation process has been refined through advances in causal language modeling techniques (Gupta et al., 2023; Ibrahim et al., 2024; Parmar et al., 2024). Some work has investigated using experience replay to preserve capabilities (Gupta et al., 2023; Parmar et al., 2024), but these studies have been limited to either small models (around 400M parameters) or settings with access to extensive computational resources for training from scratch.
+
+**Knowledge distillation and its variants.** Knowledge distillation (Buciluundefined et al., 2006; Hinton et al., 2015) tackles the task of training a high-quality, small student model under the supervision of a large teacher model. In the context of language modeling, knowledge distillation is mainly used in a black-box manner, where the student model only have access to the tokens generated by the teacher model (Taori et al., 2023; Fu et al., 2023). With the advancement of open-weight language models, there is a growing interest in white-box distillation, where the student model have full access to the logits output of the teacher model (Wen et al., 2023; Gu et al., 2024; Agarwal et al., 2024). Our paper differs from the knowledge distillation literature in that our goal is not compressing a larger model to a smaller one. Instead, we use the technique of knowledge distillation to mitigate forgetting in the finetuning stage of language models.
+
+In the context of knowledge distillation, similar to our work is the study of self-distillation (Zhang et al., 2019; Mobahi et al., 2020), where they find that first training a model and then distilling the model can be more effective than directly training the model. The goal of self-distillation is to improve generalization, as opposed to mitigate forgetting. Closely related to self-distillation is the technique of label smoothing (Szegedy et al., 2016; Müller et al., 2019b;a) that regularizes the KL divergence between model output and the uniform distribution. Label smoothing is similar to our proposal in that we both regularize the probability distribution predicted by the model with an additional distribution over class labels — a uniform distribution in the context of label smoothing and the distribution predicted by the initial model in our method.
+
+## 2 OUR METHOD
+
+Before the advancement of the large pretrained language model followed by instruction tuning (Brown et al., 2020), there is less practical concern about forgetting when finetuning a pretrained model. For example, in language modeling, when we finetune a BERT model (Devlin et al., 2019) to perform a question-answering (Rajpurkar et al., 2016) task, we do not have concern if the finetuned model forgets its ability to perform other tasks (e.g., summarization) due to the *task-specific* nature of finetuning. In contrast, when adapting an open-weight language model, e.g., Llama (Dubey et al., 2024a), Mistral (Jiang et al., 2023), to a new domain of knowledge, one needs to make sure that the finetuned model is a reasonable model that can, for example, follow user instructions or complete few-shot examples (MetaAI, 2024).
+
+In this section, we describe our proposed label annealing algorithm that aims to address the forgetting issue when finetuning an open-weight language model. We first introduce the setup for our method (Section 2.1), and then describe the label annealing regularization in detail (Section 2.2). To provide background for the empirical experiments in Section 3, we present the label annealing algorithm in the context of finetuning a language model, but we note that our method can be generalized to any supervised or self-supervised learning task that uses cross-entropy loss.
+
+### 2.1 SETUP
+
+**Finetuning dataset.** In the context of language modeling, we use  $x$  to denote a sequence of tokens and  $y$  to denote the next token following  $x$ . We use  $(x, y) \sim \mathcal{D}_{\text{FT}}$  to denote a context sampled from the finetuning dataset  $\mathcal{D}_{\text{FT}}$ . Let  $p_\theta(y|x)$  denote the output distribution of our model, where  $\theta$
+
+{3}------------------------------------------------
+
+represents the model weights. We denote the output distribution of the initial model as  $p_{\theta_0}(y|\mathbf{x})$ , where  $\theta_0$  are the initial parameters.
+
+**Success criteria.** We consider methods that only require access to the weights of the initial model. For each finetuning dataset, we define two types of evaluation benchmarks: (1) target benchmarks that measure improvement in the specific domain being finetuned, and (2) source benchmarks that assess preservation of the model’s general capabilities. Then, we consider a technique as successfully mitigating the forgetting problem if (i) the improvement in the target benchmark is close to that of direct finetuning without applying any memory retaining technique, and (ii) the performance on the source benchmarks is close to that of the initial model.
+
+### 2.2 LABEL ANNEALING
+
+In this section, we introduce the label annealing regularization in the context of language model finetuning (Figure 1). Without any regularization, causal language modeling aims to minimize the following objective:
+
+$$L(\theta) = \mathbb{E}_{\mathbf{x}, y \sim \mathcal{D}}[-\log p_{\theta}(y|\mathbf{x})]. \quad (1)$$
+
+However, aggressively optimizing this objective may cause the model to forget its old capabilities. To mitigate this, label annealing introduces a regularization term with temperature scaling:
+
+$$L_{\text{LA}}(\theta, T) = \lambda \mathbb{E}_{\mathbf{x}, y \sim \mathcal{D}}[\text{KL}(p_{\theta, T}(y|\mathbf{x}) || p_{\theta_0, T}(y|\mathbf{x}))], \quad (2)$$
+
+where KL denotes the Kullback-Leibler divergence, and  $T$  is the temperature scaling parameter. The temperature-scaled distributions are defined as:
+
+$$p_{\theta, T}(y|\mathbf{x}) = \frac{\exp(z_y/T)}{\sum_{y'} \exp(z_{y'}/T)},$$
+
+where  $\mathbf{z}$  represents the logits output of the model for input  $\mathbf{x}$ . The same scaling is applied to  $p_{\theta_0, T}(y|\mathbf{x})$  using the pretrained model’s logits. The full objective then becomes:
+
+$$L_{\text{total}}(\theta) = L(\theta) + L_{\text{LA}}(\theta, T) \quad (3)$$
+
+where  $\lambda$  is a hyperparameter controlling the strength of the regularization, and  $T$  controls the “sharpness” of the distributions. A higher temperature ( $T > 1$ ) makes the distributions more uniform, while a lower temperature ( $0 < T < 1$ ) makes them more peaked. In the limit of  $T \rightarrow \infty$ , our regularization reduces to the label smoothing (Szegedy et al., 2016) regularization discussed in Section 1.1. By optimizing this combined objective, label annealing seeks to strike a balance between adapting to the new data and retaining knowledge from pretraining.
+
+## 3 MAIN EXPERIMENTS
+
+In this section, we describe our main experiments. We finetune Llama 3 8B base model (Dubey et al., 2024a) on various downstream datasets, and measure its performance on some standard language model benchmarks. We split our experiments into two sections.
+
+In Section 3.2, we finetune the model on additional mathematics and code data. We find that label annealing prevents forgetting with no loss in downstream performance. In contrast, a simple baseline of adding  $L_2$  regularization toward initialization (Kumar et al., 2023) provides little to no benefit. In Section 3.3, we present two complementary experiments, (i) performing instruction tuning on the base model and (ii) finetuning an aligned model on an additional downstream dataset. In both cases, we observe a smooth tradeoff between finetuning benchmarks and pretraining benchmarks. We next present the experiment setup that serves this section.
+
+### 3.1 EXPERIMENT SETUP
+
+**Evaluation setup.** Each finetuning dataset  $\mathcal{D}_{\text{FT}}$  is evaluated using two benchmark categories: (1) target benchmarks  $\mathcal{B}_{\text{target}}$  that measure improvement in finetuned capabilities, and (2) source benchmarks  $\mathcal{B}_{\text{source}}$  that verify preservation of the original model’s performance. As an example, if we perform additional training on mathematics related text, we would expect math benchmarks like GSM8K (Cobbe et al., 2021) or MATH (Hendrycks et al., 2021b) to improve, whereas general capability benchmarks such as MMLU (Hendrycks et al., 2021a) to not degrade.
+
+{4}------------------------------------------------
+
+**Benchmark selection.** We select 8 benchmarks, roughly divided into five categories, to probe different knowledge or capability of the finetuned model. Note that we do not evaluate each finetuning experiment with data source  $\mathcal{D}_{\text{FT}}$  on all 8 benchmarks. Instead, based on the content of each finetuning dataset, we select  $\mathcal{B}_{\text{target}}$  as the benchmarks we expect to see improvement and select  $\mathcal{B}_{\text{source}}$  as the benchmarks we wish to retain performance. We defer the evaluation details to Appendix A. At a high level, we pick benchmarks that probe performance in mathematics (MATH (Hendrycks et al., 2021b), GSM8K (Cobbe et al., 2021)), coding (HumanEval (Chen et al., 2021)), pretraining knowledge (MMLU (Hendrycks et al., 2021a), TriviaQA (Joshi et al., 2017)), niche books and articles (QuALITY QA (Pang et al., 2022; Yang et al., 2024b)).
+
+**Direct finetuning baseline.** For each finetuning dataset  $\mathcal{D}_{\text{FT}}$ , we first report the result of directly finetuning on it. As we shall see, in some cases the forgetting is not a serious problem even without any intervention. Throughout our experiments, we use batch size 128 and context window 2048, leading to a throughput of 262K tokens per batch. We use cosine learning rate decay with linear warmup up to 5% of total steps with peak learning rate 5e-6. For all datasets, we finetune on the downstream dataset for 5 epochs. As a result, we standardize a fixed set of training hyperparameter and do not perform dataset specific hyperparameter selection for each finetuning dataset  $\mathcal{D}_{\text{FT}}$ .
+
+**$L_2$  regularization baseline.** A simple baseline to maintain pretraining knowledge with only access to pretrained weights is to simply regularize the weights toward initialization. We consider this simple approach of  $L_2$  regularization as a baseline. This is introduced as “regenerative regularization” in Kumar et al. (2023), it can also be viewed as a simplified case of Elastic Weight Consolidation (EWC) (Kirkpatrick et al., 2017), where all parameters are weighted equally. We implement it by adding the penalty term  $\frac{\lambda}{2} \|\theta - \theta_0\|_2^2$  to the primary objective (1). We follow the same set of training hyperparameter as in direct finetuning. To select the best  $\lambda$ , we sweep over a range of  $\lambda$  for each finetuning dataset  $\mathcal{D}_{\text{FT}}$ . Then, we first filter out those choice of  $\lambda$  that lead to no improvement in target benchmarks  $\mathcal{B}_{\text{target}}$ , and then select the one that has the highest value in source benchmark  $\mathcal{B}_{\text{source}}$ .
+
+**Label annealing setup.** For our approach, we follow the same hyperparameter choice for training as in direct finetuning and  $L_2$  regularization. To select the label annealing hyperparameter, namely, the annealing scale  $\lambda$  and temperature  $T$  from (2), we follow the same selection process as in  $L_2$  regularization: pre-filtering based on target benchmark  $\mathcal{B}_{\text{target}}$  performance, and then select the one with best source benchmark performance  $\mathcal{B}_{\text{source}}$ .
+
+### 3.2 BASE MODEL TRAINING
+
+In this section, we describe experiments where we finetune the Llama 3 8B model with two finetuning datasets  $\mathcal{D}_{\text{FT}}$ . We describe the dataset construction below, as well as the target benchmarks  $\mathcal{B}_{\text{target}}$  and source benchmarks  $\mathcal{B}_{\text{source}}$  for each dataset.
+
+**Mathematics finetuning.** We first perform finetuning on some synthetic mathematics corpus. Our dataset  $\mathcal{D}_{\text{FT}}$  is constructed in two stages. (i) We start with a seed dataset of math QA dataset from Metamath (Yu et al., 2024) and additional questions collected from StackExchange. (ii) We generate a synthetic corpus by prompting GPT-4o-mini (OpenAI et al., 2024) to convert the question and answer pairs to a textbook-like article (Full prompts in Appendix A.2). Following the steps above, we generate a corpus with 179M tokens.
+
+Training on the math-related corpus, we expect mathematics benchmarks to improve  $\mathcal{B}_{\text{target}} = \{\text{MATH, GSM8K}\}$  and we hope to maintain the same performance in pretraining metrics  $\mathcal{B}_{\text{source}} = \{\text{HumanEval, MMLU, TriviaQA}\}$ . Indeed, we see in Table 1 that direct finetuning improves mathematics performance at the cost of hurting pretraining metrics, particular so in TriviaQA (drop by 14.19%), which tests more tail knowledge as opposed to commonsense knowledge. While the  $L_2$  regularization failed to resolve the forgetting problem, label annealing fixes the forgetting in pretraining metrics (MMLU and TriviaQA) and in some cases improving performance in target benchmarks. Note that even though our synthetic mathematics corpus  $\mathcal{D}_{\text{FT}}$  does not directly aim to improve coding ability, direct finetuning on this corpus does improve HumanEval performance, and label annealing can preserve most of the improvement.
+
+{5}------------------------------------------------
+
+| Training recipe      | Mathematics |       | Coding    | Pretraining |          |
+|----------------------|-------------|-------|-----------|-------------|----------|
+|                      | MATH        | GSM8K | HumanEval | MMLU        | TriviaQA |
+| Llama 3 8B Base      | 15.92       | 51.17 | 28.77     | 65.03       | 67.99    |
+| Direct finetuning    | 17.10       | 62.01 | 38.31     | 62.54       | 53.80    |
+| $L_2$ regularization | 16.78       | 62.24 | 38.32     | 62.24       | 53.51    |
+| Label annealing      | 17.94       | 61.78 | 35.24     | 64.62       | 65.87    |
+
+Table 1: Mathematics finetuning results. Target benchmarks  $\mathcal{B}_{\text{target}}=\{\text{GSM8K, MATH}\}$  and source benchmarks  $\mathcal{B}_{\text{source}}=\{\text{HumanEval, MMLU, TriviaQA}\}$ . Label annealing resolves the forgetting issue introduced in direct finetuning, while  $L_2$  regularization provides little help.
+
+**Code finetuning.** Another common finetuning task is code-specific finetuning (Rozière et al., 2024b). Base pretrained language models like Llama 3 Base are typically already trained on a large amount of code data. This process gives them some basic code completion ability. One typical approach to enable the model to perform more complex coding tasks is via code-specific instruction tuning. Toward this goal, we adopt a code instruction corpus constructed based on the method in StarCoder (Li et al., 2023a) as our finetuning dataset  $\mathcal{D}_{\text{FT}}$  of 30M tokens.
+
+| Training recipe      | Coding    | Mathematics |       | Pretraining |          |
+|----------------------|-----------|-------------|-------|-------------|----------|
+|                      | HumanEval | MATH        | GSM8K | MMLU        | TriviaQA |
+| Llama 3 8B Base      | 28.77     | 15.92       | 51.17 | 65.03       | 67.99    |
+| Direct finetuning    | 54.53     | 1.19        | 37.07 | 64.82       | 64.60    |
+| $L_2$ regularization | 53.00     | 11.36       | 34.87 | 64.87       | 64.48    |
+| Label annealing      | 51.06     | 17.16       | 52.69 | 64.63       | 67.24    |
+
+Table 2: Code finetuning results. Target benchmark  $\mathcal{B}_{\text{target}}=\{\text{HumanEval}\}$  and source benchmarks  $\mathcal{B}_{\text{source}}=\{\text{MATH, GSM8K, MMLU, TriviaQA}\}$ . Label annealing resolves the forgetting in mathematics benchmarks while also preserving the most of the improvement in HumanEval.
+
+Training on this corpus, we expect to see improvement on code metrics  $\mathcal{B}_{\text{target}}=\{\text{HumanEval}\}$  and preserve other metrics  $\mathcal{B}_{\text{source}}=\{\text{MATH, GSM8K, MMLU, TriviaQA}\}$ . Indeed, we see in Table 2 that the HumanEval performance improves by 25.76% with some degradation in mathematics metrics (MATH and GSM8K). Note that we see a dramatic drop in the MATH benchmark (drop by 14.73%). Reading into the generated samples, we find the model sometimes loses its ability to follow few-shot prompts.  $L_2$  regularization is able to resolve this issue, but still losing performance in both MATH and GSM8K. In contrast, label annealing is able to resolve the forgetting problem, and also preserve most of the improvement in HumanEval.
+
+### 3.3 ALIGNED MODEL TRAINING
+
+In this section, we present experiments involving instruction-tuned language model. We consider two complementary scenarios. (i) perform instruction tuning on a pretrained language model and see if we can get instruction-following ability without compromising the pretraining metrics, a problem known as “alignment tax”, and (ii) perform knowledge intensive finetuning on an aligned model (e.g., Llama 3 8B Instruct) and see if we can “teach” model the new knowledge while preserving the instruction following ability. In both cases, we observe that label annealing introduces a smooth tradeoff between the target benchmarks  $\mathcal{B}_{\text{target}}$  and source benchmarks  $\mathcal{B}_{\text{source}}$ .
+
+**Alignment tax.** The standard step following pretraining is instruction tuning (Ouyang et al., 2022). Models are known to lose some of their pretraining knowledge during the instruction tuning stage (e.g., MMLU drop in Llama 3 (Dubey et al., 2024a)). To investigate forgetting in this setting, we perform supervised instruction tuning on the UltraChat (Ding et al., 2023) dataset. After tokenizing it with the standard Llama 3 Instruct template, we get an instruction tuning corpus with 220M tokens.
+
+{6}------------------------------------------------
+
+![Figure 2: Instruction tuning on Llama 3 8B. Four scatter plots (a, b, c, d) showing target benchmarks (AlpacaEval, IFEval) vs. source benchmarks (MMLU, TriviaQA) for different label annealing magnitudes. The plots show a smooth tradeoff between source and target performance.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 2 consists of four scatter plots arranged in a 2x2 grid, labeled (a) through (d). Each plot shows the performance on a target benchmark (y-axis) versus a source benchmark (x-axis) for the Llama 3 8B model. The data points represent different label annealing magnitudes, with a legend indicating: Label annealing (blue circles), Base model (black cross), and Direct train (red triangle). The plots are: (a) AlpacaEval vs. MMLU, (b) AlpacaEval vs. TriviaQA, (c) IFEval vs. MMLU, and (d) IFEval vs. TriviaQA. In all cases, the label annealing points form a smooth curve between the base model and the direct train point, showing a tradeoff between the two benchmarks.
+
+Figure 2: Instruction tuning on Llama 3 8B. Four scatter plots (a, b, c, d) showing target benchmarks (AlpacaEval, IFEval) vs. source benchmarks (MMLU, TriviaQA) for different label annealing magnitudes. The plots show a smooth tradeoff between source and target performance.
+
+Figure 2: Instruction tuning on Llama 3 8B. (y-axis) Target benchmarks  $\mathcal{B}_{\text{target}} = \{\text{AlpacaEval, IFEval}\}$  v.s. (x-axis) source benchmarks  $\mathcal{B}_{\text{source}} = \{\text{MMLU, TriviaQA}\}$ . Label annealing with different magnitude offers a smooth tradeoff between  $\mathcal{B}_{\text{target}}$  and  $\mathcal{B}_{\text{source}}$ .
+
+We expect training on this dataset to improve the instruction following ability, as measured by  $\mathcal{B}_{\text{target}} = \{\text{AlpacaEval, IFEval}\}$ . We select source benchmarks  $\mathcal{B}_{\text{source}} = \{\text{MMLU, TriviaQA}\}$  that measure pretraining quality of the base model. In Figure 2, we plot target metrics against source metrics for label annealing with different value of  $\lambda$  in (2). We can see that label annealing introduces a smooth tradeoff between pretraining metrics and instruction following metrics. In some cases, for example Figure 2(a) and 2(c), we can get about half of improvement in instruction following ability without losing MMLU knowledge.
+
+**Niche books and articles QA.** Finally, consider the task of continually pretrain an instruction-tuned model. Typically, instruction tuning is the last step of building a large language model, so no training should happen beyond that point. However, with the release of powerful open-source instruction-tuned models, one might consider taking a model like Llama 3 8B Instruct and finetuning it to a niche domain whose knowledge rarely appears during the pretraining phase. We investigate the performance of the label annealing method in this setting.
+
+To design experiments, we find that the benchmarks we have looked are overly saturated for Llama 3 8B Instruct. For example, Llama 3 8B Instruct has MATH performance 51.9% and HumanEval 72.6% (Dubey et al., 2024a), making it difficult to measure improvement on top of this model. Instead of looking at naturally occurring benchmarks, we consider the QUALITY dataset introduced by Pang et al. (2022), which includes 4,609 reading comprehension questions about a collection of obscure books and articles as introduced in Section 3.1. Yang et al. (2024b) introduces a corpus of 455M tokens that are synthetic data related to the QUALITY articles. They find that training on this dataset greatly improves the QUALITY QA accuracy. This gives a natural pair of finetuning dataset  $\mathcal{D}_{\text{FT}}$  (the 455M synthetic corpus) and target benchmarks  $\mathcal{B}_{\text{target}}$  (the QUALITY QA accuracy) for our task. We finetune Llama 3 8B Instruct on this dataset using the same hyperparameter setup as in the base model finetuning (Section 3.2).
+
+{7}------------------------------------------------
+
+![Figure 3: Niche books and articles QA. (a) QuALITY QA vs. AlpacaEval. (b) QuALITY QA vs. IFEval. Both plots show Quality QA on the y-axis (0.40 to 0.60) against benchmark scores on the x-axis. Three series are shown: Label annealing (blue dots with error bars), Base model (black x), and Direct train (red triangle). In (a), Direct train is at approx (26, 0.58), Base model at (34, 0.38), and Label annealing points range from (27, 0.55) to (31, 0.43). In (b), Direct train is at approx (0.55, 0.58), Base model at (0.75, 0.38), and Label annealing points range from (0.62, 0.56) to (0.70, 0.43).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3: Niche books and articles QA. (a) QuALITY QA vs. AlpacaEval. (b) QuALITY QA vs. IFEval. Both plots show Quality QA on the y-axis (0.40 to 0.60) against benchmark scores on the x-axis. Three series are shown: Label annealing (blue dots with error bars), Base model (black x), and Direct train (red triangle). In (a), Direct train is at approx (26, 0.58), Base model at (34, 0.38), and Label annealing points range from (27, 0.55) to (31, 0.43). In (b), Direct train is at approx (0.55, 0.58), Base model at (0.75, 0.38), and Label annealing points range from (0.62, 0.56) to (0.70, 0.43).
+
+Figure 3: Niche books and articles QA. Target benchmarks  $\mathcal{B}_{\text{target}} = \{\text{Reading comprehension questions about the articles}\}$ . Source benchmark  $\mathcal{B}_{\text{source}} = \{\text{AlpacaEval, IFEval}\}$ . Each dot correspond to one label annealing experiment with different magnitude.
+
+We report our result in Figure 3. We can see that label annealing with different magnitude introduces a tradeoff between target benchmark  $\mathcal{B}_{\text{target}}$  and source benchmarks  $\mathcal{B}_{\text{source}}$ . In Figure 3(b), we see that with some choice of label annealing hyperparameter, we can get more than 80% of improvement in QuALITY question set with a small reduction in IFEval metrics.
+
+## 4 LABEL ANNEALING IN LINEAR REGRESSION
+
+In this section, we analyze label annealing in the simple setting of over-parameterized linear regression. Concretely, we consider the task of first pretrain a linear model on one dataset and finetune on another. As in Section 3, we consider three strategies of finetuning: direct finetuning,  $L_2$  regularization, and label annealing. We will provide a geometric intuition of these three different strategies.
+
+### 4.1 PRETRAINING STEP
+
+Let  $\tilde{\mathbf{X}} \in \mathbb{R}^{N \times d}$ ,  $\tilde{\mathbf{y}} \in \mathbb{R}^N$  be the covariate matrix and response vector of a linear regression task. We consider the overparameterized regime where  $d > N$ . We use the superscript  $\sim$  to denote the variables related to the pretraining data. In the pretraining step, we solve the following optimization problem:
+
+$$\text{Pretraining step: } \min_{\theta \in \mathbb{R}^d} \frac{1}{2} \|\tilde{\mathbf{X}}\theta - \tilde{\mathbf{y}}\|_2^2 \quad (4)$$
+
+Note that even though the objective above is convex, it is not strictly convex because of the over-parameterized nature of the task. In fact, the global optimal is given by the affine subspace  $\{\theta \in \mathbb{R}^d : \tilde{\mathbf{X}}\theta = \tilde{\mathbf{y}}\}$ . As a result, the minimizer is implicitly selected by the initialization of the gradient descent algorithm, as characterized by the following proposition:
+
+**Proposition 4.1** (Pretraining solution). *Suppose that  $\tilde{\mathbf{X}}$  has strictly positive singular values and there exists  $\theta$  such that  $\tilde{\mathbf{X}}\theta = \tilde{\mathbf{y}}$ . Then, the gradient descent applied to problem (6) with a learning rate less than  $\sigma_{\max}^{-2}$  converges, where  $\sigma_{\max}$  is the maximum singular value of  $\tilde{\mathbf{X}}$ . Moreover, if the gradient descent is initialized at  $\mathbf{0} \in \mathbb{R}^d$ , it will converge to a particular global optimal  $\theta_0 = \tilde{\mathbf{X}}^\top(\tilde{\mathbf{X}}\tilde{\mathbf{X}}^\top)^{-1}\tilde{\mathbf{y}}$ .*
+
+The proof follows from a direct application of Lemma B.1, which we prove in Appendix B. We denote the pretrained weights by  $\theta_0$ , and
+
+$$\theta_0 = \tilde{\mathbf{X}}^\top(\tilde{\mathbf{X}}\tilde{\mathbf{X}}^\top)^{-1}\tilde{\mathbf{y}}. \quad (5)$$
+
+In words, our modeling of the pretraining step assumes that the pretrained weights memorize the pretraining data with minimum Euclidean norm.
+
+{8}------------------------------------------------
+
+### 4.2 FINE-TUNING STEP
+
+Given the pretrained weights  $\theta_0$ , let  $X \in \mathbb{R}^{n \times d}$ ,  $y \in \mathbb{R}^n$  be a new dataset we would like to finetune on. As before, we assume that we are in the overparameterized regime with  $d > n$ . We will consider three finetuning approaches, the first approach is to directly train on  $X$  and  $y$ :
+
+$$\text{Direct tuning: } \min_{\theta \in \mathbb{R}^d} \frac{1}{2} \|X\theta - y\|_2^2. \quad (6)$$
+
+Next, as in Section 3, we consider finetuning with  $L_2$  regularization (weight decay to initialization):
+
+$$L_2 \text{ regularization: } \min_{\theta \in \mathbb{R}^d} \frac{1}{2} \|X\theta - y\|_2^2 + \frac{\lambda}{2} \|\theta - \theta_0\|_2^2. \quad (7)$$
+
+Finally, we claim that label annealing regularization in the context of linear regression corresponds to the objective
+
+$$\text{Label annealing: } \min_{\theta \in \mathbb{R}^d} \frac{1}{2} \|X\theta - y\|_2^2 + \frac{\lambda}{2} \|X\theta - X\theta_0\|_2^2. \quad (8)$$
+
+To see this, recall that in the language modeling setting, label annealing adds a KL divergence penalty between the logits from the current model and the logits from the pretrained model on each batch of finetuning data. From the perspective of neural network, the logits from the pretrained model means taking a forward pass with on the finetuning data with pretrained weights. If we simplify the transformer neural network to a single linear layer with pretrained weights  $\theta_0$ , then the forward pass on the finetuning data  $X$  becomes  $X \rightarrow X\theta_0$ . If we again simplify the KL divergence penalty with  $L_2$  loss, we obtain the objective (8).
+
+We next consider the finetuning process, where we initialize our linear weights as pretrained weights  $\theta_0$ , as with a real transformer neural network. We characterize the solution gradient descent converges to for each of three finetuning approaches: direct tuning (6),  $L_2$  regularization (7), and label annealing (8).
+
+**Theorem 1** (Finetuning step.). *Suppose that  $X$  has strictly positive singular values and there exists  $\theta$  such that  $X\theta = y$ . For  $\lambda > 0$ , gradient descent applied to objectives (6), (7), (8) with learning rate less than  $\min\{\sigma_{\max}^{-2}, (\lambda + \sigma_{\max}^2)^{-1}, (\lambda\sigma_{\max}^2 + \sigma_{\max}^2)^{-1}\}$  converges. Moreover, if gradient descent is initialized at the pretrained weights  $\theta_0$ , they converge to the following solution*
+
+$$\text{Direct tuning: } \theta_{\text{Direct}} = [I - X^T(XX^T)^{-1}X]\theta_0 + X^T(XX^T)^{-1}y,$$
+
+$$L_2 \text{ regularization: } \theta_{L_2} = (X^T X + \lambda I)^{-1} X^T y + \lambda(X^T X + \lambda I)^{-1} \theta_0,$$
+
+$$\text{Label annealing: } \theta_{LA} = [I - (1 + \lambda)^{-1} X^T(XX^T)^{-1}X]\theta_0 + (1 + \lambda)^{-1} X^T(XX^T)^{-1}y.$$
+
+The proof of the theorem is another direct application of Lemma B.1, whose proof we defer to Appendix A. As a sanity check, we can see  $\theta_{\text{Direct}}$  can be viewed as two limiting cases of  $\theta_{L_2}$  and  $\theta_{LA}$ . For example  $\lambda = 0$ , we have  $\theta_{LA} = \theta_{\text{Direct}}$ . Alternatively, as  $\lambda \rightarrow 0$ , we have  $\theta_{L_2} \rightarrow \theta_{\text{Direct}}$ .
+
+### 4.3 INTERPRETATION OF THE RESULTS.
+
+The solution selected by gradient descent admits straightforward geometric interpretation. Since we are in the overparameterized regime with  $d > n$ , the rows of  $X$  span a  $n$ -dimensional space, which intuitively corresponds to a subspace spanned by the finetuning data. The matrix  $X^T(XX^T)^{-1}X$  is then a projection onto this space. This space spanned by the finetuning data will be a core theme of this section.
+
+**Direct finetuning.** The direct finetuning solution  $\theta_{\text{Direct}}$  consists of two components:  $[I - X^T(XX^T)^{-1}X]\theta_0$  is the projection of pretrained weights onto the orthogonal complement of the space spanned by the finetuning data, and  $X^T(XX^T)^{-1}y$  is the minimum Euclidean norm solution, (Hastie et al., 2022; Bartlett et al., 2020) which is orthogonal to the first component. In words, direct finetuning would keep the portion of pretrained weights  $\theta_0$  outside the span of finetuning data  $X$  fixed, and ignore the information about  $\theta_0$  within the span of  $X$ . Since  $\theta_0$  is necessarily in the span of pretraining data  $\tilde{X}$ , our toy theory suggests that direct finetuning would avoid forgetting issue if the finetuning data and pretraining data are completely orthogonal.
+
+{9}------------------------------------------------
+
+**$L_2$  regularization.** The solution selected by  $L_2$  regularization also has two terms, but they are no longer orthogonal as in direct finetuning. The first term  $(X^\top X + \lambda I)^{-1} X^\top y$  is the usual ridge regression solution with ridge penalty  $\lambda$ . The second term  $\lambda(X^\top X + \lambda I)^{-1} \theta_0$  “rescales” the pretrained weights  $\theta_0$  based on finetuning data  $X$ . When  $\lambda \rightarrow \infty$ , this second term becomes exactly  $\theta_0$ . As the two terms overlap with each other, we see that  $L_2$  regularization admits no clean intuition why it would help. This is consistent with the empirical experiments (Section 3) that they tend to perform poorly compared with label annealing.
+
+**Label annealing.** The label annealing solution  $\theta_{\text{LA}}$  is a smoothed version of the direct finetuning solution. With the introduction of  $\lambda$ ,  $[I - (1 + \lambda)^{-1} X^\top (X X^\top)^{-1} X] \theta_0$  is no longer a projection onto the complement of spanned by the finetuning data. Instead, it adds back a small component along the direction  $[I - X^\top (X X^\top)^{-1} X] \theta_0$  scaled by  $\lambda/(1 + \lambda)$ . Concretely, label annealing solution can be rewritten as
+
+$$\theta_{\text{LA}} = \underbrace{[I - X^\top (X X^\top)^{-1} X] \theta_0}_{\text{Component orthogonal to the space spanned by finetuning data}} + \underbrace{\frac{\lambda}{1 + \lambda} X^\top (X X^\top)^{-1} X \theta_0 + \frac{1}{1 + \lambda} X^\top (X X^\top)^{-1} y}_{\text{Convex combination of pretrained weights in the finetuning data span and the minimum norm solution}}$$
+
+In some sense, label annealing is getting the best of both worlds — preserving the pretrained weights in the orthogonal complement of the space spanned by the finetuning data and also tradeoff between pretraining and finetuning information within the span of finetuning data  $X$ .
+
+## 5 LIMITATIONS
+
+Despite the lack of open-sourced dataset available for direct download, more or less some information about the training data of open-weight models can be found. For example, [Bommasani et al. \(2024\)](#) evaluated the “transparency index” of training data for Llama 2, GPT-4, Claude 3 as 40%, 20%, 0%, respectively. Based on the publicly available information, the RedPajama corpus ([TogetherAI, 2023](#)) is an effort to reconstruct the training data for Llama series of models. We report the performance of adding 10% replay from RedPajama corpus on the mathematics finetuning task (same setup as Section 3.2) below:
+
+| Training recipe          | Mathematics |       | Coding    | Pretraining |          |
+|--------------------------|-------------|-------|-----------|-------------|----------|
+|                          | MATH        | GSM8K | HumanEval | MMLU        | TriviaQA |
+| Llama 3 8B Base          | 15.92       | 51.17 | 28.77     | 65.03       | 67.99    |
+| Direct finetuning        | 17.10       | 62.01 | 38.31     | 62.54       | 53.80    |
+| Replay                   | 22.40       | 69.52 | 29.64     | 63.79       | 64.96    |
+| Replay + label annealing | 23.44       | 69.21 | 31.72     | 64.05       | 65.07    |
+
+Table 3: Math continued pretraining with replay on RedPajama.
+
+We can see that adding replay from the RedPajama corpus happens to alleviate the forgetting issue in pretraining metrics (MMLU, TriviaQA) to some extent, performing on par with using replay and label annealing simultaneously. However, as the field moves toward more complex training strategies with synthetic data and proprietary data, it becomes increasingly difficult to reconstruct a training data that covers all the capabilities that would go beyond the coverage of MMLU and TriviaQA. In contrast, label annealing stands as a reliable method that mitigates forgetting during finetuning requiring only access to the weights of the finetuned model.
+
+ Rest of paper (reference and Appendix) is removed.

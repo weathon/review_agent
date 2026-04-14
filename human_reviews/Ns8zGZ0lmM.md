@@ -1,0 +1,206 @@
+# Self-Preference Bias in LLM-as-a-Judge
+
+- Decision: Reject
+- Scores: 3, 6, 6, 3
+
+## Abstract
+Automated evaluation leveraging large language models (LLMs), commonly referred to as LLM evaluators or LLM-as-a-judge, has been widely used in measuring the performance of dialogue systems.
+However, the self-preference bias in LLMs has posed significant risks, including promoting specific styles or policies intrinsic to the LLMs.
+Despite the importance of this issue, there is a lack of established methods to measure the self-preference bias quantitatively, and its underlying causes are poorly understood.
+In this paper, we introduce a novel quantitative metric to measure the self-preference bias.
+Our experimental results demonstrate that GPT-4 exhibits a significant degree of self-preference bias.
+To explore the causes, we hypothesize that LLMs may favor outputs that are more familiar to them, as indicated by lower perplexity.
+We analyze the relationship between LLM evaluations and the perplexities of outputs.
+Our findings reveal that LLMs assign significantly higher evaluations to outputs with lower perplexity than human evaluators, regardless of whether the outputs were self-generated.
+This suggests that the essence of the bias lies in perplexity and that the self-preference bias occurs because the LLMs' own outputs have lower perplexity.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+3
+
+### Rating Number
+3
+
+### Confidence
+3
+
+### Summary
+This paper introduces a quantitative metric to measure self-preference bias in LLM-as-a-Judge. The authors analyze the relationship between LLM evaluations and the perplexities of outputs. Their findings reveal that LLMs assign significantly higher evaluations to outputs with lower perplexity than human evaluators, regardless of whether the outputs were self-generated.
+
+### Strengths
+- The writing is clear.
+- The focus of this paper is crucial.
+- This paper provides some interesting conclusions.
+
+### Weaknesses
+- The discussion of related work is insufficient, lacking discussion of several relevant works, such as "Benchmarking Cognitive Biases in Large Language Models as Evaluators," and doesn't introduce mainstream LLM-as-a-Judge methods, including single-answer grading and pairwise evaluator.
+
+- A more detailed and complete definition and explanation of the proposed metric are needed.
+
+- The authors did not account for the impact of response length on the LLM evaluator during experiments, weakening the validity of the conclusions. Bias in LLM-as-Judge is a complex issue where position bias, verbosity bias, and self-preference bias interact and affect each other. In the Chatbot Arena dataset used by the authors, significant differences in response lengths are common. The authors need to discuss how to ensure this discrepancy does not affect their experimental conclusions.
+
+- There is ambiguity in the setting of Figure 6. The authors did not clearly explain how the experimental results shown in Figure 6 were obtained. Please refer to the related questions in the question section.
+
+- The authors did not conduct experiments to explore how to eliminate self-preference bias, only briefly discussing possible measures in the discussion section, which reduces the completeness of the work.
+
+### Questions
+- Why does the caption of Figure 3 state that all models except dolly-v2-12b and stablelm-tuned-alpha-7b demonstrated a clear tendency to assign higher evaluations to responses with lower perplexity? According to the results in Figure 3, dolly-v2-12b shows a trend of decreasing winning judgment rates as perplexity decreases. This caption is also contrary to your conclusion in the text (Lines 312-316).
+
+- How were human evaluations obtained in the experimental results shown in Figure 6?
+
+- How was the temperature set in all experiments? Was there any consideration of the impact of temperature on the experimental conclusions?
+
+- Have you tested the effectiveness of your proposed bias elimination methods (Lines 407-413)? Have you considered some commonly used bias elimination methods, such as special prompts or SFT?
+
+### Soundness
+2
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+The authors propose a metric to quantify the self-preference bias in LLMs or in other words measure how biased an LLM is towards it's own response. Their metric is inspired by the concept of Equal Opportunity (Hardtet al., 2016) where a classifier needs to achieve equal recall across classes. From this they derive their bias metric as the difference between the probability of the LLM rating itself high given that the human rated it high and the probability of the LLM rating itself low given that the human rated it low.
+
+They leverage the Chatbot Arena dataset which has dialogs consisting of a prompt and a pair of responses generated by two different LLMs. They then measure the bias of 8 different LLMs as evaluators on this dataset and find that a majority of these models such as GPT-4 is biased towards selecting a response generated by itself. 
+
+The authors then try to answer why this self-preference bias may exist and look at the perplexity scores of responses. They find that on average models assign higher evaluations to responses with lower perplexity. 
+
+They then offer some suggestions to mitigate these biases such as using multiple models.
+
+### Strengths
+The continued study of LLMs as evaluation metrics is critical and it is important to continue to study the pros/cons of these metrics. We already know that these LLMs are good at a variety of tasks but if we continue to rely on them as metrics then we are self-reinforcing that the responses they select are good and are then injecting the metric's bias into our system. Therefore the authors providing an explanation as to where the bias is coming from (perplexity) can help the community then think of ways to mitigate this bias. Overall this conclusion is the biggest contribution of this work.
+
+### Weaknesses
+One concern I have is around how novel are the conclusions and how different is this from previous work. 
+
+1. Deutsch et al. (2022) gets cited as work that looked at bias within these LLMs(https://aclanthology.org/2022.emnlp-main.753/). In that work it is mentioned "Not only do they favor the underlying models’ outputs, but they are also biased toward outputs from models which are similar to their own". What sets this paper apart if Deutsch et al. (2022) is already looking at this same type of bias?
+
+2. It has been well documented that perplexity is not a good automatic metric for dialog systems (https://arxiv.org/pdf/1603.08023, https://arxiv.org/pdf/1906.09308). Since one of the conclusions from this paper is that the use of perplexity leads to bias should we then conclude perplexity shouldn't be used as a metric? And if so what then sets this paper part from the work I listed. 
+
+Overall if the authors can make it more clear how their work is different from the previous ones I mentioned that would help alot in putting it's novelty into perspective.
+
+### Questions
+Questions
+You mentioned in line 208 that you excluded responses that did not follow the prompt you specified. What percentage of the data was that? Also is there any significance testing? Is a bias of 0.25 significantly worse than let's say 0.2?
+
+Suggestions
+One suggestion I have is to better explain in text how to read the plots in Figures 3 and 4.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6
+
+### Rating Number
+6
+
+### Confidence
+4
+
+### Summary
+This paper addresses the issue of self-preference bias of LLM evaluator when doing pairwise comparisons. The paper proposed a method to quantify the self-preference bias and evaluate the self-preference bias on 8 recent LLMs using ChatBot Arena annotations. The paper further investigate the potential reason for self-preference bias might be LLMs tend to favor candidates with lower perplexities.
+
+### Strengths
+- The writing good in general, although the content is a bit short, but overall positive.
+- Although the idea of self-preference bias is not new, this paper proposed an approach to quantify this bias.
+- This paper did disentangle the positional bias from the self-preference bias during quantification.
+- The observations on LLM evaluators favor candidates with lower perplexities is insightful and interesting.
+
+### Weaknesses
+- The formula for the metric is valid, but there are some concerns when calculating it:
+    - The main concern for the metric is the class balancing issue. For example, in the Fig.2, there are 108+1852 = 1960 comparisons where gpt-4 wins, but only much less 118+160=278 comparisons where gpt-4 fails. Comparing percentages calculated on them might lead to concern that the bias might be less accurate when true label class is more imbalanced. This means if a LLMs is more preferred compared to others, the self-preference bias is less accurate.
+    - Although the paper has disentangled positional bias from self-preference bias, but what about other bias? e.g. verbosity bias? As shown in your table 1, is the gpt-4 really preferred its own answer or just any longer answer?
+
+- As the content is a bit short, I suggest a bit further investigation on the 'tails-up' phenomena as shown in Fig3 and 4. When the diff. log ppl is close to the right side, the winning rate of A has a sudden jump.
+
+### Questions
+- As your investigation has shown the main reason for self-preference bias is actually coming from favoring low ppl response, does this suggest there is actually no self-preference bias but only low-ppl bias?
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 4
+
+### Rating
+3
+
+### Rating Number
+3
+
+### Confidence
+4
+
+### Summary
+This work introduces a pairwise evaluation approach to assess self-preference bias in LLM evaluators, enhancing the ability to identify specific differences between responses. Unlike previous studies that relied on absolute scoring and limited task scopes, this method allows for more consistent human judgments and broader applicability across diverse dialogue scenarios. It addresses the need for reliable metrics to quantify self-preference bias while directly comparing LLM evaluations with human assessments. The main contributions are:
+1. The authors propose a new quantitative metric specifically designed to measure self-preference bias in LLMs. The metric is applied to assess the extent of self-preference bias across eight different LLMs, providing insights into the biases present in these models.
+2. The paper explores the relationship between LLM evaluations and output perplexity, revealing a tendency for LLMs to favor outputs with lower perplexity. This analysis suggests that the self-preference bias may stem from LLMs' familiarity with certain text styles, highlighting the importance of perplexity in understanding LLM behavior.
+
+### Strengths
+1. The research introduces a new metric for quantifying self-preference bias in LLMs, providing a tool for evaluating the performance of language models in a systematic manner.
+
+2. The study assesses the self-preference bias across eight different LLMs, offering a broad perspective on the prevalence of this bias within various models, particularly highlighting the significant findings related to GPT-4.
+
+3. The paper explores the relationship between LLM evaluations and output perplexity, revealing a tendency for LLMs to favor outputs with lower perplexity. This finding explores the nature of self-preference bias and encourages further research on how confusion affects model evaluation.
+
+### Weaknesses
+1. The formula used to quantify this bias is unreasonable. Using a static probabilistic model may fail to capture the dynamic characteristics of model behavior, affecting the applicability and utility of the findings. Additionally, as shown in Figure 2, GPT-4 correctly identifies a significant number of cases in both True and Predicted values. This leads to a large value in the first term of the formula. GPT-4’s considerably stronger performance compared to other models impacts the bias result. In the relatively small set of negative samples, GPT-4 predicts it is correct 160 times compared to 118, a difference of only a few dozen. However, due to the formula, GPT-4’s bias score appears large simply because it performs well in many cases. This formula for measuring bias is too simplistic and does not appropriately account for the capabilities of large models, being influenced by their performance.
+
+2. This method primarily focuses on specific conditions for bias, potentially overlooking other factors such as the content, context, and other semantic features of the input text. This narrow focus may lead to a partial understanding of the model's self-preference bias. Additionally, the scale of the analyzed data is insufficient and lacks comprehensiveness in broader contexts. The choice of specific input features in calculating the bias can influence the results.
+
+3. In the writing, Equation 3 lacks an explanation of ω.
+
+### Questions
+1. Considering that LLMs may exhibit different biases depending on the context, how does your method account for contextual variations? Can the bias calculation be adapted to reflect dynamic changes in model behavior?
+
+2. How do you handle potential inconsistencies in human evaluations that serve as the benchmark for calculating bias? What processes are in place to mitigate subjectivity in these evaluations?
+
+3. Given your hypothesis that self-preference bias is related to text perplexity, how do you isolate the effect of perplexity from other factors when interpreting the results? What methodology do you use to analyze this relationship?
+
+4. Have you considered the impact of model capabilities and the data distribution of self-preference bias results obtained for each model on the bias?
+
+### Soundness
+2
+
+### Presentation
+3
+
+### Contribution
+2

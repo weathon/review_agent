@@ -1,0 +1,310 @@
+
+
+{0}------------------------------------------------
+
+# LEARNING ANTI-CLASSES WITH ONE-COLD CROSS ENTROPY LOSS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+While softmax cross entropy loss is the standard objective for supervised classification, it primarily focuses on the ground truth classes, ignoring the relationships between the non-target, complementary classes. This leaves valuable non-zero target distributions underexploited during optimization. In this work, we set explicit non-zero target distributions for the complementary classes, in order to address this limitation. Specifically, for each class, we define an *anti-class*, which consists of everything that is not part of the target class—this includes all complementary classes as well as out-of-distribution samples, and in general any instance that does not belong to the true class. Various distributions can be used as a target for the anti-classes. For example, by setting a uniform one-cold encoded distribution over the complementary classes as a target for each anti-class, we encourage the model to equally distribute activations across all non-target classes. This approach promotes a symmetric geometric structure of classes in the final feature space, increases the degree of neural collapse during training, addresses the independence deficit problem of neural networks and improves generalization. Our extensive evaluation demonstrates that our proposed framework consistently results in performance gains across multiple settings, including classification, open-set recognition, and out-of-distribution detection.
+
+## 1 INTRODUCTION
+
+Deep learning has seen amazing progress over the past decade across multiple domains such as vision, speech, and text (He et al., 2015b). The optimization criterion universally used for supervised classification tasks is the cross entropy loss, which aims at minimizing the discrepancy between the predicted probability distribution across classes and the ground truth probability distribution, typically represented as a one-hot encoding of the true label (Goodfellow et al., 2016). Minimizing the cross entropy loss maximizes the likelihood of correctly identifying disjoint classes under a given set of parameters of a statistical learning model, such as a neural network, making it an intuitive choice, with strong empirical results over the years.
+
+Despite its theoretical and practical appeal, cross entropy loss is not without its limitations. Neural networks optimized with cross entropy are known to result in overconfident predictions (Guo et al., 2017), (Nguyen et al., 2015). This problem becomes more evident in open set classification scenarios, where a model must be able to also recognize unknown (i.e., not seen in training) classes at inference time (Scheirer et al., 2013). Current neural networks struggle to recognize out-of-distribution (OOD) samples (Bendale & Boult, 2015), and often misclassify them to one of the known classes with high confidence, which calls into question their trustworthiness. In a recent work, Feng et al. (2024) also identified an independence deficit in neural networks, where the prediction confidence of some classes is redundantly determined by others through simple linear relationships, even when the classes are semantically unrelated. This entanglement can lead to overfitting and poor generalization, as the network neglects learning distinct class representations.
+
+In spite of these limitations, neural networks can generalize remarkably well, and understanding the underlying reasons has been the focus of extensive research (Zhang et al., 2021), (Yang et al., 2020). In this effort, recent work has uncovered the intriguing empirical phenomenon of Neural Collapse (NC), which arises during the terminal stage of deep neural network training (Papayan et al., 2020), (Zhu et al., 2024). In NC, class features collapse to their respective means, class means become
+
+{1}------------------------------------------------
+
+maximally separated in a Simplex Equiangular Tight Frame (ETF), and the classifier aligns with these class means, leading to a highly structured decision boundary. NC has been linked to improved robustness and benign overfitting (Bartlett et al., 2020), (Ma et al., 2018), with connections to the information bottleneck theory (Tishby & Zaslavsky, 2015), which suggests that networks focus on essential information, while discarding unnecessary variability.
+
+While independence deficit and neural collapse are distinct and even contradicting behaviors—one reflecting a redundancy in class independence and the other signifying maximally separated and independent class representations—cross entropy loss does not provide a mechanism to explicitly control these phenomena. Instead, their emergence during training is often incidental, with networks passively exhibiting one behavior or the other, depending on the dataset size, class distribution, task difficulty and model complexity rather than actively optimizing for either. In this work, we rethink the classification objective by introducing the concept of an *anti-class*, which consists of the complementary set of a class, encompassing all that the class is not. With anti-classes, we can explicitly control the relationships between the complementary classes, and therefore the structure of the classes in the final feature manifold.
+
+We propose using a one-cold encoding, where the true class is labeled with 0, while the rest of the classes are labeled with non-zero targets. Inspired by the geometric properties of the Simplex ETF, we mainly focus on a uniform one-cold encoding, where each complementary class is labeled with 1, as illustrated in Figure 1a. This encoding reflects that all complementary classes of a ground truth class belong equally to its anti-class. (see Figure 1b). Through this simple label transformation, each class is encouraged to maintain a symmetric relationship with all other classes, similar to the symmetry in the Simplex ETF, where class centroids are equinorm and equiangular. This approach forces the network to develop distinct and independent representations for each class, preventing reliance on linear correlations with other classes. We argue that this enhances the model’s generalization capability.
+
+![Diagram illustrating one-hot encoding vs one-cold encoding. The 'Ground-truth class' column shows a green circle for one-hot and a red circle for one-cold. The 'Complementary classes' column shows four green circles for one-hot and four red circles for one-cold.](164d1b48231be457522b31965610ea3b_img.jpg)
+
+Diagram illustrating one-hot encoding vs one-cold encoding. The 'Ground-truth class' column shows a green circle for one-hot and a red circle for one-cold. The 'Complementary classes' column shows four green circles for one-hot and four red circles for one-cold.
+
+(a) One-hot encoding vs one-cold encoding.
+
+![Two scatter plots showing anti-class regions. The left plot (one-hot cross entropy) shows overlapping regions for different classes, while the right plot (one-cold cross entropy) shows distinct, non-overlapping regions.](131b27192f21ffa3869d8686b7a67448_img.jpg)
+
+Two scatter plots showing anti-class regions. The left plot (one-hot cross entropy) shows overlapping regions for different classes, while the right plot (one-cold cross entropy) shows distinct, non-overlapping regions.
+
+(b) Anti-class regions of one-hot cross entropy (left) and one-cold cross entropy (right).
+
+Figure 1: (b) Each point in the grid corresponds to a specific  $(x_1, x_2)$  coordinate in the input space  $\mathcal{X}$ , (not limited to visible class samples). Each point is passed through a trained MLP, its logits are negated and passed through a softmax to provide an anti-class distribution (membership of that specific point of the grid to each anti-class). The color assigned to each point is calculated with the linear combination between the anti-class distribution of that point and the colors of the classes. For example, green and yellow classes become negatively correlated, even if these classes are semantically unrelated. This can result in spurious correlations and independence deficit. In contrast, uniform OCCE removes these connections by enforcing a uniform anti-class distribution, where all complementary classes are equally represented in each anti-class.
+
+Our key contributions are highlighted as follows:
+
+- We introduce the concept of anti-classes, providing a novel approach to modeling classification problems by directly optimizing the relationships between complementary classes.
+- We propose using one-cold cross entropy (OCCE) to enable the model to learn target anti-class distributions, in either a shared or decoupled layer from the class distributions, allowing to control the geometric structure of classes.
+- We analyze the impact of the uniform OCCE objective on neural collapse, independence deficit, and the generalization capabilities of neural networks.
+- Through extensive experiments, we demonstrate that our proposed method consistently improves performance in both closed-set and open-set classification tasks.
+
+{2}------------------------------------------------
+
+## 2 METHOD
+
+### 2.1 ANTI-CLASS FORMULATION
+
+Let's consider a predefined set of  $N$  known classes. Each class  $k$  can be represented as a subspace in a  $d$ -dimensional space, denoted by  $C_k \subseteq \mathbb{R}^d$ . For every class  $k$ , we can define the complementary subspace to  $C_k$ , which we denote as  $\tilde{C}_k = \mathbb{R}^d \setminus C_k$  and refer to as the anti-class subspace of  $k$ . The anti-class subspace  $\tilde{C}_k$  contains every instance that does not belong to class  $k$ , including instances from other known or unknown classes, out-of-distribution instances, random noise or adversarial examples. Intuitively, directly modeling the anti-class subspace  $\tilde{C}_k$  seems a much harder problem than modeling  $C_k$ , as the latter is clearly more restricted. Moreover, in mutually exclusive classes, an instance that belongs to  $C_k$  inherently belongs to the anti-class of all other known classes  $\tilde{C}_{j \neq k}$ . Consequently, in multi-class classification every vector  $\mathbf{p} \in \mathbb{R}^d$  belongs to at least  $N - 1$  anti-classes, and potentially to all  $N$  of them, if the vector does not represent an instance of a known class. We can encode the anti-class labels using a one-cold encoded label  $\bar{l}$ , where the ground truth class is labeled with 0 (hence the term cold), and every complement class is labeled with a non-zero value, indicating its membership to the anti-class. If we adopt hard assignments, the vector  $\bar{l}$  can be defined as:
+
+$$\bar{l}_i = \begin{cases} 0 & \text{if } i = \text{ground truth class,} \\ 1 & \text{if } i = \text{complementary class.} \end{cases} \quad (1)$$
+
+### 2.2 ORDINARY SUPERVISED CLASSIFICATION
+
+In a standard supervised learning scenario, we deal with a set of  $n$  labeled instances  $\mathcal{D} = \{(\mathbf{x}_0, l_0), \dots, (\mathbf{x}_n, l_n)\}$  over an initial feature space  $\mathcal{X} \subseteq \mathbb{R}^d$  and a discrete label space  $L = \{1, \dots, N\}$ , where  $d$  is the dimensionality of  $\mathcal{X}$  and  $N$  the number of classes. An instance  $\mathbf{x}$  which belongs to class  $k$  is sampled from the subspace  $C_k$ . Given a model with parameters  $\theta$ , the objective of an ordinary classification task is to find the mapping  $f : \mathcal{X} \rightarrow L$ , where  $f(\mathbf{x}; \theta) = l$ , correctly mapping each input  $\mathbf{x}$  to its corresponding label  $l$ . Standard classification training minimizes the cross entropy loss for each instance, comparing the model's predicted probability distribution  $\hat{\mathbf{y}}$  with the one-hot encoded label  $\mathbf{y}$ . The cross entropy loss is defined as:
+
+$$L_{\text{CE}} = -\mathbf{y}^T \log(\hat{\mathbf{y}}), \quad \text{where} \quad \hat{y}_i = \frac{\exp(z_i)}{\sum_{j=1}^C \exp(z_j)}. \quad (2)$$
+
+In equation 2, only the log-probability of the ground truth labels is explicitly minimized, while the probabilities of the complementary classes are indirectly influenced through the softmax normalization. This approach overlooks the relationships between the complementary classes. Such a limitation can be problematic, particularly for handling anomalous samples like adversarial examples or out-of-distribution inputs. Ideally, for these cases, a model should produce a close to uniform probability distribution across all classes, indicating maximum uncertainty. However, achieving this uniform distribution requires equal activations  $\mathbf{z}$  for all classes, which is not explicitly encouraged by cross entropy loss. Furthermore, it does not enforce any specific geometric structure of the classes in the feature space, leading to undesirable phenomena such as minority collapse (Fang et al., 2021), where in imbalanced training the features of minority classes collapse towards identical clusters, or independence deficit (Feng et al., 2024), where spurious correlations between classes emerge.
+
+### 2.3 LEARNING WITH ANTI-CLASSES
+
+**Deriving the OCCE Loss.** To address these challenges, we shift our focus to anti-classes. Since one-cold encoded labels are not valid probability distributions, standard cross entropy loss cannot be directly applied. A trivial solution would be to convert the task into a multi-label problem and predict each anti-class probability independently using binary cross entropy loss. However, this approach is redundant, as binary cross entropy treats labels 0 and 1 identically, learning each class independently without controlling the relationships between complementary classes. To resolve this, we introduce competition between anti-classes by applying a softmax function. While in one-hot encoding, this results in a winner-takes-all scenario (Goodfellow et al., 2016), with anti-classes, the target probability distribution can reflect how much an instance belongs to each anti-class. In this
+
+{3}------------------------------------------------
+
+work, we mainly focus on a uniform one-cold encoding (hard assignments on anti-class labels  $\bar{1}$ ), where a sample fully belongs to all anti-classes except its true class, implying that all anti-classes are treated equally as winners. The target anti-class probability distribution  $\bar{\mathbf{y}}$  can be simply defined for each instance as:
+
+$$\bar{y}_i = \frac{\bar{1}_i}{\sum_{j=1}^N \bar{1}_j} = \begin{cases} 0 & \text{if } i = \text{ground truth class,} \\ \frac{1}{N-1} & \text{if } i = \text{complementary class.} \end{cases} \quad (3)$$
+
+Let now  $\bar{\mathbf{z}}$  be the output activation vector of our network. For a network optimized to learn anti-classes, higher activations correspond to higher probability of not belonging to the corresponding class. We can now define the one-cold cross entropy loss as:
+
+$$L_{\text{OCCE}} = -\bar{\mathbf{y}}^\top \log(\hat{\mathbf{y}}), \quad \text{where } \hat{y}_i = \frac{\exp(\bar{z}_i)}{\sum_{j=1}^N \exp(\bar{z}_j)} \quad (4)$$
+
+Finally, to obtain class activations  $\mathbf{z}$  we negate the anti-class activations  $\mathbf{z} = -\bar{\mathbf{z}}$  before softmax.
+
+OCCE can be used also with non-uniform target distributions, as we demonstrate in the supplementary material (see A.1.1), to handle different problems, e.g., accounting for different inter-class similarities. When a uniform one-cold target distribution is used as a standalone objective, then we acquire, as a special case, the reverse cross entropy (RCE) loss (Pang et al., 2017), which has been proposed as a substitute of cross entropy loss for adversarial robustness. However, the RCE loss encounters challenges with training stability on larger datasets. On the other hand, the proposed approach, can effectively overcome these challenges by combining class and anti-class learning. This combination results in consistent improvements across many classification tasks, distinguishing our approach from RCE, which, as empirically shown, is not competitive in these scenarios.
+
+**Convergence Analysis.** The gradients returned by one-hot cross entropy (CE) and by uniform one-cold cross entropy (OCCE) lead to different convergence dynamics. The gradients with respect to the activations  $\mathbf{z}$  under CE and uniform OCCE are:
+
+$$\frac{\partial L_{\text{CE}}}{\partial z_i} = \begin{cases} \hat{y}_i - 1 & \text{if } i = c, \\ \hat{y}_i & \text{if } i \neq c, \end{cases} \quad \text{and} \quad \frac{\partial L_{\text{OCCE}}}{\partial \bar{z}_i} = \begin{cases} \hat{y}_i & \text{if } i = c, \\ \hat{y}_i - \frac{1}{N-1} & \text{if } i \neq c, \end{cases} \quad \text{respectively.} \quad (5)$$
+
+When the gradient of CE loss with respect to the activations vector  $\mathbf{z}$  approaches zero,  $\nabla_{\mathbf{z}} L_{\text{CE}} \rightarrow 0$ , and under no further constraints, we get  $\hat{y}_c \rightarrow 1$ ,  $z_c \rightarrow +\infty$  for the correct class  $c$ , implying that its predicted probability converges to 1, and its corresponding activation  $z_c$  tends to positive infinity. Similarly  $\hat{y}_k \rightarrow 0$ ,  $z_k \rightarrow -\infty$  for any complementary class  $k \neq c$ , implying that the predicted probabilities  $\hat{y}_k$  and activations  $z_k$  of any complementary class independently approach 0 and negative infinity, respectively. In the case of uniform OCCE loss, when the class activations are the negated anti-class activations  $\mathbf{z} = -\bar{\mathbf{z}}$  and the gradient satisfies  $\nabla_{\bar{\mathbf{z}}} L_{\text{OCCE}} \rightarrow 0$ , the asymptotic behavior with respect to the class activations  $\mathbf{z}$  changes as follows:
+
+$$\hat{y}_c \rightarrow 0, \quad z_c \rightarrow +\infty \quad \text{for the correct class } c, \quad (6)$$
+
+$$\hat{y}_k \rightarrow \frac{1}{N-1}, \quad z_k \rightarrow -\log\left(\frac{\sum_{j \neq c} \exp(-z_j)}{N-1}\right) = z_{\text{const}} \quad \text{for any complementary class } k. \quad (7)$$
+
+The limits in Equations 6 and 7 suggest that while the correct class activation  $z_c$  still tends to positive infinity, the activations of the complementary classes tend to equal values, since the sum over complementary classes in the numerator is the same for all of them. Consequently,  $z_{k_1} \rightarrow z_{k_2}$  for any  $k_1, k_2 \neq c$ .
+
+**Gradients Behaviour.** In Figure 2, we analyze the gradient dynamics for both CE and OCCE under the same setup: a 3-class scenario where the activation for the correct class is fixed at  $z_0 = 2.5$  and the activations for the two complementary classes,  $z_1$  and  $z_2$ , vary within the range  $[-5, 5]$ . In Figure 2a, we visualize the gradient fields for both cases. Under CE, the correct class is encouraged to have a higher activation than the complementary classes, which are independently driven towards lower values. In contrast, under OCCE, the gradients for the correct class become significant only when both complementary classes have high activations. In the case of uniform OCCE, if the activations of the complementary classes have different values, the gradients work to equalize them by reducing the higher activation and increasing the lower one.
+
+{4}------------------------------------------------
+
+![Figure 2: Gradients for all classes. (a) Gradients for each class (Ground Truth Class, Complementary Class 1, Complementary Class 2) for CE and OCCE losses. (b) Cumulative gradient norm over all classes for CE and OCCE losses.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 2 consists of two parts, (a) and (b). Part (a) shows a 2x3 grid of heatmaps. The rows are labeled 'CE' and 'OCCE'. The columns are labeled 'Ground Truth Class', 'Complementary Class 1', and 'Complementary Class 2'. Each heatmap shows the gradient magnitude at a point  $(z_1, z_2)$  ranging from -5 to 5 on both axes. A color bar on the right of the grid indicates the gradient magnitude, ranging from -1.00 (blue) to 1.00 (red). Part (b) shows two heatmaps labeled 'Gradient norm across all classes' for 'CE' and 'OCCE' losses. These heatmaps show the cumulative gradient norm over all classes for the same range of  $(z_1, z_2)$ . A color bar on the right indicates the gradient norm, ranging from 0.00 (blue) to 1.75 (red).
+
+Figure 2: Gradients for all classes. (a) Gradients for each class (Ground Truth Class, Complementary Class 1, Complementary Class 2) for CE and OCCE losses. (b) Cumulative gradient norm over all classes for CE and OCCE losses.
+
+Figure 2: Given a 3-class classification scenario, we fix the ground truth class activation  $z_0 = 2.5$  and plot activations for complement classes  $z_1$  and  $z_2$  ranging from -5 to 5. (a) Each grid shows the gradients for each class at any  $(z_1, z_2)$  point. (b) The cumulative gradient norm over all classes is shown.
+
+In Figure 2b, we compare the cumulative gradient norms across all classes. For CE, large gradients appear when either complementary class has a competitive activation, without any regard for the relationship between the complementary classes. Consequently, for a classification task with N classes, gradients have small magnitude as long as  $\max_{j \neq c} z_j \ll z_c$ . For OCCE, high magnitude gradients are observed in most regions except where  $\forall j \neq c : z_j = z_{\text{const}} \ll z_c$ , which is a much more restricted area, than that of CE.
+
+Although theoretical analyses show that neural networks trained with CE loss converge to a Simplex ETF under ideal optimization conditions (Lu & Steinerberger, 2022), in practice, the extent of neural collapse observed varies. This variation is influenced by factors such as the number of classes, their label distribution, the available data, and the complexity of the model. Empirically, neural collapse tends to occur only in the later stages of training when CE loss approaches zero, implying that the activations for all complementary classes converge towards zero, achieving nearly equal values. With uniform OCCE, this behavior can be explicitly enforced from earlier stages of training, leading to faster convergence toward this desired structure.
+
+## 3 EXPERIMENTS
+
+### 3.1 OCCE BEHAVIOUR ANALYSIS
+
+**Unified CE+OCCE Objective.** The most straightforward way to apply an OCCE loss is on the negated class activations ( $\bar{z} = -z$ ), as a unified objective with standard cross entropy loss applied on  $z$ , as shown in Figure 3. However, OCCE can also be combined with any other loss that emphasizes the correct class. We also introduce a scalar  $\gamma$  in order to control the contribution of OCCE in the final unified objective:
+
+$$L = L_{\text{CE}} + \gamma \cdot L_{\text{OCCE}} \quad (8)$$
+
+![Figure 3: Unified architecture diagram showing the flow from Input to Backbone, FC Head, and then to two parallel loss calculation paths: one for CE loss and one for OCCE loss.](b4a7906eddfd40aaa750e19e56c94a8b_img.jpg)
+
+Figure 3 is a block diagram of the unified architecture. An 'Input' block points to a 'Backbone' block, which points to an 'FC Head' block. The output of the 'FC Head' is a vector  $z$ . This vector  $z$  is split into two parallel paths. The first path goes through a 'Logits' block (containing a 'Softmax' layer) to produce a loss  $L_{\text{CE}}(\hat{y}, y)$ . The second path goes through a 'Negate' block (containing a 'ReLU' layer) to produce a vector  $\bar{z}$ . This vector  $\bar{z}$  is then processed by a 'Logits' block (containing a 'Softmax' layer) to produce a loss  $L_{\text{OCCE}}(\hat{y}_{\text{neg}}, y_{\text{neg}})$ . The final loss is a combination of these two losses.
+
+Figure 3: Unified architecture diagram showing the flow from Input to Backbone, FC Head, and then to two parallel loss calculation paths: one for CE loss and one for OCCE loss.
+
+Figure 3: Unified architecture.
+
+**Neural Collapse.** To study the effect of uniform OCCE loss on the occurrence of neural collapse during optimization, we measure the amount of neural collapse during training using the four proposed NC metrics by Zhu et al. (2024).  $\mathcal{NC}_1$  measures the ratio between the within-class covariance  $\Sigma_W$  and the between-class covariance  $\Sigma_B$ ,  $\mathcal{NC}_2$  quantifies the alignment of the learned classifier with a Simplex ETF structure,  $\mathcal{NC}_3$  evaluates the duality between the classifiers  $W$  and the centered class-means  $H$ , while  $\mathcal{NC}_4$  measures how the bias term  $b$  compensates for a nonzero global mean of the features  $h_G$ , reflecting the degree of collapse in the bias term (refer to A.9 for detailed computations). Details on the calculation of these metrics are provided in Appendix. In Figure 4, we report the measurements of these NC metrics during standard training of a ResNet18 architecture. Larger  $\gamma$
+
+{5}------------------------------------------------
+
+values consistently lead to higher degree of neural collapse, showing that uniform OCCE effectively amplifies this phenomenon. The same behavior is noticed for vision transformers (see A.6.2).
+
+![Figure 4: Uniform OCCE impact on neural collapse during training of ResNet18v2 on CIFAR-100. The figure contains four subplots: (a) NC1, (b) NC2, (c) NC3, and (d) NC4. Each subplot shows the value of a neural collapse metric (NC1, NC2, NC3, or NC4) on the y-axis against the training epoch (0 to 150) on the x-axis. The legend for each plot includes: CE only, γ=0; CE+OCCE, γ=0.01; CE+OCCE, γ=0.1; CE+OCCE, γ=1; CE+OCCE, γ=10. In all plots, the CE+OCCE curves (γ > 0) show a more rapid decrease in the neural collapse metric compared to the CE only baseline (γ=0), indicating a higher degree of neural collapse.](55d2bfe1c3d04e86df8d7a104d802172_img.jpg)
+
+Figure 4: Uniform OCCE impact on neural collapse during training of ResNet18v2 on CIFAR-100. The figure contains four subplots: (a) NC1, (b) NC2, (c) NC3, and (d) NC4. Each subplot shows the value of a neural collapse metric (NC1, NC2, NC3, or NC4) on the y-axis against the training epoch (0 to 150) on the x-axis. The legend for each plot includes: CE only, γ=0; CE+OCCE, γ=0.01; CE+OCCE, γ=0.1; CE+OCCE, γ=1; CE+OCCE, γ=10. In all plots, the CE+OCCE curves (γ > 0) show a more rapid decrease in the neural collapse metric compared to the CE only baseline (γ=0), indicating a higher degree of neural collapse.
+
+Figure 4: Uniform OCCE impact on neural collapse during training of ResNet18v2 on CIFAR-100.
+
+**Independence Deficit.** Uniform OCCE encourages each class to be equidistant from all the other classes, enforcing decoupled classes with linearly independent representations. In order to show the effect on independence deficit we follow the procedure from Feng et al. (2024) to estimate the intrinsic dimension of the penultimate classification layer required to reconstruct the original classification accuracy. We compute the covariance matrix of the representations in that layer, extract its principal components, and project onto subspaces spanned by the top-K eigenvectors.
+
+Figure 5a shows that with standard cross entropy loss, 80%, 90%, and 99% of the original classification accuracy can be reconstructed using only 22, 37, and 64 dimensions, respectively, from the original 100-dimensional activation layer on CIFAR-100. However, when using uniform OCCE and increasing the value of  $\gamma$ , the reconstructed accuracy shows a more linear relationship with the dimensionality of the subspace. This suggests that uniform OCCE decouples the classes and enforces linear independence in the activation layer. For instance, with  $\gamma = 10$ , reconstructing 80%, 90%, and 99% of the accuracy requires 73, 89, and 98 dimensions, respectively. Intuitively, each class  $c_i$  is identified by the corresponding activation  $z_i$ , rather than permitting predictions for  $c_i$  through linear combinations of other activations  $z_j, j \neq i$ , directly addressing the independence deficit.
+
+![Figure 5: Sensitivity analysis of the uniform OCCE objective weighting. (a) Independence Deficit: A line plot showing Accuracy [%] (y-axis, 0 to 80) vs. Dimensions (x-axis, 0 to 100). It compares CE only, γ=0 (blue line with circles) and CE+OCCE for γ=0.01, 0.1, 1, and 10 (purple lines with diamonds). The CE only curve reaches 80%, 90%, and 99% accuracy at 22, 37, and 64 dimensions respectively. The CE+OCCE curves, especially for higher γ, show a more linear increase in accuracy with dimensions. (b) Accuracy: A bar chart showing Accuracy (%) (y-axis, 73 to 76) for different OCCE term weight factors γ (x-axis: γ=0, 0.01, 0.1, 1, 10, 100). The highest accuracy is achieved at γ=1. (c) Generalization Gap: A line plot showing Generalization Gap (y-axis, 0.2 to 0.26) vs. Epoch (x-axis, 0 to 150) for various γ values (0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20). As γ increases, the generalization gap consistently decreases.](e1dda754c2c88a8ad0b968aea4fc0786_img.jpg)
+
+Figure 5: Sensitivity analysis of the uniform OCCE objective weighting. (a) Independence Deficit: A line plot showing Accuracy [%] (y-axis, 0 to 80) vs. Dimensions (x-axis, 0 to 100). It compares CE only, γ=0 (blue line with circles) and CE+OCCE for γ=0.01, 0.1, 1, and 10 (purple lines with diamonds). The CE only curve reaches 80%, 90%, and 99% accuracy at 22, 37, and 64 dimensions respectively. The CE+OCCE curves, especially for higher γ, show a more linear increase in accuracy with dimensions. (b) Accuracy: A bar chart showing Accuracy (%) (y-axis, 73 to 76) for different OCCE term weight factors γ (x-axis: γ=0, 0.01, 0.1, 1, 10, 100). The highest accuracy is achieved at γ=1. (c) Generalization Gap: A line plot showing Generalization Gap (y-axis, 0.2 to 0.26) vs. Epoch (x-axis, 0 to 150) for various γ values (0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20). As γ increases, the generalization gap consistently decreases.
+
+Figure 5: Sensitivity analysis of the uniform OCCE objective weighting. In (a), the reconstructed accuracy is plotted based on the top-K eigenvectors of the activations layer, with  $\circ$ ,  $\times$ , and  $\diamond$  indicating the points where 80%, 95%, and 99% of the original accuracy is reconstructed, respectively. (b) and (c) illustrate the impact of varying  $\gamma$  on validation accuracy and the generalization gap. The configuration used for these experiments is a ResNet18v2 trained on CIFAR-100, and all reported values are the average results from 10 different seeds.
+
+**Impact on Generalization.** In Figure 5c, we observe that increasing the value of  $\gamma$  consistently reduces the generalization gap between train and test accuracy. However, as  $\gamma$  becomes large, it also constrains the achievable training accuracy, as the total objective becomes more challenging to optimize, due to the increased contribution of uniform OCCE. Consequently, the network tends to converge to solutions that trade off accuracy for greater alignment of complementary classes. This suggests that there is an optimal range for  $\gamma$ , which depends on the dataset’s difficulty and the model’s complexity. For instance, in Figure 5b, a value of  $\gamma = 1$  achieves the highest accuracy for ResNet18v2 on CIFAR-100. Even though this may not be the optimal value for all tasks, to maintain consistency across our following experiments, we use a value of  $\gamma = 1$ , unless otherwise noted.
+
+{6}------------------------------------------------
+
+### 3.2 CLOSED SET CLASSIFICATION EXPERIMENTS
+
+In this section, we present the details and results of our closed-set image classification experiments, including base training and transfer learning from pretrained models.
+
+**Base Training.** We train the following architectures: a ResNet18v2 (He et al., 2016), a MobileNetv2 (Sandler et al., 2018) and a DenseNet121 (Huang et al., 2016) on CIFAR-100 (Krizhevsky, 2009) and TinyImageNet (Le & Yang, 2015) datasets, containing 100 and 200 classes respectively. We follow a standard hyperparameter configuration across all experiments from He et al. (2015a), which involves employing an SGD optimizer with momentum of 0.9, mini-batches of 128 samples, weight decay of 0.0001, no dropout and a total of 150 epochs for CIFAR-100 and 90 epochs for TinyImageNet. The learning rate starts from the base value of 0.1 and is divided by 0.1 at 50 and 100 epochs for CIFAR-100, and at 30, 60 and 80 epochs for TinyImageNet. For augmentation, we follow a universal approach of normalization, random horizontal flipping and random cropping in the train set, while only normalizing and center cropping the images in the test set.
+
+We consider different baseline losses and add the weighted uniform OCCE objective on top of them. Specifically we consider: Cross entropy loss, reverse cross entropy (Pang et al., 2017), label smoothing with  $\epsilon = 0.1$  (Szegedy et al., 2015), CE combined with Negative Log loss (Kim et al., 2019), complement objective training methods (Chen et al., 2019; Kim et al., 2021), asymmetric loss (Baruch et al., 2020) and a series of focal losses (Lin et al., 2017; Smith, 2022; Ghosh et al., 2024). The differentiation of our proposed approach with these competitors is presented in Section 4.
+
+**Results.** Table 1 presents the results of base training experiments, showing pairwise comparisons between the baseline losses without and with the uniform OCCE objective. While RCE is not competitive in any of the settings, it is evident that the proposed method leads to consistent improvements along almost all baselines and models combinations, suggesting that uniform OCCE offers additional gains on top of other competitors, when used as a complementary loss. This is also visible in Figure 6, where adding OCCE improves the validation accuracy, especially after the first learning rate decay.
+
+![Figure 6: CIFAR-100 validation curves. The plot shows accuracy (y-axis, 0.55 to 0.75) versus Epoch (x-axis, 0 to 140). Solid lines represent proposed methods, and dashed lines represent baseline methods. The proposed methods consistently achieve higher accuracy than the baseline methods, especially after the first learning rate decay at epoch 50.](01da0d212fb571933f10f96556157745_img.jpg)
+
+Figure 6: CIFAR-100 validation curves. The plot shows accuracy (y-axis, 0.55 to 0.75) versus Epoch (x-axis, 0 to 140). Solid lines represent proposed methods, and dashed lines represent baseline methods. The proposed methods consistently achieve higher accuracy than the baseline methods, especially after the first learning rate decay at epoch 50.
+
+Figure 6: CIFAR-100 validation curves. Dashed lines correspond to baseline accuracy and solid lines to proposed.
+
+Table 1: Test errors from base training using different loss functions. For each loss function, results are presented as "without OCCE ( $\gamma = 0$ )" (left) and "with uniform OCCE ( $\gamma = 1$ )" (right) separated by a slash.
+
+| Dataset | Loss | ResNet18v2 | MobileNetv2 | DenseNet121 |
+|-|-|-|-|-|
+| CIFAR-100 | RCE (Pang et al., 2017) | 25.19 $\pm$ 0.23 | 50.93 $\pm$ 0.75 | 29.46 $\pm$ 0.12 |
+|  | CE (Baseline) | 24.98 $\pm$ 0.20 / 23.92 $\pm$ 0.23 | 30.03 $\pm$ 0.35 / 28.83 $\pm$ 0.25 | 25.06 $\pm$ 0.20 / 24.19 $\pm$ 0.12 |
+|  | LSCE (Szegedy et al., 2015) | 23.26 $\pm$ 0.14 / 22.97 $\pm$ 0.16 | 29.26 $\pm$ 0.16 / 29.14 $\pm$ 0.30 | 23.59 $\pm$ 0.21 / 23.43 $\pm$ 0.06 |
+|  | CE+NL (Kim et al., 2019) | 25.10 $\pm$ 0.14 / 23.90 $\pm$ 0.33 | 29.95 $\pm$ 0.22 / 28.89 $\pm$ 0.37 | 25.48 $\pm$ 0.81 / 24.71 $\pm$ 0.44 |
+|  | COT (Chen et al., 2019) | 24.52 $\pm$ 0.19 / 23.21 $\pm$ 0.26 | 29.57 $\pm$ 0.11 / 28.52 $\pm$ 0.32 | 23.70 $\pm$ 0.75 / 22.27 $\pm$ 0.26 |
+|  | CCE (Kim et al., 2021) | 25.36 $\pm$ 0.29 / 23.57 $\pm$ 0.22 | 29.81 $\pm$ 0.25 / 28.72 $\pm$ 0.31 | 25.29 $\pm$ 0.34 / 23.80 $\pm$ 0.38 |
+|  | FL (Lin et al., 2017) | 25.60 $\pm$ 0.14 / 23.60 $\pm$ 0.45 | 30.98 $\pm$ 0.20 / 29.45 $\pm$ 0.23 | 26.13 $\pm$ 0.05 / 24.16 $\pm$ 0.19 |
+|  | ASL (Baruch et al., 2020) | 24.81 $\pm$ 0.11 / 23.75 $\pm$ 0.18 | 29.76 $\pm$ 0.06 / 29.10 $\pm$ 0.33 | 24.13 $\pm$ 0.09 / 23.80 $\pm$ 0.20 |
+|  | CFL (Smith, 2022) | 23.69 $\pm$ 0.27 / 23.57 $\pm$ 0.20 | 29.55 $\pm$ 0.38 / 29.29 $\pm$ 0.20 | 24.33 $\pm$ 0.42 / 23.81 $\pm$ 0.15 |
+|  | ADAFL (Ghosh et al., 2024) | 24.21 $\pm$ 0.23 / 23.55 $\pm$ 0.11 | 34.03 $\pm$ 0.50 / 32.86 $\pm$ 0.36 | 22.78 $\pm$ 0.27 / 22.48 $\pm$ 0.10 |
+| TinyImageNet | RCE (Pang et al., 2017) | 45.22 $\pm$ 0.24 | 73.34 $\pm$ 0.15 | 64.18 $\pm$ 0.48 |
+|  | CE (Baseline) | 36.80 $\pm$ 0.20 / 35.61 $\pm$ 0.13 | 39.69 $\pm$ 0.49 / 38.79 $\pm$ 0.22 | 38.71 $\pm$ 0.63 / 36.49 $\pm$ 0.52 |
+|  | LSCE (Szegedy et al., 2015) | 36.98 $\pm$ 0.13 / 36.01 $\pm$ 0.18 | 39.10 $\pm$ 0.07 / 39.08 $\pm$ 0.16 | 38.06 $\pm$ 0.50 / 37.52 $\pm$ 0.66 |
+|  | CE+NL (Kim et al., 2019) | 36.40 $\pm$ 0.10 / 35.28 $\pm$ 0.12 | 39.16 $\pm$ 0.10 / 38.41 $\pm$ 0.28 | 38.75 $\pm$ 1.21 / 38.66 $\pm$ 1.09 |
+|  | COT (Chen et al., 2019) | 35.40 $\pm$ 0.15 / 34.74 $\pm$ 0.12 | 40.14 $\pm$ 0.26 / 39.21 $\pm$ 0.26 | 37.60 $\pm$ 0.21 / 35.11 $\pm$ 0.17 |
+|  | CCE (Kim et al., 2021) | 36.88 $\pm$ 0.02 / 35.45 $\pm$ 0.04 | 39.19 $\pm$ 0.35 / 38.81 $\pm$ 0.04 | 39.22 $\pm$ 1.17 / 37.47 $\pm$ 0.15 |
+|  | FL (Lin et al., 2017) | 37.52 $\pm$ 0.62 / 35.93 $\pm$ 0.19 | 40.35 $\pm$ 0.29 / 39.41 $\pm$ 0.10 | 39.74 $\pm$ 0.06 / 38.40 $\pm$ 0.68 |
+|  | ASL (Baruch et al., 2020) | 36.80 $\pm$ 0.04 / 35.03 $\pm$ 0.12 | 39.27 $\pm$ 0.35 / 38.35 $\pm$ 0.16 | 38.03 $\pm$ 0.88 / 37.88 $\pm$ 0.31 |
+|  | CFL (Smith, 2022) | 36.69 $\pm$ 0.33 / 35.14 $\pm$ 0.24 | 38.56 $\pm$ 0.33 / 38.46 $\pm$ 0.25 | 37.89 $\pm$ 0.39 / 36.74 $\pm$ 0.41 |
+|  | ADAFL (Ghosh et al., 2024) | 37.90 $\pm$ 0.21 / 37.61 $\pm$ 0.17 | 45.58 $\pm$ 0.32 / 45.34 $\pm$ 0.25 | 36.63 $\pm$ 0.19 / 37.16 $\pm$ 0.23 |
+
+{7}------------------------------------------------
+
+Table 2: Test errors from transfer learning. Results are presented as "CE only ( $\gamma = 0$ )" (left) and "CE w/ uniform OCCE ( $\gamma = 1$ )" (right) separated by a slash.
+
+| Model | Dataset | Test Errors ( $\downarrow$ ) |
+|-|-|-|
+| WideResNet50 | STL-10 | $1.87 \pm 0.07$ / $1.76 \pm 0.08$ |
+|  | CIFAR-100 | $13.58 \pm 0.19$ / <b>13.35</b> $\pm 0.08$ |
+|  | TinyImageNet | $17.33 \pm 0.14$ / <b>16.92</b> $\pm 0.24$ |
+|  | ImageNet | $21.90 \pm 0.22$ / <b>21.15</b> $\pm 0.12$ |
+| Swin-T | STL-10 | $2.27 \pm 0.05$ / <b>2.07</b> $\pm 0.07$ |
+|  | CIFAR-100 | $12.69 \pm 0.07$ / <b>12.41</b> $\pm 0.12$ |
+|  | TinyImageNet | $14.45 \pm 0.05$ / <b>14.31</b> $\pm 0.02$ |
+|  | ImageNet | $19.69 \pm 0.02$ / <b>19.33</b> $\pm 0.04$ |
+
+![Figure 7: CIFAR-100 transfer learning validation accuracy and loss curves. The figure contains four subplots arranged in a 2x2 grid. The top-left plot shows 'Accuracy' vs 'Epochs' for WideResNet50, comparing CE (blue solid), CE+OCCE (orange dashed), and CE+OCCE (red dash-dot) losses. The top-right plot shows 'Loss' vs 'Epochs' for WideResNet50. The bottom-left plot shows 'Accuracy' vs 'Epochs' for Swin-T. The bottom-right plot shows 'Loss' vs 'Epochs' for Swin-T. In all plots, the CE+OCCE (red dash-dot) loss consistently achieves higher accuracy and lower loss compared to the standard CE loss (blue solid).](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 7: CIFAR-100 transfer learning validation accuracy and loss curves. The figure contains four subplots arranged in a 2x2 grid. The top-left plot shows 'Accuracy' vs 'Epochs' for WideResNet50, comparing CE (blue solid), CE+OCCE (orange dashed), and CE+OCCE (red dash-dot) losses. The top-right plot shows 'Loss' vs 'Epochs' for WideResNet50. The bottom-left plot shows 'Accuracy' vs 'Epochs' for Swin-T. The bottom-right plot shows 'Loss' vs 'Epochs' for Swin-T. In all plots, the CE+OCCE (red dash-dot) loss consistently achieves higher accuracy and lower loss compared to the standard CE loss (blue solid).
+
+Figure 7: CIFAR-100 transfer learning validation accuracy and loss curves.
+
+We finetune a WideResNet50 (Zagoruyko & Komodakis, 2016) and a Swin-T vision Transformer (Liu et al., 2021) on STL-10 (Coates et al., 2011), CIFAR-100, TinyImageNet and ImageNet-1k (Deng et al., 2009). We use the pretrained weights for these models provided by PyTorch, remove the classification head and initialize a new one. For hyperparameters, we use the configuration suggested by Kolesnikov et al. (2019), which involves performing 10,000 updates all medium-sized datasets, except for ImageNet where 20,000 updates are performed. SGD optimizer is employed with 0.9 momentum and a base learning rate of 0.01 and learning rate decay with a factor of 10 at 30%, 60% and 90% of the training steps. We use no weight decay and no dropout.
+
+**Results.** Table 2 presents the results of transfer learning, while in Figure 7, we present the average performance curves for CIFAR-100 during finetuning. The loss curves reflect only the cross entropy loss in both cases. These results indicate that even though the uniform OCCE objective makes the learning task more difficult (supported by the worse performance on the training set), it results in improved generalization of the model and improved validation performance. Similar findings are reported for finetuning LLM transformers (see A.6.1).
+
+### 3.3 OPEN SET RECOGNITION (OSR) EXPERIMENTS
+
+In Open Set Recognition (OSR), we train the network on  $K$  known classes and test with samples from both known and  $U$  unknown classes. The most straightforward way to enable the reject option for the unknown classes, is through Maximum over Softmax Probabilities (MSP) (Yang et al., 2024a), where the goal is to assign lower confidence to unknown instances and higher to known ones, enabling unknown rejection by threshold.
+
+**Decoupled Architecture.** To gain deeper insights into OCCE’s behavior, we propose using decoupled projection heads for CE and OCCE. This approach allows for diversified predictions, as each head has its own projection weights, while the shared backbone is optimized by gradients from both losses (see Figure 8). This setup enables a direct comparison of linear probing under each loss within a shared representation space. We compare the results from the CE head, OCCE head, and a combination of both  $\tilde{y}_{comb}$ s by subtracting the normalized anti-class prediction  $\tilde{y}_i / \max_j \tilde{y}_j$  from each class prediction  $\tilde{y}_i$ .
+
+![Figure 8: Decoupled architecture diagram. The diagram shows an input image being processed by a 'Backbone' block. The output of the backbone is split into two parallel projection heads. The top head is labeled 'FC' and 'Logit', leading to a loss function L_ce(y, y_hat). The bottom head is also labeled 'FC' and 'Logit', leading to a loss function L_occe(y, y_hat). Both heads have their own projection weights. The final output is a combination of the two heads, labeled 'y_hat'.](7affafe7362a2d2d072e9d4bf515f0bb_img.jpg)
+
+Figure 8: Decoupled architecture diagram. The diagram shows an input image being processed by a 'Backbone' block. The output of the backbone is split into two parallel projection heads. The top head is labeled 'FC' and 'Logit', leading to a loss function L\_ce(y, y\_hat). The bottom head is also labeled 'FC' and 'Logit', leading to a loss function L\_occe(y, y\_hat). Both heads have their own projection weights. The final output is a combination of the two heads, labeled 'y\_hat'.
+
+Figure 8: Decoupled architecture.
+
+**Configuration.** We train a ResNet18v2 on FashionMNIST, CIFAR-100, and TinyImageNet for our OSR experiments. For each dataset, we split the classes into a set of known and unknown classes, denoted as  $K/U$ . We run each experiment 5 times with random selection of the  $K/U$  classes.
+
+**Evaluation Metrics.** Since the rarity of unknown samples is not known, OSR evaluation approaches requiring arbitrary thresholds are impractical. We use the following OSR metrics: 1. Error Rate (ER): closed-set test errors 2. Open Set Classification Rate (OSCR): trade-off between correctly classified knowns and misclassified unknowns across MSP thresholds (Chen et al., 2022). 3. Area Under the ROC curve (AUROC): the probability that knowns have higher MSP scores than unknowns.
+
+{8}------------------------------------------------
+
+Table 3: Average error rates, open set classification rates, and AUROC across 5 runs of our OSR configurations on FashionMNIST, CIFAR-100, and TinyImageNet datasets.
+
+| Method | FashionMNIST (4/6) |  |  | CIFAR-100 (20/80) |  |  | TinyImageNet (40/160) |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | ER (↓) | OSCR (↑) | AUROC (↑) | ER (↓) | OSCR (↑) | AUROC (↑) | ER (↓) | OSCR (↑) | AUROC (↑) |
+| BCE | 9.66 | 68.67 | 75.93 | 13.66 | 70.19 | 80.01 | 28.99 | 59.59 | 73.63 |
+| CE | 8.04 | 71.56 | 77.39 | 14.41 | 70.09 | 77.89 | 28.41 | 59.37 | 72.78 |
+| RCE | 9.85 | 70.62 | 75.04 | 23.52 | 64.47 | 75.80 | 55.18 | 37.50 | 64.80 |
+| CE+OCCE | 8.04 | 73.93 | 78.62 | <b>13.26</b> | 72.46 | 80.12 | <b>26.83</b> | <b>61.94</b> | <b>75.31</b> |
+| Dual (CE head) | 8.26 | 72.77 | 78.48 | 13.51 | 71.09 | 78.96 | 27.58 | 60.35 | 73.72 |
+| Dual (OCCE head) | 7.11 | <b>75.33</b> | <b>78.69</b> | 13.61 | <b>74.02</b> | <b>80.52</b> | 27.88 | <b>60.78</b> | 74.59 |
+| Dual (Combined) | 8.22 | 74.11 | 78.51 | 13.58 | 73.75 | 80.04 | 27.38 | <b>61.50</b> | 74.51 |
+
+**Results.** Table 3 presents the results of our OSR experiments. Employing a decoupled heads architecture enables uniform OCCE head to remain competitive across all datasets, consistently outperforming single-head CE, especially in the open-set OSCR and AUROC metrics. The CE head also benefits from the dual architecture, which indicates an improvement in the learned representations in the feature space. This is further illustrated in Figure 9, where the dual head architecture leads to tighter known class clusters and better separation from unknown classes.
+
+![Figure 9: t-SNE visualization of features for CIFAR-100 validation set. (a) CE: Shows a dense, overlapping cloud of points where known classes (colored) and unknown classes (grey) are mixed. (b) Proposed: Shows a more structured cloud with distinct, tighter clusters of known classes and better separation from the unknown classes (grey).](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 9: t-SNE visualization of features for CIFAR-100 validation set. (a) CE: Shows a dense, overlapping cloud of points where known classes (colored) and unknown classes (grey) are mixed. (b) Proposed: Shows a more structured cloud with distinct, tighter clusters of known classes and better separation from the unknown classes (grey).
+
+Figure 9: t-SNE visualization of features for CIFAR-100 validation set (K=10, U=90). Known classes are colored, while unknowns are in grey.
+
+### 3.4 OUT-OF-DISTRIBUTION (OOD) EXPERIMENTS
+
+We conduct additional experiments on out-of-distribution (OOD) detection, to examine if the shown improvements are agnostic to the choice of the unknown rejection algorithm. The goal here is similar to OSR, with the distinction that instead of differentiating between known and unknown classes from the same dataset, we treat all classes from an in-distribution (ID) dataset as known, while other datasets represent out-of-distribution samples.
+
+**Configuration.** For the in-distribution datasets, we use CIFAR-100 and ImageNet-200 (full 224×224 image resolution). For out-of-distribution datasets, we employ CIFAR-10, TinyImageNet and SVHN for CIFAR-100, while SSB Hard, NINCO, and iNaturalist for ImageNet-200. All experiments are conducted using a standard ResNet-18 model. We select 10 competitive post-hoc OOD detection methods from the literature and utilized their implementations from the OpenOOD library (Yang et al., 2024a). We compare the performance of training with CE versus CE plus uniform OCCE with ( $\gamma = 0.1$ ).
+
+**Results.** As shown in Table 4, adding the uniform OCCE to the objective improves AUROC across all ID/OOD dataset combinations. Furthermore, CE+OCCE leads to higher accuracy on the ID datasets, achieving 77.48% for CIFAR-100 and 85.05% for ImageNet-200, compared to 76.83% and 84.28% with CE. Figure 10 illustrates that CE+OCCE outperforms CE in 9 out of 10 OOD methods on CIFAR-100 and in 8 out of 10 methods on ImageNet-200, demonstrating consistent improvements, largely agnostic to the specific post-hoc OOD method used. The full results are provided in A.7.
+
+| ID Dataset | OOD Dataset | AUROC (↑) |
+|-|-|-|
+| CIFAR100 | CIFAR10 | 77.49 / <b>78.23</b> |
+|  | TinyImageNet | 81.25 / <b>82.34</b> |
+|  | SVHN | 81.52 / <b>83.30</b> |
+| ImageNet200 | SSB Hard | 77.11 / <b>78.01</b> |
+|  | NINCO | 82.97 / <b>83.56</b> |
+|  | iNaturalist | 92.27 / <b>92.51</b> |
+
+Table 4: Average AUROC across 10 post-hoc OOD methods and 3 runs. Comparisons of CE w/o and w/ OCCE ( $\gamma = 0.1$ ) are reported, separated with a slash.
+
+![Figure 10: Pairwise comparisons between CE w/o OCCE (left sub-bars) and w/ OCCE (right sub-bars) across different post-hoc OOD methods. (a) CIFAR-100: Shows 10 pairs of bars for different OOD methods. In 9 out of 10 cases, the right bar (w/ OCCE) is higher than the left bar (CE w/o OCCE). (b) ImageNet-200: Shows 10 pairs of bars. In 8 out of 10 cases, the right bar (w/ OCCE) is higher than the left bar (CE w/o OCCE).](ca5f2304ffe22946414ffab54cd3fd93_img.jpg)
+
+Figure 10: Pairwise comparisons between CE w/o OCCE (left sub-bars) and w/ OCCE (right sub-bars) across different post-hoc OOD methods. (a) CIFAR-100: Shows 10 pairs of bars for different OOD methods. In 9 out of 10 cases, the right bar (w/ OCCE) is higher than the left bar (CE w/o OCCE). (b) ImageNet-200: Shows 10 pairs of bars. In 8 out of 10 cases, the right bar (w/ OCCE) is higher than the left bar (CE w/o OCCE).
+
+Figure 10: Pairwise comparisons between CE w/o OCCE (left sub-bars) and w/ OCCE (right sub-bars) across different post-hoc OOD methods. Bars represent averages over all OOD datasets and 3 runs.
+
+{9}------------------------------------------------
+
+## 4 RELATED WORK
+
+**Complement Entropy.** Complement Objective Training (COT) (Chen et al., 2019) alternatively optimizes the primary cross entropy loss and a complement objective, to maximize the Shannon’s entropy of complementary classes, including two updates per batch, which increases training time by 1.6-fold. Later, Kim et al. (2021) unified these objectives into Complementary Cross Entropy (CCE) loss. OCCE, unlike COT and CCE which are narrowed down to Shannon’s entropy in the complementary classes, optimizes a specified anti-class distribution. As a result, OCCE can be naturally integrated with soft labels and knowledge distillation (see A.1.1).
+
+**RCE and Label Smoothing.** Szegedy et al. (2015) introduced label smoothing to mitigate the overconfidence of neural networks, by assigning small targets to the complementary classes. However, this introduces global bias to the correct class. Pang et al. (2017) introduced RCE training procedure as a solution to this problem. RCE is an extreme case of label smoothing, when  $\lambda \rightarrow \text{inf}$ , and can be seen as the stand-alone uniform OCCE objective in our framework, while our proposed approach combines class and anti-class learning, outperforming both RCE and label smoothing (see Table 1).
+
+**ETF Simplex Classifiers.** Inspired from neural collapse, in Zhu et al. (2024), the authors fix the last layer classifier to be a Simplex ETF, demonstrating time and memory gains without performance loss. Furthermore, Simplex ETF structure has been used to mitigate minority collapse in imbalanced training (Yang et al., 2024b) and few-shot incremental learning (Yang et al., 2023). OCCE diversifies from these approaches, because it induces the Simplex ETF structure in an end-to-end learnable manner, rather than predefining the structure of the classifier.
+
+**Hierarchical Classification.** Hierarchical classification methods have been proposed to structure class activations by leveraging parent-child relationships in predefined hierarchies (Wu et al., 2020; Valmadre, 2022; Liang & Davis, 2023). While these approaches address hierarchical relationships (vertical in a hierarchy tree), our method focuses on the flat structure, emphasizing relationships between classes at the same hierarchy level. The proposed method can be employed at multiple hierarchical levels in a similar fashion.
+
+**Focal Approaches.** Focal Loss (Lin et al., 2017) scales the loss of well-classified samples with  $(1 - \hat{y}_c)^\gamma$ , where  $\hat{y}_c$  is the predicted probability for the correct class, and  $\gamma > 0$  emphasizes hard samples. Variants like Cyclic Focal Loss (Smith, 2022) and AdaFocal (Ghosh et al., 2024) dynamically adjust  $\gamma$ . These methods focus on instance-level difficulty, but they assign zero probabilities to complementary classes, effectively ignoring their structure. Introducing target anti-class distributions operates orthogonally to focal approaches and can be readily combined with them.
+
+**Supervised Contrastive Learning.** Supervised Contrastive Learning (SupCon) (Khosla et al., 2020) extends cross entropy to the feature space by pulling positive pairs closer and pushing negative pairs farther apart. Even though it normalizes distances among both positive and negative pairs in the softmax denominator to prevent collapse, SupCon does not explicitly optimize the relationships among the complementary classes, treating them only as a normalization mechanism. This represents a fundamental difference from our proposed approach.
+
+**Reciprocal Points Learning.** Reciprocal Points Learning (RPL) models “otherness” by positioning reciprocal points in latent space (Chen et al., 2020). Adversarial RPL (ARPL) reduces open space risk using an adversarial margin constraint (Chen et al., 2022), while ARPL + CS adds adversarial samples equidistant from all reciprocal points to simulate unseen classes. OCCE objective aligns the activations of the complementary classes for each instance, rather than relying on a single anti-class prototype for each class in the latent space.
+
+## 5 CONCLUSIONS
+
+In this paper, we highlight the importance of controlling the relationships between complementary classes. To this end, we introduce the concept of anti-classes as a complementary approach to modeling classification problems. By representing anti-classes using one-cold encoding, we optimize neural networks to directly learn target anti-class probability distributions through one-cold cross entropy loss. While we mainly focus on a uniform one-cold encoding, inspired by the phenomenon of neural collapse, our proposed framework can be naturally extended to non-uniform target distributions to address limitations, for example to account for inter-class relationships (see A.1.1).
+
+ Rest of paper (reference and Appendix) is removed.

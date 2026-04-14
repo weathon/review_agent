@@ -1,0 +1,311 @@
+
+
+{0}------------------------------------------------
+
+# PYRAMIDKV: DYNAMIC KV CACHE COMPRESSION BASED ON PYRAMIDAL INFORMATION FUNNELING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+In this study, we investigate whether attention-based information flow inside large language models (LLMs) is aggregated through noticeable patterns for long context processing. Our observations reveal that LLMs aggregate information through **Pyramidal Information Funneling** where attention is scattering widely in lower layers, progressively consolidating within specific contexts, and ultimately focusing on critical tokens (a.k.a massive activation or attention sink) in higher layers. Motivated by these insights, we developed PyramidKV, a novel and effective KV cache compression method. This approach dynamically adjusts the KV cache size across different layers, allocating more cache in lower layers and less in higher ones, diverging from traditional methods that maintain a uniform KV cache size. Our experimental evaluations, utilizing the LongBench benchmark, show that PyramidKV matches the performance of models with a full KV cache while retaining only 12% of the KV cache, thus significantly reducing memory usage. In scenarios emphasizing memory efficiency, where only 0.7% of the KV cache is maintained, PyramidKV surpasses other KV cache compression techniques, achieving up to a 20.5 absolute accuracy improvement on TREC dataset. In the Needle-in-a-Haystack experiment, PyramidKV outperforms competing methods in maintaining long-context comprehension in LLMs; notably, retaining just 128 KV cache entries enables the LLAMA-3-70B model to achieve 100.0 Acc. performance, matching that of a full KV cache.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs) (Achiam et al., 2023; Touvron et al., 2023a;b; Jiang et al., 2023) are integral to various natural language processing applications, including dialogue systems (Chiang et al., 2023), document summarization (Fabbri et al., 2019a), and code completion (Roziere et al., 2023). These models have recently been scaled up to handle long contexts (Fu et al., 2024; Ding et al., 2024; Zhu et al., 2023; Chen et al., 2023), with GPT-4 processing up to 128K tokens and Gemini-pro-1.5 handling 1M tokens. However, scaling LLMs to extremely long contexts naturally leads to a significant delay due to the quadratic computation of attention over long contexts. A common solution to mitigate such inference delays involves caching the key and value states (KV) of previous tokens (Waddington et al., 2013), with the trade-off of requiring extensive GPU memory storage. For instance, maintaining a KV cache for 100K tokens in LLaMA-2 7B requires over 50GB of memory, while a 2K context requires less than 1GB of memory (Wu et al., 2024).
+
+To tackle these memory constraints, recent studies have explored the optimization of KV caching, including approaches such as low-rank decomposition of the KV cache (Dong et al., 2024) or pruning non-essential KV cache (Zhang et al., 2024; Li et al., 2024; Ge et al., 2023). Notably, it has been shown that maintaining merely 20% of the KV cache can preserve a substantial level of performance (Zhang et al., 2024). Moreover, extreme compression of the KV cache for tasks of longer contexts (e.g., retrieval augmented generation or RAG for short) can drastically improve efficiency and further reduce resource use. However, questions about the universal applicability of these strategies across all layers of an LLM remain open. (1) *Are these KV cache strategies applicable to all layers?* (2) *Is it computationally efficient to use the same KV cache size across layers as previous studies have done?* These considerations suggest a need for an in-depth, more nuanced understanding of KV cache optimization in LLMs.
+
+{1}------------------------------------------------
+
+![Figure 1: Illustration of PyramidKV compared with existing KV cache compression methods. The figure shows four grid diagrams representing KV cache states across layers (Layer 0 to Layer 31) and tokens (Prompt and Query). (a) Full KV cache: All tokens are stored in all layers. (b) Streaming LLM (fixed position): Only the first few tokens are stored in all layers. (c) Selected KV cache (fixed length): A fixed number of tokens are stored in all layers. (d) PyramidKV (Ours): Cache size decreases from Layer 0 to Layer 31, forming a pyramid shape. The labels 'Dense', 'Streaming LLM', 'SnapKV / H2O', and 'PyramidKV (Ours)' are placed below their respective diagrams.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Illustration of PyramidKV compared with existing KV cache compression methods. The figure shows four grid diagrams representing KV cache states across layers (Layer 0 to Layer 31) and tokens (Prompt and Query). (a) Full KV cache: All tokens are stored in all layers. (b) Streaming LLM (fixed position): Only the first few tokens are stored in all layers. (c) Selected KV cache (fixed length): A fixed number of tokens are stored in all layers. (d) PyramidKV (Ours): Cache size decreases from Layer 0 to Layer 31, forming a pyramid shape. The labels 'Dense', 'Streaming LLM', 'SnapKV / H2O', and 'PyramidKV (Ours)' are placed below their respective diagrams.
+
+Figure 1: Illustration of PyramidKV compared with existing KV cache compression methods. (a) Full KV has all tokens stored in the KV cache in each layer; cache size increases as the input length increases. (b) StreamingLLM (Xiao et al., 2023) only keeps few initial tokens with a fixed cache size in each layer. (c) SnapKV (Li et al., 2024) and H2O (Zhang et al., 2024) keep a fixed cache size across Transformer layers, and their selection is based on the attention score. (d) PyramidKV maintains pyramid-like cache sizes, allocating more cache budget to lower layers and less to higher layers. This approach to KV cache selection better aligns with the increasing attention sparsity observed in multi-layer Transformers (§3).
+
+To examine these questions, we aim to systematically investigate the design principles of the KV cache compression across different layers, specifically tailored to the behaviors of the attention mechanism. We first investigate how information flow is aggregated via attention mechanisms across different layers in multi-document question answering (QA), a classic task involving long contexts. Our analysis identifies a notable transition of attention distribution from a broad coverage of global contexts to a narrow focus of local tokens over layers in LLMs. This pattern suggests an aggregated information flow where information is initially gathered broadly and subsequently narrowed down to key tokens, epitomizing the massive attention phenomenon. Our findings provide unique insights beyond the previously documented “massive activation” (Sun et al., 2024) that very few activations exhibit significantly larger values than others when calculating multi-head attention in LLMs and “attention sink” (Xiao et al., 2023) that keeping the KV of initial tokens will largely recover the performance of window attention.
+
+Building on these insights on how information flows are aggregated through a pyramid pattern, we design a novel and effective KV cache pruning approach that mirrors the geometric shape, named PyramidKV. As shown in Figure 1, unlike the fixed-and-same length KV cache pruning common in prior works (Zhang et al., 2024; Ge et al., 2023; Li et al., 2024), PyramidKV allocates more KV cache to the lower layers where information is more dispersed and each KV holds less information while reducing the KV cache in higher layers where information becomes concentrated in fewer key tokens. To the best of our knowledge, PyramidKV is the first KV cache compression method with varied cache retention across layers, tailoring cache amounts to the informational needs of each layer and paving the way for future research.
+
+We conducted comprehensive experiments on LongBench (Bai et al., 2023) using 17 datasets across various tasks and domains with three backbone models (LLaMa-3-8B-Instruct, LLaMa-3-70B-Instruct and Mistral-7B (Jiang et al., 2023)). The results show that PyramidKV preserves performance using just 12.0% of the KV cache (KV Cache size = 2048) on the LongBench benchmark and significantly outperforms other methods in extreme conditions, retaining only 0.7% of the KV cache. Moreover, PyramidKV outperforms baseline models (H2O (Zhang et al., 2024), SnapKV (Li et al., 2024), StreamingLLM (Xiao et al., 2023)) across all tested cache sizes (64, 96, 128, 256), with its advantages most pronounced at smaller cache sizes. In the Needle In A Haystack experiment, PyramidKV effectively maintains the long-context comprehension in LLMs, outperforming than competing methods. Remarkably, with PyramidKV, retaining only 128 KV cache entries allows the LLaMa-3-70B-Instruct model to achieve 100.0 Acc. performance, matching the performance of a full KV cache.
+
+{2}------------------------------------------------
+
+## 2 RELATED WORK
+
+**Interpretation of LLMs** Prior research has shown that attention matrices in LLMs are typically sparse (Chen et al., 2024a; Xiao et al., 2023; Zhang et al., 2024), focusing disproportionately on a few tokens. For instance, Xiao et al. (2023) identified an “attention sink” phenomenon, where maintaining the Key and Value (KV) states of the first few tokens can substantially restore the performance of windowed attention, despite these tokens not being semantically crucial. Similarly, Sun et al. (2024) identified a “massive activations” pattern, where a minority of activations show significantly larger values than others within LLMs. Interestingly, these values remain relatively constant across different inputs and act as critical bias terms in the model.
+
+Further explorations in this field reveal distinct patterns across various attention heads and layers. Li et al. (2024) observed that certain attention heads consistently target specific prompt attention features during decoding. Additionally, Wang et al. (2023) discovered that in In-Context Learning scenarios, label words in demonstration examples serve as semantic anchors. In the lower layers of an LLM, shallow semantic information coalesces around these label words, which subsequently guide the LLMs’ final output predictions by serving as reference points. Recently, Wu et al. (2024) revealed that a special type of attention head, the so-called retrieval head, is largely responsible for retrieving information. Inspired by these findings that the attention mechanism exhibits varying behaviors across different layers, we discovered that “Massive Activation” does not consistently manifest across all layers in long context sequences; instead, it predominantly occurs in the upper layers. Additionally, we identified a novel trend of information aggregation specific to long-context inputs, which will be further explained in §3.
+
+**KV Cache Compression** There has been a growing interest in addressing LLMs’ memory constraints on processing long context inputs. FastGen (Ge et al., 2023) introduces an adaptive KV cache management strategy that optimizes memory use by tailoring retention tactics to the specific nature of attention heads. This method involves evicting long-range contexts from heads that prioritize local interactions, discarding non-special tokens from heads focused on special tokens, and maintaining a standard KV cache for heads that engage broadly across tokens. SnapKV (Li et al., 2024) improves efficiency by compressing KV caches via selecting/clustering significant KV positions based on their attention scores. Heavy Hitter Oracle (H2O) (Zhang et al., 2024) implements a dynamic eviction policy that effectively balances the retention of recent and historically significant tokens, optimizing memory usage while preserving essential information. StreamingLLM (Xiao et al., 2023) enables LLMs trained on finite attention windows to handle infinite sequence lengths without fine-tuning, thus expanding the models’ applicability to broader contexts. LM-Infinite (Han et al., 2023) allows LLMs pre-trained with 2K or 4K-long segments to generalize to up to 200M length inputs while retaining perplexity without parameter updates.
+
+While these approaches have significantly advanced the efficient management of memory for LLMs, they generally apply a fixed KV cache size across all layers. In contrast, our investigations into the attention mechanisms across different layers of LLMs reveal that the attention patterns vary from layer to layer, making a one-size-fits-all approach to KV cache management suboptimal. In response to this inefficiency, we propose a novel KV cache compression method, called PyramidKV that allocates different KV cache budgets across different layers, tailored to the unique demands and operational logic of each layer’s attention mechanism. This layer-specific strategy takes a significant step toward balancing both memory efficiency and model performance, addressing a key limitation in existing methodologies.
+
+## 3 PYRAMIDAL INFORMATION FUNNELING
+
+To systematically understand the attention mechanism over layers in LLMs for long-context inputs, we conduct a fine-grained study focusing on the multi-document question answering (QA) task. The model is presented with multiple interrelated documents and prompted to generate an answer for the given query. The main target is to investigate how the model aggregates dispersed information within these retrieved documents for accurate responses.
+
+In particular, we focus on our analysis of the LLaMa (Touvron et al., 2023a;b) and visualize the distribution and behavior of attention scores over layers. To assess the distinct behaviors of each
+
+{3}------------------------------------------------
+
+![Figure 2: Attention patterns of retrieval-augmented generation across layers in LLaMa. The figure displays six attention weight heatmaps for layers 0, 6, 12, 18, 24, and 30. Layer 0 shows a broad, uniform attention distribution. Layer 6 shows localized attention within each document, marked by dotted red triangular shapes. Layer 12 shows a transition to more localized attention. Layer 18 shows 'massive attention' concentrated on a few key tokens, indicated by a red arrow pointing to a small inset heatmap. Layer 24 and 30 show continued concentration on key tokens, with a green arrow pointing to an 'Attention Sink' and a red arrow pointing to 'Massive Attention'.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 2: Attention patterns of retrieval-augmented generation across layers in LLaMa. The figure displays six attention weight heatmaps for layers 0, 6, 12, 18, 24, and 30. Layer 0 shows a broad, uniform attention distribution. Layer 6 shows localized attention within each document, marked by dotted red triangular shapes. Layer 12 shows a transition to more localized attention. Layer 18 shows 'massive attention' concentrated on a few key tokens, indicated by a red arrow pointing to a small inset heatmap. Layer 24 and 30 show continued concentration on key tokens, with a green arrow pointing to an 'Attention Sink' and a red arrow pointing to 'Massive Attention'.
+
+Figure 2: Attention patterns of retrieval-augmented generation across layers in LLaMa (Touvron et al., 2023a,b) reveal that in the lower layers, the model exhibits a broad-spectrum mode of attention, distributing attention scores uniformly across all content. In the middle layers, attention becomes more localized within each document, indicating refined information aggregation (dotted red triangular shapes in layers 6 and 10). This culminates in the upper layers, where “massive attention” focuses on a few key tokens (concentrated attention bars after layer 18), efficiently extracting essential information for answers.
+
+multi-head self-attention layer, we compute the average attention from all heads within each layer. Figure 2 shows the attention patterns of one QA example over six different layers (i.e., 0, 6, 12, 18, 24, and 30).
+
+We identify an approximately uniform distribution of attention scores from the lower layers (e.g., the 0th layer). This suggests that the model operates in a broad-spectrum mode at the lower layers, aggregating information globally from all available content without prioritizing its attention on specific input segments. Notably, a distinct transition to a more localized attention pattern within each document emerges, as the model progresses to encode information at the middle layers (6th to 18th layers). In this phase, attention is predominantly directed towards tokens within the same document, suggesting a more refined aggregation of information within individual contexts.
+
+This trend continues and intensifies in the upper layers (from the 24th to the 30th layer), where we observed the emergence of ‘massive attention’ phenomena. In these layers, the attention mechanism concentrates overwhelmingly on a few key tokens. This pattern of attention allocation, where extremely high attention scores are registered, signifies that the model has aggregated the essential information into these focal tokens. Such behavior underscores a sophisticated mechanism by which LLMs manage and streamline complex and voluminous information, culminating in the efficient extraction of the most pertinent data points necessary for generating accurate answers.
+
+## 4 PYRAMIDKV
+
+### 4.1 PRELIMINARIES AND PROBLEM FORMULATION
+
+In an autoregressive transformer-based LLM, the generation of the  $i$ -th token requires that the attention module computes the query, key, and value vectors for all previous  $i - 1$  tokens. To speed
+
+{4}------------------------------------------------
+
+up the inference process and avoid duplicate computations, the key and value matrices are typically stored in the GPU memory. While the KV cache enhances inference speed and reduces redundant computations, it can consume significant memory when dealing with long input contexts. To optimize memory usage, a strategy called KV cache compression is proposed (Zhang et al., 2024; Xiao et al., 2023; Li et al., 2024), which involves retaining only a minimal amount of KV cache while preserving as much information as possible.
+
+In a language model with  $m$  transformer layers, we denote the key and value matrices in the  $l$ -th attention layer respectively as  $\mathbf{K}^l, \mathbf{V}^l \in \mathbb{R}^{n \times d}$ ,  $\forall l \in [0, m-1]$  when encoding a sequence of  $n$  tokens. The goal of KV cache compression is to seek two sub-matrices  $\mathbf{K}_s^l, \mathbf{V}_s^l \in \mathbb{R}^{k^l \times d}$  from the full matrices  $\mathbf{K}^l$  and  $\mathbf{V}^l$ , given a cache budget  $k^l < n$  for each layer  $l \in [0, m-1]$  while maximizing performance preservation. That is, a language model with KV cache compression only uses  $\mathbf{K}_s^l$  and  $\mathbf{V}_s^l$  in the GPU memory for inference on a dataset  $\mathcal{D}$ , and obtains a similar result to a full model according to an evaluation scoring metric, i.e.,  $\text{score}(\mathbf{K}^l, \mathbf{V}^l, \mathcal{D}) \approx \text{score}(\mathbf{K}_s^l, \mathbf{V}_s^l, \mathcal{D})$ .
+
+### 4.2 PROPOSED METHOD
+
+In this section, we introduce our method, PyramidKV, based on the pyramidal information funneling observed across different layers in §3. PyramidKV consists of two steps: (1) Dynamically allocating different KV cache sizes/budgets across different layers (§4.2.1); and (2) Selecting important KV vectors in each attention head for caching (§4.2.2).
+
+#### 4.2.1 KV CACHE SIZE/BUDGET ALLOCATION
+
+Previous work on KV cache compression (Li et al., 2024; Zhang et al., 2024; Xiao et al., 2023) often allocates a fixed KV cache size across LLM layers. However, as our analysis in §3 demonstrates, attention patterns are not identical across different layers. Particularly dense attention is observed in the lower layers, and sparse attention in higher layers. Therefore, using a fixed KV cache size across different layers may lead to suboptimal performance. These approaches may retain many unimportant tokens in the higher layers of sparser attentions while potentially overlooking many crucial tokens in the lower layers of denser attentions.
+
+Thus, we propose to increase compression efficiency by dynamically allocating the cache budgets across layers to reflect the aggregated information flow based on attention patterns. Specifically, PyramidKV allocates more KV cache to the lower layers where information is more dispersed and each KV state contains less information, while reducing the KV cache in higher layers where information becomes concentrated in a few key tokens.
+
+Following the common practice in KV cache compression (Li et al., 2024; Xiao et al., 2023), we first retain the KV cache for the last  $\alpha$  tokens of the input across all layers, as these tokens have been shown to contain the most immediate task-related information, where  $\alpha$  is a hyperparameter, controlling the number of last few tokens being included in the KV cache. For simplicity, we call these tokens “*instruction tokens*”, which is also referred to as “*local window*” in previous literature (Zhang et al., 2024; Li et al., 2024; Xiao et al., 2023).
+
+Subsequently, given the remaining total cache budget  $k^{\text{total}} = \sum_{l \in [0, m-1]} k^l$  that can be used over all transformer layers (noted as  $m$ ), we first determine the cache sizes for the top and bottom layers, and use an arithmetic sequence to compute the cache sizes for the intermediate layers to form the pyramidal shape. The key intuition is to follow the attention pattern in aggregated information flow, reflecting a monotonically decreasing pattern of important tokens for attention from lower layers to upper layers. We allocate  $k^{m-1} = k^{\text{total}} / (\beta \cdot m)$  for the top layer and  $k^0 = (2 \cdot k^{\text{total}}) / m - k^{m-1}$  for the bottom layer, where  $\beta$  is a hyperparameter to adjust the pyramid’s shape. The hyperparameter  $\beta$  is still required to determine the top layer. Once the top layer is identified, the budget of the bottom layer can be calculated by summing the budgets across all layers and equating this sum to the total budget. Once the cache sizes of the bottom and top layers are determined, the cache sizes for all intermediate layers are set according to an arithmetic sequence, defined as
+
+$$k^l = k^0 - \frac{k^0 - k^{m-1}}{m-1} \times l. \quad (1)$$
+
+{5}------------------------------------------------
+
+#### 4.2.2 KV CACHE SELECTION
+
+Once the KV cache budget is determined for each layer, our method needs to select specific KV states for caching within each layer in LLMs. As described in the previous section, the KV cache of the last  $\alpha$  tokens, referred to as instruction tokens, are retained across all layers. Following SnapKV (Li et al., 2024), the selection of the remaining tokens is then guided by the attention scores derived from these instruction tokens—tokens receiving higher attention scores are deemed more relevant to the generation process and are thus their KV states are prioritized for retention in the GPU cache.
+
+In a typical LLM, the attention mechanism in each head  $h$  is calculated using the formula:
+
+$$\mathbf{A}^h = \text{softmax}(\mathbf{Q}^h \cdot (\mathbf{K}^h)^\top / \sqrt{d_k}), \quad (2)$$
+
+where  $d_k$  denotes the dimension of the key vectors. Following (Li et al., 2024), we utilize a pooling layer at  $\mathbf{A}^h$  to avoid the risk of being misled by some massive activation scores.
+
+To quantify the importance of each token during the generation process, we measure the level of attention each token receives from the instruction tokens, and use this measurement to select important tokens for KV caching. Specifically, we compute the score of selecting  $i$ -th token for retention in the KV cache as  $s_i^h$  in each attention head  $h$  by:
+
+$$s_i^h = \sum_{j \in [n - \alpha, n]} \mathbf{A}_{ij}^h \quad (3)$$
+
+where  $[n - \alpha, n]$  is the range of the instruction tokens. In each layer  $l$  and for each head  $h$ , the top  $k^l$  tokens with the highest scores are selected, and their respective KV caches are retained. All other KV caches are discarded and will not be utilized in any subsequent computations throughout the generation process.
+
+## 5 EXPERIMENT
+
+We conduct comprehensive experiments to evaluate the effectiveness of PyramidKV on performance preserving and memory reduction. First, we introduce the experiment setup (§5.1) as backbone LLMs (§5.1.1), the evaluation datasets (§5.1.2), and the baselines in comparison (§5.1.3). Next, we report the performance in a memory-oriented scenario and a performance-oriented scenario experiments in §5.2. We also do some insight experiment (§5.3) to test if the model can preserve the performance on long-context inputs on the Needle-in-the-haystack experiment (§5.3.1). Finally, we discuss the trade-off between memory, time, and performance in §5.3.2.
+
+### 5.1 EXPERIMENT SETUP
+
+We maintain a fixed constant KV cache size for each layer for the baseline methods. In contrast, PyramidKV employs varying KV cache sizes across different layers. To ensure a fair comparison, we adjusted the average KV cache size in PyramidKV to match that of the baseline models, to keep the total memory consumption of all methods the same. In our experiment, we set  $\beta = 20$  and  $\alpha = 8$ . We use the same prompt for each dataset in all the experiments.
+
+#### 5.1.1 BACKBONE LLMs
+
+We compare PyramidKV against baselines using state-of-the-art open-sourced LLMs, namely LLaMa-3-8B-Instruct, Mistral-7B-Instruct (Jiang et al., 2023) and LLaMa-3-70B-Instruct. Testing examples are evaluated in a generative format, with answers generated by greedy decoding across all tasks to ensure a fair comparison.
+
+#### 5.1.2 DATASETS
+
+We use LongBench (Bai et al., 2023) to assess the performance of PyramidKV on tasks involving long-context inputs. LongBench is a meticulously designed benchmark suite that tests the capabilities
+
+{6}------------------------------------------------
+
+of language models in handling extended documents and complex information sequences. This benchmark was created for comprehensive multi-task evaluation of long context inputs. It includes 17 datasets covering tasks such as single-document QA (Kočiský et al., 2018; Dasigi et al., 2021), multi-document QA (Yang et al., 2018; Ho et al., 2020), summarization (Huang et al., 2021; Zhong et al., 2021; Fabbri et al., 2019b), few-shot learning (Li and Roth, 2002; Gliwa et al., 2019; Joshi et al., 2017), synthetic, and code generation (Guo et al., 2023; Liu et al., 2023b). The datasets feature an average input length ranging from 1,235 to 18,409 tokens (detailed average lengths can be found in Table 1), necessitating substantial memory for KV cache management. For all these tasks, we adhered to the standard metrics recommended by LongBench (Bai et al., 2023) (i.e., F1 for QA, Rouge-L for summarization, Acc. for synthetic and Edit Sim. for code generation.) We refer readers to more details at Appendix E.
+
+#### 5.1.3 BASELINES
+
+We compare PyramidKV with three baselines, all of which keep the same KV cache size across different layers, with different strategies for KV cache selection.
+
+**StreamingLLM (SLM)** (Xiao et al., 2023) is an efficient framework that enables LLMs trained with a finite length attention window to generalize to infinite sequence length without any fine-tuning. They propose StreamingLLM based on the attention sink phenomenon that keeping the KV of the first few tokens will largely recover the performance of window attention. StreamingLLM is a competitive method to solve long-context tasks. In our experiments, to be consistent with other methods, we simply keep the KV cache of the last  $\alpha$  tokens and the first  $k - \alpha$  tokens, as suggested in the paper.
+
+**Heavy Hitter Oracle (H2O)** (Zhang et al., 2024) is a KV cache compression policy that dynamically retains a balance of recent and Heavy Hitter (H2) tokens. H2O keeps a fixed cache size of the Key and Value matrix across Transformer layers. The selection process for the KV cache is driven by attention scores, specifically utilizing the average attention scores from all queries across all tokens to guide the selection.
+
+**SnapKV (SKV)** (Li et al., 2024) automatically compresses KV caches by selecting clustered important tokens for each attention head. This method discerns the attention patterns of the Key and Value matrices using a localized observation window positioned at the end of the prompts. However, unlike H2O, SnapKV employs a more nuanced clustering algorithm that includes a pooling layer. Additionally, SnapKV captures attention signals using patterns from a localized window (Instruction Tokens), rather than aggregating attention across all queries, allowing for more targeted and efficient compression.
+
+**FullKV (FKV)** caches all keys and values for each input token in each layer. All methods are compared to the FullKV simultaneously.
+
+### 5.2 MAIN RESULTS
+
+The evaluation results from LongBench (Bai et al., 2023) are shown in Table 1 and Figure 3. In Figure 3, we report the average score across datasets for 64, 96, 128, and 256 case sizes. In Table 1, we report the results for two different KV cache sizes with 64 and 2048. These two sizes represent two distinct operational scenarios—the memory-efficient scenario and the performance-preserving scenario, respectively for a trade-off between memory and model performance. In Appendix M, we report the results of KV cache sizes with 64, 96, 128 and 2048.
+
+Overall, PyramidKV preserves the performance with only 12% of the KV cache and it consistently surpasses other method across a range of KV cache sizes and different backbone models, with its performance advantages becoming particularly pronounced in memory-constrained environments where only about 0.8% of the KV cache from the prompt is retained. Upon examining specific tasks, PyramidKV demonstrates a notably superior performance on the TREC task, a few-shot question answering challenge. This suggests that the model effectively aggregates information from the few-shot examples, highlighting the potential for further investigation into in-context learning tasks.
+
+{7}------------------------------------------------
+
+![Figure 3: Performance Comparison plots for LongBench across different cache sizes (50, 100, 150, 200, 250). The plots show Avg. Score for four models: SnapKV (blue), StreamingLLM (orange), H2O (green), and PyramidKV (red). PyramidKV consistently outperforms the other models across all cache sizes and datasets (LLaMa-3-8B-Instruct, Mistral-7B-Instruct, and LLaMa-3-70B-Instruct).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3: Performance Comparison plots for LongBench across different cache sizes (50, 100, 150, 200, 250). The plots show Avg. Score for four models: SnapKV (blue), StreamingLLM (orange), H2O (green), and PyramidKV (red). PyramidKV consistently outperforms the other models across all cache sizes and datasets (LLaMa-3-8B-Instruct, Mistral-7B-Instruct, and LLaMa-3-70B-Instruct).
+
+Figure 3: The evaluation results from LongBench (Bai et al., 2023) across 64, 96, 128 and 256 cache sizes at LLaMa-3-8B-Instruct (Left), Mistral-7B-Instruct (Middle) and LLaMa-3-70B-Instruct (Right). The evaluation metrics are the average score of LongBench across datasets. PyramidKV outperforms H2O (Zhang et al., 2024), SnapKV (Li et al., 2024) and StreamingLLM (Xiao et al., 2023), especially in small KV cache sizes.
+
+| Method | Single-Document QA |  |  | Multi-Doc QA |  |  | Summarization |  |  | Few-shot Learning |  |  | Synthetic |  |  | Code |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | NtqQA | Qasper | MF-en | HeperQA | WikiMQA | Musique | GovReport | QMSum | MultiNews | TREC | TriviaQA | SAMSum | PCQuat | Pre | Lee | R&P | Avg. |  |
+| LLaMa-3-8B-Instruct, KV Size = Full |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| FKV | 25.70 | 29.75 | 41.12 | 45.55 | 35.87 | 22.35 | 25.63 | 23.03 | 26.21 | 73.00 | 90.56 | 41.88 | 4.67 | 69.25 | 58.05 | 50.77 | 41.46 |  |
+| LLaMa-3-8B-Instruct, KV Size = 64 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| SKV | 19.86 | 9.09 | 27.89 | <b>37.34</b> | 28.35 | <b>18.17</b> | 15.86 | 20.80 | 16.41 | 38.50 | 85.92 | <b>36.32</b> | 5.22 | 69.00 | 51.78 | 48.38 | 33.05 |  |
+| H2O | 20.80 | 11.34 | 27.03 | 32.25 | 30.01 | <b>17.94</b> | 18.29 | 21.49 | 19.13 | 38.00 | 84.70 | <b>37.76</b> | 5.63 | 69.33 | 53.44 | 50.15 | 33.89 |  |
+| SLM | 17.44 | 8.68 | 22.25 | 35.37 | <b>31.51</b> | 15.97 | 15.46 | 20.06 | 14.64 | 38.00 | 72.33 | 29.10 | 5.42 | <b>69.50</b> | 46.14 | 45.09 | 30.43 |  |
+| Ours | <b>21.13</b> | <b>14.18</b> | <b>30.26</b> | 35.12 | 23.76 | 16.17 | <b>18.33</b> | <b>21.65</b> | <b>19.23</b> | <b>58.00</b> | <b>88.31</b> | 37.07 | 5.23 | <b>69.50</b> | 52.61 | 45.74 | <b>34.76</b> |  |
+| LLaMa-3-8B-Instruct, KV Size = 2048 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| SKV | <b>25.86</b> | 29.55 | 41.10 | <b>44.99</b> | <b>35.80</b> | 21.81 | 25.98 | <b>23.40</b> | 26.46 | <b>73.50</b> | <b>90.56</b> | 41.66 | 5.17 | <b>69.25</b> | 56.65 | 49.94 | 41.35 |  |
+| H2O | 21.71 | 25.78 | 38.13 | 42.12 | 32.01 | 16.93 | 23.14 | 21.64 | <b>26.48</b> | 70.00 | 83.22 | 31.75 | 5.74 | 68.50 | 53.50 | 45.58 | 37.82 |  |
+| SLM | 25.56 | 26.85 | 39.54 | 44.30 | 32.92 | 21.09 | 24.68 | 23.01 | 26.16 | 53.00 | <b>90.56</b> | 41.84 | 4.91 | <b>69.25</b> | 56.40 | 49.68 | 39.35 |  |
+| Ours | 25.40 | <b>29.71</b> | 40.25 | 44.76 | 35.32 | <b>21.98</b> | <b>26.83</b> | 23.30 | 26.19 | 73.00 | <b>90.56</b> | 42.14 | 5.22 | <b>69.25</b> | <b>58.76</b> | <b>51.18</b> | <b>41.49</b> |  |
+| Mistral-7B-Instruct, KV Size = Full |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| FKV | 26.90 | 33.07 | 49.20 | 43.02 | 27.33 | 18.78 | 32.91 | 24.21 | 26.99 | 71.00 | 86.23 | 42.65 | 2.75 | 86.98 | 56.96 | 54.52 | 42.71 |  |
+| Mistral-7B-Instruct, KV Size = 64 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| SKV | 16.94 | 17.17 | 39.51 | <b>36.87</b> | 22.26 | 15.18 | 14.75 | 20.35 | 21.45 | 37.50 | <b>84.16</b> | 37.28 | 4.50 | 61.13 | 42.40 | 38.44 | 30.72 |  |
+| SLM | 15.01 | 13.84 | 28.74 | 30.97 | <b>24.50</b> | 13.42 | 13.25 | 19.46 | 19.17 | 35.50 | 76.91 | 29.61 | 4.67 | 27.33 | 38.71 | 35.29 | 25.60 |  |
+| H2O | 18.19 | 19.04 | 37.40 | 30.18 | 22.22 | 13.77 | 16.60 | <b>21.52</b> | <b>21.98</b> | 37.00 | 81.02 | <b>38.62</b> | 5.00 | <b>66.03</b> | 43.54 | <b>40.46</b> | 30.88 |  |
+| Ours | <b>20.91</b> | <b>20.21</b> | <b>39.94</b> | 33.57 | 22.87 | <b>15.70</b> | <b>17.31</b> | 21.23 | 21.41 | <b>54.00</b> | 81.98 | 36.96 | 3.58 | 60.83 | <b>44.52</b> | 37.99 | <b>32.19</b> |  |
+| Mistral-7B-Instruct, KV Size = 2048 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| SKV | <b>25.89</b> | <b>32.93</b> | 48.56 | <b>42.96</b> | 27.42 | 19.02 | 26.56 | <b>24.47</b> | 26.69 | 70.00 | 86.27 | 42.57 | 5.50 | <b>88.90</b> | 50.42 | 46.72 | 41.56 |  |
+| SLM | 20.31 | 26.64 | 45.72 | 35.25 | 24.31 | 12.20 | 22.26 | <b>27.47</b> | 24.51 | 68.50 | 71.95 | 31.19 | 5.00 | 22.50 | 43.38 | 37.08 | 32.35 |  |
+| H2O | 25.76 | 31.10 | <b>49.03</b> | 40.76 | 26.52 | 17.07 | 24.81 | 23.64 | 26.60 | 55.00 | <b>86.35</b> | 42.48 | 5.50 | 88.15 | 49.93 | 46.57 | 39.95 |  |
+| Ours | 25.53 | 32.21 | 48.97 | 42.26 | <b>27.50</b> | <b>19.36</b> | 26.60 | 23.97 | <b>26.73</b> | <b>71.00</b> | 86.25 | 42.94 | 4.50 | 87.90 | <b>53.12</b> | <b>47.21</b> | <b>41.63</b> |  |
+| LLaMa-3-70B-Instruct, KV Size = Full |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| FKV | 27.75 | 46.48 | 49.45 | 52.04 | 54.90 | 30.42 | 32.37 | 22.27 | 27.58 | 73.50 | 92.46 | 45.73 | 12.50 | 72.50 | 40.96 | 63.91 | 46.55 |  |
+| LLaMa-3-70B-Instruct, KV Size = 64 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| SKV | 23.92 | 31.09 | 36.54 | 46.66 | 50.40 | 25.30 | 18.05 | 21.11 | 19.79 | 41.50 | <b>91.06</b> | 40.26 | 12.00 | <b>72.50</b> | 43.33 | 57.62 | 39.45 |  |
+| SLM | 22.07 | 23.53 | 27.31 | 43.21 | <b>51.66</b> | 23.85 | 16.62 | 19.74 | 15.20 | 39.50 | 76.89 | 33.06 | 12.00 | <b>72.50</b> | 40.23 | 50.20 | 35.47 |  |
+| H2O | 25.45 | 34.64 | 33.23 | 48.25 | 50.30 | 24.88 | 20.03 | 21.50 | 21.39 | 42.00 | 90.36 | 41.58 | 12.00 | 71.50 | 43.83 | <b>58.16</b> | 39.94 |  |
+| Ours | <b>25.47</b> | <b>36.71</b> | <b>42.29</b> | 47.08 | 46.21 | <b>28.30</b> | <b>20.60</b> | <b>21.62</b> | <b>21.62</b> | <b>64.50</b> | 89.61 | 41.28 | 12.50 | <b>72.50</b> | <b>45.34</b> | 56.50 | <b>42.01</b> |  |
+| LLaMa-3-70B-Instruct, KV Size = 2048 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| SKV | 26.73 | 45.18 | 47.91 | <b>52.00</b> | <b>55.24</b> | 30.48 | 28.76 | 22.35 | 27.31 | 72.50 | 92.38 | 45.58 | 12.00 | <b>72.50</b> | <b>41.52</b> | <b>69.27</b> | 46.36 |  |
+| SLM | 26.69 | 41.01 | 35.97 | 46.55 | 52.98 | 25.71 | 27.81 | 20.81 | 27.16 | 69.00 | 91.55 | 44.02 | 12.00 | 72.00 | 41.44 | 68.73 | 43.96 |  |
+| H2O | <b>27.67</b> | <b>46.51</b> | <b>49.54</b> | 51.49 | 53.85 | 29.97 | 28.57 | <b>22.79</b> | <b>27.53</b> | 59.00 | <b>92.63</b> | <b>45.94</b> | 12.00 | 72.50 | 41.39 | 63.90 | 45.33 |  |
+| Ours | 27.22 | 46.19 | 48.72 | 51.62 | 54.56 | <b>31.11</b> | <b>29.76</b> | 22.50 | 27.27 | <b>73.50</b> | 91.88 | 45.47 | 12.00 | 72.50 | 41.36 | 69.12 | <b>46.55</b> |  |
+
+Table 1: Performance comparison of PyramidKV (Ours) with SnapKV (SKV), H2O, StreamingLLM (SLM) and FullKV (FKV) on LongBench for LLaMa-3-8B-Instruct, Mistral-7B-Instruct and LLaMa-3-70B-Instruct. PyramidKV generally outperforms other KV Cache compression methods across various KV Cache sizes and LLMs. The performance strengths of PyramidKV are more evident in small KV Cache sizes (i.e. KV Size = 64). Bold text represents the best performance.
+
+Notably, we initially observe the pyramidal attention patterns from the visualization analysis on the multi-document QA task (Figure 2), but the pyramid heuristic has demonstrated its effectiveness on a range of other LongBench tasks (e.g., single-document QA, In-Context Learning), suggesting its promising generalizability beyond multi-document QA.
+
+{8}------------------------------------------------
+
+The performance advantage of PyramidKV increases as the KV cache memory decreases. By focusing on optimizing budget allocation across layers, PyramidKV accurately allocates resources in memory-constrained scenarios, ensuring that retained information is effectively preserved to maintain model performance. Moreover, as in long bench results shown in Table 1, even in the performance-preserving scenario (i.e., KV cache size = 2048), PyramidKV still improves the performance over baseline methods and even outperforms the performance of FullKV.
+
+Among the 16 datasets, the tasks where our proposed method performs slightly worse than the baseline are mostly saturated (e.g., HotpotQA, Musique, etc under the LLaMa-3-8B-Instruct setting with KV Size = 64, as shown in Table 1). In these cases, our method is only marginally inferior to the baseline and remains competitive. Conversely, on tasks with greater potential for improvement (e.g., Qasper, MF-en, TREC, TriviaQA, etc under the same setting), our method significantly outperforms the baseline. Consequently, the overall average performance of our method surpasses that of the baselines. Notably, these tasks include several In-Context Learning tasks (i.e., TREC), our method enjoys best performance gain at In-Context Learning tasks, where the method demonstrates the ability to leverage provided examples to adapt effectively. The importance of In-Context Learning tasks lies in their widespread use in real-world applications, where dynamic adaptation to new inputs is critical.
+
+### 5.3 DISCUSSION AND INSIGHTS
+
+#### 5.3.1 PYRAMIDKV PRESERVES THE LONG-CONTEXT UNDERSTANDING ABILITY
+
+We conduct the "Fact Retrieval Across Context Lengths" (Needle In A Haystack) experiment (Liu et al., 2023a; Fu et al., 2024), which is a dataset designed to test whether a model can find key information in long input sequences, to evaluate the in-context retrieval capabilities of LLMs when utilizing various KV cache compression methods. For this purpose, we employ **LLaMa-3-70B-Instruct** as our base, with context lengths extending up to 8k. We compared several KV cache compression techniques (PyramidKV, SnapKV (Li et al., 2024), and H2O (Zhang et al., 2024)) at cache sizes of 128 and full cache. The results, presented in Figure 4 <sup>1</sup>. The results demonstrate that with only 128 KV cache retained, PyramidKV effectively maintains the model's ability to understand short contexts, and shows only modest degradation for longer contexts. In contrast, other KV cache compression methods significantly hinder the performance of LLMs. Notably, for the larger model (**LLaMa-3-70B-Instruct**), PyramidKV achieves 100.0 Acc. performance, matching the results of FullKV, thereby demonstrating its ability to preserve long-context comprehension with a substantially reduced KV cache. We adopt the haystack setting of haystack formed from a long corpus for the Needle In A Haystack task as Wu et al. (2024).
+
+#### 5.3.2 PYRAMIDKV SIGNIFICANTLY REDUCES MEMORY WITH LIMITED PERFORMANCE DROP
+
+In this section, we study how sensitive the methods are with different sizes of KV cache. We report the KV cache memory reduction in Table 2. We evaluate the memory consumption of LLaMa-3-8B-Instruct. Specifically, we evaluate the memory consumption of all methods with a fixed batch size of 1, a sequence length of 8192, and model weights in fp16 format. We observe that PyramidKV substantially reduces the KV cache memory across different numbers of cache sizes.
+
+We also present that the allocation strategy and score-based selection add minimal complexity in the inference phase compared to the computation required for next-token predictions as Appendix K.
+
+## 6 CONCLUSION
+
+In this study, we investigate the intrinsic attention patterns of Large Language Models (LLMs) when processing long context inputs. Our empirical analysis leads us to discover the existence of Pyramidal Information Funneling. Motivated by this discovery, we design a novel KV cache
+
+<sup>1</sup>Additional results with 64, 96 and 128 KV cache sizes with **LLaMa-3-8B-Instruct** at 8k context length, **LLaMa-3-70B-Instruct** at 8k context length, and **Mistral-7B-Instruct** (Jiang et al., 2023) at 32k context length are available in Appendix O
+
+{9}------------------------------------------------
+
+![Four heatmaps (a, b, c, d) showing attention weights across depth (0-100%) and token length (0-8192). (a) FullKV, KV Size = Full, acc 100.0: High attention weights across all depths and tokens. (b) PyramidKV, KV Size=128, acc 100.0: Similar to (a). (c) SnapKV, KV Size=128, acc 98.6: Sparse attention weights, concentrated in specific regions. (d) H2O, KV Size=128, acc 82.3: Very sparse attention weights, concentrated in specific regions.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+### LLaMA-3-70B - 8K Context Size
+
+(a) FullKV, KV Size = Full, acc 100.0
+
+(b) PyramidKV, KV Size=128, acc 100.0
+
+(c) SnapKV, KV Size=128, acc 98.6
+
+(d) H2O, KV Size=128, acc 82.3
+
+Four heatmaps (a, b, c, d) showing attention weights across depth (0-100%) and token length (0-8192). (a) FullKV, KV Size = Full, acc 100.0: High attention weights across all depths and tokens. (b) PyramidKV, KV Size=128, acc 100.0: Similar to (a). (c) SnapKV, KV Size=128, acc 98.6: Sparse attention weights, concentrated in specific regions. (d) H2O, KV Size=128, acc 82.3: Very sparse attention weights, concentrated in specific regions.
+
+Figure 4: Results of the Fact Retrieval Across Context Lengths (“Needle In A HayStack”) test in **LLaMa-3-70B-Instruct** with **8k** context size in **128 KV** cache size. The vertical axis of the table represents the depth percentage, and the horizontal axis represents the token length.
+
+| cache size | Memory | Compression Ratio | QMSum | TREC | TriviaQA | PCount | PRé | Lcc |
+|-|-|-|-|-|-|-|-|-|
+| 512 | 428M | 6.3% | 22.80 | 71.50 | 90.61 | 5.91 | 69.50 | 58.16 |
+| 1024 | 856M | 12.5% | 22.55 | 71.50 | 90.61 | 5.91 | 69.50 | 58.16 |
+| 2048 | 1712M | 25.0% | 22.55 | 72.00 | 90.56 | 5.58 | 69.25 | 56.79 |
+| Full | 6848M | 100.0% | 23.30 | 73.00 | 90.56 | 5.22 | 69.25 | 58.76 |
+
+Table 2: Memory reduction effect and benchmark result by using PyramidKV. We conducted a comparison of memory consumption between the Llama-3-8B-Instruct model utilizing the Full KV cache and the Llama-3-8B-Instruct model compressed with the PyramidKV.
+
+compression approach PyramidKV that utilizes this information flow pattern. By leveraging the Pyramidal Information Funneling into KV cache compression design, our method excels in memory-constrained settings, preserves long-context understanding ability, and significantly reduces memory usage with minimal performance trade-offs compared to the baselines.
+
+ Rest of paper (reference and Appendix) is removed.

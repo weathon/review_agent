@@ -1,0 +1,310 @@
+
+
+{0}------------------------------------------------
+
+# TEMPORAL REASONING TRANSFER FROM TEXT TO VIDEO
+
+Lei Li<sup>1\*</sup> Yuanxin Liu<sup>2\*</sup> Linli Yao<sup>2</sup> Peiyuan Zhang<sup>3</sup> Chenxin An<sup>1</sup>  
+ Lean Wang<sup>2</sup> Xu Sun<sup>2</sup> Lingpeng Kong<sup>1</sup> Qi Liu<sup>1</sup>
+
+<sup>1</sup>The University of Hong Kong <sup>2</sup>Peking University <sup>3</sup>University of California, San Diego  
+ nlp.lilei@gmail.com {liuyuanxin, linliyao}@stu.pku.edu.cn  
+ pez010@ucsd.edu cxan23@connect.hku.hk  
+ {lean, xusun}@pku.edu.cn {lpk, liuqi}@cs.hku.hk
+
+## ABSTRACT
+
+Video Large Language Models (Video LLMs) have shown promising capabilities in video comprehension, yet they struggle with tracking temporal changes and reasoning about temporal relationships. While previous research attributed this limitation to the ineffective temporal encoding of visual inputs, our diagnostic study reveals that video representations contain sufficient information for even small probing classifiers to achieve perfect accuracy. Surprisingly, we find that the key bottleneck in Video LLMs’ temporal reasoning capability stems from the underlying LLM’s inherent difficulty with temporal concepts, as evidenced by poor performance on textual temporal question-answering tasks. Building on this discovery, we introduce the **Textual Temporal reasoning Transfer (T3)**. T3 synthesizes diverse temporal reasoning tasks in pure text format from existing image-text datasets, addressing the scarcity of video samples with complex temporal scenarios. Remarkably, *without using any video data*, T3 enhances LongVA-7B’s temporal understanding, yielding a 5.3 absolute accuracy improvement on the challenging TempCompass benchmark, which enables our model to outperform ShareGPT4Video-8B trained on 28,000 video samples. Additionally, the enhanced LongVA-7B model achieves competitive performance on comprehensive video benchmarks. For example, it achieves a 49.7 accuracy on the Temporal Reasoning task of Video-MME, surpassing powerful large-scale models such as InternVL-Chat-V1.5-20B and VILA1.5-40B. Further analysis reveals a strong correlation between textual and video temporal task performance, validating the efficacy of transferring temporal reasoning abilities from text to video domains.<sup>1</sup>
+
+## 1 INTRODUCTION
+
+The rapid development of large language models (LLMs) (OpenAI, 2024; Gemini Team, 2024) has sparked significant interest in video large language models (Video LLMs) (Zhang et al., 2023; Lin et al., 2023b) due to their impressive generation and reasoning capabilities. Current approaches typically use pre-trained vision encoders (Radford et al., 2021) combined with powerful LLMs (Touvron et al., 2023; Chiang et al., 2023; Yang et al., 2024) as the starting point for Video LLMs. These models employ various strategies to handle multiple video frames (Li et al., 2023b; Tan et al., 2024), and are then further trained on curated instruction-tuning datasets (Chen et al., 2024), demonstrating promising abilities in video comprehension tasks (Fu et al., 2024; Zhou et al., 2024).
+
+Despite the progress in video comprehension, Video LLMs often struggle with temporal reasoning, which is essential for truly interpreting video content (Li et al., 2023c; Tang et al., 2023b). Specifically, video temporal reasoning involves the ability to track changes over time, comprehend event sequences, and relate objects and actions to specific moments in a video (Mangalam et al., 2023; Li et al., 2023d). As illustrated in Figure 1, two strong Video LLMs, LongVA-7B (Zhang et al., 2024b) and VILA-8B (Lin et al., 2023b), both failed to answer basic questions about the chronological order of events
+
+<sup>\*</sup>Equal contribution.
+
+<sup>1</sup>Project page: <https://video-t3.github.io>
+
+{1}------------------------------------------------
+
+![Figure 1: Comparison of Video LLMs' temporal reasoning. Left: A video frame showing a person dancing in a room. Middle: Textual Temporal Training showing a question about the correct order of items (cat, person, flower) based on the video context. Right: A radar chart comparing Video-MME, TempCompass, and MLVU benchmarks for LongVU-7B, VILA-LLaMA3-8B, and LongVU-7B (Ours).](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+**Left: Video Temporal Inference**  
+ Question: What is the correct order that the items appear in the video?  
+ Options: (A) cat, person, flower; (B) cat, flower, person; (C) person, cat, flower; (D) person, flower, cat; (E) flower, person, cat; (F) flower, cat, person.  
+ LongVU-7B (Ours)  (A) cat, person, flower.  
+ VILA-LLaMA3-8B  The correct order that the items appear in the video is: cat, flower, person.   
+ LongVU-7B (Ours)  (A) cat, person, flower.
+
+**Middle: Textual Temporal Training**  
+ The image shows a person dancing. The image illustrates a cozy living room. This image presents a city street.  
+ Question: Arrange the following items in correct order based on the context: person, street, room.  
+ Options: (A) person, street, room; (B) person, room, street; (C) person, room, street; (D) person, street, room; (E) person, street, room; (F) person, street, room.  
+ LongVU-7B (Ours)  (B) person, room, street.
+
+**Right: Radar Chart Data**
+
+| Benchmark | LongVU-7B | VILA-LLaMA3-8B | LongVU-7B (Ours) |
+|-|-|-|-|
+| Video-MME: Temporal | 43.6 | 31.2 | 53.6 |
+| TempCompass: Order | 50.6 | 37.8 | 60.7 |
+| TempCompass: Attribute | 41.0 | 30.0 | 50.0 |
+| MLVU | 25.2 | 18.5 | 33.2 |
+| Video-MME | 41.0 | 33.0 | 51.4 |
+
+Figure 1: Comparison of Video LLMs' temporal reasoning. Left: A video frame showing a person dancing in a room. Middle: Textual Temporal Training showing a question about the correct order of items (cat, person, flower) based on the video context. Right: A radar chart comparing Video-MME, TempCompass, and MLVU benchmarks for LongVU-7B, VILA-LLaMA3-8B, and LongVU-7B (Ours).
+
+Figure 1: Two popular Video LLMs struggle with basic temporal reasoning (**left**). We mitigate this issue via textual temporal transfer (**middle**), which demonstrates consistent improvement (**right**).
+
+in synthesized videos, whereas humans can predict correctly without difficulty. This significant gap between human performance and current Video LLMs in temporal reasoning tasks motivates us to explore the underlying reasons for this discrepancy.
+
+Previous research has largely attributed temporal reasoning deficiencies in Video LLMs to ineffective video encodings, leading to various temporal aggregation module developments (Ren et al., 2023; Jin et al., 2023; Tan et al., 2024). Our paper takes a different approach by decomposing Video LLMs into two parts and asking a fundamental question: What is the bottleneck of this limitation? Is it due to limitations in the vision encoder, or, surprisingly, shortcomings in the LLM itself? We conduct probing experiments using synthesized videos for basic temporal-related video question-answering (QA) tasks, allowing full control over temporal aspects. Our method involves: (i) Training small probe classifiers on video representations in the Video LLM embedding space to assess temporal information captured by visual encoders and aggregation modules. (ii) Transforming synthesized videos into textual descriptions using commercial visual language models (e.g., GPT-4o) to analyze how standalone LLMs process temporal information. By comparing the performance of these components with full Video LLMs, we could precisely locate the bottleneck in temporal understanding.
+
+Our experiments reveal a striking contrast in temporal reasoning capabilities between different components of Video LLMs. Probe classifiers trained on video embeddings achieve near-perfect accuracy (> 90% in most cases), indicating that these embeddings successfully capture sufficient temporal information. Even simple neural models like LSTM (Hochreiter & Schmidhuber, 1997) can accurately extract temporal relationships from these embeddings. Conversely, despite their significantly larger scale, LLMs struggle to process this temporal information effectively. They exhibit relatively low probing accuracy across various temporal aspects, highlighting their difficulty in handling temporal relationships. These findings provide compelling evidence that **the LLM component, rather than the visual encoding, is the primary bottleneck in the temporal reasoning of current Video LLMs**, motivating us to enhance LLMs’ ability to reason about temporal information.
+
+Building on our insights, we propose enhancing Video LLMs’ temporal understanding by focusing on the LLM component. Our approach leverages existing image-text datasets to generate diverse temporal reasoning tasks in *pure text format*, overcoming the scarcity of video samples with complex temporal scenarios (§3). Remarkably, without using any video data, our text-only synthesized dataset enables LongVA-7B to outperform ShareGPT4Video-8B (trained on 28,000 video samples) on the TempCompass benchmark (Liu et al., 2024b). Moreover, as shown in the right of Figure 1, our enhanced model demonstrates competitive results on various video-understanding benchmarks. It improves temporal reasoning accuracy by 12.4 points on Video-MME (Fu et al., 2024) and increases average accuracy from 56.4 to 58.1 on MLVU (Zhou et al., 2024), surpassing larger models such as InternVL-Chat-V1.5-20B (Chen et al., 2023) and VILA-1.5-40B (Lin et al., 2023b). Analysis reveals the crucial role of self-attention modules in temporal reasoning transfer, and our method improves the utilization of more video frames and transfers to subtle temporal aspects well (Shangguan et al., 2024; Zhang et al., 2024a).
+
+## 2 PINPOINTING VIDEO LLM TEMPORAL REASONING BOTTLENECK
+
+In this section, we seek to examine and pinpoint the temporal reasoning bottleneck of Video LLMs. Video LLMs typically consist of two essential components for temporal understanding tasks: a vision
+
+{2}------------------------------------------------
+
+encoder and an LLM decoder, where the former extracts visual features from video frames and the latter is responsible for integrating this information with textual instructions to complete the end task. We aim to answer two questions: (1) Can existing Video LLMs understand the temporal information in videos? (2) If not, which component—the vision encoder or the LLM decoder—is the bottleneck? To address these questions, we design different tasks to test the full Video LLMs and these two components separately (§2.1), incorporating various aspects of temporal understanding abilities (§2.2), and discuss our findings (§2.3).
+
+### 2.1 TASK FORMULATION FOR DIFFERENT VIDEO LLM COMPONENTS
+
+**Full Video LLM.** We evaluate the full Video LLMs through multi-choice video question answering. Specifically, we uniformly sample eight frames from videos and present them to the model along with a multiple-choice question. To encourage the Video LLM to directly output an option, we append the prompt “*Answer the option only.*” after the question.
+
+**LLM Decoder.** We replace the video frames with detailed frame captions generated by GPT-4o. In this way, we assess the ability of LLM decoder to understand temporal information in the textual context. The multi-choice questions are identical to those employed in testing the full Video LLM. To ensure that the temporal understanding questions can indeed be addressed using these frame captions, we carefully design the prompting strategy to incorporate all essential information in the captions (please refer to Appendix A.2 for the implementation details and examples of frame captions.)
+
+**Visual Features.** Unlike the full Video LLM and LLM decoder, the quality of visual features cannot be directly tested via question answering. To determine whether the visual features contain sufficient information to differentiate between different temporal dynamics in videos (e.g., *brightening* versus *darkening*), we employ the “classifier probe” technique proposed by (Alain & Bengio, 2017). Assuming that there are  $c$  categories of contradicting temporal dynamics, we train a “probe”  $f()$  that maps a set of visual features  $\mathbf{V} \in \mathcal{R}^{n \times d_v}$  to a probability distribution  $p \in \mathcal{R}^c$ . In practice,  $f()$  is a single-layer LSTM model (Hochreiter & Schmidhuber, 1997) for capturing sequential correlation, and we employ the visual features that are down-sampled and projected into LLM embedding space. The probe is tested on the same set of videos as the full Video LLM but is trained on a different set of videos. More details of the visual classifier probe can be found in Appendix A.3.
+
+### 2.2 EVALUATION DATA COLLECTION
+
+**Temporal Reasoning Abilities.** Temporal reasoning encompasses several key aspects. Based on recent Video LLM benchmarks (Fu et al., 2024; Wu et al., 2024), we focus on four critical dimensions: (1) **Order**: comprehending the sequential arrangement of events; (2) **Attribute**: perceiving changes in environmental or object attributes over time; (3) **Temporal Referring**: formulating questions based on specific temporal positions within a video; and (4) **Temporal Grounding**: identifying the temporal location of specific elements in a video. While these aspects are a limited approximation of the full spectrum of temporal understanding, our study reveals that they are sufficient to expose significant deficiencies in current Video LLMs.
+
+**Collecting Videos.** Existing video benchmarks are unsuitable for our analysis due to two main limitations: (1) the lack of video clusters with contrasting temporal dynamics needed for visual feature probing, and (2) the inability to fully eliminate single-frame or language bias (Liu et al., 2024b). Consequently, we synthesize custom videos to isolate different aspects of temporal understanding. Figure 2 illustrates examples of our synthesized videos. For the *Order* aspect, we concatenate different source videos (e.g., person, cat, flower) temporally, creating various categories based on concatenation order. The *Attribute* aspect focuses on shape (flower blooming videos and their reversals) and brightness (gradually altering pixel values of static images). *Temporal Referring* and *Temporal Grounding* reuse videos from the Order aspect with three concatenated items. Appendix A provides detailed information on the video creation process and data distribution.
+
+**Constructing Questions and Answers.** As depicted in Figure 2, we design multi-choice question templates for each temporal aspect. The questions remain consistent across videos within each aspect, while the correct answers vary based on the specific video content. This approach ensures a controlled evaluation of temporal reasoning capabilities.
+
+{3}------------------------------------------------
+
+![Figure 2: Example of videos and questions focusing on different temporal reasoning abilities. The figure shows a grid of video frames with questions. Categories include 'Order' (Two Events, Three Events), 'Temporal Referring' (Begin, Middle, End), 'Attribute' (Shape, Brightness), and 'Temporal Grounding' (Person, Cat, Flower). Each question asks the user to identify a specific temporal aspect of the video content.](dc1e692e5b7efd8e5a2a790c458646d9_img.jpg)
+
+Figure 2: Example of videos and questions focusing on different temporal reasoning abilities. The figure shows a grid of video frames with questions. Categories include 'Order' (Two Events, Three Events), 'Temporal Referring' (Begin, Middle, End), 'Attribute' (Shape, Brightness), and 'Temporal Grounding' (Person, Cat, Flower). Each question asks the user to identify a specific temporal aspect of the video content.
+
+Figure 2: Example of videos and questions focusing on different temporal reasoning abilities.
+
+![Figure 3: Temporal probing results for LongVA (upper) and VILA (lower). The figure contains eight bar charts showing accuracy for different temporal tasks: Attribute, Referring, Grounding, and Order. Each chart compares performance across different models: Random, Full Video LLM, LLM Decoder, Other LLM, and Visual Features. The Visual Features model consistently achieves high accuracy, often exceeding 90%.](f961cbef0f8217e216b553bed270315b_img.jpg)
+
+| Model | LongVA Attribute | LongVA Referring | LongVA Grounding | LongVA Order | VILA Attribute | VILA Referring | VILA Grounding | VILA Order |
+|-|-|-|-|-|-|-|-|-|
+| Random | ~25 | ~25 | ~25 | ~25 | ~25 | ~25 | ~25 | ~25 |
+| Full Video LLM | ~53 | ~53 | ~53 | ~53 | ~45 | ~45 | ~45 | ~45 |
+| LLM Decoder | ~47 | ~47 | ~47 | ~47 | ~54 | ~54 | ~54 | ~54 |
+| Other LLM | ~45 | ~45 | ~45 | ~45 | ~52 | ~52 | ~52 | ~52 |
+| Visual Features | ~95 | ~95 | ~95 | ~95 | ~95 | ~95 | ~95 | ~95 |
+
+Figure 3: Temporal probing results for LongVA (upper) and VILA (lower). The figure contains eight bar charts showing accuracy for different temporal tasks: Attribute, Referring, Grounding, and Order. Each chart compares performance across different models: Random, Full Video LLM, LLM Decoder, Other LLM, and Visual Features. The Visual Features model consistently achieves high accuracy, often exceeding 90%.
+
+Figure 3: Temporal probing results for LongVA (upper) and VILA (lower). The probe on visual representations achieves  $> 90$  accuracy in most cases, while the LLM decoders still have large room for improvement even with textual inputs, leading to the poor temporal understanding ability of Video LLMs. Detailed results of the sub-categories are reported in Appendix A.4.
+
+### 2.3 RESULTS
+
+We examine two advanced Video LLMs that utilize different LLM backbones on our synthesized probing datasets: LongVA-7B (Zhang et al., 2024b), which is based on Qwen2-7B (Yang et al., 2024), and VILA-8B (Lin et al., 2023b), which is built upon LLaMA3-8B (Dubey et al., 2024). The results are visualized in Figure 3, with more results reported in Appendix A.4. Our analysis reveals several key findings:
+
+**Performance of Video LLMs:** Video LLMs demonstrate relatively poor performance, struggling to reach 70 accuracy across all temporal understanding tasks. This suggests a potential limitation in their ability to process and reason about temporal information in video content.
+
+**Efficacy of Visual Representations:** Notably, small classifiers trained on the visual representations in the LLMs’ embedding space achieve near-perfect accuracy. This finding suggests that these visual representations encapsulate rich information, sufficient to distinguish between temporally contradicting videos, even with a simple probe classifier. Consequently, we can conclude that **the input processing is not the primary limitation in temporal reasoning tasks.**
+
+**LLM Backbone Performance:** To our surprise, moderate-sized LLM backbone decoders such as Qwen2-7B and LLaMa3-8B fail to answer a considerable number of questions related to *Referring*, *Grounding* and *Order* aspects, which are intuitively very easy for SoTA LLMs given that the frame captions are provided in textual format. Worse still, these LLM decoders perform only at the level of random guessing when it comes to the *Attribute* aspect. These findings indicate that **the LLM decoders face substantial challenges even in the context of textual temporal understanding, posing a major limitation to the video temporal understanding capabilities of Video LLMs.** In comparison, larger LLMs with over 70 billion parameters significantly outperform their smaller counterparts on these tasks, suggesting that (i) the generated frame captions are accurate and contain
+
+{4}------------------------------------------------
+
+| Order | Attribute |
+|-|-|
+| <p><b>Textual Context:</b><br/>The image shows a book cover with a predominantly dark color scheme.<br/>The image shows a book with a unique design.<br/>The image shows a colorful illustration of a cartoon book.<br/>The image is a split-screen comparison of two individuals.</p> <p>Q: What is the correct order of images as they appear in the video?</p> <p>(A) die, book cover, school bus, split-screen<br/>(B) die, book cover, school bus, split-screen<br/>(C) book cover, die, school bus, split-screen</p> <p>Q: Arrange the images from the video according to their sequence: (1) die (2) book cover (3) split-screen (4) school bus.</p> <p>(A) (2)(3)(4)(1) (B) (2)(1)(4)(3)<br/>(C) (2)(3)(1)(4) (D) (1)(2)(3)(4)</p> | <p><b>Textual Context:</b><br/>The image shows a young child sitting on the floor in a dimly lit room.<br/>The image shows a young child sitting on the floor in a brightly lit room.</p> <p>Q: How does the lighting condition change in the scene?</p> <p>(A) it becomes brighter (B) it becomes dimmer</p> <p><b>Textual Context:</b><br/>The image shows a person wearing a loose blue polo shirt.<br/>The image shows a person wearing a tight blue polo shirt.</p> <p>Q: How does the fit of the polo shirt change?</p> <p>(A) from tight-fitting to loose<br/>(B) from medium to loose<br/>(C) from loose to tight-fitting</p> |
+| <p><b>Temporal Referring</b></p> <p><b>Textual Context:</b><br/>The image shows two squares, black coins with numbers engraved on them.<br/>The image shows two oval, blue plates with designs painted on them.<br/>The image shows two round, red apples with stickers on them.</p> <p>Q: What objects are shown in the image in the begin of the video?</p> <p>(A) black coins (B) blue plates<br/>(C) red apples</p> <p>Q: What objects are shown in the image in the middle of the video?</p> <p>(A) black coins (B) blue plates<br/>(C) red apples</p> <p>Q: What objects are shown in the image in the end of the video?</p> <p>(A) black coins (B) blue plates<br/>(C) red apples</p> | <p><b>Temporal Grounding</b></p> <p><b>Textual Context:</b><br/>The image shows two squares, black coins with numbers engraved on them.<br/>The image shows two oval, blue plates with designs painted on them.<br/>The image shows two round, red apples with stickers on them.</p> <p>Q: When in the video can we observe the coins are black?</p> <p>(A) the begin (B) the middle<br/>(C) the end</p> <p>Q: Where in the video can we observe the plates are blue?</p> <p>(A) the begin (B) the middle<br/>(C) the end</p> <p>Q: Where in the video can we observe the apples are red?</p> <p>(A) the begin (B) the middle<br/>(C) the end</p> |
+
+Figure 4: Temporal-oriented question-answering pairs with textual image captions as context.
+
+sufficient information for temporal reasoning; (ii) the textual temporal understanding ability emerges when the text decoder scale exceeds certain thresholds. We hypothesize that this discrepancy may be due to the sparse expression of temporal concepts in pre-trained corpora. Consequently, smaller-scale models might not have sufficient exposure to learn these temporal reasoning abilities effectively. This sparsity could explain why only very large language models (>70B parameters) demonstrate proficiency in temporal reasoning tasks.
+
+Our findings ultimately suggest that the temporal reasoning ability in current Video LLMs is primarily constrained by the LLM decoder rather than the quality of visual representations. This conclusion highlights a critical area for improvement in the development of more effective Video LLMs, motivating us to enhance the temporal reasoning capabilities from the textual side.
+
+## 3 TEXTUAL TEMPORAL UNDERSTANDING TRANSFER
+
+In this section, we explore strategies to mitigate the deficiency of Video LLMs in temporal reasoning. A straightforward approach would be to create a temporal-oriented instruction-tuning dataset from videos. However, existing approaches to video instruction-tuning data generation, whether through human annotation or automatic generation via rules/models, present significant challenges. Human annotation of video datasets is resource-intensive, demanding considerable time and financial investment. Synthetic video instruction tuning (Maaz et al., 2024; Zhang et al., 2024c), while more efficient and scalable, is constrained by the content of the videos themselves. For instance, if our goal is to enhance a particular aspect of temporal reasoning, it is crucial to ensure that the videos contain information relevant to this aspect. This limitation makes it difficult to create instruction-tuning data that targets specific abilities.
+
+Motivated by (1) the limitations of video instruction-tuning and (2) our finding that the LLM backbone is the primary bottleneck of temporal understanding, we investigate the feasibility of enhancing video temporal reasoning through a novel perspective: using synthesized textual temporal reasoning data. Our method uses sequences of image captions as proxies for video frames, allowing us to create temporal-oriented question-answering pairs without relying on actual video content. This text-only approach offers two key advantages: (i) **Scalability**: The abundance of available image-caption pairs (Changepinyo et al., 2021; Liu et al., 2023) allows for easy expansion of the dataset. (ii) **Flexibility**: We can precisely control the targeted ability and sample complexity by adjusting the content and number of image captions. To address the four aspects of temporal understanding (*Order*, *Attribute*, *Referring* and *Grounding*), we design heuristics to construct textual contexts and generate question-answer pairs solely from caption sequences with examples visualized in Figure 4. The specific generation processes are as follows.
+
+**Order.** This aspect focuses on understanding the sequential order of image captions. To construct the textual context for question answering, we randomly sample 3~6 captions from a caption pool.
+
+{5}------------------------------------------------
+
+Table 1: Summary of our textual temporal reasoning datasets where  $X \in \{\text{phrase, prefix, sentence}\}$  for **Order-Template (X)**. Detailed data statistics are provided in Appendices B.3 and C.1.
+
+| Dataset | #Relevant Captions | #Distractor Captions | Description |
+|-|-|-|-|
+| Order-GPT ( $N \times$ ) | $2 \sim 4$ | $N \times 100 \pm 50, N \in \{1, 2, 4, 8\}$ | Order-related questions generated by GPT-4. |
+| Attribute ( $N \times$ ) | 2 | $N \times 100 \pm 50, N \in \{1, 2, 4, 8\}$ | Attribute-related questions. |
+| Order-Template (X) | $3 \sim 6$ | $200 \pm 50$ | Order-related questions based on templates X |
+| Referring | 3 | $200 \pm 50$ | Temporal referring questions. |
+| Grounding | 3 | $200 \pm 50$ | Temporal grounding questions. |
+
+The questions are created using two methods: On the one hand, we provide GPT-4-turbo with examples and prompt it to generate order-related questions, which we refer to as **Order-GPT**. On the other hand, we employ predefined templates and heuristic rules to create questions. These template questions require rearranging shuffled sequences according to the textual context of image captions. These sequences comprise of (a) complete image captions, (b) phrases within captions or (c) phrases with prefix identifiers (e.g., (1)(2)(3)(4) as shown in the example in Figure 4). We denote the template-based questions as **Order-Template (X)**, where  $X \in \{\text{sentence, phrase, prefix}\}$ .
+
+**Attribute.** This aspect involves recognizing how specific attributes of objects or scenes change throughout the video. To achieve this, we first prompt GPT-4-turbo to generate new image captions by modifying particular attributes in the original captions. Specifically, we consider five types of attributes: *color*, *light condition*, *size & shape*, *posture*, and *emotion*. Subsequently, we employ GPT-4-turbo again to generate questions that focus on the attribute changes between pairs of captions.
+
+**Temporal Referring.** This aspect requires understanding questions that refer to particular temporal locations (e.g., *begin*, *middle* and *end*). To increase the difficulty, we employ GPT-4-turbo to generate three similar image captions that only differ in certain aspect, such as object, action or attribute. These three captions are then placed respectively at the beginning, middle, and end of the textual context. For the questions, we first generate a question for each caption without referring to temporal locations. Then, temporal references are added to the questions according to the specific temporal location of the corresponding caption.
+
+**Temporal Grounding.** This aspect is a complementary angle to *temporal referring*, aiming to identify the temporal location of an element (a phrase describing an object, action or attribute) of interest. The textual context reuses the same image captions as in *temporal referring*. To formulate the questions, we first prompt GPT-4-turbo to generate a declarative statement for each caption (e.g., “the coins are black”). These statements are then incorporated into the temporal grounding question templates, as illustrated in Figure 4.
+
+We enhance the basic textual context (i.e., captions relevant to the question) by incorporating “distractor captions” sampled from the caption pool and inserted between the original captions. This approach challenges the model to identify relevant temporal information amidst irrelevant context, enhances the robustness of its temporal understanding abilities, and presents a more realistic scenario mimicking the complexity of real-world temporal reasoning tasks. To maintain question clarity, we ensure distracting captions do not share nouns with the original captions. Table 1 gives a summary of our synthesized textual temporal QA datasets. For each task, we also create a validation set consisting of 500 samples for later verification. Appendix B provides a detailed and formalized description of the data construction process, as well as the ablation study for distractor captions and a comparison of temporal reasoning transfer via multiple images (Appendix B.4).
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETTINGS
+
+**Benchmarks.** To establish a connection between textual temporal reasoning ability and video comprehension, we adopt the fine-grained temporal understanding benchmark, TempCompass (Liu et al., 2024b) (Multiple-Choice subset), diagnosing multi-facet basic video temporal understanding abilities. For a comprehensive assessment of long-form video understanding capabilities, we choose two challenging benchmarks: MLVU (Zhou et al., 2024) and Video-MME (Fu et al., 2024). These benchmarks are specifically designed to test temporal reasoning across diverse domains. For MLVU,
+
+{6}------------------------------------------------
+
+Table 2: TempCompass evaluation results. Without training on any videos, our T3 helps LongVA-7B outperform ShareGPT4Video-8B trained on 28k video samples. Temporal Change combines Order-GPT and Attribute. The best results are shown in **bold**.
+
+| Method | Action | Direction | Speed | Order | Attribute Change | Average |
+|-|-|-|-|-|-|-|
+| Video-ChatGPT-7B (Maaz et al., 2024) | 61.5 | 28.9 | 29.0 | 36.1 | 30.9 | 37.7 |
+| Video-LLaVA-7B (Lin et al., 2023a) | 76.0 | 35.2 | 35.7 | 37.8 | 41.0 | 45.6 |
+| LLaVA-Next-Video-7B-DPO (Liu et al., 2024a) | 87.6 | 35.8 | 41.3 | 39.7 | 45.8 | 50.6 |
+| Llama-3-VILA1.5-8B (Lin et al., 2023b) | 92.9 | 33.7 | 44.2 | 50.0 | 60.1 | 56.4 |
+| ShareGPT4Video-8B (Chen et al., 2024) | 87.6 | 34.6 | <b>47.5</b> | 62.9 | 64.2 | 59.4 |
+| LongVA-7B (32 frm) | <b>92.3</b> | 37.3 | 42.0 | 54.3 | 51.7 | 55.9 |
+| + LLaVA-Next | 92.0 | 36.4 | 43.2 | 55.6 | 51.0 | 56.0 |
+| + Hotpot QA | <b>92.3</b> | 37.0 | 39.4 | 53.0 | 50.7 | 54.9 |
+| + Temporal Change (1x) | 91.1 | 37.3 | 39.8 | 65.2 | 63.9 | 59.5 |
+| + Temporal Change (2x) | 89.6 | 39.1 | 40.4 | <b>66.9</b> | 61.8 | 59.6 |
+| + Temporal Change (4x) | 90.5 | <b>43.0</b> | 39.4 | 64.2 | 64.2 | 60.4 |
+| + Temporal Change (8x) | 90.2 | 42.4 | 39.8 | 64.2 | <b>68.1</b> | 61.0 |
+| + Temporal Change (1x, 2x, 4x and 8x) | 90.5 | 38.2 | 39.8 | 65.6 | 64.2 | 59.7 |
+| + Order-Template | 89.9 | 35.8 | 46.1 | 58.3 | 54.5 | 57.2 |
+| + Temporal Referring | 91.4 | 33.7 | 46.1 | 46.7 | 51.0 | 54.2 |
+| + Temporal Grounding | 63.0 | 31.6 | 29.3 | 40.7 | 38.9 | 41.0 |
+| + Order-Template + Temporal Change (1x) | 90.2 | 40.6 | 42.9 | 63.6 | 65.3 | 60.6 |
+| + Temporal Grounding+ Temporal Change (1x) | 91.1 | 38.8 | 41.6 | 62.9 | 62.9 | 59.6 |
+| + Temporal Referring + Temporal Change (1x) | 90.8 | 38.2 | 42.3 | 62.9 | 64.6 | 59.8 |
+| + T3 (all tasks) | 90.8 | 39.7 | 41.6 | 65.9 | <b>68.1</b> | <b>61.2</b> |
+| GPT-4o | 98.2 | 52.8 | 52.1 | 73.2 | 78.5 | 71.0 |
+
+Table 3: MLVU evaluation results. Our textual temporal reasoning transfer achieves the best overall performance, with significant gains in temporal-related aspects over the backbone model. TR: Topic Reasoning, AR: Anomaly Recognition, ER: Ego Reasoning, AO: Action Order, AC: Action Count. \* denotes temporal-related dimensions. Best results are in **bold**.
+
+| Model | AC* | ER | Needle QA | AO* | Plot QA | AR | TR | Macro Average |
+|-|-|-|-|-|-|-|-|-|
+| Video-ChatGPT-7B (Maaz et al., 2024) | 31.1 | 42.0 | 40.3 | 25.1 | 29.9 | 24.0 | 26.9 | 31.3 |
+| Video-LLaVA-7B (Lin et al., 2023a) | 35.9 | 45.2 | 53.2 | 20.1 | 48.4 | 57.0 | 71.6 | 47.3 |
+| MA-LMM-7B (He et al., 2024) | 24.3 | 38.9 | 43.1 | 25.1 | 35.8 | 35.5 | 51.9 | 36.4 |
+| Llama-3-VILA1.5-8B (Lin et al., 2023b) | 0.0 | 24.7 | 32.4 | 6.6 | 20.0 | 27.0 | 46.2 | 22.4 |
+| VILA1.5-40B (Lin et al., 2023b) | 11.7 | 35.8 | 38.3 | 34.3 | 62.0 | 56.4 | 84.7 | 46.2 |
+| InternVL-Chat-V1.5-20B (Chen et al., 2023) | 13.3 | 24.5 | 40.0 | 14.3 | 42.0 | 51.3 | 80.2 | 37.9 |
+| LongVA-7B (128 frm) | 25.2 | 48.6 | 70.4 | 41.7 | 68.1 | <b>58.5</b> | <b>82.2</b> | 56.4 |
+| + LLaVA-Next | 11.7 | 20.5 | 36.6 | 17.8 | 45.3 | 17.5 | 72.7 | 31.7 |
+| + Hotpot QA w/ LLaVA-Next | 13.1 | 27.6 | 40.6 | 19.7 | 45.3 | 21.5 | 72.4 | 34.3 |
+| + T3 w/ LLaVA-Next (Ours) | <b>29.1</b> | <b>48.9</b> | <b>72.1</b> | <b>54.4</b> | <b>69.4</b> | 51.0 | 81.4 | <b>58.1</b> |
+| GPT-4o | 46.3 | 57.1 | 64.8 | 56.7 | 65.1 | 74.5 | 87.4 | 64.6 |
+
+we select the following tasks covering three aspects: holistic video understanding (Topic Reasoning (TR) and Anomaly Reasoning (AR)), single-detail understanding (Needle Question-Answering, Ego Reasoning (ER) and Plot Question Answering), and multi-detail understanding (Action order (AO) and Action Count (AC)). For Video-MME, which consists of 2700 video QA pairs spanning primary visual domains and three video duration types (Short, Medium, and Long), we focus on two temporal-oriented tasks (i.e., Temporal Perception and Temporal Reasoning) and overall performance.
+
+**Compared Methods.** We evaluate our temporal textual augmentation approach against two baselines: (i) LLaVA-Next: Continually fine-tuning on the original image-text instruction dataset used by LongVA (Chen & Xing, 2024). (ii) HotpotQA (Yang et al., 2018): Fine-tuning on a multi-document QA dataset to assess enhancements in textual locating ability. We also report the performance of recent Video LLMs, including Video-ChatGPT (Maaz et al., 2024), Video-LLaVA-7B (Lin et al., 2023a), LLaVA-Next-Video-7B-DPO (Liu et al., 2024a), MA-LMM-7B (He et al., 2024), ShareGPT4Video-8B (Chen et al., 2024), Llama-3-VILA1.5-8B (Lin et al., 2023b), VILA1.5-40B (Lin et al., 2023b), and InternVL-Chat-V1.5-20B (Chen et al., 2023). GPT-4o (OpenAI, 2024) is included to represent commercial model results. These models serve as reference points and we report the highest scores published to represent optimal performance.
+
+**Training Details.** We adopt LongVA (Zhang et al., 2024b) as our backbone model and continually fine-tune the official checkpoint. Despite being trained exclusively on text and image data, LongVA
+
+{7}------------------------------------------------
+
+Table 4: Video-MME evaluation results. Our method enhances LongVA-7B’s accuracy across various video durations, even outperforming VILA1.5-40B in temporal reasoning. Best results are in bold.
+
+| Model | Temporal Perception | Temporal Reasoning | Short | Medium | Long | Overall |
+|-|-|-|-|-|-|-|
+| Video-LLaVA-7B (Lin et al., 2023a) |  |  | 45.3 | 38.0 | 36.2 | 39.9 |
+| LLaVA-NEXT-Video-7B-DPO (Liu et al., 2024a) | 40.0 | 29.4 | 48.9 | 42.0 | 35.6 | 42.1 |
+| Llama-3-VILA1.5-8B (Lin et al., 2023b) | 50.9 | 41.2 | 56.1 | 42.1 | 39.6 | 45.9 |
+| VILA1.5-40B (Lin et al., 2023b) | 60.0 | 40.7 | <b>72.0</b> | <b>61.2</b> | <b>53.8</b> | <b>62.3</b> |
+| InternVL-Chat-V1.5-20B (Chen et al., 2023) | 45.5 | 33.3 | 60.2 | 46.4 | 45.6 | 50.7 |
+| LongVA-7B (128 fm) | 58.2 | 37.3 | 61.1 | 50.4 | 46.2 | 52.6 |
+| + LLaVA-Next | 54.6 | 37.3 | 61.2 | 50.6 | 44.9 | 52.2 |
+| + Hotpot QA w/ LLaVA-Next | <b>65.5</b> | 39.6 | 60.2 | 50.9 | 45.6 | 52.2 |
+| + T3 w/ LLaVA-Next (Ours) | <b>60.0</b> | <b>49.7</b> | <b>63.3</b> | <b>54.8</b> | <b>46.8</b> | <b>55.0</b> |
+| GPT-4o | 74.1 | 59.4 | 80.0 | 70.3 | 65.3 | 71.9 |
+
+demonstrates exceptional zero-shot video understanding capabilities and can effectively handle long videos. We strictly adhere to the original LongVA implementation and follow the official fine-tuning protocol. This involves using Adam (Kingma & Ba, 2015) as the optimizer, with learning rates of 2e-6 for the visual encoder and 1e-5 for the rest part of the model. For the exploration of textual temporal reasoning transfer, we use 22k samples for fine-tuning across different augmentation datasets. We further scale the dataset up to transfer to holistic video understanding benchmarks, where we find it necessary to incorporate the original instruction tuning data to maintain visual perception ability. According to our textual validation accuracy, we set the ratio of textual temporal QA and original data to 1:2 and the total samples to 200k. This mixing ratio applies to Hotpot QA for a fair comparison. Appendix C provides the details of dataset composition mixture configurations, and the dataset scaling effect. The model is trained on the corresponding dataset for one epoch, a process that can be completed within 5 hours using 8 H100 GPUs. We apply our recipe to a larger Qwen2-VL-72B backbone and observe consistent improvements for temporal reasoning (Appendix D.1).
+
+### 4.2 RESULTS
+
+Our results aim to answer the following three research questions: (1) Can textual temporal reasoning ability be effectively transferred to video temporal reasoning? and (2) Do these two abilities correlate well? and (3) Does this transfer also reflect on holistic video understanding benchmarks?
+
+**Textual temporal reasoning transfer:** Table 2 presents the evaluation results of models trained on various compositions of our datasets. Continual training with the original LLaVA-Next dataset yields negligible improvements, while HotpotQA training surprisingly degrades performance, despite its similarity to temporal location tasks. These findings underscore the non-trivial nature of enhancing temporal understanding in Video LLMs. Our textual temporal transfer approach, by contrast, demonstrates significant improvements. Regarding the different tasks, we find that: (i) The Temporal Change (1x) subset which combines Order-GPT (1x) and Attribute (1x), enhances Order accuracy from 54.3 to 65.2 and Attribute accuracy from 51.7 to 63.9. Increasing the number of distractor captions (1x to 8x) leads to generally better performance. (ii) Order-Template and Temporal Referring excel in the Speed dimension, while Temporal Grounding negatively influences all aspects. (iii) Combining different aspects often leads to synergistic improvements. For example, supplementing Temporal Change (1x) with other tasks leads to better results than training with the set alone. This suggests complementary benefits across diverse temporal reasoning skills. Finally, despite without any video data, our T3 composition with all synthesized tasks, helps LongVA-7B achieve the best overall accuracy, even outperforming ShareGPT4Video-8B trained on 28,000 video samples annotated by GPT-4V. These results highlight the effectiveness of our approach in improving Video LLMs’ temporal reasoning across various dimensions.
+
+**Holistic video understanding evaluation:** Based on previous results, we adopt the T3 composition, which achieves the highest textual validation scores, to explore transfer effects on comprehensive video understanding benchmarks. Table 3 shows detailed task accuracy results on MLVU. Further training on the original image-text instruction dataset or Hotpot QA decreased overall performance, indicating that video temporal understanding cannot be enhanced through continued fine-tuning or long-context training alone. In contrast, mixing our T3 with LLaVA-Next improves performance across most tasks. Notably, the two highly temporal-oriented tasks, Action Count (AC) and Action Order (AO), see a substantial average gain of 8.3 points. Specifically, AC scores increased by 3.9 points (25.2 → 29.1), while AO scores improved by 12.7 points (41.7 → 54.4). Table 4 demonstrates
+
+{8}------------------------------------------------
+
+substantial improvement in Video-MME’s temporal reasoning subtask (37.3 → 49.7), even outperforming larger models such as InternVL-Chat-V1.5-20B and VILA1.5-40B. Besides, compared to fine-tuning with LLaVA-Next and Hotpot QA, our method yields the best overall performance at 55.0. Further analysis on distribution overlapping between our synthesized samples and downstream tasks justifies the performance gains are not sourced from simply memorizing the distribution of questions and answer choices D.2. We also observe strong correlations between the textual and video temporal reasoning scores across benchmarks in Appendix D.3. These results validate that enhanced textual temporal reasoning in LLM backbones effectively transfers to holistic video understanding.
+
+**Critical LLM components for temporal understanding:** We evaluate the impact of selectively unfreezing LLM components across TempCompass, MLVU, and Video-MME datasets using the T3 /w LLaVA-Next dataset. Figure 5 illustrates that fully unfreezing the language model yields optimal performance. For TempCompass, the fully unfrozen model achieves 58.2% accuracy, outperforming self-attention-only (57.7%) and MLP-only (50.1%) configurations. Notably, unfreezing self-attention modules consistently surpasses unfreezing MLP layers, with MLVU showing a substantial 4.2 percentage point difference (55.8% vs. 51.6%) and a 2.3 absolute accuracy gap on Video-MME (52.4% vs. 50.1%). This suggests that self-attention modules play a more crucial role in transferring temporal understanding capabilities. These findings align with the understanding that self-attention modules act as dynamic information aggregators (Wang et al., 2023b), while MLP layers primarily serve as static knowledge banks (Geva et al., 2021).
+
+![Bar chart showing Accuracy (%) for TempCompass, MLVU, and Video-MME datasets across three LLM component configurations: All (blue), Self-Attention Only (green), and MLP Only (orange).](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+| Dataset | All (%) | Self-Attention Only (%) | MLP Only (%) |
+|-|-|-|-|
+| TempCompass | 58.2 | 57.7 | 50.1 |
+| MLVU | 56.0 | 55.8 | 51.6 |
+| Video-MME | 55.0 | 52.4 | 50.1 |
+
+Bar chart showing Accuracy (%) for TempCompass, MLVU, and Video-MME datasets across three LLM component configurations: All (blue), Self-Attention Only (green), and MLP Only (orange).
+
+Figure 5: Compared to MLP modules, self-attention modules are more important for temporal reasoning.
+
+**Enhanced utilization of increased video frames:** We examine whether temporal-enhanced LLMs could better leverage increased input video frames by comparing performance gains when increasing frames from 32 to 128, using models trained on Temporal Change sets.
+
+Figure 6 shows that our textual temporal reasoning-enhanced models benefit more from increased input frames compared to the baseline LongVA. On TempCompass, the Temporal Change (1x) model gains 1.7% accuracy with 128 frames, versus 0.6% for LongVA. Similarly, on MLVU, enhanced models achieve nearly double the gain of the baseline. These results indicate that our approach enables better utilization of additional input frames. Training on longer inputs with more distractor captions generally yields larger gains, though the optimal length varies between datasets.
+
+**Transfer to Other Temporal Concepts:** Our designed textual temporal tasks focus on four fundamental temporal aspects inspired by previous diagnosis benchmarks (Liu et al., 2024b; Fu et al., 2024). While these aspects may appear basic, they form essential building blocks for complex temporal reasoning and are particularly challenging for current Video LLMs to master, as evidenced in our previous analysis. To rigorously evaluate the generalization capability of our method, particularly to temporal concepts that are challenging to describe textually (e.g., precise rotation counts, relative motion speeds), we test our models on two recent benchmarks with complementary temporal characteristics: TOMATO (Shangguan et al., 2024) and Vinoground (Zhang et al., 2024a). TOMATO evaluates fine-grained motion understanding that goes beyond discrete textual descriptions, testing continuous aspects of motion dynamics. Our T3-enhanced model shows significant improvements in velocity and frequency understanding (Vel. & Freq) (39.9 vs. 23.1, + 16.8) and Shape & Trend comprehension (30.5 vs. 22.4, + 8.1). The decreased performance in Rotation (16.6 vs. 26.4, - 9.8) reveals an inherent limitation: purely
+
+![Bar chart showing Accuracy Gain (%) for Temporal Change (1x, 2x, 4x, 8x) across four datasets: Baseline gain on Video-MME (blue), Baseline gain on MLVU (orange), Video-MME (pink), and MLVU (green).](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+| Temporal Change | Baseline gain on Video-MME (%) | Baseline gain on MLVU (%) | Video-MME (%) | MLVU (%) |
+|-|-|-|-|-|
+| Temporal Change (1x) | 0.6 | 0.7 | 1.7 | 2.5 |
+| Temporal Change (2x) | 0.7 | 0.8 | 1.7 | 3.1 |
+| Temporal Change (4x) | 0.8 | 0.9 | 2.4 | 2.9 |
+| Temporal Change (8x) | 0.9 | 1.0 | 1.2 | 3.4 |
+
+Bar chart showing Accuracy Gain (%) for Temporal Change (1x, 2x, 4x, 8x) across four datasets: Baseline gain on Video-MME (blue), Baseline gain on MLVU (orange), Video-MME (pink), and MLVU (green).
+
+Figure 6: Our temporal-enhanced models leverage more input video frames better.
+
+{9}------------------------------------------------
+
+Table 5: Generalization evaluation on TOMATO and Vinoground benchmarks.
+
+| Model | TOMATO (Shangguan et al., 2024) |  |  |  |  |  |  | Vinoground (Zhang et al., 2024a) |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  | Rotation | Direction | Vel. & Freq. | Shape & Trend | Visual Cues | Action Count | All | Text | Video | Group |
+| LongVA-7B | 26.4 | 21.6 | 23.1 | 22.4 | 38.6 | 14.7 | 22.3 | 21.2 | 21.6 | 5.4 |
+| + LLaVA-Next | 22.2 (-4.2) | 25.6 (+4.0) | 21.2 (-1.9) | 26.0 (+3.6) | 40.0 (+1.4) | 19.8 (+5.1) | 21.2 (-1.1) | 19.0 (-2.2) | 21.8 (+0.2) | 4.6 (-0.8) |
+| + T3 w/ LLaVA-Next (Ours) | 16.6 (-9.8) | 21.6 (0) | 39.9 (+16.8) | 30.8 (+8.1) | 38.6 (0) | 16.4 (+1.7) | 24.3 (+2.0) | 31.6 (+10.4) | 30.0 (+8.4) | 11.8 (+6.4) |
+
+text-based training may not fully capture precise rotational movements that require continuous, quantitative understanding. On the other hand, Vinoground examines temporal reasoning ability in real-world scenarios through carefully curated video-caption pairs that share identical static content but differ in temporal action sequences. For instance, distinguishing between *cut then turn* versus *turn then cut* requires a precise understanding of temporal order. Our method substantially improves LongVA-7B’s performance across all metrics: Text (31.6, +10.4), Video (30.0, +8.4), and Group (11.8, +6.4). These comprehensive evaluations demonstrate that our T3 develops robust temporal reasoning abilities that generalize well to continuous motion understanding (TOMATO) and different task formats (Vinoground).
+
+## 5 RELATED WORK
+
+**Video Large Language Models (Video LLMs).** Video LLMs, integrating LLMs and visual encoders, have shown promising results on diverse video tasks (Tang et al., 2023a). These models typically leverage open-source LLMs (Touvron et al., 2023; Yang et al., 2024) for generation and reasoning capabilities. Recent architectural explorations have focused on efficient video encoding, including Video Transformer and Q-Former (Li et al., 2023b; Ren et al., 2023), spatial and temporal QFormer (Zhang et al., 2023; Tan et al., 2024), and memory bank for long video frames (He et al., 2024). Other approaches like Video-LLaVA (Lin et al., 2023a), Chat-UniVi (Jin et al., 2023), VILA-series (Lin et al., 2023b), and LLaVA-series (Liu et al., 2024a; Zhang et al., 2024b) demonstrate effective transfer from image to video tasks with image-video unification. In contrast to these studies, our work focuses on probing and enhancing the temporal understanding ability of Video LLMs, identifying the LLM’s poor grasp of temporal concepts as a key bottleneck. Our textual-only temporal reasoning transfer effectively addresses this issue without using any image/video instruction tuning data.
+
+**Temporal Understanding Benchmarks for Video LLMs.** Video temporal understanding benchmarks have evolved rapidly to guide Video LLM development. Pilot studies incorporate existing tasks (Wang et al., 2019; Li et al., 2021) into comprehensive assessments (Li et al., 2023c; Ning et al., 2023; Li et al., 2023a). As Video-LLMs become stronger, benchmarks such as EgoSchema (Mangalam et al., 2023), Neptune (Nagrani et al., 2024), Video-MME (Fu et al., 2024) and MLVU (Zhou et al., 2024), focus on stress-testing models with diverse and challenging tasks of long videos. Specific benchmarks addressing temporal understanding (Li et al., 2023d; Liu et al., 2024b; Wang et al., 2023a; Shangguan et al., 2024; Zhang et al., 2024a) have highlighted limitations in current Video LLMs. Our work not only diagnoses the temporal understanding bottleneck in Video LLMs but also demonstrates a correlation between textual and fine-grained video temporal understanding. Importantly, our proposed methods show improvements on challenging benchmarks such as Video-MME, advancing the field of video temporal reasoning.
+
+## 6 CONCLUSIONS AND LIMITATIONS
+
+Our work investigates the temporal reasoning bottleneck of Video LLMs, identifying the language model backbone as the primary source. To address this, we develop a textual temporal reasoning transfer framework that synthesizes QA pairs on various temporal concepts from image-text pairs. Experimental results validate the correlation between textual and visual temporal understanding, demonstrating the efficacy of our method on comprehensive video understanding benchmarks. **Limitations: Limited temporal concept scope:** While our framework addresses four key temporal dimensions and shows potential across temporal tasks, temporal reasoning aspects such as motion-related changes still need further investigation. (ii) **Scalability with model size:** Although T3 improves even large models such as Qwen2-VL-72B, the gains vary across the backbone model scales and tasks. Future work could explore more complex temporal scenarios and develop advanced augmentation pipelines for larger models.
+
+ Rest of paper (reference and Appendix) is removed.

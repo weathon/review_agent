@@ -1,0 +1,423 @@
+
+
+{0}------------------------------------------------
+
+# AUTOMATIC TASK-AWARE INSTRUCTION OPTIMIZER FOR BLACK-BOX LLMs
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large Language Models (LLMs) have demonstrated superior capabilities in terms of solving various real-world tasks. However, their performance and generated content quality heavily depend on task-relevant instructions, which makes instruction optimization a challenging but critical direction to explore. In particular, as practitioners generally cannot access black-box (or API) LLMs' internal parameters and gradient information, it consequently makes instruction optimization for black-box LLMs especially non-trivial. Existing methods for optimizing black-box LLM instructions mainly focus on in-context learning using manually designed or heuristic disciplines, which can be insufficient due to the extreme complexity of modern black-box LLMs that can contain hundreds of billions of parameters. To address these challenges, we propose a novel automatic instruction optimization framework named Automatic Instruction Optimizer (AIO). AIO is designed to perceive target task information and adaptively adjust its task-aware instructing strategy for a task-solver black-box LLM. By leveraging a white-box LLM with parameter fine-tuning for enhanced representation power, AIO can automatically update its instructing strategy based on the feedback from task-solver black-box LLM. To achieve this goal, AIO adopts a novel LLM parameter fine-tuning process powered by zeroth-order gradient approximation and Contextual Bandit techniques, which can effectively and efficiently help address the challenge of inaccessible black-box LLM internal parameters and gradients, as well as help alleviate expensive API cost concerns by flexibly reusing collected black-box LLM feedback. Extensive empirical evaluations are presented to demonstrate properties of our proposed AIO, and its effectiveness in comparison with strong baselines.
+
+## 1 INTRODUCTION
+
+Large Language Models (LLMs) have demonstrated impressive performance across various application scenarios, such as knowledge graph reasoning (Pan et al., 2024). However, LLMs generally rely on well-crafted instructions that provide accurate guidance and sufficient reference for high-quality answer generation. Designing such instructions can be particularly challenging for more powerful black-box (or API) LLMs (e.g., GPT-4 (Achiam et al., 2023), Claude-3 (Anthropic, 2024)), as their parameters and gradients are commonly inaccessible. Meanwhile, effective instructing strategies can vary significantly across different LLMs, distinct LLM versions, and downstream tasks (Zhou et al., 2022; Khattab et al., 2023; 2022), while optimal instructing strategies generally require flexible adaptations tailored to target tasks or domains (Sun et al., 2024; Liu et al., 2024). In this case, designing an optimal instructing strategy for a specific target task like knowledge reasoning can be non-trivial and expensive. In addition, crafting proper instructing strategies for domain-specific tasks can be difficult and time-consuming for human experts (Brown et al., 2020; Reynolds & McDonell, 2021; Shin et al., 2020). For instance, assigning human labor to refine such task-specific instructions will be expensive, and the cost can grow exponentially along with increasingly more task categories of higher granularity levels (Scao & Rush, 2021; Shin et al., 2023; Amatriain, 2024). Thus, it is necessary and valuable to develop automatic task-aware instructing mechanisms based on task information to enable optimal performance of task-solver black-box LLMs, without intervention of human experts.
+
+Regarding instruction optimization in terms of black-box LLMs, there is an emerging line of works using an additional instruction-generating LLM as an "instruction engineer" (Zhou et al., 2022; Pryzant et al., 2023; Fernando et al., 2023; Guo et al., 2024; Chen et al., 2024; Lin et al., 2024), in order to leverage the strong representation power of LLMs in search of a good instructing strategy.
+
+{1}------------------------------------------------
+
+054 However, existing works mainly focus on in-context learning aspects with frozen LLM parameters,  
+055 based on manually crafted or heuristic disciplines, which can limit the ability of LLMs in terms  
+056 of perceiving and utilizing target task information and black-box LLM feedback. On the other  
+057 hand, LLM fine-tuning alternatively offers more elasticity by involving trainable LLM parameters to  
+058 maintain an over-parameterization advantage (Allen-Zhu et al., 2019) with regard to exemplars from  
+059 target tasks, which can allow LLMs to adapt their interpretations to align task textual data with target  
+060 objectives (Han et al., 2024b) such as human preferences (Korbak et al., 2023; Rafailov et al., 2024),  
+061 along with parameter-efficient fine-tuning options (Hu et al., 2021a; Wu et al., 2024; Han et al., 2024b).  
+062 Meanwhile, as modern LLMs are commonly pre-trained to achieve good generalization abilities  
+063 instead of being optimized for specific downstream tasks (i.e., task-aware instruction optimization  
+064 in our case) out of the box, LLM parameter fine-tuning can generally offer more flexibility and  
+065 better performance than in-context learning techniques for various downstream applications (Liu  
+066 et al., 2022; Mosbach et al., 2023). However, as black-box LLM parameters and gradients are  
+067 generally inaccessible, it is impractical to directly fine-tune the "instruction engineer" LLM with  
+068 back-propagation based on chain rule and black-box LLM feedback.
+
+069 In face of above motivations and challenges, we propose a novel framework named Automatic  
+070 Instruction Optimizer (AIO) to automatically optimize instructions for task-solver black-box LLM,  
+071 with regard to the target task. In particular, AIO composes and optimizes human-comprehensible  
+072 instructions fed into a black-box LLM to improve its performance on the target task, for reinforced  
+073 transparency and trustworthiness. To learn a good task-aware instructing strategy, distinct from  
+074 existing in-context learning approaches, AIO alternatively fine-tunes a white-box LLM (e.g., Llama  
+075 3 (Dubey et al., 2024)) into a capable automatic instruction optimizer, which is able to perceive  
+076 downstream task information and generate high-quality instructions accordingly. This formulation  
+077 aims to tackle the formidable complexity of modern black-box LLMs (i.e., with possibly hundreds of  
+078 billions of parameters involved). Here, with strong representation power and learning abilities of a  
+079 fine-tuned white-box LLM, AIO is capable of learning the complex relationship between task-aware  
+080 instructions and black-box LLM feedback. Intuitively, one significant obstacle is that black-box  
+081 LLM parameters and gradients are commonly inaccessible. To address this challenge and achieve  
+082 efficient gradient approximation for the black-box LLM, we propose a novel zeroth-order (ZO)  
+083 gradient approximation approach aided by Thompson Sampling (TS), by modeling the ZO gradient  
+084 approximation of the black-box LLM as a sequential decision-making process. In the meantime,  
+085 during instruction optimization, it is necessary to retrieve black-box LLM feedback, which requires  
+086 querying third-party APIs and incurs direct development costs. To alleviate API cost concerns, our  
+087 TS-based ZO gradient approximation adaptively reuses collected black-box LLM feedback, enabling  
+088 efficient instruction optimization through the rich representation power originated from white-box  
+089 LLM fine-tuning. Our contributions can be summarized as:
+
+- 090 • **Problem Formulation:** We delve into the realm of automatic task-aware instruction optimization  
+091 for black-box LLMs, where existing in-context learning methods can fail to deliver optimal  
+092 performance due to insufficient representation power of their learning models or mechanisms.  
+093 Different from existing approaches, we alternatively transform the goal of instruction optimization  
+094 into an LLM fine-tuning objective, where a white-box LLM with sufficient representation power is  
+095 fine-tuned to generate high-quality task-aware instructions for a task-solver black-box LLM.
+- 096 • **Proposed Framework:** Different from existing approaches where human experts are involved  
+097 to manually design instructions for downstream tasks, our proposed AIO does not require such  
+098 intervention of human experts, while finishing all the instruction optimization automatically through  
+099 LLM fine-tuning. To enhance the trustworthiness of our instruction optimization process, AIO is  
+100 able to optimize human-comprehensible instructions (i.e., instructions made up by concrete textual  
+101 tokens) to provide additional insights and transparency for practitioners. To tackle challenges of  
+102 inaccessible black-box LLM gradients and possibly expensive API costs of the black-box LLM,  
+103 AIO utilizes a novel zeroth-order gradient approximation approach aided by Thompson Sampling.  
+104 By inventively formulating ZO gradient approximation procedure as a sequential decision-making  
+105 process, this design enables us to approximate black-box LLM gradients effectively and efficiently,  
+106 which are essential for fine-tuning our instruction-generating white-box LLM.
+- 107 • **Experiments:** Extensive experiments are conducted on real-world data sets, demonstrating the  
+108 superior performance of AIO compared with state-of-the-art baselines, as well as efficiency advan-  
+109 tages of AIO in terms of reducing API token costs. Furthermore, we perform additional analytical  
+110 experiments to explore characteristics and properties of AIO, such as instruction optimization  
+111 trajectory results that demonstrate how instructions evolve across the optimization process.
+
+{2}------------------------------------------------
+
+## 2 RELATED WORKS
+
+**Instruction Optimization for API (Black-box) LLMs.** In contrast to white-box LLM instruction optimization (Shin et al., 2020; Li & Liang, 2021; Lester et al., 2021), as practitioners generally have no access to black-box LLM parameters or gradients, a line of existing works (Zhou et al., 2022; Prasad et al., 2022) perform instruction search based on manually defined criteria. Chen et al. (2024); Lin et al. (2024); Hu et al. (2024) also apply another LLM with frozen parameters to generate instructions for the black-box LLM, and gradually optimize the generated instruction based on Bayesian Optimization (Frazier, 2018; Wang et al., 2023; Shahriari et al., 2015), Contextual Bandit approaches (Chu et al., 2011; Li et al., 2010; Valko et al., 2013; Zhou et al., 2020; Agrawal & Goyal, 2013; Zhang et al., 2021), or localized instruction optimization guided by Gaussian Process (Schulz et al., 2018). Since these works primarily rely on manually designed or heuristic principles focused on in-context learning, they can result in sub-optimal black-box LLM performance. Alternatively, we fine-tune a white-box LLM into an "instruction engineer", capable of adaptively perceiving target task information and directly learning from black-box LLM feedback for instruction optimization.
+
+**LLM-based Instruction Generation.** Instruction generation using LLMs is an emerging research topic (Zhou et al., 2022; Ma et al., 2024; Schnabel & Neville, 2024), where LLMs are applied as instruction optimizer and their instructing strategies are gradually refined based on environment feedback or target model outputs. In particular, there are a series of works leveraging meta-prompts, which can be manually designed by humans (Yang et al., 2024), or optimized by LLMs (Tang et al., 2024). Meanwhile, Pryzant et al. (2023) perform in-context "Gradient Descent" on instructions based on interactions with an instruction-generating LLM. Fernando et al. (2023); Guo et al. (2024) propose evolutionary algorithms to refine LLM-generated instructions in an in-context learning manner. Different from these works, our fine-tuned LLM can automatically perceive task-relevant information and black-box LLM feedback, which can generally offer more flexibility than in-context learning approaches and require no labor of human experts during the instruction optimization process.
+
+## 3 PROBLEM FORMULATION
+
+As mentioned in our Introduction, given a target task  $\mathcal{T}$ , two LLMs are involved in our pipeline: (1) black-box LLM  $\mathcal{F}_B(\cdot)$  is applied for task-solving, i.e., generating answers for task queries. Here, the black-box LLM is considered as part of our learning objective, as we aim to learn optimized instructions to enable the black-box LLM to achieve optimal performance. (2) white-box LLM  $\mathcal{F}_W(\cdot; \Theta_W)$  with trainable parameters  $\Theta_W$  aims to generate and optimize human-comprehensible instructions, based on task  $\mathcal{T}$  and feedback from  $\mathcal{F}_B(\cdot)$ . Suppose that target task  $\mathcal{T}$  is associated with three data collections (i.e., query-label pairs  $(X, Y)$ ) individually drawn from task  $\mathcal{T}$ : (1) training data  $\mathcal{D}_{\text{Train}}$ , which can also be named as task exemplars, will be fed into the white-box LLM as reference for generating high-quality task-specific instructions; (2) validation data  $\mathcal{D}_{\text{Valid}}$  is applied for performance evaluation during the optimization; and (3) final evaluation will be conducted on a separate testing data set, which will remain unrevealed and inaccessible during the optimization stage for instruction-generating white-box LLM. Meanwhile, we denote  $\mathcal{F}_W(\mathcal{D}_{\text{Train}}; \Theta_W)$  as the instruction generated based on exemplars  $\mathcal{D}_{\text{Train}}$  and corresponding white-box LLM parameters  $\Theta_W$ . With generated instruction, denote  $\hat{Y} = \mathcal{F}_B([\mathcal{F}_W(\mathcal{D}_{\text{Train}}; \Theta_W); X])$  as the answer generated by black-box LLM for query  $X$ , where  $[\cdot; \cdot]$  operation embeds query  $X$  to the generated instruction.
+
+**Learning Objective.** With task exemplars  $\mathcal{D}_{\text{Train}}$  and an evaluation function (e.g., loss function)  $\mathcal{L}(\cdot, \cdot)$ , we transform the instruction optimization process into a white-box LLM fine-tuning objective, to leverage the sufficient learning and representation power of LLM fine-tuning for instruction optimization. Here, we aim to find the optimal white-box parameters  $\Theta_W$  that minimize:
+
+$$\min_{\Theta_W} \left[ \mathbb{E}_{(X, Y) \sim \mathcal{T}} [\mathcal{L}(\hat{Y}, Y)] \right] = \min_{\Theta_W} \left[ \mathbb{E}_{(X, Y) \sim \mathcal{T}} [\mathcal{L}(\mathcal{F}_B([\phi(\Theta_W); X]), Y)] \right] \quad (1)$$
+
+in observation of task exemplars  $\mathcal{D}_{\text{Train}}$ , where we apply a shorthand for generated instruction:
+
+$$\phi(\Theta_W) := \mathcal{F}_W(\mathcal{D}_{\text{Train}}; \Theta_W). \quad (2)$$
+
+Intuitively, we utilize the above fine-tuning process to guide how white-box LLM comprehends task exemplars and composes task-specific instructions, based on task-solver black-box LLM feedback.
+
+## 4 PROPOSED FRAMEWORK: AUTOMATIC INSTRUCTION OPTIMIZER (AIO)
+
+Recall that we aim to fine-tune the white-box LLM parameters  $\Theta_W$  to minimize our learning objective by optimizing generated instructions. An intuitive approach is to update the white-box LLM
+
+{3}------------------------------------------------
+
+162  
+163  
+164  
+165  
+166  
+167  
+168  
+169  
+170  
+171  
+172  
+173  
+174  
+175  
+176  
+177  
+178  
+179  
+180  
+181  
+182  
+183  
+184  
+185  
+186  
+187  
+188  
+189  
+190  
+191  
+192  
+193  
+194  
+195  
+196  
+197  
+198  
+199  
+200  
+201  
+202  
+203  
+204  
+205  
+206  
+207  
+208  
+209  
+210  
+211  
+212  
+213  
+214  
+215
+
+![Figure 1: Pipeline of AIO. The diagram illustrates the Instruction Generation & Evaluation process. It starts with 'Instruction Generation & Evaluation' which takes 'Exemplars' (e.g., Exemplary data: [EXEMPLARS], [examples]) and a 'Generation Template' to produce an 'Instruction' (e.g., QUERY: 2+2 = ?, LABEL: 2). This instruction is then processed by a 'White-box LLM' (represented by a cat icon) to produce an 'Embed & Feed' output. This output is then processed by a 'Black-box LLM' (represented by a snake icon) to produce 'Predictions' (e.g., Output: 2+2 = 4). The 'Validation Labels' (e.g., LABEL: 2+2 = 4) are used to calculate the 'Validation Loss'. The 'White-box LLM' is then fine-tuned using 'Fine-tuning with Gradient Descent' (represented by a gear icon). The 'Gradient Flow Decomposition' (Eq. 4) is shown, which decomposes the gradient flow into 'TS-aided ZO Grad. Approximation' (Eq. 4.1.2) and 'Back-propagation' (Eq. 4.1.2).](9e6062272bbe3ddbb7c0606721d64cf0_img.jpg)
+
+Figure 1: Pipeline of AIO. The diagram illustrates the Instruction Generation & Evaluation process. It starts with 'Instruction Generation & Evaluation' which takes 'Exemplars' (e.g., Exemplary data: [EXEMPLARS], [examples]) and a 'Generation Template' to produce an 'Instruction' (e.g., QUERY: 2+2 = ?, LABEL: 2). This instruction is then processed by a 'White-box LLM' (represented by a cat icon) to produce an 'Embed & Feed' output. This output is then processed by a 'Black-box LLM' (represented by a snake icon) to produce 'Predictions' (e.g., Output: 2+2 = 4). The 'Validation Labels' (e.g., LABEL: 2+2 = 4) are used to calculate the 'Validation Loss'. The 'White-box LLM' is then fine-tuned using 'Fine-tuning with Gradient Descent' (represented by a gear icon). The 'Gradient Flow Decomposition' (Eq. 4) is shown, which decomposes the gradient flow into 'TS-aided ZO Grad. Approximation' (Eq. 4.1.2) and 'Back-propagation' (Eq. 4.1.2).
+
+Figure 1: Pipeline of AIO. The white-box LLM  $\mathcal{F}_W$  generates an instruction  $\phi$  from exemplars  $\mathcal{D}_{\text{Train}}$ , which is evaluated to produce validation loss. The gradient flow towards white-box LLM parameters is then decomposed into: (1) TS-aided ZO gradient approximation for black-box LLM gradients, and (2) back-propagation for white-box LLM gradients. Finally, white-box LLM parameters are updated via Gradient Descent.
+
+parameters  $\Theta_W$  using gradients derived from the instruction evaluation results (Eq. 1). However, the nested black-box LLM makes direct back-propagation towards  $\Theta_W$  via the chain rule infeasible.
+
+**Brief summary of AIO pipeline.** To address this challenge, we propose the AIO framework for efficient and effective white-box LLM fine-tuning, aimed at instruction optimization. As illustrated in Figure 1, the pipeline of AIO involves two major parts: (1) *Instruction Generation & Evaluation*: Given the exemplars  $\mathcal{D}_{\text{Train}}$ , the white-box LLM with parameters  $\Theta_W$  generates an instruction  $\phi(\Theta_W) := \mathcal{F}_W(\mathcal{D}_{\text{Train}}; \Theta_W)$  as in Eq. 2. This instruction is then evaluated based on the black-box LLM output, which produces validation loss. (2) *White-box Instruction-generating LLM Fine-tuning*: Based on the validation loss, we can decompose the gradient flow towards  $\Theta_W$  into two multiplicative components via the chain rule: (i) white-box LLM gradients that can be obtained with back-propagation, and (ii) inaccessible black-box LLM gradients that are approximated with our proposed TS-aided ZO approximation method. Different from existing methods with randomly sampled ZO directions (e.g., Spall (1992); Malladi et al. (2023)), we apply TS here to adaptively determine the ZO directions for efficient and effective gradient approximation (Subsec. 4.1.2). We elaborate on technical details in Subsec. 4.1 and provide AIO pseudo-code in Algorithm 1.
+
+**Validation loss.** Given the original optimization objective in Eq. 1, since a comprehensive overview of the task distribution  $\mathcal{T}$  can be inaccessible, we alternatively evaluate the quality of generated instructions using validation data  $\mathcal{D}_{\text{Valid}}$ . This leads to our validation loss:
+
+$$\mathcal{L}_{\text{Valid}}(\phi(\Theta_W)) := \frac{1}{|\mathcal{D}_{\text{Valid}}|} \sum_{(X, Y) \in \mathcal{D}_{\text{Valid}}} \mathcal{L}(\mathcal{F}_B(\phi(\Theta_W); X), Y), \quad (3)$$
+
+where the validation loss is evaluated on the instruction  $\phi(\Theta_W)$ , which is generated by the white-box LLM  $\mathcal{F}_W(\cdot; \Theta_W)$  as in Eq. 2. Consequently, the gradient flow towards white-box LLM parameters  $\Theta_W$  will become  $\partial \left[ \frac{1}{|\mathcal{D}_{\text{Valid}}|} \sum_{(X, Y) \in \mathcal{D}_{\text{Valid}}} \mathcal{L}(\mathcal{F}_B(\phi(\Theta_W); X), Y) \right] / \partial \Theta_W$ . Given the nested black-box LLM, we are unable to directly back-propagate towards  $\Theta_W$  through the chain rule.
+
+### 4.1 THOMPSON SAMPLING (TS) AIDED ZEROTH-ORDER (ZO) GRADIENT APPROXIMATION
+
+To deal with the challenge of inaccessible black-box LLM gradients, by applying chain rule on Eq. 3, we first can decompose the gradient flow with respect to white-box LLM parameters  $\Theta_W$  into two separate multiplicative parts: (1) gradients involving the black-box LLM; (2) and white-box LLM gradients that can be obtained by back-propagation, as
+
+$$\begin{aligned} \partial \left[ \frac{1}{|\mathcal{D}_{\text{Valid}}|} \sum_{(X, Y) \in \mathcal{D}_{\text{Valid}}} \mathcal{L}(\mathcal{F}_B(\phi(\Theta_W); X), Y) \right] / \partial \Theta_W \\ = \underbrace{\partial \left[ \frac{1}{|\mathcal{D}_{\text{Valid}}|} \sum_{(X, Y) \in \mathcal{D}_{\text{Valid}}} \mathcal{L}(\mathcal{F}_B(\phi(\Theta_W); X), Y) \right]}_{\text{Black-box LLM Gradients}} \cdot \underbrace{\frac{\partial \phi(\Theta_W)}{\partial \Theta_W}}_{\text{White-box LLM Gradients}}. \end{aligned} \quad (4)$$
+
+On one hand, while our white-box LLM gradients can be obtained by conventional back-propagation in a straightforward way, we can also readily integrate back-propagation with Parameter-efficient Fine-tuning (PEFT) techniques, such as LoRA (Hu et al., 2021a), to enhance the efficiency of white-box LLM fine-tuning while still maintaining promising performance. On the other hand, as we have mentioned, it is not plausible to directly derive the first term on the right-hand side with back-propagation, since black-box LLM  $\mathcal{F}_B(\cdot)$  parameters and gradients are inaccessible. In this case, we propose to tackle this challenge with the zeroth-order gradient approximation technique.
+
+{4}------------------------------------------------
+
+#### 4.1.1 ZEROTH-ORDER GRADIENT APPROXIMATION FOR BLACK-BOX LLM GRADIENTS
+
+Zeroth-order gradient approximation has been proved effective and efficient for LLM fine-tuning (Malladi et al., 2023), yielding satisfactory results with only a few forward (i.e., inference) passes of LLMs. This makes zeroth-order gradient approximation a promising solution for approximating inaccessible black-box LLM gradients. To begin with, analogous to existing ZO approximation works (e.g., Nesterov & Spokoiny (2017); Ghadimi et al. (2016); Duchi et al. (2015); Shu et al. (2023); Malladi et al. (2023)), we can first suppose a *linear optimization landscape* around each white-box LLM output  $\phi$ . With notation from Eq. 3, it leads to  $\mathcal{L}_{\text{Valid}}(\phi + z) \approx [\nabla_{\phi} \mathcal{L}_{\text{Valid}}(\phi)]^{\top} z + \mathcal{L}_{\text{Valid}}(\phi)$ ; and  $z$  is a small perturbation applied to the predicted next-token distribution, for all tokens in the output  $\phi$ , specifically on *LLM-header output probabilities* (i.e., predicted distribution over the vocabulary). We also include supplementary explanations for auto-regressive generation and perturbation in Appendix C.1. Here, we slightly abuse the notation by using operations "+" and "-" to impose perturbation  $z$  onto token-level output probabilities of each token from  $\phi$ . This formulation holds because gradients  $\nabla_{\phi} \mathcal{L}_{\text{Valid}}(\phi) := \partial \mathcal{L}_{\text{Valid}}(\phi) / \partial \phi$  will stay uniform for all  $\phi$  within the *linear* landscape.
+
+Here, these small token-level perturbations are imposed to collect information of the optimization landscape, as small perturbations on token-level outputs can effectively change the auto-regressive generation process (Han et al., 2024a). Inspired by Malladi et al. (2023), we can formulate an approximation for black-box LLM gradients as
+
+$$\frac{\partial [\mathcal{L}_{\text{Valid}}(\phi(\Theta_W))]}{\partial \phi(\Theta_W)} \approx \frac{[\mathcal{L}_{\text{Valid}}(\phi(\Theta_W) + \epsilon z) - \mathcal{L}_{\text{Valid}}(\phi(\Theta_W) - \epsilon z)]}{2\epsilon} \cdot z \quad (5)$$
+
+by deeming  $\mathcal{L}_{\text{Valid}}(\cdot)$  as the validating evaluation function for generated instruction  $\phi$  from Eq. 3. Here,  $z \sim \mathcal{N}(0, I) \in \mathbb{R}^d$  stands for a random Gaussian perturbation vector, imposed on each token of the output  $\phi$ , thereby maintaining the same dimensionality as the token-level dimensionality of the output.  $z$  also satisfies the isotropic condition  $\mathbb{E}[zz^{\top}] = I_d$ . Consequently,  $d$  will correspond to the vocabulary size of the white-box LLM. The scaling parameter  $\epsilon \in \mathbb{R}^+$  is used to control the perturbation intensity. This formulation intuitively follows the idea of bi-directional estimation of optimization landscape to perceive the optimization landscape from both directions (Spall, 1992; Malladi et al., 2023). In this way, the first term on the RHS of Eq. 4 can be approximated with only black-box LLM forward passes, without accessing its internal gradients or parameters.
+
+**Remark 1.** *We only approximate black-box LLM gradients, instead of using ZO method to directly estimate whole gradient flow  $\partial [\frac{1}{|\mathcal{D}_{\text{Valid}}|} \sum_{(X, Y) \in \mathcal{D}_{\text{Valid}}} \mathcal{L}(\mathcal{F}_B([\phi(\Theta_W); X]), Y)] / \partial \Theta_W$ . The reason is that the error of zeroth-gradient method tends to grow along with the target dimensionality (Malladi et al., 2023). Since the size of white-box LLM parameters  $\Theta_W$  is generally much larger than white-box LLM output dimensionality, we choose to approximate  $\partial [\mathcal{L}_{\text{Valid}}(\mathcal{F}_B(\phi(\Theta_W)), Y)] / \partial \phi(\Theta_W)$  instead for a lower approximation error. Related ablation study is presented in Appendix B.6.*
+
+However, one potential drawback is that as perturbation vectors  $z$  are randomly sampled (Eq. 5), gradient perturbation directions within the optimization landscape will be random and potentially inefficient (Cai et al., 2022). Thus, we propose to reuse collected feedback, by formulating above ZO-based fine-tuning process as an online sequential decision-making problem; and utilize Contextual Bandit techniques to effectively determine which perturbation directions are informative, beneficial and worth exploring, in terms of improving instruction quality and black-box LLM performance.
+
+#### 4.1.2 TS-AIDED SELECTION OF GRADIENT PERTURBATION DIRECTIONS
+
+Recall that for ZO-based gradient approximation methods (e.g., Nesterov & Spokoiny (2017); Ghadimi et al. (2016); Duchi et al. (2015); Malladi et al. (2023)), it is common to suppose that we have a linear optimization landscape around the current optimization objective as in Eq. 5. In this case, as illustrated in Figure 2, with random Gaussian perturbation vector  $z$ , we have the radius of the supposed linear optimization landscape following a Chi-squared distribution with expected radius being  $\mathbb{E}[\|\text{Radius}\|] = \mathbb{E}[\|\epsilon z\|_2] = \epsilon \sqrt{d}$ .
+
+**Leveraging the linear optimization landscape.** Within the supposed linear landscape, we can intuitively formulate this ZO optimization problem into a sequential decision-making process, where collected information can help choose perturbation directions  $z$  in Eq. 5, rather than applying completely random  $z$ . As a natural solution, Contextual Bandit algorithms (Li et al., 2010; Agrawal & Goyal, 2013) are designed to identify the optimal choice among a set of candidate arms (i.e.,
+
+{5}------------------------------------------------
+
+actions) based on arm contextual information and historical records, while addressing the exploration-exploitation dilemma in sequential decision-making processes Auer et al. (2002). Under Contextual Bandit settings, and based on the gradient approximation formulation from Eq. 5, we define the arm reward  $r \in \mathbb{R}$  for each perturbation direction  $z \in \mathbb{R}^d$  (i.e., *candidate arm* in Contextual Bandit) as
+
+$$r := [\nabla_{\phi} \mathcal{L}_{\text{Valid}}(\phi)]^{\top} \cdot z \approx \frac{\mathcal{L}_{\text{Valid}}(\phi + \epsilon \cdot z) - \mathcal{L}_{\text{Valid}}(\phi - \epsilon \cdot z)}{2\epsilon}, \quad (6)$$
+
+with respect to current white-box LLM output  $\phi$ . Intuitively, our formulation of arm reward echoes with our bi-directional ZO approximation formulated in Eq. 5. This formulation aims to quantify the benefit of descending towards perturbation direction  $z$  (i.e., updating output  $\phi$  towards direction  $-z$ ).
+
+With our arm reward formulation enabled by the supposed linear optimization landscape, we apply a *linear* TS model to select perturbation directions (i.e., arms) accordingly. Here, TS model parameters with dimensionality  $d$  are denoted by lowercase  $\theta \in \mathbb{R}^d$ . Analogous to (Agrawal & Goyal, 2013; Zhang et al., 2021), we consider  $\mathcal{N}(0, \mathbf{I})$  as the initial prior for TS model parameters. Then, starting from the prior, we gradually refine the corresponding TS parameter posterior distribution with collected optimization landscape information, and sample updated TS parameters  $\theta$  from the refined posterior.
+
+![Figure 2: Linear optimization landscape (illustrated as a sphere) around white-box LLM output phi. The sphere has radius epsilon/sqrt(d). A perturbation direction z is shown as a vector from the center phi. Two points on the sphere, phi' and phi'', are shown as updated outputs. The distance between phi' and phi'' is labeled as ||z||_2 = epsilon/sqrt(d).](38b977dc8ba47e36367f97933421e3ae_img.jpg)
+
+Figure 2: Linear optimization landscape (illustrated as a sphere) around white-box LLM output phi. The sphere has radius epsilon/sqrt(d). A perturbation direction z is shown as a vector from the center phi. Two points on the sphere, phi' and phi'', are shown as updated outputs. The distance between phi' and phi'' is labeled as ||z||\_2 = epsilon/sqrt(d).
+
+$$\mathcal{L}_{\text{Valid}}(\phi + \epsilon \cdot z) \approx [\nabla_{\phi} \mathcal{L}_{\text{Valid}}(\phi)]^{\top} (\epsilon \cdot z) + \mathcal{L}_{\text{Valid}}(\phi)$$
+
+Figure 2: Linear optimization landscape (illustrated as a sphere) around white-box LLM output  $\phi$ . With the sampled perturbation direction  $z \sim \mathcal{N}(0, \mathbf{I})$ , expected radius will be  $\epsilon \sqrt{d}$  in terms of  $L_2$  distance between averaged output token-level probabilities. Updated outputs  $\phi', \phi''$  can stay within the linear landscape, motivating our TS-based approximation.
+
+Regarding our arm reward formulation in Eq. 6 and the nature of linear TS, the parameters  $\theta$  essentially serve as an estimate of the uniform gradients  $\nabla_{\phi} \mathcal{L}_{\text{Valid}}(\phi)$  within the optimization landscape. In this way, we gradually refine our arm selection strategy by effectively reusing collected black-box LLM feedback. Notably, the linear optimization landscape allows us to employ a highly efficient linear TS algorithm for rapid arm selection and parameter refinement. Next, we proceed with arm (perturbation direction) selection for the ZO gradient approximation procedure.
+
+**TS-aided perturbation direction (arm) selection.** We consider a  $T$ -round fine-tuning process, and denote the initial white-box LLM parameters without fine-tuning as  $\Theta_0 := \Theta_W$ , with initial generated instruction  $\phi_0 := \phi(\Theta_0)$ . We also let  $\Theta_{t-1}, t \in [T]$  refer to white-box LLM parameters *before*  $t$ -th round fine-tuning. Here, in each round  $t$ , we first sample  $K \in \mathbb{N}^+$  candidate arms (i.e., perturbation directions)  $\mathcal{Z}_t$  for selection, from the standard Gaussian distribution, as
+
+$$\mathcal{Z}_t := \{z_{t,1}, z_{t,2}, \dots, z_{t,K}\} \sim \mathcal{N}(0, \mathbf{I}). \quad (7)$$
+
+This design controls the arm context norm magnitude with the isotropic formulation, while ensuring randomness in terms of candidate arm context directions. Before the fine-tuning process, initial TS model parameters are instantiated as  $\theta_0$  from sampling from the prior  $\mathcal{N}(0, \mathbf{I})$ . Here, we let  $\theta_{t-1}$  represent the TS model parameters in round  $t$  before the refinement. We will discuss later how to update TS parameters using a refined TS parameter posterior in Eq. 9. Next, for these  $K$  candidate arms, we formulate *estimated rewards* as the inner product  $z_{t,k}^{\top} \theta_{t-1}, \forall z_{t,k} \in \mathcal{Z}_t$ , and select the top- $B$  arms with the *highest estimated rewards* to form collection  $\tilde{\mathcal{Z}}_t \subset \mathcal{Z}_t$ , with cardinality  $|\tilde{\mathcal{Z}}_t| = B, B \ll K$ . The chosen arms  $\tilde{\mathcal{Z}}_t$  are considered perturbation directions that can lead to potential benefits for reducing the validation loss. Calculation details are in lines 5-7 of Algorithm 1.
+
+**Querying arm rewards.** Next, we query the black-box LLM (i.e., reward oracle) for validation loss results  $\mathcal{L}_{\text{Valid}}$  to obtain rewards for the chosen arms  $\tilde{\mathcal{Z}}_t$ . Using the shorthand  $\phi_{t-1} := \phi(\Theta_{t-1})$ , for each chosen arm  $z_{t,k} \in \tilde{\mathcal{Z}}_t$ , we calculate its arm reward by following Eq. 6, leading to
+
+$$r_{t,k} = \frac{\mathcal{L}_{\text{Valid}}(\phi_{t-1} + \epsilon \cdot z_{t,k}) - \mathcal{L}_{\text{Valid}}(\phi_{t-1} - \epsilon \cdot z_{t,k})}{2\epsilon}, \quad (8)$$
+
+which measures the benefit of involving direction (arm)  $z_{t,k}$  for gradient approximation. Naturally, with each chosen arm (perturbation direction), the queried validation loss results are recycled to derive the black-box LLM gradient approximation according to Eq. 5. Finally, by plugging in the estimated black-box LLM gradients, *white-box LLM parameters can be updated via Gradient Descent through the gradient flow (Eq. 4) and estimated black-box LLM gradients (Eq. 5)*. Gradient estimation results from the  $B$  chosen perturbation direction vectors (arms) are averaged for a more accurate approximation, analogous to existing ZO approximation methods (Malladi et al., 2023).
+
+{6}------------------------------------------------
+
+**Validating optimization landscape.** After querying arm rewards with Eq. 8 and performing white-box LLM parameter fine-tuning, we proceed to update the TS model parameters. Recall that we operate within a linear optimization landscape, if generated instructions do not significantly deviate from previous ones. In this case, we apply a threshold parameter  $\beta > 0$  to quantify the landscape magnitude. For the optimized instruction  $\phi_t$  in round  $t$ , we use the condition  $\|\phi_t - \phi_{\text{Check}}\| > \beta$  to verify whether the assumed linear landscape remains valid. The initial checkpoint  $\phi_{\text{Check}}$  is set as the instruction  $\phi_0$  prior to optimization. We calculate the  $L_2$  distance between the averaged token-level probabilities of the output  $\phi_t$  and the checkpoint  $\phi_{\text{Check}}$ , inspired by prior works (e.g., Joshi et al. (2023); Manakul et al. (2023)). Collected records are initialized as an empty set  $\Omega_0$ .
+
+**Updating TS parameters.** In each optimization round  $t \in [T]$ , we have *Scenario (1)*: If white-box LLM output becomes far enough from the checkpoint, s.t.  $\|\phi_t - \phi_{\text{Check}}\| > \beta$ , our current knowledge can be invalid because current white-box LLM output has significantly deviated from the checkpoint. In this case, we set the new checkpoint as  $\phi_t$  and discard collected records. Then, reinitialize TS parameters  $\theta_t$  from the prior  $\mathcal{N}(0, \mathbf{I})$ . *Scenario (2)*: Otherwise, if the distance is small enough s.t.,  $\|\phi_t - \phi_{\text{Check}}\| \leq \beta$ , the chosen arms and their true rewards from this round will be integrated into collected records  $\Omega_t$ . Afterwards, analogous to existing TS methods (Agrawal & Goyal, 2013; Zhang et al., 2021), with an exploration parameter  $\nu \geq 0$ , covariance matrix  $\Sigma_t := \mathbf{I} + \sum_{(z,r) \in \Omega_t} z \cdot z^\top$ , and reward vector  $\mathbf{b}_t := \sum_{(z,r) \in \Omega_t} z \cdot r$ , we update the posterior of TS parameters as
+
+$$\mathcal{N}(\Sigma_t^{-1} \mathbf{b}_t, \nu \cdot \Sigma_t^{-1}). \quad (9)$$
+
+Finally, we update TS parameters  $\theta_t$  by sampling from the updated posterior, and proceed to the next optimization round. Additional calculation details are presented in lines 12-19 of Algorithm 1.
+
+**Remark 2.** To reduce computational costs of matrix inversion and sampling from high-dimensional Gaussian distribution, motivated by Johnson-Lindenstrauss (JL) Lemma (Johnson & Lindenstrauss, 1984), we adopt random Gaussian projection to map  $d$ -dimensional arm contexts into a lower-dimensional space (Matoušek, 2008; Larsen & Nelson, 2017), where we perform the TS-aided selection of candidate arms  $\mathcal{Z}_t$ . Comparable ideas are also applied in existing works for reducing the dimensionality of tunable soft prompt vectors (Chen et al., 2024; Lin et al., 2024). To efficiently compute the inversion of the covariance matrix  $\Sigma_t$  in each round  $t$ , we utilize the Sherman-Morrison formula (Bartlett, 1951; Maponi, 2007), avoiding direct matrix inversion operations. Details will be elaborated in Appendix C.2 due to page limit.
+
+### 4.2 WORKFLOW SUMMARY AND PSEUDO-CODE FOR AIO FRAMEWORK
+
+The pseudo-code of AIO is in Algorithm 1. For each optimization round  $t \in [T]$ , we first sample a pool of  $K$  candidate arms (gradient approximation directions)  $\mathcal{Z}_t$  (line 5, Algorithm 1). Then, we apply a TS-based bandit model to estimate arm rewards, which quantify the benefit of including the corresponding arms as perturbation directions. To reduce API costs, we only select  $B \ll K$  arms as the chosen arms  $\tilde{\mathcal{Z}}_t \subset \mathcal{Z}_t$  (lines 6-7). Next, we query the black-box LLM to obtain rewards of the chosen arms (line 9) and perform Gradient Descent to fine-tune the white-box LLM parameters with the gradient flow described in Eqs. 4 and 5 (line 10). Afterwards, we check if the white-box LLM output after fine-tuning differs sufficiently from the checkpoint. If so, we reset the records and the TS parameter distribution (line 13). Otherwise, we update the parameter posterior with the chosen arms and their true rewards (lines 16-17). TS parameters  $\theta_t$  are updated accordingly (lines 14, 18).
+
+## 5 EXPERIMENTS
+
+Our empirical analysis mainly aims to show that AIO can effectively optimize task-specific black-box LLM instructions compared with strong baselines, as well as provide insights on AIO behaviours and properties. In terms of LLM implementations, we apply Llama-3-8B-Instruct (Dubey et al., 2024) as our tunable white-box LLM  $\mathcal{F}_W(\cdot; \Theta_W)$ , and adopt Claude-3-Sonnet (Anthropic, 2024) as our black-box LLM  $\mathcal{F}_B(\cdot)$ . As an outline for our empirical results in the main body, we have: (1) zero-shot instruction induction experiments on 15 tasks in Subsec. 5.1; (2) empirical analysis on API token costs and performance in Subsec. 5.2; (3) a case study that provides analysis and examples for AIO instruction optimization trajectories in Subsec. 5.3. Due to page limit, we include experiment and implementation details in Appendix A. Meanwhile, we also conduct additional experiments presented in Appendix B, including but not limited to few-shot instruction induction results, ablation study on AIO, applying AIO under Chain-of-Thought (CoT) settings, as well as empirical results with different combinations of white-box LLMs and black-box LLMs.
+
+{7}------------------------------------------------
+
+#### **Algorithm 1** Automatic Instruction Optimizer (AIO)
+
+---
+
+```
+
+1: Input: Optimization rounds  $T$ . Exemplars  $\mathcal{D}_{\text{Train}}$ , validation data  $\mathcal{D}_{\text{Valid}}$ . Number of candidate
+380 arms  $K$ . Number of chosen arms  $B$ . Exploration parameter  $\nu \geq 0$ . Threshold parameter  $\beta > 0$ .
+381 2: Initialization: TS Model Parameters  $\theta_0 \sim \mathcal{N}(0, \mathbf{I})$ . White-box LLM parameters  $\Theta_0 \leftarrow \Theta_W$ .
+382 Instruction checkpoint  $\phi_{\text{check}} \leftarrow \phi(\Theta_0)$ . TS model records  $\Omega_0 \leftarrow \emptyset$ .
+383 3: for each round  $t \in [T]$  do
+384 4:   ▷ ----- TS-aided ZO Perturbation Direction Selection -----
+385 5:   Sample candidate perturbation directions (i.e., candidate arms)  $\tilde{\mathcal{Z}}_t$  (Eq. 7), with  $|\tilde{\mathcal{Z}}_t| = K$ .
+386 6:   Calculate arm reward estimations  $\hat{r}_{t,k} = z_{t,k}^\top \theta_{t-1}, \forall z_{t,k} \in \tilde{\mathcal{Z}}_t$ , with TS parameters  $\theta_{t-1}$ .
+387 7:   Choose  $B$  arms of highest estimated rewards  $\tilde{\mathcal{Z}}_t \leftarrow \arg \max_{\tilde{\mathcal{Z}}_t \subset \mathcal{Z}_t: |\tilde{\mathcal{Z}}_t|=B} \left[ \sum_{z_{t,k} \in \tilde{\mathcal{Z}}_t} \hat{r}_{t,k} \right]$ .
+388 8:   ▷ ----- White-box LLM Parameter Fine-tuning -----
+389 9:   Query rewards for chosen arms  $\tilde{\mathcal{Z}}_t$  (Eq. 8). ▷ Only query chosen arms to reduce API cost.
+390 10:  With  $B$  chosen perturbation directions (arms)  $\tilde{\mathcal{Z}}_t$  and their queried rewards, fine-tune white-
+391  box LLM parameters to  $\Theta_t$ , with Gradient Descent, based on gradient flow decomposition (Eq.
+392  4 and Eq. 5) and validation loss (Eq. 3). Generate updated instruction  $\phi_t := \phi(\Theta_t)$ .
+393 11: ▷ ----- Updating Linear TS Model -----
+394 12: if  $\|\phi_t - \phi_{\text{check}}\| > \beta$  then
+395 13:   Reset prior as  $\mathcal{N}(0, \mathbf{I})$ , new checkpoint  $\phi_{\text{check}} \leftarrow \phi_t$ , and collected records  $\Omega_t \leftarrow \emptyset$ .
+396 14:   Sample updated TS parameters  $\theta_t \sim \mathcal{N}(0, \mathbf{I})$ .
+397 15: else
+398 16:   With chosen arms  $z \in \tilde{\mathcal{Z}}_t$  and their rewards  $r$ , update  $\Omega_t \leftarrow \Omega_{t-1} \cup \left[ \bigcup_{z \in \tilde{\mathcal{Z}}_t} (z, r) \right]$ .
+399 17:   Update the posterior for TS parameters by  $\mathcal{N}(\Sigma_t^{-1} b_t, \nu \Sigma_t^{-1})$  (Eq. 9).
+400 18:   Sample updated TS parameters from the posterior distribution  $\theta_t \sim \mathcal{N}(\Sigma_t^{-1} b_t, \nu \Sigma_t^{-1})$ .
+401 19: end if
+402 20: end for
+
+```
+
+---
+
+### 5.1 EXPERIMENTS ON ZERO-SHOT INSTRUCTION INDUCTION
+
+We first experiment on zero-shot instruction induction performance of AIO. Analogous to existing works for LLM instruction optimization (Zhou et al., 2022; Chen et al., 2024; Lin et al., 2024), our empirical analysis involves 15 different tasks including instruction induction tasks from Honovich et al. (2022), as well as more challenging reasoning tasks from BigBench (bench authors, 2023). Consequently, evaluation criteria will vary depending on specific tasks, such as "Multiple Choice" where the white-box LLM needs to choose the right option out of several candidates, and "Exact Match" where black-box LLM answers needs to be identical to ground-truth labels. We defer detailed task descriptions and evaluation criteria to Appendix A.1.
+
+**Baseline methods.** We involve four baselines, including two kinds of LLM-based instruction optimization methods. The first two baselines leverage black-box LLM for instruction generation: (1) APE (Zhou et al., 2022), (2) ProTeGi (Pryzant et al., 2023). We also include baselines that utilize white-box LLM for instruction generation: (3) InstructZero (Chen et al., 2024), (4) INSTINCT (Lin et al., 2024). Detailed baseline descriptions are included in Appendix B. Here, we apply Claude-3-Sonnet as the black-box instruction generation LLM for APE and ProTeGi, while adopting white-box LLM Llama-3-8B-Instruct for InstructZero and INSTINCT.
+
+**Two PEFT variants of AIO.** Apart from the original AIO framework in Algorithm 1, recall that AIO is also compatible with many existing PEFT methods for efficient white-box LLM fine-tuning. Therefore, to reinforce fine-tuning efficiency, we further include empirical results of incorporating Linear Probing (LP) (Kumar et al., 2022) and LoRA (Hu et al., 2021a) to our proposed AIO. These two variants are denoted as "AIO + LP" and "AIO + LoRA" respectively. In particular, we note that "AIO + LP" only fine-tunes  $\sim 6.54\%$  of white-box LLM parameters, while "AIO + LoRA" merely needs to fine-tune  $\sim 0.04\%$  of white-box LLM parameters.
+
+**Empirical results.** Our empirical results are shown in Table 1. We notice that our proposed AIO can generally achieve better performance in comparison with strong baselines, in the presence of the challenging reasoning tasks from BigBench (bench authors, 2023). In particular, our light-
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+| Tasks \ Methods | Black-box LLM |  | White-box LLM |  | White-box LLM w/ FT (Ours) |  |  |
+|-|-|-|-|-|-|-|-|
+|  | APE | ProTeGi | InstructZero | INSTINCT | AIO | AIO + LP | AIO + LoRA |
+| antonyms | 0.893 | 0.861 | 0.843 | 0.881 | <b>0.901</b> | 0.857 | 0.898 |
+| sentiment | 0.911 | 0.928 | 0.941 | 0.920 | 0.949 | <b>0.967</b> | 0.947 |
+| larger_animal | 0.914 | 0.932 | 0.827 | 0.857 | 0.912 | <u>0.945</u> | <b>0.950</b> |
+| taxonomy_animal | 0.491 | 0.970 | 0.598 | 0.782 | <b>0.983</b> | <u>0.979</u> | 0.935 |
+| object_counting | 0.319 | <b>0.550</b> | 0.522 | 0.537 | <u>0.543</u> | 0.401 | 0.479 |
+| navigate | 0.580 | 0.624 | 0.556 | 0.577 | <b>0.644</b> | 0.623 | 0.627 |
+| wинослов | 0.022 | <u>0.703</u> | 0.671 | <b>0.725</b> | 0.622 | 0.646 | 0.635 |
+| implicatures | 0.806 | 0.826 | 0.816 | 0.837 | 0.811 | 0.836 | <b>0.849</b> |
+| logical fallacy | 0.820 | 0.826 | 0.790 | 0.826 | <b>0.868</b> | 0.824 | 0.836 |
+| hyperbaton | 0.515 | 0.499 | 0.467 | 0.502 | <b>0.538</b> | 0.518 | 0.527 |
+| epistemic reasoning | 0.604 | 0.459 | 0.667 | 0.580 | <u>0.766</u> | <b>0.784</b> | 0.719 |
+| movie_recommendation | 0.348 | 0.847 | <u>0.895</u> | 0.866 | <b>0.902</b> | 0.857 | 0.883 |
+| timeful | 0.532 | 0.718 | <u>0.786</u> | 0.712 | <b>0.814</b> | 0.734 | 0.759 |
+| presuppositions_as_nli | 0.458 | 0.488 | <u>0.503</u> | 0.482 | <b>0.523</b> | 0.486 | 0.493 |
+| question_selection | <u>0.712</u> | 0.667 | <b>0.718</b> | 0.605 | 0.648 | 0.628 | 0.622 |
+| Average Rank | 3.87 | 2.80 | 3.13 | 3.20 | <b>2.00</b> |  |  |
+
+Table 1: Zero-shot Instruction Induction Results. For each task (row), **bold** number refers to the best result, while underlined number refers to the second-best one. AIO and its two variants can outperform four baselines on 12 out of a total of 15 tasks. We average results of AIO and its two variants task-wise, and treat these three methods as a unified baseline for ranking comparisons.
+
+weight variants "AIO + LP" and "AIO + LoRA", which fine-tune significantly less white-box LLM parameters, can also achieve promising performance, or outperform other baselines on tasks like "epistemic reasoning". To perform a more comprehensive ranking comparison, we present ranking results by averaging the performance of AIO and its two variants for each task, and applying averaged performance for comparing against baselines to derive ranking. As in Table 1, AIO and its variants as a unity can still enjoy relatively higher ranking results compared with baselines. We also include additional complementary experiments, such as few-shot instruction induction and an ablation study of AIO components, so that interested readers can refer to Appendix B for details.
+
+### 5.2 OPTIMIZATION PERFORMANCE VERSUS API TOKEN EFFICIENCY
+
+![Figure 3: Token consumption vs. performance (accuracy) results. The figure contains three scatter plots for Sentiment, Navigate, and Epistemic reasoning tasks, and a line graph for Accuracy vs. Token Consumption. The scatter plots show Accuracy (Result) on the y-axis and Tokens Consumed (Relative value) on the x-axis for various methods: Baseline APE (blue circle), ProTeGi (orange diamond), InstructZero (green cross), INSTINCT (purple star), and AIO (red plus). Annotations indicate token reduction percentages (e.g., -29%, -34%, -28%). The line graph shows Accuracy (Result) on the y-axis and Total Tokens Consumed on the x-axis for InstructZero (blue line with circles), AIO (orange line with diamonds), and AIO + LP (green line with crosses). Annotations highlight that AIO + LP uses fewer tokens for the same accuracy as InstructZero, and that AIO identifies the second speaker's response in a dialogue faster than InstructZero.](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+Figure 3: Token consumption vs. performance (accuracy) results. The figure contains three scatter plots for Sentiment, Navigate, and Epistemic reasoning tasks, and a line graph for Accuracy vs. Token Consumption. The scatter plots show Accuracy (Result) on the y-axis and Tokens Consumed (Relative value) on the x-axis for various methods: Baseline APE (blue circle), ProTeGi (orange diamond), InstructZero (green cross), INSTINCT (purple star), and AIO (red plus). Annotations indicate token reduction percentages (e.g., -29%, -34%, -28%). The line graph shows Accuracy (Result) on the y-axis and Total Tokens Consumed on the x-axis for InstructZero (blue line with circles), AIO (orange line with diamonds), and AIO + LP (green line with crosses). Annotations highlight that AIO + LP uses fewer tokens for the same accuracy as InstructZero, and that AIO identifies the second speaker's response in a dialogue faster than InstructZero.
+
+Figure 3: Token consumption vs. performance (accuracy) results. Token consumption results are normalized into  $[0, 1]$  range. In the below figure, we include token consumption vs. best accuracy results till certain token consumption levels on four tasks, with two instruction fragments for "Implicatures" task at different stages.
+
+Recall that we apply Claude-3-Sonnet as our black-box LLM  $\mathcal{F}_B(\cdot)$  for experiments, where API query costs are charged on a token-basis for end users. In Figure 3, we show an illustration in terms of token consumption, with input and output token quantities combined, versus instruction induction performance on four different tasks. From Figure 3, we see that AIO can relatively maintain a good balance between token costs and induction performance, starting from early optimization stages when small amounts of tokens are consumed. Compared with ProTeGi, the performance of APE tends to be inferior as ProTeGi can optimize generated instructions with higher-granularity error feedback in terms of specific training samples, although it can lead to additional token consumption costs. On the other hand, we observe that the baselines InstructZero and INSTINCT generally have higher token consumption compared to AIO. While these two baselines also leverage white-box LLMs for instruction optimization, their methods primarily rely on in-context learning, by tuning a prefix soft prompt with kernel-based learner or small neural model. Given the extreme complexity of black-box LLMs, their representation power can be insufficient for effectively learning from black-box LLM feedback, leading to more interactions with the black-box LLM and, consequently, higher token costs. Alternatively,
+
+{9}------------------------------------------------
+
+![Figure 1: A diagram illustrating the evaluation of LLMs using a 'White-Box' approach. On the left, a flowchart shows the pipeline: 'Training Exemplars' (with 'positive' and 'negative' examples) -> 'Enhanced Prompt' -> 'White-Box LLM' -> 'Evaluate & T' -> 'Black-Box LLM'. The 'Enhanced Prompt' includes an instruction and exemplars with annotations like 'Overfitting Exemplars' and 'Generalization'. On the right, a scatter plot titled 'Accuracy vs. Normative distance with varying instructions' shows data points for 'No Instruction' (blue circles), 'No Instruction + T' (orange triangles), and 'Instruction' (green diamonds) for both 'No Adversarial' (circles) and 'With Adversarial' (triangles) conditions. The plot shows that accuracy generally decreases as normative distance increases, but is higher for instructions and adversarial examples. A radar chart on the far right shows 'Better Instructions' across various dimensions like 'Accuracy', 'Robustness', and 'Generalization'.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 1: A diagram illustrating the evaluation of LLMs using a 'White-Box' approach. On the left, a flowchart shows the pipeline: 'Training Exemplars' (with 'positive' and 'negative' examples) -> 'Enhanced Prompt' -> 'White-Box LLM' -> 'Evaluate & T' -> 'Black-Box LLM'. The 'Enhanced Prompt' includes an instruction and exemplars with annotations like 'Overfitting Exemplars' and 'Generalization'. On the right, a scatter plot titled 'Accuracy vs. Normative distance with varying instructions' shows data points for 'No Instruction' (blue circles), 'No Instruction + T' (orange triangles), and 'Instruction' (green diamonds) for both 'No Adversarial' (circles) and 'With Adversarial' (triangles) conditions. The plot shows that accuracy generally decreases as normative distance increases, but is higher for instructions and adversarial examples. A radar chart on the far right shows 'Better Instructions' across various dimensions like 'Accuracy', 'Robustness', and 'Generalization'.
+
+Figure 4: In left Figure, we show three instructions generated for "Sentiment" task: w/o FT, during FT, and after FT. Instructions with FT generalize to task contexts instead of over-fitting task exemplars. Middle and right figures shows the normalized distance vs. accuracy for tasks "Larger Animal", "Question Selection" (middle figure with fitted lines), "Navigate" (right radar plot). For radar plot, instruction (i.e., point) accuracy increases clock-wisely starting from  $0^\circ$ . Point distances to circle center are corresponding distances from  $\phi_0$ .
+
+to tackle the complexity of the black-box LLM, we fine-tune a white-box LLM to leverage its rich representation power, enabling efficient instruction optimization with adequate utilization of black-box LLM feedback.
+
+### 5.3 CASE STUDY: INSTRUCTION OPTIMIZATION TRAJECTORY ANALYSIS
+
+In this subsection, we present analysis on how AIO generated instructions evolve across optimization rounds. From the left figure in Figure 4, we provide some examples in terms of how fine-tuning changes the way our white-box LLM  $\mathcal{F}_{\text{W}}$  comprehends exemplars and composes instructions. These exemplars all originate from our experiment data. Without fine-tuning,  $\mathcal{F}_{\text{W}}$  can over-fit exemplars by searching specific keywords to judge sentiment outcomes, which can clearly fail to generalize to unseen task data points and lead to low accuracy. During and after fine-tuning,  $\mathcal{F}_{\text{W}}$  perceives black-box LLM feedback and corrects its way in terms of interpreting task exemplars as well as generating instructions. During fine-tuning, instruction gets improved by considering signal words from exemplars (e.g., "entertainingly") as *examples* instead of *sole indicators*. Moreover, after fine-tuning,  $\mathcal{F}_{\text{W}}$  further generalizes the concept "positive connotations = positive sentiment" to a more comprehensive view, by mentioning "use sentiment analysis" to analyze outcome directly.
+
+In addition, we also present visualization results in terms of induction performance as well as distances between generated instructions  $\phi$  and the initial instruction  $\phi_0 = \phi(\mathbf{0}_W)$ . Instruction distances are measured by averaged token probabilities as in Algorithm 1. With the middle line chart, we individually plot a fitting line for instruction points of each task. For tasks like "Question Selection", our optimization trajectory tends to fit well with the supposed linear optimization landscape where small residuals are observed. On the other hand, for tasks like "Larger Animal", we can observe relatively higher fluctuations when generated instructions deviate from  $\phi_0$ . In this case, as it still obeys a relatively fitting linear trend until the normalized distance reaches  $0.7 \sim 0.8$ , we can supposed a smaller linear landscape in terms of TS-aided optimization. Shown in the radar plot, regarding the "Navigate" task, we see that good instructions are not necessarily far away from the initial  $\phi_0$ , while the best instructions tend to fall into a sub-area within the optimization landscape, instead of consistently deviates from the starting point  $\phi_0$  as accuracy results increase. Due to page limit, we will include additional instruction optimization trajectory examples in Appendix B.12.
+
+## 6 CONCLUSION
+
+In this paper, we propose a novel framework named Automatic Instruction Optimizer (AIO) to adaptively customize instructions for various downstream tasks. By applying a task-solver black-box LLM for query answering, AIO fine-tunes a white-box LLM into a task-aware instruction optimizer that learns from high-level task-relevant information and black-box LLM feedback, to generate high-quality instructions for the task-solver black-box LLM. Distinct from existing in-context learning approaches, our framework is designed to address the formidable complexity of modern black-box LLMs with possibly hundreds of billions of parameters involved. To overcome the challenges of inaccessible black-box LLM gradients and mitigate concerns related to expensive black-box LLM API costs, our AIO framework leverages a novel TS-aided zeroth-order gradient approximation method, enabling effective and efficient learning of task-aware instructing strategies. Extensive experiments demonstrate the superiority of our proposed framework in terms of performance and API token efficiency, along with additional analyses that highlight AIO’s properties and specifications. Additional discussions on AIO future extensions are presented in Appendix E.
+
+ Rest of paper (reference and Appendix) is removed.

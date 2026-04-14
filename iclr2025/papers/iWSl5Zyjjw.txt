@@ -1,0 +1,277 @@
+
+
+{0}------------------------------------------------
+
+# DECIMAMBA: EXPLORING THE LENGTH EXTRAPOLATION POTENTIAL OF MAMBA
+
+Assaf Ben-Kish<sup>1</sup>, Itamar Zimerman<sup>1</sup>, Shady Abu-Hussein<sup>1</sup>,  
+Nadav Cohen<sup>1</sup>, Amir Globerson<sup>1,2</sup>, Lior Wolf<sup>1</sup>, Raja Giryes<sup>1</sup>  
+<sup>1</sup>Tel Aviv University, <sup>2</sup>Google Research
+
+![GitHub logo](64662465bba247703fdec49c8f3309f9_img.jpg)
+
+GitHub logo
+
+<https://github.com/assafbk/DeciMamba>
+
+## ABSTRACT
+
+Long-range sequence processing poses a significant challenge for Transformers due to their quadratic complexity in input length. A promising alternative is Mamba, which demonstrates high performance and achieves Transformer-level capabilities while requiring substantially fewer computational resources. In this paper we explore the length-generalization capabilities of Mamba, which we find to be relatively limited. Through a series of visualizations and analyses we identify that the limitations arise from a restricted effective receptive field, dictated by the sequence length used during training. To address this constraint, we introduce *DeciMamba*, a context-extension method specifically designed for Mamba. This mechanism, built on top of a hidden filtering mechanism embedded within the S6 layer, enables the trained model to extrapolate well even without additional training. Empirical experiments over real-world long-range NLP tasks show that *DeciMamba* can extrapolate to context lengths that are significantly longer than the ones seen during training, while enjoying faster inference.
+
+## 1 INTRODUCTION
+
+Lengthy sequences, which can span up to millions of tokens, are common in real-world applications including long books, high-resolution video and audio signals, and genomic data. Consequently, developing Deep Learning (DL) sequence models capable of effectively managing long contexts is a critical objective. Transformers (Vaswani et al., 2017), despite their current dominance in general DL tasks, still face challenges in processing long sequences. Specifically, their quadratic complexity in sequence length makes them computationally demanding, restricting the ability to train them over long sequences and very large datasets.
+
+In recent years, substantial efforts have been made in order to tackle this challenge. The most significant advancements include efficient implementations that increase the model’s context length during training (Dao et al., 2022; Liu et al.), and context-extension methods (Chen et al., 2023b; Peng et al., 2023b) designed to effectively expand the context after training. However, recent studies suggest that long-range processing is still an unresolved problem (Li et al., 2024a; Liu et al., 2024a).
+
+One promising approach in this domain is the development of attention-free networks with sub-quadratic complexity, which can be trained more efficiently over long sequence data. In a recent line of works (Gu et al., 2021; Gu et al., Gupta et al., 2022), the family of state-space layers has been introduced. These layers can be seen as theoretically grounded linear RNNs that can be efficiently computed in parallel via convolutions, thanks to a closed-form formulation of their linear recurrent rule. A recent advancement by Gu & Dao (2024) presented Mamba, which builds on top of an expressive variant of SSMs called Selective State-Space Layers (S6). These layers match or exceed the performance of Transformers in several domains, such as NLP (Lieber et al., 2024; Zuo et al., 2024; Pióro et al., 2024; Wang et al., 2024a), image classification (Zhu et al.; Liu et al., 2024b), audio processing (Shams et al., 2024), genomic data (Schiff et al., 2024), and more.
+
+In this paper, we first explore the length-generalization abilities of Mamba and identify that they are relatively limited. Although Mamba layers are theoretically capable of capturing global interactions at the layer level, we show, through a series of visualizations, analyses, and empirical measures, that
+
+{1}------------------------------------------------
+
+![Figure 1: Improving Mamba Extrapolation with DeciMamba. The figure contains six subplots. Five are bar charts showing zero-shot evaluation of a 2.8B Mamba model on LongBench tasks (MFQA, GovR, MN, TrQA, LCC, RepB, Avg) for training lengths of 0-4K, 4-8K, and 8K+ tokens. The sixth is a heatmap showing Passkey Retrieval performance for Mamba-130m and DeciMamba-130m across context lengths from 1K to 128K tokens. Blue bars represent DeciMamba-Inst-2.8B, and orange bars represent Mamba-Inst-2.8B. The heatmaps show that DeciMamba maintains high performance across all context lengths, while Mamba's performance drops significantly as context length increases beyond the training length.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Improving Mamba Extrapolation with DeciMamba. The figure contains six subplots. Five are bar charts showing zero-shot evaluation of a 2.8B Mamba model on LongBench tasks (MFQA, GovR, MN, TrQA, LCC, RepB, Avg) for training lengths of 0-4K, 4-8K, and 8K+ tokens. The sixth is a heatmap showing Passkey Retrieval performance for Mamba-130m and DeciMamba-130m across context lengths from 1K to 128K tokens. Blue bars represent DeciMamba-Inst-2.8B, and orange bars represent Mamba-Inst-2.8B. The heatmaps show that DeciMamba maintains high performance across all context lengths, while Mamba's performance drops significantly as context length increases beyond the training length.
+
+Figure 1: **Improving Mamba Extrapolation with DeciMamba.** We present a novel decimation mechanism tailored for Mamba. With our method Mamba is able to process sequences that are much longer than the ones trained on while enjoying reduced inference costs. (**Left**) Zero-shot evaluation of an instruction-tuned 2.8B Mamba model on a subset of LongBench tasks. We show both LongBench and LongBench.e (three length groups: 0-4K, 4-8K, 8k+). MFQA, GovR, MN, TrQA, LCC, RepB, and Avg stand for MultiFieldQA, GovReport, MultiNews, TriviaQA, LCC, RepoBench-p, and Average: (**Right-Top**) Passkey Retrieval for Mamba-130m (**Right-Bottom**) Same for DeciMamba-130m. All models (130m, 2.8b) were trained on lengths of 2K tokens.
+
+the main barrier is Mamba’s implicit bias towards sequence lengths that were seen during training, a phenomenon that we call ‘limited effective receptive field’ (ERF). Next, based on the assumption that long-context data is usually sparse, we present *DeciMamba*, the first context-extension method specifically designed for S6. Our method relies on a dynamic data-dependent pooling method that utilizes a hidden filtering mechanism intrinsic to the Mamba layer. We leverage this mechanism to introduce a global compression operator, which expands Mamba’s ERF by discarding unimportant tokens before the S6 layer. In particular, we interpret the norms of the per-token selective recurrent gate ( $\Delta_t$ ) as indicators of each token’s importance. This metric allows us to identify the top-k most impactful tokens, enabling direct application of the SSM to these tokens only. The proposed method (Figure 2) significantly increases the effective context length of Mamba by several orders of magnitude while requiring a smaller computational budget.
+
+**Our main contributions** encompass the following three aspects: (i) identify that Mamba has limited length-extrapolation capabilities via thorough experiments in controlled environments. (ii) Through a series of visualizations, analyses, and empirical measures, recognize that although Mamba can theoretically capture global interactions via the recurrent state, its limited ERF prevents significant length-extrapolation; (iii) building on this insight, introduce *DeciMamba*, the first context-extension technique specifically designed for Mamba models. This approach leverages an existing filtering mechanism embedded within the S6 layer. As illustrated in Fig. 1, our method effectively enhances Mamba’s length-extrapolation abilities, and is applicable to real-world long-context NLP tasks.
+
+## 2 PRELIMINARIES
+
+Long-range models evolve in two main directions: (i) adapting transformers, the most dominant architecture today, to be more suitable for such tasks; (ii) developing architectures with sub-quadratic complexity in sequence length such as Hyena (Poli et al., 2023), RWKV (Peng et al., 2023a), Hawk (De et al., 2024), xLSTM (Beck et al., 2024), and Mamba, the focus of our paper.
+
+**Mamba.** Given an input sequence  $U = (u_1, u_2, \dots, u_L) \in \mathbb{R}^{L \times d}$  of length  $L$  such that  $u_i \in \mathbb{R}^d$ , a Mamba block with  $d$  channels is built on top of the S6 layer via the following formula:
+
+$$\begin{aligned} G &= \sigma(\text{Linear}(U)), & X &= \text{Conv1D}(\text{Linear}(U)), \\ Y &= S6(X), & O &= Y \otimes G \end{aligned} \quad (1)$$
+
+{2}------------------------------------------------
+
+![Figure 2: DeciMamba (Left) Schematic overview; (Middle) By carefully inspecting the recurrent view of Mamba, we revealed the implicit filtering mechanism embedded in the recurrent gate and controlled by Δt; (Right) Visualization of a DeciMamba model. The grey lines represent the sequence length at the input and output of each layer. Layers with a large ERF are decimated.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+The figure is divided into three panels. The left panel, titled 'DeciMamba Block', shows a schematic of the block architecture: an input is processed through a 'Conv1D' layer and a 'σ' activation, then enters a 'Δt-Based Decision' block, followed by an 'SSM' block. The output of the SSM is multiplied elementwise (⊗) with the input. The middle panel, titled 'Δt-Strategy', shows a 'Simplified Recurrent View of Mamba' with an 'Input Gate' and an 'Output Gate'. It illustrates the recurrent equation  $h_t = \exp(-A\Delta_t)h_{t-1} + \Delta_t B_t x_t$  and  $y_t = C_t h_t$ , noting that  $\Delta_t$  controls the impact on future tokens. The right panel, titled 'Decimation: Scope & Ratio', shows a vertical stack of layers in a 'DeciMamba Model'. It includes 'Mamba Block' layers and 'DeciMamba Block' layers. Grey lines represent sequence length at input and output. Some layers are highlighted with red boxes and have smaller grey lines, indicating decimation.
+
+Figure 2: DeciMamba (Left) Schematic overview; (Middle) By carefully inspecting the recurrent view of Mamba, we revealed the implicit filtering mechanism embedded in the recurrent gate and controlled by Δt; (Right) Visualization of a DeciMamba model. The grey lines represent the sequence length at the input and output of each layer. Layers with a large ERF are decimated.
+
+Figure 2: **DeciMamba (Left)** Schematic overview; **(Middle)** By carefully inspecting the recurrent view of Mamba, we revealed the implicit filtering mechanism embedded in the recurrent gate and controlled by  $\Delta_t$ ; **(Right)** Visualization of a *DeciMamba* model. The grey lines represent the sequence length at the input and output of each layer. Layers with a large ERF are decimated.
+
+where  $G$  represents the gate branch,  $\otimes$  is elementwise multiplication,  $\sigma$  is the SILU activation, Linear and Conv1D are standard linear projection and 1-dimensional convolution layers. The S6 layer is based on a time-variant SSM, which can be elaborated by the following recurrent rule:
+
+$$h_t = \bar{A}_t h_{t-1} + \bar{B}_t x_t, \quad y_t = C_t h_t \quad (2)$$
+
+where  $X = (x_1, x_2, \dots, x_L)$  is the input sequence of a representative channel,  $\bar{A}_t \in \mathbb{R}^{N \times N}$ ,  $\bar{B}_t \in \mathbb{R}^{N \times 1}$ , and  $C_t \in \mathbb{R}^{1 \times N}$  are the system, input, and output discrete time-variant matrices, respectively. S6 conditions the discrete time-variant matrices based on the input as follows:
+
+$$\begin{aligned} \Delta_t &= \text{Sft}(S_\Delta X_t), \quad B_t = S_B X_t, \quad C_t = (S_C X_t)^T \\ \bar{A}_t &= \exp(A \Delta_t), \quad \bar{B}_t = B_t \Delta_t \end{aligned} \quad (3)$$
+
+such that  $\Delta_t$  is the discretization step,  $\text{Sft}$  represents the softplus function, and  $S_\Delta, S_B, S_C$  are linear projection layers. Ali et al. (2024) demonstrated that S6 layers, similar to attention models, can be interpreted as data-controlled linear operators. Specifically, the S6 layer computation can be represented using the following linear operator  $\alpha$ , controlled by the input (via Eq. 3):
+
+$$Y = \alpha X, \quad \alpha_{i,j} = C_i \left( \prod_{k=j+1}^L \bar{A}_k \right) \bar{B}_j \quad (4)$$
+
+$$\begin{bmatrix} y_1 \\ y_2 \\ \vdots \\ y_L \end{bmatrix} = \begin{bmatrix} C_1 \bar{B}_1 & 0 & \dots & 0 \\ C_2 \bar{A}_2 \bar{B}_1 & C_2 \bar{B}_2 & \dots & 0 \\ \vdots & \vdots & \ddots & 0 \\ C_L \prod_{k=2}^L \bar{A}_k \bar{B}_1 & C_L \prod_{k=3}^L \bar{A}_k \bar{B}_2 & \dots & C_L \bar{B}_L \end{bmatrix} \begin{bmatrix} x_1 \\ x_2 \\ \vdots \\ x_L \end{bmatrix} \quad (5)$$
+
+In this formulation, each output  $y_i$  is a weighted sum of all inputs, where the ‘attention weights’ of all inputs  $x_j$ , i.e., the set  $\{\alpha_{i,j}\}_{j=1}^L$ , is data-driven. We utilize this perspective to further investigate the effective receptive field of Mamba layers.
+
+**Context Extension & Length Extrapolation.** Several methods were proposed to enhance the effective context length of transformers and improve their extrapolation over longer sequences. Press et al. demonstrated that models built on top of original sinusoidal, rotary (Su et al., 2024), and T5 bias (Raffel et al., 2020) positional encoding have poor length generalization. It proposed to mitigate this issue by incorporating distance-based linear biases into the attention matrix for promoting locality. Kazemnejad et al. (2024) showed that transformers without positional encoding (NoPE) exhibit better length extrapolation capabilities in downstream tasks. Recently, CoPE (Golovneva et al., 2024) utilized context-aware positional encoding and Peng et al. (2023b); Chen et al. (2023a) suggested post-training positional interpolation.
+
+A recent direction involves architectural modifications to pre-trained models followed by short fine-tuning. It includes LongLora (Chen et al., 2023b), which proposes shifted sparse attention, and Landmark Attention (Mohtashami & Jaggi, 2023), which applies attention in chunks and inserts
+
+{3}------------------------------------------------
+
+global unique tokens into the input sequences between those chunks. Our work focuses on taking such an approach for Mamba models, rather than transformers. More related work is in Appendix D. Furthermore, we refer to Appendix D.4, where we motivate the study of Long Context LLMs in parallel to Retrieval Augmented Generation (RAG). Lastly, we note that in order to assess the long range performance of the model, in our experiments we measure perplexity only on the farthest labels of the context window, causing the perplexity values to be larger than their typical values (usually, all tokens in the context window are aggregated).
+
+## 3 EXTRAPOLATION LIMITATIONS OF MAMBA
+
+In this section we explore the length-generalization capabilities of Mamba models. Specifically, we assess the limited effective receptive field (ERF) of S6 layers, a phenomenon that leads to poor information propagation when processing sequences that are longer than the ones trained on. For a detailed description of the ERF, we refer the reader to Appendix D.3. Consequently, we develop methods to measure the portion of the context utilized by the model, and show that it is dictated by the training sequence lengths.
+
+We start by visualizing Mamba’s hidden attention (Eq. 4, 5) during extrapolation. In Fig. 3 (left, center) we display the attention matrices of layer 17 of Mamba-130M while *evaluating* sequences of length 2K and 16K (the model trained on the Passkey Retrieval task with sequence lengths of 2K). Notice that while the attention is very dense for the 2K sequence (no extrapolation), the attention for the 16K sequence (extrapolation  $\times 8$ ) is much more sparse, and its elements vanish as we move towards the lower rows. This exhibits a limited ERF, as information from the first tokens in the sequence does not propagate to the final tokens in the output sequence.
+
+![Figure 3: Detecting and Quantifying Limited ERFs. The figure consists of three panels. The left panel shows a 2K x 2K attention matrix for a 2K token sequence, which is dense. The center panel shows a 16K x 16K attention matrix for a 16K token sequence, which is sparse, with a dashed yellow rectangle highlighting a limited effective receptive field. The right panel is a line graph showing the sum value (log scale) of attention weights versus context length (2K to 32K) for layers 0, 4, 10, 14, 16, 17, 19, 20, and 23. The graph shows that for most layers, the sum value increases with context length, but for layers 16 and 17, it diverges exponentially fast, indicating a fast decay in attention values.](09af5b86cf9391543d22db5f2129b3ca_img.jpg)
+
+Figure 3: Detecting and Quantifying Limited ERFs. The figure consists of three panels. The left panel shows a 2K x 2K attention matrix for a 2K token sequence, which is dense. The center panel shows a 16K x 16K attention matrix for a 16K token sequence, which is sparse, with a dashed yellow rectangle highlighting a limited effective receptive field. The right panel is a line graph showing the sum value (log scale) of attention weights versus context length (2K to 32K) for layers 0, 4, 10, 14, 16, 17, 19, 20, and 23. The graph shows that for most layers, the sum value increases with context length, but for layers 16 and 17, it diverges exponentially fast, indicating a fast decay in attention values.
+
+Figure 3: **Detecting and Quantifying Limited ERFs.** (Center, Left) Recordings of Mamba Attention Matrices with and without extrapolation (Mamba-130m, layer 17, trained on seq. lengths of 2k). Mamba unintentionally learns a limited ERF during training (highlighted by the dashed rectangle) which disrupts its extrapolation abilities. (Right) Quantifying Mamba’s Information Loss by Measuring  $\sum_{k=2}^L \Delta_k$  Divergence. To show Mamba’s sensitivity to increasing context lengths we measure the first occasion of information loss, as described in Sec. 3. We observe that in the most semantic layers (16 and 17, see Passkey Retrieval in Sec. 5)  $\sum_{k=2}^L \Delta_k$  diverges exponentially fast, causing a fast decay in the attention values, leading to limited ERFs like in the center image.
+
+**Measuring ERFs via Mamba Mean Distance.** To quantify how well Mamba utilizes the context during inference, we introduce a quantitative measure called ‘Mamba Mean Distance’. This measure is analogous to the receptive field in CNNs and the attention mean distance in transformers described by Dosovitskiy et al. (2020). For a causal transformer model, the attention mean distance for the  $i$ -th output token is computed by:
+
+$$\mathbb{E}_{j \leq i} d(i, j) = \sum_{j \leq i} \tilde{A}_{i,j} \otimes (i - j), \quad (6)$$
+
+where  $\tilde{A}$  is the normalized attention matrix that defines a probability distribution over the distances for various tokens. We tailored this measure to S6 by leveraging the implicit attention representation,
+
+{4}------------------------------------------------
+
+which we normalize using the following function:
+
+$$\mathbb{N}(x_1, \dots, x_L)_j = \frac{|x_j|}{\sum_{k=1}^L |x_k|}. \quad (7)$$
+
+As we are usually interested in the last tokens, and as we will see shortly, they are the first to suffer from this phenomenon, we find that it is sufficient to compute our metric for the last token only:
+
+$$\mathbb{E}_{j \leq L} d(L, j) \approx \sum_{j \leq L} \mathbb{N}(\alpha)_{L,j} \otimes (L - j). \quad (8)$$
+
+Fig. 4 visualizes this measure by presenting the ‘Mamba Mean Distance’ for different hidden attention matrices, depicted by the horizontal distance between the red line and the main diagonal.
+
+![Figure 4: Five attention matrices for the Mamba model. Each matrix is a square grid with a dark purple background. A prominent red diagonal line runs from the top-left to the bottom-right. A horizontal distance is indicated by a vertical line segment between the red diagonal and the main diagonal (which is slightly offset to the right). The matrices show varying degrees of attention spread, with some being more concentrated on the diagonal and others more spread out.](6f1efa91fb9b476380af7a35db4f14bf_img.jpg)
+
+Figure 4: Five attention matrices for the Mamba model. Each matrix is a square grid with a dark purple background. A prominent red diagonal line runs from the top-left to the bottom-right. A horizontal distance is indicated by a vertical line segment between the red diagonal and the main diagonal (which is slightly offset to the right). The matrices show varying degrees of attention spread, with some being more concentrated on the diagonal and others more spread out.
+
+Figure 4: **Mamba Mean Distance.** Each panel contains an attention matrix along with its corresponding ‘Mamba Mean Distance’, depicted by the horizontal distance between the red diagonal line and the main diagonal. The matrices are extracted from a pre-trained model of size 2.8B, trained on the Pile dataset (Gao et al., 2020).
+
+![Figure 5: Two line graphs showing the relationship between context length and Mamba Mean Distance. The left graph plots 'Mamba Mean Distance' (y-axis, 20 to 70) against 'L_Eval' (x-axis, 200 to 1000). The right graph plots 'Normalized Mamba Mean Distance' (y-axis, 0.05 to 0.30) against 'L_Eval' (x-axis, 200 to 1000). Both graphs show five lines for different training context lengths: L_train = 1024 (red), 512 (orange), 256 (purple), 128 (blue), and 64 (green). In the left graph, all lines show an upward trend. In the right graph, all lines show a downward trend, indicating that the normalized distance decreases as context length increases.](bc04d002fc79e8a3637b1552ac3361e6_img.jpg)
+
+Figure 5: Two line graphs showing the relationship between context length and Mamba Mean Distance. The left graph plots 'Mamba Mean Distance' (y-axis, 20 to 70) against 'L\_Eval' (x-axis, 200 to 1000). The right graph plots 'Normalized Mamba Mean Distance' (y-axis, 0.05 to 0.30) against 'L\_Eval' (x-axis, 200 to 1000). Both graphs show five lines for different training context lengths: L\_train = 1024 (red), 512 (orange), 256 (purple), 128 (blue), and 64 (green). In the left graph, all lines show an upward trend. In the right graph, all lines show a downward trend, indicating that the normalized distance decreases as context length increases.
+
+Figure 5: **Mamba Mean Distance Quantifies Effective Context Utilization.** (Left) Mamba Mean Distance as a function of the context length during inference, for various training context lengths. (Right) Same, but normalized by the training context length.
+
+By introducing an empirical measure for Mamba’s ERF, we can explore it more robustly. Fig. 5 portrays the relationship between the input context length and the Mamba Mean Distance. Here, Mamba-based language models with 80M parameters are trained across various context lengths for next-token prediction on the WikiText-103 benchmark (Merity et al., 2016). We average the Mamba Mean Distance over all channels and layers using 100 test examples. More details on Mamba Mean Distance are in Appendix D.5. Surprisingly, in the left panel of Fig. 5, we see that the Mamba Mean Distance increases with context length. Although it does grow, it is hard to tell whether the growth is proportional to the growth in context length. Therefore, in the right panel, we normalize the Mamba Mean Distance by the sequence length during inference, revealing the exact proportion of context utilized in practice. It is now evident that the context utilization drops dramatically as the evaluated context length increases.
+
+To identify the internal mechanism that leads to this behavior, we return to the analytic expression of Mamba’s hidden attention defined in Eq. 5. We observe that the product of transition matrices  $\prod_{k=j+1}^L \tilde{A}_k$  includes more elements as the sequence length  $L$  increases, and can be written for the  $j$ ’th element in the last row as:
+
+$$\prod_{k=j+1}^L \tilde{A}_k = \prod_{k=j+1}^L \exp(A \Delta_k) = \exp(A \sum_{k=j+1}^L \Delta_k) \quad (9)$$
+
+{5}------------------------------------------------
+
+We note that this product always converges since  $\Delta_t \geq 0$  and  $A[i, i] < 0$  by design. Yet, if it converges too fast, the attention element will collapse undesirably. To measure the attention elements' collapse we focus on attention element  $\alpha_{L, 1}$  due to the following reasons: (i) we are usually interested in the information at the end of the sequence; (ii) this element is the first in the row to collapse, capturing the first occasion of information loss because  $\sum_{k=2}^L \Delta_k \geq \sum_{k=j+1}^L \Delta_k$  for all  $L - 1 \geq j \geq 1$ , and  $A$  is always negative, so the power of its exponent will always be the smallest. As can be seen in Eq. 9, the only input-length dependent value is  $\sum_{k=2}^L \Delta_k$ . Therefore, in Fig. 3 (right), we compute it for varying input lengths  $L$  during inference (per layer, averaged over the channels dimension). As can be seen in the figure, the values of  $\sum_{k=2}^L \Delta_k$  start small and increase exponentially fast in layers 16 and 17, which are the most global layers (Fig. 12). This aligns with the observations in Fig. 3 (left, center) - since these layers require a large ERF, the fast collapse of the attention elements restricts global information propagation, leading to distorted performance. In the other layers, the values of  $\sum_{k=2}^L \Delta_k$  start large and grow linearly. Since these layers perform local processing (diagonal attention matrices), the fast decay is desired.
+
+To conclude, the limited length-generalization abilities arise due to decay rates  $A$  and  $\Delta_t$  sums (Eq. 9) that are sufficient for the training data of length  $L_{train}$ , but not flexible enough to provide effective length-extrapolation for lengths  $L_{eval} > L_{train}$ . As the transition matrix product converges too fast, we observe a collapse of the attention matrix, specifically in regions that convey information from the beginning of the sequence to its end.
+
+## 4 METHOD: *DeciMamba*
+
+In Sec. 3 we identified that for a pre-trained model, the ERF of Mamba is dictated by the context size used during training  $L_{train}$ . This creates a blind spot for sequences that exceed  $L_{train}$ , as dependencies originating in the far input segments are not captured by the model, resulting in poor length generalization. To solve this problem we propose embedding a filtering mechanism within the pre-trained Mamba layers, with no need to re-train the model. The mechanism's core task is to reduce the amount of tokens that the S6 layer processes, and it does so by discarding tokens of fewer importance. The method is described in Fig. 2 and Alg. 1. It encapsulates three aspects: (i) Decimation Strategy, (ii) Decimation Rate, and (iii) Decimation Scope. We refer the reader to Appendix C where we further discuss each hyperparameter's role and selection strategy.
+
+**Decimation Strategy (The Role of  $\Delta_t$ )** To pool the most relevant tokens, we must assign each token a relative importance score. We select the  $\Delta_t$  parameter as a proxy for this score and motivate our choice by explaining its operation. First, we apply the SSM parametrization to Eq. 2:
+
+$$h_t = \bar{A}_t h_{t-1} + \bar{B}_t x_t = e^{A\Delta_t} h_{t-1} + \Delta_t B_t x_t. \quad (10)$$
+
+Notice that when  $\Delta_t \rightarrow 0$  the layer discards the input token and preserves the previous hidden state. When  $\Delta_t > 0$  the hidden state "attends" the input token (the attendance is proportional to  $\Delta_t$ ) and adds it to an attenuated version of the previous hidden state (this attenuation is also proportional to  $\Delta_t$ ). We note that this is always the case because  $\Delta_t \geq 0$  and  $A[i, i] < 0$  by design. Hence,  $\Delta_t$  can be interpreted as the controller of the recurrent gate, determining which tokens should impact future tokens. The final importance score for each token is the mean value over all channels of its respective  $\Delta_t$  parameter. Note that this selection induces a small interference in Mamba's operation, as Mamba already attempts to ignore input tokens with small  $\Delta_t$ .
+
+**Decimation Ratio** For each decimating layer  $s$ , we propose to keep the Top- $P_s$  tokens with the largest importance scores, where  $P_s$  decreases gradually as we go deeper into the network according to the following formula:
+
+$$P_s = L_{base} \cdot \beta^s, \quad \beta \in (0, 1), \quad L_{base} \in \mathbb{N}, \quad (11)$$
+
+where  $\beta, L_{base}$  are hyper-parameters representing a decay factor that controls the decimation rate (as we progress in depth) and the maximal length of the sequence after the first decimating layer. Sec. E.2 further discusses the selected pooling strategy.
+
+**Decimation Scope (Layer Selection)** We turn to describe the decimation scope, which defines which layers should use the embedded decimation mechanism. We begin by explaining the guiding principles behind our method, followed by the criteria that reflects those principles. Our goal is to
+
+{6}------------------------------------------------
+
+expand the ERF of a pre-trained Mamba model. Traditionally, DL models focus on various scales of token interactions at different layers. Therefore, a natural design choice is to decimate layers that already focus on long-range dependencies. This approach can potentially increase their ability to learn global dependencies without negatively impacting the layers that are associated with short-term features. As a criterion for measuring the scale embedded within each layer, we measure the ERF of Mamba based on the Mamba Mean Distance defined in Eq. 8. We thus select the layers with the highest Mamba Mean Distance, with the number of selected layers being a hyper-parameter. Note that during inference we perform decimation only in the pre-fill phase. Section E.4 demonstrates that its use in the decoding phase leads to a negligible improvement and thus not required.
+
+**Inference Efficiency** Mamba can be computed in parallel with a prefix-scan or step-by-step like RNNs. For efficient inference, the context is processed in parallel mode (pre-fill), and then the response is generated via auto-regressive decoding in recurrent mode. *DeciMamba* performs pooling only during the pre-fill phase, leveraging the parallel mode to compute the global pooling operation efficiently. During decoding, Mamba and *DeciMamba* have identical forms (no pooling).
+
+**Complexity** In the parallel view of Mamba, the time complexity for processing a sequence of length  $L$ , is  $O(L \log L)$ . In *DeciMamba*, we first compute the delta-based importance score for each token, identify the top- $P$  elements, and then apply S6 to those  $P$  elements. This results in an overall complexity of  $O(L + P \log P)$ . We ignore the complexity of selecting the top- $P$  elements (which is  $O(L \log P)$ ) since this computation does not depend on the state size  $N$  or the number of channels  $H$ , making it negligible compared to the other operations in both Mamba and *DeciMamba*.
+
+#### --- Algorithm 1 Decimated SSM ---
+
+**Require:**  $x : (B - \text{Batch size}, L - \text{Tokens}, D - \text{Channels})$
+
+- 1:  $A : (D, N) \leftarrow \text{Parameter}$
+- 2:  $B : (B, L, N) \leftarrow S_B(x)$
+- 3:  $C : (B, L, N) \leftarrow S_C(x)$
+- 4:  $\Delta : (B, L, D) \leftarrow \tau \Delta(\text{Parameter} + S_\Delta(x))$
+- 5:  $\Delta_P \leftarrow \text{Top-P}(|\Delta|).\text{indices}$
+- 6:  $\Delta, A, B, C, x \leftarrow \Delta[\Delta_P], A[\Delta_P], B[\Delta_P], C[\Delta_P], x[\Delta_P]$
+- 7:  $A, B : (B, L, D, N) \leftarrow \text{discretize}(\Delta, A, B)$
+- 8: return  $y : (B, L, D) \leftarrow \text{SSM}(A, B, C)(x)$
+
+---
+
+## 5 EXPERIMENTS
+
+We evaluate *DeciMamba* as a context-extension approach across multiple tasks. First, we demonstrate the long-range understanding and retrieval capabilities of our method in the NLP domain. Next, we assess the retrieval capabilities of our method using the Passkey-Retrieval task and examine its language modeling capabilities over PG-19. Finally, we analyze and measure *DeciMamba*’s inference efficiency and provide ablation studies to support our claims.
+
+**LongBench** This benchmark contains a variety of zero-shot long context tasks, such as: Single/Multi Document QA, Summarization, Coding, etc. We evaluate an instruction-tuned Mamba-2.8b (model: ‘xiuyul/mamba-2.8b-zephyr’ from huggingface) with and without *DeciMamba* (Zero-Shot) and report the results in Table 1. 0-4k, 4-8k, 8k+ are the scores for each context length group in LongBench-E, LB is the LongBench score, and ‘N/A’ means that the task does not exist in LongBench-E. In almost all tasks, *DeciMamba* improves the performance of the model for all context lengths. Most noticeable are the improvements at 4-8k, where Mamba starts suffering from ERFs, while *DeciMamba* extends its performance significantly. E.g. in TriviaQA we improve the LB result from 3.93 to 12.61, a performance gain of 220%, and improve each context length group by 24% (0-4k), 150% (4-8k), and 152% (8k+) respectively. Despite the improvement, when *DeciMamba* is applied to zero-shot scenarios it does not completely prevent degradation when the context length increases, motivating future research of this behavior. See Sec. A.3 for more details.
+
+**Document Retrieval** In this task the model receives a query and  $N_{\text{docs}}$  randomly assorted documents, and its objective is to return the id of the matching document. Our data is sampled from SQuAD v2 (Rajpurkar et al., 2018). We train both Mamba-130m and *DeciMamba*-130m to retrieve out of  $N_{\text{docs}} = 11$  documents (about 2k tokens), and evaluate their performance with
+
+{7}------------------------------------------------
+
+Table 1: **LongBench**. The results are for an instruction-tuned Mamba-2.8b model with and without DeciMamba (Zero-Shot). Avg Len = Average Length in words.
+
+| Type (Metric) | Benchmark | Avg Len | Mamba |  |  |  | DeciMamba |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  |  |  | 0-4k | 4-8k | 8k+ | LB | 0-4k | 4-8k | 8k+ | LB |
+| MultiDoc-QA (F1) | 2wikimqa | 4887 | 7.04 | 1.58 | 0.6 | 3.92 | <b>11.54</b> | <b>6.2</b> | <b>3.08</b> | <b>9.06</b> |
+| MultiDoc-QA (F1) | Hotpotqa | 9151 | 4.7 | 1.18 | 0.18 | 1.45 | <b>8.29</b> | <b>3.75</b> | <b>3.19</b> | <b>4.46</b> |
+| MultiDoc-QA (F1) | Musique | 11214 | N/A | N/A | N/A | 0.85 | N/A | N/A | N/A | <b>1.73</b> |
+| SingleDoc-QA (F1) | Narrative QA | 18409 | N/A | N/A | N/A | 0.87 | N/A | N/A | N/A | <b>1.74</b> |
+| SingleDoc-QA (F1) | Qasper | 3619 | 6.91 | 4.4 | 1.36 | 5.97 | <b>8.75</b> | <b>9.2</b> | <b>2.41</b> | <b>8.91</b> |
+| SingleDoc-QA (F1) | Multifield QA | 4559 | 18.26 | 5.71 | 2.45 | 11.16 | <b>26.05</b> | <b>13.67</b> | <b>4.63</b> | <b>18.58</b> |
+| Summarizing (Rouge-L) | GovReport | 8734 | 24.76 | 10.9 | 5.2 | 9.84 | <b>27.4</b> | <b>19.38</b> | <b>7.81</b> | <b>14.86</b> |
+| Summarizing (Rouge-L) | QMSum | 10614 | N/A | N/A | N/A | <b>8.18</b> | N/A | N/A | N/A | <b>7.08</b> |
+| Summarizing (Rouge-L) | MultiNews | 2113 | 24.58 | 9.79 | <b>5.34</b> | 23.15 | <b>25.45</b> | <b>17.2</b> | <b>4.43</b> | <b>24.58</b> |
+| Few-Shot (F1) | TriviaQA | 8209 | 10.38 | 5.59 | 4.11 | 3.93 | <b>12.9</b> | <b>14.02</b> | <b>10.36</b> | <b>12.61</b> |
+| Few-Shot (Rouge-L) | SAMSum | 6258 | <b>9.58</b> | <b>7.07</b> | <b>7.76</b> | <b>8.56</b> | 9.17 | 6.76 | 6.88 | 7.34 |
+| Few-Shot (Accuracy) | TREC | 5177 | 0.0 | 0.0 | 0.0 | 0.5 | <b>1.0</b> | 0.0 | 0.0 | 0.5 |
+| Code (Edit Sim) | LCC | 1235 | 8.12 | 5.61 | 4.17 | 8.13 | <b>9.4</b> | <b>14.25</b> | <b>7.63</b> | <b>8.67</b> |
+| Code (Edit Sim) | RepoBench-p | 4206 | 7.52 | 5.74 | 4.63 | 7.15 | <b>10.08</b> | <b>10.49</b> | <b>6.86</b> | <b>10.96</b> |
+| Synthetic (Accuracy) | Passage Count | 11141 | 2.0 | 0.0 | 0.0 | 0.0 | <b>3.0</b> | 0.0 | 0.0 | <b>0.5</b> |
+| Synthetic (Accuracy) | Passage Ret. en | 9289 | 0.0 | 0.0 | 0.0 | 0.0 | <b>9.0</b> | <b>1.0</b> | 0.0 | <b>1.5</b> |
+
+$N_{docs} \in [11, 160]$  (2k to 32k tokens). The results are presented in Table 2 (Retrieval). While the performance of Mamba and *DeciMamba* is similar when evaluated on sequence lengths close to those used during training, *DeciMamba* gains a clear advantage as the number of documents exceeds this length, achieving improved length generalization. See Appendix A.2 for more details.
+
+**Multi-Document QA.** Next, we stay in a setting similar to Sec. 5 (Document Retrieval), yet increase the level of difficulty by asking the model to answer the query in free text (instead of retrieving the id of the most relevant document). We train Mamba-130m and *DeciMamba*-130m on the same dataset and present the F1 score between the generated response and the ground truth answers in Tab. 2. As in the previous task, when the amount of documents is close to the amount trained on, the models perform quite similarly. When the document amount increases we can see that *DeciMamba* develops a clear advantage. Note that the performance of both Mamba and *DeciMamba* is relatively modest compared to prior work, due to the use of smaller models.
+
+Table 2: **Multi-Document Retrieval and QA**. The table shows the score of Mamba and DeciMamba (+*Deci*) 130m models as we increase the amount of documents during evaluation. For retrieval we show the accuracy and for free-form QA we show the F1 score between the ground truth annotations and the predictions. Both models were trained using 11 documents.
+
+| # Docs: |  | 10 | 20 | 40 | 60 | 80 | 100 | 120 | 140 | 160 |
+|-|-|-|-|-|-|-|-|-|-|-|
+| Retrieval (Acc) | Mamba | <b>68.3</b> | 74.0 | 64.7 | 45.3 | 24.7 | 5.7 | 1.0 | 0.3 | 0.3 |
+|  | +Deci | 67.7 | <b>77.3</b> | <b>68.7</b> | <b>65.3</b> | <b>49.7</b> | <b>37.0</b> | <b>26.3</b> | <b>16.7</b> | <b>5.3</b> |
+| QA (F1) | Mamba | 25.3 | 22.8 | 23.6 | <b>25.8</b> | <b>19.3</b> | 7.5 | 4.1 | 1.1 | 0.6 |
+|  | +Deci | <b>26.2</b> | <b>24.4</b> | <b>25.3</b> | 22.74 | 19.1 | <b>18.1</b> | <b>12.9</b> | <b>10.0</b> | <b>5.0</b> |
+
+**Passkey Retrieval.** We fine-tune Mamba-130M and *DeciMamba*-130M to retrieve a random 5-digit code hidden in a random location within a contiguous 2K token sample from Wiki-Text (Merity et al., 2016). To test the models’ extrapolation abilities, during inference we increase the sequence lengths exponentially from 1K to 128K and record their performance for a variety of passkey locations within the context. Full implementation details are in Appendix A.1. As can be seen in Fig. 1 (right), *DeciMamba*-130m significantly increases the extrapolation abilities of Mamba-130m from 16K to 128K, when trained on sequence lengths of 2k tokens only. Interestingly, we identify that the  $\Delta_t$  values in Layer 16 of Mamba-130m capture the exact location of the passkey, as can be seen in Fig. 10. Using this finding, we display the distortion caused to the embedded sequence due to the ERF in Fig. 11. Tokens at locations  $< 10k$  have meaningful  $\Delta_t$  values, yet tokens at locations  $> 10k$  have noisy  $\Delta_t$ ’s, possibly due to the poor information flow caused by the limited ERF.
+
+{8}------------------------------------------------
+
+**Language Modeling** Following Chen et al. (2023b); Mehta et al. (2022), we evaluate our method on long-range language modeling using the PG-19 dataset in both zero-shot and fine-tuned regimes.
+
+**Zero-Shot.** We test our method on the test set of PG-19 using the larger Mamba models (1.4b, 2.8b) in Fig. 6 (right). We observe that the selectivity scores learned during pre-training are quite effective and extend the context naturally without any training for both models. Furthermore, our method can maintain the low perplexity achieved in the short-context region. In the ablations section we further discuss our proposed decimation mechanism and show its benefit w.r.t other alternatives.
+
+**Fine-Tuning.** We display *DeciMamba*’s performance on PG-19 perplexity in Fig. 6 (left). We train both Mamba-130M and *DeciMamba*-130M with a sequence length of 2K and test their extrapolation abilities. The full training details can be found in Sec. A.4 in the appendix. While Mamba can extrapolate to context lengths that are at most  $\times 5$  times longer than the training sequences, *DeciMamba* can extrapolate to sequences that are about  $\times 20$  times longer, without any additional computational resources. Furthermore, we plot a lower bound by calculating the perplexity of a Mamba-130M model that was trained on the same context length it evaluates on (each point on the green curve is a different model). We observe that *DeciMamba* is close to the lower bound and diverges from it quite slowly, while utilizing significantly less computational resources. Nevertheless, for train sequences longer than 30K the ‘lower bound’ models reach an Out Of Memory (OOM) error (Nvidia RTX-A6000, 48GB of RAM), which is caused by Mamba’s O(L) training complexity. This further emphasizes the importance of good extrapolation abilities when scaling to longer sequences.
+
+![Figure 6: Perplexity Over PG-19 Test Set. (Left) Plot of Perplexity vs Context Length [Tokens] for Mamba-130M and DeciMamba-130M. The x-axis ranges from 0 to 80K tokens, and the y-axis ranges from 0 to 60 perplexity. A dashed purple line at 2K tokens indicates the training length. A green curve represents the 'Mamba Full Length Training' lower bound, which stays flat until 30K tokens, where an 'OOM' (Out Of Memory) error occurs. A blue curve for Mamba-130M rises sharply after 2K tokens. An orange curve for DeciMamba-130M rises much more gradually. (Right) Zero-Shot perplexity comparison for Mamba-2.8B, DeciMamba-2.8B, Mamba-1.4B, and DeciMamba-1.4B. The x-axis ranges from 0 to 80K tokens, and the y-axis ranges from 0 to 80 perplexity. All four models show low perplexity (around 15-20) up to 30K tokens, after which the Mamba models (dashed lines) show a sharp increase in perplexity, while the DeciMamba models (solid lines) remain relatively flat.](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 6: Perplexity Over PG-19 Test Set. (Left) Plot of Perplexity vs Context Length [Tokens] for Mamba-130M and DeciMamba-130M. The x-axis ranges from 0 to 80K tokens, and the y-axis ranges from 0 to 60 perplexity. A dashed purple line at 2K tokens indicates the training length. A green curve represents the 'Mamba Full Length Training' lower bound, which stays flat until 30K tokens, where an 'OOM' (Out Of Memory) error occurs. A blue curve for Mamba-130M rises sharply after 2K tokens. An orange curve for DeciMamba-130M rises much more gradually. (Right) Zero-Shot perplexity comparison for Mamba-2.8B, DeciMamba-2.8B, Mamba-1.4B, and DeciMamba-1.4B. The x-axis ranges from 0 to 80K tokens, and the y-axis ranges from 0 to 80 perplexity. All four models show low perplexity (around 15-20) up to 30K tokens, after which the Mamba models (dashed lines) show a sharp increase in perplexity, while the DeciMamba models (solid lines) remain relatively flat.
+
+Figure 6: **Perplexity Over PG-19 Test Set.** (Left) The dashed purple line shows the train sequence length for Mamba-130m and *DeciMamba*-130m. Each point on the green curve shows a different Mamba-130m model trained on the respective context length ( $L_{train} = L_{eval}$ ); for  $L_{train} > 30K$  an Out Of Memory (OOM) error occurs. (Right) Zero-Shot perplexity comparison.
+
+**Comparison With Transformers.** We evaluate equivalent Transformer models from the Pythia suite (Biderman et al., 2023) on the experiments described above. We find that vanilla Transformers have inferior length generalization abilities compared to Mamba. Full results are in Appendix B.1.
+
+**Inference Efficiency.** We benchmark both *DeciMamba* and Mamba with a Nvidia RTX A6000 GPU and compare their inference speeds for the Passkey Retrieval task. From Table 3 it is evident that *DeciMamba* is twice faster than the baseline Mamba model, which is expected. This is because the decimation is performed at layer 12 (out of 24 layers in total), hence only half of the blocks process the whole context length  $L$ . The other half processes the decimated sequence (of length  $P \ll L$ ), resulting in a negligible computation time. Table 9 (Appendix) shows that per block, *DeciMamba* does not induce an additional computational overhead when compared to Mamba (first two rows). In addition, we can see that the computation time becomes negligible for blocks that are placed after the first *DeciMamba* block (rows three and four), no matter the input context length.
+
+**Ablation study** The ablation studies can be found in Appendix E. Briefly, these studies examine three key aspects: layer selection, pooling strategy, and decimation mechanism. For layer selection, it seems that the choice of the first decimating layer significantly affects performance, with layer 12
+
+{9}------------------------------------------------
+
+![Figure 7: Ablation Studies. (Left) Model sensitivity to decimation layer selection. (Right) Zero-Shot perplexity measurement comparing different pooling mechanisms.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 7 consists of two line graphs. The left graph shows 'Passkey Retrieval Success Rate' on the y-axis (0.0 to 1.0) against 'Min Decimating Layer' on the x-axis (6 to 20). It compares 'DeciMamba' (solid blue line) and 'Mamba' (dashed orange line). DeciMamba starts at 0.0 at layer 6, peaks at 1.0 at layer 12, and then declines to about 0.55 at layer 20. Mamba remains constant at approximately 0.58. The right graph shows 'Perplexity' on the y-axis (0 to 80) against 'Context Length (Tokens)' on the x-axis (0 to 60K). It compares 'Mamba-1.4B' (solid blue line) with three variants: '+ Max Norm Pool' (dashed red line), '+ Random Pool' (dashed orange line), and '+  $\Delta_t$  Pool (Ours)' (solid green line). Mamba-1.4B's perplexity increases sharply after 10K tokens, reaching over 80. The other three variants show much lower perplexity, increasing more gradually to between 30 and 50 at 60K tokens.
+
+Figure 7: Ablation Studies. (Left) Model sensitivity to decimation layer selection. (Right) Zero-Shot perplexity measurement comparing different pooling mechanisms.
+
+Figure 7: **Ablation Studies.** (Left) Model sensitivity to decimation layer selection. We show the score achieved by *DeciMamba*-130M in the Passkey Retrieval task when trained on sequences of length 2K. Each point on the graph is a model’s score, while decimating from layer ‘Min Decimating Layer’ to layer 20. (Right) A Zero-Shot perplexity measurement comparing between different pooling mechanisms: ours (based on  $\Delta_t$ ), random and max-norm pooling.
+
+Table 3: **Inference Efficiency.** Inference time (seconds) of the entire model, benchmarked on Nvidia RTX A6000 GPU. *DeciMamba* is about twice as fast when compared to Mamba.
+
+| Model | Context Length |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|
+|  | 8K | 16K | 32K | 64K | 128K | 256K | 512K |
+| Mamba-130m | 0.17 | 0.3 | 0.69 | 1.27 | 2.12 | 4.03 | 8.17 |
+| DeciMamba-130m | <b>0.14</b> | <b>0.19</b> | <b>0.31</b> | <b>0.59</b> | <b>1.08</b> | <b>2.01</b> | <b>4.22</b> |
+
+yielding the best results in a Passkey Retrieval task. The pooling strategy study compares a Top-Ps approach with a Top-K% approach, demonstrating that the former is more effective in extending the model’s extrapolation abilities. The decimation mechanism study compares various pooling methods, where  $\Delta_t$ -based pooling performs best, though max-norm pooling also shows promise. In Appendix E.4 we justify our design choice of pooling only during the pre-fill phase of inference. We demonstrate this by ablating an additional pooling mechanism during the decoding phase.
+
+## 6 CONCLUSIONS
+
+In this paper, we explore the length-extrapolation abilities of S6 layers. Our first contribution is the characterization of the ERF of S6. This characterization reveals that the ERF of Mamba is significantly constrained by the context length during training, which is counterintuitive given that Mamba theoretically has an unbounded receptive field due to its recurrent selective memory. Based on these insights, we develop *DeciMamba*, a unique data-dependent compression operator that is built on two key insights: (i) There exists a hidden filtering mechanism within the Mamba layer, manifested by the selective time-steps  $\Delta_t$ , which can be interpreted as the controller of the recurrent gate. (ii) Long-range and short-range interactions between tokens are captured by different layers in the model, which can be identified using our Mamba Mean Distance metric.
+
+Looking ahead, we plan to explore different transformer context-extension methods, including length-extrapolation PE (Press et al., 2024), hierarchical models, and architectural improvements (Sun et al., 2022). Furthermore, while the techniques described in this paper are designed for Mamba models, a detailed discussion on extending our proposed methods to other models such as Griffin can be found in Appendix F. Finally, we will further use our Mamba Mean Distance Metric to investigate the mechanism which leads to limited ERFs in Mamba.
+
+## 7 LIMITATIONS
+
+Similar to other context-extension methods, our model modifies a pretrained Mamba model but does not propose an improved Mamba architecture to address the underlying issue. Despite empirical evidence demonstrating the effectiveness of our decimation-based method in capturing long-range interactions and its efficiency, the approach can be suboptimal. For example, pooling and compression methods may miss critical information in challenging scenarios. Therefore, designing an improved Mamba variant with enhanced length-generalization abilities that can effectively capture global interactions within a single layer (without pooling the sequence) is an important next step.
+
+ Rest of paper (reference and Appendix) is removed.

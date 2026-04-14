@@ -1,0 +1,293 @@
+
+
+{0}------------------------------------------------
+
+# ACCELERATING NEURAL ODES: A VARIATIONAL FORMULATION-BASED APPROACH
+
+Hongjue Zhao<sup>1</sup>, Yuchen Wang<sup>2</sup>, Hairong Qi<sup>3</sup>, Zijie Huang<sup>4</sup>, Han Zhao<sup>1</sup>, Lui Sha<sup>1</sup>, Huajie Shao<sup>2</sup>
+
+<sup>1</sup>University of Illinois Urbana-Champaign, <sup>2</sup>William & Mary, <sup>3</sup>University of Tennessee, Knoxville,
+
+<sup>4</sup>University of California Los Angeles
+
+{hongjue2, hanzhao, lrs}@illinois.edu, {ywang142, hshao}@wm.edu
+
+hqi@utk.edu, zijiehuang@cs.ucla.edu
+
+## ABSTRACT
+
+Neural Ordinary Differential Equations (Neural ODEs or NODEs) excel at modeling continuous dynamical systems from observational data, especially when the data is irregularly sampled. However, existing training methods predominantly rely on numerical ODE solvers, which are time-consuming and prone to accumulating numerical errors over time due to autoregression. In this work, we propose VF-NODE, a novel approach based on the variational formulation (VF) to accelerate the training of NODEs. Unlike existing training methods, the proposed VF-NODEs implement a series of global integrals, thus evaluating Deep Neural Network (DNN)-based vector fields only at specific observed data points. This strategy drastically reduces the number of function evaluations (NFEs). Moreover, our method eliminates the use of autoregression, thereby reducing error accumulations for modeling dynamical systems. Nevertheless, the VF loss introduces oscillatory terms into the integrals when using the Fourier basis. We incorporate Filon’s method to address this issue. To further enhance the performance for noisy and incomplete data, we employ the natural cubic spline regression to estimate a closed-form approximation. We provide a fundamental analysis of how our approach minimizes computational costs. Extensive experiments demonstrate that our approach accelerates NODE training by 10 to 1000 times compared to existing NODE-based methods, while achieving higher or comparable accuracy in dynamical systems. The code is available at <https://github.com/ZhaoHongjue/VF-NODE-ICLR2025>.
+
+## 1 INTRODUCTION
+
+Neural ordinary differential equations (NODEs) (Chen et al., 2018) represent a family of continuous-depth machine learning models. Drawing inspiration from ResNets (He et al., 2016), NODEs aim to parameterize vector fields of ODEs using deep neural networks (DNNs),
+
+$$\dot{x} = f_{\theta}(t, x), \quad (1)$$
+
+where  $f_{\theta} : [0, T] \times \mathbb{R}^d \rightarrow \mathbb{R}^d$  is a DNN and  $\theta$  denotes the model parameters. The continuous nature and specific inductive bias of NODEs render them particularly well-suited for modeling dynamical systems from *irregularly sampled time series* data (Rubanova et al., 2019; Kidger et al., 2020). Thus, NODEs have been widely applied to various dynamical system applications, such as multi-agent trajectory forecasting (Wen et al., 2022), model-based reinforcement learning (Alvarez et al., 2020), optimal control (Chi, 2024) and chemical reaction process modeling (Yin et al., 2023).
+
+In existing training frameworks of NODEs, numerical ODE solvers play a crucial role. The forward pass outcomes are directly calculated using numerical ODE solvers. For the backward pass, there are two methods commonly employed to backpropagate through ODE solvers (Kidger, 2022; Onken & Ruthotto, 2020): (1) *discretize-then-optimize*, which involves directly backpropagating through operations of ODE solvers, and (2) *optimize-then-discretize*, also known as the *adjoint sensitivity method*, as utilized in (Chen et al., 2018), which introduces additional adjoint ODEs. In this method, gradients of the scalar loss function with respect to parameters of NODEs are computed by solving these adjoint ODEs. More details can be found in Appendix B.1.
+
+{1}------------------------------------------------
+
+![Figure 1: Comparison of VF-NODEs and ODE-solver-based methods. (a) ODE-solver-based training methods: Input (Sampled Trajectory x) is processed by a Numerical ODE Solver to produce a Solution of NODE x-tilde. The MSE Loss is calculated as 1/(K-1) * sum_{k=0}^K (x(t_k) - x-tilde(t_k))^2. (b) VF-NODE: Input (Sampled Trajectory x) is processed by Spline Regression to produce an Estimated Trajectory x-tilde. This is then processed by a DNN f_theta to produce a DNN-based Vector Field f_theta(t, x-tilde). The VF Loss is calculated as the sum of two integrals: ||int_0^T x-tilde-dot(t) phi(t) dt||^2 + ||int_0^T f_theta(t, x-tilde(t)) phi(t) dt||^2. Both integrals are approximated using Filon's Method and Closed-form Approximation of Estimated Trajectory/Vector Fields. The legend indicates that red dots are extra time points required by the ODE solver and black dots are sampled time points.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Comparison of VF-NODEs and ODE-solver-based methods. (a) ODE-solver-based training methods: Input (Sampled Trajectory x) is processed by a Numerical ODE Solver to produce a Solution of NODE x-tilde. The MSE Loss is calculated as 1/(K-1) \* sum\_{k=0}^K (x(t\_k) - x-tilde(t\_k))^2. (b) VF-NODE: Input (Sampled Trajectory x) is processed by Spline Regression to produce an Estimated Trajectory x-tilde. This is then processed by a DNN f\_theta to produce a DNN-based Vector Field f\_theta(t, x-tilde). The VF Loss is calculated as the sum of two integrals: ||int\_0^T x-tilde-dot(t) phi(t) dt||^2 + ||int\_0^T f\_theta(t, x-tilde(t)) phi(t) dt||^2. Both integrals are approximated using Filon's Method and Closed-form Approximation of Estimated Trajectory/Vector Fields. The legend indicates that red dots are extra time points required by the ODE solver and black dots are sampled time points.
+
+Figure 1: Comparison of VF-NODEs and ODE-solver-based methods. (a) ODE-solver-based training methods: ODE solvers compute solutions of the NODEs, necessitating evaluations of the DNN-based vector fields at *additional* data points. (b) VF-NODEs: implement global integrals numerically using Filon’s method and spline regression in the VF loss, evaluating the DNN-based vector fields only at specific data points.
+
+Nonetheless, these ODE-solver-based training methods face two significant limitations. First, they are inherently *time-consuming*. The internal mechanisms within numerical ODE solvers can incur significant computational costs in solving NODEs (Lipman et al., 2022). This is attributed to the numerous evaluations of DNN-based vector fields beyond given sampled data points, as shown in Fig. 1. For the optimize-then-discretize approach, this issue may be exacerbated by the introduction of additional adjoint ODEs. Second, existing approaches may suffer from low accuracy. On the one hand, the autoregressive nature of most numerical ODE solvers can lead to error accumulation, as discussed in Appendix B.2. On the other hand, the optimize-then-discretize approach *incurs additional numerical discretization error*, resulting in inaccurate gradients, and potentially causing the training process to fail entirely (Gholami et al., 2019). In short, these limitations stem from the use of *numerical ODE solvers*.
+
+To date, various approaches have been proposed to address the aforementioned limitations of NODEs. For example, to alleviate the computational bottleneck of NODEs, some works attempt to constrain the complexity of learned dynamics (Finlay et al., 2020; Kelly et al., 2020; Pal et al., 2021), while others seek to directly modify the ODE-solver-based training process (Kidger et al., 2021; Djeumou et al., 2022; Norcliffe & Deisenroth, 2023; Matei et al., 2023). In the domain of irregularly sampled time series tasks, several models built upon neural differential equations have been proposed (Rubanova et al., 2019; Kidger et al., 2020). Nevertheless, these approaches remain heavily reliant on ODE solvers, preventing them from effectively addressing the computational bottleneck.
+
+To address the challenges associated with the reliance on numerical ODE solvers during the training of NODEs, we propose the VF-NODE, a novel approach that employs the variational formulation (VF) (Brunel et al., 2014; Hackbusch, 2017) to accelerate training. The proposed approach integrates a VF-based loss function within the standard NODE architecture. Our *motivation* is that the VF loss can implement a series of *global integrals*, thus evaluating the DNN-based vector field only at specific data points in the observations. In contrast, existing ODE-solver-based training methods have to evaluate the DNN-based vector fields at extra data points due to step size settings. Consequently, our method significantly reduces the number of function evaluations (NFEs). On the other hand, these global integrals mitigate autoregression compared with ODE-solver-based training methods, eliminating error accumulation and improving prediction accuracy. However, the utilization of the VF loss poses two challenges for NODEs. (i) It could result in additional oscillatory integrals due to the introduction of Fourier basis functions like sine and cosine. (ii) It does not perform well when data is missing and noisy. To address the first challenge, we incorporate Filon’s method (Deaño
+
+{2}------------------------------------------------
+
+et al., 2017) for oscillatory integrals. For the second challenge, we adopt the natural cubic spline regression (De Boor, 1978) to obtain a closed-form approximation for Filon’s method. We also provide a fundamental analysis of the acceleration benefits of our approach in Section 4.3. Extensive experiments demonstrate that the VF-NODE achieves a 10 to 1000 times speed increase over existing baselines while maintaining higher or comparable accuracy.
+
+**Our contributions are three-fold:** (1) We introduce a novel approach that employs the variational formulation (VF) to significantly accelerate the training of NODEs. This method significantly reduces the number of function evaluations (NFEs) and improves the prediction accuracy. (2) We integrate Filon’s method with natural cubic spline regression to effectively compute oscillatory integrals from noisy and partially observed data within the VF loss. (3) Evaluation results on multiple dynamical systems including one real-world application demonstrate that our approach achieves 10 to 1000 times acceleration in training speed compared to the baselines while achieving higher or competitive accuracy.
+
+## 2 RELATED WORK
+
+**NODEs for Dynamical Systems.** NODEs have been introduced to model continuous dynamical systems. Latent ODEs based on VAEs were first proposed in (Chen et al., 2018), with RNNs as encoders and NODEs as decoders. Rubanova et al. (2019) proposed ODE-RNNs, which use NODEs to simulate continuous dynamics of hidden states in RNNs, and incorporated them into Latent ODEs as encoders. Kidger et al. (2020) introduced Neural Controlled Differential Equations (NCDEs), which can be viewed as the deep limit of RNNs. However, complex mechanisms involved in these methods exacerbate the computational burden during training. In contrast, our approach is built on common NODEs, requiring only simple multi-layer perceptrons (MLPs) and the VF loss. It can significantly speed up NODE training and improve the robustness against noisy data. Biloš et al. (2021) introduced Neural Flows as an alternative to NODEs, which directly use DNNs to model the solution of ODEs. However, they have difficulty modeling autonomous systems.
+
+**Acceleration Techniques of NODEs.** Existing works on accelerating the NODEs training can be divided into three categories. (i) *Regularization-based methods*. Some approaches try to constrain the complexity of learned dynamics using regularization techniques, including high-order derivatives regularization (Kelly et al., 2020), kinetic regularization (Finlay et al., 2020), temporal regularization (Ghosh et al., 2020) and others. Unfortunately, these methods may only accelerate inference, and the training time may not be reduced. (ii) *Design new architectures*. Some works directly restrict the dynamics by designing special architectures of NODEs, for example, Heavy Ball NODEs (Xia et al., 2021) and Nesterov NODEs (Nguyen et al., 2022). In addition, model order reduction techniques have been utilized to directly compress DNNs in NODEs (Lehtimäki et al., 2022). However, these methods limit the expressivity of learned dynamics, making them unsuitable for dynamical systems. (iii) *Modify training process*. Other approaches try to modify the training process of NODEs to implement acceleration, such as the IRDM (Daulbaev et al., 2020), seminorm approach (Kidger et al., 2021), the Taylor theorem (Djeumou et al., 2022), the Gauß-Legendre quadrature (Norecliff & Deisenroth, 2023), and the sensitivity-free gradient descent (Matei et al., 2023). Nevertheless, all existing modifications still rely on ODE solvers. Thus, the existing computational bottleneck is not tackled effectively, leading to poor acceleration performance. In contrast, our method only performs global numerical integrals, which is much more efficient than existing approaches.
+
+**Variation Formulation of ODEs.** The VF method, as employed in our work, was initially introduced for parameter estimation of *known* ODEs (Brunel et al., 2014). Subsequent research, such as D-CODE (Qian et al., 2022), extended the use of VF for *symbolic regression* to facilitate the discovery of equations. This approach was primarily adopted to circumvent the need for numerically estimating derivatives from noisy data. However, it was not utilized to expedite the training of models, unlike in our work. Furthermore, the evaluation of D-CODE was limited to dynamical systems sampled at regular intervals, employing the basic compound trapezoidal rule (Press, 2007) for computing numerical integrals in the loss function. Notably, D-CODE did not address the challenges posed by oscillatory integrals, which arise with the Fourier basis function (Deaño et al., 2017). *In contrast, our application of VF to NODEs serves distinct purposes.* Firstly, we leverage VF to accelerate NODEs training. Secondly, we utilize it to avoid autoregression, thereby enhancing prediction accuracy. From an application perspective, our focus is on modeling dynamical systems based on
+
+{3}------------------------------------------------
+
+irregularly sampled data. On the technical front, we integrate Filon’s method to effectively handle oscillatory integrals, a significant advancement over the D-CODE approach.
+
+## 3 PRELIMINARIES
+
+**Problem Setup.** Consider a time-series dataset in which each trajectory is represented as  $\{(t_0, \mathbf{x}(t_0)), (t_1, \mathbf{x}(t_1)), \dots, (t_K, \mathbf{x}(t_K))\}$ , where  $0 = t_0 < t_1 < \dots < t_K = T$ , and  $\mathbf{x}(t_k) = [x_1(t_k), x_2(t_k), \dots, x_d(t_k)]^\top \in (\mathbb{R} \cup \{*\})^d$  are noisy observations, with  $*$  denoting possible missing values. Our goal is to speed up the training of NODEs for dynamical systems.
+
+### 3.1 VARIATIONAL FORMULATION OF ODES
+
+In this subsection, we formally introduce the variational formulation (VF) of ODEs we utilized in Theorem 1. Through this formulation, we can establish a direct connection between the trajectory  $\mathbf{x}$  and the vector field  $\mathbf{f}$  through a numerical integral.
+
+**Theorem 1** (Variational Formulation of ODEs (Brunel et al., 2014; Hackbusch, 2017)). Consider  $d \in \mathbb{N}^+$ ,  $T \in \mathbb{R}^+$ , continuous functions  $\mathbf{x} : [0, T] \rightarrow \mathbb{R}^d$ ,  $\mathbf{f} : [0, T] \times \mathbb{R}^d \rightarrow \mathbb{R}^d$ , and  $\phi \in \mathcal{C}^1[0, T]$ , where  $\mathcal{C}^1$  is the set of continuously differentiable functions. Here we define the functionals
+
+$$c(\mathbf{x}, \mathbf{f}, \phi) := \int_0^T \mathbf{x}(t) \dot{\phi}(t) dt + \int_0^T \mathbf{f}(t, \mathbf{x}(t)) \phi(t) dt. \quad (2)$$
+
+Then  $\mathbf{x}$  is the solution to the ODEs  $\dot{\mathbf{x}} = \mathbf{f}(t, \mathbf{x})$  if and only if
+
+$$c(\mathbf{x}, \mathbf{f}, \phi) = \mathbf{0}, \quad \forall \phi \in \mathcal{C}^1[0, T] \quad \text{s.t. } \phi(0) = \phi(T) = 0. \quad (3)$$
+
+The proof of Theorem 1 can be found in (Qian et al., 2022). This theorem establishes the necessary and sufficient conditions under which  $\mathbf{x}$  is the solution of the ODEs  $\dot{\mathbf{x}} = \mathbf{f}(t, \mathbf{x})$ . Moreover, in contrast to existing training frameworks for NODEs, this connection does not rely on solving the ODE numerically.
+
+Intuitively, for a NODE expressed as Eq. (1), we can attempt to find the optimal parameters  $\boldsymbol{\theta}$  by minimizing  $\|c(\mathbf{x}, \mathbf{f}, \phi)\|_2^2 = \sum_{j=1}^d c_j^2(\mathbf{x}, \mathbf{f}, \phi)$  to zero to satisfy Eq. (3). To operationalize this concept in NODE training, we introduce Theorem 2 (Qian et al., 2022), which is outlined below.
+
+**Theorem 2.** Let  $\mathbf{x} : [0, T] \rightarrow \mathbb{R}^d$  be a continuously differentiable function which satisfies  $\dot{\mathbf{x}} = \mathbf{f}(t, \mathbf{x})$ . Then for the Lipschitz continuous neural network  $\mathbf{f}_\boldsymbol{\theta} : [0, T] \times \mathbb{R}^d \rightarrow \mathbb{R}^d$ , where  $\boldsymbol{\theta}$  are parameters, the following limit holds.
+
+$$\lim_{L \rightarrow \infty} \sum_{\ell=1}^L c_j^2(\mathbf{x}, \mathbf{f}_\boldsymbol{\theta}, \phi_\ell) = \|(f_{\boldsymbol{\theta}, j} - f_j) \circ (t, \mathbf{x})\|_2^2, \quad (4)$$
+
+where  $\{\phi_1, \phi_2, \dots, \phi_L\}$  are a series of Hilbert orthonormal basis for  $L^2[0, T]$  such that  $\phi_\ell(0) = \phi_\ell(T) = 0$ ,  $\ell = 1, \dots, L$  and  $\|(f_{\boldsymbol{\theta}, j} - f_j) \circ (t, \mathbf{x})\|_2^2 = \int_0^T [f_{\boldsymbol{\theta}, j}(t, \mathbf{x}(t)) - f_j(t, \mathbf{x}(t))]^2 dt$ .
+
+The proof of Theorem 2 can be found in Appendix C. In general, Theorem 2 enables the application of the VF to the training of NODEs. By leveraging this theorem, we convert an infinite number of constraints into a series of constraints using a set of orthogonal basis functions. Additionally, we establish a connection between the VF and distances between functions, implying that as  $\|c(\mathbf{x}, \mathbf{f}_\boldsymbol{\theta}, \phi)\|_2^2$  converges to zero, the parameters  $\boldsymbol{\theta}$  in NODEs also converge to their optimal values.
+
+### 3.2 FILON’S METHOD
+
+Filon’s method is designed for oscillatory integrals. Consider the integral  $\int_0^T h(t) \sin(\omega t) dt$ . We aim to compute this integral numerically using the available data points  $\{h(t_k)\}_{k=0}^K$  with  $0 = t_0 < t_1 < \dots < t_K = T$ .
+
+{4}------------------------------------------------
+
+For general numerical integration techniques, such as the Newton-Cotes formula (Press, 2007), they utilize polynomials  $p_k(t)$  to approximate the entire integrand  $h(t) \sin(\omega t)$  within each time interval  $[t_k, t_{k+1}]$ . Consequently, these methods struggle to handle high-frequency oscillations as  $\omega$  increases, because polynomials cannot effectively match the high-order derivatives of the integrand. Further analysis on this issue is provided in Appendix D. To address this limitation, we introduce Filon’s method (Deaño et al., 2017), which employs polynomials solely to approximate the non-oscillatory component  $h(t)$  in the original integrand. This approach enables the estimation of the original integral as follows:
+
+$$\int_0^T h(t) \sin(\omega t) dt = \sum_{k=0}^{K-1} \int_{t_k}^{t_{k+1}} h(t) \sin(\omega t) dt \approx \sum_{k=0}^{K-1} \int_{t_k}^{t_{k+1}} q_k(t) \sin(\omega t) dt, \quad (5)$$
+
+where  $q_k(t)$  is the approximate  $n$ -th-order polynomial of  $h(t)$  over the time interval  $[t_k, t_{k+1}]$ . It is important to note that the integral  $\int_{t_k}^{t_{k+1}} q_k(t) \sin(\omega t) dt$  can always be computed analytically. This approach ensures that the accuracy of numerical integrals is not affected by  $\omega$ , effectively addressing the challenge of oscillatory integrals.
+
+## 4 PROPOSED METHOD
+
+In this section, we begin by introducing the VF loss for NODEs based on Theorem 2 and addressing the computational challenges in the VF loss using Filon’s method and natural cubic spline regression. Then, we elaborate on the steps of VF-NODEs. Finally, we provide a fundamental analysis of the acceleration benefits of our approach.
+
+### 4.1 COMPUTING THE VF LOSS
+
+In Section 3.1, we systematically introduced the VF utilized in this work, and demonstrated the connection between this formulation and the distance between the vector field  $\mathbf{f}_\theta$  of the NODE and the ground truth vector field  $\mathbf{f}$ . Based on Theorem 1 and Theorem 2, the optimal parameters  $\theta$  of a NODE, as expressed in Eq. (1), can be obtained by solving the following optimization problem:
+
+$$\theta^* = \arg \min_{\theta} \sum_{i=1}^N \sum_{\ell=1}^L \left\| c(\mathbf{x}^{[i]}, \mathbf{f}_\theta, \phi_\ell) \right\|_2^2, \quad (6)$$
+
+$$c(\mathbf{x}^{[i]}, \mathbf{f}_\theta, \phi_\ell) = \int_0^T \mathbf{x}^{[i]}(t) \dot{\phi}_\ell(t) dt + \int_0^T \mathbf{f}_\theta(t, \mathbf{x}^{[i]}(t)) \phi_\ell(t) dt,$$
+
+where  $\{\mathbf{x}^{[i]}\}_{i=1}^N$  are trajectories in the dataset, and  $\phi_\ell(t) = \sqrt{2/T} \sin(\pi \ell t/T)$ , which can be considered as the sine Fourier basis. However, computing the VF loss poses two computational challenges. (i) The use of the sine Fourier basis introduces oscillatory terms into the integrals. (ii) It is challenging to compute integrals numerically from noisy and incomplete data.
+
+To address the first challenge, we introduce the Filon’s method, which is designed for oscillatory integrals. Integrals in Eq. (6) are one-dimensional oscillatory integrals, and these integrals can be concluded as  $\int_0^T h(t) \sin(\omega t) dt$ , without loss of generality. As discussed in Section 3.2, polynomials struggle to capture the nature of the oscillatory integrand  $h(t) \sin(\omega t)$  as  $\omega$  increases. To tackle this issue, we leverage Filon’s method, which uses polynomials to approximate the non-oscillatory part  $h(t)$  in each interval. By focusing on  $h(t)$  alone, we eliminate the influence of  $\omega$  on the precision of the closed-form approximation.
+
+To deal with the second challenge, we introduce the natural cubic spline regression (De Boor, 1978), which is used to build up a precise closed-form polynomial approximation for  $h(t)$  in Filon’s method from noisy data. For  $\{h(t_k)\}_{k=0}^K$  with  $0 = t_0 < t_1 < \dots < t_K = T$ , we aim to construct a cubic polynomial  $q_k(t)$  in each interval  $[t_k, t_{k+1}]$  in Eq. (5):
+
+$$q_k(t) = a_{k,0} + \sum_{m=1}^3 a_{k,m} (t - t_k)^m = a_{k,0} + a_{k,1} (t - t_k) + a_{k,2} (t - t_k)^2 + a_{k,3} (t - t_k)^3. \quad (7)$$
+
+By meeting the requirements for continuity, differentiability, natural boundary conditions, and smoothness, we can calculate the coefficients  $a_{k,m}$  ( $k = 0, \dots, K-1$ ,  $m = 0, 1, 2, 3$ ) in Eq. (7). In
+
+{5}------------------------------------------------
+
+general, spline regression allows us to create sufficiently precise *closed-form* approximations while maintaining smoothness. We provide a detailed process for this calculation in Appendix E.
+
+In summary, to compute the integral  $\int_0^T h(t) \sin(\omega t) dt$ , we first construct the natural cubic spline approximation of  $h(t)$ , denoted as  $q_k(t)$ , within each time interval using sampled data  $\{(t_k, h(t_k))\}_{k=0}^K$ . By substituting Eq. (7) into Eq. (5), we can estimate the integral accurately by computing  $\sum_{k=0}^{K-1} \int_{t_k}^{t_{k+1}} q_k(t) \sin(\omega t) dt$ .
+
+### 4.2 VF-NODES
+
+The proposed VF-NODE uses the same neural architecture as the vanilla NODE, but it is trained based on the VF loss. Given a trajectory  $\{(t_k, \mathbf{x}(t_k))\}_{k=0}^K$ , where  $0 = t_0 < t_1 < \dots < t_K = T$ , we present the detailed steps of our method.
+
+**Step 1:** Perform natural cubic spline *regression* on  $\mathbf{x}(t_k)$  to get the spline coefficients  $\mathbf{a}_{k,m}$ .
+
+**Step 2:** Estimate the trajectory based on the spline to remove noise:  $\hat{\mathbf{x}}(t_k) = \mathbf{a}_{k,0} + \sum_{m=1}^3 \mathbf{a}_{k,m} (t_k - t_k)^m = \mathbf{a}_{k,0}$  ( $k = 0, \dots, K-1$ ) and  $\hat{\mathbf{x}}(t_K) = \sum_{m=0}^3 \mathbf{a}_{K-1,m} (t_K - t_{K-1})^m$ .
+
+**Step 3:** Evaluate the vector fields  $\mathbf{f}_\theta(t_k, \hat{\mathbf{x}}(t_k))$ ,  $k = 0, \dots, K$ .
+
+**Step 4:** Perform natural cubic spline *interpolation* on  $\mathbf{f}_\theta(t_k, \hat{\mathbf{x}}(t_k))$  to get the spline coefficients  $\mathbf{b}_{k,m}$ .
+
+**Step 5:** Compute the VF loss  $\|\mathbf{c}(\hat{\mathbf{x}}, \mathbf{f}_\theta, \phi_\ell)\|_2^2$  based on  $\mathbf{a}_{k,m}$  and  $\mathbf{b}_{k,m}$ :
+
+$$\sum_{\ell=1}^L \|\mathbf{c}(\hat{\mathbf{x}}, \mathbf{f}_\theta, \phi_\ell)\|_2^2 = \sum_{\ell=1}^L \left\| \int_0^T \hat{\mathbf{x}}(t) \dot{\phi}_\ell(t) dt + \int_0^T \mathbf{f}_\theta(t, \hat{\mathbf{x}}(t)) \phi_\ell(t) dt \right\|_2^2 \quad (8)$$
+
+where
+
+$$\begin{aligned} \int_0^T \hat{\mathbf{x}}(t) \dot{\phi}_\ell(t) dt &= \sqrt{\frac{2}{T}} \frac{\pi \ell}{T} \sum_{k=0}^{K-1} \sum_{m=0}^3 \mathbf{a}_{k,m} \int_{t_k}^{t_{k+1}} (t - t_k)^m \cos \frac{\pi \ell t}{T} dt, \\ \int_0^T \mathbf{f}_\theta(t, \hat{\mathbf{x}}(t)) \phi_\ell(t) dt &\approx \sqrt{\frac{2}{T}} \sum_{k=0}^{K-1} \sum_{m=0}^3 \mathbf{b}_{k,m} \int_{t_k}^{t_{k+1}} (t - t_k)^m \sin \frac{\pi \ell t}{T} dt. \end{aligned} \quad (9)$$
+
+These steps are summarized as Algorithm 1 in Appendix F. In this process, the natural cubic spline serves two key roles in our method. (i) It builds up precise closed-form approximations of the trajectory  $\mathbf{x}(t)$ , denoted as  $\hat{\mathbf{x}}(t)$ , and vector fields  $\mathbf{f}_\theta(t, \hat{\mathbf{x}}(t))$  from noisy observations, which is essential for estimating the oscillatory integral accurately. (ii) It fills in missing values in the trajectory  $\mathbf{x}(t)$ , which is necessary for evaluating the vector fields  $\mathbf{f}_\theta(t, \hat{\mathbf{x}}(t))$ .
+
+*Remark 1.* It is important to emphasize that our primary use of natural cubic spline is for constructing the closed-form approximation, which is essential for computing numerical integrals, rather than for transforming the original irregularly sampled data into regularly spaced data. While we do utilize this technique to fill in missing values, it is a natural byproduct of constructing the closed-form approximation.
+
+*Remark 2.* Because we have removed noise in observations by performing spline *regression* on  $\mathbf{x}(t)$ , we only need to perform spline *interpolation* on  $\mathbf{f}_\theta(t, \hat{\mathbf{x}}(t))$  for obtaining a closed-form approximation.
+
+### 4.3 FUNDAMENTAL ANALYSIS FOR THE ACCELERATION OF VF-NODES
+
+Now we demonstrate how our method accelerates the training of NODEs in two ways: (1) reduce the number of function evaluations (NFEs) and (2) improve parallelizability. Consider a trajectory with  $M$  observed data points. As shown in Fig. 1 (a), ODE-solver-based training methods require evaluating vector fields  $\mathbf{f}_\theta$  many more than  $M$  times. For example, common adaptive-step-size explicit Runge-Kutta methods (Butcher, 2016) use an autoregressive formula  $\mathbf{x}_{n+1} = \mathbf{x}_n + h \sum_{j=1}^J z_j \mathbf{g}_j$  to estimate the solution of a NODE expressed as in Eq. (1). Here,  $h$  is the step size,  $J$  is the order
+
+{6}------------------------------------------------
+
+of the ODE solver,  $z_j$  are coefficients and  $g_j$  are evaluations of the DNN-based vector field  $f_\theta$ . In this case, to make one-step-forward prediction, the DNN-based vector field must be evaluated for  $J$  times. Moreover, to ensure accuracy, these ODE solvers often require evaluating the DNN-based vector field at additional data points beyond those provided in the observations. As a result, the vector field  $f_\theta$  will be evaluated  $\gg M \times J$  times using ODE-solver-based training methods. Additionally, due to the autoregressive nature of ODE solvers, these vector fields must be evaluated step by step.
+
+However, VF-NODEs only evaluate the DNN-based vector fields for exactly  $M$  times, as shown in Fig. 1 (b). As discussed in Section 4.2, to compute global integrals in the VF loss numerically, we evaluate the vector fields  $f_\theta$  only at the specific sampled data points in **Step 3**, in order to construct a closed-form spline approximation in **Step 4**. In addition, these vector fields can be evaluated simultaneously in **Step 3**. Although  $L$  integrals need to be computed in  $c(x, f_\theta, \phi_\ell)$  for  $\ell = 1, \dots, L$ , these integrals share the same vector fields, allowing for efficient computation.
+
+**Summary of the Proposed VF-NODEs.** Our method enables the learning of parameters in NODEs without relying on numerical ODE solvers. Regarding computational efficiency, our approach requires only a series of global integrals for each trajectory. In these numerical integrals, the vector fields of NODEs are only evaluated at observed data points in parallel, significantly reducing the number of function evaluations and achieving better parallelizability. Additionally, our approach effectively mitigates error accumulation from autoregression, thus improving prediction accuracy.
+
+## 5 EXPERIMENTS
+
+In this section, we conduct a series of experiments to evaluate the performance of VF-NODEs. We begin by applying the method to four dynamical systems of various dimensions. Subsequently, we assess its performance on the real-world COVID-19 dataset. Lastly, we perform ablation studies to examine the model’s key components.
+
+**Baselines.** To evaluate acceleration performance, we compare our method against the following training approaches for NODE-based models: (1) the discretize-then-optimize approach (Dis-Opt), (2) the optimize-then-discretize approach (Opt-Dis) (Chen et al., 2018), and (3) the seminorm approach (Kidger et al., 2021). Additionally, we compare the *accuracy* of our proposed method against two categories of SOTA methods. The first category includes NODE-based models: (1) Vanilla NODE (Chen et al., 2018), (2) TayNODE (Kelly et al., 2020), (3) Latent ODE with RNN encoder (Chen et al., 2018), (4) ODE-RNN (Rubanova et al., 2019), (5) Latent ODE with ODE-RNN encoder (Rubanova et al., 2019), and (6) NCDE (Kidger et al., 2020). The second category consists of Neural Flows (Biloš et al., 2021), where neural networks  $g_\theta$  are used to directly model the solution of ODEs as  $x = g_\theta(t, x_0)$ . This category includes models such as ResNet Flows and GRU Flows. Detailed hyperparameter settings of these models are provided in Appendix I.1. We also discuss other training methods for NODEs based on spline methods, as shown in Appendix H.
+
+### 5.1 SIMULATION OF LOW-DIMENSIONAL DYNAMICAL SYSTEMS
+
+**Dynamical Systems.** We select four dynamical systems from fields such as biology, biochemistry, genetics and epidemiology: the glycolytic oscillator (Sel’Kov, 1968), the genetic toggle switch (Gardner et al., 2000), the repressilator (Elowitz & Leibler, 2000), and the age-structured SIR model (Ram & Schaposhnik, 2021). These systems vary in dimensionality: the repressilator is six-dimensional, and the age-structured SIR model is 27-dimensional, while the remaining systems are two-dimensional. Further dataset details are provided in Appendix I.2.
+
+**Datasets.** For each system, except the age-structured SIR model, we generate 125 trajectories with randomly sampled initial conditions, of which 100 are used for training and 25 for validation. Each trajectory is uniformly sampled with 100 data points from  $U[0, T]$ , with values randomly dropped at a rate of  $1 - r$  via masking. Following (Qian et al., 2022), Gaussian noise  $\epsilon = \sigma_R \cdot \text{std}(x(t))$  is added to each observation. For baselines, each trajectory is segmented into 5 short segments to enhance the performance of baselines, while for VF-NODEs, the whole trajectory is used to improve the precision of spline regression. Additionally, we generate 25 test trajectories, each containing 200 randomly sampled points. The first 100 points are sampled from  $U[0, T]$  for interpolation tasks, and the remaining 100 from  $U[T, 2T]$  for extrapolation tasks. In our experiments,  $T$  is set to 10,  $\sigma_R$  to
+
+{7}------------------------------------------------
+
+0.01, and the retention ratio to  $r = 0.8$ . All settings remain the same for the age-structured SIR model except for the number of trajectories: 500 are generated for training and validation (400 for training and 100 for validation), and an additional 100 trajectories are generated for testing.
+
+**Evaluation on Acceleration.** We compare the acceleration performance of our method against NODE-based baselines in terms of average training time per epoch using the glycolytic oscillator. As shown in Fig. 2, our method significantly accelerates the training of NODE-based baselines by a factor of 10 to 1000. This improvement is attributed to our approach, which relies solely on global numerical integration over the time domain, thereby reducing NFEs during training. Average training time per epoch on other dynamical systems are provided in Appendix G.1.
+
+![Bar chart showing Average Training Time / Epoch (s) for various methods on the glycolytic model. The y-axis is logarithmic, ranging from 10^-1 to 10^1. The x-axis lists methods: VF-NODEs, Vanilla NODE, TayNODE, Latent ODE 1, ODE-RNN, Latent ODE 2, and NCDE. VF-NODEs is the fastest, followed by Dis-Opt, then Opt-Dis, and Seminorm is the slowest.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+| Method | Avg Training Time / Epoch (s) |
+|-|-|
+| VF-NODEs | ~0.02 |
+| Vanilla NODE | ~0.15 |
+| TayNODE | ~0.4 |
+| Latent ODE 1 | ~0.3 |
+| ODE-RNN | ~3.0 |
+| Latent ODE 2 | ~12.0 |
+| NCDE | ~0.8 |
+
+Bar chart showing Average Training Time / Epoch (s) for various methods on the glycolytic model. The y-axis is logarithmic, ranging from 10^-1 to 10^1. The x-axis lists methods: VF-NODEs, Vanilla NODE, TayNODE, Latent ODE 1, ODE-RNN, Latent ODE 2, and NCDE. VF-NODEs is the fastest, followed by Dis-Opt, then Opt-Dis, and Seminorm is the slowest.
+
+Figure 2: Average training time per epoch (second) for each method on the glycolytic model. Our method can achieve 10 to 1000 times faster than the baselines. Due to the high stability of the training speed for some methods, the uncertainty is negligible and not clearly visible in the figure.
+
+**Evaluation on Prediction Error.** We evaluate the prediction error of different methods on interpolation and extrapolation tasks using mean squared error (MSE), as shown in Tables 1 and 2 respectively. The results demonstrate that our method consistently achieves higher or comparable performance compared with the baselines. This superior performance can be attributed to two key factors: (1) the standard NODE architecture in VF-NODEs aligns well with dynamical systems represented by ODEs, and (2) the use of global integrals in the VF loss mitigates autoregression, effectively reducing error accumulation. Although Vanilla NODEs share the same neural architecture, they rely on ODE solvers for training, which leads to error accumulation and significantly slower training speeds compared to VF-NODEs. In the case of TayNODEs, the regularization term restricts the complexity of the learned dynamics, limiting the expressivity of the model and leading to even worse performance than Vanilla NODEs. Neural Flows also perform worse than VF-NODEs, as they must explicitly model the time dependencies of solutions. In contrast, VF-NODEs can leverage ODE solvers to handle time evolution during inference. Additionally, other baselines are designed for more general irregular time series data. They do not align with the form of these dynamical systems. Detailed training settings can be found in Appendix I.3.
+
+Additionally, we test our method on the Gompertz model (Gompertz, 1825) and the Lotka-Volterra equations (Kingsland, 1995). Related experimental results can be found in Appendix G.2.
+
+Table 1: Testing MSE (mean $\pm$ standard deviation) for interpolation tasks on 4 dynamical systems with 80% observed data ( $r = 0.8$ ). Lower values indicate better performance. Here  $\text{e}n$  refers to  $\times 10^{\pm n}$ . Latent ODE 1 refers to Latent ODE with an RNN encoder. Latent ODE 2 refers to Latent ODE with an ODE-RNN encoder. The best results are highlighted in **bold black**, and the second-best results are highlighted in **bold purple**.
+
+|  | Glycolytic | Toggle | Repressorlator | AgeSIR |
+|-|-|-|-|-|
+| Vanilla NODE | (1.51e-03) $\pm$ (1.40e-03) | <b>(8.00e-04)</b> $\pm$ <b>(8.69e-04)</b> | <b>(2.25e-02)</b> $\pm$ <b>(5.04e-03)</b> | <b>(7.54e-03)</b> $\pm$ <b>(6.58e-04)</b> |
+| TayNODE | (3.20e-03) $\pm$ (1.32e-03) | (1.37e-02) $\pm$ (9.96e-03) | (1.43e-01) $\pm$ (1.72e-02) | (3.18e-01) $\pm$ (7.36e-02) |
+| Latent ODE 1 | (2.21e-01) $\pm$ (3.35e-02) | (6.57e-01) $\pm$ (1.48e-01) | (2.33e+01) $\pm$ (9.23e-01) | (4.18e+01) $\pm$ (6.56e+00) |
+| ODE-RNN | <b>(8.80e-05)</b> $\pm$ <b>(2.30e-05)</b> | (1.63e-03) $\pm$ (5.56e-04) | (1.41e-01) $\pm$ (7.97e-03) | (6.75e+00) $\pm$ (3.43e-01) |
+| Latent ODE 2 | (1.00e-01) $\pm$ (1.87e-02) | (6.31e-01) $\pm$ (4.69e-01) | (7.47e-01) $\pm$ (8.77e-02) | (1.36e+09) $\pm$ (1.93e+09) |
+| NCDE | (3.49e-02) $\pm$ (1.36e-02) | (3.96e-02) $\pm$ (3.43e-02) | (1.51e+00) $\pm$ (1.22e+00) | (1.22e+01) $\pm$ (3.75e+00) |
+| ResNet Flow | (2.84e-01) $\pm$ (5.69e-02) | (7.09e-01) $\pm$ (2.21e-01) | (1.03e+01) $\pm$ (8.14e-01) | (2.50e+00) $\pm$ (1.96e-01) |
+| GRU Flow | (3.80e-01) $\pm$ (5.34e-02) | (2.45e+00) $\pm$ (1.88e-01) | (7.45e+00) $\pm$ (4.68e-02) | (4.19e+01) $\pm$ (1.22e-01) |
+| VF-NODE (Ours) | <b>(6.35e-05)</b> $\pm$ <b>(2.68e-06)</b> | <b>(1.69e-04)</b> $\pm$ <b>(6.09e-05)</b> | <b>(1.92e-02)</b> $\pm$ <b>(2.62e-04)</b> | <b>(7.39e-03)</b> $\pm$ <b>(6.71e-04)</b> |
+
+{8}------------------------------------------------
+
+Table 2: Testing MSE (mean $\pm$ standard deviation) for extrapolation task on 4 dynamical systems with 80% observed data ( $r = 0.8$ ). Lower values indicate better performance. Here  $e_{\text{cn}}$  refers to  $\times 10^{\pm n}$ . Latent ODE 1 refers to Latent ODE with an RNN encoder. Latent ODE 2 refers to Latent ODE with an ODE-RNN encoder. The best results are highlighted in **bold black**, and the second-best results are highlighted in **bold purple**.
+
+|  | Glycolytic | Toggle | Repressor/activator | AgeSIR |
+|-|-|-|-|-|
+| Vanilla NODE | (8.79e-04) $\pm$ (7.64e-04) | <b>(8.14e-07)<math>\pm</math>(6.72e-07)</b> | <b>(1.25e-01)<math>\pm</math>(3.11e-02)</b> | <b>(1.99e-02)<math>\pm</math>(1.69e-03)</b> |
+| TayNODE | (4.71e-03) $\pm$ (3.60e-03) | (5.09e-02) $\pm$ (5.09e-02) | (8.73e-01) $\pm$ (1.35e-01) | (4.52e-01) $\pm$ (1.31e-01) |
+| Latent ODE 1 | (2.39e-01) $\pm$ (7.29e-02) | (1.48e+00) $\pm$ (1.28e+00) | (9.14e+00) $\pm$ (1.19e+00) | (2.30e+02) $\pm$ (4.85e+01) |
+| ODE-RNN | <b>(4.68e-05)<math>\pm</math>(1.15e-05)</b> | (2.04e-04) $\pm$ (1.42e-04) | (2.02e-01) $\pm$ (7.51e-03) | (7.48e+00) $\pm$ (9.12e-02) |
+| Latent ODE 2 | (1.82e-01) $\pm$ (1.61e-01) | (4.96e+00) $\pm$ (5.70e+00) | (3.09e+00) $\pm$ (2.99e-01) | (1.36e+09) $\pm$ (1.93e+09) |
+| NCDE | (8.00e-01) $\pm$ (4.48e-01) | (1.03e+00) $\pm$ (7.38e-01) | (6.73e+00) $\pm$ (4.85e+00) | (2.13e+01) $\pm$ (8.27e+00) |
+| ResNet Flow | (3.47e+00) $\pm$ (2.82e+00) | (5.32e+00) $\pm$ (1.97e+00) | (6.56e+01) $\pm$ (2.23e+01) | (1.95e+01) $\pm$ (3.29e-01) |
+| GRU Flow | (7.39e-01) $\pm$ (2.23e-01) | (5.03e+00) $\pm$ (5.22e-01) | (1.84e+01) $\pm$ (5.74e-01) | (6.02e+01) $\pm$ (1.89e-01) |
+| VF NODE (Ours) | <b>(1.63e-04)<math>\pm</math>(3.05e-05)</b> | <b>(4.79e-07)<math>\pm</math>(5.24e-08)</b> | <b>(1.23e-01)<math>\pm</math>(1.48e-02)</b> | <b>(2.37e-02)<math>\pm</math>(1.61e-03)</b> |
+
+### 5.2 REAL-WORLD APPLICATION: COVID-19 DATASET
+
+We also evaluate the performance of VF-NODEs on the real-world COVID-19 dataset. Using covsirphy (Takaya & Team, 2020–2024), we leverage data from the COVID-19 Data Hub (Guidotti & Ardia, 2020). This data can be modeled using a four-dimensional *phase-dependent* SIR-F framework (Takaya & Team, 2020–2024), where the ODE parameters vary over time. VF-NODEs, however, are not designed to handle these time-varying dynamics due to the limitations of the standard NODE architecture. To address this, we apply S-R analysis (Balkew, 2010) to segment the data, allowing the ODE parameters to remain constant within each segment. In this study, we evaluate our method and the baselines using data from four countries: Japan, Italy, Norway, and India. For each country, we extract 100 data points from the longest segment in a single trajectory, allocating 80 for training, 10 for validation, and 10 for testing. Each data point consists of four variables: Susceptible, Infected, Recovered, and Fatal. We standardize the data for consistency and employ spline regression to smooth it. The experimental results, presented in Table 3, demonstrate that our method achieves significantly better performance compared to the baselines. This superior performance can be attributed to the fact that the COVID-19 dataset conforms to the SIR-F ODE system, which aligns with the inductive bias of VF-NODEs. Vanilla NODEs outperform most other baselines because they share the same neural architecture as VF-NODEs. However, Vanilla NODEs have lower accuracy than our method due to the error accumulation caused by autoregression in ODE-solver-based training methods. Detailed training settings are provided in Appendix I.3.
+
+Table 3: Testing MSE (mean $\pm$ standard deviation) on the real-world COVID-19 dataset. Lower values indicate better performance. Here  $e_{\text{cn}}$  refers to  $\times 10^{\pm n}$ . Latent ODE 1 refers to Latent ODE with an RNN encoder. Latent ODE 2 refers to Latent ODE with an ODE-RNN encoder. The best results are highlighted in **bold black**.
+
+|  | Japan | Italy | Norway | India |
+|-|-|-|-|-|
+| Vanilla NODE | (1.42e+00) $\pm$ (7.44e-01) | (1.35e-02) $\pm$ (1.39e-02) | (1.03e-03) $\pm$ (6.30e-05) | (8.86e-04) $\pm$ (3.76e-04) |
+| TayNODE | (2.02e+00) $\pm$ (8.00e-01) | (3.88e-02) $\pm$ (5.70e-03) | (5.57e-04) $\pm$ (1.13e-04) | (1.18e-02) $\pm$ (1.08e-02) |
+| Latent ODE 1 | (1.02e+01) $\pm$ (4.42e-01) | (6.56e-01) $\pm$ (2.87e-01) | (1.83e-01) $\pm$ (1.10e-01) | (5.69e-01) $\pm$ (1.59e-01) |
+| ODE-RNN | (8.43e+00) $\pm$ (6.56e-01) | (1.10e-01) $\pm$ (1.12e-02) | (5.58e-03) $\pm$ (1.48e-03) | (2.09e-01) $\pm$ (1.74e-01) |
+| Latent ODE 2 | (1.12e+01) $\pm$ (1.31e+00) | (3.36e-01) $\pm$ (2.70e-01) | (4.12e-01) $\pm$ (2.90e-01) | (4.07e-01) $\pm$ (1.54e-01) |
+| NCDE | (1.14e+01) $\pm$ (1.10e+00) | (8.72e-01) $\pm$ (2.46e-01) | (1.27e-02) $\pm$ (1.20e-02) | (3.94e-01) $\pm$ (8.18e-02) |
+| ResNet Flow | (9.33e-01) $\pm$ (1.69e-01) | (3.69e-02) $\pm$ (3.20e-03) | (2.51e-02) $\pm$ (1.65e-02) | (2.04e-02) $\pm$ (2.01e-03) |
+| GRU Flow | (1.39e+00) $\pm$ (2.96e-02) | (8.63e-03) $\pm$ (1.17e-04) | (3.07e-03) $\pm$ (3.07e-07) | (2.52e-03) $\pm$ (1.84e-04) |
+| VF NODE (Ours) | <b>(1.87e-01)<math>\pm</math>(4.82e-02)</b> | <b>(1.64e-03)<math>\pm</math>(2.19e-04)</b> | <b>(3.43e-04)<math>\pm</math>(1.18e-04)</b> | <b>(5.68e-04)<math>\pm</math>(2.28e-04)</b> |
+
+Furthermore, we also apply the proposed VF-NODEs to model the temporal effects of chemotherapy on tumor volume. The experimental results are presented in Appendix G.3.
+
+{9}------------------------------------------------
+
+### 5.3 ABLATION STUDIES
+
+Lastly, we conduct ablation studies to investigate the impact of various components on the performance of VF-NODEs. Specifically, we examine: (1) the influence of Filon’s method and spline regression and (2) the type of basis functions. The experimental settings are consistent with those described in Section 5.1.
+
+**Influence of Filon’s method and spline regression.** There are two key components enabling the accurate computation of the VF loss in VF-NODEs: (1) Filon’s method and (2) natural cubic spline regression. To evaluate the influence of these components, we assess the performance of VF-NODEs under the following settings: (1) using only Filon’s method (Filon’s method + natural cubic spline interpolation), (2) using only natural cubic spline regression (trapezoidal rule (Press, 2007) + natural cubic spline regression), (3) using neither (trapezoidal rule + natural cubic spline interpolation), (4) using Filon’s method with Hermite cubic spline. The experimental results, shown in Table 4, demonstrate that while both components enhance performance, natural cubic spline regression has a more significant impact. The inferior performance of Hermite cubic spline can be attributed to its reliance on numerical differentiation, which is ill-posed on noisy, sparse data.
+
+Table 4: Testing MSE (mean $\pm$ standard deviation) for the ablation study on Filon’s method and spline regression. Lower values indicate better performance. Here  $\text{e}\pm n$  refers to  $\times 10^{\pm n}$ .
+
+| Filon | Spline | Regression | Glycolytic |  | Toggle |  |
+|-|-|-|-|-|-|-|
+|  |  |  | Interpolation | Extrapolation | Interpolation | Extrapolation |
+| ✓ | Natural | ✗ | (9.13e+05) $\pm$ (1.29e+06) | (2.50e+30) $\pm$ (3.53e+30) | (9.39e+16) $\pm$ (1.33e+17) | (8.16e+37) $\pm$ (1.15e+38) |
+| ✗ | Natural | ✓ | (2.78e+01) $\pm$ (2.65e+01) | (5.76e+02) $\pm$ (5.67e+02) | (1.40e+09) $\pm$ (1.40e+09) | (4.35e+20) $\pm$ (4.35e+20) |
+| ✗ | Natural | ✗ | (5.59e+01) $\pm$ (5.48e+01) | (6.66e+01) $\pm$ (6.55e+01) | (1.69e+14) $\pm$ (1.69e+14) | (8.29e+29) $\pm$ (8.29e+29) |
+| ✓ | Hermite | ✗ | (1.54e+00) $\pm$ (2.07e+00) | (3.90e+01) $\pm$ (5.51e+01) | (3.74e-01) $\pm$ (1.14e-01) | (9.66e-01) $\pm$ (4.43e-01) |
+| VF-NODE (Ours) |  |  | <b>(6.35e-05)<math>\pm</math>(2.68e-06)</b> | <b>(1.63e-04)<math>\pm</math>(3.05e-05)</b> | <b>(1.69e-04)<math>\pm</math>(6.09e-05)</b> | <b>(4.79e-07)<math>\pm</math>(5.24e-08)</b> |
+
+**Type of basis functions.** To illustrate the rationale behind using Fourier basis and Filon’s method, we test two alternative types of basis functions: (1)  $\phi_\ell(t) = (t/T)(t/T - 1)(t/T - \ell/L)$ , and (2) Hermite cubic spline interpolation at three points:  $(0, 0)$ ,  $(T/2, \ell/L)$ , and  $(T, 0)$ , with derivatives at these points set to 0. Filon’s method was not applied to these basis functions. The experimental results, shown in Table 5, indicate that VF-NODEs with Fourier basis significantly outperform those with other basis functions. This can be attributed to the requirement that  $\phi_\ell$  should form a Hilbert orthonormal basis in the function space, as per Theorem 2. However, performing Gram-Schmidt orthonormalization on these basis functions is computationally expensive. Other Hilbert orthonormal basis functions, such as orthonormal polynomials Chihara (2011), also exist but fail to meet the boundary conditions  $\phi_\ell(0) = \phi_\ell(T) = 0$ . While Qian et al. (2022) used B-splines, their recursive generation (De Boor, 1978) can significantly slow down the training of VF-NODEs.
+
+Table 5: Testing MSE (mean $\pm$ standard deviation) for the ablation study on the types for basis functions  $\phi_\ell$ . Lower values indicate better performance. Here  $\text{e}\pm n$  refers to  $\times 10^{\pm n}$ .
+
+|  | Glycolytic |  | Toggle |  |
+|-|-|-|-|-|
+|  | Interpolation | Extrapolation | Interpolation | Extrapolation |
+| $(t/T)(t/T - 1)(t/T - \ell/L)$ | (3.89e-02) $\pm$ (8.37e-03) | (1.56e-02) $\pm$ (8.54e-03) | (3.44e-01) $\pm$ (3.79e-01) | (6.23e-01) $\pm$ (7.38e-01) |
+| Hermite-based basis | (7.06e-01) $\pm$ (5.39e-01) | (5.29e-01) $\pm$ (4.99e-01) | (4.16e+00) $\pm$ (4.55e+00) | (1.62e+01) $\pm$ (2.06e+01) |
+| VF-NODE (Ours) | <b>(6.35e-05)<math>\pm</math>(2.68e-06)</b> | <b>(1.63e-04)<math>\pm</math>(3.05e-05)</b> | <b>(1.69e-04)<math>\pm</math>(6.09e-05)</b> | <b>(4.79e-07)<math>\pm</math>(5.24e-08)</b> |
+
+We also conduct some additional ablation studies, including the **sensitivity of VF-NODEs to hyper-parameters**, the **effect of sampling**, and the **effect of noise**, which can be found in Appendix G.4.
+
+## 6 CONCLUSION
+
+This work introduced a novel training method based on variational formulation to accelerate the training of NODEs for dynamical systems. Our approach required only a series of global integrals in the loss computation, eliminating the need for traditional numerical ODE solvers. To overcome the challenges posed by oscillatory integrals in the VF loss, we incorporated Filon’s method to enhance model performance. Additionally, we developed a natural cubic spline regression to better handle noisy and incomplete data. Extensive experiments demonstrated that our method significantly accelerates NODEs training while maintaining high accuracy. Limitations are discussed in Appendix A.
+
+ Rest of paper (reference and Appendix) is removed.

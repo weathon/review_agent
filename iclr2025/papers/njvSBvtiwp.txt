@@ -1,0 +1,272 @@
+
+
+{0}------------------------------------------------
+
+# NERAF: 3D SCENE INFUSED NEURAL RADIANCE AND ACOUSTIC FIELDS
+
+Amandine Brunetto, Sascha Hornauer, Fabien Moutarde
+
+Center for Robotics, Mines Paris - PSL University
+
+Paris, France
+
+{amandine.brunetto, sascha.hornauer, fabien.moutarde}@minesparis.psl.eu
+
+## ABSTRACT
+
+Sound plays a major role in human perception. Along with vision, it provides essential information for understanding our surroundings. Despite advances in neural implicit representations, learning acoustics that align with visual scenes remains a challenge. We propose NeRAF, a method that jointly learns radiance and acoustic fields. NeRAF synthesizes both novel views and spatialized room impulse responses (RIR) at new positions by conditioning the acoustic field on 3D scene geometric and appearance priors from the radiance field. The generated RIR can be applied to auralize any audio signal. Each modality can be rendered independently and at spatially distinct positions, offering greater versatility. We demonstrate that NeRAF generates high-quality audio on SoundSpaces and RAF datasets, achieving significant performance improvements over prior methods while being more data-efficient. Additionally, NeRAF enhances novel view synthesis of complex scenes trained with sparse data through cross-modal learning. NeRAF is designed as a Nerfstudio module, providing convenient access to realistic audio-visual generation.
+
+Project page: <https://amandinebtto.github.io/NeRAF>
+
+## 1 INTRODUCTION
+
+Sound is fundamental to human perception. Imagine standing in the middle of a bustling city. It’s not only the visual cues but the sounds of car horns, footsteps, and chatter that guide your perception and decisions. Beyond conveying environmental details, sound provides crucial insights into context and atmosphere, enriching our understanding of the world in ways that sight alone cannot. In gaming and AR/VR simulations, audio is key to immersion, enhancing the realism of virtual environments and making experiences feel authentic.
+
+Advances in novel view synthesis have enabled the generation of high-quality, photorealistic images from any camera position using a set of captured images (Mildenhall et al., 2020; Martin-Brualla et al., 2021; Zhang et al., 2020; Tancik et al., 2023), unlocking exciting applications for simulated environments. Yet, these methods lack acoustic synthesis, which is essential for fully immersive experiences. Learning scene acoustics presents additional challenges (Luo et al., 2022). As sound travels from its source to the listener it is influenced by the geometry of the space and the materials of objects and surfaces. Room Impulse Responses (RIRs) capture these complex interactions for specific source-listener pairs, but collecting RIRs is a laborious process, requiring sounds to be played and recorded at multiple positions.
+
+To address this, recent research has focused on estimating RIRs at novel positions from sparse data (Majumder et al., 2022; Singh et al., 2021; Somayazulu et al., 2024). Inspired by NeRF’s success in image synthesis, emerging studies (Luo et al., 2022; Su et al., 2022; Liang et al., 2023a;b) apply neural fields to learn the acoustic properties of an environment, allowing for audio synthesis from new source and microphone positions. However, these approaches often overlook the critical influence of 3D scene geometry on acoustics (Luo et al., 2022; Su et al., 2022; Liang et al., 2023a), or they rely on additional annotations that are unavailable in real-world scenarios (Liang et al., 2023b).
+
+In response, we introduce NeRAF, a method that generates both novel views and RIRs at new sensor positions by jointly learning radiance and acoustic fields (Figure 1). NeRAF queries the radiance field to construct a voxel representation of the scene that encodes radiance and density. This grid
+
+{1}------------------------------------------------
+
+![Figure 1: NeRAF synthesizes audio-visual data at novel sensor positions. The diagram shows a top-down view of a room with various furniture and objects. Overlaid on this view are icons for cameras (blue squares) and microphones (blue circles). Some icons are solid, while others are dashed. A dashed green box highlights a specific area. To the right, there's a legend: 'Known Views' with a camera and microphone icon, and 'Novel Views' with a camera and microphone icon. Below the legend is a neural network icon labeled 'NeRAF'. An arrow points from the 'Novel Views' icon to the 'NeRAF' icon. Above the 'NeRAF' icon is a dashed green box containing a small image of a room and a green audio waveform.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: NeRAF synthesizes audio-visual data at novel sensor positions. The diagram shows a top-down view of a room with various furniture and objects. Overlaid on this view are icons for cameras (blue squares) and microphones (blue circles). Some icons are solid, while others are dashed. A dashed green box highlights a specific area. To the right, there's a legend: 'Known Views' with a camera and microphone icon, and 'Novel Views' with a camera and microphone icon. Below the legend is a neural network icon labeled 'NeRAF'. An arrow points from the 'Novel Views' icon to the 'NeRAF' icon. Above the 'NeRAF' icon is a dashed green box containing a small image of a room and a green audio waveform.
+
+Figure 1: NeRAF synthesizes audio-visual data at novel sensor positions by learning radiance and acoustic fields from a collection of images and audio recordings. It enables audio auralization and spatialization, as well as improved image rendering, all of which are crucial for creating a realistic perception of space. NeRAF leverages cross-modal learning without the need for co-located audio and visual sensors for training. Our method allows for the independent rendering of each modality.
+
+conditions the acoustic field with appearance and geometric 3D priors, without the need for additional annotations. NeRAF’s cross-modal approach benefits both modalities: it achieves state-of-the-art RIR synthesis while being more data-efficient and enhances novel view generation in complex scenes. We validate our method on Sound Spaces (Chen et al., 2020a; 2022b), a simulated dataset, and on RAF (Chen et al., 2024), a real-world dataset. Nerfstudio (Tancik et al., 2023) is an easy-to-use, modular framework for NeRF. We design NeRAF as a new module to offer convenient access to audio-visual generation necessary for immersive experiences. Although the approach is cross-modal, each modality can be generated independently and the model can be trained without co-located audio and visual sensors, providing flexibility for various applications. We release NeRAF’s code to the community.
+
+## 2 RELATED WORKS
+
+**Neural Radiance Fields.** NeRF (Mildenhall et al., 2020) synthesizes novel photorealistic views of a scene by modeling it as a continuous function that maps 3D spatial coordinates and viewing directions to radiance. Although it has demonstrated impressive results on objects and small bounded regions, it struggles with complex scenes where the camera can be oriented in any directions and content may exist at any distance. Building upon NeRF, (Martin-Brualla et al., 2021) handles unconstrained photo collections, enabling the use of diverse image sets. Other works improved NeRF to learn more complex scenes (Barron et al., 2022; Zhang et al., 2020) with higher efficiency and quality (Müller et al., 2022; Xu et al., 2022). Recently, Nerfstudio (Tancik et al., 2023) provided a modular framework that allows for a simplified end-to-end process of creating, training, and testing NeRF. It combines many existing NeRF improvements to create Nefacto, a model suited for real static scenes. NeRAF is designed as a Nerfstudio module, bringing novel audio synthesis to existing state-of-the-art NeRF methods. Its cross-modal learning improves Nefacto performance on large complex scenes given a small image set.
+
+**Neural Acoustic Fields.** Several works have extended the applicability of neural fields to the audio domain. Luo et al. (2022) (NAF) and Su et al. (2022) (INRAS) model acoustic propagation in a scene by learning an implicit representation that maps emitter-listener positions to RIRs. NAF conditions the acoustic field by learning local geometric information, while INRAS performs audio scene feature decomposition based on the acoustic radiance transfer model. NACF (Liang et al., 2023b) and AV-NeRF (Liang et al., 2023a) provide vision-based information to the acoustic field. NACF assumes the pre-acquisition of RGB-D images along with acoustic coefficients of surfaces. However, the latter is unavailable in real-life scenarios. AV-NeRF relies on a pre-trained Nefacto model to render RGB-D information at the microphone’s position. It then conditions the audio rendering at
+
+{2}------------------------------------------------
+
+![Figure 2: NeRAF overview diagram. The diagram illustrates the NeRAF pipeline. On the left, a 'Grid Sampler' (represented by a 3D grid) queries the NeRF module. NeRF takes 3D coordinates X and orientations d as input and outputs Density σ and Color c. These are used for 'Volume Rendering' to produce an 'RGB' image. A loss L_V is calculated between the rendered RGB image and a ground truth image. Simultaneously, the Grid Sampler also provides features (d_1, ..., d_j) to a 'Features Extractor' (represented by a camera icon). The Features Extractor outputs features f_s. The NACF module takes source-microphone poses X_s, d_s and microphone-source poses X_m, d_m as input, along with the features f_s, to produce a 'STFT' (Short-Time Fourier Transform) representation. This is then processed by 'STFT^{-1}' to generate a 'Binaural RIR' (Room Impulse Response). A loss L_A is calculated between the predicted RIR and a ground truth RIR.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2: NeRAF overview diagram. The diagram illustrates the NeRAF pipeline. On the left, a 'Grid Sampler' (represented by a 3D grid) queries the NeRF module. NeRF takes 3D coordinates X and orientations d as input and outputs Density σ and Color c. These are used for 'Volume Rendering' to produce an 'RGB' image. A loss L\_V is calculated between the rendered RGB image and a ground truth image. Simultaneously, the Grid Sampler also provides features (d\_1, ..., d\_j) to a 'Features Extractor' (represented by a camera icon). The Features Extractor outputs features f\_s. The NACF module takes source-microphone poses X\_s, d\_s and microphone-source poses X\_m, d\_m as input, along with the features f\_s, to produce a 'STFT' (Short-Time Fourier Transform) representation. This is then processed by 'STFT^{-1}' to generate a 'Binaural RIR' (Room Impulse Response). A loss L\_A is calculated between the predicted RIR and a ground truth RIR.
+
+Figure 2: **NeRAF overview.** NeRF maps 3D coordinates,  $\mathbf{X}$ , and orientations,  $\mathbf{d}$ , to density and color. The grid sampler fills a 3D grid representing the scene by querying the radiance field with voxel center coordinates and multiple viewing directions. NACF learns to map source-microphone poses and directions to STFT. It is conditioned by extracted scene features. Predicted RIRs can be convolved with audio to obtain auralized and spatialized audio matching the scene.
+
+the same pose. In contrast, NeRAF extends beyond the camera’s field of view by using NeRF to capture 3D scene information – without the need for more annotations – providing richer insights for the acoustic field. Contrary to AV-NeRF, our method does not need co-located audio and visual sensors for training. Therefore, it handles unequal amounts of training data for each modality, which is beneficial in real-world settings. Additionally, at inference, the vision modality is not necessary for audio rendering leading to greater versatility.
+
+**RIR Synthesis.** RIRs have various applications, such as enabling immersive and spatialized audio for AR and VR, performing de-reverberation or providing insights about room acoustics. However, RIRs collection in real-world environment is time consuming and needs specialized hardware. Consequently, synthesizing them has been a longstanding research topic. Traditional methods rely on simulated approaches such as *wave-based* (Gumerov & Duraiswami, 2009; Thompson, 2006; Raghuvanshi et al., 2009; Bilbao et al., 2019) or *geometric* methods (Savioja & Svensson, 2015; Schissler & Manocha, 2016; Krokstad et al., 1968; Vorländer, 1989; Cao et al., 2016; Sprunck et al., 2022). While these methods effectively simulate sound propagation, *wave-based* methods face computation complexity and *geometric* methods struggle to simulate low-frequency acoustic phenomena such as interference and diffraction. Recent works have proposed to leverage the modeling ability of neural networks to learn room acoustics and estimate RIRs (Majumder et al., 2022; Luo et al., 2022; Su et al., 2022; Ratnarajah et al., 2021; 2022).
+
+**Audio-Visual Learning.** Some works rely on both audio and visual information to perform acoustic related tasks such as audio binauralization (Gao & Grauman, 2019; Garg et al., 2023), auralization (Chen et al., 2022a; Somayazulu et al., 2024), de-reverberation (Chen et al., 2023a; Chowdhury et al., 2023) or RIR prediction (Singh et al., 2021; Majumder et al., 2022). Audio-visual learning has also demonstrated promising results for other tasks such as improving depth prediction (Christensen et al., 2020; Brunetto et al., 2023; Parida et al., 2021; Zhu et al., 2024), performing floorplan reconstruction (Majumder et al., 2023; Purushwalkam et al., 2021), navigating through a space (Younes et al., 2023; Gao et al., 2020; Chen et al., 2023c; 2020b; Gan et al., 2020) and estimating poses (Chen et al., 2023c).
+
+## 3 METHOD
+
+NeRAF generates both RGB images and binaural RIRs for any camera and microphone-source position and orientation. It achieves this by jointly learning neural radiance and acoustic fields. Although trained together, the audio and visual components can be used independently. The NeRAF pipeline, shown in Figure 2, consists of three modules: NeRF, the grid sampler, and NACF. The NeRF learns the radiance field and generates RGB images. The grid sampler queries NeRF’s radiance field
+
+{3}------------------------------------------------
+
+with each voxel’s center, filling the 3D grid with color and density. NACF then renders binaural RIRs, conditioned by the implicit appearance and geometric 3D priors derived from the features extracted from this 3D grid.
+
+### 3.1 MODELING ACOUSTIC THROUGH RIRs
+
+To model the acoustic of an environment, our method learns RIRs. They describe how sound propagates between one emitter and listener depending of the scene’s geometry and material properties. For example, early reflections provide information about the distance to nearby surfaces, while late reverberation reflects the overall size and structure of the scene. Learning acoustics through RIRs offers several key benefits: (1) RIRs encapsulate the acoustic behavior between specific emitter and listener positions; (2) By convolving audio signals with RIRs, we can synthesize sound that mimics how it would be heard within the scene; (3) Binaural RIRs include head-related transfer functions (HRTFs), which are essential for accurately spatializing audio.
+
+By learning to generate RIRs, our method captures essential sound propagation phenomena, enabling realistic audio synthesis with rich acoustic details.
+
+### 3.2 NEURAL RADIANCE FIELD
+
+Neural radiance field (NeRF) (Mildenhall et al., 2020) renders photo-realistic images from new view points. It represents a static scene as a 5D vector-valued continuous function whose input is a 3D location  $\mathbf{X} = (x, y, z)$  and 2D viewing direction  $\mathbf{d} = (\theta, \phi)$ , and output is color  $\mathbf{c} = (r, g, b)$  and volume density  $\sigma$ :
+
+$$\text{NeRF} : (\mathbf{X}, \mathbf{d}) \rightarrow (\mathbf{c}, \sigma). \quad (1)$$
+
+NeRF shoots rays  $\mathbf{r}(t) = \mathbf{o} + t\mathbf{d}$  through image pixels from camera origin  $\mathbf{o}$  between the near  $t_{\text{near}}$  and far  $t_{\text{far}}$  boundaries of the scene. 3D points  $\mathbf{X}_n = \mathbf{o} + t_n\mathbf{d}$  are sampled along the ray and, along with  $\mathbf{d}$  used as input of two MLPs. The first one maps  $\mathbf{X}_n$  to the view-independent density  $\sigma_n$  and a corresponding feature vector. The second MLP takes the feature vector and  $\mathbf{d}$  to produce view-dependent color  $\mathbf{c}_n$ . The final color  $C(\mathbf{r})$  of an image pixel are rendered using volume rendering equations:
+
+$$C(\mathbf{r}) = \int_{t_{\text{near}}}^{t_{\text{far}}} \mathcal{T}(t_n) \sigma_n \mathbf{c}_n dt_n, \quad (2)$$
+
+where  $\mathcal{T}(t_n)$  is the transmittance expressed as  $\exp(-\int_{t_{\text{near}}}^{t_n} \sigma_k dk)$ .
+
+NeRAF builds on Nerfacto (Tancik et al., 2023) as its NeRF backbone. Nerfacto integrates advancements from several works following (Mildenhall et al., 2020) including camera pose refinement (Wang et al., 2021; Lin et al., 2021), per image appearance conditioning (Martin-Brualla et al., 2021), proposal sampling (Müller et al., 2022), scene contraction and hash encoding. We selected Nerfacto for its robust performance in handling real-world static scenes. However, our method is NeRF-agnostic as it relies directly on the radiance field without altering the underlying NeRF model.
+
+### 3.3 GRID SAMPLER
+
+Sound propagation is omnidirectional and influenced by the 3D geometry of the environment. Therefore, we provide our neural acoustic field with 3D geometric and appearance priors about the scene.
+
+To this end, we use our grid sampler, illustrated in Figure 3, to construct a 3D volume from the NeRF model. The scene is represented as a 3D grid of  $S^3$  voxels with coordinates between 0 and 1 in accordance with NeRF’s scene contraction. We shows in Section 4.3, that  $S = 128$  leads to good performances and use it for all our experiments.
+
+We populate the grid by sequentially selecting batches of voxel centers  $\mathbf{X}_{vi}$  as queries to the radiance field. By processing voxels in order, we ensure that the grid is progressively updated to reflect the
+
+{4}------------------------------------------------
+
+![Diagram of the Grid Sampler process. A 3D grid of voxels is shown on the left. A specific voxel is highlighted, and its center coordinates X_vij = (x_vij, y_vij, z_vij) and viewing directions d_1 = (theta_1, phi_1), ..., d_j = (theta_j, phi_j) are indicated. These are input to a 'Grid Sampler' block, which outputs a density value sigma_vij. The viewing directions d_1 to d_N are also input to a 'Volume Rendering' block, which outputs color values c_1 to c_N. These color values are then averaged to produce the final color C_vij = C_hat_vij. The final output is a 3D grid with the voxel's color and density values.](690fce4fb5c9cbb8beb560cb2a3fcbeb_img.jpg)
+
+Diagram of the Grid Sampler process. A 3D grid of voxels is shown on the left. A specific voxel is highlighted, and its center coordinates X\_vij = (x\_vij, y\_vij, z\_vij) and viewing directions d\_1 = (theta\_1, phi\_1), ..., d\_j = (theta\_j, phi\_j) are indicated. These are input to a 'Grid Sampler' block, which outputs a density value sigma\_vij. The viewing directions d\_1 to d\_N are also input to a 'Volume Rendering' block, which outputs color values c\_1 to c\_N. These color values are then averaged to produce the final color C\_vij = C\_hat\_vij. The final output is a 3D grid with the voxel's color and density values.
+
+Figure 3: **Grid sampler.** We represent the scene as a grid of voxels. The grid is populated by querying the radiance field with the center coordinates of each voxel,  $\mathbf{X}_{vij}$ , along with multiple viewing directions,  $\mathbf{d}_{1 \rightarrow N}$ . We average the color values obtained from these directions. It results in a 7-channels 3D grid containing color  $\hat{\mathbf{C}}_{vij}$ , density  $\sigma_{vij}$  and the 3D coordinates of the voxel centers.
+
+improvements in the NeRF model. To avoid slowing down training, we do not update the entire grid at each training iteration and process in batches. This sampling method guarantees complete grid population.
+
+As NeRF color is view-dependent, we follow (Chen & Lee, 2023) and form  $N = 18$  viewing rays per  $\mathbf{X}_{vij}$ . The goal is to obtain an average color of the voxel. The radiance field returns a density value  $\sigma_{vij}$  and a color value  $\mathbf{c}_{vij,j}$  per  $j \in [1, N]$  viewing directions:
+
+$$\text{NeRF} : (\mathbf{X}_{vij}, \mathbf{d}_{1 \rightarrow N}) \rightarrow (\mathbf{c}_{vij1 \rightarrow N}, \sigma_{vij}). \quad (3)$$
+
+For color, we apply the volume rendering equation to a ray containing a single point,  $\mathbf{X}_{vij}$ , with each viewing direction and average the values across these directions to obtain  $\hat{\mathbf{C}}_{vij}$ . For density, we compute the alpha compositing value  $\alpha = 1 - \exp(-\sigma_{vij}\delta)$  where  $\delta$  is a chosen small value. We populate the grid with these values and the 3D coordinates of the voxels, resulting in a 7-channel representation.
+
+### 3.4 NEURAL ACOUSTIC FIELD
+
+The goal of our neural acoustic field (NAcF), presented in Figure 4, is to learn a continuous neural representation of the scene’s acoustics. To this end, NAcF maps microphone coordinates,  $\mathbf{X}_m = (x_m, y_m, z_m)$ , and orientations,  $\mathbf{d}_m = (\theta_m, \phi_m)$ , along with source position,  $\mathbf{X}_s = (x_s, y_s, z_s)$ , and orientation,  $\mathbf{d}_s = (\theta_s, \phi_s)$ , to the short-time Fourier transform (STFT) of a room impulse response:
+
+$$\text{NAcF} : (\mathbf{X}_m, \mathbf{d}_m, \mathbf{X}_s, \mathbf{d}_s, t) \rightarrow \text{RIR}(f, t). \quad (4)$$
+
+The exact field parametrization adapted to the sensors’ characteristics of each dataset is presented in Appendix A.
+
+We learn RIRs through their STFT representation, resulting in  $\text{STFT} \in \mathbb{R}^{C \times F \times T}$ , where  $C$ ,  $F$  and  $T$  denote the number of channels, frequency bins, and time bins, respectively. This is motivated by the fact that the time-frequency representation is smoother and more suitable to neural network prediction than the time domain (Luo et al., 2022). Thus, NAcF learns to infer log-magnitude STFTs. To better capture perceptual effects such as reverberation, we query NAcF with STFT time bins  $t$ . Consequently, NAcF outputs the  $F$  frequency bins corresponding to the time query. We normalize  $t$  between  $[0, 1]$  and encode it with positional encoding. Similar to NeRF (Mildenhall et al., 2020) pose, microphone and source coordinates as well as direction are also embedded to a higher dimensional space using respectively positional encoding and spherical harmonic encoding.
+
+Given the voxel grid, we concurrently train a ResNet3D (He et al., 2016) to extract relevant features for sound propagation. They serve as implicit indicators of scene’s 3D geometry, which is central for acoustic modeling. Moreover, as shown in previous works (Chen et al., 2023b; Singh et al., 2021), information about materials can be inferred by a ResNet architecture from the scene’s appearance and contribute to audio synthesis. We perform multimodal fusion by concatenating the features vector from the grid to the encoded poses, directions and the time query. Similar to NeRF, NAcF comprises two MLP blocks. The first block maps the input to a feature vector that embeds the input information and the acoustic scene. The second focuses on learning microphone specifics. For
+
+{5}------------------------------------------------
+
+![Diagram of the Neural Acoustic Field (NAcF) architecture. An input image of a room is processed by a ResNet 3D feature extractor. Simultaneously, microphone-source poses (X_m, X_s) are processed through a positional encoding block (circle with a diagonal line), and directions (d_m, d_s) are processed through a Spherical Harmonic Encoding (SHE) block. Time queries (t) are also processed through a positional encoding block. All three encoded inputs are fed into a 'Multi-modal Fusion' block. The output of this block is then processed by two parallel heads, one for 'Left' and one for 'Right' audio channels. Each head produces a spectrogram (STFT) with frequency (f) on the y-axis and time (t) on the x-axis.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Diagram of the Neural Acoustic Field (NAcF) architecture. An input image of a room is processed by a ResNet 3D feature extractor. Simultaneously, microphone-source poses (X\_m, X\_s) are processed through a positional encoding block (circle with a diagonal line), and directions (d\_m, d\_s) are processed through a Spherical Harmonic Encoding (SHE) block. Time queries (t) are also processed through a positional encoding block. All three encoded inputs are fed into a 'Multi-modal Fusion' block. The output of this block is then processed by two parallel heads, one for 'Left' and one for 'Right' audio channels. Each head produces a spectrogram (STFT) with frequency (f) on the y-axis and time (t) on the x-axis.
+
+Figure 4: **Neural acoustic field.** NAcF maps microphone-source poses and directions to either binaural or monaural RIRs, with the number of output heads adjusted accordingly. NAcF is conditioned on scene features extracted through a 3D ResNet. Both poses and time queries are transformed into a higher-dimensional space using positional encoding, while directions use spherical harmonic encoding. The output of NAcF is a vector containing  $F$  frequency values for each time query,  $t$ .
+
+binaural microphones, this block learns the HRTF necessary for audio spatialization. It contains one MLP per microphone channel.
+
+To render the complete STFT, we query all time bins  $t \in [0, T]$ . Finally, we use Griffin-Lim (Griffin & Lim, 1984; Perraudin et al., 2013) algorithm to obtain RIR waveforms from magnitude STFTs.
+
+### 3.5 LEARNING OBJECTIVE
+
+Cross-modal learning has proven beneficial in multiple works (Section 2). Thus, NeRAF trains jointly NeRF and NAcF. NAcF training is slightly delayed as it begins when the grid has been updated a few times. The feature extractor is jointly trained with the radiance and acoustic fields.
+
+We do not modify the NeRF loss function  $\mathcal{L}_V$ . It usually consists in an MSE loss between ground-truth pixel color,  $\mathbf{C}(\mathbf{r})$ , and the rendered one,  $\hat{\mathbf{C}}(\mathbf{r})$ , and complementary losses,  $\mathcal{L}_{\text{comp}}$ , specific to each NeRF.
+
+$$\mathcal{L}_V = \|\hat{\mathbf{C}}(\mathbf{r}) - \mathbf{C}(\mathbf{r})\|_2^2 + \mathcal{L}_{\text{comp}}, \quad (5)$$
+
+Inspired by (Yamamoto et al., 2019; 2020), we use a combination of spectral loss  $\mathcal{L}_{\text{SL}}$  (Défossez et al., 2018) and spectral convergence loss  $\mathcal{L}_{\text{SC}}$  (Arik et al., 2018) as our audio loss  $\mathcal{L}_A$ :
+
+$$\mathcal{L}_A = \lambda_{\text{SC}} \mathcal{L}_{\text{SC}} + \lambda_{\text{SL}} \mathcal{L}_{\text{SL}}, \quad (6)$$
+
+$$\mathcal{L}_{\text{SL}} = \|\log(|s| + \epsilon) - \log(|\hat{s}| + \epsilon)\|_2^2, \quad (7)$$
+
+$$\mathcal{L}_{\text{SC}} = \frac{\|s - \hat{s}\|_F}{\|s\|_F}, \quad (8)$$
+
+where  $\hat{s}$  is the predicted STFT,  $s$  the ground-truth STFT,  $\|\cdot\|_F$  denotes the Frobenius norm,  $\|\cdot\|_2$  the L2 norm and  $\epsilon = 10^{-3}$ . The values of our loss hyperparameters are found empirically and given in Appendix C. The spectral convergence loss emphasizes on spectral peaks helping especially in early phases of training while the spectral loss focus on small amplitude components which tends to be more important towards the later phases of training. Our loss differs from (Yamamoto et al., 2019; 2020) as we found out that the MSE spectral loss leads to a better trade-off between metrics than the L1 spectral loss (Su et al., 2022) and the MSE loss on magnitude STFT (Luo et al., 2022; Liang et al., 2023a). NeRAF results with those three losses are presented in Section 4.3. The complete learning objective can be resumed as:
+
+$$\mathcal{L} = \mathcal{L}_V + \lambda_A \mathcal{L}_A. \quad (9)$$
+
+{6}------------------------------------------------
+
+Table 1: **Comparison with state-of-the-art.** Performance on the SoundSpaces dataset using T60, C50, and EDT metrics (Left) and on RAF (Right) with the same metrics and STFT error. Lower score indicates higher RIR quality.
+
+| Methods | T60 (%) ↓ | C50 (dB) ↓ | EDT (sec) ↓ | Methods | T60 (%) ↓ | C50 (dB) ↓ | EDT (sec) ↓ | STFT error (dB) ↓ |
+|-|-|-|-|-|-|-|-|-|
+| Opus-nearest | 10.10 | 3.58 | 0.115 | NAF | 10.08 | 0.71 | 0.021 | 0.64 |
+| Opus-linear | 8.64 | 3.13 | 0.097 | INRAS | 8.01 | 0.79 | 0.025 | 0.36 |
+| AAC-nearest | 9.35 | 1.67 | 0.059 | AV-NeRF | 8.11 | 0.73 | 0.021 | 0.39 |
+| AAC-linear | 7.88 | 1.68 | 0.057 | <b>NeRAF</b> | <b>7.47</b> | <b>0.61</b> | <b>0.020</b> | <b>0.17</b> |
+| NAF | 3.18 | 1.06 | 0.031 | NAF++ | 8.19 | 0.53 | 0.017 | 0.64 |
+| INRAS | 3.14 | 0.60 | 0.019 | INRAS++ | <b>6.17</b> | 0.57 | 0.017 | 0.39 |
+| AV-NeRF | 2.47 | 0.57 | 0.016 | NACE | 6.62 | 0.59 | 0.017 | 0.39 |
+| NACF | 2.36 | 0.50 | 0.014 | NACF w/T | 7.31 | 0.59 | 0.018 | 0.39 |
+| NACF w/T | 2.17 | 0.49 | 0.014 | <b>NeRAF++</b> | <b>6.87</b> | <b>0.51</b> | <b>0.015</b> | <b>0.17</b> |
+| <b>NeRAF</b> | <b>2.14</b> | <b>0.38</b> | <b>0.010</b> |  |  |  |  |  |
+
+## 4 EXPERIMENTS
+
+First, we benchmark NeRAF against related works (Luo et al., 2022; Su et al., 2022; Liang et al., 2023a,b) on the SoundSpaces and RAF datasets. Next, we demonstrate that cross-modal learning of the acoustic and radiance fields is also beneficial to vision, resulting in enhanced results for large complex scenes trained with sparse observations. Furthermore, we evaluate NeRAF’s ability to generalize across multiple scenes. To assess the effectiveness of our method when trained with a limited number of audio recordings, we conduct a few-shot experiment. Finally, we investigate the impact of the 3D grid and our loss combination on NeRAF’s performance. Video demonstrations showcasing NeRAF’s audio-visual generation in both real and synthetic environments are available on our project page.
+
+### 4.1 DATASETS
+
+**SoundSpaces.** SoundSpaces (Chen et al., 2020a) is an audio simulator built upon Habitat Sim (Savva et al., 2019; Szot et al., 2021; Puig et al., 2024), a 3D simulator for embodied AI research. It provides binaural RIRs at discrete positions of a 2D grid with a spatial resolution of 0.5 m with four head orientations accompanied by sound source position. This popular benchmark (Gao et al., 2020; Chen et al., 2020b; Luo et al., 2022; Liang et al., 2023a; Su et al., 2022; Purushwalkam et al., 2021; Parida et al., 2021; Chen et al., 2022a) enables us to evaluate our method on diverse scene types while being under same settings as previous works. Following (Luo et al., 2022; Liang et al., 2023a; Su et al., 2022; Liang et al., 2023b), we select six indoor scenes from Replica (Straub et al., 2019). Two are small rooms (office 4 and room 2) with rectangular walls, two are medium room (frl apartment 2 and 4) with more complex layout and objects and two are complete apartments containing multiple rooms (apartment 1 and 2).
+
+**RAF.** Real Acoustic Fields (RAF) (Chen et al., 2024) is a real-world dataset that includes high-quality, densely captured room impulse response data paired with multi-view images and precise 6DoF pose tracking data for sound emitters and listeners in two rooms. The room impulse response are recorded using the “earful tower”, which is equipped with omnidirectional microphones. This dataset was recently used to benchmark previous works on real-world scenes.
+
+**RWAVS.** RWAVS (Liang et al., 2023a) is a real-world dataset used to benchmark AV-NeRF. It does not contain RIRs but audio recordings. Our results on the RWAVS dataset are presented in Appendix J.
+
+![Figure 5: Loudness maps visualization. The figure shows four heatmaps representing predicted RIR intensities at different microphone positions. The first two heatmaps are labeled 'Empty Room' and the last two are labeled 'Furnished Room'. A color bar on the right indicates intensity from 'Quiet' (blue) to 'Loud' (red). Each heatmap shows a top-down view of a room with a red dot indicating the loudspeaker position and orientation.](797231cfee084ca299de599340240401_img.jpg)
+
+Figure 5: Loudness maps visualization. The figure shows four heatmaps representing predicted RIR intensities at different microphone positions. The first two heatmaps are labeled 'Empty Room' and the last two are labeled 'Furnished Room'. A color bar on the right indicates intensity from 'Quiet' (blue) to 'Loud' (red). Each heatmap shows a top-down view of a room with a red dot indicating the loudspeaker position and orientation.
+
+Figure 5: **Loudness maps visualization.** We visualize the intensity of predicted RIRs at different microphone positions for a given loudspeaker position and orientation. Intensities are averaged over multiple heights.
+
+{7}------------------------------------------------
+
+Table 2: **Quantitative results on cross-modal learning.** For highly complex scenes with very sparse training images, NeRAF audio-visual joint training improves vision performances, especially LPIPS. Evaluation on 50 test novel views. Delta are computed against Nerfacto (no audio).
+
+| # Images | PSNR ↑ |  |  | SSIM ↑ |  |  | LPIPS ↓ |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | 75 | 100 | 150 | 75 | 100 | 150 | 75 | 100 | 150 |
+| <i>Apartment 1</i> |  |  |  |  |  |  |  |  |  |
+| Nerfacto | 22.48 | 24.77 | 27.00 | 0.838 | 0.882 | 0.902 | 0.246 | 0.161 | 0.118 |
+| NeRAF | <b>23.33</b> | <b>25.07</b> | <b>27.70</b> | <b>0.858</b> | <b>0.884</b> | <b>0.915</b> | <b>0.216</b> | <b>0.140</b> | <b>0.105</b> |
+| ΔNeRAF | +3.78% | +1.23% | +2.60% | +2.39% | +0.28% | +1.37% | -12.20% | -13.22% | -11.25% |
+| <i>Apartment 2</i> |  |  |  |  |  |  |  |  |  |
+| Nerfacto | 19.10 | 22.67 | 25.62 | 0.777 | 0.836 | 0.884 | 0.381 | 0.232 | 0.160 |
+| NeRAF | <b>20.53</b> | <b>23.46</b> | <b>26.06</b> | <b>0.802</b> | <b>0.856</b> | <b>0.895</b> | <b>0.322</b> | <b>0.206</b> | <b>0.150</b> |
+| ΔNeRAF | +7.48% | +3.49% | +1.69% | +3.26% | +2.31% | +1.20% | -15.27% | -11.14% | -6.03% |
+
+### 4.2 EVALUATION
+
+**Metrics.** Following (Su et al., 2022; Liang et al., 2023a), we assess the quality of the predicted impulse responses using Reverberation Time (T60), Clarity (C50) and Early Decay Time (EDT). T60 reflects the overall sound decay within a room by measuring the time an impulse response takes to decay by 60 dB. C50 measures the energy ratio between the first 50 ms of RIR and the remaining portion. It relates to speech intelligibility, and the clarity of acoustics. EDT focuses on early reflections. For RAF dataset, we also evaluate the STFT error which is the absolute error between the predicted and the ground-truth log-magnitude STFTs (Défossez et al., 2018; Luo et al., 2022; Chen et al., 2024). To assess the effect of cross-modal learning on novel view synthesis, we employ commonly used metrics: PSNR, SSIM, and LPIPS.
+
+**Experimental Setup.** Similar to (Su et al., 2022; Luo et al., 2022; Liang et al., 2023a), we use 90% of SoundSpaces audio data for training and 10% for testing. They are pre-generated binaural RIRs with corresponding source and microphone positions. We resample the RIR to 22.05 kHz and compute STFT using  $N_{\text{FFT}} = W = 512$  and  $H = 128$  where  $N_{\text{FFT}}$  is the number of FFT bins, W the Hann window size and H the hop length. To train the vision part, we generate RGB images using Habitat Sim. Camera poses and parameters were selected to limit the amount of visual data. For small, medium and large rooms, we use respectively 45, 75 and 150 observations. Evaluation set comprises 50 images. More details on the motivations and the generation process are available in Appendix D.
+
+For RAF, we follow previous works experimental setup: we keep 80% of data for training and 20% for evaluation. Audios are cut to 0.32 s, sampled to 48 kHz and processed into STFT using  $N_{\text{FFT}} = 1024$ ,  $W = 512$  and  $H = 256$ . For the vision part, we randomly select one third of the data from cameras 20 to 25. Nerfstudio automatically keep 90% of them for training and 10% for evaluation.
+
+![Figure 6: Visualization of cross-modal learning impact on vision performances. The figure shows two rows of images for Apartment 1 and Apartment 2. The top row is labeled 'Vision Only' and the bottom row is labeled 'Audio + Vision'. Each row contains four images of interior rooms. Red circles highlight specific areas in the images, likely indicating artifacts or details that are improved by the audio-visual joint training. The 'Audio + Vision' row shows more detailed and clearer images compared to the 'Vision Only' row.](f01b22e5bb303653828200595aece414_img.jpg)
+
+Figure 6: Visualization of cross-modal learning impact on vision performances. The figure shows two rows of images for Apartment 1 and Apartment 2. The top row is labeled 'Vision Only' and the bottom row is labeled 'Audio + Vision'. Each row contains four images of interior rooms. Red circles highlight specific areas in the images, likely indicating artifacts or details that are improved by the audio-visual joint training. The 'Audio + Vision' row shows more detailed and clearer images compared to the 'Vision Only' row.
+
+Figure 6: **Visualization of cross-modal learning impact on vision performances.** We compare Nerfacto (Vision Only) with NeRAF (Audio + Vision) on apartment 1 and 2. Learning both radiance and acoustic fields improves the quality of novel views synthesis, reducing floating artifacts and enabling more detailed images.
+
+{8}------------------------------------------------
+
+![Figure 7: Few-shot learning. Three line graphs showing T60 (s), C50 (dB), and EDT (sec) vs. % of training data (20, 40, 60, 80, 100). NeRAF (solid blue line) outperforms AV-NeRF (dashed orange line) on all metrics. T60 and EDT decrease as training data increases, while C50 increases and then plateaus. NeRAF consistently achieves better performance than AV-NeRF across all training data percentages.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 7: Few-shot learning. Three line graphs showing T60 (s), C50 (dB), and EDT (sec) vs. % of training data (20, 40, 60, 80, 100). NeRAF (solid blue line) outperforms AV-NeRF (dashed orange line) on all metrics. T60 and EDT decrease as training data increases, while C50 increases and then plateaus. NeRAF consistently achieves better performance than AV-NeRF across all training data percentages.
+
+Figure 7: **Few-shot learning.** With 25% less audio recordings, NeRAF outperforms AV-NeRF trained on all the training data. Results are averaged on office 4, frl apartment 2 and apartment 2.
+
+To ensure statistically significant results, we conduct each experiment 6 times and average results. More details on the implementation and architecture are presented in [Appendix B](#) and [Appendix C](#).
+
+**Results.** We compare NeRAF with state-of-the-arts methods on SoundSpaces in [Table 1](#) (Left). Similar to previous works on neural acoustic field, we also compare our method to traditional audio encoding methods AAC and Opus (for [Standardization, 2006; Foundation, 2012](#)). AAC is a multichannel audio coding standard and Opus is an open audio codec. NeRAF significantly outruns existing methods for C50 and EDT. It achieves 22.4% improvement on C50 and 28.6% on EDT compared to NACF with temporal alignment. Compared to AV-NeRF – which is the method most similar to ours as it also employ Nerfacto and does not rely on a large amount of information known a priori – we achieve respectively 13.4%, 33.3% and 37.5% improvement for T60, C50 and EDT.
+
+As SoundSpaces is a simulated dataset that presents limitations in term of visual and acoustics realism, we also present results on RAF in [Table 1](#) (Right). NeRAF outperforms previous works best results, achieving -6.7% T60, -14.2% C50, -4.5% EDT and -52.5% STFT error. The second part of the table contains a comparison of methods using an additional energy decay loss term ([Majumder et al., 2022; Liang et al., 2023b](#)). While NACF initially relies on this term, other methods, with this new term, are denoted by “++”. NeRAF++ still achieves state-of-the-art results, in particular for C50, EDT and STFT error. We present details about this loss in [Appendix C](#). We showcase qualitative results of audio synthesis in [Figure 5](#) and in [Appendix I](#).
+
+**Cross-Modal Learning.** We next investigate the impact of jointly learning acoustic and radiance fields on vision in complex scenes with very sparse training views, a challenging scenario where NeRF typically struggles. We train NeRAF and Nerfacto on the two large rooms. 75, 100, 150 images are used for training and the same 50 novel views are used for evaluation. In [Table 2](#) we show that joint training of cross-modal learning improves novel view synthesis. It has a stronger impact on LPIPS which is related to the human-perceived similarity between two images. Overall, the performance improvement is more significant when the training images are very sparse. We present qualitative results in [Figure 6](#): NeRAF reduces floating artifacts and enables more detailed images. Results on real scenes and additional visualizations are presented respectively in [Appendix J](#) and [Appendix I](#).
+
+**Generalization on Multiple Scenes.** We evaluate NeRAF’s ability to generalize across multiple scenes. To this end, we train the acoustic field across multiple scenes without increasing the model size. Since Nerfacto is scene-dependent, we first train one NeRF-model for each scene. We populate a 128-grid per scene using the grid sampler and trained NeRFs. These grids are fed into the ResNet3D, which is trained jointly with the acoustic field. Batches are drawn from all scenes during training to ensure global convergence. [Table 3](#) compares single-scene to multi-scene training. The results show similar performance, demonstrating NeRAF’s capability to effectively learn the acoustic field across multiple scenes with a single model. In this setup, the visual modality supports the adaptation to different rooms. However, as NeRF and NACF are not trained jointly, the visual component does not benefit from cross-modal learning. Detailed results for each scene are provided in [Appendix O](#).
+
+Table 3: **Multi-scene training.** Comparison of NeRAF performance when trained per scene versus on multiple scenes. Results are averaged across office 4, frl apartment 4 and apartment 2.
+
+| Training | T60 (%) ↓ | C50 (dB) ↓ | EDT (sec) ↓ |
+|-|-|-|-|
+| Single-scene | 2.29 | <b>0.37</b> | <b>0.010</b> |
+| Multi-scene | <b>2.24</b> | <b>0.37</b> | <b>0.010</b> |
+
+{9}------------------------------------------------
+
+Table 4: **Ablation studies. Left:** Influence of the grid evaluated on RAF dataset. NG stands for no grid, 128 w/ 0 for a 128-grid filled with zeros, while 128 and 256 respectively correspond to grid of resolutions  $S = 128$  and  $S = 256$ . **Bold and underlined** respectively indicates best and second best. **Right:** NeRAF’s loss study. Performances averaged across SoundSpaces dataset.
+
+| Grid | T60 (%) ↓ | C50 (dB) ↓ | EDT (sec) ↓ | Loss | T60 (%) ↓ | C50 (dB) ↓ | EDT (sec) ↓ |
+|-|-|-|-|-|-|-|-|
+| NG | 8.15 | 0.674 | 0.212 | MSE | 1.89 | 0.53 | 0.015 |
+| 128 w/ 0 | 7.75 | 0.626 | 0.0205 | SC+SL <sub>L1</sub> | <b>1.56</b> | 0.42 | 0.013 |
+| 128 | <u>7.47</u> | <u>0.609</u> | <b>0.0201</b> | SC+SL <sub>MSE</sub> | 2.14 | <b>0.38</b> | <b>0.010</b> |
+| 256 | <b>7.42</b> | <b>0.608</b> | <u>0.0204</u> |  |  |  |  |
+
+**Few-shot RIR Synthesis.** Previous works evaluated on SoundSpaces rely on a significant amount of RIRs, which is often unavailable in real-life scenarios. Therefore, we assess the performance of our model when trained with fewer data. We conduct a few-shot experiment on one small, one medium, and one large room and average the results. As shown in Figure 7, NeRAF is better than AV-NeRF on all metrics when trained with 75% of the data. It still outperforms AV-NeRF on EDT when trained with only 25% of the data. On RAF dataset – which is a real-world dataset that already contains a more realistic amount of training data – NeRAF still outperforms the previous methods when trained with 25% less data. Results on RAF are presented in Appendix E.
+
+### 4.3 ABLATION STUDY
+
+**Grid Impact.** We assess the grid impact on performances in Table 4 (Left) by first removing the grid (NG) and then filling the 128-grid with zeros (128 w/ 0). In both cases, NacF is no longer conditioned by the 3D priors from the scene. Removing the grid also means we reduce the number of trainable parameters as we no longer keep the features extractor. By setting the grid to zero we remove scene-related information and still keep the exact same architecture. This way, we show that the performance gap cannot be explained only by an increased number of parameters but rather to the information extracted from the 3D-grid. We also study the impact of the resolution of the grid by comparing  $S = 128$  and  $S = 256$ . Increasing the resolution to 256 improves T60 and slightly C50 but is accompanied by a minor EDT decline and increased training computation time.
+
+**Loss Impact.** We examine the impact of our custom loss described in Section 3.5 compared to the MSE loss used in previous works (Liang et al., 2023a; Luo et al., 2022) and the combination with L1 spectral loss proposed by (Yamamoto et al., 2020) in Table 4 (Right). Our loss combination significantly improves C50 and EDT but decreases T60. Thus, this loss choice is a trade-off that can be adjusted to the final application. Note that NeRAF also achieves state-of-the-art performances with SC+SL<sub>L1</sub> combination.
+
+## 5 DISCUSSION
+
+**Limitation and Future Work.** While the neural acoustic field can be trained on multiple scene, it is still necessary to train NeRF separately for each scene. Future work should explore advancements in generalizable NeRF to develop a unified, generalizable approach for synthesizing audio-visual scenes. The current approach is also limited to static scenes. Addressing the challenge of learning implicit representations for audio-visual scenes with dynamic sound sources would be a significant advancement.
+
+**Conclusion.** We introduce NeRAF, a cross-modal method that learns both neural radiance and acoustic fields. By conditioning the acoustic field with scene features from a 3D grid containing geometric and appearance information, NeRAF enables realistic audio auralization, spatialization and novel view synthesis. Our results demonstrate improvements over other methods, enhanced novel view synthesis in complex scenes and increased data efficiency.
+
+ Rest of paper (reference and Appendix) is removed.

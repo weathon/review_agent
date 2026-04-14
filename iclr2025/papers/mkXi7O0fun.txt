@@ -1,0 +1,291 @@
+
+
+{0}------------------------------------------------
+
+# DATA VALUE ESTIMATION ON PRIVATE GRADIENTS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+For gradient-based machine learning (ML) methods commonly adopted in practice such as stochastic gradient descent, the *de facto* differential privacy (DP) technique is perturbing the gradients with random Gaussian noise. Data valuation attributes the ML performance to the training data and is widely used in privacy-aware applications that require enforcing DP such as data pricing, collaborative ML, and federated learning (FL). *Can existing data valuation methods still be used when DP is enforced via gradient perturbations?* We show that the answer is no with the default approach of injecting i.i.d. random noise to the gradients because the *estimation uncertainty* of the data value estimation paradoxically *linearly scales* with more estimation budget, producing estimates almost like random guesses. To address this issue, we propose to instead inject carefully correlated noise to provably remove the linear scaling of estimation uncertainty w.r.t. the budget **with some assumptions on the gradient distribution**. We also empirically demonstrate that our method gives better data value estimates on various ML tasks and is applicable to use cases including dataset valuation and FL.
+
+## 1 INTRODUCTION
+
+With growing data privacy regulations (Bukaty, 2019; Council of European Union, 2014) and machine learning (ML) model attacks (Shokri et al., 2017), privacy has become a primary concern in many scenarios such as collaborative ML (Sim et al., 2020; Xu et al., 2021) and federated learning (FL) (McMahan et al., 2017; Yang et al., 2019). Differential privacy (DP) (Dwork & Roth, 2014) is commonly adopted as the *de facto* framework to provide privacy protection for training data with theoretical guarantees. In deep learning, DP is typically achieved by perturbing the gradients w.r.t. the model’s loss on the training data (Abadi et al., 2016).
+
+Data valuation (Ghorbani & Zou, 2019) has received increased interest from providing attribution for parties in collaborative ML (Sim et al., 2022) and identifying data quality for data curation (Ghorbani & Zou, 2019) and data marketplace (Agarwal et al., 2019). Data values are often estimated with sampling-based methods such as Monte Carlo (Castro et al., 2009) on user statistics, e.g. gradients of user data (Ghorbani & Zou, 2019). However, the sensitive nature of the user statistics requires privacy during data valuation to protect the data of participants in collaboration (Sim et al., 2023) or to facilitate interaction between data buyers and sellers in a marketplace (Chen et al., 2023). Specifically, enforcing DP on the data is desirable in these scenarios for two reasons: 1) DP enjoys the post-processing immunity (Dwork & Roth, 2014), allowing further access to data without risking privacy leakage; 2) DP offers a natural trade-off between privacy protection and data quality: Data contributors can determine at their discretion the level of information protection at the expense of degraded data quality. While some previous works considered DP in data valuation (Sim et al., 2023; Wang et al., 2023; Watson et al., 2022), they either focused on a limited class of ML models or required a trusted central server, both of which are difficult to satisfy in real-world scenarios (Sim et al., 2022). A natural question arises: *Can we circumvent these two challenges in data valuation while enforcing DP?*
+
+One might think of perturbing gradients on user data before using them for updating a gradient-trained parametric model to overcome the challenges. Unfortunately, we demonstrate that the naive approach of adding i.i.d. Gaussian noise (Dwork & Roth, 2014) to user gradients leads to practically useless data value estimates: The perturbation on the gradients erodes the information they carry, leading to a lowered data value and increased data value estimation uncertainty because the noise introduced by such perturbation accumulates with repeated evaluations (i.e., sampling methods
+
+{1}------------------------------------------------
+
+methods (Castro et al., 2009; Maleki et al., 2014)). While a lowered (mean of) data value estimate is intuitive and expected as a result of information loss (Dwork et al., 2015; Kairouz et al., 2015), *increased estimation uncertainty* can render existing data valuation methods useless because the magnitude of the noise scales with the evaluation budget for a fixed DP guarantee. As an illustration, the 3rd figure of Fig. 2 shows that as the number of evaluations  $k$  increases, removing data with high data value estimates produces a curve closer to that with random removal, implying that more evaluation samples, paradoxically, have *worsened* the quality of data value estimates. We theoretically account for this counter-intuitive phenomenon by showing that perturbation introduced by DP can cause the estimation uncertainty of data value estimates, measured in terms of the variance brought by the perturbation, to *scale linearly in the number of evaluations*.
+
+Fortunately, through our developed theoretical analysis, we derive an insight that leads to a method for controlling the estimation uncertainty. We focus the analysis on the family of semivalues widely adopted as data valuation metrics such as data Shapley (Ghorbani & Zou, 2019), Beta Shapley (Kwon & Zou, 2022), and data Banzhaf (Wang & Jia, 2023). We revisit the paradigm of data valuation in the context of gradient-based DP ML and thus design a technique that perturbs the gradients with *correlated noise* in repeated evaluations to mitigate the above issue. Contrary to the linear scaling of estimation uncertainty of the data value estimates with the evaluation budget in the naive approach, our proposed method is shown to control the estimation uncertainty to a *constant*. Additionally, we empirically demonstrate that, on various ML tasks, our proposed method produces (i) greater model degradation from removing high-value data; and (ii) higher AUC scores in identifying label-corrupted data. In comparison, the naive approach performs similarly to random selection. We also apply our approach to other scenarios including dataset valuation (Wu et al., 2022) and FL (McMahan et al., 2017). Our specific contributions are summarized as follows:
+
+- We formalize a notion of *estimation uncertainty* (Eq. (3)) to specifically target the uncertainty due to DP. We then theoretically identify that under the naive approach of injecting i.i.d. noise for DP, the estimation uncertainty grows in  $\Omega(k)$  with the evaluation budget  $k$  (Prop. 5.1), resulting in low-quality data value estimates.
+- As mitigation, we propose a simple yet effective approach (in Algorithm 1) via injecting correlated noise to control the estimation uncertainty to  $\mathcal{O}(1)$  (Prop. 5.4) as opposed to  $\Omega(k)$ .
+- We empirically demonstrate the implications of the escalating estimation uncertainty shown by the near-random performance on the data removal task (Sec. 6.1) and noisy label detection task (Sec. 6.2). Our approach outperforms the baseline approach on these tasks (Sec. 6.2) and on noisy label detection task in dataset valuation and FL (Sec. 6.3).
+
+## 2 RELATED WORK
+
+Prior works (Sim et al., 2023; Wang et al., 2023; Watson et al., 2022; Usynin et al., 2024) that consider privacy-aware data valuation have limited applicability due to limited settings. (Sim et al., 2023) considered perturbing user statistics to ensure DP but is restricted on the class of Bayesian models whereas we consider a wider family of models trained with gradient-based methods including neural networks. (Wang et al., 2023) proposed a private variant of KNN-Shapley but did not generalize to other semivalues, whereas our method applies to all semivalues. Watson et al. (2022) directly perturbed the semivalue estimates. However, both (Wang et al., 2023; Watson et al., 2022) require a trusted server to centralize the original gradients which may not reflect real-world scenarios where untrusted central servers pose added privacy risks, whereas our approach does not require a trusted central server. (Usynin et al., 2024) assessed using variance of gradients and privacy loss-input susceptibility score to select useful data points for DP training. The authors further propose methods to compute the DP version of these scores. (Bani-Harouni et al., 2023) considered improving the performance of DP-SGD by utilizing cosine similarity between privatized per-sample gradient and original gradient to decide whether to include the gradient in averaged gradient.
+
+Li & Yu (2023); Wang & Jia (2023) identified that stochastic utility functions can lead to noisy data values which deteriorated the rank preservation and proposed to use (weighted) Banzhaf values as the semivalue metric. Although the noise introduced by DP also renders the utility functions stochastic, their methods do not consider the DP setting where noise scales with the number of evaluation budgets. We specifically consider mitigating the issue of the scaling noise.
+
+{2}------------------------------------------------
+
+Dwork et al. (2010); Li et al. (2015); Nasr et al. (2020) introduced correlated noise to mitigate the effect of noise brought by DP, which has since been widely adopted in online learning with DP requirement to improve learning performance (Choquette-Choo et al., 2023a;b; Denisov et al., 2023; Kairouz et al., 2021). In contrast, we apply correlated noise to the setting of data valuation with privacy needs, to improve the quality of data value estimates. (Koloskova et al., 2024) analyzed the use of correlated noise under a DP follow-the-regularized-leader setting.
+
+## 3 PRELIMINARIES
+
+We recall the definition of semivalue for data valuation (Ghorbani & Zou, 2019) and the necessary preliminaries on DP.
+
+### 3.1 DATA VALUATION
+
+**Semivalues.** Denote  $[n] := \{1, 2, \dots, n\}$ . The *semivalue* of  $i$  in a set  $[n]$  of parties w.r.t. a utility function  $V : 2^{[n]} \rightarrow \mathbb{R}$  and a weight function  $w : [n] \rightarrow \mathbb{R}$  s.t.  $\sum_{r=1}^n \binom{n-1}{r-1} w(r) = n$  is (Dubey et al., 1981)
+
+$$\phi_i := \sum_{r=1}^n n^{-1} w(r) \sum_{S \subseteq N \setminus \{i\}, |S|=r-1} [V(S \cup \{i\}) - V(S)]. \quad (1)$$
+
+Leave-one-out (Cook, 1977), Shapley value (Shapley, 1953), and Banzhaf value (Wang & Jia, 2023) are examples of semivalues. In data valuation, a party can be represented by a data point, a dataset, or (the data of) an agent in FL setting. In ML, semivalues are often treated as a random variable and estimated using Monte Carlo methods (Castro et al., 2009; Maleki et al., 2014) since  $[n]$  is usually large and  $V$  is stochastic (more details in App. B.1). Denote  $P_j^\pi$  as the set of predecessors of party  $j$  in a permutation  $\pi$  uniformly randomly drawn from the set of all permutations  $\Pi$ , and let  $p_j(\pi) := 2^{n-1} n^{-1} w(|P_j^\pi \cup \{j\}|)$ , then  $\phi_j = \mathbb{E}[\psi_j]$  with  $\psi_j$  an average over  $k$  random draws:
+
+$$\psi_j = (1/k) \sum_{t=1}^k p_j(\pi^t) [V(P_j^{\pi^t} \cup \{j\}) - V(P_j^{\pi^t})]. \quad (2)$$
+
+### 3.2 DIFFERENTIALLY PRIVATE MACHINE LEARNING (DP ML)
+
+**Definition 3.1** (( $\epsilon, \delta$ )-Differential Privacy (Dwork & Roth, 2014, Def. 2.4)). A randomized algorithm  $\mathcal{M}$  with domain  $\mathcal{D}$  and range  $\mathcal{R}$  is said to be  $(\epsilon, \delta)$ -differentially private if for any two neighboring<sup>1</sup> datasets  $d, d' \in \mathcal{D}$ , and for all event  $S \subseteq \mathcal{R}$ ,  $\Pr(\mathcal{M}(d) \in S) \leq \exp(\epsilon) \Pr(\mathcal{M}(d') \in S) + \delta$ .
+
+Importantly, the DP guarantee of  $\mathcal{M}$  is immune against post-processing (Dwork & Roth, 2014, Proposition 2.1). The composition  $f \circ \mathcal{M}$  with an arbitrary randomized mapping  $f$  have the same DP guarantee as  $\mathcal{M}$ . We adopt this definition of DP to show the linearly scaling effect of perturbation (Sec. 5.1). We elaborate in App. B.2 that our analysis can be extended to other DP frameworks.
+
+## 4 SETTINGS AND PROBLEM STATEMENT
+
+**Settings.** Our analysis is based on the G-Shapley framework (Ghorbani & Zou, 2019) for gradient-based ML methods where a parametric ML model learns from the data of each party via the perturbed gradients of the data against a deterministic loss function  $\mathcal{L} : [n] \times \mathbb{R}^d \rightarrow \mathbb{R}$  which maps the (data of a) party and model parameters ( $\in \mathbb{R}^d$ ) to a score ( $\in \mathbb{R}$ ). The utility improvement reflects the data value after the model updates its parameters with the gradient. For an evaluation budget  $k$ ,  $k$  uniformly random permutations  $\pi^1, \dots, \pi^k \in \Pi$  are sampled, and for each sampled permutation  $\pi$  (superscript omitted), a model is randomly initialized with  $\theta_\pi$  and updated by the parties *in sequence* according to  $\pi$ . Then, denote  $\theta_{\pi,j}^\ell$  the model parameters immediately before party  $j$  updates the model in permutation  $\pi$ . For each subsequent party  $j$  in  $\pi$ , the Gaussian mechanism is adopted to obtain a perturbed gradient  $\tilde{g}_{\pi,j}$  to update the model  $\theta_{\pi,j} := \theta_{\pi,j}^\ell - \alpha \tilde{g}_{\pi,j}$  where  $\tilde{g}_{\pi,j} := \hat{g}_{\pi,j} + z$  from a Gaussian noise  $z \sim \mathcal{N}(\mathbf{0}, (C\sigma)^2 I)$  (with  $C, \sigma > 0$ ) and the norm clipped gradient  $\hat{g}_{\pi,j} := g_{\pi,j} / \max(1, \|g_{\pi,j}\|_2/C)$  based on the gradient  $g_{\pi,j} := \nabla_{\theta} \mathcal{L}(j, \theta_{\pi,j}^\ell)$  derived from  $j$ 's data. For a fixed test dataset, a utility  $V(P_j^\pi \cup \{j\})$  representing the test performance depends on
+
+<sup>1</sup>Two inputs  $x, x'$  are neighboring if they differ by one training example (Abadi et al., 2016).
+
+{3}------------------------------------------------
+
+the model parameter  $\theta_{\pi,j}$  (e.g.  $V$  is the negated test loss), so we replace  $V(P_j^\pi \cup \{j\})$  with  $V(\theta_{\pi,j})$  hereafter to highlight the interaction between model parameters and utility. While it is possible  $P_j^\pi \cup \{j\}$  results in different  $\theta_{\pi,j}$  due to the random model initialization and varying orders of parties in  $\pi$ , our subsequent definition of estimation uncertainty (Eq. (3)) carefully excludes their effects and focuses on the uncertainty due to DP if  $V$  is *deterministic* w.r.t. model parameters  $\theta$  as we fix  $\theta_{\pi,j}^p$ . Algorithm 1 outlines this **i.i.d. noise approach**, **our method** and **a variant**, explained in Sec. 5.
+
+#### --- **Algorithm 1** **i.i.d.** **Corr. Noise (X)** **Corr. Noise (Y)** ---
+
+```
+
+1: Input: number of parties  $n$ , utility function  $V$ , clipping norm  $C$ , loss function  $\mathcal{L}$ , noise multiplier
+ $\sigma$ , number of evaluations  $k$ , weight coefficient  $p_j$ , burn-in ratio  $q$ .
+2: for  $t \leftarrow 1$  to  $k$  do
+3:   Draw  $\pi^t \stackrel{\text{unif.}}{\sim} \Pi$  and initialize the model with  $\theta_{\pi^t}$ ;
+4:    $i \leftarrow \pi^t[0]$ ;  $\theta_{\pi^t,i} \leftarrow \theta_{\pi^t}$ 
+5:   for  $j \in \{\pi^t[1], \pi^t[2], \dots, \pi^t[n]\}$  do
+6:      $g_{\pi^t,j} \leftarrow \nabla_{\theta} \mathcal{L}(j, \theta_{\pi^t,j}^p)$ 
+7:      $\tilde{g}_{\pi^t,j} \leftarrow g_{\pi^t,j} / \max(1.0, \|g_{\pi^t,j}\|_2/C) + \mathcal{N}(\mathbf{0}, k(C\sigma)^2 \mathbf{I})$ 
+8:     if Correlated Noise (X) or Correlated Noise (Y) then
+9:        $\tilde{g}_{\pi^t,j} \leftarrow (1 - X_{t,t}) \times \tilde{g}_j^{\text{roll}} + X_{t,t} \times \tilde{g}_{\pi^t,j}$ 
+10:       $\tilde{g}_j^{\text{roll}} \leftarrow (t - 1)/t \times \tilde{g}_j^{\text{roll}} + 1/t \times \tilde{g}_{\pi^t,j}$ 
+11:    end if
+12:     $\theta_{\pi^t,j} \leftarrow \theta_{\pi^t,j}^p - \alpha \tilde{g}_{\pi^t,j}$ 
+13:    if Correlated Noise (Y) then
+14:      if  $t > kq$  then
+15:         $\psi_j \leftarrow \frac{t-kq-1}{t-kq} \psi_j + \frac{p_j(\pi^t)}{t-kq} (V(\theta_{\pi^t,j}) - V(\theta_{\pi^t,i}))$ 
+16:      end if
+17:       $i \leftarrow j$  and Continue
+18:    end if
+19:     $\psi_j \leftarrow \frac{t-1}{t} \psi_j + p_j(\pi^t) (V(\theta_{\pi^t,j}) - V(\theta_{\pi^t,i})) / t$ ;  $i \leftarrow j$ 
+20:  end for
+21: end for
+22: Return  $\psi$ 
+
+```
+
+---
+
+**Problem Statement.** We study how noise introduced by DP impacts the estimation uncertainty of semivalue estimates. Formally, the estimation uncertainty for each party  $j$  is defined as
+
+$$\text{Var}[\psi_j | \theta_{\pi^1,j}^p, \theta_{\pi^2,j}^p, \dots, \theta_{\pi^k,j}^p], \quad (3)$$
+
+and we aim to precisely understand its (asymptotic) relationship with  $k$  under i.i.d. noise and using our proposed method (in Sec. 5) respectively. While Eq. (3) may seem more complicated than  $\text{Var}[\psi_j]$ , the conditioning effectively removes the stochasticity in permutation sampling, gradient descent, and model initialization, thus focusing on the impact of noise introduced by DP. Indeed, when there is no perturbation due to DP and  $V$  is *deterministic* (w.r.t.  $\theta$ ),  $\text{Var}[\psi_j | \theta_{\pi^1,j}^p, \theta_{\pi^2,j}^p, \dots, \theta_{\pi^k,j}^p] = 0$ , meaning Eq. (3) solely depends on the randomness from the perturbations of DP. Importantly, the definition of estimation uncertainty in Eq. (3) admits precise and intuitive results about the randomness due to DP, enabling us to pinpoint an issue with the i.i.d. noise approach; then, we propose the correlated noise approach to asymptotically reduce this uncertainty and mitigate the issue.
+
+**Remark.** We note that minimizing the estimation uncertainty *does not* necessarily recover the original (i.e., without DP) data value estimate since DP exerts an upper bound on the marginal contribution (more discussed in App. B.4). Nevertheless, we highlight that this limitation does not diminish the merit of our analysis as reducing estimation uncertainty helps **improve the preservation of the ranking** of data value estimates of different parties **compared to the naive approach of injecting**
+
+{4}------------------------------------------------
+
+**i.i.d. noise**, which is an important axiomatic characterization and a common application of such data value metrics (Ghorbani & Zou, 2019; Zhou et al., 2023).
+
+Our subsequent analysis is w.r.t. a particular party  $j$  and for notational brevity, omits the subscript  $j$  (e.g.,  $\theta_{\pi,j} = \theta_{\pi}, \tilde{g}_{\pi,j} = \tilde{g}_{\pi}$ ) where the context is clear. Table 4 in App. A consolidates the important notations used throughout this work.
+
+## 5 APPROACH AND THEORETICAL RESULTS
+
+We summarize the results on estimation uncertainty for the naive approach (i.i.d. noise), our method, and a variant in Table 1. All proofs and derivations are deferred to App. C.
+
+Table 1: Summary of theoretical results.  $\sigma_q^2$  refers to the average variance of unperturbed gradients.  $q \in (0, 1)$  is a hyperparameter.
+
+| Result | Asymptotic Estimation Uncertainty | Approach |
+|-|-|-|
+| Prop. 5.1 | $\Omega(k)$ | <b>i.i.d. noise</b> |
+| Prop. 5.3 | $\mathcal{O}(\log^2 k + \sigma_q^2)$ | <b>Our method</b> |
+| Prop. 5.4 | $\mathcal{O}(\log^2(1/q)/(1-q)^2 + \sigma_q^2)$ | <b>Our method (variant)</b> |
+
+![Figure 1: Two box plots. The left plot shows Delta_cos vs. Budget k (50, 100, 150, 200, 250, 300). The right plot shows Delta_g vs. Budget k (50, 100, 150, 200, 250, 300). Both plots compare 'i.i.d. noise' (blue) and 'Our method' (red). In the left plot, 'Our method' has higher Delta_cos values (better) than 'i.i.d. noise'. In the right plot, 'Our method' has lower Delta_g values (better) than 'i.i.d. noise'.](3ef2266eb61ae3929cdae1742c1f526e_img.jpg)
+
+Figure 1: Two box plots. The left plot shows Delta\_cos vs. Budget k (50, 100, 150, 200, 250, 300). The right plot shows Delta\_g vs. Budget k (50, 100, 150, 200, 250, 300). Both plots compare 'i.i.d. noise' (blue) and 'Our method' (red). In the left plot, 'Our method' has higher Delta\_cos values (better) than 'i.i.d. noise'. In the right plot, 'Our method' has lower Delta\_g values (better) than 'i.i.d. noise'.
+
+Figure 1: Left: Box plots of  $\Delta_{\cos}$  vs. budget  $k$ , where higher is better. Right: Box plots of  $\Delta_g$  vs. budget  $k$ , where lower is better.  $\epsilon = 1$  for both plots.
+
+**Choice of  $V$ .** For the purpose of mathematical analysis, we consider, in our theoretical analysis, the case where  $V$  is deterministic, non-positive, and Lipschitz smooth. An example of such  $V$  is the (average) negated loss on a fixed test dataset (Ghorbani & Zou, 2019), elaborated in Sec. 5.1. Nevertheless, Sec. 6.1 additionally empirically investigates test accuracy as  $V$ , which is discrete, to show our method works even if these properties are relaxed.
+
+### 5.1 I.I.D. NOISE CAUSES SCALING ESTIMATION UNCERTAINTY
+
+We first reveal that the propagation of noise from each  $z_i$  to  $V$  can be catastrophic to the estimator  $\psi$ : a *higher* evaluation budget  $k$ , surprisingly, leads to a *higher* estimation uncertainty.
+
+The estimator  $\psi$  in Eq. (2) aggregates various marginal contributions  $m(\pi) = V(\theta_{\pi}) - V(\theta_{\pi}^{\emptyset})$  over different  $\pi \in \Pi$ . Thus, if  $\psi$  requires  $k$  evaluations of  $m$ , party  $j$  needs to reveal its gradients  $k$  times. The repeated release of gradients increases the privacy risk, requiring greater perturbation to maintain the same DP guarantee. In the Gaussian mechanism, the best known variance of the Gaussian noise grows in  $\Theta(k)$  (Abadi et al., 2016, Theorem 1) (more discussed in App. B.3), so each Gaussian noise is expressed as  $z_i \sim \mathcal{N}(0, k(C\sigma)^2 I)$  where both  $C$  and  $\sigma^2$  are constants satisfying a fixed  $(\epsilon, \delta)$ -DP guarantee hereafter.
+
+The linear scaling of  $\text{Var}[z_i]$  creates a *vicious cycle*: More marginal contributions are needed to obtain a more certain semivalue estimation, incurring a larger  $k$ , which in turn necessitates greater perturbations for DP and increasing the estimation uncertainty. Formally, we show that the perturbations used to guarantee DP are amplified by a strongly concave utility function  $V$  (achievable with a strongly convex loss w.r.t. model parameters, such as K-Means, Lasso, and logistic regression with weight decay), and causes the estimation uncertainty of semivalues to grow in the order of  $\Omega(k)$ , via two specific globally strongly convex loss functions:
+
+**Proposition 5.1. (I.I.D. Noise)**  $\forall t \in [k]$ , denote  $\theta_{\pi^t} := \theta_{\pi^t}^{\emptyset} - \alpha \tilde{g}_{\pi^t} = \theta_{\pi^t}^{\emptyset} - \alpha(\hat{g}_{\pi^t} + z_t)$  where  $\forall t \in [k], z_t \stackrel{\text{i.i.d.}}{\sim} \mathcal{N}(0, k(C\sigma)^2 I)$  under the Gaussian mechanism. Denote a test dataset  $\mathcal{D}_{\text{test}} = \{(\mathbf{x}_1, y_1), \dots, (\mathbf{x}_l, y_l)\}$  of  $l$  data points. If  $V$  is the negated mean-squared error loss on a linear regression model
+
+$$V(\theta) := -l^{-1} \sum_{i=1}^l (\theta^{\top} \mathbf{x}_i - y_i)^2,$$
+
+or the negated  $\ell_2$ -regularized cross-entropy loss on a logistic regression model
+
+$$V(\theta) := l^{-1} \sum_{i=1}^l (1 - y_i) \log(1 - \text{Sig}(\theta, \mathbf{x}_i)) + l^{-1} \sum_{i=1}^l y_i \log(\text{Sig}(\theta, \mathbf{x}_i)) - \lambda \|\theta\|_2^2$$
+
+{5}------------------------------------------------
+
+where  $\text{Sig}(\theta, x_i) = (1 + e^{-\theta^\top x_i})^{-1}$  is the sigmoid function and  $\lambda > 0$  is the regularization hyperparameter. Denote  $m(\pi^t) := V(\theta_{\pi^t}) - V(\theta_{\pi^t}^p)$ . Further denote a regular semivalue estimator  $\psi := k^{-1} \sum_{t=1}^k p(\pi^t) m(\pi^t)$ .<sup>2</sup> Then,  $\text{Var}[\psi|\theta_{\pi^1}^p, \theta_{\pi^2}^p, \dots, \theta_{\pi^k}^p] = \Omega(k)$ .
+
+As an intuition, consider that in each iteration, a Gaussian noise of variance  $k(C\sigma)^2$  is injected to each gradient and amplified when propagated to the loss (i.e.,  $-V$  by definition) due to strong convexity to become  $\Omega(k^2)$ , and the averaging over multiple evaluations shaves off a factor of  $k$ , yielding the final  $\Omega(k)$  estimation uncertainty. Worse, the estimation uncertainty grows asymptotically with  $k$ : increasing the evaluation budget increases the estimation uncertainty due to the noise of DP.
+
+One might ask whether this issue persists for deep neural networks that generally have a non-convex loss. As the loss surface of neural networks can exhibit strong convexity around local minima (Kleinberg et al., 2018; Milne, 2019), we derive, with a few additional assumptions including a notion of local strong convexity, a counter-part result to Prop. 5.1 w.r.t. deep neural networks where the estimation uncertainty is also  $\Omega(k)$  via Prop. C.4 in App. C. In short, using i.i.d. noise can lead to scaling estimation uncertainty in many cases, raising a significant issue for data valuation, which we mitigate next.
+
+### 5.2 CORRELATED NOISE TO REDUCE ESTIMATION UNCERTAINTY
+
+The key to mitigating this “linearly scaling” estimation uncertainty lies in reducing the variance of the noise  $z_t$  in each iteration to render it less significant after amplification when propagated to the loss (equivalently  $V$ ). Taking advantage of the way data values are estimated where private gradients are continuously released in each iteration, we can add a carefully correlated noise  $z_t^*$  to the gradients  $\hat{g}_{\pi^t}$  instead of independent noise  $z_t \sim \mathcal{N}(0, k(C\sigma)^2 \mathbf{I})$  while achieving the same DP guarantee.
+
+Constructing  $z_t^*$  exploits the post-processing property of DP: reusing previously released private statistics does not affect the DP guarantee level. At each iteration  $t$ , instead of directly injecting i.i.d. noise to  $\hat{g}_{\pi^t}$  to become  $\tilde{g}_{\pi^t} := \hat{g}_{\pi^t} + z_t$ , estimation uncertainty can be reduced by reusing the i.i.d.-perturbed gradients  $\tilde{g}_{\pi^1}, \dots, \tilde{g}_{\pi^t}$ . To ease the understanding of the core idea, we begin by assuming that the original gradients at each iteration are identical, i.e.  $\hat{g}_{\pi^1} = \hat{g}_{\pi^2} = \dots = \hat{g}_{\pi^k}$ , and relax it later. Instead of  $\tilde{g}_{\pi^t}$ , a *weighted sum* (e.g.,  $\tilde{g}_{\pi^t}^* := t^{-1} \sum_{l=1}^t \tilde{g}_{\pi^l}$ ) of previously released private gradients can be utilized. This implicitly constructs the correlated noise  $z_t^* := t^{-1} \sum_{l=1}^t z_l \sim \mathcal{N}(0, (k/t)(C\sigma)^2 \mathbf{I})$ , resulting a reduction in variance by a factor of  $t$ . To see how this variance reduction is propagated to  $V$ , compare the variance on the following strongly convex function (to mimic  $V$ ):  $\text{Var}[\|\tilde{g}_{\pi^t}\|_2^2] \rightarrow t^{-2} \text{Var}[\|\hat{g}_{\pi^t}\|_2^2]$  as  $k \rightarrow \infty$  (see Obs. C.1). Notice that the variance reduction is amplified from  $t^{-1}$  to  $t^{-2}$ . Indeed, such variance reduction can lead to an  $\mathcal{O}(\log^2 k)$  bound for the estimation uncertainty (see Prop. C.9). However, two questions remain: (i) Is the “identical gradient” assumption satisfied for semivalue estimation, and what if it is not? (ii) How to cleverly reuse previously privatized gradients to obtain a lower estimation uncertainty?
+
+For question (i), unfortunately, the assumption is *not* satisfied: The gradients at each permutation  $\hat{g}_{\pi^t}$ , though obtained from the same underlying data, are not identical in general since  $\theta_{\pi^t}^p$  are different for different  $\pi^t$ . Specifically, consider a party  $j$  whose unperturbed gradients in  $k$  evaluations are  $\hat{g}_{\pi^1}, \hat{g}_{\pi^2}, \dots, \hat{g}_{\pi^k}$ . The unperturbed gradients are first injected with a Gaussian noise to produce the perturbed gradients  $\tilde{g}_{\pi^t} = \hat{g}_{\pi^t} + z_t$  for  $t \in [k]$ . Then, party  $j$  will release the gradient
+
+$$\tilde{g}_{\pi^t}^* := t^{-1} \sum_{l=1}^t \tilde{g}_{\pi^l} = t^{-1} \sum_{l=1}^t \hat{g}_{\pi^l} + t^{-1} \sum_{l=1}^t z_l$$
+
+which, however, is not an unbiased estimator for  $\hat{g}_{\pi^t}$  since  $\mathbb{E}[\tilde{g}_{\pi^t}^*] = t^{-1} \sum_{l=1}^t \hat{g}_{\pi^l} \neq \hat{g}_{\pi^t}$  unless  $\hat{g}_{\pi^1} = \hat{g}_{\pi^2} = \dots = \hat{g}_{\pi^k}$  (i.e., identical gradients). Nevertheless, empirical observations suggest that as compared to  $\tilde{g}_{\pi^t}$ ,  $\tilde{g}_{\pi^t}^*$  is much “closer” to  $\hat{g}_{\pi^t}^*$  in terms of the mean difference in cosine similarity
+
+$$\Delta_{\cos} := n^{-1} \sum_{j \in [n]} k^{-1} \sum_{t=1}^k [\cos(\hat{g}_{\pi^t, j}, \tilde{g}_{\pi^t, j}^*) - \cos(\hat{g}_{\pi^t, j}, \tilde{g}_{\pi^t, j})]$$
+
+where  $\cos(a, b) := |a \cdot b| / (\|a\|_2 \|b\|_2)$ , and the difference in  $\ell_2$  distance
+
+$$\Delta_{\ell_2} := n^{-1} \sum_{j \in [n]} k^{-1} \sum_{t=1}^k \|\hat{g}_{\pi^t, j} - \tilde{g}_{\pi^t, j}^*\|_2 - \|\hat{g}_{\pi^t, j} - \tilde{g}_{\pi^t, j}\|_2 ,$$
+
+<sup>2</sup>A regular semivalue has  $p(\pi) > 0$  for all  $\pi \in \Pi$  (Carreras & Freixas, 2002). Examples include Shapley value and Banzhaf value.
+
+{6}------------------------------------------------
+
+as shown in Fig. 1 where we empirically investigate the similarity with 400 randomly selected data points from the diabetes dataset (Efron et al., 2004) trained with logistic regression. The difference is even more pronounced with a higher budget  $k$ , suggesting that  $\tilde{g}_{\pi^t}^*$  is better than  $\tilde{g}_{\pi^t}$  in approximating  $\hat{g}_{\pi^t}$ . Therefore, relaxing the assumption of identical gradients, we assume that they are i.i.d. samples of a distribution (also assumed in (Faghihi et al., 2020; Zhang et al., 2013)). Additionally, we further assume an **diagonal** sub-Gaussian distribution, defined as follows.
+
+**Definition 5.2 (Diagonal Multivariate Sub-Gaussian Distribution).** Let  $X \in \mathbb{R}^n$  be a random vector with  $\mathbb{E}[X] = 0$ .  $X$  is said to follow a diagonal multivariate sub-Gaussian distribution if  $\forall i \in [n], X_i$  follows a sub-Gaussian distribution and  $\forall i, j \in [n]$  s.t.  $i \neq j, \text{Cov}[X_i, X_j] = 0$ .
+
+For question (ii), we specifically consider linear combinations of the private gradients to use linearity of expectation to ensure unbiasedness (see P2). Formally, we express the finally released gradients in all iterations as a matrix product  $W = XA$ , where  $A = (\tilde{g}_{\pi^1}^*, \dots, \tilde{g}_{\pi^k}^*)^\top$  and  $X$  is a square matrix (which will be relaxed in Sec. 5.3) mapping  $A$  to the matrix of released gradients  $W = (\tilde{g}_{\pi^1}^*, \dots, \tilde{g}_{\pi^k}^*)^\top$ . Since there are many possible matrices  $W$ , we describe two key principles (specific to data valuation) in selecting  $W$ , for a square matrix  $X$ .
+
+P1. **Lower triangularity:**  $X$  should be lower triangular.
+
+P2. **Unbiasedness:** the combined gradient  $\tilde{g}_{\pi^t}^*$  should be a *weighted sum* of the previous gradients, i.e.,  $\tilde{g}_{\pi^t}^* := \sum_{l=1}^t X_{t,l} \tilde{g}_{\pi^l}$  where  $\sum_{l=1}^t X_{t,l} = 1$ .
+
+P1 ensures that each revealed gradient is calculated as a weighted prefix sum of the preceding perturbed gradients as future gradients are unknown. P2 ensures unbiased gradient estimate  $\mathbb{E}[\tilde{g}_{\pi^t}^*] = \mathbb{E}[\tilde{g}_{\pi^t}]$  (note that we treat  $\tilde{g}_{\pi^t}$  as a random variable here), and thus an unbiased estimate for the utility. The following square matrix  $X^*$  satisfies P1 and P2:
+
+$$X_{i,j}^* := i^{-1} \cdot \mathbf{1}_{j \leq i}. \quad (4)$$
+
+Despite its simplicity,  $X^*$  is surprisingly a “one-size-fits-all” matrix as it delivers a lower asymptotic bound than  $\Omega(k)$  (with i.i.d. noise) when  $k$  is large, even if the unperturbed gradients are not identical:
+
+**Proposition 5.3 (Correlated Noise with  $X$ , informal).** Let  $\tilde{g}_{\pi^t}, l \in [t]$  be perturbed gradients using the Gaussian mechanism that satisfies  $(\epsilon, \delta)$ -DP.  $\forall t \in [k]$ , denote  $\theta_{\pi^t}^* := \theta_{\pi^t}^p - \alpha \sum_{l=1}^t X_{t,l} \tilde{g}_{\pi^l}$ ,  $m^*(\pi^t) := V(\theta_{\pi^t}^*) - V(\theta_{\pi^t}^p)$  and  $\psi^* := k^{-1} \sum_{t=1}^k p(\pi^t) m^*(\pi^t)$ . Assume that  $\forall t \in [k], \tilde{g}_{\pi^t} - \mathbb{E}[\tilde{g}_{\pi^t}]$  i.i.d. follow an **diagonal** multivariate sub-Gaussian distribution with covariance  $\Sigma \in \mathbb{R}^{(d \times d)}$  and let  $\sigma_g^2 := d^{-1} \sum_{r=1}^d \Sigma_{r,r}$ . Then, using a suitable matrix  $X$  can produce  $\text{Var}[\psi^* | \theta_{\pi^1}^p, \theta_{\pi^2}^p, \dots, \theta_{\pi^k}^p] = \mathcal{O}(\log^2 k + \sigma_g^4)$  and  $\mathbb{E}[\psi^* - \psi] = \mathcal{O}(\log k + \sigma_g^2)$  while satisfying  $(\epsilon, \delta)$ -DP. Moreover, as  $k \rightarrow \infty$ ,  $X \rightarrow X^*$ .
+
+A formal statement of Prop. 5.3 and its proof is found in Appendix (Prop. C.10). Prop. 5.3 offers a better bound than  $\Omega(k)$  in Prop. 5.1 as  $\sigma_g^2$  is a constant. Notice that as  $k \rightarrow \infty$ ,  $X \rightarrow X^*$ . An exciting implication of Prop. 5.3 is that one can use  $X^*$  to approximate  $X$  by setting a large  $k$  regardless of  $\sigma_g^2$  and achieve the given asymptotic bound. Another implication is that implementation of Prop. 5.3 is simple since all  $X_{t,l}$  are identical except for  $X_{t,t}$ . Thus  $X$  is fully specified by just  $k$  parameters:  $X_{t,t}$  for  $t \in [k]$ . As shown in Algorithm 1 in [red](#), on top of [i.i.d.](#), the model is updated using a weighted sum between  $\tilde{g}_{\pi^{t-1}}^*$  and  $\tilde{g}_{\pi^t}$  at each iteration  $t$ .
+
+### 5.3 MORE VARIANCE REDUCTION WITH NON-SQUARE MATRIX
+
+The bound in Prop. 5.3, though asymptotically better than  $\Omega(k)$ , still grows in terms of  $k$ : estimates still become worse even with more samples. Inspired by the “burn-in” technique (Neiswanger et al., 2014) widely employed in MCMC, we show that it is possible to achieve a constant bound via a *non-square* matrix (i.e., relaxing P1). For an arbitrary square matrix  $X$ , consider its counterpart  $Y$  defined with a hyperparameter  $q \in (0, 1)$ ,  $Y_{(k-kq) \times k} := X(kq + 1 : k; 1 : k)$  where the bracket means taking a sub-matrix with the selected rows and columns. In other words, given a  $X, Y$  is a sub-matrix of  $X$  with the  $(kq + 1)$ th row to the last row, and thus a counterpart to  $X$  and relaxes P1. The intuition is that in the first few iterations,  $t$  is small, causing  $\tilde{g}_{\pi^t}^*$  to still incur relatively large variances even with correlated noise via  $X$ . As a remedy,  $Y$  effectively discards these highly fluctuating marginal contributions to yield an asymptotically even lower total variance than  $X$ .
+
+{7}------------------------------------------------
+
+**Proposition 5.4 (Correlated Noise with  $Y$ , informal).** Let  $\tilde{g}_{\pi^l}, l \in [t]$  be perturbed gradients using the Gaussian mechanism that satisfies  $(\epsilon, \delta)$ -DP.  $\forall t \in \{kq+1, \dots, k\}$ , denote  $\theta_{\pi^t}^* := \theta_{\pi^t}^p - \alpha \sum_{l=1}^t Y_{t-kq,l} \tilde{g}_{\pi^l}$ ,  $m^*(\pi^t) := V(\theta_{\pi^t}^*) - V(\theta_{\pi^t}^p)$ , and  $\psi^* := (k-kq)^{-1} \sum_{t=kq+1}^k p(\pi^t) m^*(\pi^t)$  for  $q \in (0, 1)$ . With the same assumption and the suitable matrix  $X$  discussed in Prop. 5.3, setting  $\forall t \in [k], \forall l \in [t], Y_{t,l} = X_{t,l}$  produces  $\text{Var}[\psi^* | \theta_{\pi^1}^p, \theta_{\pi^2}^p, \dots, \theta_{\pi^k}^p] = \mathcal{O}((1-q)^{-2} \log^2(1/q) + \sigma_g^4)$  and  $\mathbb{E}[\psi^* - \psi] = \mathcal{O}((1-q) \log 1/q + \sigma_g^2)$  while satisfying  $(\epsilon, \delta)$ -DP.
+
+A formal statement of Prop. 5.4 is in Appendix (Prop. C.11). Prop. 5.4 shows that we can control the estimation uncertainty by a *constant* (i.e., entirely removing the effect of  $k$ ) with a combination of correlated noise and burn-in. Intuitively, the first term represents the injected noise controlled by  $q$ . In particular, since  $kq \in \mathbb{N}^+$ , we have  $q \geq 1/k$  which implies  $\log^2(1/q) \leq \log^2 k$ . As such, when  $k \rightarrow \infty$  and  $q \rightarrow 1/k$ , the bound is reduced to that in Prop. 5.3. As  $q \rightarrow 1$ , too many evaluation samples are “burnt”, leaving insufficient samples to average out the noise as reflected by the exploding first term where  $(1-q)^{-2} \log^2(1/q) \rightarrow \infty$ . We show in detail how  $q$  affects the estimation uncertainty in Sec. 6.2. Pseudo-code is in Algorithm 1 (in [green](#)). On top of [red](#) and [blue](#), [green](#) lines exclude the first  $kq$  marginal contributions from being included in  $\psi$ .
+
+## 6 EXPERIMENTS
+
+We fix  $C = 1.0$  and  $(\epsilon = 1, \delta = 5 \times 10^{-5})$ -DP guarantee unless otherwise specified. All experiments are repeated over 5 independent trials. We focus on classification tasks as they are more susceptible to noise and defer regression task to App. D.3. We consider data selection and noisy label detection tasks as standard evaluations of the effectiveness of a data value estimate (Ghorbani & Zou, 2019; Kwon & Zou, 2022; Wang & Jia, 2023; Zhou et al., 2023). Exploiting Prop. 5.3, we set a large  $k \geq 200$  (except FL) and use  $X^*$  and  $Y^*$  for adding correlated noise. Additional experimental settings and results are in App. D.
+
+While our theoretical results have provided a  $(\epsilon, \delta)$ -DP guarantee level, in App. D.1, we verify the privacy protection of our method by constructing a membership inference attack (MIA) following the setting in (Wang et al., 2023), and demonstrate that our method can successfully defend against the constructed MIA. For experiments in the main text, we focus on how our method improves the data value estimation with privacy protection.
+
+### 6.1 INCREASING $k$ UNDER I.I.D. NOISE *Does Not* REDUCE THE ESTIMATION UNCERTAINTY
+
+We empirically show the scaling estimation uncertainty as the evaluation budget  $k$  increases and its implication. As a setup, we randomly choose 400 training examples from the diabetes dataset (Efron et al., 2004) with the remaining data points as the test dataset. We train a logistic regression using the negated cross-entropy loss on the test dataset as the utility function  $V$ . To evaluate the estimation uncertainty, we first examine the quality of data value estimates through mean-adjusted variance of  $\psi_j$  (Zhou et al., 2023), which is the ratio between the empirical variance  $s_{i.i.d.}^2 := k^{-1}(k-1)^{-1} \sum_{t=1}^k [m_j(\pi^t) - \mu_j]^2$  and the empirical mean  $\mu_j := k^{-1} \sum_{t=1}^k m_j(\pi^t)$ . We also examine how test accuracy changes when removing training examples with the highest  $\psi$ ’s. The leftmost figure of Fig. 2 shows that the mean-adjusted variance  $s_{i.i.d.}^2 / |\mu_{i.i.d.}|$  with i.i.d. noise increases with  $k$ , indicating greater estimation uncertainty, whereas using correlated noise,  $s_{\text{corr.}}^2 / |\mu_{\text{corr.}}|$  not only decreases but is also smaller by several magnitudes (in  $10^5$ ). Moreover,  $\mu_{i.i.d.}$ ’s computed with i.i.d. noise are increasingly negative as  $k$  increases, whereas  $\mu_{\text{corr.}}$ ’s computed with correlated noise stay positive, suggesting that the estimated  $\psi$ ’s are less affected by noise. The 3rd figure of Fig. 2 shows that  $\psi$ ’s computed with greater  $k$  produces higher test accuracy during removal (i.e., closer to random removal), verifying our identified paradox that  $\psi$ ’s computed with more budget are poorer estimates of data values.
+
+### 6.2 CORRELATED NOISE IMPROVES THE QUALITY OF THE ESTIMATES
+
+Following the same setup as Sec. 6.1, we compute the  $\psi$ ’s using correlated noise (with  $q = 0.8$ ) and no injected noise due to DP respectively. The results are shown in the rightmost figure of Fig. 2. Removing data points with high  $\psi$ ’s computed with no injected noise produces low test accuracy
+
+{8}------------------------------------------------
+
+![Figure 2: Four plots showing data value estimation. (a) mean [q] variance vs budget k for i.i.d. and correlated noise. (b) mean of estimates vs budget k. (c) error bars of test accuracy vs fraction of data removed for different k. (d) accuracy vs fraction of data removed for k=1000, q=0.8.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 2: Four plots showing data value estimation. (a) mean [q] variance vs budget k for i.i.d. and correlated noise. (b) mean of estimates vs budget k. (c) error bars of test accuracy vs fraction of data removed for different k. (d) accuracy vs fraction of data removed for k=1000, q=0.8.
+
+Figure 2: (a)  $n^{-1} \sum_{j \in [n]} s_j^2 / [\mu_j]$  and (b)  $\mu_j$  vs.  $k$  using i.i.d. noise and correlated noise. (c) error bars of test accuracy vs. ratio of data removed with the highest  $\psi$ 's using different  $k$  with i.i.d. noise and (d) also with correlated noise and no DP. "Random" means random removal.
+
+close to that with correlated noise. In contrast, the curve of  $\psi$ 's computed with i.i.d. noise lies far above (i.e., close to random removal), suggesting that  $\psi$ 's computed with correlated noise are much more reflective of the true worth of data as compared to  $\psi$ 's computed with i.i.d. noise.
+
+**Ablation study on the influence of  $q$ .** We study how much  $q$  affects the data value estimation in a noisy label detection setting on two datasets. We randomly perturb 30% of labels on a selection of 800 training examples from Covtype dataset (Blackard, 1998) (and MNIST dataset (LeCun et al., 1990) in App. D.4) respectively. The datasets are trained with logistic regression (LR) and a more complex convolutional network (CNN). Ideally, a good data value estimate should assign the lowest  $\psi$ 's to the perturbed training examples. To measure this, we plot the AUC-ROC curve (AUC) in Fig. 3 with  $q = 0$  equivalent to  $X^*$ . With increased  $k$ , the AUC with our method *increases* especially in the large- $q$  region while the AUC with i.i.d. noise *decreases*. We also observe that AUC generally increases with  $q$  when  $q \lesssim 0.9$ .
+
+**Adopting other utility functions.** While our theoretical analysis is w.r.t. negated loss as the utility function  $V$ , we demonstrate similar results with test accuracy as  $V$ , shown in the right column of Fig. 3. Our method still outperforms i.i.d. noise, although the AUC is lower than when  $V$  is negated loss. We think this is because accuracy is a less fine-grained metric. Hence subtle changes in the model performance (often due to perturbation) in this task cannot be well reflected. Moreover, we observe that as  $q \rightarrow 1$ , AUC degrades, consistent with the result in Prop. 5.4.
+
+![Figure 3: Six plots showing AUC vs. burn-in ratio q for different datasets and utility functions. Top row: k=200, bottom row: k=1000. Left column: CNN, MNIST; middle column: LR, Covtype; right column: LR, Covtype (accuracy). Legend: i.i.d. (blue dashed), corr. (orange solid), no DP (green dashed).](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+Figure 3: Six plots showing AUC vs. burn-in ratio q for different datasets and utility functions. Top row: k=200, bottom row: k=1000. Left column: CNN, MNIST; middle column: LR, Covtype; right column: LR, Covtype (accuracy). Legend: i.i.d. (blue dashed), corr. (orange solid), no DP (green dashed).
+
+Figure 3: Plots of AUC vs. burn-in ratio  $q \in [0, 1)$  (with  $q = 0$  equivalent to  $X^*$ ).  $V$  is (left and middle) negated test loss and (right) test accuracy. Lines represent mean and shades represent 1 standard deviation. Higher is better.
+
+**Experiments on other semivalues.** We compare the effect of utilizing correlated noise with data Banzhaf (Wang & Jia, 2023) and Beta Shapley (Kwon & Zou, 2022) in Table 2. We consider the same setup as Sec. 6.2 with  $k = 1000$ . We compare the performance using  $X^*$  and  $Y^*$  with
+
+{9}------------------------------------------------
+
+Table 2: Mean (std. errors) of AUC on Cover-type trained with LR (top) and MNIST trained with CNN (bottom). The best score is highlighted. Higher is better.
+
+| semivalues | no DP | i.i.d. noise | $\mathbf{X}^*$ | $\mathbf{Y}^*$ ( $q = 0.5$ ) | $\mathbf{Y}^*$ ( $q = 0.9$ ) |
+|-|-|-|-|-|-|
+| Shapley | 0.905 (1.0e-03) | 0.675 (6.0e-03) | 0.735 (2.0e-02) | 0.774 (8.0e-03) | <b>0.798 (4.0e-03)</b> |
+| Banzhaf | 0.896 (2.0e-03) | 0.633 (1.7e-02) | 0.725 (2.0e-02) | 0.770 (8.0e-03) | <b>0.777 (4.0e-03)</b> |
+| Beta(1, 1) | 0.882 (1.0e-03) | 0.612 (1.4e-02) | 0.721 (2.1e-02) | 0.766 (8.0e-03) | <b>0.777 (4.0e-03)</b> |
+| Beta(6, 1) | 0.875 (0.0e-00) | 0.557 (2.4e-03) | 0.707 (2.0e-02) | 0.757 (8.0e-03) | <b>0.767 (5.0e-03)</b> |
+| Shapley | 0.988 (0.00) | 0.600 (1.5e-02) | 0.627 (2.3e-02) | 0.803 (4.0e-03) | <b>0.825 (6.0e-03)</b> |
+| Banzhaf | 0.985 (1.0e-04) | 0.572 (2.0e-02) | 0.616 (2.3e-02) | 0.808 (4.0e-03) | <b>0.827 (7.0e-03)</b> |
+| Beta(4, 1) | 0.991 (0.00) | 0.569 (1.5e-02) | 0.618 (2.1e-02) | 0.789 (4.0e-03) | <b>0.810 (7.0e-03)</b> |
+| Beta(6, 1) | 0.992 (0.00) | 0.539 (1.0e-02) | 0.615 (1.1e-02) | 0.773 (5.0e-03) | <b>0.793 (9.0e-03)</b> |
+
+Table 3: Mean (std. errors) of  $\Delta_{\text{i.i.d.}}$  and  $\Delta_{\text{corr.}}$  for dataset valuation (top) and FL (bottom). Best scores are highlighted (lower is better).  $B$  is the dataset size.
+
+| ML Task | $[k, B]$ | $\Delta_{\text{i.i.d.}}$ | $\Delta_{\text{corr.}}$ (Ours) |
+|-|-|-|-|
+| MNIST + CNN | [20, 800, 8] | 0.290 (1.53-02) | <b>0.170 (3.74e-02)</b> |
+| CIFAR10 + CNN | [1000, 100, 32] | 0.178 (5.85e-02) | <b>0.003 (1.25e-02)</b> |
+| CIFAR10 + ResNet18 | [1000, 100, 32] | 0.204 (5.33e-02) | <b>0.119 (1.75e-02)</b> |
+| CIFAR10 + ResNeXt | [1000, 100, 32] | 0.144 (8.21e-03) | <b>0.0833 (7.0e-03)</b> |
+| MNIST + CNN | [50, 50, 32] | 0.195 (9.4e-03) | <b>0.0810 (8.06e-03)</b> |
+| CIFAR10 + CNN | [50, 50, 32] | 0.167 (3.96e-02) | <b>0.0415 (9.63e-03)</b> |
+
+$q \in \{0.5, 0.9\}$ . For all variants, the AUC is higher than that with i.i.d. noise. Particularly,  $q = 0.9$  works the best for all 4 semivalues tested. In contrast, the AUCs with i.i.d. noise using data Banzhaf are  $\approx 0.53$  on both datasets, *close to randomness* (0.5). The results show that our method generalizes to various data valuation metrics. We also note a similar improvement for LOO (Cook, 1977) in App. D.4 despite it not being a regular semivalue.
+
+### 6.3 APPLICATION TO OTHER USE CASES
+
+We verify the effectiveness of using correlated noise for dataset valuation (Wu et al., 2022) and collaborator attribution in federated learning (Wang et al., 2020) (refer to App. D.2 for setup). We consider MNIST dataset and CIFAR10 (Krizhevsky et al., 2012) dataset, trained on CNN and fine-tuned on pretrained ResNet18/34 (He et al., 2015). We tabulate the difference in AUC between using correlated noise with  $q = 0.9$ , denoted as  $\Delta_{\text{corr.}} := \text{AUC}_{\text{no DP}} - \text{AUC}_{\text{corr.}}$ , and using i.i.d. noise, denoted as  $\Delta_{\text{i.i.d.}} := \text{AUC}_{\text{no DP}} - \text{AUC}_{\text{i.i.d.}}$ . For ResNet34, we use  $\epsilon = 10$  as the model is more complex, causing both i.i.d. and our method to have degraded performance with strict privacy. Our methods outperform i.i.d. noise as shown in Table 3 top. For FL, we notice that the continually updating characteristic of the global model poses two challenges: (i) the overall scale of the loss values decreases in each round as the model gradually converges such that marginal contributions computed in later rounds are less significant, and (ii) the variance of gradients  $\sigma_g^2$  is larger than in common data valuation scenarios. To tackle these challenges, we adopt test accuracy as  $V$  so that  $V$  are in the same scale in each round, use a matrix with  $\mathbf{X}_{t,t} > 1/t$  to control  $\sigma_g^2$ , and choose a small burn-in ratio  $q = 0.2$  to keep more evaluations in the first few rounds (detailed in App. D.2). The results with these modifications are shown in Table 3 bottom. Our method outperforms i.i.d. noise by a large margin, showing the applicability of our approach beyond the default data valuation setting under which our theoretical results are developed.
+
+## 7 CONCLUSION, LIMITATIONS, AND FUTURE WORKS
+
+In this work, we identify a problem in data valuation where DP is enforced via perturbing gradients with i.i.d. noise: The estimation uncertainty scales linearly (i.e.,  $\Omega(k)$ ) with more budget  $k$  and renders the data value estimates almost useless (i.e., close to random guesses in some investigated cases). As a solution, we propose to use correlated noise and theoretically show that using a weighted sum via matrix form using  $\mathbf{X}$  provably reduces the estimation uncertainty of semivalues from  $\Omega(k)$  to  $\mathcal{O}(1)$  and empirically demonstrate the implications of our method on various ML tasks and data valuation metrics. One limitation is the need to store the gradients. However, this limitation is alleviated when the number of parties is small (e.g. dataset valuation) or when the memory load can be distributed across parties (e.g. FL). Another limitation is that our theoretical result assumes an **diagonal** multivariate sub-Gaussian distribution of the gradients. Nevertheless, we empirically demonstrate that our method works for neural networks where the assumption is not explicitly satisfied. A future direction is to explore other possible  $\mathbf{X}$  to reduce estimation uncertainty further.
+
+## REFERENCES
+
+Martin Abadi, Andy Chu, Ian Goodfellow, H. Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. Deep learning with differential privacy. In *Proceedings of the ACM SIGSAC Conference on Computer and Communications Security*, 2016.
+
+ Rest of paper (reference and Appendix) is removed.

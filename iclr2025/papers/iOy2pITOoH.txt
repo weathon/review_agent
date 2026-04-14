@@ -1,0 +1,408 @@
+
+
+{0}------------------------------------------------
+
+# SPARK TRANSFORMER: HOW MANY FLOPS IS A TOKEN WORTH?
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+This work introduces *Spark Transformer*, an architectural variant of the Transformer model that drastically reduces the FLOPs count while maintaining comparable quality and an identical parameter count. This reduction is achieved by introducing sparse activations in both the feedforward network (FFN) and the Attention mechanism. In the FFN, this sparsity engages only a subset of parameters for each input. In the Attention mechanism, it limits the number of tokens that each token attends to. We achieve this sparsity through *statistical top-k*, a lightweight approximate algorithm that is well-suited for accelerator hardware and minimizes training slowdown. Furthermore, Spark Transformer incorporates dedicated predictors to identify the activated entries. These predictors are formed by allocating a portion of the model’s parameters and are trained jointly with the rest of the model. This approach distinguishes Spark Transformer from existing methods that introduce sparsity and predictors post-training, which often leads to increased training costs, additional model parameters, and complex modifications to the model architecture. Our Spark Transformer, pretrained using the Gemma 2 recipe, achieves competitive performance on standard benchmarks while exhibiting significant sparsity. Specifically, it utilizes only 8% nonzeros in the FFN activation and attends to a maximum of 256 tokens. This results in a  $3.1\times$  reduction in FLOPs, yielding a  $1.70\times$  speedup for prefill and a  $1.79\times$  speedup for decoding on a 16-core CPU VM.
+
+## 1 INTRODUCTION
+
+The machine learning landscape has witnessed a surge in large-scale Transformer models (Anil et al., 2023; Almazrouei et al., 2023; Dubey et al., 2024; Adler et al., 2024), pushing the boundaries of language understanding and generation. However, the pursuit of scale is often constrained not by limitations in model quality, but by the escalating computational costs (Sharir et al., 2020; Patterson et al., 2021) associated with increasing parameter counts (Kaplan et al., 2020). This challenge is further exacerbated by the development of models that handle increasingly long context inputs (Reid et al., 2024), where computational demands grow proportionally with context length.
+
+*Sparse activation* is a popular approach for addressing the computational challenges posed by both large model size and long context length. To handle large models, sparse activation reduces costs by engaging only a small subset of model parameters for each input. This approach has gained significant interest following the discovery of an intriguing phenomenon: the feed-forward networks (FFNs) in classic Transformers like T5 (Raffel et al., 2020) and ViT (Dosovitskiy, 2020) exhibit *natural* activation sparsity (Zhang et al., 2022; Li et al., 2022). In other words, these models demonstrate sparsity without explicit enforcement. This inherent sparsity, reaching remarkable levels like 3% nonzeros in T5, presents an opportunity for substantial efficiency gains with minimal modifications to the model architecture.
+
+Unfortunately, this natural sparsity is absent in the latest generation of models (Jiang et al., 2023; Gemma Team, 2024; Dubey et al., 2024), which have adopted *gated non-ReLU* activation functions (Dauphin et al., 2017). To re-introduce sparsity, recent work has explored extra pretraining steps, either by switching back to ReLU activations (Mirzadeh et al., 2023; Zhang et al., 2024) or by adding *top-k* thresholding (Yerram et al., 2024; Song et al., 2024a;b). This is often combined with training a low-cost predictor to identify activated parameters, a crucial step for maximizing efficiency gains (Liu et al., 2023; Zeng et al., 2023; Song et al., 2023; Yerram et al., 2024). However,
+
+{1}------------------------------------------------
+
+Table 1: **FLOPs per token comparison: Spark Transformer vs. standard Transformer.** In a standard Transformer with model dimension  $d_{\text{model}}$ , we assume multi-head attention where the sum of head dimensions equals  $d_{\text{model}}$ , and an FFN with non-gated activation and width  $d_{\text{ff}}$ . Here,  $n_{\text{ctx}}$  represents the context length for the target token. The computational cost is primarily determined by the FFN (assuming  $d_{\text{ff}} \gg d_{\text{model}}$ , which is typical) and the attention dot product (assuming a long context length). Spark Transformers introduce sparsity parameters,  $k_{\text{ff}}$  and  $k_{\text{attn}}$ , to reduce FLOPs. Setting  $k_{\text{ff}} = 8\% \times d_{\text{ff}}$  and  $k_{\text{attn}} = 256$  achieves a  $3.2\times$  FLOPs reduction in the FFN, a  $4\times$  reduction in the attention dot product, and a  $3.1\times$  reduction overall (assuming  $n_{\text{ctx}} = 8k$ ) for Gemma-2B.
+
+| Operation | FLOPs per Token <sup>1</sup> |  |
+|-|-|-|
+|  | Standard Transformer | Spark Transformer (Ours) |
+| FFN | $2d_{\text{model}}d_{\text{ff}}$ | $0.5d_{\text{model}}d_{\text{ff}} + 1.5d_{\text{model}}k_{\text{ff}}$ |
+| Attention dot product | $2d_{\text{model}}n_{\text{ctx}}$ | $0.5d_{\text{model}}n_{\text{ctx}} + 1.5d_{\text{model}} \min\{k_{\text{attn}}, n_{\text{ctx}}\}$ |
+| Attention linear projection | $4d_{\text{model}}^2$ | $4d_{\text{model}}^2$ |
+
+these approaches not only complicate the training procedure and incur extra training costs, but also introduce additional parameters (for the predictor) and have yet to demonstrate high sparsity levels without compromising model quality.
+
+Sparse activation for attention, often called sparse attention, faces a similar challenge. Sparsity is used to efficiently handle long context input by limiting the number of tokens each token attends to. A straightforward approach is top- $k$  attention (Gupta et al., 2021), which applies a top- $k$  mask to the attention coefficients. This can be combined with a low-cost predictor to maximize efficiency (Ribar et al., 2023; Yang et al., 2024; Lee et al., 2024c). However, achieving high sparsity and a predictor without complicated procedure and sacrificing quality remains a challenge.
+
+**Contributions.** This work introduces *Spark Transformer*, an architectural variant of Transformer that achieves both high activation sparsity and low-cost prediction in both the FFN and Attention mechanisms. Notably, Spark Transformer can be trained in a single stage without requiring separate post-processing and maintains quality without introducing additional parameters. This makes it a suitable drop-in replacement for standard Transformer models. Because the FFN and attention components dominate the computational cost in large Transformers with long contexts, Spark Transformer drastically reduces the overall FLOP count for decoding a token (see Table 1).
+
+We pretrain a Spark Transformer using the Gemma-2 recipe (Gemma Team, 2024), resulting in a model we call Spark Gemma-2. Evaluation on standard benchmarks demonstrates that Spark Gemma-2 closely matches the quality of Gemma-2, even with a high degree of sparsity: only 8% activated entries in the FFN and a maximum of 256 attended tokens in attention (see Table 2). This sparsity leads to a  $3.1\times$  reduction in overall FLOPs compared to Gemma-2. Using this sparsity, we evaluate model efficiency with `gemma.cpp` (Google Gemma.cpp, 2024), a C++ inference engine optimized for serving Gemma models on CPUs, and observe a speedup of up to  $1.79\times$  (see Figure 3). Notably, on a readily available 4-core cloud VM, Spark Gemma-2 achieves a decoding speed of 86 ms per token, surpassing typical human reading speed (Brysbaert, 2019). This increased efficiency enables wider access to high-quality models for users with limited access to high-FLOP devices, such as GPUs and TPUs.
+
+Spark Transformer leverages the interpretation of both FFN and attention as key-value lookup tables (Geva et al., 2021) to provide a unified solution for achieving sparsity and prediction. Specifically, the predictor is obtained by repurposing a subset of the dimensions of the query and key vectors to produce an importance score for each key-value pair (see Section 3). Top- $k$  thresholding is applied to these scores to identify the activated keys. In particular, standard top- $k$  thresholding requires performing a sorting, which is inefficient particularly on training accelerators. To address this, we introduce *statistical top- $k$* , a linear complexity algorithm for approximate nearest neighbor search (see Section 2) based on fitting a Gaussian distribution to the activation entries and estimating a threshold that yields the top entries. While ideas similar to statistical top- $k$  have been used (Shi et al., 2019; M Abdelmoniem et al., 2021) for the problem of distributed training (Lin et al., 2018), we are the first to introduce, adapt, and verify its effectiveness for activation sparsity.
+
+<sup>1</sup>Please refer to Section 3.1 and Section 3.2 for the calculation of FLOPs for FFN and Attention, respectively. We omit non-leading-order terms (e.g., those arising from embedding, normalization, and nonlinear layers) and exclude the number of layers as a common multiplier.
+
+{2}------------------------------------------------
+
+## 2 STATISTICAL TOP-K
+
+This section introduces Statistical-Top $_k$ , an approximate algorithm for obtaining the  $k$  largest entries of an input vector. Recall that the *soft-thresholding operator* is defined for an arbitrary vector  $\mathbf{x} \in \mathbb{R}^d$  and a scalar threshold  $\theta \in \mathbb{R}$  as
+
+$$\text{Soft-Threshold}(\mathbf{x}, \theta) \stackrel{\text{def}}{=} \max\{\mathbf{x} - \theta \cdot \mathbf{1}, \mathbf{0}\} \in \mathbb{R}^d, \quad (1)$$
+
+where  $\mathbf{1}$  and  $\mathbf{0}$  are  $d$ -dimensional vectors with all entries equal to 1 and 0, respectively. The soft-thresholding operator shifts each entry of  $\mathbf{x}$  to the left by  $\theta$  and then thresholds the result at zero.
+
+We define Statistical-Top $_k$  as the following mapping from  $\mathbb{R}^d$  to  $\mathbb{R}^d$ :
+
+$$\text{Statistical-Top}_k(\mathbf{x}) \stackrel{\text{def}}{=} \text{Soft-Threshold}(\mathbf{x}, \theta(\mathbf{x}, k)), \text{ where } \theta(\mathbf{x}, k) \stackrel{\text{def}}{=} \text{mean}(\mathbf{x}) + \text{std}(\mathbf{x}) \cdot Q(1 - \frac{k}{d}) \quad (2)$$
+
+Here,  $\text{mean}(\mathbf{x}) \stackrel{\text{def}}{=} \frac{1}{d} \sum_{i=1}^d x_i$  and  $\text{std}(\mathbf{x}) \stackrel{\text{def}}{=} \sqrt{\frac{1}{d-1} \sum_{i=1}^d (x_i - \text{mean}(\mathbf{x}))^2}$  compute the sample mean and standard deviation of the entries of  $\mathbf{x}$ , respectively, and  $Q(\cdot)$  is the quantile function (i.e., inverse of the cumulative distribution function) of the standard Gaussian distribution.
+
+Statistical-Top $_k$  in Eq. (2) operates by first computing a threshold  $\theta(\mathbf{x}, k)$  such that approximately  $k$  entries of  $\mathbf{x}$  exceed it, and then applying the soft-thresholding operator with this threshold to  $\mathbf{x}$  to obtain a sparse output. We discuss these two components in the next two subsections.
+
+### 2.1 THRESHOLD ESTIMATION
+
+The threshold  $\theta(\mathbf{x}, k)$  in Eq. (2) is designed such that, if the entries of  $\mathbf{x}$  are drawn from a Gaussian distribution, approximately  $k$  out of the  $d$  entries will exceed this threshold. To understand this, let  $\mu$  and  $\sigma$  denote the mean and standard deviation of the underlying Gaussian distribution. Its quantile function is given by  $\mu + \sigma \cdot Q(p)$  for  $p \in (0, 1)$ . Consequently, due to the properties of quantile functions, we expect roughly  $p \cdot d$  entries of  $\mathbf{x}$  to exceed  $\mu + \sigma \cdot Q(1 - p)$ . In practice, since  $\mu$  and  $\sigma$  are unknown, they are replaced with the sample mean  $\text{mean}(\mathbf{x})$  and the sample standard deviation  $\text{std}(\mathbf{x})$ , respectively.
+
+The following theorem formalizes this argument.
+
+**Theorem 1.** *Let  $\mathbf{x} \in \mathbb{R}^d$  be a vector with entries drawn i.i.d. from  $\mathcal{N}(\mu, \sigma^2)$ . For any  $1 \leq k \leq d-1$ , let  $\theta(\mathbf{x}, k)$  be a scalar defined in Eq. (2). Take any  $\delta \in (0, 1)$  and assume  $d \geq \max\{2, \log \frac{6}{\delta}\}$ . With a probability of at least  $1 - \delta$ , the number of entries of  $\mathbf{x}$  that are greater than  $\theta(\mathbf{x}, k)$ , i.e.,  $\text{card}(\{i \in [d] \mid x_i > \theta(\mathbf{x}, k)\})$ , satisfies*
+
+$$\frac{|\text{card}(\{i \in [d] \mid x_i > \theta(\mathbf{x}, k)\}) - k|}{d} \leq 4\sqrt{\frac{\log \frac{6}{\delta}}{d}} \left(1 + \sqrt{-2 \log \min \left\{\frac{k}{d}, 1 - \frac{k}{d}\right\}}\right).$$
+
+Theorem 1 provides a relative error bound between  $k$  and the true number of entries of  $\mathbf{x}$  that exceed  $k$ . This bound is maximized when  $k = 1$  or  $k = d - 1$ . Consequently, the worst-case bound is  $O\left(\sqrt{\frac{\log d \log \frac{1}{\delta}}{d}}\right)$  which vanishes as  $d$  increases. Notably, the error bound becomes  $O\left(\sqrt{\frac{\log \frac{1}{\delta}}{d}}\right)$  when  $k = \Theta(d)$ , demonstrating even faster convergence.
+
+**Computation cost.** The computation of the threshold  $\theta(\mathbf{x}, k)$  is highly efficient, requiring only  $2d$  FLOPs to compute the mean and standard deviation of the samples. This contrasts sharply with a naive sorting-based approach, which has  $O(d \log d)$  complexity.
+
+While the Gaussian quantile function  $Q(\cdot)$  lacks a closed-form solution, high-precision piecewise approximation algorithms with constant complexity are available in standard software packages like SciPy (Virtanen et al., 2020), readily applicable to our needs.
+
+### 2.2 SPARSIFICATION
+
+Given the threshold  $\theta(\mathbf{x}, k)$ , a straightforward approach to obtain a sparse vector is to set all entries of  $\mathbf{x}$  below the threshold to zero, preserving the remaining values. This operator, sometimes referred to as *hard thresholding* (Blumensath & Davies, 2008), suffers from discontinuity, potentially hindering its suitability for gradient-descent-based training.
+
+{3}------------------------------------------------
+
+To address this, Statistical-Top $_k$  employs the soft-thresholding operator defined in Eq. (1) (Beck & Teboulle, 2009). This operator first shrinks all entries of  $\mathbf{x}$  by the threshold  $\theta(\mathbf{x}, k)$  and then sets all entries below 0 to 0. Soft thresholding offers the advantages of being continuous and differentiable almost everywhere (except when entries of  $\mathbf{x}$  coincide with  $\theta(\mathbf{x}, k)$ ).
+
+For complete differentiability, one can utilize a smoothing function like the Huber loss (Huber, 1992), defined element-wise on an input  $\mathbf{x}$  as:
+
+$$\text{Huber}(\mathbf{x}; \delta) \stackrel{\text{def}}{=} \begin{cases} \frac{1}{2}x^2 & \text{for } |x| < \delta, \\ \delta \cdot (|x| - \frac{1}{2}\delta) & \text{otherwise.} \end{cases} \quad (3)$$
+
+The following theorem establishes the continuous differentiability of the mapping  $\mathbf{x} \mapsto \text{Huber}(\text{Statistical-Top}_k(\mathbf{x}); \delta)/\delta$ :
+
+**Theorem 2.** *For any  $\delta > 0$ , the function  $\mathbb{R}^d \rightarrow \mathbb{R}^d$  defined as*
+
+$$\text{Huber}(\text{Statistical-Top}_k(\mathbf{x}); \delta) / \delta \quad (4)$$
+
+*is continuously differentiable.*
+
+Note that Eq. (4) converges to  $\text{Statistical-Top}_k(\mathbf{x})$  as  $\delta \rightarrow 0$ , since  $\text{Huber}(\mathbf{x}; \delta)/\delta \rightarrow |\mathbf{x}|$  and  $\text{Statistical-Top}_k(\mathbf{x})$  is always non-negative. In practice, however, we find that using a non-zero  $\delta$  does not improve model quality, and therefore we set  $\delta = 0$  for simplicity.
+
+Finally, soft thresholding admits a variational form (see, e.g., Parikh et al. (2014)):
+
+$$\text{Soft-Threshold}(\mathbf{x}, \theta) = \arg \min_{\mathbf{z} \geq 0} \theta \|\mathbf{z}\|_1 + \frac{1}{2} \|\mathbf{x} - \mathbf{z}\|_2^2. \quad (5)$$
+
+This formulation seeks a vector  $\mathbf{z}$  that minimizes both its squared  $\ell_2$  distance to the input  $\mathbf{x}$  and its  $\ell_1$  norm, with the threshold  $\theta$  balancing these terms. Given the sparsity-promoting nature of the  $\ell_1$  norm, soft thresholding effectively finds a sparse approximation of the input  $\mathbf{x}$ .
+
+### 2.3 COMPARISON WITH RELATED TOP- $k$ OPERATORS
+
+The variational form in Eq. (5) also reveals connections of  $\text{Statistical-Top}_k$  with other top- $k$  algorithms in the literature. Specifically, Lei et al. (2023) defines a *soft top- $k$*  as
+
+$$\arg \min_{\mathbf{z}} -\theta \cdot H(\mathbf{z}) - \langle \mathbf{z}, \mathbf{x} \rangle, \quad \text{s.t. } \mathbf{z}^\top \mathbf{1} = k, \quad 0 \leq \mathbf{z} \leq 1, \quad (6)$$
+
+where  $H(\mathbf{z})$  is the entropy function. Another work (Lou et al., 2024) defines the *SparseK* operator
+
+$$\arg \min_{\mathbf{z}} -H^G(\mathbf{z}) - \langle \mathbf{z}, \mathbf{x} \rangle, \quad \text{s.t. } \mathbf{z}^\top \mathbf{1} = k, \quad 0 \leq \mathbf{z} \leq 1, \quad (7)$$
+
+where  $H^G(\mathbf{z})$  is the generalized Gini entropy.
+
+$\text{Statistical-Top}_k$  in the form of Eq. (5), as well as Eq. (6) and Eq. (7), can all be interpreted as finding an output that is *close* to the input subject to a sparsifying regularization. Their major difference lies in the choice of the sparse regularization. That is,  $\text{Statistical-Top}_k$  uses  $\ell_1$ , whereas soft top- $k$  and *SparseK* uses entropy and Gini entropy, respectively. The choice of  $\ell_1$  makes  $\text{Statistical-Top}_k$  superior in that it has a closed form solution provided by soft-thresholding, which only requires  $d$  FLOPs. In contrast, soft top- $k$  and *SparseK* both do not have closed form solutions and require an iterative algorithm with a FLOP count dependent on the number of iterations. In addition, there is no guarantee that soft top- $k$  and *SparseK* can obtain (approximately)  $k$  nonzero entries as output.
+
+## 3 SPARK TRANSFORMER
+
+This section describes Spark FFN and Spark Attention, the two components of Spark Transformer.
+
+### 3.1 SPARK FFN
+
+FFNs in a standard Transformer are two-layer multi-layer perceptrons that map an input token  $\mathbf{q} \in \mathbb{R}^{d_{\text{model}}}$  to an output
+
+$$\text{FFN}(\mathbf{q}; \mathbf{K}, \mathbf{V}) \stackrel{\text{def}}{=} \mathbf{V} \cdot \sigma(\mathbf{K}^\top \mathbf{q}) \in \mathbb{R}^{d_{\text{model}}}. \quad (8)$$
+
+In above,  $\{\mathbf{K}, \mathbf{V}\} \subseteq \mathbb{R}^{d_{\text{model}} \times d_{\text{ff}}}$  are trainable model parameters, and  $\sigma(\cdot)$  is a nonlinear activation function. We ignore the dependency on layer index to simplify the notations.
+
+{4}------------------------------------------------
+
+Each of the matrix multiplication in Eq. (8) has  $d_{\text{model}} \cdot d_{\text{ff}}$  FLOPs hence overall the computation cost is  $2d_{\text{model}} \cdot d_{\text{ff}}$ . However, previous work shows that when  $\sigma(\cdot)$  is ReLU, the activation map  $\sigma(\mathbf{K}^\top \mathbf{q})$  is very sparse after model training. The sparsity can be used trivially to reduce the computation costs in the calculation of its product with the second layer weight matrix  $\mathbf{V}$  (Li et al., 2022), reducing the overall FLOPs count of FFN to  $d_{\text{model}} \cdot (d_{\text{ff}} + k)$ , where  $k \ll d_{\text{ff}}$  is the number of nonzero entries in the activation. Note that the sparsity cannot be used to reduce the computation costs associated with  $\mathbf{K}$ , which constitute half of the total FLOPs in FFN.
+
+In order to reduce FLOPs count in the first layer of FFN as well, we introduce Spark FFN as follows:
+
+$$\text{Spark-FFN}(\mathbf{q}; \mathbf{K}, \mathbf{V}, k, r) \stackrel{\text{def}}{=} \mathbf{V} \cdot (\sigma(\text{Statistical-Top}_k(\mathbf{K}^\top \mathbf{Pq})) \odot (\mathbf{K}^\top (\mathbf{I} - \mathbf{P})\mathbf{q})) \in \mathbb{R}^{d_{\text{model}}}. \quad (9)$$
+
+In above,  $\{\mathbf{K}, \mathbf{V}\} \subseteq \mathbb{R}^{d_{\text{model}} \times d_{\text{ff}}}$  are trainable parameters as in standard FFNs, and the activation  $\sigma(\cdot)$  is taken to be GELU (Hendrycks & Gimpel, 2016) following Gemma. The Statistical-Top $_k$ , defined in Eq. (2), is introduced for obtaining sparsity, with  $k$  being a hyper-parameter specifying the sparsity level. Finally,  $\mathbf{P}$  is a fixed matrix  $\mathbf{P} \stackrel{\text{def}}{=} \mathbf{1}_r \oplus \mathbf{0}_{d_{\text{model}} - r} \in \mathbb{R}^{d_{\text{model}} \times d_{\text{model}}}$  where  $\oplus$  is the direct sum operator and  $r$  is a hyper-parameter. It is introduced so that the term  $\mathbf{K}^\top \mathbf{Pq}$  serves as a low-rank predictor of the location of the nonzero entries, which allows us to obtain efficiency benefits in computing  $\mathbf{K}^\top (\mathbf{I} - \mathbf{P})\mathbf{q}$  and the multiplication with  $\mathbf{V}$ . This is discussed in detail below.
+
+**FLOPs per Token.** Naive implementation of the Spark-FFN has the same number of FLOPs as the vanilla FFN in Eq. (8), i.e.,
+
+$$r \cdot d_{\text{ff}} + (d_{\text{model}} - r) \cdot d_{\text{ff}} + d_{\text{model}} \cdot d_{\text{ff}} = 2d_{\text{model}} \times d_{\text{ff}} \quad (10)$$
+
+where the three terms are from  $\mathbf{K}^\top \mathbf{Pq}$ ,  $\mathbf{K}^\top (\mathbf{I} - \mathbf{P})\mathbf{q}$ , and the multiplication with  $\mathbf{V}$ , respectively. In Spark-FFN, one may first compute the term  $\mathbf{K}^\top \mathbf{Pq}$  as a low-rank predictor. After passing its output through Statistical-Top $_k$ , which selects approximately the  $k$  most important entries, followed by the activation function  $\sigma(\cdot)$ , we obtain a sparse output. Importantly, after obtaining the sparse output there is no need to perform the full computation of the other two matrix multiplications in Eq. (9), i.e.,  $\mathbf{K}^\top (\mathbf{I} - \mathbf{P})\mathbf{q}$  and the multiplication with  $\mathbf{V}$ . Instead, one can perform a sparse matrix multiplication with a drastically reduced FLOPs count:
+
+$$r \cdot d_{\text{ff}} + (d_{\text{model}} - r) \cdot k + d_{\text{model}} \cdot k = (d_{\text{ff}} - k) \cdot r + 2d_{\text{model}} \cdot k, \quad (11)$$
+
+which is an increasing function of  $r$ . In other words,  $r$  controls the computation cost. We provide ablation study in the section to show that the best model quality is obtained when  $r \approx \frac{d_{\text{model}}}{2}$ . In this case, the total FLOP count of Spark FFN is approximately  $0.5 \cdot d_{\text{model}} \cdot d_{\text{ff}} + 1.5 \cdot d_{\text{model}} \cdot k$ , which is a 4-times reduction from Eq. (10) when  $k$  is very small.
+
+**Relation to gated activation.** Many of the most recent Transformers, including Gemma 2, use a variant of the standard FFN in Eq. (8) where the activation function is replaced with a gated one:
+
+$$\text{Gated-FFN}(\mathbf{q}; \mathbf{K}_1, \mathbf{K}_2, \mathbf{V}) = \mathbf{V} \cdot (\sigma(\mathbf{K}_1^\top \mathbf{q}) \odot (\mathbf{K}_2^\top \mathbf{q})). \quad (12)$$
+
+Note that when compared with the FFN in Eq. (8) for quality studies,  $d_{\text{ff}}'$  is usually taken to be  $2/3 \cdot d_{\text{ff}}$  to be iso-parameter count (Shazeer, 2020).
+
+Our Spark FFN in Eq. (9) bears some resemblance to Gated FFN in that both have two linear maps in the first layer and one in the second layer. The difference lies in that 1) Spark FFN adds a statistical top- $k$  to obtain sparsity, and 2) the input to the first layers of Spark FFN are obtained from splitting the dimensions of the input. The latter change has the benefit that it offers a convenient means of controlling the number of FLOPs from tuning the choice of  $r$  (see Eq. (11)).
+
+### 3.2 SPARK ATTENTION
+
+In a standard multi-head attention layer, an input  $\mathbf{x} \in \mathbb{R}^{d_{\text{model}}}$  is mapped to a query, a key, and a value vector of dimension  $d_{\text{att}}$  as  $\mathbf{q}^{(i)} = \mathbf{W}_Q^{(i)} \mathbf{x} \in \mathbb{R}^{d_{\text{att}}}$ ,  $\mathbf{k}^{(i)} = \mathbf{W}_K^{(i)} \mathbf{x} \in \mathbb{R}^{d_{\text{att}}}$ ,  $\mathbf{v}^{(i)} = \mathbf{W}_V^{(i)} \mathbf{x} \in \mathbb{R}^{d_{\text{att}}}$  for each head  $i$ . Here,  $\{\mathbf{W}_Q^{(i)}, \mathbf{W}_K^{(i)}, \mathbf{W}_V^{(i)}\} \subseteq \mathbb{R}^{d_{\text{att}} \times d_{\text{model}}}$  are trainable weights.
+
+Collecting all the key and value vectors in the context of  $\mathbf{x}$  into  $\mathbf{K}^{(i)} = [\mathbf{k}_1^{(i)}, \dots, \mathbf{k}_{n_{\text{ctx}}}^{(i)}] \in \mathbb{R}^{d_{\text{att}} \times n_{\text{ctx}}}$  and  $\mathbf{V}^{(i)} = [\mathbf{v}_1^{(i)}, \dots, \mathbf{v}_{n_{\text{ctx}}}^{(i)}] \in \mathbb{R}^{d_{\text{att}} \times n_{\text{ctx}}}$ , attention conducts the following computation:
+
+$$\text{Attention}(\mathbf{q}; \mathbf{K}, \mathbf{V}) \stackrel{\text{def}}{=} \mathbf{V} \cdot \text{softmax}(\mathbf{K}^\top \mathbf{q}) \in \mathbb{R}^{d_{\text{att}}}, \quad (13)$$
+
+{5}------------------------------------------------
+
+where we omit the dependency on  $i$  for simplicity. Note that computation cost associated with Eq. (13) is  $2d_{\text{attn}} \cdot n_{\text{ctx}}$  for each head. Finally, output from all heads are concatenated followed by a linear map to project to  $d_{\text{model}}$ .
+
+Note that Eq. (13) has the same form as FFN in Eq. (8) except for the choice of nonlinearity. Hence, following a similar strategy in obtaining Spark FFN, here we present Spark Attention as
+
+$$\text{Spark-Attention}(q; K, V, k, r) \stackrel{\text{def}}{=} V \cdot \left( \text{softmax} \left( \text{Statistical-Top}_k^{(-\infty)} (K^\top P q) \right) \odot \text{softplus} (K^\top (I - P) q) \right) \quad (14)$$
+
+In above,  $P \stackrel{\text{def}}{=} \mathbf{1}_r \bigoplus \mathbf{0}_{d_{\text{attn}}-r} \in \mathbb{R}^{d_{\text{attn}} \times d_{\text{attn}}}$  is a fixed matrix.  $\text{Statistical-Top}_k^{(-\infty)}$  is a slight variant of Eq. (2) where the entries below the threshold  $\theta(x, k)$  are set to  $-\infty$  instead of 0, so that such entries become zero after passing through softmax. Specifically,
+
+$$[\text{Statistical-Top}_k^{(-\infty)}(x)]_i \stackrel{\text{def}}{=} \begin{cases} x_i - \theta(x, k) & \text{if } x_i > \theta(x, k), \\ -\infty & \text{otherwise.} \end{cases} \quad (15)$$
+
+Finally, a softplus nonlinearity defined as the entrywise softplus function, i.e.,  $\log(1 + \exp(x))$ , is applied to the term  $K^\top (I - P)q$  as this is empirically observed to offer quality benefits.
+
+**FLOPs per Token.** With a naive implementation the number of FLOPs in Eq. (14) is given by  $2d_{\text{attn}} \cdot n_{\text{ctx}}$ , which is the same as the FLOPs for Eq. (13). However, by noting that the output of the softmax is expected to be sparse with approximately  $k$  nonzero entries, the computation costs associated with  $K^\top (I - P)q$  and in the multiplication with  $V$  can be drastically reduced. In particular, if we take  $r = \frac{d_{\text{attn}}}{2}$  then the FLOPs per token becomes
+
+$$0.5d_{\text{model}}n_{\text{ctx}} + 1.5d_{\text{model}} \min\{k_{\text{attn}}, n_{\text{ctx}}\}, \quad (16)$$
+
+which is nearly a  $4\times$  reduction when  $k_{\text{attn}}$  is much smaller than  $n_{\text{ctx}}$ .
+
+## 4 EXPERIMENTS
+
+In this section, we present an experimental evaluation of Spark Transformer using the Gemma-2 2B model. Gemma-2 2B is a decoder-only Transformer with 2 billion parameters, pretrained on 2 trillion tokens of primarily English text data (see Gemma Team (2024) for details). To evaluate Spark Transformer, we train a *Spark Gemma-2 2B* model by substituting the standard FFN and Attention in Gemma-2 2B with their Spark Transformer counterparts (Spark FFN and Spark Attention, respectively). This Spark Gemma-2 2B model is trained using the same procedure and data as the original Gemma-2 2B model.
+
+**Implementation details.** Gemma-2 uses a model dimension of  $d_{\text{model}} = 2304$ . **For FFN**, Gemma-2 uses the Gated FFN in Eq. (12) with  $d_{\text{ff}} = 9216$ . We replace it with Spark FFN in Eq. (9) with  $d_{\text{ff}} = 13824$  so that the parameter count keeps the same. In addition, we take  $k = 1106$ , which gives a sparsity level of 8%, and  $r = 1024$  (due to sharding constraints,  $r$  can only be a multiple of 256). **For Attention**, Gemma-2 alternates between a global attention that have a span of 8192 tokens, and a local attention with a 4096 window size, both with  $d_{\text{attn}} = 256$ . We replace both with Spark Attention in Eq. (13) where for the latter we use the same 4096 window size. For hyper-parameters, we use  $k = 256$ , i.e., each token attends to at most 256 tokens, and  $r = 128$ . Extra care need to be taken for handling position embedding. Gemma-2 uses Rotary Position Embedding (Su et al., 2024) which is applied to  $q$  and the columns of  $K$  in Eq. (13). For Spark Attention in Eq. (14), we apply this position encoding to  $Pq$ ,  $(I - P)q$ , the columns of  $PK$ , and the columns of  $(I - P)K$ .
+
+### 4.1 QUALITY
+
+We evaluate Spark Gemma-2 2B on a suite of benchmarks that are used in the Gemma-2 paper (Gemma Team, 2024), and report the result in Table 2. We observe that Spark Gemma 2 matches the quality of Gemma 2 while having a drastically reduced FLOP count per token.
+
+**Sparsity.** To verify the effectiveness of statistical top- $k$ , we report the level of sparsity measured in terms of percentage of nonzeros in FFN and the number of nonzeros in Attention. At the beginning of model training, we observe that statistical top- $k$  produces close to 8% nonzeros in FFN (see Figure 1a), which aligns well with our hyper-parameter choice of using  $k/d_{\text{ff}} = 8\%$  in Spark FFN. This
+
+{6}------------------------------------------------
+
+Table 2: Evaluation of Spark Transformer quality. We train a *Spark Gemma-2* model, replacing the standard FFN and Attention in Gemma-2 with Spark FFN and Spark Attention, respectively. We compare Spark Gemma-2 with ProSparse and LLaMA ReGLU, two recent models employing activation sparsity in their FFNs. Numbers in parentheses are taken from the respective original papers. FLOPs per token are computed assuming a context length of 8k.
+
+|  | ProSparse<br>(Song et al., 2024a) | LLaMA ReGLU<br>(Zhang et al., 2024) | Gemma-2 | Spark Gemma-2<br>(Ours) |
+|-|-|-|-|-|
+| Model size | 7B | 7B | 2B | 2B |
+| FLOPs / token | - | - | 4.2B | 1.4B |
+| MMLU | (45.5) | (44.8) | 52.1 (52.2) | 50.2 |
+| ARC-C | - | - | 50.1 (55.7) | 51.1 |
+| GSM8K | (12.1) | (10.6) | 21.2 (24.3) | 21.2 |
+| AGIEval | (27.5) | - | 31.8 (31.5) | 31.4 |
+| BBH | (35.0) | - | 41.3 (41.9) | 38.8 |
+| Winogrande | - | (69.4) | 68.7 (71.3) | 67.3 |
+| HellaSwag | - | (74.7) | 73.9 (72.9) | 73.2 |
+| MATH | - | - | 16.4 (16.0) | 15.6 |
+| ARC-e | - | - | 80.6 (80.6) | 81.3 |
+| PIQA | - | - | 78.5 (78.4) | 78.6 |
+| SIQA | - | - | 51.6 (51.9) | 51.3 |
+| Boolq | - | - | 72.9 (72.7) | 73.3 |
+| TriviaQA | - | - | 60.4 (60.4) | 59.4 |
+| NQ | - | - | 17.1 (17.1) | 17.1 |
+| HumanEval | - | - | 4.3 (20.1) | 6.1 |
+| MBPP | - | - | 30.4 (30.2) | 29.0 |
+| Avg. | - | - | 47.0 | 46.6 |
+
+![Figure 1a: Spark FFN sparsity. A line graph showing the percentage of nonzero entries (y-axis, 1 to 11) across layer indices (x-axis, 0 to 25). Five lines represent training steps: 0k (blue), 120k (orange), 240k (red), 360k (green), and 480k (purple). A horizontal blue line at 8% indicates the target sparsity. The 480k step reaches the highest sparsity, peaking around 10% at layer 15 before dropping to about 8% at layer 25. The 0k step remains flat at 8%.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 1a: Spark FFN sparsity. A line graph showing the percentage of nonzero entries (y-axis, 1 to 11) across layer indices (x-axis, 0 to 25). Five lines represent training steps: 0k (blue), 120k (orange), 240k (red), 360k (green), and 480k (purple). A horizontal blue line at 8% indicates the target sparsity. The 480k step reaches the highest sparsity, peaking around 10% at layer 15 before dropping to about 8% at layer 25. The 0k step remains flat at 8%.
+
+(a) Spark FFN sparsity
+
+![Figure 1b: Spark Attention sparsity. A line graph showing the number of nonzero entries (y-axis, 202 to 218) across layer indices (x-axis, 0 to 25). Five lines represent training steps: 0k (blue), 120k (orange), 240k (red), 360k (green), and 480k (purple). A horizontal blue line at 256 indicates the target sparsity. The 480k step shows the most volatility, fluctuating between 204 and 218. The 0k step remains flat at 256.](4279c8be6ec4ed56f4b3349be98bb426_img.jpg)
+
+Figure 1b: Spark Attention sparsity. A line graph showing the number of nonzero entries (y-axis, 202 to 218) across layer indices (x-axis, 0 to 25). Five lines represent training steps: 0k (blue), 120k (orange), 240k (red), 360k (green), and 480k (purple). A horizontal blue line at 256 indicates the target sparsity. The 480k step shows the most volatility, fluctuating between 204 and 218. The 0k step remains flat at 256.
+
+(b) Spark Attention sparsity
+
+Figure 1: Sparsity in the intermediate activation of Spark FFN (i.e., output of GELU) and intermediate activation of Spark Attention (i.e., output of softmax) across all 26 layers at selected training steps. For FFN we report the percentage of nonzero entries out of  $d_{\text{ffn}} = 13824$  entries. For Attention, we report the number of nonzero entries (i.e., attended tokens). Note that our hyper-parameter choice is to have 8% nonzeros in Spark FFN and at most 256 nonzeros in Spark Attention.
+
+is expected as the model parameters, particularly  $K$  in Spark FFN, are randomly initialized, hence the entries of the activation maps are drawn from a Gaussian distribution which is in accordance with the assumption of statistical top- $k$ . The Gaussian assumption is no longer guaranteed after training, but we empirically observe it to hold approximately (see Section D.1) and statistical top- $k$  reliably produce a sparsity level close to 8% until the end of training at 480k steps. Sparsity in attention is reported in Figure 1b, which show that the number of attended tokens is below our hyper-parameter choice of 256 in Spark Attention throughout training. In particular, the numbers are much smaller because the results are from averaging over all tokens many of which have a context length of less than 256. Finally, we observe comparable levels of sparsity during evaluation (see Section D.2).
+
+### 4.2 EFFICIENCY
+
+We evaluate the efficiency benefits of the Spark Gemma-2 2B over standard Gemma-2 2B using the `gemma.cpp` (Google Gemma.cpp, 2024), a C++ inference engine optimized for the Gemma models
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388
+
+![Diagram (a) illustrating Vector-Masked Matrix Multiplication. A vector 'q' is multiplied by a matrix 'K(I-P)'. A mask [1, 0, 1, 0] is applied to the result. The output is a vector [5, 0, 8, 0], where the 0s correspond to the 0s in the mask, indicating skipped memory access/compute.](990567efebf979be51f56d1150012c9d_img.jpg)
+
+Diagram (a) illustrating Vector-Masked Matrix Multiplication. A vector 'q' is multiplied by a matrix 'K(I-P)'. A mask [1, 0, 1, 0] is applied to the result. The output is a vector [5, 0, 8, 0], where the 0s correspond to the 0s in the mask, indicating skipped memory access/compute.
+
+Red: skipped memory access /compute
+
+(a) Vector-Masked Matrix Multiplication.
+
+![Diagram (b) illustrating Sparse Vector-Matrix Multiplication. A sparse activation vector [5, 0, 8, 0] is multiplied by a matrix 'V'. The result is a vector [FFN output], where the 0s in the activation vector correspond to skipped rows in the matrix 'V'.](c0e88e4bd3a209b66ee7cb67e1cec2be_img.jpg)
+
+Diagram (b) illustrating Sparse Vector-Matrix Multiplication. A sparse activation vector [5, 0, 8, 0] is multiplied by a matrix 'V'. The result is a vector [FFN output], where the 0s in the activation vector correspond to skipped rows in the matrix 'V'.
+
+(b) Sparse Vector-Matrix Multiplication.
+
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396
+
+Figure 2: Illustration of the matrix multiplication implementation using sparse activation. (a) Vector-Masked Matrix Multiplication takes a dense vector  $q$ , a dense matrix  $K^\top(I - P)$ , and a mask from statistical top- $k$  on  $K^\top P q$  to compute  $u := (K^\top(I - P)q) \odot \text{mask}$ . It skips memory loading and compute associated with the masked columns. (b) Sparse Vector-Matrix Multiplication takes a sparse activation vector  $u$  to compute weighted sum of rows in the dense matrix  $V$ . It skips loading and computation of rows corresponding to 0's in  $u$ . To optimize performance, we implement Sparse Vector-Matrix Multiplication using tiling, which helps minimize cross-CPU core synchronization.
+
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405
+
+![Bar chart (a) showing Normalized Decode Speed (Baseline=1.0) for 16 Core CPU VM. The x-axis represents Prompt Length (tokens) with values 256, 1024, 2048, and 4096. The y-axis represents Normalized Decode Speed. Two bars are shown for each prompt length: SparkGemma-FFN (blue) and SparkGemma-FFN and Attention (orange). The speedup increases with prompt length, reaching 1.79x at 4096 tokens.](2396add2849eccefcbcfbe1c7142a253_img.jpg)
+
+| Prompt Length (tokens) | SparkGemma-FFN | SparkGemma-FFN and Attention |
+|-|-|-|
+| 256 | 1.34 | 1.35 |
+| 1024 | 1.26 | 1.47 |
+| 2048 | 1.14 | 1.58 |
+| 4096 | 1.05 | 1.79 |
+
+Bar chart (a) showing Normalized Decode Speed (Baseline=1.0) for 16 Core CPU VM. The x-axis represents Prompt Length (tokens) with values 256, 1024, 2048, and 4096. The y-axis represents Normalized Decode Speed. Two bars are shown for each prompt length: SparkGemma-FFN (blue) and SparkGemma-FFN and Attention (orange). The speedup increases with prompt length, reaching 1.79x at 4096 tokens.
+
+(a) 16 Core CPU VM.
+
+![Bar chart (b) showing Normalized Decode Speed (Baseline=1.0) for 4 Core CPU VM. The x-axis represents Prompt Length (tokens) with values 256, 1024, 2048, and 4096. The y-axis represents Normalized Decode Speed. Two bars are shown for each prompt length: SparkGemma-FFN (blue) and SparkGemma-FFN and Attention (orange). The speedup increases with prompt length, reaching 1.64x at 4096 tokens.](68aa26525c9346e4590a15c75d394e9d_img.jpg)
+
+| Prompt Length (tokens) | SparkGemma-FFN | SparkGemma-FFN and Attention |
+|-|-|-|
+| 256 | 1.43 | 1.42 |
+| 1024 | 1.33 | 1.47 |
+| 2048 | 1.25 | 1.56 |
+| 4096 | 1.12 | 1.64 |
+
+Bar chart (b) showing Normalized Decode Speed (Baseline=1.0) for 4 Core CPU VM. The x-axis represents Prompt Length (tokens) with values 256, 1024, 2048, and 4096. The y-axis represents Normalized Decode Speed. Two bars are shown for each prompt length: SparkGemma-FFN (blue) and SparkGemma-FFN and Attention (orange). The speedup increases with prompt length, reaching 1.64x at 4096 tokens.
+
+(b) 4 Core CPU VM.
+
+406  
+407  
+408  
+409  
+410  
+411  
+412
+
+Figure 3: Spark Gemma-2 2B decoding speedup on CPU relative to the original Gemma-2 2B for varying prompt lengths. Speed is measured as the decoding time per token average over 128 tokens after the prompt. We provide a breakdown of speedup from FFN and Attention by reporting results of SparkGemma-FFN, which contains sparse optimization for FFN only, and SparkGemma-FFN and Attention, which contains sparse optimization for both. We use decode batch size of one.
+
+413  
+414  
+415  
+416  
+417  
+418
+
+on CPUs. Our implementation uses sparse matrix multiplication operators, which exploit sparsity in both FFN and Attention, as well as modern CPU vector SIMD operations (SIMD Wikipedia, 2024), see Figure 2 for an illustration and Section C in Appendix for details. We show that Spark Gemma-2 significantly improves the efficiency of transformer models, even in highly FLOP-constrained environments such as CPUs.
+
+419  
+420  
+421  
+422  
+423
+
+Specifically, Figure 3 reports the decoding speed under varying prompt lengths on a 4-Core or a 16-Core CPU. We see that Spark Gemma-2 outperforms the original Gemma-2 model, achieving a speedup that ranges from 1.35x to 1.79x on 16-Core CPU depending on the prompt length. For short prompts (e.g., 256 tokens), the sparse FFN optimization provides most of the speedup, whereas the sparse attention optimization provides the most speedup for longer prompts (e.g. 4096 tokens).
+
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+Table 3 further highlights the efficiency of Spark Gemma-2 in both prefill and decode phases. During the prefill, the prompt is usually chunked into batches since the process is bounded by memory bandwidth. This may reduce the benefit of activation sparsity as different tokens in a chunk may activate different subsets of parameters (in FFN) and attend to different subsets of tokens (in Attention). However, Table 3 shows that Spark Gemma-2 maintains strong performance with a chunk size of 64 tokens, following the default setup in `gemma.cpp`. A more detailed performance analysis of batching/chunking is provided in the Appendix. In addition, Spark Gemma-2 significantly outperforms the original Gemma-2 during decoding (with batch size=1). Notably, it achieves a decode speed of 86ms per token, which surpasses the average human reading speed (238 words per minute) (Brysbaert, 2019), with a very accessible 4-Core CPU Cloud VM.
+
+{8}------------------------------------------------
+
+Table 3: Prefill and decode speed of Spark Gemma-2 on 4-Core and 16-Core CPUs for prompts of 4096 tokens. During prefill phase, the prompt is chunked into batches of 64 tokens, following a default setup of `gemma.cpp`. Speedups relative to Gemma-2 are shown in parentheses.
+
+|  | Prefill (ms / token) | Decode (ms / token) |
+|-|-|-|
+| 4 Core CPU VM | 15 (1.86x) | 86 (1.64x) |
+| 16 Core CPU VM | 7 (1.7x) | 33 (1.79x) |
+
+### 4.3 ABLATION
+
+**Statistical top- $k$ .** Adding a top- $k$  operator is expected to lead to a training slowdown due to the extra computation cost of computing top- $k$ . In Figure 4 we report the slowdown during training due to adding statistical top- $k$ . It can be observed that the slowdown is with a very small amount, demonstrating the efficiency of statistical top- $k$ . In particular, we compare the slowdown with that of the top- $k$  operator provided in JAX, namely `jax.lax.approx_max_k` (Chern et al., 2022). This operator is optimized to achieve TPU peak performance and has a controllable recall target, which we vary on the x-axis. Statistical top- $k$  is significantly faster than the JAX top- $k$  even when the latter operates on a small recall of 50%. Finally, we do not provide the quality of models trained with JAX top- $k$  since such models take a very long time to train.
+
+![Figure 4: Comparison of training slowdown from using our statistical top-k vs the standard top-k (i.e., jax.lax.approx_max_k) relative to not using any top-k. The plot shows Step time relative to without top-k on a log scale (10^0 to 10^2) against Recall (0.50 to 0.90). The 'statistical top-k' line is a dashed blue line at 10^0. The 'jax.lax.approx_max_k' line is a solid orange line that increases from approximately 10^1 at 0.50 recall to about 10^1.5 at 0.90 recall.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 4: Comparison of training slowdown from using our statistical top-k vs the standard top-k (i.e., jax.lax.approx\_max\_k) relative to not using any top-k. The plot shows Step time relative to without top-k on a log scale (10^0 to 10^2) against Recall (0.50 to 0.90). The 'statistical top-k' line is a dashed blue line at 10^0. The 'jax.lax.approx\_max\_k' line is a solid orange line that increases from approximately 10^1 at 0.50 recall to about 10^1.5 at 0.90 recall.
+
+Figure 4: Comparison of training slowdown from using our statistical top- $k$  vs the standard top- $k$  (i.e., `jax.lax.approx_max_k` (Chern et al., 2022)) relative to not using any top- $k$ .
+
+**Effect of  $r$  and  $k$  in Spark FFN.** Spark FFN comes with two hyper-parameters, namely  $r$  which controls the rank hence FLOP count of the low-cost predictor, and  $k$  which controls sparsity of activation hence the FLOP count. In Figure 5 we provide an ablation study on the effect of these two hyper-parameters, by reporting the training loss curves in the first 25,000 training steps (which is around 5% of full training). From Figure 5a, the best choice of  $r$  is 1024 which is nearly half of  $d_{\text{model}} = 2304$  (due to model sharding constraint,  $r$  cannot be taken to be exactly a half of  $d_{\text{model}}$ ). From Figure 5b, we see that the model quality is insensitive to choices of  $k$  that gives [5%, 10%] sparsity, but there is quality loss if we go sparser, e.g. 3% nonzeros.
+
+![Figure 5: Effect of hyper-parameters r and k in Spark FFN on training loss. (a) Effect of r: Loss vs Steps (12000 to 24000) for r=768 (blue), r=1024 (orange), and r=1536 (green). (b) Effect of k: Loss vs Steps (12000 to 24000) for k=d_r=3% (blue), k=d_r=5% (orange), k=d_r=8% (green), and k=d_r=10% (red). Both plots show loss decreasing over steps, with a Gaussian filter applied for smoothing.](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+Figure 5: Effect of hyper-parameters r and k in Spark FFN on training loss. (a) Effect of r: Loss vs Steps (12000 to 24000) for r=768 (blue), r=1024 (orange), and r=1536 (green). (b) Effect of k: Loss vs Steps (12000 to 24000) for k=d\_r=3% (blue), k=d\_r=5% (orange), k=d\_r=8% (green), and k=d\_r=10% (red). Both plots show loss decreasing over steps, with a Gaussian filter applied for smoothing.
+
+Figure 5: Effect of hyper-parameters  $r$  and  $k$  in Spark FFN on training loss. A Gaussian filter of  $\sigma = 200$  is applied to smooth the loss curves.
+
+## 5 DISCUSSION AND RELATED WORK
+
+Returning to the question posed at the outset: How many FLOPs is a token worth? This paper offers an answer through the Spark Transformer architecture, demonstrating at least a  $3\times$  overall FLOPs reduction without sacrificing model quality. This reduction is realized by selectively activating only part of the model parameters and limiting the attended context for each input. This principle of sparse activation finds a compelling parallel in neuroscience, where studies reveal sparse activity patterns in the brain as a key factor in its remarkable efficiency (Attwell & Laughlin, 2001; Barth & Poulet, 2012; Lee et al., 2024a). While hardware limitations currently hinder the full exploitation of
+
+{9}------------------------------------------------
+
+sparse activation in Transformers, particularly on GPUs and TPUs designed for dense computations, our work with Spark Transformer on CPUs highlights its potential. We believe this opens avenues for research into alternative hardware and platforms better suited for sparse computations, hence circumvents the hardware lottery (Hooker, 2021) and potentially lead to greater efficiency gains in the future.
+
+In the following, we review a few lines of work closely related to ours.
+
+**Mixture of Experts (MoEs)** may be considered as a particular case of sparsely activated models which group the neurons in FFN and activate all neurons in selected groups (Shazeer et al., 2017; Lepikhin et al., 2020). Neuron grouping has the benefit of being better suited for training accelerators compared to unstructured activation sparsity. However, training of MoEs incurs extra complexities in algorithmic design and requires special hardware support (Fedus et al., 2022). Moreover, the structured nature of sparsity limits the model’s flexibility and expressiveness, and recent work advocates the use of a larger number of smaller experts (Dai et al., 2024; He, 2024). On the other hand, the discovery of the naturally emerging unstructured activation sparsity has motivated the new perspective of naturally emerging experts (Zhang et al., 2022; Dong et al., 2023; Csordás et al., 2023; Qiu et al., 2023; Szatkowski et al., 2024; Zheng et al., 2024).
+
+**Sparse activation** is common approach to improve the efficiency of large models and many techniques for a low-cost activation prediction have been developed over the years, such as low-rank factorization (Davis & Arel, 2013), quantization (Cao et al., 2019), product keys (Lample et al., 2019), hashing (Chen et al., 2020), etc. With the popularity of modern large Transformer models, these techniques become natural choices (Jaszczur et al., 2021; Zeng et al., 2023; Liu et al., 2023; Song et al., 2023) for reducing their high computation costs. In particular, a lot of the excitement comes from the discovery that the activations in FFNs are naturally sparse (Zhang et al., 2022; Li et al., 2022) and hence efficiency with activation sparsity are obtained without a quality toll.
+
+Our work falls into the category of the latest work in this direction that aim to bring the benefits to the latest generation large language models that do not have natural sparsity. Early attempts (Mirzadeh et al., 2023; Peng et al., 2023; Zhang et al., 2024) seek to bring back sparsity by switching back to ReLU variants, but it usually incurs a quality loss. The quality gap may be largely bridged by more careful tuning, but the activation becomes less sparse (e.g. 25% nonzeros in LLAMA 7B (Song et al., 2024a)). Top- $k$  becomes a more popular choice for obtaining sparsity recently (Song et al., 2024b) and is able to maintain neutral quality while offering strong sparsity, but only in selected layers (Yerram et al., 2024). Moreover, such methods require finetuning to bring sparsity and also obtain a predictor. Without doing finetuning, Lee et al. (2024b); Liu et al. (2024a) obtained at most 50% nonzeros under neutral quality. In contrast to these works, our work not only obtains 8% nonzeros in activation of all FFN layers, but also a predictor, all with a single-stage training. [We provide a summary of comparison to these methods in Table 4 in the Appendix.](#)
+
+Finally, the usefulness of activation sparsity goes beyond efficiency. For example, theoretical studies show its benefits for model generalizability and learnability (Muthukumar & Sulam, 2023; Awasthi et al., 2024). Moreover, activated neurons may be associated with semantic concepts, which offers understanding of the working mechanism and enables manipulating the output of Transformer models (Cuadros et al., 2022; Luo et al., 2024).
+
+**Sparse attention** broadly refers to the approach of attending to a selected subset of tokens in the context as a means of reducing computation cost (Deng et al., 2024; Jiang et al., 2024). Work on sparse attention include those that use handcrafted attention patterns (Child et al., 2019; Beltagy et al., 2020; Ainslie et al., 2023; Ding et al., 2023), which feature simplicity, and learned attention patterns (Kitaev et al., 2020; Roy et al., 2021) which feature better modeling capacity. However, learning attention patterns often involve learning, e.g., a hash table or  $k$ -means centers, which significantly complicates modeling. Closely related to our Spark Attention is the top- $k$  attention (Gupta et al., 2021), which obtains data-adaptive attention simply from top- $k$  thresholding. Our work improves upon top- $k$  attention by introducing a low cost predictor which enables an increased computational benefits from sparsity. Finally, KV pruning approaches drop selected tokens permanently as decoding proceeds (Zhang et al., 2023; Liu et al., 2024b), and cannot achieve as high compression ratio as Top- $k$  based approaches.
+
+ Rest of paper (reference and Appendix) is removed.

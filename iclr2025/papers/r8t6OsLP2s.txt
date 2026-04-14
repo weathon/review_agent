@@ -1,0 +1,297 @@
+
+
+{0}------------------------------------------------
+
+# DISCOVERING MESSAGE PASSING HIERARCHIES FOR MESH-BASED PHYSICS SIMULATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Graph neural networks have emerged as a powerful tool for large-scale mesh-based physics simulation. Existing approaches primarily employ hierarchical, multi-scale message passing to capture long-range dependencies within the graph. However, these graph hierarchies are typically fixed and manually designed, which do not adapt to the evolving dynamics present in complex physical systems. In this paper, we introduce a novel neural network named DHMP, which learns **Dynamic Hierarchies for Message Passing** networks through a differentiable node selection method. The key component is the *anisotropic* message passing mechanism, which operates at both intra-level and inter-level interactions. Unlike existing methods, it first supports directionally non-uniform aggregation of dynamic features between adjacent nodes within each graph hierarchy. Second, it determines node selection probabilities for the next hierarchy according to different physical contexts, thereby creating more flexible message shortcuts for learning remote node relations. Our experiments demonstrate the effectiveness of DHMP, achieving 22.7% improvement on average compared to recent fixed-hierarchy message passing networks across five classic physics simulation datasets.
+
+## 1 INTRODUCTION
+
+Simulating physical systems with deep neural networks has achieved remarkable success due to their efficiency compared with traditional numerical solvers. Graph Neural Networks (GNNs) have been validated as a powerful tool for mesh-based physical scenarios, such as fluids and rigid collisions (Wu et al., 2020). The primary mechanism driving the GNN-based models is message passing (Sanchez-Gonzalez et al., 2020; Pfaff et al., 2021; Allen et al., 2023). In this process, time-varying physical quantities are encoded within the mesh structure at each time step and are updated by aggregating information broadcast from neighboring nodes. These existing methods generally rely on local message passing, limiting their ability to propagate influence over long distances. A common solution involves using multi-scale graph structures to facilitate direct information shortcuts between distant nodes (Lino et al., 2022; Cao et al., 2023; Yu et al., 2024; Han et al., 2022; Fortunato et al., 2022).
+
+However, as illustrated in Table 1, these approaches depend on heuristic methods to create coarser message passing structures with predefined graphs (Cao et al., 2023; Yu et al., 2024) or downsample the nodes based on spatial proximity (Lino et al., 2022) where hierarchies are preprocessed in one pass before training. These fixed graph hierarchies over the entire physical sequence do not account for the diverse range of physical contexts; while in practical systems like turbulence, despite identical boundary conditions, even minor changes in initial conditions can lead to significant differences in subsequent dynamics. Moreover, the spatial correlations in a physical process can evolve over time, making static GNN hierarchies insufficient for accommodating the time-varying node interactions.
+
+To tackle these challenges, we propose a novel approach named **Dynamic Hierarchical Message Passing (DHMP)**, which constructs context-aware and temporally evolving graph hierarchies based on the original mesh topology and the input physical quantities. The key insight is to develop a differentiable node selection method that allows for flexible modeling of node interactions. This is technically supported by the proposed *anisotropic message passing*, which aggregates the neighboring features to the central node in a directionally non-uniform manner, predicting its downsampling probabilities as a node within the coarser graph level. We then employ Gumbel-Softmax sampling to create a differentiable approximation of the hard sampling for the downsampled graph.
+
+{1}------------------------------------------------
+
+Table 1: Comparison of mesh-based simulation models. *Dynamic hierarchy* refers to hierarchical graph structures evolving over time. *Context-aware* indicates that the graph structures are determined by the physical inputs. *Prop.* denotes different feature propagation mechanisms.
+
+| Model | Hierarchical | Dynamic Hierarchy | Context-Aware Hierarchy | Anisotropic Intra-level Prop. | Learnable Inter-level Prop. |
+|-|-|-|-|-|-|
+| MGN (2020) | ✗ | - | - | ✗ | - |
+| BSMS-GNN (2023) | ✓ | ✗ | ✗ | ✗ | ✗ |
+| Lino <i>et al.</i> (2022) | ✓ | ✗ | ✓ | ✗ | ✓ |
+| DHMP | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+The anisotropic message passing mechanism not only adaptively creates multi-scale graph structures but also enables learned directionally non-uniform importance weights to facilitate both intra-level and inter-level propagation of dynamic information. As shown in Table 1, existing approaches perform isotropic feature aggregation within intra-level transition, assuming equal contributions from neighboring nodes, which may overlook the directional nature of physical processes. While some methods employ attention mechanisms to replace isotropic intra-level propagation (Dwivedi & Bresson, 2020; Janny *et al.*, 2023; Yu *et al.*, 2024; Han *et al.*, 2022), our approach demonstrates advantages in computational efficiency. Furthermore, existing models generally rely on unlearnable importance weights to transfer information across hierarchical levels. In contrast, the inter-level aggregation weights in DHMP are data-specific and time-varying, effectively harnessing the anisotropic nature of our message passing mechanism to enhance multi-scale modeling flexibility.
+
+Overall, our contributions are summarized as follows:
+
+- We present DHMP, a new method that constructs dynamic hierarchies via a differentiable node selection process, enabling context-aware modeling of hierarchical structures for physics simulations.
+- As a key component in DHMP, the proposed anisotropic message passing enables learnable, non-uniform intra-level and inter-level feature propagation, significantly enhancing model performance.
+- DHMP achieves a **22.7% promotion** on average across four standard benchmarks, compared with fixed-hierarchy models. It is also shown to generalize well to test cases with time-varying mesh structures (Table 3), unseen resolutions (Table 4), and out-of-distribution dynamics (Table 5).
+
+## 2 PRELIMINARIES
+
+**Message passing.** We consider simulating mesh-based physical systems, where the task is to predict the dynamic quantities of the mesh at future timesteps given the current mesh configuration. A mesh-based system is represented as a bi-directed graph  $\mathcal{G} = (\mathcal{V}, \mathcal{E})^1$ , where  $\mathcal{V}$  and  $\mathcal{E}$  denote the set of nodes and edges, respectively. *Message passing neural networks* (MPNNs) compute the node representations by stacking multiple message passing layers of the form:
+
+$$\text{Edge update: } \hat{\mathbf{e}}_{ij} = \phi^e(\mathbf{e}_{ij}, \mathbf{v}_i, \mathbf{v}_j); \text{ Node update: } \hat{\mathbf{v}}_i = \phi^v(\mathbf{v}_i, \psi(\{\hat{\mathbf{e}}_{ij} \mid \forall j, e_{ij} \in \mathcal{E}\})), \quad (1)$$
+
+where  $\mathbf{v}_i$  is the feature of node  $v_i \in \mathcal{V}$  and  $\psi$  denotes a *non-parametric* aggregation function. The function  $\phi^e$  updates the features of edges based on the endpoints, while  $\phi^v$  updates the node states with aggregated messages from its neighbors. In existing mesh-based simulation methods, multi-layer perceptrons (MLPs) with residual connections are commonly employed for  $\phi^e(\cdot)$  and  $\phi^v(\cdot)$ , with the aggregation function  $\psi(\cdot)$  being defined as the sum of edge features. Notably, since the aggregation function treats all neighbors equally, the contributions from neighboring nodes may be averaged out, and the repeated message-passing process can further dilute distinctive node features. This issue is exacerbated in dynamic physical systems, where transferring directed patterns is crucial.
+
+**Hierarchical MPNNs.** To facilitate long-range modeling, hierarchical MPNNs process information at  $L$  scales by creating a graph for each level and propagating information between them (Lino *et al.*, 2022; Fortunato *et al.*, 2022; Cao *et al.*, 2023; Yu *et al.*, 2024). Let  $\mathcal{G}_1 = (\mathcal{V}_1, \mathcal{E}_1)$  represent the graph structure at the finest level, *i.e.*, the input mesh. The lower-resolution graphs  $\mathcal{G}_2, \mathcal{G}_3, \dots, \mathcal{G}_L$ , with  $|\mathcal{V}_1| > |\mathcal{V}_2| > \dots > |\mathcal{V}_L|$ , contain fewer nodes and edges, which allows for more efficient
+
+<sup>1</sup>*Bi-directed* means each original undirected edge is represented twice in  $\mathcal{G}$ : if there is an edge between  $i$  and  $j$ , it is represented as two directed edges  $i \rightarrow j$  and  $j \rightarrow i$ . Each node has a self-loop.
+
+{2}------------------------------------------------
+
+feature propagation over longer physical distances with certain propagation steps. The typical process for constructing multi-scale structures primarily involves downsampling and upsampling between adjacent graph hierarchies. Downsampling reduces the number of nodes while upsampling transfers information from a lower-resolution graph to a higher-resolution one. The downsampling operation can be broken down into two steps:
+
+- **SELECT**: Nodes are selected from the current graph structure  $\mathcal{G}_l$  to create a new, coarser graph  $\mathcal{G}_{l+1}$ . Various criteria for node selection (Diehl, 2019; Ying et al., 2018; Lino et al., 2022) can be applied to form  $\mathcal{V}_{l+1}$ . The edges  $\mathcal{E}_{l+1}$  in  $\mathcal{G}_{l+1}$  are constructed by connecting the selected nodes based on the original edges  $\mathcal{E}_l$ . However, this process can sometimes lead to loss of connectivity and introduce partitions (Gao & Ji, 2019; Lee et al., 2019; Cao et al., 2023). To mitigate this, connectivity in  $\mathcal{E}_{l+1}$  can be strengthened by adding  $K$ -hop edges.
+- **REDUCE**: The features of the nodes in  $\mathcal{V}_{l+1}$  are aggregated from their corresponding neighborhood features in the finer graph  $\mathcal{G}_l$ .
+
+The upsampling process is represented by the **EXPAND**, the inverse of the **REDUCE** function, which aggregates information from the coarser level back to the finer level. Most previous work generates coarser graphs for each sequence either by using numerical software or by downsampling the input mesh through heuristic pooling strategies. This process occurs during the data preprocessing stage, enabling the preprocessed hierarchy of the same input mesh topology to be reused across various initial conditions and different time steps.
+
+## 3 METHOD
+
+In this section, we introduce the Dynamic Hierarchical Message Passing Networks (DHMP), a fully differentiable model that learns to dynamically generate coarser graphs over the sequence while simultaneously learning to simulate the physical system over the learned hierarchical graphs.
+
+### 3.1 OVERVIEW
+
+Figure 1 demonstrates an overview of the proposed model, which operates in an *encode-process-decode* pipeline. The encoder first maps the input field to a latent feature space  $\mathbf{V}_1 = \{\mathbf{v}_i | v_i \in \mathcal{V}_1\}$  at the original mesh resolution. Subsequently, we model the physical dynamics across the learned multi-scale graph hierarchies with adaptive graph structures. To enhance the propagation of long-term dependencies between distant nodes, we propose an *anisotropic message passing* (AMP) mechanism, which is largely inspired by the directed nature of significant dynamic patterns.
+
+In Section 3.2, we present the details of the AMP layer. In Section 3.3, we discuss the approach for learning context-aware graph hierarchies. In Section 3.4, we describe the inter-level downsampling and upsampling processes that incorporate AMP-based feature propagation. Finally, in Section 3.5, we outline the implementation details and hyperparameter choices.
+
+### 3.2 ANISOTROPIC MESSAGE PASSING
+
+We introduce the AMP layer, which facilitates information propagation both within and between graph hierarchies, enabling DHMP to effectively capture local and long-range dependencies simultaneously.
+
+As shown in Eq. (1), a common method in mesh-based simulation is to use the summation aggregation function for node update:  $\hat{\mathbf{v}}_i = \phi^v \left( \mathbf{v}_i, \sum_{v_j \in \mathcal{N}_i} \hat{\mathbf{e}}_{ij} \right)$ , where  $v_j \in \mathcal{N}_i$  denotes a neighboring node of  $v_i$  in the graph. Using the summation aggregation has two drawbacks: i) it can excessively smooth the neighboring features, potentially failing to capture intricate local relations, as discussed in previous literature (Alon & Yahav, 2021; Dong et al., 2023; Dwivedi et al., 2022), and ii) it does not account for the directed nature that can be inherent in physics scenarios.
+
+To address these issues, we propose the AMP layer, which employs a more flexible aggregation function to facilitate anisotropic feature propagation within each message-passing hierarchy. Instead of directly summing the edge features, AMP exploits learnable parameters  $\phi^w : \mathbb{R}^{E^+} \rightarrow \mathbb{R}$  to predict the importance weight of edge feature  $\hat{\mathbf{e}}_{ij}$  to node  $v_i$ :
+
+$$w_{ij} = \phi^w(\mathbf{e}_{ij}, \mathbf{v}_i, \mathbf{v}_j). \quad (2)$$
+
+{3}------------------------------------------------
+
+![Figure 1: Diagram of Dynamic Hierarchical Message Passing (DHMP) architecture. The top part shows two grid plots representing physical dynamics at time t_n and t_{n+1} = t_n + Δt. Below this, a hierarchical graph structure is shown with levels G_1, G_2, ..., G_L. G_1 is the finest resolution, and G_L is the coarsest. Arrows indicate message passing: 1xAMP (Anisotropic Message Passing) within each level, DiffSELECT (node selection) and REDUCE (feature aggregation) between levels, and EXPAND (feature distribution) between levels. A legend on the right defines the AMP message passing rule: v_i^l = φ^v(v_i, ∑_{j ∈ N_{v_i}} α_{ij} e_{ij}^l) and the Differentiable Pooling operation. The legend also shows symbols for DiffSELECT node (red circle), REDUCE (solid blue arrow), and EXPAND (dashed blue arrow).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1: Diagram of Dynamic Hierarchical Message Passing (DHMP) architecture. The top part shows two grid plots representing physical dynamics at time t\_n and t\_{n+1} = t\_n + Δt. Below this, a hierarchical graph structure is shown with levels G\_1, G\_2, ..., G\_L. G\_1 is the finest resolution, and G\_L is the coarsest. Arrows indicate message passing: 1xAMP (Anisotropic Message Passing) within each level, DiffSELECT (node selection) and REDUCE (feature aggregation) between levels, and EXPAND (feature distribution) between levels. A legend on the right defines the AMP message passing rule: v\_i^l = φ^v(v\_i, ∑\_{j ∈ N\_{v\_i}} α\_{ij} e\_{ij}^l) and the Differentiable Pooling operation. The legend also shows symbols for DiffSELECT node (red circle), REDUCE (solid blue arrow), and EXPAND (dashed blue arrow).
+
+Figure 1: In DHMP, physical dynamics is modeled on multiple graph resolutions with adaptive structures,  $\mathcal{G}_1, \mathcal{G}_2, \dots, \mathcal{G}_L$ , and are processed using their respective AMP layers. The `DiffSELECT` operation performs differentiable pooling to create coarser graphs with learnable downsampling probabilities. `REDUCE` and `EXPAND` integrate inter-level information using learned feature aggregation weights over the neighboring nodes. DHMP is trained end-to-end with one-step supervision.
+
+To ensure that the coefficients are easily comparable across different nodes, we normalize them using the softmax function across all choices of  $j$ :
+
+$$\alpha_{ij} = \text{softmax}_j(w_{ij}) = \frac{\exp(w_{ij})}{\sum_{k \in \mathcal{N}_i} \exp(w_{ik})}. \quad (3)$$
+
+The normalized coefficients are used to compute a linear combination of the corresponding edge features. This linear combination serves as the final input for the node update function  $\phi^v$  given node feature  $\mathbf{v}_i$ :
+
+$$\hat{\mathbf{v}}_i = \phi^v\left(\mathbf{v}_i, \sum_{j \in \mathcal{N}_{v_i}} \alpha_{ij} \hat{\mathbf{e}}_{ij}\right). \quad (4)$$
+
+Unlike traditional MPNNs with non-parametrized aggregation functions, the proposed AMP layer allows for the implicit assignment of varying contribution weights to the updated edge features within the same neighborhood. Analyzing the learned direction-specific weights in AMP provides additional benefits for interoperability. AMP also differs from the Graph Convolutional Networks (GCNs) (Niepert et al., 2016) and attention-based GNNs (Veličković et al., 2018): while these methods model aggregation by assigning weights to node features, AMP emphasizes weighting edge features which contain relative distance offsets. These edge features provide direct information about node positions, making them essential for capturing spatial relationships and enhancing generalization.
+
+### 3.3 DIFFERENTIABLE MULTI-SCALE GRAPH CONSTRUCTION
+
+With the AMP layer functioning within each graph level, local dependencies are effectively propagated throughout the high-resolution graphs, guiding the selection of nodes to be discarded in the next hierarchy for improved long-range modeling. We now delve into the details of the differentiable node selection method (`DiffSELECT`) for hierarchical graph construction.
+
+In the `DiffSELECT` operation, we train the node update module  $\phi^v$  based on anisotropic aggregated edge features to produce a probability  $p_i$  for each node. This probability indicates the likelihood of retaining node  $v_i$  in the next-level coarser graph  $\mathcal{G}_{l+1}$ . Accordingly, we rewrite Eq. (4) as follows:
+
+$$\hat{\mathbf{v}}_i^l, p_i^l = \phi^v\left(\mathbf{v}_i^l, \sum_{j \in \mathcal{N}_{v_i}} \alpha_{ij}^l \hat{\mathbf{e}}_{ij}^l\right). \quad (5)$$
+
+{4}------------------------------------------------
+
+Next, we employ Gumbel-Softmax sampling (Jang et al., 2017) on  $p_i$  to determine whether node  $v_i$  is included in the downsampled graph:
+
+$$z_i^l = \text{Gumbel-Softmax}(p_i^l), \quad (6)$$
+
+where  $z_i^l$  is a binary variable indicating the selection of node  $v_i$ . When  $z_i^l = 1$ , node  $v_i$  is retained in the next graph level. In this way, the node set  $\mathcal{V}_{l+1}$  is dynamically constructed based on node features from the finer graph level. The Gumbel-Softmax technique provides a differentiable approximation to hard sampling, thereby facilitating end-to-end training. Additionally, we implement the Gumbel-Softmax with temperature annealing to stabilize training, initially encouraging the exploration of hierarchies and gradually refining the selection process.
+
+The edges  $\mathcal{E}_{l+1}$  in the coarser graph  $\mathcal{G}_{l+1}$  are constructed by connecting the selected nodes using the original graph’s edges  $\mathcal{E}_l$ . However, this process may result in disconnected partitions (see Figure 7 in the appendix). To address this issue, we enhance the connectivity in  $\mathcal{E}_{l+1}$  by incorporating the  $K$ -hop edges during the edge selection process, defined as follows:
+
+$$\tilde{\mathcal{E}}_l^{(K)} = \mathcal{E}_l \cup \{e_{ij} \mid \exists v_{k_1}, v_{k_2}, \dots, v_{k_{K-1}} \in \mathcal{V}_l \text{ s.t. } e_{i,k_1}, e_{k_1,k_2}, \dots, e_{k_{K-1},j} \in \mathcal{E}_l\}. \quad (7)$$
+
+In essence,  $e_{ij} \in \tilde{\mathcal{E}}_l^{(K)}$  if there exists a sequence of intermediate nodes  $\{v_{k_1}, v_{k_2}, \dots, v_{k_{K-1}}\}$  consecutively connected by edges in  $\mathcal{E}_l$  or  $e_{ij} \in \mathcal{E}_l$ . The edges in  $\mathcal{E}_{l+1}$  are defined as:
+
+$$\mathcal{E}_{l+1} = \{e_{ij} \mid \exists v_i, v_j \in \mathcal{V}_{l+1} \text{ s.t. } e_{ij} \in \tilde{\mathcal{E}}_l^{(K)}\}. \quad (8)$$
+
+$\mathcal{E}_{l+1}$  consists of edges from the enhanced edge set  $\tilde{\mathcal{E}}_l^{(K)}$  that connect nodes in  $\mathcal{V}_{l+1}$ . As  $K$  increases, nodes in  $\tilde{\mathcal{E}}_l^{(K)}$  can be connected through additional intermediate nodes, thereby improving long-range connectivity. In practice, the most effective value of  $K$  is 2, which ensures effective connectivity.
+
+The graph construction process is fully differentiable, allowing for seamless integration into differentiable physical simulators. By flexibly adapting graph hierarchies based on simulation states, it paves the way for more accurate predictions of the spatiotemporal patterns in complex systems.
+
+### 3.4 INTER-LEVEL FEATURE PROPAGATION WITH AMP
+
+During the downsampling process from  $\mathcal{G}_l$  to the generated coarser graph  $\mathcal{G}_{l+1}$ , as illustrated in Figure 1, the REDUCE operation aggregates information to each node in  $\mathcal{V}_{l+1}$  from its corresponding neighbors in  $\mathcal{V}_l$ . Conversely, the EXPAND operation unpool the reduced graph back to a finer resolution, delivering the information of the pooled nodes to their neighbors at the finer level.
+
+Prior works employed non-parametric aggregation in inter-level propagation, convolving features based on the normalized node degree. It simplifies intricate relationships between nodes and neglects the directional aspects of information flow. In comparison, the inter-level aggregation weights in DHMP are data-specific and time-varying. Notably, the importance weight  $\alpha_{ij}^l$  in the proposed AMP layer inherently captures the significance of node  $v_j$ ’s features to node  $v_i$  at the graph level  $l$ . Consequently, it can be directly reused for the REDUCE and EXPAND operations in the downsampling and upsampling processes. We provide details of these operations as follows:
+
+- REDUCE: Let  $v_i$  be the node at the coarser graph level. The downsampling process aggregates the information of the current neighbors  $\mathcal{N}_i$  by reusing the weight  $\alpha_{ij}^l$ :  $\mathbf{v}_i^{l+1} \leftarrow \sum_{j \in \mathcal{N}_i} \alpha_{ij}^l \mathbf{v}_j^l$ .
+- EXPAND: We first unpool the node features from the next-level coarser graph  $\mathcal{G}_{l+1}$ . To achieve this, we record the nodes selected during the downsampling process and use this information to place nodes back in their original positions in the graph. Next, we re-use the importance weight  $\alpha_{ij}^l$  to assign features in the coarser graph to nodes in the finer graph, i.e.,  $\mathbf{v}_i^l \leftarrow \sum_{j \in \mathcal{N}_i} \mathbf{v}_j^{l+1} \alpha_{ij}^l$ .
+- FeatureMixing: Following the EXPAND operation, DHMP conducts an additional message passing step based on  $\mathbf{v}_i^l$ . It then integrates the resulting features with the intra-level message passing outcomes in  $\mathcal{G}_l$  (before downsampling) through a skip connection.
+
+### 3.5 IMPLEMENTATION DETAILS
+
+We train DHMP using the one-step supervision that measures the  $L_2$  loss between the ground truth and the next-step predictions. We include detailed descriptions of the physical quantities represented
+
+{5}------------------------------------------------
+
+by input node and edge features in Appendix B. We implement the encoder, decoder, node update function  $\phi^v$ , and edge update function  $\phi^e$  using two-layer MLPs with ReLU activation and a hidden size of 128. Likewise, the network component for generating importance weights,  $\phi^w$ , in AMP is implemented using a two-layer MLP. We apply layer normalization to the MLP outputs, except for those of the decoder and the importance weight network. [We perform a single message passing step at each graph level](#). We discuss the specific number of graph levels  $L$  for downsampling in Appendix A. In the Gumbel-Softmax operator for differentiable node selection, we use temperature annealing to decrease the temperature from 5 to 0.1 with a decay factor of  $\gamma = 0.999$ , which aims to encourage the exploration of hierarchies while gradually refining node selection to ensure training stability.
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Datasets.** We evaluate our approach on five mesh-based physics simulation benchmarks established in previous literature (Pfaff et al., 2021; Cao et al., 2023; Wu et al., 2023; Narain et al., 2012).
+
+- *CylinderFlow*: Simulation of incompressible flow around a cylinder based on 2D Eulerian meshes.
+- *Airfoil*: Aerodynamic simulation around airfoil cross-sections based on 2D Eulerian meshes.
+- *Flag*: Simulation of flag dynamics in the wind based on Lagrangian meshes with fixed topology.
+- *DeformingPlate*: Deformation of hyper-elastic plates based on Lagrange tetrahedral meshes.
+- *FoldingPaper*: Deformation of paper sheets on Lagrangian meshes, with varying forces at the four corners and evolving mesh graph.
+
+For details regarding the datasets, including descriptions of the input physical quantities, please refer to Appendix A. Additional information concerning our implementation can be found in Appendix B.
+
+**Compared models.** We primarily compare DHMP with the following methods:
+
+- MGN (Pfaff et al., 2021), which performs multiple times of message passing at the original graph.
+- BSMS-GNN (Cao et al., 2023), which generates static hierarchies using bi-stride pooling and performs message passing on predefined meshes.
+- Lino et al. (2022), which also trains MPNNs on manually-set multi-scale mesh graphs.
+- HCMT (Yu et al., 2024), which generates static hierarchies by applying Delaunay triangulation to the bi-stride pooled nodes, and enables directed feature propagation with the attention mechanism.
+
+All models are trained using the Adam optimizer with an exponential learning rate decay from  $10^{-4}$  to  $10^{-6}$ . [We further clarify the architecture details and the hyperparameters in Appendix C](#).
+
+### 4.2 MAIN RESULTS
+
+**Standard benchmarks.** Table 2 presents the root mean squared error (RMSE) of one-step prediction (RMSE-1) and long-term rollouts for 100–600 future time steps (RMSE-all). DHMP consistently outperforms the compared models across all benchmarks. This demonstrates the effectiveness of building context-aware, temporally evolving hierarchies with learnable, directionally non-uniform
+
+Table 2: Quantitative comparison of the one-step and long-term prediction errors. We report the mean results over 3 random seeds, with corresponding standard deviations detailed in Appendix F. *Promotion* denotes the improvement over the second-best model.
+
+| Model | RMSE-1 ( $\times 10^{-2}$ ) |  |  |  | RMSE-All ( $\times 10^{-2}$ ) |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | Cylinder | Airfoil | Flag | Plate | Cylinder | Airfoil | Flag | Plate |
+| MGN (2021) | 0.4046 | 77.38 | 0.4890 | 0.0579 | 59.78 | 2816 | 124.5 | 3.982 |
+| BSMS-GNN (2023) | <u>0.2263</u> | 71.69 | 0.5080 | 0.0632 | <u>16.98</u> | 2493 | 168.1 | <u>1.811</u> |
+| Lino et al. (2022) | 3.9352 | 85.66 | 0.9993 | <u>0.0291</u> | 27.60 | <u>2080</u> | 118.2 | 2.090 |
+| HCMT (2024) | 0.9190 | <u>48.62</u> | 0.4013 | 0.0295 | 23.59 | 3238 | <u>90.32</u> | 2.468 |
+| DHMP | <b>0.1568</b> | <b>41.41</b> | <b>0.3049</b> | <b>0.0282</b> | <b>6.571</b> | <b>2002</b> | <b>76.16</b> | <b>1.296</b> |
+| <i>Promotion</i> | <b>30.7%</b> | <b>14.8%</b> | <b>24.0%</b> | <b>3.10%</b> | <b>61.3%</b> | <b>3.75%</b> | <b>15.7%</b> | <b>28.5%</b> |
+
+{6}------------------------------------------------
+
+![Figure 2: Prediction showcases over 400 future steps on CylinderFlow and the final error maps. The figure is a grid of 4 columns (MGN, BSMS-GNN, DHMP, Ground Truth) and 6 rows of time steps (t=1, t=50, t=100, t=200, t=400, and a final error map for t=400). Each cell shows a velocity field around a cylinder. The error map at the bottom right shows a color scale from Low Error (blue) to High Error (red/yellow).](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 2: Prediction showcases over 400 future steps on CylinderFlow and the final error maps. The figure is a grid of 4 columns (MGN, BSMS-GNN, DHMP, Ground Truth) and 6 rows of time steps (t=1, t=50, t=100, t=200, t=400, and a final error map for t=400). Each cell shows a velocity field around a cylinder. The error map at the bottom right shows a color scale from Low Error (blue) to High Error (red/yellow).
+
+Figure 2: Prediction showcases over 400 future steps on CylinderFlow and the final error maps.
+
+![Figure 3: Top: the velocity field from the true data at t=100 and t=400. Bottom: the temporal difference of the velocity fields between adjacent time steps alongside the constructed coarser-level mesh graph (G_{t=4}). The highlighted areas show the mesh structure and its alignment with high-intensity regions.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 3: Top: the velocity field from the true data at t=100 and t=400. Bottom: the temporal difference of the velocity fields between adjacent time steps alongside the constructed coarser-level mesh graph (G\_{t=4}). The highlighted areas show the mesh structure and its alignment with high-intensity regions.
+
+Figure 3: **Top:** the velocity field from the true data. **Bottom:** the temporal difference of the velocity fields between adjacent time steps alongside the constructed coarser-level mesh graph ( $\mathcal{G}_{t=4}$ ). The highlighted areas demonstrate a notable experimental phenomenon: the mesh dynamically evolves with the data context, and aligns with the critical areas of change in the data.
+
+feature propagation both within and across graph levels. Figure 2 presents long-term predictions on CylinderFlow, based solely on the system’s initial conditions at the first step. As we can see, DHMP captures the complex, time-varying fluid flow around the cylinder obstacle more successfully, with its predictions closely matching the ground truth evolution. More results are shown in Appendix I.
+
+**Can the learned hierarchies adapt to evolving data dynamics?** In Figure 3, we visualize the dynamic hierarchies constructed by DHMP at different time steps, where coarser-level nodes tend to concentrate in regions highlighted by the temporal differences in the true data. We have two observations here: First, the constructed hierarchy evolves as the data context changes. Second, the temporally evolving graph structures align with the high-intensity regions, either in the velocity fields (top) or in their temporal variations (bottom). These findings highlight the effectiveness of our approach in capturing significant patterns within the dynamic system.
+
+**Paper simulation with changing meshes.** We evaluate DHMP in a more challenging setting with time-varying meshes for paper folding simulation, generated using the ARCSim solver (Narain et al., 2012; Wu et al., 2023). Notably, methods such as BSMS-GNN and HCMT require pre-computed hierarchies as part of their data preprocessing, which poses a significant limitation in scenarios with continuously changing mesh topologies. We assess the models using ground-truth remeshing nodes provided by the ARCSim Adaptive Remeshing component, following the setup from Pfaff et al. (2021). As shown in Table 3, DHMP achieves superior short-term and long-term accuracy compared to MGN, indicating that the dynamic graph hierarchies in our approach can better fit physical systems with significant geometric variations, as represented by the time-varying input mesh structures.
+
+Table 3: Errors of 2D paper simulation ( $\times 10^{-2}$ ) on time-varying meshes.
+
+| Model | RMSE-1 | RMSE-All |
+|-|-|-|
+| MGN | 0.0618 | 24.08 |
+| DHMP | <b>0.0544</b> | <b>7.41</b> |
+
+{7}------------------------------------------------
+
+![Figure 4: Analyses of dynamic hierarchies, anisotropic intra-level propagation, and learnable inter-level feature propagation. (a) CylinderFlow: RMSE-1 and RMSE-All for M1, M2, M3, and DHMP. (b) Flag: RMSE-1 and RMSE-All for M1, M2, M3, and DHMP. Red dashed lines represent BSMS-GNN results.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4 consists of two sets of bar charts, (a) CylinderFlow and (b) Flag. Each set contains two y-axes: RMSE-1 (left) and RMSE-All (right). The x-axis for each chart shows four models: M1, M2, M3, and DHMP. A red dashed horizontal line in each chart represents the BSMS-GNN baseline. The legend indicates: Static-Aniso-Unlearnable (blue), Static-Aniso-Learnable (orange), Dynamic-Aniso-Unlearnable (green), and DHMP (red). In both datasets, DHMP consistently achieves lower RMSE values than the baseline and other variants.
+
+Figure 4: Analyses of dynamic hierarchies, anisotropic intra-level propagation, and learnable inter-level feature propagation. (a) CylinderFlow: RMSE-1 and RMSE-All for M1, M2, M3, and DHMP. (b) Flag: RMSE-1 and RMSE-All for M1, M2, M3, and DHMP. Red dashed lines represent BSMS-GNN results.
+
+Figure 4: The analyses of dynamic hierarchies, anisotropic intra-level propagation, and learnable inter-level feature propagation. The red dashed lines represent results from BSMS-GNN (Cao et al., 2023). Lower values indicate better performance.
+
+![Figure 5: (a) Error maps for BSMS-GNN and DHMP. (b) Bar chart showing the ratios of challenging nodes (top 10% errors) for BSMS-GNN and DHMP across different graph levels.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 5(a) shows error maps for BSMS-GNN and DHMP. Nodes with the top 10% errors are highlighted in yellow. Figure 5(b) is a bar chart showing the percentage of these 'challenging nodes' at different graph levels ( $V_0, V_1, V_2, V_3$ ). The legend indicates Bi-side Pooling (yellow) and DiffSELECT (red). DHMP (red bars) maintains a higher percentage of challenging nodes (around 45-50%) compared to BSMS-GNN (yellow bars, around 10-15%) across all levels.
+
+Figure 5: (a) Error maps for BSMS-GNN and DHMP. (b) Bar chart showing the ratios of challenging nodes (top 10% errors) for BSMS-GNN and DHMP across different graph levels.
+
+Figure 5: (a) Error maps, where nodes with the top 10% of errors in each model’s predictions are marked in yellow and referred to as “challenging nodes”. (b) DHMP retains more challenging nodes in coarser graph hierarchies to capture multi-scale dependencies more effectively.
+
+**Model stability under variable graph structures.** Due to the stochasticity of Gumbel-Softmax sampling in DiffSELECT, we evaluate the stability of trained DHMP by conducting three independent runs on the test set. The mean and standard deviations of the prediction errors reveal minimal discrepancies across different runs, as shown in Table 11 in Appendix E. These findings demonstrate that once trained, DHMP generates consistent graph hierarchies based on the same inputs.
+
+**Computation efficiency.** The computation efficiency is evaluated in Appendix G. It shows that DHMP has the lowest training cost and lower inference time compared to attention-based model.
+
+### 4.3 ABLATION STUDIES
+
+DHMP has three contributions: (i) dynamic hierarchy, (ii) anisotropic intra-level propagation, (iii) learnable inter-level propagation. To investigate the effectiveness of each component, we implement various variants of DHMP, including *Static-Anisotropic-Unlearnable (M1)*, *Static-Anisotropic-Learnable (M2)*, *Dynamic-Anisotropic-Unlearnable (M3)*, and compare them against BSMS-GNN. The baseline model uses static hierarchies, isotropic intra-level summation, and unlearnable inter-level propagation. Ablation study results compared to baseline BSMS-GNN are presented in Figure 4.
+
+**Effectiveness of dynamic hierarchies.** From Figure 4, by comparing DHMP vs. *M2* and *M3* vs. *M1*, we observe the advantages of learning dynamic hierarchical graph structures. These results highlight the significance of adaptively modeling interactions in context-dependent graphs. To better understand how DHMP constructs dynamic hierarchies, we visualize the distribution of nodes with the top 10% prediction errors in Figure 5(a). Accordingly in Figure 5(b), we observe that DHMP retains a higher proportion of “challenging” nodes in the coarser message passing levels, enabling our model to capture multi-scale dependencies more effectively, especially in areas where finer message passing levels struggle. In contrast, the predefined static hierarchies in the BSMS baseline are data-independent and may inevitably overlook modeling long-range relations surrounding these pivotal nodes, even though they typically present higher errors than those in DHMP.
+
+**Effectiveness of anisotropic message passing.** Figure 4 further illustrates the importance of enhancing the direction-specific contributions during both intra-level and inter-level updates. First, incorporating AMP into the static hierarchy results in performance improvements, as shown by the comparison between *M1* and BSMS-GNN. Additionally, the significance of transmitting directed
+
+{8}------------------------------------------------
+
+![Figure 6: Visualizations of the variance of the generated anisotropic weights calculated on adjacent edges (top) and the corresponding variance of physical quantities computed over time (bottom). The figure shows four heatmaps on a triangular mesh. The top-left heatmap is labeled 'Importance Weight Variance' and the bottom-left is 'Physical Quantity Variance'. Both show high variance (red) around a circular obstacle and a rectangular block. The top-right and bottom-right heatmaps show similar patterns. A color bar on the right indicates variance from 0 (blue) to 1 (red).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 6: Visualizations of the variance of the generated anisotropic weights calculated on adjacent edges (top) and the corresponding variance of physical quantities computed over time (bottom). The figure shows four heatmaps on a triangular mesh. The top-left heatmap is labeled 'Importance Weight Variance' and the bottom-left is 'Physical Quantity Variance'. Both show high variance (red) around a circular obstacle and a rectangular block. The top-right and bottom-right heatmaps show similar patterns. A color bar on the right indicates variance from 0 (blue) to 1 (red).
+
+Figure 6: Visualizations of the variance of the generated anisotropic weights calculated on adjacent edges (**top**) and the corresponding variance of physical quantities computed over time (**bottom**). The strong correlation between them reveals the AMP’s ability to perceive significant patterns in data.
+
+Table 4: Results on out-of-distribution (OOD) mesh resolutions.
+
+| Model | RMSE-1 ( $\times 10^{-2}$ ) |  |  |  | RMSE-All ( $\times 10^{-2}$ ) |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | Cylinder | Airfoil | Flag | Plate | Cylinder | Airfoil | Flag | Plate |
+| BSMS-GNN | 0.9177 | 202.3 | 0.6486 | 0.0474 | <b>33.87</b> | 6179 | 148.2 | <b>1.904</b> |
+| DHMP | <b>0.4855</b> | <b>126.7</b> | <b>0.5536</b> | <b>0.0368</b> | 47.72 | <b>5759</b> | <b>120.9</b> | 2.553 |
+
+inter-level information is highlighted by comparing DHMP vs. *M3* and *M1* vs. *M2*. In Figure 6, we visualize the variance of predicted anisotropic edge weights and compare it with areas where physical quantities present substantial variations over time. The results reveal a strong correlation between the anisotropic learning mechanism and the rapidly changing dynamics of the physical system.
+
+### 4.4 GENERALIZATION ANALYSES
+
+**Generalization to out-of-distribution mesh resolutions.** Almost none of the existing machine learning models for mesh-based physics simulation are resolution-free. They may fail when evaluated on unseen mesh resolutions. We assess the generalization performance of DHMP by training it on low-resolution meshes and testing it on high-resolution meshes. The average number of nodes in the test data is twice that of the training data, and the number of edges is three times greater. As shown in Table 4, DHMP demonstrates improved zero-shot generalization ability to more refined mesh structures. This improvement is primarily attributed to our model’s capability to generate hierarchical graphs adaptively. However, it is important to note that this result does not imply that our method has fully explored generalization across arbitrary resolutions—achieving true resolution-free modeling requires a more refined model design. Nevertheless, this holds significant value in practical applications and has the potential to greatly reduce the time overhead of numerical simulation processes for preparing the large-scale mesh data required for model training.
+
+#### Generalization to physics variations.
+
+We evaluate DHMP under strong distribution shifts in the input physical quantities. Table 5 presents data statistics and the RMSE results on the CylinderFlow and Airfoil datasets. DHMP achieves lower RMSEs than BSMS-GNN in both short-term and long-term simulations, which can be largely attributed to the proposed AMP layer. When the fluid dynamics in the test set become more complex—characterized by increased variance in the velocity field over time—the dynamics patterns propagate more rapidly in space. The AMP layer can more effectively capture directed long-range node interactions.
+
+Table 5: Generalization results across various scales of input velocities, presented by the variance and norm of data in training/test splits. *Increase* denotes the relative increase of the test data compared to the training data.
+
+| Split | Cylinder |  | Airfoil |  |
+|-|-|-|-|-|
+|  | Var | Norm | Var | Norm |
+| Train | 7.92 | 579.6 | 288.3 | 173.4 |
+| Test | 13.43 | 826.3 | 827.4 | 180.6 |
+| <i>Increase</i> | 64.5% | 42.5% | 186.9% | 4.20% |
+| Model | RMSE-1 | RMSE-All | RMSE-1 | RMSE-All |
+| BSMS-GNN | $2.58 \times 10^{-3}$ | 0.251 | 1.035 | 30.32 |
+| DHMP | <b><math>2.14 \times 10^{-3}</math></b> | <b>0.091</b> | <b>0.665</b> | <b>22.57</b> |
+
+{9}------------------------------------------------
+
+## 5 RELATED WORK
+
+**Learning-based physics simulation.** Recent literature has shown that learning-based simulators can efficiently handle complex and high-dimensional problems, such as fluid dynamics (Zhu et al., 2024), structural analysis (Kavvas et al., 2018; Thai, 2022), and climate modeling (Kurth et al., 2018; Rasp et al., 2018; Rolnick et al., 2022; Lam et al., 2023). The models can be roughly categorized into three groups based on data representation: those modeling partial differential equations (Raissi et al., 2017; 2019; Lu et al., 2019; Li et al., 2021; Wang et al., 2021), particle-based systems (Li et al., 2019; Sanchez-Gonzalez et al., 2020; Ummenhofer et al., 2020; Prantl et al., 2022), and mesh-based systems (Pfaff et al., 2021; Lino et al., 2022; Fortunato et al., 2022; Cao et al., 2023). The rapid inference time and differentiable property of these models greatly facilitate downstream tasks, such as inverse design (Wang & Zhang, 2021; Goodrich et al., 2021; Allen et al., 2022; Janny et al., 2023).
+
+**GNN-based physics simulation.** Previous work has explored GNNs in various physical domains, such as articulated systems (Sanchez-Gonzalez et al., 2018), soft-body deformation and fluids (Li et al., 2019; Mrowca et al., 2018; Sanchez-Gonzalez et al., 2020; Rubanova et al., 2022; Wu et al., 2023), rigid body dynamics (Battaglia et al., 2016; Li et al., 2019; Mrowca et al., 2018; Bear et al., 2021; Rubanova et al., 2022), and aerodynamics (Belbute-Peres et al., 2020; Hines & Bekemeyer, 2023; Pfaff et al., 2021; Fortunato et al., 2022; Cao et al., 2023). Among them, MGN (Pfaff et al., 2021) is a key method that models mesh-based dynamics through graph interactions. Subsequent approaches primarily focus on enhancing modeling capabilities and reducing computational costs.
+
+**Hierarchical GNNs for physics simulation.** Hierarchical GNNs employ multi-scale graph structures (Lino et al., 2022; Han et al., 2022; Fortunato et al., 2022; Allen et al., 2023; Janny et al., 2023; Cao et al., 2023; Yu et al., 2024) to decrease overhead by using fewer nodes at coarser levels and enabling long-range feature propagation. GMR-Transformer-GMUS (Han et al., 2022) employs a uniform sampling pooling method to select pivotal nodes. MS-MGN (Fortunato et al., 2022) uses a dual-level hierarchical GNN and performs message passing at both fine and coarse resolutions. Hierarchical GNNs with multi-level structures (Lino et al., 2022; Cao et al., 2023; Yu et al., 2024; Garnier et al., 2024; Hy & Kondor, 2023) are most relevant to our approach, as they integrate message passing neural networks within the U-Net architecture (Ronneberger et al., 2015). Lino et al. (2022) uses manually set grid resolutions and spatial proximity for graph pooling, which requires predefined parameters. BSMS-GNN (Cao et al., 2023) introduces a bi-stride pooling strategy that pools nodes on alternating breadth-first search frontiers while enhancing edges with two-hop connections. HCMT (Yu et al., 2024) refines the structure further by applying Delaunay triangulation to bi-stride nodes. Notably, these methods construct multi-level structures as preprocessing and cannot change the graph hierarchies under varying physical conditions. Moreover, they typically use uniform feature aggregation for intra-level propagation, which may hinder the directed transfer of significant dynamic patterns, or use attention-based aggregation, which increases computational overhead. Furthermore, inter-level propagation is often predefined or unlearnable, limiting flexibility in transferring information across hierarchy levels. In contrast, our model generates context-aware and temporally evolving graph hierarchies and incorporates learnable anisotropic feature propagation, allowing it to better adapt to various initial conditions and rapidly changing dynamic systems.
+
+## 6 CONCLUSIONS AND LIMITATIONS
+
+In this paper, we introduced DHMP, a neural network that significantly advances the state-of-the-art in mesh-based physics simulation. Our key innovation is dynamically creating the context-aware graph structures of hierarchical GNNs through a differentiable node selection process. To this end, we proposed an anisotropic message passing mechanism to enhance the propagation of long-term dependencies between distant nodes, aligning with the directed nature of significant dynamic patterns. Extensive experiments show that DHMP outperforms existing models, especially those with fixed graph hierarchies, in both short-term and long-term predictions.
+
+A potential limitation of this work is the need to improve the interpretability of the learned hierarchy structure. Additionally, we would consider incorporating specific physical priors into DHMP to further enhance the model’s robustness and generalizability, particularly in *resolution-free* problem settings, which have been less explored in existing mesh-based approaches.
+
+ Rest of paper (reference and Appendix) is removed.

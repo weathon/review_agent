@@ -1,0 +1,302 @@
+
+
+{0}------------------------------------------------
+
+# 000 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017 018 019 020 021 022 023 024 025 026 027 028 029 030 031 032 033 034 035 036 037 038 039 040 041 042 043 044 045 046 047 048 049 050 051 052 053 BEYOND MARKOV ASSUMPTION: IMPROVING SAMPLE EFFICIENCY IN MDPs BY HISTOR- ICAL AUGMENTATION
+
+**Anonymous authors**
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Under the Markov assumption of Markov Decision Processes (MDPs), an optimal stationary policy does not need to consider history and is no worse than any non-stationary or history-dependent policy. Therefore, existing Deep Reinforcement Learning (DRL) algorithms usually model sequential decision-making as an MDP and then try to optimize a stationary policy by single-step state transitions. However, such optimization is often faced with sample inefficiency when the causal relationships of state transitions are complex. To address the above problem, this paper investigates if augmenting the states with their historical information can simplify the complex causal relationships in MDPs and thus improve the sample efficiency for DRL. First, we demonstrate that a complex causal relationship of single-step state transitions may be inferred by a simple causal function of the historically augmented states. Then, we propose a convolutional neural network architecture to learn the representation of the current state and its historical trajectory. The main idea of this representation learning is to compress the high-dimensional historical trajectories into a low-dimensional space. In this way, we can extract the simple causal relationships from historical information and avoid the overfitting caused by high-dimensional data. Finally, we formulate Historical Augmentation Aided Actor-Critic (HA3C) algorithm by adding the learned representations to the actor-critic method. The experiment on standard MDP tasks demonstrates that HA3C outperforms current state-of-the-art methods in terms of both sample efficiency and performance.
+
+## 1 INTRODUCTION
+
+Sequential decision-making widely exists in real-world control tasks, such as robot control and autonomous driving (Dorf & Bishop, 2011; Ibarz et al., 2021; Sallab et al., 2017). Generally speaking, it can be modelled as a Markov Decision Process (MDP), where an agent iteratively takes action in an environment for transiting from one state to another (Puterman, 1990). Each transition is evaluated by a reward signal passing from the environment to the agent so that Reinforcement Learning (RL) can learn the optimal policy by maximizing the cumulative reward (Sutton & Barto, 2018). The Markov Assumption of MDPs asserts that the probability distributions of the reward and next state depend only on the current state and action. Under the Markov assumption of MDPs, there exists an optimal stationary policy which does not need to consider history and is no worse than any non-stationary or history-dependent policy (Puterman, 2014). Therefore, existing RL algorithms usually try to optimize a stationary policy by single-step state transitions.
+
+With advances in deep learning, many effective Deep RL (DRL) methods were proposed (Fujimoto et al., 2018; Haarnoja et al., 2018; Lillicrap et al., 2016; Mnih et al., 2016; 2015). Under the Markov assumption of MDPs, they are usually based on the actor-critic method where the critic estimates the  $Q$ -function, i.e., the expected cumulative reward after taking action at each state, while the actor updates the policy to choose the action which can maximize the estimated  $Q$ -function (Schulman et al., 2015; Silver et al., 2014). However, such optimization may miss the useful causal relationships of state transitions, leading to sample inefficiency (Allen et al., 2021; Buckman et al., 2018; Du et al., 2020; Guo et al., 2020). An existing partial solution to this issue is representation learning in which a neural network is trained to infer the causal relationships of state transitions by predicting the
+
+{1}------------------------------------------------
+
+reward or future state of each state-action pair (Munk et al., 2016; Ni et al., 2023; Ravindran, 2004; Rezaei-Shoshtari et al., 2022). Then, the sample efficiency of DRL can be improved by adding the learned representations to the actor-critic method. Unfortunately, it is hard to train the neural networks which can infer complex causal relationships, e.g., polynomial causal relationships and the basic laws of physics (Andoni et al., 2014; Crammer et al., 2020). Standard complexity-theoretic results strongly suggest that there is no algorithm efficient enough for learning arbitrary target functions, even for target functions representable by very low-depth networks (Applebaum et al., 2006). Therefore, the sample efficiency for DRL is still limited in complex MDP tasks.
+
+This paper addresses the above problem by augmenting the states with their historical information. Based on the analysis in Section 3, we believe that historical augmentation can simplify the causal relationships of state transitions by its inherent contextual information and increasing the search space of the causal functions (Hallak et al., 2015; Sprunger & Jacobs, 2019). Therefore, we focus on optimizing a history-dependent stationary policy in an MDP. Our DRL approach comprises two key components: 1) Learning the state representations to capture the causal relationships in an MDP and 2) finding the optimal stationary policy by the learned representations. Given an action and the historically augmented current state, our representation learning utilizes a Convolutional Neural Network (CNN) architecture to compress the high-dimensional historical trajectory of the given state into a low-dimensional space while predicting the future state. The compressed historical trajectories can be seen as the abstracted features which can represent the simple causal relationships and avoid the overfitting caused by high-dimensional data (Andre & Russell, 2002). To keep the Markov assumption of MDPs, our representation learning does not compress the current state. We add the learned state representations to the actor-critic method. In this way, the causal relationships captured by our representation learning can be utilized to estimate the  $Q$ -function and update policy. Therefore, our new DRL approach can optimize the policy in a complex MDP with high sample efficiency. We combine historical augmentation, state representations, and TD3 in our approach to formulate a new DRL algorithm, Historical Augmentation Aided Actor-Critic (HA3C). The experiment on standard MDP tasks, i.e. Mujoco control tasks and Deep Mind Control (DMC) suite, empirically demonstrates that HA3C outperforms current state-of-the-art methods in terms of both sample efficiency and performance (Brockman et al., 2016; Todorov et al., 2012; Tassa et al., 2018).
+
+Our contributions are as follows: 1) Existing RL methods usually utilize historical information to recover Markov assumption in dynamics. It is the first time in the literature that historical augmentation can be used to improve sample efficiency when Markov assumption is satisfied. 2) We propose a new DRL approach to address the problem of how to effectively utilize the historical information in MDPs. 3) Based on this approach, we formulate a new RL algorithm, HA3C, which outperforms existing state-of-the-art DRL algorithms, e.g. TD7 (Fujimoto et al., 2023). 4) Our examples, experiment, and discussion illustrate that in fact, DRL needs to consider historical information in complex MDP tasks.
+
+## 2 BACKGROUND
+
+An MDP can be written as a 5-tuple  $\mathbb{M} = \langle \mathcal{S}, \mathcal{A}, R, P, \gamma \rangle$  with state space  $\mathcal{S}$ , action space  $\mathcal{A}$ , reward function  $R$ , transition model  $P$ , and discount factor  $\gamma$ . In an MDP, RL can maximize the discounted cumulative reward by learning how to map the states to the actions (Baird, 1995; Duan et al., 2016; Williams, 1992). For a given state  $s_t \in \mathcal{S}$  at time step  $t$ , the agent executes an action  $a_t \in \mathcal{A}$  w.r.t. a policy  $\pi : \mathcal{S} \mapsto \mathcal{A}$ , to obtain a reward  $r_t = R(s_t, a_t)$  and transfer to a new state  $s_{t+1}$ . The return of the agent is defined as the discounted cumulative reward  $G_t = \sum_{i=t}^{+\infty} \gamma^{i-t} r_i$ . Based on the Markov assumption of MDPs, RL can find the optimal policy to maximize the following value function which is the expected return when  $s_t = s$  and following  $\pi$  thereafter.
+
+$$V^\pi(s) = \mathbb{E}^\pi [G_t | s_t = s] = \mathbb{E}^\pi \left[ \sum_{i=0}^{+\infty} \gamma^i r_{t+i} | s_t = s \right],$$
+
+where  $\mathbb{E}^\pi[\cdot]$  denotes the expected value of a random variable given that the agent follows policy  $\pi$ .
+
+With advances in deep learning, combining neural networks into RL has drawn significant attention in the literature. Many DRL algorithms learn the optimal policy by the actor-critic method (Kaelbling et al., 1996), where the critic network estimates the  $Q$ -function which is the expected return when
+
+{2}------------------------------------------------
+
+$s_t = s, a_t = a$ , and following policy  $\pi$  thereafter.
+
+$$Q^\pi(s, a) = \mathbb{E}^\pi [G_t | s_t = s, a_t = a] = \mathbb{E}^\pi \left[ \sum_{t=0}^{+\infty} \gamma^t r_{t+i} | s_t = s, a_t = a \right],$$
+
+while the actor network updates the policy to maximize the estimated  $Q$ -function.
+
+To improve sample efficiency, some DRL methods learn the state representations of the collected state transitions and then add the learned representations to the actor-critic method (Anand et al., 2019; Dayan, 1993; Gelada et al., 2019; Li et al., 2006). This representation learning aims to capture the causal relationships in MDPs, and thus improves sample efficiency (Liu et al., 2020; Van Hoof et al., 2016; Ye et al., 2023; Zhang et al., 2021). For example, ML-DDPG learns the state representations by predicting the next state representation and the reward in MDPs (Munk et al., 2016). As an improvement of ML-DDPG, OFENet learns the high-dimensional state representations by predicting the next state in DenseNet architecture (Ota et al., 2020). TD7 improves the learning of state representations by AvgL1Norm and then combines the learned representations with TD3, checkpoints, and prioritized replay buffer (Fujimoto et al., 2023).
+
+DRL algorithms need to consider historical information when the Markov assumption of MDPs is violated (Eysenbach et al., 2020; Majeed & Hutter, 2018; Hafner et al., 2019b). For Partially Observable MDPs (POMDPs), in which the states are partially observable, deep recurrent  $Q$ -network uses LSTMs to encode state transition trajectories in the  $Q$ -function estimation (Hausknecht & Stone, 2015). As an improvement of deep recurrent  $Q$ -network, deep transformer  $Q$ -network uses transformers to encode the state transition trajectories (Esslinger et al., 2022). As a famous DRL algorithm, Dreamer encodes the historical information into the state at every time step in POMDPs (Ha & Schmidhuber, 2018; Hafner et al., 2019a). In delayed MDPs, in which the current state and reward may arrive at the agent with a delay (Katsikopoulos & Engelbrecht, 2003), researchers usually recover the Markov assumption of MDPs by considering the historical actions (Bouteiller et al., 2020; Derman et al., 2021). When the Markov assumption of MDPs is violated by the state abstraction, it is possible to find a history-based policy which works in the abstracted space and is of the same quality as optimal policy (Patil et al., 2024). However, the history-based DRL for the dynamics which are under Markov assumption is largely absent from the literature.
+
+## 3 MOTIVATION
+
+Let  $h_t = \{s_0, a_0, \dots, s_t\}$  be the history up to time step  $t$  in a sequential decision-making task. The optimal policy may change the decision rule in different time steps and select actions based on historical information. In this case, we should optimize a history-dependent policy  $\pi = \{d_t | t = 0, 1, \dots\}$  which selects action at time step  $t$  by decision-rule  $d_t(a_t | h_t)$ . Fortunately, based on the Markov assumption of MDPs, there is an optimal stationary policy  $\pi(a_t | s_t)$  which is unrelated to time and selects action  $a_t$  by only the state  $s_t$ . This Markov assumption asserts that the probability distributions of state  $s_{t+1}$  and reward  $r_t$  depend only on the  $s_t$  and  $a_t$  as
+
+$$P\{s_{t+1} = s', r_t = r | s_0, a_0, r_0, \dots, s_t, a_t\} = P\{s_{t+1} = s', r_t = r | s_t, a_t\},$$
+
+where  $P$  is the probability distribution in  $P$ . Let  $HR$  and  $SR$  denote the class of history-dependent and stationary policies, respectively. Lemma 3.1 is the key of most existing RL algorithms (Puterman, 2014)[Thm. 6.2.10]. The different types of policies are detailed in Appendix A.
+
+**Lemma 3.1.** *Under the Markov assumption of MDPs, there exists a policy  $\pi^* \in SR$  such that, for all  $t$ ,  $V_{\pi^*}(s_t) = \sup_{\pi \in HR} V_\pi(h_t)$ .*
+
+Based on Lemma 3.1, existing DRL algorithms for MDPs usually optimize a stationary policy by single-step transitions. If the causal relationships in the modelled MDP are simple, e.g., there are only linear causal relationships in this MDP, such optimization effectively finds the optimal policy. A classical result is that a neural network with a single hidden layer can successfully learn a linear function (Andoni et al., 2014). However, it is still hard to capture complex causal relationships by neural networks. Standard complexity-theoretic results strongly suggest that there is no algorithm efficient enough for learning arbitrary functions, even for target functions representable by very low-depth networks (Applebaum et al., 2006). In fact, a more complex causal function requires neural networks to approximate with more parameters, samples, and time consumption (Bianchini & Scarselli, 2014).
+
+{3}------------------------------------------------
+
+Historical augmentation has the potential to address the above problem by simplifying the causal relationships in MDPs as it can increase the search space of the causal functions and provide much contextual information on state transitions (Hallak et al., 2015; Sodhani et al., 2022).
+
+*Example 3.1.* For example, if we model the state transitions with Fibonacci sequence as  $s_0 = 1$ ,  $s_1 = 1$ ,  $s_2 = 2$ ,  $s_3 = 3$ ,  $s_4 = 5, \dots$ , when  $t > 2$ , the state transitions in this model will satisfy the Markov assumption of Markov Processes as (Dynkin, 1965)
+
+$$P\{s_{t+1} = s' | s_0, \dots, s_t\} = P\{s_{t+1} = s' | s_t\}.$$
+
+Without considering history, at  $s_t$ ,  $s_{t+1}$  will be predicted by a complex time-related formula
+
+$$s_{t+1} = \frac{1}{\sqrt{5}} \left[ \left( \frac{1 + \sqrt{5}}{2} \right)^{t+1} - \left( \frac{1 - \sqrt{5}}{2} \right)^{t+1} \right].$$
+
+Fortunately, when considering history, we can predict  $s_{t+1}$  by a simple linear function
+
+$$s_{t+1} = s_{t-1} + s_t.$$
+
+In Appendix B, we give another example to illustrate that by historical augmentation, a non-linear causal relationship in single-step transitions may be simplified as a linear causal relationship. Fig. 1(a) presents the original MDP causal relationships and Fig. 1(b) demonstrates the MDP causal relationships with state augmentation. When inferring the causal relationships in a trajectory, the causal
+
+![Figure 1: Causal diagrams of an MDP with or without historical augmentation. (a) Original MDP: States s_{t-1}, s_t, s_{t+1} are shown as blue circles. s_{t-1} has a solid black arrow to s_t. s_t has a solid black arrow to s_{t+1}. Above s_{t-1} is a green diamond labeled a_{t-2} with a dashed line to s_{t-1} and a solid black arrow to s_t. Above s_t is a green diamond labeled a_t with a dashed line to s_t and a solid black arrow to s_{t+1}. Above s_{t+1} is a green diamond labeled a_{t+1} with a dashed line to s_{t+1} and a solid black arrow to the next state. Above s_{t-1} is an orange rectangle labeled r_{t-2} with a solid black arrow to s_{t-1}. Above s_t is an orange rectangle labeled r_t with a solid black arrow to s_t. Above s_{t+1} is an orange rectangle labeled r_{t+1} with a solid black arrow to s_{t+1}. (b) MDP with historical augmentation: States s_{t-1}, s_t, s_{t+1} are shown as blue circles. s_{t-1} has a solid black arrow to s_t. s_t has a solid black arrow to s_{t+1}. s_{t+1} has a solid black arrow to the next state. Above s_{t-1} is a green diamond labeled a_{t-2} with a dashed line to s_{t-1} and a solid black arrow to s_t. Above s_t is a green diamond labeled a_t with a dashed line to s_t and a solid black arrow to s_{t+1}. Above s_{t+1} is a green diamond labeled a_{t+1} with a dashed line to s_{t+1} and a solid black arrow to the next state. Above s_{t-1} is an orange rectangle labeled r_{t-2} with a solid black arrow to s_{t-1}. Above s_t is an orange rectangle labeled r_t with a solid black arrow to s_t. Above s_{t+1} is an orange rectangle labeled r_{t+1} with a solid black arrow to s_{t+1}. Red dashed lines represent added causal relationships: from s_{t-1} to s_{t+1}, from s_t to s_{t+1}, and from s_{t+1} to the next state. Red solid lines represent added causal relationships: from s_{t-1} to s_t, from s_t to s_{t+1}, and from s_{t+1} to the next state.](7a207f7bb5a20f849aee089439e24a84_img.jpg)
+
+Figure 1: Causal diagrams of an MDP with or without historical augmentation. (a) Original MDP: States s\_{t-1}, s\_t, s\_{t+1} are shown as blue circles. s\_{t-1} has a solid black arrow to s\_t. s\_t has a solid black arrow to s\_{t+1}. Above s\_{t-1} is a green diamond labeled a\_{t-2} with a dashed line to s\_{t-1} and a solid black arrow to s\_t. Above s\_t is a green diamond labeled a\_t with a dashed line to s\_t and a solid black arrow to s\_{t+1}. Above s\_{t+1} is a green diamond labeled a\_{t+1} with a dashed line to s\_{t+1} and a solid black arrow to the next state. Above s\_{t-1} is an orange rectangle labeled r\_{t-2} with a solid black arrow to s\_{t-1}. Above s\_t is an orange rectangle labeled r\_t with a solid black arrow to s\_t. Above s\_{t+1} is an orange rectangle labeled r\_{t+1} with a solid black arrow to s\_{t+1}. (b) MDP with historical augmentation: States s\_{t-1}, s\_t, s\_{t+1} are shown as blue circles. s\_{t-1} has a solid black arrow to s\_t. s\_t has a solid black arrow to s\_{t+1}. s\_{t+1} has a solid black arrow to the next state. Above s\_{t-1} is a green diamond labeled a\_{t-2} with a dashed line to s\_{t-1} and a solid black arrow to s\_t. Above s\_t is a green diamond labeled a\_t with a dashed line to s\_t and a solid black arrow to s\_{t+1}. Above s\_{t+1} is a green diamond labeled a\_{t+1} with a dashed line to s\_{t+1} and a solid black arrow to the next state. Above s\_{t-1} is an orange rectangle labeled r\_{t-2} with a solid black arrow to s\_{t-1}. Above s\_t is an orange rectangle labeled r\_t with a solid black arrow to s\_t. Above s\_{t+1} is an orange rectangle labeled r\_{t+1} with a solid black arrow to s\_{t+1}. Red dashed lines represent added causal relationships: from s\_{t-1} to s\_{t+1}, from s\_t to s\_{t+1}, and from s\_{t+1} to the next state. Red solid lines represent added causal relationships: from s\_{t-1} to s\_t, from s\_t to s\_{t+1}, and from s\_{t+1} to the next state.
+
+Figure 1: Causal diagrams of an MDP with or without historical augmentation. The black lines index the original MDP causal relationships and the red lines index the added causal relationships, e.g., the causal relationships from historical augmentation. The dashed lines indicate the information needed in the optimization.
+
+function in Fig 1(b) can be simpler than the causal function in Fig 1(a).
+
+From the analysis above, the motivation of our work is that historical information can simplify the complex causal relationships in MDPs and thus has the potential to improve the sample efficiency of DRL. However, the challenges are 1) how to ensure that the causal relationships learned from historical augmentation are simple and 2) avoiding overfitting caused by the high-dimensional historical data.
+
+## 4 METHOD
+
+In this section, we propose a new DRL approach by the representation learning of historically augmented states. Then, we formulate a new DRL algorithm, HA3C, and illustrate the advantage of this algorithm with a visual example.
+
+### 4.1 REPRESENTATION LEARNING ON HISTORICALLY AUGMENTED STATES
+
+To address the problem of how to effectively utilize the historical information in MDPs, we propose a new DRL approach by the representation learning of historically augmented states. The main idea of this representation learning is to compress the high-dimensional historical trajectories into a low-dimensional representation space (Andre & Russell, 2002; Li et al., 2006). On the one hand, the compressed historical trajectories can be seen as the abstracted features of the historical information to extract the simple causal relationships. On the other hand, this compression will avoid the overfitting caused by the high-dimensional historical data (Ying, 2019).
+
+{4}------------------------------------------------
+
+To keep the Markov assumption of MDPs, our representation learning does not compress the current state. Let  $s_{k,t} = \{s_{t-k+1}, \dots, s_t\}$ . If  $t < k$ , one can set each  $s_i \in s_{k-t-1}$  by the zero vector 0. The causal diagram of MDP with our state abstraction is in Fig. 2. As we can see, when predicting  $s_{t+1}$  by  $s_{k,t}$  and  $a_t$ , the dimensionality reduction is only performed on  $s_{k-1,t-1}$ .
+
+Let  $S_k D$  denote the class of the stationary deterministic policies based on  $k$ -order state trajectories. Theorem 4.1 forms the basis of our DRL approach. This theorem can be implied by Lemma 3.1. For completeness, we provide a proof in Appendix D.
+
+**Theorem 4.1.** *Under the Markov assumption of MDPs, there exists a stationary deterministic policy  $\mu^* \in S_k D$  such that, for all  $t$ ,  $V^\mu(s_{k,t}) = \sup_{\pi \in H_R} V^\pi(h_t)$ .*
+
+To capture the simplified causal relationships in MDPs by historical augmentation, we define a pair of encoders  $z^{s_{k,t}} = f(s_{k,t})$  and  $z^{s_{k,t}, a_t} = g(z^{s_{k,t}}, a_t)$ . Based on the Markov assumption in MDPs, we can predict  $z^{s_{k,t+1}}$ , i.e., the representation of  $s_{k,t+1}$ , by  $z^{s_{k,t}, a_t}$ . Thus, the two encoders are trained by minimizing the following predicting loss:
+
+$$L(f, g) = \|g(f(s_{k,t}), a_t) - f(s_{k,t+1})\|_2^2 = \|z^{s_{k,t}, a_t} - z^{s_{k,t+1}}\|_2^2, \quad (1)$$
+
+where  $\|\cdot\|_2$  denotes the stop-gradient operation. As presented in Fig. 3, a simple yet effective CNN network architecture is utilized in our representation learning. In the network of  $f(s_{k,t})$ , we first use a CNN layer to mine the historical information in  $s_{k-1,t-1}$ . This layer produces the feature maps of  $s_{k-1,t-1}$  by the multiple filters, which are as wide as the state dimensionality. Second, we utilize a max pooling layer to capture the most important features and an average pooling layer to capture the tendency features. Third, we compress the captured features into a low-dimensional space and learn the features of  $s_t$ . Finally, we concatenate the compressed features of  $s_{k-1,t-1}$  and the learned features of  $s_t$ . The concatenated features are the input of the next fully connected layer to obtain the representation  $z^{s_{k,t}}$ . In the network of  $g(z^{s_{k,t}}, a_t)$ , we put the concatenation of  $z^{s_{k,t}}$  and  $a_t$  into the two fully connected layers to obtain the representation  $z^{s_{k,t}, a_t}$ .
+
+We combine our learned representations with the actor-critic method and thus the  $Q$ -function can be defined as  $\hat{Q}(z^{s_{k,t}}, a_t)$  and the policy can be defined as  $\mu(z^{s_{k,t}}) \in S_k D$ . Define the probability distribution of  $z^{s_{k,t+1}}$  under  $\mu$  as
+
+$$P^\mu\{z^{s_{k,t+1}} = z^{s_{k,t}} | z^{s_{k,t}} = z^{s_{k,t}}\} = \int_{\mathcal{Z}} \mathbb{E}_{a \sim \mu(z^{s_{k,t}})} [p(z^{s_{k,t}} | z^{s_{k,t}}, a)] dz^{s_{k,t}},$$
+
+where  $s_{k,t}$  is a  $k$ -order state trajectory  $\{s_0, \dots, s_{k-1}\}$  ending with  $s$ , i.e.,  $s_{k-1} = s$ ,  $\mathcal{Z}$  is the set of all possible  $z^{s_{k,t}}$ , and  $p(z^{s_{k,t}} | z^{s_{k,t}}, a)$  is the probability of transferring to  $z^{s_{k,t}}$  with taking  $a$  at  $z^{s_{k,t}}$ . Our optimization is based on a Bellman optimality operator  $B$  for  $\mu$  as
+
+$$B_\mu \hat{Q}(z^{s_{k,t}}, a) = \max_{\mu} \mathbb{E}_{a_{t+1} \sim \mu, z^{s_{k,t+1}} \sim P^\mu} [r_t + \gamma \hat{Q}(z^{s_{k,t+1}}, a_{t+1})]. \quad (2)$$
+
+The following theorem gives the conditions to find the optimal stationary policy in our approach. The proof of this theorem is given in Appendix D.
+
+**Theorem 4.2.** *Given a finite MDP, if 1)  $f(*)$  and  $g(*)$  are fixed, 2)  $\forall s_{k,t}, s'_{k,t} \in S_{k,t}, s \neq s' \Rightarrow z^{s_{k,t}} \neq z^{s'_{k,t}}$ , and 3)  $L(f, g) \rightarrow 0$ , then  $\hat{Q}(z^{s_{k,t}}, a_t)$  converges to the optimal  $Q^*(s_t, a_t)$  by the Bellman optimality operator in equation 2.*
+
+This theorem illustrates that no matter whether different historical trajectories lead to different representations on the state  $s$ , we can still find the optimal stationary policy in the representation space. To make condition 2) hold, we can increase the dimensionality of  $s$  in representation learning. This operation also can improve sample efficiency (Ota et al., 2020). To see condition 3) hold, there should exist a  $s'_{k,t}$  that satisfies
+
+$$p\{s_{k,t+1} = s'_{k,t} | s_{k,t}, a_t\} \rightarrow 1.$$
+
+{5}------------------------------------------------
+
+![Figure 3: Network architecture of our representation learning. The diagram shows two main components: f(s_{k,t}) and g(z^{s_{k,t}}, a_t). f(s_{k,t}) takes a sequence of frames s_{k-1:t} and s_{k,t} as input. s_{k-1:t} is processed by a CNN with 'Dimensional reduction' (Max Pooling, Avg Pooling) to produce z^{s_{k,t}}. s_{k,t} is processed by an FC layer to produce z^{s_{k,t}}. These two z^{s_{k,t}} vectors are concatenated and processed by a series of FC and RF layers. g(z^{s_{k,t}}, a_t) takes z^{s_{k,t}} and action a_t as input. a_t is processed by an FC layer to produce z^{s_{k,t}, a_t}. z^{s_{k,t}} and z^{s_{k,t}, a_t} are concatenated and processed by a series of FC and RF layers.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Figure 3: Network architecture of our representation learning. The diagram shows two main components: f(s\_{k,t}) and g(z^{s\_{k,t}}, a\_t). f(s\_{k,t}) takes a sequence of frames s\_{k-1:t} and s\_{k,t} as input. s\_{k-1:t} is processed by a CNN with 'Dimensional reduction' (Max Pooling, Avg Pooling) to produce z^{s\_{k,t}}. s\_{k,t} is processed by an FC layer to produce z^{s\_{k,t}}. These two z^{s\_{k,t}} vectors are concatenated and processed by a series of FC and RF layers. g(z^{s\_{k,t}}, a\_t) takes z^{s\_{k,t}} and action a\_t as input. a\_t is processed by an FC layer to produce z^{s\_{k,t}, a\_t}. z^{s\_{k,t}} and z^{s\_{k,t}, a\_t} are concatenated and processed by a series of FC and RF layers.
+
+Figure 3: Network architecture of our representation learning. FC represents a fully connected layer and RF represents the state representation features.
+
+There is an analysis of the function approximation error in Appendix D. We add  $z^{s_{k,t}, a_t}$  to  $\hat{Q}$  to consider the learned relationship between  $a_t$  and  $z^{s_{k,t}}$  in the representation space. We also add  $s_t$  to  $\hat{Q}$  and  $\mu$  to consolidate the relationships in single-step transitions. Thus  $Q$  and  $\mu$  can be written as  $\hat{Q}(z^{s_{k,t}, a_t}, z^{s_{k,t}}, s_t, a_t)$  and  $\mu(z^{s_{k,t}}, s_t)$ , respectively. The operations in  $\hat{Q}$  and  $\mu$  are shown in Fig. 4.
+
+![Figure 4: The operations in Q and mu. The diagram shows two components: Q and mu. Q takes s_t, z^{s_{k,t}}, and a_t as input. s_t is processed by an FC layer to produce z^{s_{k,t}}. z^{s_{k,t}} and a_t are concatenated and processed by an FC layer to produce z^{s_{k,t}, a_t}. z^{s_{k,t}, a_t} is processed by an FC layer to produce the output Q. mu takes s_t and z^{s_{k,t}} as input. s_t is processed by an FC layer to produce z^{s_{k,t}}. z^{s_{k,t}} is processed by an FC layer to produce the output mu.](f6d72d7c790e7f585532140f3971639a_img.jpg)
+
+Figure 4: The operations in Q and mu. The diagram shows two components: Q and mu. Q takes s\_t, z^{s\_{k,t}}, and a\_t as input. s\_t is processed by an FC layer to produce z^{s\_{k,t}}. z^{s\_{k,t}} and a\_t are concatenated and processed by an FC layer to produce z^{s\_{k,t}, a\_t}. z^{s\_{k,t}, a\_t} is processed by an FC layer to produce the output Q. mu takes s\_t and z^{s\_{k,t}} as input. s\_t is processed by an FC layer to produce z^{s\_{k,t}}. z^{s\_{k,t}} is processed by an FC layer to produce the output mu.
+
+Figure 4: The operations in  $Q$  and  $\mu$ .
+
+Our approach can be connected with POMDPs, High-order MDPs (HMDPs), and state abstraction. A detailed analysis of the connections between our approach and the related work is shown in Appendix C.
+
+### 4.2 HA3C ALGORITHM
+
+In this subsection, we propose HA3C algorithm which is a combination of TD3, representation learning, historical augmentation. HA3C has several networks as follows. Two critic networks  $(\hat{Q}_{\phi_1}, \hat{Q}_{\phi_2})$ , two target critic networks  $(\hat{Q}_{\phi_1^T}, \hat{Q}_{\phi_2^T})$ , an actor network  $\mu_\theta$ , a target actor network  $\mu_{\theta^T}$ , two encoders  $(f_\sigma, g_\sigma)$ , two fixed encoders  $(f_{\sigma^F}, g_{\sigma^F})$ , two target encoders  $(f_{\sigma^T}, g_{\sigma^T})$ , a checkpoint actor network  $\pi_{\theta^C}$ , and a checkpoint encoder  $f_{\sigma^C}$ .
+
+To learn the representations with historical augmentation,  $f_\sigma$ , and  $g_\sigma$  are trained by the transitions in buffer  $\mathcal{B} = \{s_{k,t}, a_t, r_t, s_{k,t+1}\}$  to minimize the predicting loss in equation 1. For any parameter set  $\alpha$ , we define
+
+$$z_\alpha^{s_{k,t}} = f_\alpha(s_{k,t}), \quad z_\alpha^{s_{k,t}, a_t} = g_\alpha(z^{s_{k,t}}, a_t).$$
+
+Based on the assumption that  $f_{\sigma^F}$  and  $g_{\sigma^F}$  satisfy the conditions in Theorem 4.2 on the most transitions in  $\mathcal{B}$ , the  $Q$ -function is estimated by the following Huber loss function (Huber, 1992).
+
+$$L(\phi_i, \mathcal{B}) = \text{Huber}_{(s_{k,t}, a_t, r_t, s_{k,t+1}) \sim \mathcal{B}} [x_t - (\hat{Q}_{\phi_i}[z_{\sigma^F}^{s_{k,t}, a_t}, z_{\sigma^F}^{s_{k,t}}, s_t, a_t)], \quad (3)$$
+
+$$x_t = r_t + \gamma \text{clip}(\min(\hat{Q}_{\phi_1^T}(z_{\sigma^T}^{s_{k,t+1}, a'}, z_{\sigma^T}^{s_{k,t+1}}, s_{t+1}, a')), \hat{Q}^{\min}, \hat{Q}^{\max}),$$
+
+$$a' = \mu_{\theta^T}(z_{\sigma^T}^{s_{k,t+1}}, s_{t+1}) + e_T, e_T \sim \mathcal{N},$$
+
+where  $e_T$  is target policy noise (Fujimoto et al., 2018),  $\mathcal{N}$  is a Gaussian distribution  $\mathcal{N}(0, \sigma)$ , and  $\hat{Q}^{\min}$  and  $\hat{Q}^{\max}$  are updated at each time step as
+
+$$\hat{Q}^{\max} \leftarrow \max(x_t, \hat{Q}^{\max}), \quad \hat{Q}^{\min} \leftarrow \min(x_t, \hat{Q}^{\min}).$$
+
+Based on the learned  $Q$ -function, the policy network  $\pi_\theta$  is updated by
+
+$$\max_\theta \mathbb{E}_{s_{k,t} \sim \mathcal{B}} \left[ \sum_{i=1,2} \hat{Q}_{\phi_i}(z^{s_{k,t}, a}, z^{s_{k,t}}, s_t, a) \right], \quad (4)$$
+
+$$a = \mu_\theta(z_{\sigma^F}^{s_{k,t}}, s_t).$$
+
+{6}------------------------------------------------
+
+To explore the new actions and thus generate new transitions in  $\mathcal{B}$ , exploration noise  $\epsilon$  is added as
+
+$$\mathbf{a}_t \leftarrow \mathbf{a}_t + \epsilon_e, \epsilon_e \sim \mathcal{N}.$$
+
+In our TD learning,  $\sigma^F$ ,  $\sigma^T$ ,  $\phi^T$ , and  $\theta^T$  are updated by
+
+$$\sigma^F \leftarrow \sigma^T, \quad \sigma^T \leftarrow \sigma, \quad \phi^T \leftarrow \phi, \quad \theta^T \leftarrow \theta. \quad (5)$$
+
+Because DRL algorithms are unstable (Henderson et al., 2018; Teh et al., 2017), we use the checkpoint policy to obtain the cumulative reward in our evaluation (Vaswani et al., 2017). In the training of HA3C, if the current policy outperforms the checkpoint policy, we will update the checkpoint policy with the current policy, then  $\sigma^C \leftarrow \sigma$  and  $\theta^C \leftarrow \theta$ . The checkpoint policy can give a more accurate evaluation by maintaining the high-performance policy unchanged. Furthermore, the LAP replay buffer is utilized to store and replay the transitions (Fujimoto et al., 2023; 2020). The algorithm of online HA3C is presented in Algorithm 1.
+
+#### --- Algorithm 1 Online HA3C ---
+
+```
+
+Initialize the hyper-parameters and networks
+Initialize replay buffer  $\mathcal{B}$ 
+for  $episode = 0$  to  $episode_{max}$  do
+  Collect  $k$ -order transitions by  $\mu_\theta$  and store them in LAP buffer  $\mathcal{B}$ 
+  if Checkpoint condition then
+    if  $\mu_\theta$  outperforms  $\mu_{\theta^C}$  then
+      Update checkpoint networks  $\mu_{\theta^C} \leftarrow \mu_\theta$  and  $f_{\sigma^C} \leftarrow f_\sigma$ 
+    end if
+  end if
+  Sample  $k$ -order transitions from LAP buffer  $\mathcal{B}$ 
+  Train the encoder  $f_\sigma$  and  $g_\sigma$  by equation 1
+  Train  $\hat{Q}_{\phi_1}$  and  $\hat{Q}_{\phi_2}$  by equation 3
+  Train  $\pi_\theta$  by equation 4
+  if Target update frequency steps have passed then
+    Update target networks by equation 5
+  end if
+end for
+
+```
+
+---
+
+Fig. 5 is an example to illustrate the advantage of learning the policy in HA3C. We first collect the obtained states of Walker2d MuJoCo control task by learning the policy with and without historical augmentation, respectively. The max learning step is  $4 \times 10^5$ . Then we map the collected states in 2D space together by UMAP. Finally, we show the reached states without the learning of historical augmentation in the left subfigure of Fig. 5 and the reached states with the learning of historical augmentation in the right subfigure of Fig. 5. Each state is coloured by the reward of reaching it. As we can see, although the actions to obtain the states in high-reward regions (indexed by the red circles) can be explored, without historical augmentation, it is hard to learn the policy which can regenerate these explored actions. Therefore, in the left subfigure, there are only a few states in the high-reward regions. Fortunately, as shown in the right subfigure, there are a lot of states in the high-reward regions when learning the policy with historical augmentation. The visual results of other environments are shown in Appendix F.
+
+![Figure 5: Visual results of the obtained states in Walker2d environment. The figure consists of two side-by-side UMAP plots. The left plot, titled 'No Aug.', shows a sparse distribution of states with two red circles highlighting high-reward regions that are mostly unexplored. The right plot, titled 'HA3C', shows a much denser distribution of states, with many more points falling within the same two high-reward regions. A color bar on the right of the HA3C plot indicates reward values ranging from -2 (dark purple) to 10 (yellow), with the high-reward regions showing higher values (yellow/green).](797231cfee084ca299de599340240401_img.jpg)
+
+Figure 5: Visual results of the obtained states in Walker2d environment. The figure consists of two side-by-side UMAP plots. The left plot, titled 'No Aug.', shows a sparse distribution of states with two red circles highlighting high-reward regions that are mostly unexplored. The right plot, titled 'HA3C', shows a much denser distribution of states, with many more points falling within the same two high-reward regions. A color bar on the right of the HA3C plot indicates reward values ranging from -2 (dark purple) to 10 (yellow), with the high-reward regions showing higher values (yellow/green).
+
+Figure 5: Visual results of the obtained states in Walker2d environment. Each state is coloured by the reward of reaching this state.
+
+{7}------------------------------------------------
+
+## 5 EXPERIMENTAL RESULT
+
+In this section, first, we compare HA3C to five existing RL algorithms on five MuJoCo control tasks (Todorov et al., 2012). Second, we give the ablation study of HA3C to illustrate that historical augmentation is the real source of the improvement in sample efficiency. Third, we analyze the parameter sensitivity on the length of the historical state trajectory and the number of dimensions of compressed historical trajectories. Finally, we give the running times of the different RL algorithms. The experimental setting is in Appendix E. Appendix F has some supplementary experiments including the state visualization and DMC experiment (Tassa et al., 2018).
+
+### 5.1 COMPARATIVE EVALUATION
+
+In this subsection, we evaluate our HA3C on five MuJoCo control tasks including Walker2d, HalfCheetah, Ant, Humanoid, and Hopper. The compared algorithms are TD3 (Fujimoto et al., 2018), SAC (Haarnoja et al., 2018), TQC (Kuznetsov et al., 2020), TD3+OFE (Ota et al., 2020), and TD7 (Fujimoto et al., 2023). For all algorithms, each task runs 10 instances with different random seeds. In each instance, the evaluation is performed every 5000 time steps. The learning curves are shown in Fig. 6 and the numerical results at 400K time step and 1M time step are shown in Table 1.
+
+![Figure 6: Learning curves of different RL algorithms on the MuJoCo control tasks. The figure contains five subplots: Walker2d, Ant, Hopper, HalfCheetah, and Humanoid. Each subplot shows 'Total reward (1K)' on the y-axis and 'Time steps (1M)' on the x-axis (ranging from 0.0 to 1.0). Six algorithms are compared: HA3C (blue), TD7 (red), TQC (light blue), TD (green), SAC (orange), and TD3+OFE (purple). Shaded regions around the lines represent 90% confidence intervals. HA3C consistently shows higher rewards and faster learning across all tasks compared to the other algorithms.](7ff005f9556dc6518981bb92091d36ab_img.jpg)
+
+Figure 6: Learning curves of different RL algorithms on the MuJoCo control tasks. The figure contains five subplots: Walker2d, Ant, Hopper, HalfCheetah, and Humanoid. Each subplot shows 'Total reward (1K)' on the y-axis and 'Time steps (1M)' on the x-axis (ranging from 0.0 to 1.0). Six algorithms are compared: HA3C (blue), TD7 (red), TQC (light blue), TD (green), SAC (orange), and TD3+OFE (purple). Shaded regions around the lines represent 90% confidence intervals. HA3C consistently shows higher rewards and faster learning across all tasks compared to the other algorithms.
+
+Figure 6: Learning curves of different RL algorithms on the MuJoCo control tasks. The shaded area captures a 90% confidence interval around the average performance.
+
+From Fig. 6 and Table 1, we can see that 1) With the help of historical augmentation, HA3C significantly outperforms the compared algorithms in terms of the early average highest returns (400K time step) and final average highest returns (1M time step); 2) as shown in Fig. 6, because of the instability in rapidly learning complex causal relationships, the early average returns of HA3C on Walker2d and Humanoid are a little lower than the early average returns of TD7, however, HA3C can get the highest final average returns on all of the control tasks.
+
+### 5.2 ABLATION STUDY
+
+Our ablation study aims to prove that our historical augmentation is the real source of the improvement in sample efficiency. Therefore, we compare HA3C to the following two ablations: 1) Copy Aug. copies the current state  $k$  times instead of augmenting with  $k$  steps of history in our CNN; 2) No Aug. is TD3 with single-step representation learning and LAP. Our ablation study is performed on Ant, Hopper, and Walker2d. All of the comparison methods have the same parameter setting.
+
+{8}------------------------------------------------
+
+Table 1: The average highest returns over 10 instances on the MuJoCo control tasks at 400K and 1M time steps.  $\pm$  captures the standard deviation over trials. The best score is highlighted by cyan and the second best score is highlighted by orange.
+
+| Algorithm | Time step | Walker2d | HalfCheetah | Ant | Humanoid | Hopper |
+|-|-|-|-|-|-|-|
+| TD3 | 400K | $2636 \pm 933$ | $8229 \pm 757$ | $3297 \pm 1084$ | $1384 \pm 282$ | $2876 \pm 859$ |
+|  | 1M | $4198 \pm 516$ | $10560 \pm 675$ | $4617 \pm 1287$ | $5308 \pm 105$ | $3387 \pm 137$ |
+| SAC | 400K | $3122 \pm 156$ | $8945 \pm 1368$ | $3893 \pm 569$ | $2268 \pm 905$ | $3276 \pm 86$ |
+|  | 1M | $3921 \pm 163$ | $11729 \pm 258$ | $5956 \pm 2209$ | $5498 \pm 131$ | $3422 \pm 87$ , |
+| TQC | 400K | $4994 \pm 397$ | $9644 \pm 1006$ | $3307 \pm 939$ | $4061 \pm 703$ | $3534 \pm 91$ |
+|  | 1M | $5895 \pm 552$ | $13431 \pm 561$ | $5258 \pm 1165$ | $6140 \pm 426$ | $3602 \pm 117$ |
+| TD3+OFE | 400K | $4329 \pm 550$ | $11508 \pm 635$ | $6406 \pm 549$ | $5193 \pm 797$ | $3471 \pm 45$ |
+|  | 1M | $4574 \pm 551$ | $14759 \pm 696$ | $7246 \pm 497$ | $7262 \pm 209$ | $3616 \pm 28$ |
+| TD7 | 400K | $5787 \pm 444$ | $15625 \pm 559$ | $7305 \pm 197$ | $5823 \pm 231$ | $3440 \pm 92$ |
+|  | 1M | $6354 \pm 209$ | $17343 \pm 359$ | $8346 \pm 291$ | $7405 \pm 236$ | $3757 \pm 214$ |
+| HA3C | 400K | $6441 \pm 366$ | $16652 \pm 323$ | $7838 \pm 138$ | $6099 \pm 305$ | $3783 \pm 153$ |
+|  | 1M | $7143 \pm 456$ | $18108 \pm 294$ | $8687 \pm 128$ | $8584 \pm 273$ | $4143 \pm 170$ |
+
+![Figure 7: Learning curves of the ablation study on the MuJoCo benchmark. The figure contains three line plots for the tasks Ant, Hopper, and Walker2d. Each plot shows 'Total reward (1K)' on the y-axis and 'Time steps (1M)' on the x-axis. Three series are shown: HA3C (blue), Copy Aug. (orange), and No Aug. (purple). Shaded regions represent 90% confidence intervals. HA3C consistently outperforms the other two methods across all tasks, reaching higher rewards faster and achieving higher final rewards.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 7: Learning curves of the ablation study on the MuJoCo benchmark. The figure contains three line plots for the tasks Ant, Hopper, and Walker2d. Each plot shows 'Total reward (1K)' on the y-axis and 'Time steps (1M)' on the x-axis. Three series are shown: HA3C (blue), Copy Aug. (orange), and No Aug. (purple). Shaded regions represent 90% confidence intervals. HA3C consistently outperforms the other two methods across all tasks, reaching higher rewards faster and achieving higher final rewards.
+
+Figure 7: Learning curves of the ablation study on the MuJoCo benchmark. The shaded area captures a 90% confidence interval around the average performance.
+
+As we can see from Fig. 7, HA3C significantly outperforms the compared algorithms in terms of both sample efficiency and performance on Ant and Walker2d. HA3C also significantly outperforms the compared algorithms in final performance on Hopper. This phenomenon illustrates that historical augmentation is the real source for improving sample efficiency.
+
+### 5.3 PARAMETER SENSITIVITY ANALYSIS
+
+In Fig. 8, we analyze the sensitivities of two important parameters,  $k$  and  $N$ , on Ant.  $k$  is the length of the historical state trajectory and  $N$  is the number of dimensions of compressed historical trajectories. Both of the above parameters are not used in the previous representation-based RL algorithms.  $k$  is set from  $\{6, 12, 18, 24\}$  and  $N$  is set from  $\{8, 16, 64, 256\}$ .
+
+As we can see, HA3C is a little sensitive to  $k$  and  $N$ . When  $k \leq 12$  and  $N \leq 16$ , our historical augmentation will significantly improve the sample efficiency. When  $N = 256$ , the historical information cannot improve neither sample efficiency nor final performance. This phenomenon illustrates that compressing the historical trajectories into a low-dimensional space is the key to effectively utilize the historical information in MDP tasks.
+
+{9}------------------------------------------------
+
+![Figure 8: Learning curves for parameter sensitivity analysis on the MuJoCo benchmark. The figure contains two line plots. The left plot is titled 'k' and the right plot is titled 'N'. Both plots show 'Total reward (1K)' on the y-axis (ranging from 3 to 9) against 'Time steps (1M)' on the x-axis (ranging from 0 to 1.0). The legend indicates five data series: k=6, N=8 (blue); k=12, N=16 (red); k=18, N=64 (purple); k=24, N=256 (light blue); and 'No Aug.' (black dashed line). Shaded regions around the lines represent 90% confidence intervals. In both plots, the 'No Aug.' series generally achieves lower rewards than the augmented series, which all converge to high rewards between 8 and 9.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 8: Learning curves for parameter sensitivity analysis on the MuJoCo benchmark. The figure contains two line plots. The left plot is titled 'k' and the right plot is titled 'N'. Both plots show 'Total reward (1K)' on the y-axis (ranging from 3 to 9) against 'Time steps (1M)' on the x-axis (ranging from 0 to 1.0). The legend indicates five data series: k=6, N=8 (blue); k=12, N=16 (red); k=18, N=64 (purple); k=24, N=256 (light blue); and 'No Aug.' (black dashed line). Shaded regions around the lines represent 90% confidence intervals. In both plots, the 'No Aug.' series generally achieves lower rewards than the augmented series, which all converge to high rewards between 8 and 9.
+
+Figure 8: Learning curves of the parameter sensitivity analysis on the MuJoCo benchmark. The shaded area captures a 90% confidence interval around the average performance.
+
+### 5.4 RUNNING TIME
+
+To understand the computational cost of HA3C, we compare the running times of different algorithms with identical computational resources in HalfCheetah control task. The result is shown in Fig. 9. As we can see, the computational cost of HA3C is less than the computational costs of TD3+OFE and TQC but is more than the computational costs of TD3, SAC, and TD7.
+
+## 6 CONCLUSION
+
+Under the Markov assumption of MDPs, the probability distributions of the next state and reward depend only on the current state and action. Therefore, given a finite  $Q$ -table, we can find the optimal policy in an MDP by a heuristic algorithm which only considers single-step transitions. Different from the heuristic algorithm, DRL algorithms need to approximate the causal functions by learning the causal relationships in MDPs. In this case, DRL is often faced with sample inefficiency from complex causal relationships, as a more complex causal function requires neural networks to approximate with more parameters, samples, and time consumption.
+
+This paper addresses the above problem by augmenting the current state with historical information. We believe that historical augmentation can simplify the causal relationships of state transitions by its inherent contextual information and increasing the search space of the causal functions. Therefore, we focus on optimizing a history-dependent stationary policy in MDPs and propose a new RL algorithm, HA3C. The main idea of HA3C is to learn the state representations by compressing the high-dimensional historical trajectories into a low-dimensional space. In this way, we can extract the simple causal relationships from historical trajectories and avoid the overfitting caused by high-dimensional historical data. Our experiment demonstrates the superior performance of HA3C over five state-of-the-art RL algorithms on MuJoCo control tasks.
+
+## REFERENCES
+
+- Cameron Allen, Neev Parikh, Omer Gottesman, and George Konidaris. Learning markov state abstractions for deep reinforcement learning. *Advances in Neural Information Processing Systems*, 34:8229–8241, 2021.
+
+![Figure 9: Bar chart showing the running times of different algorithms for 1M time steps. The y-axis is labeled 'Hours' and ranges from 0 to 7. The x-axis lists the algorithms: TD3, SAC, TD3+OFE, TQC, TD7, and HA3C. The bars show the following approximate running times: TD3 (1h 28m), SAC (2h 47m), TD3+OFE (6h 18m), TQC (7h 21m), TD7 (3h 27m), and HA3C (4h 17m).](58de972a8c79c238b69cbeeafcc8d5fb_img.jpg)
+
+Figure 9: Bar chart showing the running times of different algorithms for 1M time steps. The y-axis is labeled 'Hours' and ranges from 0 to 7. The x-axis lists the algorithms: TD3, SAC, TD3+OFE, TQC, TD7, and HA3C. The bars show the following approximate running times: TD3 (1h 28m), SAC (2h 47m), TD3+OFE (6h 18m), TQC (7h 21m), TD7 (3h 27m), and HA3C (4h 17m).
+
+Figure 9: Running times of different algorithms for 1M time steps.
+
+ Rest of paper (reference and Appendix) is removed.

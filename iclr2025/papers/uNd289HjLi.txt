@@ -1,0 +1,289 @@
+
+
+{0}------------------------------------------------
+
+# SCORE-BASED SELF-SUPERVISED MRI DENOISING
+
+**Jiachen Tu, Yaokun Shi & Fan Lam**
+
+Department of Electrical and Computer Engineering
+
+University of Illinois at Urbana-Champaign
+
+Champaign, IL 61820, USA
+
+{jtu9, yaokuns2, fanlaml}@illinois.edu
+
+## ABSTRACT
+
+Magnetic resonance imaging (MRI) is a powerful noninvasive diagnostic imaging tool that provides unparalleled soft tissue contrast and anatomical detail. Noise contamination, especially in accelerated and/or low-field acquisitions, can significantly degrade image quality and diagnostic accuracy. Supervised learning based denoising approaches have achieved impressive performance but require high signal-to-noise ratio (SNR) labels, which are often unavailable. Self-supervised learning holds promise to address the label scarcity issue, but existing self-supervised denoising methods tend to oversmooth fine spatial features and often yield inferior performance than supervised methods. We introduce Corruption2Self (C2S), a novel score-based self-supervised framework for MRI denoising. At the core of C2S is a generalized denoising score matching (GDSM) loss, which extends denoising score matching to work directly with noisy observations by modeling the conditional expectation of higher-SNR images given further corrupted observations. This allows the model to effectively learn denoising across multiple noise levels directly from noisy data. Additionally, we incorporate a reparameterization of noise levels to stabilize training and enhance convergence, and introduce a detail refinement extension to balance noise reduction with the preservation of fine spatial features. Moreover, C2S can be extended to multi-contrast denoising by leveraging complementary information across different MRI contrasts. We demonstrate that our method achieves state-of-the-art performance among self-supervised methods and competitive results compared to supervised counterparts across varying noise conditions and MRI contrasts on the M4Raw and fastMRI dataset. The project website is available at: <https://jiachentu.github.io/Corruption2Self-Self-Supervised-Denoising/>.
+
+## 1 INTRODUCTION
+
+Magnetic resonance imaging (MRI) is an invaluable noninvasive imaging modality that provides exceptional soft tissue contrast and anatomical detail, playing a crucial role in clinical diagnosis and research. However, the inherent sensitivity of MRI to noise, particularly in accelerated acquisitions and/or low-field settings, can impair diagnostic accuracy and subsequent computational analysis. Unlike natural images, MRI data often contains Rician or non-central chi-distributed noise in magnitude images. Denoising has become an important processing step in the MRI data analysis pipeline. Higher signal-to-noise ratios (SNR) enable better trade-offs for reduced scanning times or increased spatial resolution, both of which can improve patient experience and diagnostic accuracy. Traditional denoising methods, such as Non-Local Means (NLM) Froment (2014) and BM3D Mäkinen et al. (2020), often rely on handcrafted priors such as Gaussianity, self-similarity, or low-rankness. The performance of these methods is limited by the accuracy of their assumptions and often requires prior knowledge specific to the acquisition methods used. With the advent of deep learning,
+
+{1}------------------------------------------------
+
+supervised learning based denoising methods Zhang et al. (2017); Liang et al. (2021); Zamir et al. (2022) have demonstrated impressive performance by learning complex mappings from noisy inputs to clean targets. However, they rely heavily on the availability of high-quality, high-SNR “ground truth” data for training—a resource that is not always readily available or feasible to acquire in MRI. Acquiring such clean labels necessitates longer scan times, leading to increased costs and patient discomfort. This limitation underscores the need for self-supervised denoising algorithms, which remove or reduce the dependency on annotated datasets by leveraging self-generated pseudo-labels as supervisory signals. Moreover, supervised approaches often face generalization issues due to distribution shifts caused by differences in imaging instruments, protocols, and noise levels Xiang et al. (2023), limiting their utility in real-world clinical settings. Techniques such as Noise2Noise Lehtinen et al. (2018), Noise2Void Krull et al. (2019), Noise2Self Batson & Royer (2019), and their extensions Xie et al. (2020); Huang et al. (2021); Pang et al. (2021); Jang et al. (2024); Wang et al. (2023) have demonstrated the potential to learn effective denoising models without explicit clean targets. Recent innovations tailored for MRI, like Patch2Self Fadnavis et al. (2020) and Coil2Coil Park et al. (2022), further exploit domain-specific characteristics to enhance performance. However, these self-supervised methods often have limitations. For example, Noise2Noise requires repeated noisy measurements, which may not be practical. Methods like Noise2Void and Noise2Self rely on masking strategies that can limit the receptive field or introduce artifacts, potentially leading to oversmoothing and loss of fine details. Approaches such as Pfaff et al. (2023) and Park et al. (2022) require additional data processing steps, restricting their applicability. In this paper, we introduce Corruption2Self, a score-based self-supervised framework for MRI denoising. Building upon the principles of denoising score matching (DSM) Vincent (2011), we extend DSM to the ambient noise setting, where only noisy observations are available, enabling effective learning in practical MRI settings where high-SNR data are scarce or impractical to obtain. An overview of the C2S workflow is illustrated in Figure 1. Additionally, we incorporate a reparameterization of noise levels for a consistent coverage of the noise level range during training, leading to enhanced training stability and convergence. In medical imaging, the visual quality of the output and the preservation of diagnostically relevant features are often more critical than achieving high scores on standard metrics. To address this priority, a detail refinement extension is introduced to balance noise reduction with the preservation of fine spatial feature. Furthermore, we extend C2S to multi-contrast denoising by integrating data from multiple MRI contrasts. This approach leverages complementary information across contrasts, indicating the potential of C2S to better exploit the rich information available in multi-contrast MRI acquisitions.
+
+![Figure 1: Overview of the Corruption2Self (C2S) workflow for MRI denoising. The diagram shows a sequence of MRI brain slices from left to right, increasing in noise level. The first two are labeled 'Data' and '(X_0, 0)'. The next two are labeled 'Forward Corruption' and '(X_{t_{min}}, t_{min})'. The last two are labeled 'Noise' and '(X_{t_{max}}, t_{max})'. A denoising function D_\theta(X_t, t) = \lambda_{out} h_\theta(X_t, t) + \lambda_{skip} X_t is shown in the center, indicating the model's task to reverse the corruption process.](aa9e46d6f962be5cebcbb5c654c9b13e_img.jpg)
+
+The diagram illustrates the C2S workflow. It starts with 'Data' (two clean MRI slices, labeled  $(\mathbf{X}_0, 0)$ ). A 'Forward Corruption' process adds Gaussian noise to create progressively noisier versions (two slices, labeled  $(\mathbf{X}_{t_{min}}, t_{min})$ ). The final state is 'Noise' (two very noisy slices, labeled  $(\mathbf{X}_{t_{max}}, t_{max})$ ). The denoising function  $D_\theta(\mathbf{X}_t, t) = \lambda_{out} h_\theta(\mathbf{X}_t, t) + \lambda_{skip} \mathbf{X}_t$  is shown in the center, representing the model's task to reverse the corruption process.
+
+Figure 1: Overview of the Corruption2Self (C2S) workflow for MRI denoising. The diagram shows a sequence of MRI brain slices from left to right, increasing in noise level. The first two are labeled 'Data' and '(X\_0, 0)'. The next two are labeled 'Forward Corruption' and '(X\_{t\_{min}}, t\_{min})'. The last two are labeled 'Noise' and '(X\_{t\_{max}}, t\_{max})'. A denoising function D\_\theta(X\_t, t) = \lambda\_{out} h\_\theta(X\_t, t) + \lambda\_{skip} X\_t is shown in the center, indicating the model's task to reverse the corruption process.
+
+Figure 1: Overview of the Corruption2Self (C2S) workflow for MRI denoising. Starting from a noisy MRI image  $\mathbf{X}_{t_{min}}$ , the forward corruption process adds additional Gaussian noise to create progressively noisier versions  $\mathbf{X}_t$ . During training, the model learns to reverse this process by estimating the clean image  $\mathbf{X}_0$  from these corrupted observations, despite having access only to noisy data. The denoising function  $h_\theta$  approximates the conditional expectation  $\mathbb{E}[\mathbf{X}_0 | \mathbf{X}_t]$ , effectively learning to denoise without clean targets. A reparameterized function  $D_\theta(\mathbf{X}_t, t)$ , which shares parameters with  $h_\theta$ , is used to compute the loss.
+
+We conduct extensive experiments on publicly available datasets, including a low-field MRI dataset, to evaluate the performance of C2S. Our results demonstrate that C2S achieves state-of-the-art performance
+
+{2}------------------------------------------------
+
+among self-supervised methods and, after extending to multi-contrast on the M4Raw dataset, shows state-of-the-art performance among both self-supervised and supervised methods. Notably, we are among the first to comprehensively analyze and compare self-supervised and supervised learning approaches in MRI denoising. Our findings reveal that C2S not only bridges the performance gap but also offers robust performance under varying noise conditions and MRI contrasts. This indicates the potential of self-supervised learning to achieve competitive performance with supervised approaches when the latter are trained on practically obtainable higher-SNR labels, particularly in scenarios where perfectly clean ground truth is unavailable, offering a practical and robust solution adaptable to broader clinical settings.
+
+## 2 BACKGROUND
+
+### 2.1 LEARNING-BASED DENOISING WITHOUT CLEAN TARGETS
+
+A central concept in many of the self-supervised denoising methods is J-invariance Batson & Royer (2019), where the denoising function is designed to be invariant to certain subsets of pixel values. Techniques like Noise2Void Krull et al. (2019) and Noise2Self Batson & Royer (2019) utilize this property by masking pixels and predicting their values based on their surroundings, approximating supervised learning objectives without the need for clean data. Noise2Same Xie et al. (2020) extends these concepts by implicitly enforcing  $\mathcal{J}$ -invariance via optimizing a self-supervised upper bound. Approaches such as Neighbor2Neighbor Huang et al. (2021), Noisier2Noise Moran et al. (2020), and Recorrupted2Recorrupted Pang et al. (2021) create pairs of images from a single noisy observation to mimic the effect of supervised training objectives with independent noisy pairs. Noise2Score Kim & Ye (2021) exploits the assumption that noise follows an exponential family distribution and utilizes Tweedie’s formula to obtain the posterior expectation of clean images using the estimated score function via the AR-DAE Lim et al. (2020) approach. This approach highlights a connection between Stein’s Unbiased Risk Estimator (SURE)-based denoising methods Soltanayev & Chun (2018); Kim et al. (2020) and score matching objectives Hyvärinen & Dayan (2005). Specifically, under additive Gaussian noise, the SURE cost function can be reformulated as an implicit score matching objective, differing only by a scaling factor and a constant term Kim & Ye (2021). In the context of MRI, recent innovations have capitalized on the intrinsic properties of data within a self-supervised framework Moreno López et al. (2021) to enhance denoising performance without clean labels. For standard MRI, Pfaff et al. (2023) utilizes SURE Kim et al. (2020) and spatially resolved noise maps to improve denoising performance, while Coil2Coil Park et al. (2022) leverages coil sensitivity to exploit multi-coil information effectively. In the realm of diffusion MRI (dMRI), specialized approaches have emerged to address the unique challenges of 4D data. Patch2Self Fadnavis et al. (2020) employs a J-invariant approach that preserves critical anatomical details by selectively excluding target volume data from its training inputs, though it requires a minimum of ten additional diffusion volumes. DDM2 Xiang et al. (2023) introduces a three-stage framework incorporating statistical image denoising into diffusion models. More recently, Wu et al. Wu et al. (2025) proposed Di-Fusion, a single-stage self-supervised approach that performs dMRI denoising by integrating statistical techniques with diffusion models through a Fusion process that prevents drift in results and a “Di-” process that better characterizes real-world noise distributions.
+
+### 2.2 DENOISING SCORE MATCHING
+
+Denoising Score Matching (DSM) Vincent (2011) is a framework for learning the score function (i.e., the gradient of the log-density) of the data distribution by training a model to reverse the corruption process of adding Gaussian noise. In DSM, given a clean data sample  $\mathbf{X}_0 \in \mathbb{R}^d$  and a noise level  $\sigma_t > 0$ , a noisy observation  $\mathbf{X}_t$  is generated by adding Gaussian noise:  $\mathbf{X}_t = \mathbf{X}_0 + \sigma_t \mathbf{Z}$ ,  $\mathbf{Z} \sim \mathcal{N}(0, \mathbf{I}_d)$ . The objective is to train a denoising function  $h_\theta : \mathbb{R}^d \times \mathbb{R} \rightarrow \mathbb{R}^d$ , parameterized by  $\theta$ , that estimates the clean image  $\mathbf{X}_0$  from its noisy counterpart  $\mathbf{X}_t$ . This is achieved by minimizing the expected mean squared error (MSE)
+
+{3}------------------------------------------------
+
+loss  $\mathbb{E}_{\mathbf{x}_0, \mathbf{x}_t} [\|\mathbf{h}_\theta(\mathbf{x}_t, t) - \mathbf{x}_0\|^2]$ . Vincent (2011) demonstrated that optimizing the denoising function  $\mathbf{h}_\theta$  using the MSE loss is equivalent to learning the score function of the noisy data distribution  $p_t(\mathbf{x}_t)$  up to a scaling factor. Specifically, using *Tweedie’s formula*, the relationship between the denoising function and the score function is given by:  $\nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}_t) = \frac{1}{\sigma_t^2} (\mathbf{h}_\theta(\mathbf{x}_t, t) - \mathbf{x}_t)$ . By learning  $\mathbf{h}_\theta$ , we implicitly learn  $\nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}_t)$ , which forms the foundation of score-based generative models Song & Ermon (2019); Ho et al. (2020). However, DSM relies on access to clean data during training, limiting its applicability in situations where only noisy observations are available. *Ambient Denoising Score Matching* (ADSM) Daras et al. (2024) leverages a double application of Tweedie’s formula to relate noisy and clean distributions, enabling score-based learning from noisy observations. While ADSM was originally designed to mitigate memorization in large diffusion models by treating noisy data as a form of regularization Daras et al. (2024), its potential for self-supervised denoising remains underexplored. In our work, we bridge the gap of score-based self-supervised denoising in practical imaging applications.
+
+## 3 METHODOLOGY
+
+Consider a clean image  $\mathbf{X}_0 \in \mathbb{R}^d$  and its corresponding noisy observation  $\mathbf{X}_{t_{\text{data}}} \in \mathbb{R}^d$ . We formulate the self-supervised denoising problem as estimating the conditional expectation  $\mathbb{E}[\mathbf{X}_0 | \mathbf{X}_{t_{\text{data}}}]$ , which constitutes the optimal estimator of  $\mathbf{X}_0$  in the minimum mean square error (MMSE) sense. While estimating this typically requires clean or high-SNR reference images in a supervised learning setting, we adopt an ambient score-matching perspective inspired by Daras et al. (2024), circumventing the need for clean labels. The noisy image can be modeled as:
+
+$$\mathbf{X}_{t_{\text{data}}} = \mathbf{X}_0 + \sigma_{t_{\text{data}}} \mathbf{N}, \quad (1)$$
+
+where  $\sigma_{t_{\text{data}}} > 0$  denotes the noise standard deviation at level  $t_{\text{data}}$ , and  $\mathbf{N} \sim \mathcal{N}(\mathbf{0}, \mathbf{I}_d)$  represents the noise component. In MRI, the noise  $\mathbf{N}$  is typically assumed to be additive, ergodic, stationary, uncorrelated, and white in k-space Liang & Lauterbur (2000). When the signal-to-noise ratio (SNR) exceeds two, the noise in the image domain can be well-approximated as Gaussian distributed Gudbjartsson & Patz (1995). While this Gaussian assumption underpins our theoretical framework, our empirical results suggest robustness even when this condition is not strictly satisfied.
+
+The noise level  $\sigma_{t_{\text{data}}}$  scales the noise to match the observed noise level in the MRI data. To facilitate self-supervised learning, we introduce a forward corruption process that systematically adds additional Gaussian noise to  $\mathbf{X}_{t_{\text{data}}}$ , defining a continuum of increasingly noisy versions of the data:
+
+$$\mathbf{X}_t = \mathbf{X}_{t_{\text{data}}} + \sqrt{\sigma_t^2 - \sigma_{t_{\text{data}}}^2} \mathbf{Z}, \quad \mathbf{Z} \sim \mathcal{N}(\mathbf{0}, \mathbf{I}_d), \quad t > t_{\text{data}}, \quad (2)$$
+
+where  $\sigma_t$  is a strictly monotonically increasing noise schedule function for  $t \in (t_{\text{data}}, T]$ , with  $T$  being the maximum noise level. This process allows us to model the distribution of the noisy data at different noise levels and forms the foundation for our generalized denoising score matching approach. In scenarios where the noise deviates from Gaussianity (e.g., Rician noise in low-SNR regions), pre-processing techniques such as the Variance Stabilizing Transform (VST) Foi (2011) can be applied to better approximate Gaussian statistics. Our goal is to train a denoising function  $\mathbf{h}_\theta : \mathbb{R}^d \times \mathbb{R} \rightarrow \mathbb{R}^d$ , parameterized by  $\theta$ , which maps a noisy input  $\mathbf{X}_t$  at noise level  $t$  to an estimate of either the clean image  $\mathbf{X}_0$  or a less noisy version corresponding to a target noise level  $\sigma_{t_{\text{target}}} \leq \sigma_{t_{\text{data}}}$ , where  $\mathbf{X}_{t_{\text{target}}} = \mathbf{X}_0 + \sigma_{t_{\text{target}}} \mathbf{N}_0$ , with  $\mathbf{N}_0 \sim \mathcal{N}(\mathbf{0}, \mathbf{I}_d)$ .
+
+### 3.1 GENERALIZED DENOISING SCORE MATCHING
+
+We introduce the Generalized Denoising Score Matching (GDSM) loss, which enables learning a denoising function directly from noisy observations by modeling the conditional expectation of a higher-SNR image given a further corrupted version of the noisy data (proof provided in Appendix 4).
+
+{4}------------------------------------------------
+
+**Theorem 1** (Generalized Denoising Score Matching). *Let  $\mathbf{X}_0 \in \mathbb{R}^d$  be a clean data sample drawn from the distribution  $p_0(\mathbf{x}_0)$ . Suppose that the noisy observation at a given data noise level  $t_{\text{data}}$  is*
+
+$$\mathbf{X}_{t_{\text{data}}} = \mathbf{X}_0 + \sigma_{t_{\text{data}}} \mathbf{N}, \quad \mathbf{N} \sim \mathcal{N}(0, \mathbf{I}_d),$$
+
+and that for any  $t > t_{\text{data}}$  the observation  $\mathbf{X}_t$  is generated according to the forward process described in Equation 2. Let  $\mathbf{h}_\theta : \mathbb{R}^d \times (t_{\text{data}}, T] \rightarrow \mathbb{R}^d$  be a denoising function parameterized by  $\theta$ , and fix a target noise level  $\sigma_{t_{\text{target}}}$  satisfying  $0 \leq \sigma_{t_{\text{target}}} \leq \sigma_{t_{\text{data}}}$ . Define the loss function
+
+$$J(\theta) = \mathbb{E}_{\mathbf{x}_{t_{\text{data}}}, t, \mathbf{x}_t} \left[ \left\| \gamma(t, \sigma_{t_{\text{target}}}) \mathbf{h}_\theta(\mathbf{X}_t, t) + \delta(t, \sigma_{t_{\text{target}}}) \mathbf{X}_t - \mathbf{X}_{t_{\text{data}}} \right\|^2 \right], \quad (3)$$
+
+where  $t$  is sampled uniformly from  $(t_{\text{data}}, T]$  and the coefficients are defined by
+
+$$\gamma(t, \sigma_{t_{\text{target}}}) := \frac{\sigma_t^2 - \sigma_{t_{\text{data}}}^2}{\sigma_t^2 - \sigma_{t_{\text{target}}}^2} \quad \text{and} \quad \delta(t, \sigma_{t_{\text{target}}}) := \frac{\sigma_{t_{\text{data}}}^2 - \sigma_{t_{\text{target}}}^2}{\sigma_t^2 - \sigma_{t_{\text{target}}}^2}.$$
+
+Then any minimizer  $\theta^*$  of  $J(\theta)$  satisfies
+
+$$\mathbf{h}_{\theta^*}(\mathbf{X}_t, t) = \mathbb{E}[\mathbf{X}_{t_{\text{target}}} | \mathbf{X}_t].$$
+
+In other words, the optimal denoising function recovers the conditional expectation of the image with noise level  $\sigma_{t_{\text{target}}}$  given the more heavily corrupted observation  $\mathbf{X}_t$ .
+
+**Remark 1.** The proposed GDSM framework generalizes several existing methods: when  $\sigma_{t_{\text{target}}} = \sigma_{t_{\text{data}}}$ , GDSM reduces to the standard denoising score matching (DSM) Vincent (2011); when  $\sigma_{t_{\text{target}}} = 0$ , it recovers the ambient denoising score matching (ADSM) formulation Daras et al. (2024). Moreover, GDSM subsumes Noiser2Noise Moran et al. (2020) as a special case. By setting  $\sigma_{t_{\text{target}}} = 0$  and fixing the noise level to  $\sigma_t^2 = (1 + \alpha^2)\sigma_{t_{\text{data}}}^2$ , the coefficients simplify to  $\gamma(t, 0) = \frac{\alpha^2}{1 + \alpha^2}$  and  $\delta(t, 0) = \frac{1}{1 + \alpha^2}$ , thereby generalizing Noiser2Noise to a continuous range of noise levels. For further details, see Section B.2.
+
+To enhance training stability and improve convergence, we introduce a **reparameterization of the noise levels**. Let  $\tau \in (0, T']$  be a new variable defined by
+
+$$\sigma_\tau^2 = \sigma_t^2 - \sigma_{t_{\text{data}}}^2, \quad T' = \sqrt{\sigma_T^2 - \sigma_{t_{\text{data}}}^2}. \quad (4)$$
+
+The original  $t$  can be recovered via the inverse of  $\sigma_t$ , as:
+
+$$t = \sigma_t^{-1} \left( \sqrt{\sigma_\tau^2 + \sigma_{t_{\text{data}}}^2} \right). \quad (5)$$
+
+Since  $\sigma_t$  is strictly increasing,  $\sigma_t^{-1}$  is well-defined. In practice, as  $T' \gg t_{\text{data}}$ , we approximate  $T' \approx T$  to allow uniform sampling over  $\tau$  and consistent coverage of the noise level range during training, leading to smoother and faster convergence. To further improve training stability, we combine our reparameterization strategy with Exponential Moving Average (EMA) of model parameters. Details of the training dynamics with and without reparameterization (and the effect of EMA) are provided in Appendix I (see Figure 12).
+
+Under this reparameterization, the loss function in Equation 12 becomes:
+
+$$J'(\theta) = \mathbb{E}_{\mathbf{x}_{t_{\text{data}}}, \tau, \mathbf{x}_\tau} \left[ \left\| \gamma'(\tau, \sigma_{t_{\text{target}}}) \mathbf{h}_\theta(\mathbf{X}_\tau, \tau) + \delta'(\tau, \sigma_{t_{\text{target}}}) \mathbf{X}_\tau - \mathbf{X}_{t_{\text{data}}} \right\|^2 \right], \quad (6)$$
+
+where the coefficients are:
+
+$$\gamma'(\tau, \sigma_{t_{\text{target}}}) = \frac{\sigma_\tau^2}{\sigma_\tau^2 + \sigma_{t_{\text{data}}}^2 - \sigma_{t_{\text{target}}}^2}, \quad \delta'(\tau, \sigma_{t_{\text{target}}}) = \frac{\sigma_{t_{\text{data}}}^2 - \sigma_{t_{\text{target}}}^2}{\sigma_\tau^2 + \sigma_{t_{\text{data}}}^2 - \sigma_{t_{\text{target}}}^2}. \quad (7)$$
+
+**Corollary 2** (Reparameterized Generalized Denoising Score Matching). *With our reparameterization strategy, the minimizer  $\theta^*$  of the objective  $J'(\theta)$  satisfies (proof provided in Appendix 5):*
+
+$$\mathbf{h}_{\theta^*}(\mathbf{X}_t, t) = \mathbb{E}[\mathbf{X}_{t_{\text{target}}} | \mathbf{X}_t], \quad \forall \mathbf{X}_t \in \mathbb{R}^d, t > t_{\text{data}}.$$
+
+{5}------------------------------------------------
+
+### 3.2 CORRUPTION2SELF: A SCORE-BASED SELF-SUPERVISED MRI DENOISING FRAMEWORK
+
+Building upon the Reparameterized Generalized Denoising Score Matching introduced earlier, we propose Corruption2Self (C2S) where the objective is to train a denoising function  $\mathbf{h}_\theta$  that approximates the conditional expectation  $\mathbb{E}[\mathbf{X}_{t_{\text{target}}} | \mathbf{X}_t]$ , where  $\mathbf{X}_{t_{\text{target}}}$  is a less noisy version of  $\mathbf{X}_{t_{\text{data}}}$  with noise level  $\sigma_{t_{\text{target}}} \leq \sigma_{t_{\text{data}}}$ . Denote  $\mathbf{D}_\theta(\mathbf{X}_\tau, \tau)$  as the weighted combination of the network output with the input through skip connections:
+
+$$\mathbf{D}_\theta(\mathbf{X}_\tau, \tau) = \lambda_{\text{out}}(\tau, \sigma_{t_{\text{target}}}) \mathbf{h}_\theta(\mathbf{X}_t, t) + \lambda_{\text{skip}}(\tau, \sigma_{t_{\text{target}}}) \mathbf{X}_t, \quad (8)$$
+
+where  $\mathbf{X}_t = \mathbf{X}_{t_{\text{data}}} + \sigma_\tau \mathbf{Z}$  with  $\mathbf{Z} \sim \mathcal{N}(0, \mathbf{I}_d)$ , and  $t$  relates to  $\tau$  through  $t = \sigma_\tau^{-1} \left( \sqrt{\sigma_\tau^2 + \sigma_{t_{\text{data}}}^2} \right)$ . The blending coefficients are defined as:
+
+$$\lambda_{\text{out}}(\tau, \sigma_{t_{\text{target}}}) = \frac{\sigma_\tau^2}{\sigma_\tau^2 + \sigma_{t_{\text{data}}}^2 - \sigma_{t_{\text{target}}}^2}, \quad \lambda_{\text{skip}}(\tau, \sigma_{t_{\text{target}}}) = \frac{\sigma_{t_{\text{data}}}^2 - \sigma_{t_{\text{target}}}^2}{\sigma_\tau^2 + \sigma_{t_{\text{data}}}^2 - \sigma_{t_{\text{target}}}^2}. \quad (9)$$
+
+When  $\sigma_{t_{\text{target}}} = 0$  (maximum denoising), the goal is to predict  $\mathbb{E}[\mathbf{X}_0 | \mathbf{X}_t]$  and the coefficients simplify to:  $\lambda_{\text{out}}(\tau, 0) = \sigma_\tau^2 / (\sigma_\tau^2 + \sigma_{t_{\text{data}}}^2)$ ,  $\lambda_{\text{skip}}(\tau, 0) = \sigma_{t_{\text{data}}}^2 / (\sigma_\tau^2 + \sigma_{t_{\text{data}}}^2)$ . Our loss function is expressed as:
+
+$$\mathcal{L}_{\text{C2S}}(\theta) = \frac{1}{2} \mathbb{E}_{\mathbf{X}_{t_{\text{data}}} \sim p_{t_{\text{data}}}(\mathbf{x}), \tau \sim \mathcal{U}(0, T)} \left[ w(\tau) \left\| \mathbf{D}_\theta(\mathbf{X}_\tau, \tau) - \mathbf{X}_{t_{\text{data}}} \right\|_2^2 \right], \quad (10)$$
+
+where  $\mathbf{X}_\tau$  is constructed by adding noise to  $\mathbf{X}_{t_{\text{data}}}$  according to the reparameterized noise level  $\tau$ , and  $w(\tau)$  is a weighting function designed to balance the contributions from different noise levels. Following practices from prior works Song et al. (2020); Kingma et al. (2021); Karras et al. (2022),  $w(\tau)$  can be set to  $(\sigma_\tau^2 + \sigma_{t_{\text{data}}}^2)^\alpha$ , with  $\alpha$  being a hyperparameter controlling the weighting.
+
+During inference, given a noisy observation  $\mathbf{X}_{t_{\text{data}}}$ , the denoised output is obtained by:
+
+$$\hat{\mathbf{X}} = \mathbf{h}_{\theta^*}(\mathbf{X}_{t_{\text{data}}}, t_{\text{data}}), \quad (11)$$
+
+where the trained model  $\mathbf{h}_{\theta^*}$  approximates  $\mathbb{E}[\mathbf{X}_0 | \mathbf{X}_{t_{\text{data}}}]$ , providing a clean estimate of the image.
+
+While the C2S training procedure effectively approximates  $\mathbb{E}[\mathbf{X}_0 | \mathbf{X}_t]$  when  $\sigma_{t_{\text{target}}} = 0$ , it can lead to oversmoothing. To maintain a balance between noise reduction and feature preservation, we introduce a **detail refinement** extension where the network is trained to predict  $\mathbb{E}[\mathbf{X}_{t_{\text{target}}} | \mathbf{X}_t]$  with a non-zero target noise level  $\sigma_{t_{\text{target}}} > 0$ , allowing the network to retain a controlled amount of noise for preserving finer image textures (details are provided in Appendix G). As shown in Table 1, incorporating the detail refinement extension leads to a statistically significant improvement in image quality across contrasts. Our denoising model builds upon the U-Net architecture employed in DDPM Ho et al. (2020), enhanced with time conditioning and the Noise Variance Conditioned Multi-Head Self-Attention (NVC-MSA) module Hatamizadeh et al. (2023), which enables the self-attention layers to dynamically adapt to varying noise scales. Empirically, we found that setting the noise schedule function  $\sigma_\tau$  equal to the noise level  $\tau$  yields good performance. More details regarding the architecture and implementation are provided in Appendix C.
+
+## 4 RESULTS AND DISCUSSION
+
+We first evaluate C2S on the **M4Raw** dataset, which includes in-vivo MRI data with real noise. The training and validation data use three-repetition-averaged images, while the test data comprises higher-SNR labels,
+
+{6}------------------------------------------------
+
+### **Algorithm 1** Corruption2Self Training Procedure
+
+**Require:** Noisy dataset  $X_{t_{data}i=1}^N$ ,  $h_g$ , max noise level  $T$ , batch size  $m$ , total iterations  $K$ , noise schedule function  $\sigma_\tau$
+
+- 1: **for**  $k = 1$  to  $K$  **do**
+- 2:   Sample minibatch  $X_{t_{data}i=1}^m$ ,  $\tau \sim \mathcal{U}(0, T)$ ,  $Z \sim \mathcal{N}(0, I_d)$
+- 3:   Compute  $\lambda_{out}(\tau, 0) = \frac{\sigma_\tau^2}{\sigma_\tau^2 + \sigma_{t_{data}}^2}$ ,  $\lambda_{skip}(\tau, 0) = \frac{\sigma_{t_{data}}^2}{\sigma_\tau^2 + \sigma_{t_{data}}^2}$
+- 4:   Recover  $t = \sigma_\tau^{-1}(\sqrt{\sigma_\tau^2 + \sigma_{t_{data}}^2})$
+- 5:   Compute  $X_t \leftarrow X_{t_{data}} + \sigma_\tau Z$
+- 6:   Compute loss:  $\mathcal{L}_{c2s}(\theta) = \frac{1}{2m} \sum_{i=1}^m w(\tau) \cdot \| \cdot \|$
+- 7:   Update  $\theta$  using Adam optimizer Kingma (2014)
+
+Table 1: Effectiveness of detail refinement module on the M4Raw validation dataset. Improvements are statistically significant ( $*p < 0.05$ ) using paired t-tests.
+
+Additional details are provided in Appendix G.
+
+| Contrast | PSNR | p-value |
+|-|-|-|
+| T1 | $34.56 \pm 0.062 \rightarrow \mathbf{34.89} \pm 0.038$ | 0.001* |
+| T2 | $33.84 \pm 0.090 \rightarrow \mathbf{34.07} \pm 0.121$ | 0.001* |
+| FLAIR | $32.44 \pm 0.073 \rightarrow \mathbf{32.58} \pm 0.089$ | 0.016* |
+|  | SSIM | p-value |
+| T1 | $0.885 \pm 0.002 \rightarrow \mathbf{0.892} \pm 0.003$ | 0.007* |
+| T2 | $0.860 \pm 0.003 \rightarrow \mathbf{0.867} \pm 0.002$ | 0.003* |
+| FLAIR | $0.812 \pm 0.004 \rightarrow \mathbf{0.818} \pm 0.001$ | 0.005* |
+
+created by averaging six repetitions for T1 and T2, and four for FLAIR. This setup allows us to assess how well denoising methods perform when evaluated on cleaner test data. Table 2 compares the performance of C2S against classical methods (NLM, BM3D), supervised learning (SwinIR, Restormer, Noise2Noise), and self-supervised approaches (Noise2Void, Noise2Self, PUCA, LG-BPN, Noiseier2Noise, Recorrupted2Recorrupted). C2S consistently outperforms other self-supervised methods, achieving the highest PSNR and SSIM across all contrasts. Our base C2S model significantly outperforms existing self-supervised methods across all contrasts, achieving PSNRs of 32.59dB, 32.28dB, and 32.43dB for T1, T2, and FLAIR respectively. With our detail refinement extension, C2S further improves performance to 32.77dB/0.919, 32.33dB/0.890, and 32.51dB/0.876 for T1, T2, and FLAIR contrasts respectively. Notably, recent self-supervised methods like PUCA and LG-BPN, demonstrate lower performance on MRI data. This performance gap can be attributed to the blind-spot architecture design, often leading to information loss and oversmoothed results.
+
+![Figure 2: Comparison of different denoising methods for T1 contrast from the M4Raw dataset. The figure shows a 3x11 grid of brain MRI slices. The columns are labeled: Noisy, Label, Noise2Noise, SwinIR, BM3D, Noise2Self, LG-BPN, Noiseier2Noise, R2R, C2S, and C2S (w/ refinement). The rows show different anatomical sections: axial (top), coronal (middle), and sagittal (bottom). Each slice has a small orange arrow pointing to a specific feature. The 'C2S (w/ refinement)' column shows the most refined results, with better preservation of fine details compared to other methods.](f3e03accc76df483950e65a9fb19c20e_img.jpg)
+
+Figure 2: Comparison of different denoising methods for T1 contrast from the M4Raw dataset. The figure shows a 3x11 grid of brain MRI slices. The columns are labeled: Noisy, Label, Noise2Noise, SwinIR, BM3D, Noise2Self, LG-BPN, Noiseier2Noise, R2R, C2S, and C2S (w/ refinement). The rows show different anatomical sections: axial (top), coronal (middle), and sagittal (bottom). Each slice has a small orange arrow pointing to a specific feature. The 'C2S (w/ refinement)' column shows the most refined results, with better preservation of fine details compared to other methods.
+
+Figure 2: Comparison of different denoising methods for T1 contrast from the M4Raw dataset.
+
+An important observation is that supervised methods such as SwinIR and Restormer, trained on three-repetition-averaged labels, do not significantly outperform self-supervised methods on higher-SNR test data. Supervised models typically learn  $\mathbb{E}[\mathbf{X}_{t_{target}} | \mathbf{X}_{t_{data}}]$ , where  $t_{data} > t_{target} > 0$  when multi-repetition averaged samples are used as labels. This makes supervised methods less effective at handling shifts to higher-SNR test data. In contrast, C2S approximates  $\mathbb{E}[\mathbf{X}_0 | \mathbf{X}_t]$ , allowing it to achieve competitive performance on test data. Empirical results on test labels (three-repetition-average) matching the SNR of the training data (presented
+
+{7}------------------------------------------------
+
+| Methods | T1 | T2 | FLAIR |
+|-|-|-|-|
+|  | PSNR / SSIM $\uparrow$ | PSNR / SSIM $\uparrow$ | PSNR / SSIM $\uparrow$ |
+| <i>Classical Non-Learning-Based Methods</i> |  |  |  |
+| NLM Froment (2014) | 31.90 / 0.898 | 31.17 / 0.876 | 32.01 / 0.870 |
+| BM3D Mäkinen et al. (2020) | 32.07 / 0.903 | 31.20 / 0.877 | 32.14 / 0.873 |
+| <i>Supervised Learning Methods</i> |  |  |  |
+| SwinIR Liang et al. (2021) | 32.53 / 0.913 | 31.90 / 0.891 | 32.15 / 0.885 |
+| Restormer Zamir et al. (2022) | 32.35 / 0.912 | 31.79 / 0.890 | 32.31 / 0.886 |
+| Noise2Noise Lehtinen et al. (2018) | 32.59 / 0.911 | 32.37 / 0.886 | 32.70 / 0.871 |
+| <i>Self-Supervised Single-Contrast Methods</i> |  |  |  |
+| Noise2Void Krull et al. (2019) | 31.46 / 0.870 | 30.93 / 0.857 | 31.17 / 0.851 |
+| Noise2Self Batson & Royer (2019) | 31.72 / 0.887 | 31.18 / 0.873 | 31.72 / 0.870 |
+| PUCA Jang et al. (2024) | 30.52 / 0.870 | 29.11 / 0.827 | 29.57 / 0.807 |
+| LG-BPN Wang et al. (2023) | 31.15 / 0.890 | 30.66 / 0.868 | 30.82 / 0.862 |
+| Noisier2Noise Moran et al. (2020) | 31.60 / 0.876 | 31.45 / 0.871 | 31.59 / 0.861 |
+| Recorrupted2Recorrupted Pang et al. (2021) | 31.67 / 0.876 | 31.33 / 0.870 | 31.57 / 0.863 |
+| <b>C2S</b> | <u>32.59 / 0.915</u> | <u>32.28 / 0.888</u> | <u>32.43 / 0.872</u> |
+| <b>C2S (w/ Detail Refinement)</b> | <b>32.77 / 0.919</b> | <b>32.33 / 0.890</b> | <b>32.51 / 0.876</b> |
+
+Table 2: Quantitative comparison of denoising performance on the M4Raw test dataset. Results show PSNR (dB) and SSIM metrics across T1, T2, and FLAIR contrasts. C2S with detail refinement (bold) achieves the best performance among all self-supervised methods across all contrasts, and even outperforms supervised approaches in some cases. Second-best results among self-supervised methods are underlined.
+
+in Appendix F) show that supervised methods like SwinIR and Restormer perform better when the noise characteristics of the training and test data are similar.
+
+| Methods | PD, $\sigma = 13/255$ | PD, $\sigma = 25/255$ | PDFS, $\sigma = 13/255$ | PDFS, $\sigma = 25/255$ |
+|-|-|-|-|-|
+|  | PSNR / SSIM $\uparrow$ | PSNR / SSIM $\uparrow$ | PSNR / SSIM $\uparrow$ | PSNR / SSIM $\uparrow$ |
+| <i>Classical Non-Learning-Based Methods</i> |  |  |  |  |
+| NLM | 30.40 / 0.772 | 21.63 / 0.327 | 28.82 / 0.726 | 21.12 / 0.350 |
+| BM3D | 33.16 / 0.829 | 30.58 / 0.755 | 30.64 / 0.705 | 28.49 / 0.592 |
+| <i>Supervised Learning Methods</i> |  |  |  |  |
+| Noise2True (SwinIR) | 34.44 / 0.868 | 32.39 / 0.820 | 31.35 / 0.774 | 29.55 / 0.665 |
+| Noise2True (U-Net) | 34.54 / 0.870 | 32.61 / 0.825 | 31.39 / 0.775 | 29.62 / 0.669 |
+| Noise2Noise Lehtinen et al. (2018) | 34.06 / 0.854 | 30.83 / 0.769 | 31.33 / 0.773 | 29.12 / 0.654 |
+| <i>Self-Supervised Methods</i> |  |  |  |  |
+| Noise2Void Krull et al. (2019) | 32.19 / 0.804 | 29.79 / 0.706 | 29.50 / 0.629 | 27.99 / 0.558 |
+| Noise2Self Batson & Royer (2019) | 32.47 / 0.808 | 30.60 / 0.757 | 29.32 / 0.613 | 28.31 / 0.563 |
+| PUCA Jang et al. (2024) | 31.03 / 0.771 | 29.88 / 0.740 | 28.65 / 0.594 | 27.54 / 0.527 |
+| LG-BPN Wang et al. (2023) | 31.15 / 0.776 | 30.32 / 0.751 | 29.14 / 0.603 | 27.77 / 0.535 |
+| Noisier2Noise Moran et al. (2020) | 33.18 / 0.807 | 30.35 / 0.741 | 30.39 / 0.683 | 27.83 / 0.559 |
+| Recorrupted2Recorrupted Pang et al. (2021) | 33.29 / 0.810 | 30.52 / 0.745 | <b>30.95</b> / 0.752 | 28.32 / 0.561 |
+| <b>C2S</b> | <u>33.36 / 0.831</u> | <u>30.62 / 0.753</u> | 30.72 / 0.750 | <u>28.58 / 0.592</u> |
+| <b>C2S (w/ Detail Refinement)</b> | <b>33.48 / 0.832</b> | <b>30.67 / 0.761</b> | 30.91 / 0.756 | <b>28.62 / 0.601</b> |
+
+Table 3: Quantitative evaluation on the fastMRI test dataset with simulated noise at two different levels ( $\sigma = 13/255$  and  $\sigma = 25/255$ ) across PD and PDFS contrasts.
+
+{8}------------------------------------------------
+
+![Figure 3: Comparison of denoising methods for the PD contrast (sigma = 13/255) from the fastMRI dataset. The figure shows a 3x11 grid of MRI images. The columns are labeled: Noisy, Label, Noise2Noise, SwinIR, BM3D, Noise2Self, LG-BPN, Noise2Noise, R2R, C2S, and C2S (w/ refinement). The rows show different views of the knee MRI, with the bottom row showing zoomed-in details. The C2S method, especially with refinement, shows superior denoising and detail preservation compared to other methods.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 3: Comparison of denoising methods for the PD contrast (sigma = 13/255) from the fastMRI dataset. The figure shows a 3x11 grid of MRI images. The columns are labeled: Noisy, Label, Noise2Noise, SwinIR, BM3D, Noise2Self, LG-BPN, Noise2Noise, R2R, C2S, and C2S (w/ refinement). The rows show different views of the knee MRI, with the bottom row showing zoomed-in details. The C2S method, especially with refinement, shows superior denoising and detail preservation compared to other methods.
+
+Figure 3: Comparison of denoising methods for the PD contrast ( $\sigma = 13/255$ ) from the fastMRI dataset.
+
+To further evaluate the robustness of C2S under different noise levels, we conducted experiments on the **fastMRI** dataset Zbontar et al. (2018), simulating Gaussian noise with  $\sigma = 13/255$  and  $\sigma = 25/255$ . As shown in Table 3, the same baseline methods are analyzed and C2S consistently achieves the best or comparable results among self-supervised methods. On PDFS with  $\sigma = 13/255$ , Recorrupted2Recorrupted achieves a slightly higher PSNR (30.95 dB vs. 30.91 dB); however, C2S records the highest SSIM (0.756), indicating better detail preservation. It is worth noting that although the labels in this simulated dataset do not have added synthetic noise, they still contain inherent noise typical in MRI, albeit with higher SNR. Figure 3 demonstrates that our method balances feature preservation and noise removal, resulting in much cleaner visual representations compared to other methods. For additional results on fastMRI, refer to Appendix E.
+
+We assessed the effect of reparameterization on training stability and performance by mapping the noise levels  $\tau \in (0, T]$  to a new scale for more uniform sampling. As shown in Table 4a, reparameterization improves PSNR and SSIM across all contrasts. The training dynamics, illustrated in Figure 12, confirm the stabilizing effect of reparameterization. The model with reparameterization (blue) shows smoother and faster convergence than the model without it (orange), which fluctuates more and converges slower.
+
+| Method | T1 |  | T2 |  | FLAIR |  | Architecture | M4Raw |  | fastMRI |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | PSNR $\uparrow$ | SSIM $\uparrow$ | PSNR $\uparrow$ | SSIM $\uparrow$ | PSNR $\uparrow$ | SSIM $\uparrow$ |  | PSNR $\uparrow$ | SSIM $\uparrow$ | PSNR $\uparrow$ | SSIM $\uparrow$ |
+| Without Reparam. | 31.14 | 0.837 | 30.53 | 0.807 | 30.43 | 0.771 | U-Net | 33.11 | 0.865 | 32.32 | 0.807 |
+| With Reparam. | <b>34.43</b> | <b>0.882</b> | <b>33.82</b> | <b>0.860</b> | <b>32.56</b> | <b>0.814</b> | DDPM | 34.82 | 0.886 | 33.48 | 0.835 |
+|  |  |  |  |  |  |  | <b>Ours</b> | <b>34.91</b> | <b>0.890</b> | <b>33.63</b> | <b>0.837</b> |
+
+(a) Impact of reparameterization of noise levels on the M4Raw dataset. Results are validation results obtained after training for 200 epochs.
+
+(b) Influence of model architecture on the M4Raw dataset (T1) and fastMRI dataset (PD).
+
+Table 4: Ablation studies on the impact of reparameterization and model architecture.
+
+We evaluated the impact of different architectural choices on the performance of our denoising model. As shown in Table 4b, incorporating time conditioning significantly improves both PSNR and SSIM across the M4Raw (T1 contrast) and fastMRI (PD contrast, noise level 13/255) datasets. The best performance is achieved by further incorporating the NVC-MSA module in our model (Appendix C), which allows the model to dynamically adapt to varying noise levels by integrating noise variance into the self-attention mechanism.
+
+Our approach demonstrates strong robustness to noise level estimation errors, making it suitable for practical applications where exact noise levels may be unknown. Through extensive experiments detailed in Appendix H, we show that C2S maintains stable performance even with significant estimation errors ( $\pm 50\%$  of the true noise level). This robustness, combined with the incorporation of standard noise estimation
+
+{9}------------------------------------------------
+
+techniques (e.g., from the *skimage* package Van der Walt et al. (2014)), enables our method to effectively function as a blind denoising model. In practice, we find such noise estimation tools provide sufficiently accurate estimates for optimal model performance, alleviating the need for precise noise level knowledge. More quantitative results and analysis of the effect of noise estimation error are provided in Appendix H.
+
+**Extending C2S to Multi-Contrast Settings** MRI typically involves acquiring multiple contrasts to provide comprehensive diagnostic information. By leveraging complementary information from different contrasts, denoising performance can be further enhanced. To capitalize on this, we extend the C2S framework to multi-contrast settings by incorporating additional MRI contrasts as inputs. Figure 4 demonstrates the visual comparison of different denoising methods for the T1 contrast on the M4Raw dataset. It is evident that using multi-contrast inputs (T1 & T2, T1 & FLAIR) allows for better structural preservation and more detailed reconstructions compared to single-contrast denoising techniques. Quantitatively, Table 5 shows that multi-contrast C2S consistently outperforms classical BM3D, supervised Noise2Noise, and single-contrast C2S in terms of PSNR and SSIM. More details can be found in Appendix D.
+
+| Target Contrast<br>PSNR / SSIM $\uparrow$ | Best Classical<br>BM3D | Best Supervised<br>Noise2Noise | Best Self-Supervised<br>C2S | Multi-Contrast C2S |  |  |
+|-|-|-|-|-|-|-|
+|  |  |  |  | T1 & T2 | FLAIR & T1 | T2 & FLAIR |
+| T1 | 32.07 / 0.903 | 32.59 / 0.911 | 32.77 / 0.919 | <u>33.57 / 0.921</u> | <b>33.89 / 0.922</b> | N/A |
+| T2 | 31.20 / 0.877 | 32.37 / 0.886 | 32.33 / 0.890 | <u>33.01 / 0.895</u> | N/A | <b>33.36 / 0.901</b> |
+| FLAIR | 32.14 / 0.873 | <u>32.70 / 0.871</u> | 32.51 / 0.876 | N/A | <b>32.71 / 0.879</b> | <u>32.62 / 0.877</u> |
+
+Table 5: Multi-contrast denoising results on the M4Raw dataset. For the multi-contrast C2S results, entries such as “T1 & T2” indicate that T1 and T2 contrasts were used as inputs for denoising the target contrast.
+
+![Figure 4: Comparison of different denoising methods for T1 contrast in the M4Raw dataset. The figure shows a 2x8 grid of brain MRI slices. The columns are labeled: Noisy, Multi-resp. Avg. Label, BM3D, SwinIR, Noise2Noise, C2S, T1 FLAIR, and T1 T2. The first row shows axial slices, and the second row shows sagittal slices. The 'Multi-resp. Avg. Label' column shows the ground truth. The 'T1 FLAIR' and 'T1 T2' columns show the results of multi-contrast C2S denoising, which appear sharper and more detailed than the single-contrast methods.](61ce9760bffbecba8f5e63310be1ebec_img.jpg)
+
+Figure 4: Comparison of different denoising methods for T1 contrast in the M4Raw dataset. The figure shows a 2x8 grid of brain MRI slices. The columns are labeled: Noisy, Multi-resp. Avg. Label, BM3D, SwinIR, Noise2Noise, C2S, T1 FLAIR, and T1 T2. The first row shows axial slices, and the second row shows sagittal slices. The 'Multi-resp. Avg. Label' column shows the ground truth. The 'T1 FLAIR' and 'T1 T2' columns show the results of multi-contrast C2S denoising, which appear sharper and more detailed than the single-contrast methods.
+
+Figure 4: Comparison of different denoising methods for T1 contrast in the M4Raw dataset. The figure showcases Noisy, BM3D, Noise2Noise, and C2S, along with multi-contrast C2S variants (T1 & T2, T1 & FLAIR). Multi-contrast C2S preserves more structural details and produces sharper reconstructions.
+
+## 5 CONCLUSION
+
+We have introduced Corruption2Self, a score-based self-supervised denoising framework tailored for MRI applications. By extending denoising score matching to the ambient noise setting through our Generalized Denoising Score Matching approach, C2S enables effective learning directly from noisy observations without the need for clean labels. Our method incorporates a reparameterization of noise levels to stabilize training and enhance convergence, as well as a detail refinement extension to balance noise reduction with the preservation of fine spatial features. By extending C2S to multi-contrast settings, we further leverage complementary information across different MRI contrasts, leading to enhanced denoising performance. Notably, C2S exhibits superior robustness across varying noise conditions and MRI contrasts, highlighting its potential for broader applicability in clinical settings.
+
+ Rest of paper (reference and Appendix) is removed.

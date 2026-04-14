@@ -1,0 +1,323 @@
+
+
+{0}------------------------------------------------
+
+# DPLM-2: A MULTIMODAL DIFFUSION PROTEIN LANGUAGE MODEL
+
+Xinyou Wang<sup>\*†</sup> ✉, Zaixiang Zheng<sup>†</sup> ✉, Fei Ye<sup>✉</sup>, Dongyu Xue<sup>✉</sup>, Shujian Huang<sup>✉</sup>, Quanquan Gu<sup>†</sup> ✉
+
+<sup>✉</sup>School of Computer Science, Nanjing University <sup>✉</sup>ByteDance Research  
+wangxinyou@mail.nju.edu.cn, {zhengzaixiang, quanquan.gu}@bytedance.com
+
+<sup>†</sup>Project Lead <sup>†</sup>Corresponding Author
+
+Project Page: <https://bytedance.github.io/dplm/dplm-2>
+
+## ABSTRACT
+
+Proteins are essential macromolecules defined by their amino acid sequences, which determine their three-dimensional structures and, consequently, their functions in all living organisms. Therefore, generative protein modeling necessitates a multimodal approach to simultaneously model, understand, and generate both sequences and structures. However, existing methods typically use separate models for each modality, limiting their ability to capture the intricate relationships between sequence and structure. This results in suboptimal performance in tasks that requires joint understanding and generation of both modalities. In this paper, we introduce DPLM-2, a multimodal protein foundation model that extends discrete diffusion protein language model (DPLM) to accommodate both sequences and structures. To enable structural learning with the language model, 3D coordinates are converted to discrete tokens using a lookup-free quantization-based tokenizer. By training on both experimental and high-quality synthetic structures, DPLM-2 learns the joint distribution of sequence and structure, as well as their marginals and conditionals. We also implement an efficient warm-up strategy to exploit the connection between large-scale evolutionary data and structural inductive biases from pre-trained sequence-based protein language models. Empirical evaluation shows that DPLM-2 can simultaneously generate highly compatible amino acid sequences and their corresponding 3D structures eliminating the need for a two-stage generation approach. Moreover, DPLM-2 demonstrates competitive performance in various conditional generation tasks, including folding, inverse folding, and scaffolding with multimodal motif inputs, as well as providing structure-aware representations for predictive tasks.
+
+## 1 INTRODUCTION
+
+Proteins are macromolecules that execute crucial roles in every living organism. They are characterized by their amino acid sequences and three-dimensional structure, where the sequence determines the structure, which in turn governs the protein’s function. Generative modeling for proteins has made significant strides in recent years. Among them, diffusion models (Ho et al., 2020; Song et al., 2020) exhibit great success in protein structure-based generative modeling (Watson et al., 2023; Yim et al., 2023). Meanwhile, large-scale protein language models (Rives et al., 2019; Lin et al., 2022), trained on evolutionary-scale sequence database, have become one of the most important cornerstones in sequence-based foundation models for protein sequence representation learning and generation. Remarkably, DPLM (Wang et al., 2024), a discrete diffusion (Austin et al., 2021) based protein language models, has exhibited the state-of-the-art performance in both sequence generation and understanding, addressing a wide range of sequence-oriented applications.
+
+Many protein engineering applications, *e.g.*, motif-scaffolding (Watson et al., 2023; Yim et al., 2024) and antibody design (Jin et al., 2021; Kong et al., 2022; Zhou et al., 2024), require jointly determine both structure and sequence. However, the aforementioned approaches mostly employ generative models for one modality (either sequence or structure) and resort to separate models (Jumper et al., 2021; Dauparas et al., 2022) for the other. This highlights the pressing need for multimodal protein generative models that can integrate both sequence and structure, enabling a more comprehensive understanding of protein behaviors and functions. This, therefore, raises the following question:
+
+---
+
+\*This work was done during Xinyou’s internship at ByteDance Research.
+
+{1}------------------------------------------------
+
+![Figure 1: Overall illustration of DPLM-2. (A) Structure Tokenization: A GVP-based encoder (GVP) takes atomic coordinates x = R^{3 \times N_{atoms} \times 3} and produces invariant backbone geometric features. A lookup-free quantizer (LFQ) discretizes these into structure tokens s = \{1, \dots, 4096\}^N. An IPA-based decoder (IPA) converts these tokens back into atomic coordinates. (B) Training and Sampling of Multimodal Diffusion Protein Language Model (DPLM-2): The model is trained on Unif-50 (45M) and evolutionary scale sequence data. It uses a Transformer Layer (Bidirectional Multihead Attention + MLP) \times N. The training process involves a warning from pre-trained sequence-based DPLM-2, masked tokens, residue index, and ground-truth tokens. The model is also trained on PDB + AFDB-SwissProt (200K) structure data. The sampling process shows the model generating structure tokens x^{(T)} and amino-acid tokens x^{(T-1)} from a mixed-modal input. (C) Applications: (1) unconditional protein generation (struct-seq mixed-modal co-generation), (2) structure-aware protein representations for downstream predictive tasks, (3) folding (seq-cond. structure generation), (4) inv-folding (struct-cond. sequence generation), and (5) conditional protein generation (e.g., motif-scaling with struct-seq mixed-modal input & output).](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Overall illustration of DPLM-2. (A) Structure Tokenization: A GVP-based encoder (GVP) takes atomic coordinates x = R^{3 \times N\_{atoms} \times 3} and produces invariant backbone geometric features. A lookup-free quantizer (LFQ) discretizes these into structure tokens s = \{1, \dots, 4096\}^N. An IPA-based decoder (IPA) converts these tokens back into atomic coordinates. (B) Training and Sampling of Multimodal Diffusion Protein Language Model (DPLM-2): The model is trained on Unif-50 (45M) and evolutionary scale sequence data. It uses a Transformer Layer (Bidirectional Multihead Attention + MLP) \times N. The training process involves a warning from pre-trained sequence-based DPLM-2, masked tokens, residue index, and ground-truth tokens. The model is also trained on PDB + AFDB-SwissProt (200K) structure data. The sampling process shows the model generating structure tokens x^{(T)} and amino-acid tokens x^{(T-1)} from a mixed-modal input. (C) Applications: (1) unconditional protein generation (struct-seq mixed-modal co-generation), (2) structure-aware protein representations for downstream predictive tasks, (3) folding (seq-cond. structure generation), (4) inv-folding (struct-cond. sequence generation), and (5) conditional protein generation (e.g., motif-scaling with struct-seq mixed-modal input & output).
+
+Figure 1: Overall illustration of DPLM-2. (A) Structure tokenization consists of a GVP-based encoder to yield invariant backbone geometric features, a lookup-free quantizer (LFQ) to discretize encoded structural features into structure tokens within a codebook, and an IPA-based decoder as de-tokenizer to convert structure tokens back to backbone atomic coordinates. (B) Multimodal learning and generation of protein structure and sequence with DPLM-2. (C) Various applications of DPLM-2 as a protein foundation model: (1) unconditional protein sequence-structure mixed-modal co-generation; (2) protein sequence-structure joint representation for predictive tasks; (3) structure prediction; (4) fixed-backbone sequence generation; (5) conditional protein generation with structure-sequence mixed-modal input and output.
+
+*Can we build a multimodal protein foundation model to simultaneously model, understand, and generate both sequences and structures?*
+
+To pursue this goal, Multiflow (Campbell et al., 2024) is a recent effort for structure-sequence co-generation that incorporates sequences into structure-based generative models using multimodal flow matching. Despite its impressive structure generation capability, Multiflow exhibits suboptimal performance in co-generating structurally-compatible sequences and consequently resorts to instance-level knowledge distillation from ProteinMPNN (Dauparas et al., 2022). Furthermore, it completely falls short in protein folding for given sequences, showing Multiflow’s inadequacy in sequence understanding. We argue that this bottleneck arises from the absence (co-)evolutionary inductive bias derived from massive pre-training from sequence database, as prior studies have demonstrated that the evolutionarily-informed representations learned by pre-trained protein language models implicitly capture structural information enables direct structure prediction (Lin et al., 2022). As a consequence, the limitation in sequence understanding and generation renders Multiflow inadequate as a multimodal protein generative foundation.
+
+Inspired by the connection between evolutionary knowledge and spatial interactions, we deem that sequence-based generative language models like DPLM, with their strong sequence generation and predictive abilities, hold great promise as a foundation for multimodal learning for proteins. Despite its exciting potential, this approach presents two key challenges: (1) language models cannot directly handle continuous data like structure; and (2) language models heavily necessitate sufficient scale of data and compute resources while structure data is much smaller compared to sequence databases.
+
+In this paper, we address the aforementioned questions by introducing DPLM-2, a multimodal protein foundation model that advances the state-of-the-art discrete diffusion-based protein language model (i.e., DPLM) to accommodate both sequences and structures. By training on both experimental and high-quality synthetic structures, DPLM-2 learns the joint distribution of sequence and structure,
+
+{2}------------------------------------------------
+
+as well as their marginals and conditionals. We present several key recipes to facilitate multimodal learning in DPLM-2: (1) the core difficulty lies in enabling the language model to learn structural information, which is challenging and remains elusive, for which we develop a lookup-free quantization (LFQ, Yu et al., 2023) structure tokenizer to convert 3D coordinates to discrete tokens and vice versa (Fig. 1A, §3.3); (2) we implement an efficient warm-up strategy to exploit the connection between large-scale evolutionary data and structural inductive biases from pre-trained sequence-based DPLM (Fig. 1B, §3.2); and (3) we also address the exposure bias problem in discrete diffusion for sequence learning (Ranzato et al., 2016; Bengio et al., 2015) by a self-mixup training strategy that leads to enhanced generation quality and diversity.
+
+We highlight our main contributions and findings as follows:
+
+- (i) We present DPLM-2, a multimodal protein generative language model that aims to simultaneously model, understand and generate protein structure and sequence. We show that it can be fairly efficient and effective to obtain a multimodal protein model with moderate amount of high-quality data, a decent structure tokenizer and publicly-accessible sequence-only pre-trained language models.
+- (ii) As a multimodal generative model, DPLM-2 enables unconditional protein co-generation of both structure and sequence, which demonstrates good structure-sequence consistency (Fig. 1C(1)). Our empirical evaluation shows that DPLM-2 attains competitive co-generation performance compared to structure-based generative approaches, while the proteins generated by DPLM-2 have a better alignment with the characteristics of natural proteins in secondary structure statistics (§4.1).
+- (iii) In addition, DPLM-2 supports various conditional generation tasks by its multimodal nature, ranging from (sequence-conditioned) folding (Fig. 1C(3), §4.2), (structure-conditioned) inverse-folding (Fig. 1C(4), §4.3), to more successful motif-scaffolding given multimodal motif conditioning (Fig. 1C(5), §4.4).
+- (iv) Last but not least, we demonstrate that the structure-aware protein representation learned by DPLM-2 brings additional benefit for a range of protein predictive tasks (Fig. 1C(2), §4.5).
+
+**Concurrent work.** During the development of DPLM-2, we became aware of the recently proposed multimodal generative protein language model, ESM3 (Hayes et al., 2024), which also jointly models tokenized structure and sequence using a generative masked language model. While both models aim for similar goals, DPLM-2 differs from ESM3 in several key aspects: **(1) Multimodal protein generation:** DPLM-2 treats structure and sequence modalities equally by design and emphasizes the simultaneous co-generation of compatible protein sequence and structure, whereas ESM3 is a sequence-first model (other modalities are subject to dropout during training) and generates in cascaded modality-by-modality manner. **(2) Data and compute efficiency:** ESM3 seeks to perform multimodal pre-training from scratch using a huge amount of synthetic data, with modal size ranging from 1.4B to 98B. With strict license and absence of training infrastructure, this prohibits community from replicating for customized purposes. In contrast, DPLM-2 leverages much smaller datasets (PDB + SwissProt) and builds on open-source, pre-trained sequence-based DPLM (150M/650M/3B), which leverages DPLM’s learned evolutionary knowledge and inherits strong sequence understanding and generation capabilities. We are also committed to open-source our models, training and inference code to democratize multimodal generative protein LMs to benefit the community. Overall, we believe DPLM-2 provides unique contributions to the community.
+
+## 2 PRELIMINARIES
+
+### 2.1 GENERATIVE MODELING FOR PROTEIN
+
+The aim of generative protein modeling is to estimate the underlying distribution  $\text{prot} \sim q(\text{prot})$  of the protein data of our interest by learning a probabilistic model  $p_\theta(\text{prot})$ . Here  $\text{prot} = (r_1, r_2, \dots, r_L)$  denotes a protein with  $L$  residues, where each residue  $r_i = (s_i, x_i)$  is represented by two major modalities, i.e.,  $s_i \in \{0, 1\}^{|S|}$  is a categorical variable for its amino acid type in  $S = \{1, \dots, 20\}$ , and  $x_i \in \mathbb{R}^{N_{\text{atoms}} \times 3}$  is the real-value Cartesian coordinates of its residue atoms (we only consider backbone atoms herein, i.e.,  $[N, C_\alpha, C, O]$  with  $N_{\text{atoms}} = 4$ ). Namely,
+
+$$p_\theta(\text{prot}) = p_\theta(s_1, s_2, \dots, s_L, x_1, x_2, \dots, x_L) = p_\theta(\mathbf{s}, \mathbf{x})$$
+
+As a result, most of protein tasks can be viewed as specifying their input conditioning and output between these two modalities (Tab. 1), including (1) sequence-conditioned structure prediction (fold-
+
+Table 1: *Generative tasks w.r.t. structure & sequence.*
+
+| task               | objective                          |
+|--------------------|------------------------------------|
+| folding            | $p_\theta(\mathbf{x} \mathbf{s})$  |
+| inv-folding        | $p_\theta(\mathbf{s} \mathbf{x})$  |
+| seq. gen.          | $p_\theta(\mathbf{s})$             |
+| struct. gen.       | $p_\theta(\mathbf{x})$             |
+| seq-struct co-gen. | $p_\theta(\mathbf{s}, \mathbf{x})$ |
+
+{3}------------------------------------------------
+
+ing, Jumper et al., 2021; Lin et al., 2022; Huguet et al., 2024), (2) structure-conditioned sequence generation (inverse folding or fixed-backbone design, Dauparas et al., 2022; Hsu et al., 2022; Zheng et al., 2023b), (3) sequence learning or generation (Rives et al., 2019; Nijkamp et al., 2022; Alamdari et al., 2023; Wang et al., 2024), (4) structure generation (Yim et al., 2023; Watson et al., 2023; Ingraham et al., 2023), and (5) sequence-structure co-generation (Jin et al., 2021; Shi et al., 2022; Campbell et al., 2024). These further enable various conditional applications by allowing single or mixed-modal conditioning for partial generation, *e.g.*, motif-scaffolding and antibody design.
+
+### 2.2 DIFFUSION PROTEIN LANGUAGE MODEL (DPLM)
+
+Language models (LMs), typically parameterized by Transformers (Vaswani et al., 2017) have become the *de facto* choice dominating different domains with scalable and performing expressiveness (OpenAI, 2023). Among them, protein LMs have been serving as one of the AI foundation for protein sequence learning (Rives et al., 2019; Lin et al., 2022) and generation (Nijkamp et al., 2022; Alamdari et al., 2023).
+
+Diffusion protein language model (DPLM, Wang et al., 2024), in particular, shows excelling performance in both generation and representation learning of protein sequences. DPLM is grounded in *absorbing* discrete diffusion framework (Austin et al., 2021; Zheng et al., 2023a), which is characterized by a forward and backward Markov process. Let  $\text{Cat}(\mathbf{x}; \mathbf{p})$  be a categorical distribution on protein sequence  $\mathbf{y}$  parameterized by a vector  $\mathbf{p}$  on  $(|\mathcal{V}| - 1)$ -dimensional probability simplex. The forward process of discrete diffusion defines a Markov process governed by the transition kernel  $q(\mathbf{x}^{(t)}|\mathbf{x}^{(t-1)}) = \text{Cat}(\mathbf{x}^{(t)}; \beta_t \mathbf{x}^{(t-1)} + (1 - \beta_t) \mathbf{q}_{\text{noise}})$  that gradually perturb the data  $\mathbf{x}^{(0)} \sim q(\mathbf{x}^{(0)})$  into a stationary distribution  $\mathbf{x}^{(T)} \sim \mathbf{q}_{\text{noise}}$ . For absorbing diffusion,  $\mathbf{q}_{\text{noise}}$  is the point mass with all of the probability on the absorbing (mask) state. The learned *backward* process  $p_\theta(\mathbf{x}^{(t-1)}|\mathbf{x}^{(t)})$  reversely denoises the  $\mathbf{x}^{(T)}$  towards the data distribution  $\mathbf{x}^{(0)}$ , which is typically optimized by the variational bound of the log-likelihood (Ho et al., 2020):
+
+$$\begin{aligned} \mathbb{E}_{q(\mathbf{x}^{(0)})} [\log p_\theta(\mathbf{x}^{(0)})] &\geq \mathbb{E}_{q(\mathbf{x}^{(0:T)})} \left[ \log \frac{p_\theta(\mathbf{x}^{(0:T)})}{q(\mathbf{x}^{(1:T)}|\mathbf{x}^{(0)})} \right] \\ &= \mathbb{E}_{q(\mathbf{x}^{(0)})} \left[ \log p_\theta(\mathbf{x}^{(0)}|\mathbf{x}^{(1)}) + \underbrace{\sum_{t=2}^T -\text{KL} [q(\mathbf{x}^{(t-1)}|\mathbf{x}^{(t)}, \mathbf{x}^{(0)}) \| p_\theta(\mathbf{x}^{(t-1)}|\mathbf{x}^{(t)})]}_{\mathcal{J}_t} \right] + \text{const.}, \end{aligned}$$
+
+where  $\mathcal{J}_t$  is the learning objective. The learning objective of discrete diffusion can be further simplified into reweighted cross-entropies (Zheng et al., 2023a), resembling masked language modeling at arbitrary noise levels:
+
+$$\begin{aligned} \mathcal{J}_t &= \mathbb{E}_{q(\mathbf{x}^{(0)})} - \text{KL} [q(\mathbf{x}^{(t-1)}|\mathbf{x}^{(t)}, \mathbf{x}^{(0)}) \| p_\theta(\mathbf{x}^{(t-1)}|\mathbf{x}^{(t)})] \\ &= \mathbb{E}_{q(\mathbf{x}^{(0)})} \left[ \lambda^{(t)} \sum_{1 \leq i \leq L} b_i(t) \cdot \log p_\theta(x_i^{(0)}|\mathbf{x}^{(t)}) \right], \end{aligned} \quad (1)$$
+
+where  $\lambda^{(t)}$  is a weighting coefficient induced from the specific noising schedule and  $b_i(t) = \mathbf{1}_{x_i^{(t)} \neq x_i^{(0)}}$ . For inference, DPLM is able to generate amino acid sequences by the reverse iterative denoising process of discrete diffusion (Hoogeboom et al., 2021; Austin et al., 2021) from the following distribution,
+
+$$p_\theta(\mathbf{x}^{(t-1)}|\mathbf{x}^{(t)}) = \sum_{\tilde{\mathbf{x}}^{(0)}} q(\mathbf{x}^{(t-1)}|\mathbf{x}^{(t)}, \tilde{\mathbf{x}}^{(0)}) p_\theta(\tilde{\mathbf{x}}^{(0)}|\mathbf{x}^{(t)}).$$
+
+Specifically, at time  $t$ , it first generates  $\tilde{\mathbf{x}}^{(0)}$  from  $p_\theta(\cdot|\mathbf{x}^{(t)})$ , then a less noisy  $\mathbf{x}^{(t-1)}$  is sampled by  $q(\cdot|\mathbf{x}^{(t)}, \mathbf{x}^{(0)} = \tilde{\mathbf{x}}^{(0)})$ . Within absorbing diffusion, the generation process can be viewed as an iterative *mask-predict* approach. For sequence representation for predictive tasks, it can be obtained by simply letting DPLM take the sequence as input.
+
+## 3 DPLM-2: A MULTIMODAL DIFFUSION PROTEIN LANGUAGE MODEL
+
+### 3.1 OVERVIEW
+
+Fig. 1 illustrates DPLM-2’s overall architecture. DPLM-2 is built on the state-of-the-art sequence-based generative protein LM, *i.e.*, DPLM (Wang et al., 2024), using a discrete diffusion probabilistic framework to concurrently model both protein sequences and their corresponding structures. To facilitate structure learning in language models, we introduce a token-based representation for protein structure via a tokenizer that converts  $\mathbf{x} \in \mathbb{R}^{L \times N_{\text{backb}} \times 3}$ , the 3D coordinates of the protein backbone into a discrete structure token sequence, denoted as  $\mathbf{z} = (z_1, z_2, \dots, z_L) \in \{0, 1\}^{L \times |\mathcal{Z}|}$ , where each token  $z_i$  represents a local structural element of the  $i$ -th residue. Given tokenized structure,
+
+{4}------------------------------------------------
+
+DPLM-2 processes multimodal input by concatenating the structure token sequence  $\mathbf{z}$  with the corresponding amino acid sequence  $\mathbf{s}$  for the same protein. Notably, there exists a position-by-position correspondence between  $\mathbf{z}$  and  $\mathbf{s}$ , where  $z_i$  and  $s_i$  refer to the two modalities of the  $i$ -th residue, respectively. To reinforce this correspondence, we assign identical position encodings to both  $z_i$  and  $s_i$ , thereby ensuring that structural and sequence information is aligned at the residue level.
+
+To train DPLM-2, we leverage a high-quality dataset comprising 20K clustered experimental structures from the Protein Data Bank (PDB) (Berman et al., 2000) and 200K predicted structures from the AFDB SwissProt split (Varadi et al., 2022), with length  $< 512$ . During training, DPLM-2 is tasked with denoising the input sequence across a spectrum of noise levels, ranging from fully noisy to completely clean. The multimodal training objective of DPLM-2 is derived from Eq. (1) as,
+
+$$\mathcal{J}_t = \mathbb{E}_{q(\mathbf{x}^{(0)}, \mathbf{s}^{(0)}), \mathbf{z}^{(0)} \leftarrow \text{tokenize}(\mathbf{x}^{(0)})} \left[ \lambda^{(t)} \sum_{1 \leq i \leq L} b_i(t) \cdot \log p_\theta(z_i^{(0)}, s_i^{(0)} | \mathbf{z}^{(t)}, \mathbf{s}^{(t)}) \right], \quad (2)$$
+
+where  $\log p_\theta(z_i, s_i | \cdot) = \log p_\theta(z_i | \cdot) + \log p_\theta(s_i | \cdot)$  by assuming conditional independence (see discussion in §G). By learning  $p_\theta(\mathbf{z}^{(t-1)}, \mathbf{s}^{(t-1)} | \mathbf{z}^{(t)}, \mathbf{s}^{(t)})$ , the model enables the simultaneous generation of highly correlated protein structures and sequences. This eliminates the need for a cascaded generation, allowing us to derive both the protein’s structure and sequence in a single step. To further enhance DPLM-2’s ability to differentiate between structure and sequence, noising level for each modality is subjected to distinct scheduler, denoted as  $t_d$  and  $t_s$ , respectively. This facilitates a more comprehensive understanding of the relationships between protein sequences and their corresponding structures. This design also allows us to explore arbitrary combinations of  $(t_d, t_s)$ , thus providing flexible sampling options, including sampling from the marginals of each modality and conditionals between them for various applications (Fig. 1C). For conditional sampling (e.g., folding and inverse-folding), we set the noise scheduler of the conditioned modality to 0, which means no noise in the conditioned modality. Please refer to §A.2 for more details.
+
+Furthermore, we also identify the exposure bias issue in discrete diffusion for sequence learning (Ranzato et al., 2016; Bengio et al., 2015), and mitigate this by proposing a self-mixup strategy inspired by scheduled sampling, which improves both generation quality and diversity (see §A.5).
+
+### 3.2 EFFICIENT WARM-UP FROM PRE-TRAINED SEQUENCE-BASED DPLM
+
+Protein sequences encode critical evolutionary information, reflecting co-evolutionary processes where residue pairs mutate together and often interact in 3D space, offering insights for predicting protein folding (Melnik et al., 2022b). Lin et al. (2022) further showed that protein language models trained on large-scale evolutionary data implicitly capture this information, which can facilitate structure prediction. Motivated by the link between evolutionary knowledge and structural interactions, we propose to built DPLM-2 with an efficient warmup from pre-trained sequence-based DPLM, to make the most of established evolutionary information for protein structure modeling. Since our structure dataset is significantly smaller than UniRef50 sequence database (200K vs. 45M), enabling efficient fine-tuning of the pre-trained model, we want to keep the sequence knowledge intact and reduce the risk of catastrophic forgetting, we apply LoRA (Hu et al., 2021) to limit too much deviation to the original parameters. This approach not only lowers training costs compared to starting from scratch but also effectively transfers valuable evolutionary information.
+
+### 3.3 LEARNING STRUCTURE TOKENIZATION
+
+The core difficulty of achieving a multimodal protein LM lies in enabling the language model to learn structural information, which is challenging and remains elusive. Tokenizing continuous data modalities into discrete representations (Van Den Oord et al., 2017) has gained attraction across domains like image synthesis due to its ability to capture compact, meaningful information, enabling effective compression and efficient generation, especially with sequence-based models like Transformers. Recent efforts have applied this approach to protein structure coordinates (Van Kempen et al., 2024; Liu et al., 2023; Gao et al., 2024; Lu et al., 2024). This allows language models to better learn the composition of local structural elements. However, how to learn an effective structure tokenizer remains an active research question.
+
+Structure tokenization under a typical VQ-VAE (Van Den Oord et al., 2017) framework can be summarized as follows:
+
+$$\mathbf{x} \xrightarrow{\text{encoder}} \mathbf{e} \xrightarrow{\text{quantizer}} \mathbf{z} \xrightarrow{\text{decoder}} \tilde{\mathbf{x}},$$
+
+where (1) a structure encoder encodes backbone 3D coordinates  $\mathbf{x} \in \mathbb{R}^{L \times N_{\text{back}} \times 3}$  into in-
+
+![Figure 2: Reconstruction and secondary structure correspondence of structure tokenizers. Part A is a table showing reconstruction accuracy for various tokenizers. Part B is a heatmap showing the density of structure tokens in a 2D space.](d6226b6d22b1babc1eeeb93e07cc9cc4_img.jpg)
+
+Figure 2 consists of two parts. Part A is a table titled "reconstruction acc. of tokenizers" with columns for tokenizer, size, train 1dRMS, train 1dRMS, camelyon2022 tm-score, and camelyon2022 rmsd. Part B is a heatmap titled "struct tokens in secondary structure density" showing the density of structure tokens in a 2D space defined by axes  $s_i$  and  $s_{i+1}$ .
+
+| tokenizer | size  | train 1dRMS | train 1dRMS | camelyon2022 tm-score | camelyon2022 rmsd |
+|-----------|-------|-------------|-------------|-----------------------|-------------------|
+| VQ-VAE-1k | 1024  | 0.76        | 0.71        | 0.80                  | 4.14              |
+| LFQ-1k    | 1024  | 0.82        | 0.77        | 0.86                  | 3.35              |
+| LFQ-2k    | 2048  | 0.84        | 0.79        | 0.88                  | 3.62              |
+| LFQ-4k    | 4096  | 0.86        | 0.82        | 0.91                  | 3.31              |
+| LFQ-8k    | 8192  | 0.92        | 0.86        | 0.93                  | 2.58              |
+| LFQ-16k   | 16384 | 0.92        | 0.87        | 0.94                  | 2.32              |
+
+Figure 2: Reconstruction and secondary structure correspondence of structure tokenizers. Part A is a table showing reconstruction accuracy for various tokenizers. Part B is a heatmap showing the density of structure tokens in a 2D space.
+
+Figure 2: Reconstruction and secondary structure correspondence of structure tokenizers.
+
+{5}------------------------------------------------
+
+variant features  $\mathbf{e} \in \mathbb{R}^{L \times d_{\text{quant}}}$ , (2) a quantizer converts  $\mathbf{e}$  into  $\mathbf{z}$  of  $L$  discrete tokens where  $z_i \in \{0, 1, \dots, |\mathcal{Z}|\}$  given a finite-size codebook  $\mathcal{Z}$ ; and (3) a structure decoder reconstructs 3D coordinates  $\tilde{\mathbf{x}}$  from the discrete tokens.
+
+We utilize a GVP-based (Jing et al., 2020) structure encoder from pre-trained GVP-Transformer (Hsu et al., 2022) and a IPA-based (Jumper et al., 2021) structure decoder. In terms of quantizer, our preliminary experiment showed that conventional VQ-VAE pretty much struggles in training. To mitigate this, we instead adopts Look-Up-Free Quantizer (LFQ) from the currently best visual tokenizer (Yu et al., 2023) to protein structure tokenization. Specifically, the latent space of LFQ is decomposed as the Cartesian product of single-dimensional binary variables, as  $\mathbb{C} = \times_{k=1}^{\log_2 |\mathcal{Z}|} \mathcal{C}_k$ , where  $\mathcal{C}_k = \{-1, 1\}$ . Given the encoded feature  $\mathbf{e} = \text{encoder}(\mathbf{x}) \in \mathbb{R}^{L \times \log_2 |\mathcal{Z}|}$ , each dimension (indexed by  $k$ ) of the quantized representation  $\text{quant}(\mathbf{e}_i)$  is obtained from:
+
+$$\text{quant}(\mathbf{e}_i)[k] = \mathcal{C}_{i,k} = \text{sign}(\mathbf{e}_i[k]) = -1\{z_i[k] \leq 0\} + 1\{\mathbf{e}_i[k] > 0\}.$$
+
+As such, with LFQ, the token indices for  $\mathbf{z} = \{z_1, z_2, \dots, z_i, \dots, z_L\}$  is given by:
+
+$$z_i = \text{index}(\text{quant}(\mathbf{e}_i)) = \sum_{k=1}^{\log_2 |\mathcal{Z}|} 2^{k-1} 1\{\mathbf{e}_i[k] > 0\}, \forall z_i \in \mathbb{Z}.$$
+
+The LFQ-based structure tokenizer is trained on the same structure dataset as mentioned before, using a combination of reconstruction, commitment, and entropy regularization losses, similar to standard VQ-VAE. Here FAPE loss (Jumper et al., 2021) is used as the primary reconstruction loss. (see §B.1 for more details.)
+
+**Evaluation.** As shown in Fig. 2A, LFQ significantly outperforms VQ-VAE regarding reconstruction accuracy while training of LFQ is much faster than VQ-VAE (2 vs. 15 days on 8 A100s). Increasing codebook size leads to improved reconstruction while a codebook size of 8192 achieves the best compression-reconstruction trade-off. Meanwhile in Fig. 2B, we observe a strong correlation between structure tokens and secondary structures. For instance, a lot of structure tokens concentrated at the alpha helix and beta sheet vertices, while some tokens lie between regions. This suggests that structure tokens the fine-grained structural elements in backbone local environment.
+
+## 4 EXPERIMENTS
+
+In this section, we evaluate DPLM-2 on various generative and understanding scenarios, including unconditional protein generation (structure, sequence, and structure-sequence co-generation, §4.1), and a variety of conditional tasks, such as folding (§4.2), inverse folding (§4.3) and motif-scaffolding (§4.4), and a series of protein predictive tasks (§4.5).
+
+### 4.1 UNCONDITIONAL PROTEIN GENERATION
+
+The goal of unconditional protein generation is to produce both the 3D structure and amino acid sequence. Typically, this is done using a cascaded approach: either generating the structure first and then use another model to predict the sequence, or vice versa. Here, we focus on generating structure and sequence simultaneously. We evaluate DPLM-2 on both cascaded and simultaneous generation across three tasks: *unconditional structure generation*, *unconditional sequence generation*, and *structure-sequence co-generation*.
+
+Following Multiflow (Campbell et al., 2024), we evaluate the generated proteins in terms of *quality*, *novelty* and *diversity*. **Designability** is measured through *self-consistency evaluation* and *foldability* (Yim et al., 2023; Watson et al., 2023; Wu et al., 2022a). Self-consistency evaluation is assessed by folding the generated sequence with ESMFold (Lin et al., 2022), then using *sc-TMScore* and *sc-RMSD* with the co-generated structure to evaluate similarity. Foldability is evaluated via ESMFold, with *pLDDT* > 70 considered plausible. **Novelty** is assessed by comparing generated structures to known ones in PDB using *TMScore* (pdb-TM), with lower values indicating greater novelty. **Diversity** is measured by calculating pairwise *TMScore* (inner-TM), where lower scores indicate more dissimilarity. The number of clusters identified by FoldSeek (van Kempen et al., 2023) also quantifies diversity, normalized by the total number of structures.
+
+#### 4.1.1 DPLM-2 ENABLES HIGH-QUALITY, DIVERSE AND NOVEL PROTEIN SEQUENCE AND STRUCTURE GENERATION
+
+Tab. 2 and Fig. 3 present the results of DPLM-2 for unconditional protein generation. We highlight our key findings in the following aspects:
+
+**(1) DPLM-2 can generate diverse and highly-plausible protein with simultaneous structure-sequence co-generation.** We sampled 100 proteins for each length in 100, 200, 300, 400, and 500. The co-generation can be performed in simultaneous generation (*co-generation*) and cascaded
+
+{6}------------------------------------------------
+
+![Figure 3: Evaluation of DPLM-2 on unconditional structure-sequence co-generation. The figure contains nine subplots (A-I) showing various performance metrics. A: Designability (scTMscore, scRMSD) vs length. B: Structure diversity (#clusters) vs length. C: Sequence foldability (pLDDT) vs length. D: Structure novelty (pDB-TM) vs length. E: Comparison wrt model size (scTMscore, scRMSD) for 150M, 650M, 3B models. F: Long protein generation (scTMscore, scRMSD) for lengths <=500 and >500. G: Case study of structure-sequence co-generation samples for lengths 100, 200, 300, 400, 600, 700. H: Showcase of designing symmetric oligomers.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3: Evaluation of DPLM-2 on unconditional structure-sequence co-generation. The figure contains nine subplots (A-I) showing various performance metrics. A: Designability (scTMscore, scRMSD) vs length. B: Structure diversity (#clusters) vs length. C: Sequence foldability (pLDDT) vs length. D: Structure novelty (pDB-TM) vs length. E: Comparison wrt model size (scTMscore, scRMSD) for 150M, 650M, 3B models. F: Long protein generation (scTMscore, scRMSD) for lengths <=500 and >500. G: Case study of structure-sequence co-generation samples for lengths 100, 200, 300, 400, 600, 700. H: Showcase of designing symmetric oligomers.
+
+Figure 3: Evaluation of DPLM-2 on unconditional structure-sequence co-generation. Here for designability of co-generated proteins, we use ESMFold to obtain refolded structure of DPLM-2-generated sequence and measure the structural similarity between DPLM-2-generated structure and the refolded structure, which aims to measure the compatibility of the co-generated structure and sequence pairs.
+
+workflow: first generating the structure then the sequence conditioned on generated structure (*struct  $\rightarrow$  seq*), and the reverse way (*seq  $\rightarrow$  struct*), without the need of other folding or inverse folding models. Fig. 3A/B demonstrates that DPLM-2 can sample sequence and structures with high designability across various lengths, with most *sc-TM* values exceeding 0.9, with diverse structure clusters. Fig. 3D shows that the novelty of sampled proteins, measured by *pDB-TM*, generally increases with longer protein lengths. In addition, DPLM-2 can generate with both modalities simultaneously or a modality-by-modality. As shown in Tab. 2, the co-generation performance exhibit highest *scTM*, suggesting that co-modeling indeed benefits protein generation.
+
+(2) **DPLM-2 can attain competitive performance with strong baselines on co-generation, as well as backbone-only and sequence-only generation, respectively.** As shown in Tab. 2, DPLM-2 achieves the strong *sc-TM* compared to strong baselines, approaching the quality of native structures from PDB. We notice that ESM3-Open (Hayes et al., 2024), which runs in a sequence-then-structure order, falls short of unconditional generation. Compared to MultiFlow (Campbell et al., 2024), DPLM-2 achieves comparable co-generation quality. Notably, as also reported in Campbell et al. (2024), MultiFlow falls short of sequence generation when directly trained from structures with native sequences, resulting in greatly degraded co-generation performance without data distillation from external inverse folding models (ProteinMPNN). For reference, we also provide the result of MultiFlow retrained using our training data, where its co-generation performance remains unsatisfying and lags behind DPLM-2, which suggests that DPLM-2 has advantages of directly and effectively learning from complex structure-sequence joint distribution. Moreover, DPLM-2 can also only produce single modality if needed, where it matches the best competitive models in these settings respectively. These results demonstrate DPLM-2’s effectiveness as a multimodal generative model.
+
+(3) **DPLM-2 generates longer proteins beyond training data.** As DPLM-2 is trained with a 512 length cutoff, we are curious about its length extrapolation, and evaluate sampled proteins at lengths of {600, 700, 800, 900, 1000}. As shown in Fig. 3F, notably, for proteins exceeding the maximum training length of 512, the *pLDDT* scores of sequences sampled by DPLM-2 are close to those of DPLM. This suggests that DPLM-2 largely retains its original sequence generation capability inherited from sequence pre-training in DPLM, leading to its capability of length extrapolation.
+
+(4) **Case study.** Fig. 3H shows some generated samples of DPLM-2 up to 700 residues, while in Fig. 3I we showcase that we can manipulate DPLM-2 to design symmetric oligomers by forcing to duplicate the predicted tokens with repetitive structure and sequence patterns.
+
+(5) **Ablation study on the training strategy.** We investigate the effects of warmup from the sequence-based pre-trained DPLM and data augmentation with high-quality AlphaFold-predicted structures on DPLM-2. The sequence pre-training significantly improve both designability and diversity, while
+
+{7}------------------------------------------------
+
+Table 2: *Benchmarking comparison of unconditional protein generation, in terms of structure-sequence co-generation, backbone-only generation, and sequence-only generation.* For each method, we generate 100 samples for lengths in [100, 200, 300, 400, 500]. \* denotes Multiflow variants retrained by us using different dataset – native PDB data without ProteinMPNN distillation and the same training data as DPLM-2 (i.e., PDB+SwissProt), respectively.
+
+|                                                                               | Structure-sequence Consistency |                      | Novelty       |                      | Diversity            |                |
+|-------------------------------------------------------------------------------|--------------------------------|----------------------|---------------|----------------------|----------------------|----------------|
+|                                                                               | scTM (↑)                       | scRMSD (↓)           | pLDDT (↑)     | avg. pdb-TM (↑)      | avg. inner-TM (↓)    | MaxCluster (↑) |
+| <b>Structure-sequence co-generation.</b>                                      |                                |                      |               |                      |                      |                |
+| Native PDB protein                                                            | 0.904 ± 0.129                  | 4.623 ± 5.688        | –             | –                    | 0.262 ± 0.025        | 0.776          |
+| ESM3-Open (1.4B, seq → struct)                                                | 0.624 ± 0.232                  | 24.180 ± 24.109      | –             | 0.660 ± 0.000        | 0.220 ± 0.046        | 0.540          |
+| MultiFlow w/o distillation (official ckpt)                                    | <b>0.930 ± 0.098</b>           | 3.208 ± 4.741        | 79.447        | 0.704 ± 0.000        | 0.356 ± 0.032        | 0.500          |
+| *MultiFlow w/o distillation                                                   | 0.750 ± 0.163                  | 9.306 ± 8.499        | 61.519        | –                    | 0.350 ± 0.038        | 0.490          |
+| *MultiFlow (retrained on our training data)                                   | 0.871 ± 0.934                  | 6.580 ± 6.258        | 62.624        | –                    | 0.331 ± 0.052        | 0.440          |
+| DPLM-2 (650M, seq → struct)                                                   | 0.907 ± 0.117                  | 6.337 ± 9.403        | 82.246        | 0.653 ± 0.195        | 0.280 ± 0.038        | 0.651          |
+| DPLM-2 (650M, struct → seq)                                                   | 0.921 ± 0.098                  | 4.969 ± 6.735        | 81.910        | 0.637 ± 0.195        | 0.308 ± 0.089        | 0.575          |
+| <b>DPLM-2 (650M, co-generation)</b>                                           | <b>0.925 ± 0.085</b>           | <b>3.899 ± 3.723</b> | <b>82.686</b> | <b>0.640 ± 0.204</b> | <b>0.287 ± 0.030</b> | <b>0.545</b>   |
+| <b>Unconditional backbone generation.</b> (sequence predicted by ProteinMPNN) |                                |                      |               |                      |                      |                |
+| Native PDB struct. (seq. from PMPNN)                                          | 0.969 ± 0.000                  | 0.864 ± 0.000        | –             | –                    | 0.262 ± 0.025        | 0.782          |
+| FrameDiff                                                                     | 0.818 ± 0.000                  | 3.919 ± 0.000        | –             | 0.668 ± 0.000        | 0.444 ± 0.064        | 0.252          |
+| FoldFlow                                                                      | 0.540 ± 0.000                  | 7.965 ± 0.000        | –             | 0.566 ± 0.000        | 0.286 ± 0.023        | 0.762          |
+| RFDiffusion                                                                   | 0.914 ± 0.000                  | 1.969 ± 0.000        | –             | 0.657 ± 0.000        | 0.352 ± 0.038        | 0.598          |
+| <b>DPLM-2 (650M)</b>                                                          | <b>0.945 ± 0.082</b>           | <b>4.451 ± 5.261</b> | –             | <b>0.637 ± 0.195</b> | <b>0.297 ± 0.049</b> | <b>0.575</b>   |
+| <b>Unconditional sequence generation.</b> (structures predicted by ESMFold)   |                                |                      |               |                      |                      |                |
+| ESMFold                                                                       | –                              | –                    | 35.846        | 0.432 ± 0.106        | 0.265 ± 0.025        | 0.990          |
+| DPLM (650M)                                                                   | –                              | –                    | 83.252        | 0.541 ± 0.187        | 0.242 ± 0.041        | 0.735          |
+| <b>DPLM-2 (650M)</b>                                                          | –                              | –                    | <b>82.246</b> | <b>0.662 ± 0.199</b> | <b>0.280 ± 0.042</b> | <b>0.700</b>   |
+
+![Figure 4: Analysis regarding secondary structure of generated proteins. (A) Violin plots showing the proportion of alpha-helices, beta-sheets, and loops for RFDiffusion, MultiFlow, ESM3, PDB, and DPLM2. (B) Bar charts showing the impact of secondary structure on designability (log_mmd) for different helix, strand, and loop ratios. (C) 3D protein structure visualizations and ternary plots showing the distribution of secondary structures for MultiFlow, PDB, and DPLM2 across lengths 70, 100, 200, 300, 400, and 500.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 4: Analysis regarding secondary structure of generated proteins. (A) Violin plots showing the proportion of alpha-helices, beta-sheets, and loops for RFDiffusion, MultiFlow, ESM3, PDB, and DPLM2. (B) Bar charts showing the impact of secondary structure on designability (log\_mmd) for different helix, strand, and loop ratios. (C) 3D protein structure visualizations and ternary plots showing the distribution of secondary structures for MultiFlow, PDB, and DPLM2 across lengths 70, 100, 200, 300, 400, and 500.
+
+Figure 4: *Analysis regarding secondary structure of generated proteins.* (A) Statistics of averaged proportions of secondary structures for proteins from different methods and PDB; (B) Secondary structure vs. designability; (C) Samples of Multiflow, PDB and DPLM-2, as well as their secondary structure distributions.
+
+data augmentation can further enhance the designability, especially for long proteins. For more details of ablation study, please refer to §A.6.
+
+#### 4.1.2 DPLM-2 GENERATES PROTEINS THAT RESEMBLES NATURAL PROTEINS
+
+To further analyze the properties of different model, we examine their secondary structure distribution against natural proteins from PDB.
+
+**Proteins sampled by DPLM-2 have secondary structures most similar to natural proteins.** As seen in Fig. 4A, structure-based models like RFDiffusion and MultiFlow generate proteins with more helices and fewer sheets and loops than natural proteins in PDB. Protein language models like ESM3 and DPLM-2 show no strong bias towards alpha helices, but ESM3 tends to generate more loops. Among the methods, DPLM-2 produces the most natural-like secondary structure proportions, closely matching PDB proteins. In Fig. 4C, proteins generated by MultiFlow contain many helices and become more globular as length increases, exhibiting idealized secondary structures. In contrast,
+
+{8}------------------------------------------------
+
+proteins generated from DPLM-2 resembles natural ones have more balanced structures, with fewer helices and more beta sheets and loops. On the other hands, simplex plots in Fig. 4C shows that while MultiFlow’s proteins are clustered in helix-rich regions, DPLM-2’s proteins span a wider area similar to natural proteins, while it rarely samples proteins composed mostly of sheets and loops, which do occur in nature. Additionally, Fig. 4B shows that the loop ratio has a significant impact on designability, where a higher proportion of loops will increase  $\text{sRMSD}$ , as loops are highly flexible. Thus, proteins with long loops, which DPLM-2 often generates, tend to have relatively high  $\text{sRMSD}$ , aligning with the results in Tab. 2.
+
+### 4.2 FORWARD FOLDING (SEQUENCE-CONDITIONED STRUCTURE PREDICTION)
+
+The goal of folding is to predict the 3D structure for the given amino acid sequence (Jumper et al., 2021). As a multimodal generative model, DPLM-2 spontaneously enables protein structure prediction task (see Fig. 1C-3) given sequence as conditioning. We assess DPLM-2 on CAMEO 2022 and a PDB data split used by Multiflow (Campbell et al., 2024). We utilize  $\text{RMSD}$  and  $\text{TMscore}$  between predicted and ground truth structure for evaluation, while DPLM-2 adopts  $\text{argmax}$  decoding for 100 sampling iterations.
+
+**Tab. 3 indicates that DPLM-2 can perform sufficiently good folding in a zero-shot manner.** Performance can be improved after further supervised fine-tuning (SFT) using folding objective ( $\max_{\theta} \log p_{\theta}(\mathbf{z}|\mathbf{s})$ ). Overall, DPLM-2 can outperform or on par with the strong baselines, while achieving close performance with ESMFold. Plus, we observe that DPLM-2 with larger model scales can attain better results than smaller ones. We suggest that DPLM-2 benefits from the evolutionary information inherited from DPLM pre-trained on the vast number of protein sequences, which can be transferred and leveraged into structure modeling.
+
+Table 3: *Structure prediction performance comparison between DPLM-2 and different baseline approaches on CAMEO 2022 datasets.* †: PVQD results are quoted from Liu et al. (2023).
+
+| Models         | CAMEO 2022    |                  | PDB date split |                  |
+|----------------|---------------|------------------|----------------|------------------|
+|                | $\text{RMSD}$ | $\text{TMscore}$ | $\text{RMSD}$  | $\text{TMscore}$ |
+| ESMFold        | 3.99/2.03     | 0.85/0.93        | 2.84/1.19      | 0.93/0.97        |
+| †PVQD          | 4.08/1.95     | 0.81/0.88        |                |                  |
+| MultiFlow      | 17.84/17.96   | 0.50/0.46        | 15.64/16.08    | 0.53/0.49        |
+| ESM3           | 6.33/2.98     | 0.85/0.92        | 4.94/2.28      | 0.87/0.93        |
+| DPLM-2 (150M)  | 9.22/7.64     | 0.75/0.81        | 8.35/5.60      | 0.76/0.82        |
+| w/ folding SFT | 7.66/4.37     | 0.80/0.86        | 6.00/3.41      | 0.83/0.88        |
+| DPLM-2 (650M)  | 7.37/4.89     | 0.79/0.86        | 5.67/3.33      | 0.83/0.88        |
+| w/ folding SFT | 6.21/3.78     | 0.84/0.89        | 3.40/1.78      | 0.89/0.94        |
+| DPLM-2 (3B)    | 6.34/3.65     | 0.83/0.89        | 4.54/2.54      | 0.86/0.92        |
+| w/ folding SFT | 5.71/3.23     | 0.85/0.90        | 3.15/1.69      | 0.90/0.95        |
+
+### 4.3 INVERSE FOLDING (STRUCTURE-CONDITIONED SEQUENCE GENERATION)
+
+The goal of inverse folding is to find an amino acid sequence that can fold to a given backbone structure. For evaluation, we employ amino acid recovery (AAR) for sequence evaluation, and we also assess the structure by self-consistency  $\text{TM-score}$  ( $\text{sCTM}$ ) between the native structure and the ESMFold-predicted structure of the generated sequence.
+
+**DPLM-2 can generate reasonable sequences that fold into the given structures.** Tab. 4
+
+presents that DPLM-2 can outperform or be on par with other co-generation models (MultiFlow, ESM3). As the model size increases, the performance in terms of sequence recovery (AAR) and structural consistency ( $\text{sCTM}$ ) improves, revealing the same scaling law observed in the folding task. We suggest that multimodal training effectively aligns the structure and sequence into the same space, such that DPLM-2 can yield the corresponding sequence without additional training.
+
+Table 4: *Comparison on inverse folding task.*
+
+| Models        | CAMEO 2022  |               | PDB date split |               |
+|---------------|-------------|---------------|----------------|---------------|
+|               | AAR         | $\text{sCTM}$ | AAR            | $\text{sCTM}$ |
+| MultiFlow     | 32.28/33.58 | 0.87/0.94     | 37.74/37.59    | 0.94/0.96     |
+| ESM3          | 47.06/46.24 | 0.90/0.95     | 49.50/49.42    | 0.94/0.97     |
+| DPLM-2 (150M) | 45.22/46.12 | 0.87/0.93     | 48.83/47.96    | 0.89/0.95     |
+| DPLM-2 (650M) | 49.01/50.10 | 0.88/0.93     | 54.80/53.07    | 0.91/0.96     |
+| DPLM-2 (3B)   | 52.36/53.72 | 0.89/0.95     | 61.67/57.91    | 0.92/0.96     |
+
+### 4.4 SCAFFOLDING WITH MIXED-MODAL MOTIF CONDITIONING
+
+The objective of motif-scaffolding is to generate a suitable scaffold to preserve the structure of the given motif and maintain its original function. We follow the experimental setting of Yin et al. (2024), with 24 motif-scaffolding problems and we sample 100 scaffolds for each motif, where we (1) first determine the length of scaffold, and then (2) keep the motif segment unchanged and sample the scaffold part conditioned on the motif. The scaffold length is sampled from a range provided by Yin et al. (2024), and when there are multiple motifs, the order of motif segments is consistent with Yin et al. (2024). We provide the 3D structure and sequence of motif as input of DPLM-2. As a multimodal model, we evaluate DPLM-2 using sequence-based, structure-based, and co-generation approaches. A scaffold is considered successful if it satisfies both criteria (1) overall designability, which is successful when  $\text{pLDDT} > 70$  (for sequence-based models) or  $\text{sCTM} > 0.8$ , and (2) motif-preserving, which is deemed successful when the predicted motif structure matches the native one with  $\text{motif-RMSD} < 1\text{Å}$ .
+
+{9}------------------------------------------------
+
+Fig. 5 reveals that DPLM-2 is capable of generate reasonable scaffolds for the given functional motifs. In sequence-based, structure-based and co-generation evaluation, DPLM-2 can outperform or be on par with the corresponding approaches in most cases, solving more motif problem and achieving higher average success rate. We compared to sequence-based method, DPLM-2 shows better performance since it allows structural input of motif, which is important for preserving motif’s structure hence the functions. Remarkably, DPLM-2 attains comparable performance with RFDiffusion when only generating scaffold structure, while achieve better performance when simultaneously designing scaffold sequence and structure, outperforming ESM3. Despite not experimentally verified, these results suggest that with DPLM-2, multimodal conditioning and generation could lead to more successful conditional protein design.
+
+![Figure 5: Evaluation of motif-scaffolding w.r.t. success rate and num. of solved problems. The figure contains two bar charts. The top chart shows 'solved problems' for six methods: ESM3 (7), DPLM (11), ESM3 (21), DPLM (18), RFDiff (20), DPLM (20), ESM3 (20), DPLM (18), and DPLM-2 (19). The bottom chart shows 'success rate' for the same methods: ESM3 (0.04), DPLM (0.19), ESM3 (0.25), DPLM (0.35), RFDiff (0.4), DPLM (0.42), ESM3 (0.18), DPLM (0.29), and DPLM-2 (0.53).](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 5: Evaluation of motif-scaffolding w.r.t. success rate and num. of solved problems. The figure contains two bar charts. The top chart shows 'solved problems' for six methods: ESM3 (7), DPLM (11), ESM3 (21), DPLM (18), RFDiff (20), DPLM (20), ESM3 (20), DPLM (18), and DPLM-2 (19). The bottom chart shows 'success rate' for the same methods: ESM3 (0.04), DPLM (0.19), ESM3 (0.25), DPLM (0.35), RFDiff (0.4), DPLM (0.42), ESM3 (0.18), DPLM (0.29), and DPLM-2 (0.53).
+
+Figure 5: Evaluation of motif-scaffolding w.r.t. success rate and num. of solved problems.
+
+### 4.5 EVALUATION OF PROTEIN REPRESENTATION LEARNING
+
+Directly access to structure information is supposed to benefit downstream protein predictive tasks. To inspect this, we evaluate DPLM-2 on a variety of protein predictive tasks utilizing the dataset provided by SaProt (Su et al., 2023), where we provide tokenized protein structure tokens along with the protein sequences to DPLM-2.
+
+**DPLM-2 can perform multimodal representation learning by leveraging both structure and sequence information.** Tab. 5 presents that DPLM-2 shows further improvement compared to sequence-only methods (ESM2, DPLM) on some tasks, indicating that DPLM-2 can leverage protein structures to generate better representations containing multimodal information for downstream tasks. However, we find that DPLM-2 falls behind the state-of-the-art structure-aware protein LM, i.e., SaProt, in most tasks and even lags behind DPLM in certain tasks. We hypothesize this is because the training data of DPLM-2, consisting of PDB and SwissProt, is smaller and differs from UniRef50, which DPLM is pretrained on, potentially causing catastrophic forgetting and suboptimal representation. To test this, we conducted an ablation study on specific tasks where DPLM-2 underperforms compared to DPLM. We observe that without large-scale sequence pretraining, DPLM-2 outperforms DPLM significantly, suggesting that: (1) Incorporating structure information enhances performance over sequence-only models. (2) Smaller datasets can lead to catastrophic forgetting, diminishing the benefits of large-scale pretraining. Please refer to §E for more details.
+
+Table 5: Performance on various protein predictive downstream tasks. †: benchmarked results are quoted from Su et al. (2023).
+
+| Models                                    | Thermostability   | HumanPPI     | Metal Ion Binding | EC           | GO           |              |              | DeepLoc      |              |
+|-------------------------------------------|-------------------|--------------|-------------------|--------------|--------------|--------------|--------------|--------------|--------------|
+|                                           |                   |              |                   |              | MF           | BP           | CC           | Subcellular  | Binary       |
+|                                           | Spearman’s $\rho$ | Acc (%)      | Acc (%)           | Fmax         | Fmax         | Fmax         | Fmax         | Acc (%)      | Acc (%)      |
+| <sup>†</sup> SaProt (650M)                | <b>0.724</b>      | <b>86.41</b> | <b>75.75</b>      | <b>0.884</b> | 0.678        | 0.356        | <b>0.414</b> | <b>85.57</b> | 93.55        |
+| <sup>†</sup> MIF-ST (Yang et al., 2022b)  | 0.694             | 75.54        | 75.08             | 0.803        | 0.627        | 0.239        | <b>0.248</b> | 78.96        | 91.76        |
+| <sup>†</sup> GearNet (Zhang et al., 2023) | 0.571             | 73.86        | 71.26             | 0.871        | 0.650        | 0.354        | 0.404        | 69.45        | 89.18        |
+| ESM2 (650M)                               | 0.691             | 84.78        | 71.88             | 0.866        | 0.676        | 0.344        | 0.402        | 83.68        | 92.28        |
+| DPLM (650M)                               | 0.695             | <b>86.41</b> | 75.15             | 0.875        | <b>0.680</b> | 0.357        | 0.409        | 84.56        | 93.09        |
+| DPLM-2 (650M)                             | 0.714             | 84.44        | 74.28             | 0.878        | <b>0.680</b> | <b>0.359</b> | <b>0.411</b> | 82.98        | <b>93.64</b> |
+
+## 5 DISCUSSIONS
+
+In this paper, we introduce DPLM-2, a multimodal diffusion protein language model that understands, generates and reasons over protein structure and sequence, aiming to serve as a multimodal foundation for protein. Despite promising performance spanning protein co-generation, folding, inverse folding and conditional motif-scaffolding with multimodal input and output, there remains several limitations deserving to be addressed. (1) Structure data: Our findings indicate that while structure awareness may help with predictive tasks, the limited structure data constrains DPLM-2’s ability to learn robust representations. It is also important to account for longer protein chains and multimers in future studies. (2) Trade-off of discrete latent representation: Tokenizing structure into discrete symbols facilitates multimodal protein language models and co-generation but may come at the cost of losing fine-grained structural details and control, such as precise atomic positions and inter-atomic distances. Future work should aim to also integrate the strengths of data-space structure-based generative models into sequence-based multimodal language models to maximize the best of both worlds.
+
+ Rest of paper (reference and Appendix) is removed.

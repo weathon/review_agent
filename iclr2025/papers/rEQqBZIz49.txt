@@ -1,0 +1,334 @@
+
+
+{0}------------------------------------------------
+
+# GREENER GRASS: ENHANCING GNNs WITH ENCODING, REWIRING, AND ATTENTION
+
+Tongzhou Liao ![ORCID icon](919a2cb85b99741a73c0c31a427236a8_img.jpg)
+
+School of Computer Science  
+Carnegie Mellon University  
+Pittsburgh, USA
+
+Barnabás Póczos
+
+School of Computer Science  
+Carnegie Mellon University  
+Pittsburgh, USA
+
+## ABSTRACT
+
+Graph Neural Networks (GNNs) have become important tools for machine learning on graph-structured data. In this paper, we explore the synergistic combination of graph encoding, graph rewiring, and graph attention, by introducing **Graph Attention with Stochastic Structures (GRASS)**, a novel GNN architecture. GRASS utilizes relative random walk probabilities (RRWP) encoding and a novel decomposed variant (D-RRWP) to efficiently capture structural information. It rewires the input graph by superimposing a random regular graph to enhance long-range information propagation. It also employs a novel additive attention mechanism tailored for graph-structured data. Our empirical evaluations demonstrate that GRASS achieves state-of-the-art performance on multiple benchmark datasets, including a 20.3% reduction in mean absolute error on the ZINC dataset.
+
+## 1 INTRODUCTION
+
+Graph Neural Networks (GNNs) have revolutionized machine learning tasks involving graph-structured data (Wu et al., 2020; Veličković, 2023). Various paradigms within GNNs offer distinct advantages: message-passing neural networks (MPNNs) effectively leverage local graph structure (Kipf and Welling, 2016) and are often complemented with graph rewiring techniques to modify the graph’s topology and facilitate message passing (Topping et al., 2021); Graph Transformers (GTs) incorporate attention mechanisms to capture global dependencies (Yun et al., 2019; Rampášek et al., 2022) and can be enhanced by graph encoding methods that enrich node and edge features with structural information (Dwivedi et al., 2021; 2023).
+
+The goal of this work is to create a new architecture that can possess the advantageous properties of the methods discussed above. To achieve this goal, we propose **Graph Attention with Stochastic Structures (GRASS)**, a GNN architecture that synergistically combines random walk encoding, random rewiring, and introduces a novel additive attention mechanism designed for graph-structured data. We conduct a series of experiments on multiple benchmark datasets and perform ablation studies to rigorously assess the contribution of each component in GRASS. Our results show that GRASS achieves competitive or superior performance compared to existing methods on multiple popular datasets, suggesting that the synergy of random walk encoding, random rewiring, and a graph-tailored attention mechanism can effectively enhance GNNs.
+
+### Our Contributions.
+
+- We propose GRASS, a GNN architecture that integrates random walk encoding, random rewiring, and a novel additive attention mechanism designed for graphs.
+- We analyze these components with respect to desirable properties of a GNN and provide insights into how they contribute to the model’s performance.
+- We provide empirical evidence through experiments and ablation studies that a carefully selected combination of these components can lead to improved performance on multiple benchmark datasets.
+
+In the remainder of the paper, we review related work in Section 2, describe the architecture of GRASS in Section 3, present experimental results in Section 4, and draw conclusions in Section 5.
+
+{1}------------------------------------------------
+
+## 2 RELATED WORK
+
+In this section, we summarize some of the previous work related to the main concepts of GRASS.
+
+**Message-Passing Neural Networks.** Message-Passing Neural Networks (MPNNs), such as Graph Convolutional Networks (GCNs) (Kipf and Welling, 2016), GraphSAGE (Hamilton et al., 2017), and Graph Isomorphism Networks (GIN) (Xu et al., 2018), propagate information within local neighborhoods of a graph. By aligning computation with the structure of the graph, MPNNs offer a strong inductive bias for graph-structured data (Ma et al., 2023).
+
+**Graph Rewiring.** Graph rewiring techniques modify the topology of graphs to improve their connectivity, often leveraging spectral properties to guide the process (Topping et al., 2021; Amaiz-Rodriguez et al., 2022). Rewiring improves MPNNs by alleviating issues in information propagation, such as underreaching, which occurs when distant nodes cannot communicate (Alon and Yahav, 2020). In this work, we explore a form of random rewiring that superimposes a random regular graph on the input graph.
+
+**Graph Transformers.** Attention mechanisms (Vaswani et al., 2017) allow GNNs to weigh the importance of neighboring nodes during aggregation (Veličković et al., 2017). Graph Transformers (GTs), such as Graph Transformer Network (GTN) (Yun et al., 2019), extend this idea to global attention across nodes. GTs often inherit attention mechanisms designed for sequences, which may not be optimal for graphs (Chen et al., 2024). Designing attention mechanisms specifically for graph-structured data is an active area of research, and we aim to contribute to it by proposing a novel additive attention mechanism.
+
+**Graph Encoding.** Enhancing node and edge features with graph encodings has been shown to improve GNN performance, especially for GTs (Dwivedi et al., 2023). Techniques such as Laplacian positional encodings (LapPE) (Dwivedi et al., 2021) and relative random walk probabilities (RRWP) encoding (Ma et al., 2023) incorporate structural information into node and edge features, enhancing GTs, which otherwise lack a graph inductive bias (Ma et al., 2023). We utilize RRWP encoding in GRASS, and propose a decomposed variant (D-RRWP) with improved computational efficiency.
+
+**Notable Combinations.** The General, Powerful, Scalable (GPS) Graph Transformer (Rampášek et al., 2022) represents a hybrid of MPNN and GT, merging the inductive bias of message passing with the global perspective of Transformers. Exphormer (Shirzad et al., 2023) combines GTs and rewiring by adding random edges and supernodes, generalizing BigBird (Zaheer et al., 2020), a sparse Transformer, to graph-structured data.
+
+Our work builds upon these paradigms by incorporating random walk encoding and random rewiring, and we also create a novel additive attention mechanism tailored for graphs. Although RRWP encoding and random rewiring have been explored separately (Ma et al., 2023; Shirzad et al., 2023), their combination with each other and a graph-tailored attention mechanism is, to the best of our knowledge, novel. Our experiments show that this architecture not only matches but often exceeds state-of-the-art performance across a wide range of benchmark problems.
+
+## 3 METHODS
+
+In this section, we introduce the design of GRASS. We begin by examining the desirable qualities of a GNN, which guide our architectural design. Subsequently, we introduce the components of GRASS by following the order of data processing in our model, and describe the role of each component in terms of the design goals.
+
+**Design Goals.** We center our design around what we consider to be the key characteristics of an effective GNN. We will focus on the processing of nodes (*N1–N3*) and edges (*E1–E2*) of the model.
+
+*N1. Permutation Equivariance.* Unlike tokens in a sentence or pixels in an image, nodes in a graph are unordered, and therefore the model should be permutation equivariant by construction. Since reordering the nodes of a graph does not change the graph, permuting the nodes of the
+
+{2}------------------------------------------------
+
+![Figure 1: The structure of GRASS. The diagram illustrates the training process. It starts with an 'Input Graph' (a simple undirected graph with four nodes). This is followed by '+ (D-)RRWP Encoding', where nodes are colored black and grey. A dashed box labeled 'Training Loop' contains '+ Random Rewiring' (the graph is rewired) and 'GRASS Attention Layers' (consisting of 'Attention', 'Attention', and 'Pooling (optional)' blocks). The final output is an 'Output Graph' with the same structure but different node colors. To the right, a legend shows 'Original Edge Representation' (a blue bar with four segments) and 'Added Edge Representation' (an orange bar with four segments), both being added to a '(D-)RRWP Encoding' (a grey bar with four segments). Below this, it shows 'Distinct Embedding for Added Edges' (a blue bar with four segments) and '(D-)RRWP Encoding' (a grey bar with four segments).](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 1: The structure of GRASS. The diagram illustrates the training process. It starts with an 'Input Graph' (a simple undirected graph with four nodes). This is followed by '+ (D-)RRWP Encoding', where nodes are colored black and grey. A dashed box labeled 'Training Loop' contains '+ Random Rewiring' (the graph is rewired) and 'GRASS Attention Layers' (consisting of 'Attention', 'Attention', and 'Pooling (optional)' blocks). The final output is an 'Output Graph' with the same structure but different node colors. To the right, a legend shows 'Original Edge Representation' (a blue bar with four segments) and 'Added Edge Representation' (an orange bar with four segments), both being added to a '(D-)RRWP Encoding' (a grey bar with four segments). Below this, it shows 'Distinct Embedding for Added Edges' (a blue bar with four segments) and '(D-)RRWP Encoding' (a grey bar with four segments).
+
+Figure 1: The structure of GRASS. Prior to training, GRASS precomputes (D-)RRWP encodings. At each training iteration, it rewires the input graph and adds distinct embeddings to added edges.
+
+input graph of a GNN layer should only result in the same permutation of its output (Veličković, 2023). Formally, let  $f(\mathbf{X}, \mathbf{E}, \mathbf{A})$  be the function computed by a layer, where  $\mathbf{X} \in \mathbb{R}^{|V| \times n_{\text{node}}}$  represents node features with  $n_{\text{node}}$  dimensions,  $\mathbf{E} \in \mathbb{R}^{|V| \times |V| \times n_{\text{edge}}}$  represents edge features with  $n_{\text{edge}}$  dimensions, and  $\mathbf{A} \in \{0, 1\}^{|V| \times |V|}$  represents the adjacency matrix (edge weights are considered scalar-valued edge features). If the layer is permutation equivariant and  $(\mathbf{X}_{\text{out}}, \mathbf{E}_{\text{out}}) = f(\mathbf{X}_{\text{in}}, \mathbf{E}_{\text{in}}, \mathbf{A})$ , then  $(\mathbf{P}\mathbf{X}_{\text{in}}, \mathbf{P}\mathbf{E}_{\text{in}}\mathbf{P}^\top) = f(\mathbf{P}\mathbf{X}_{\text{in}}, \mathbf{P}\mathbf{E}_{\text{in}}\mathbf{P}^\top, \mathbf{P}\mathbf{A}\mathbf{P}^\top)$  for an arbitrary permutation matrix  $\mathbf{P}$ .
+
+- N2. Effective Communication** – The model should facilitate long-range communication between nodes. Numerous real-world tasks require the GNN to capture interactions between distant nodes (Dwivedi et al., 2022). However, MPNN layers, which propagate information locally, frequently fail in this regard (Ma et al., 2023). A major challenge is underreaching, where an MPNN with  $l$  layers is incapable of supporting communication between two nodes  $i, j$  with distance  $\delta(i, j) > l$  (Alon and Yahav, 2020). Another challenge is oversquashing, where the structure of the graph forces information from a large set of nodes to squeeze through a small set of nodes to reach its target (Topping et al., 2021). A node with a constant-size feature vector may need to relay information from exponentially many nodes (with respect to model depth), leading to excessive compression of messages in deep MPNNs (Alon and Yahav, 2020).
+- N3. Selective Aggregation** – The model should only aggregate information from relevant nodes and edges. MPNN layers commonly update node representations by unconditionally summing or averaging messages from neighboring nodes and edges (Veličković, 2023). In deep models, this can lead to oversmoothing, where the representation of nodes becomes too similar to be effectively classified in the process of repeated aggregation (Chen et al., 2020). Therefore, when required by the task, nodes should aggregate information from relevant neighbors only, instead of doing so unconditionally, in order to maintain distinguishability of node representations.
+- E1. Relationship Representation** – The model should effectively represent the relationships between nodes with edges. Edges in graph-structured data often convey meaningful information about the relationship between the nodes they connect (Gong and Cheng, 2019). In addition to the semantic relationships represented by edge features of the input graph, structural relationships can be represented by edge encodings added by the model (Rampášek et al., 2022). To capture the relationships between nodes, edge representations should combine information from both edge features and encodings, and undergo deep processing through multiple layers.
+- E2. Directionality Preservation** – The model should preserve and utilize information carried by edge directions. Many graphs representing real-world relationships are inherently directed (Rossi et al., 2024). Although edge directionality has been shown to carry important information for various tasks, many GNN variants require undirected graphs as input, to prevent edge directions from restricting information flow (Rossi et al., 2024). It would be beneficial for the model’s expressivity if edge directionality information could be preserved without severely limiting communication.
+
+**The Structure of GRASS.** The high-level structure of GRASS is illustrated in Figure 1. Prior to training, GRASS precomputes the (D-)RRWP encoding of each graph in the dataset. At each training iteration, GRASS randomly rewires the input graph, applies node and edge encodings, and passes the graph through multiple attention layers, producing an output graph with the same structure. For tasks that require a graph-level representation, such as graph regression and graph classification, pooling is performed on the output graph to obtain a single output vector.
+
+{3}------------------------------------------------
+
+### 3.1 GRAPH ENCODING
+
+Extracting structural information plays an important role in graph-structured learning and is crucial for *Relationship Representation*. To this end, we apply relative random walk probabilities (RRWP) encoding (Ma et al., 2023) to represent structural relationships. In addition, we propose D-RRWP, a decomposed variant of RRWP that offers improved computational efficiency.
+
+**RRWP Encoding.** RRWP encoding has been shown to be an expressive representation of graph structure both theoretically and practically (Ma et al., 2023), serving as a major source of structural information for the model. To calculate random walk probabilities, we first obtain the transition matrix  $\mathbf{T}$ , where  $\mathbf{T}_{i,j}$  represents the probability of moving from node  $i$  to node  $j$  in a random walk step. It is defined as  $\mathbf{T} = \mathbf{D}^{-1}\mathbf{A} \in [0, 1]^{|V| \times |V|}$ , where  $\mathbf{A} \in \{0, 1\}^{|V| \times |V|}$  is the adjacency matrix of the input graph  $G$ , and  $\mathbf{D} \in \mathbb{N}^{|V| \times |V|}$  is its degree matrix, a diagonal matrix. The powers of  $\mathbf{T}$  are stacked to form the RRWP tensor  $\mathbf{P}$ , with  $\mathbf{P}_{h,i,j}$  representing the probability that a random walker who starts at node  $i$  lands at node  $j$  at the  $h$ -th step. Formally,  $\mathbf{P} = [\mathbf{T}, \mathbf{T}^2, \dots, \mathbf{T}^k] \in [0, 1]^{k \times |V| \times |V|}$ , where  $k$  is the number of random walk steps. The diagonal elements  $\mathbf{P}_{:,i,i}$ , where  $i \in V_G$ , are used as node encodings, similarly to RWSE (Dwivedi et al., 2021). The rest are used as edge encodings when the corresponding edge is present in the rewired graph  $H$ . All node and edge encodings undergo batch normalization (BN) (Ioffe and Szegedy, 2015). Here,  $\mathbf{W}$  denotes trainable weights,  $n$  denotes the dimensionality of hidden layers, and  $\parallel$  denotes concatenation.
+
+$$\mathbf{x}_i^{\text{RW}} = \mathbf{W}_{\text{node-enc}} \text{BN}(\mathbf{P}_{:,i,i}) \in \mathbb{R}^n, \quad (1)$$
+
+$$\mathbf{e}_{i,j}^{\text{RW}} = \mathbf{W}_{\text{edge-enc}} \text{BN}(\mathbf{P}_{:,i,j} \parallel \mathbf{P}_{:,j,i}) \in \mathbb{R}^n. \quad (2)$$
+
+Before entering attention layers, RRWP encodings are added to both node features and edge features, including those of edges added by random rewiring. The node encodings are additionally accompanied by degree information (Ying et al., 2021). Here,  $d^+(i)$  and  $d^-(i)$  denote the out-degree and in-degree of node  $i$ , respectively.
+
+$$\mathbf{x}_i^0 = \mathbf{x}_i^{\text{in}} + \mathbf{x}_i^{\text{RW}} + \mathbf{W}_{\text{deg}} \text{BN}(d^+(i) \parallel d^-(i)) \in \mathbb{R}^n, \quad (3)$$
+
+$$\mathbf{e}_{i,j}^0 = \mathbf{e}_{i,j}^{\text{in}} + \mathbf{e}_{i,j}^{\text{RW}} \in \mathbb{R}^n. \quad (4)$$
+
+**Improving Efficiency.** RRWP encodings take  $O(k|V||E|)$  time to compute and  $O(k|V|^2)$  space to store (Ma et al., 2023). On extremely large graphs, this could be computationally prohibitive even when computed once per dataset. We propose D-RRWP, a decomposed variant of RRWP. Instead of computing the exact random walk probabilities  $\mathbf{P}$  from the transition matrix  $\mathbf{T}$ , we approximate it with its truncated eigendecomposition to reduce the complexity to  $O(km(|V| + |E|))$  time and  $O((k+m)|V| + k|E|)$  space, where  $m \leq |V|$  is the number of eigenpairs used for the approximation.
+
+To ensure that the transition matrix is diagonalizable, we replace  $\mathbf{T}$  with  $\mathbf{T}_{\text{sym}} = \mathbf{D}^{-\frac{1}{2}}\mathbf{A}\mathbf{D}^{-\frac{1}{2}}$ , which is always diagonalizable if  $\mathbf{A}$  is a symmetric adjacency matrix—that of an undirected graph. Given the degree matrix  $\mathbf{D}$ , this modification does not result in a loss of information, because  $\mathbf{T}_{\text{sym}} = \mathbf{D}^{\frac{1}{2}}\mathbf{T}\mathbf{D}^{-\frac{1}{2}}$ . Since  $\mathbf{T}_{\text{sym}}$  is diagonalizable, its truncated eigendecomposition coincides with its truncated singular value decomposition (SVD), which provides the optimal low-rank approximation of the matrix (Eckart and Young, 1936).
+
+Let  $\tilde{\mathbf{T}}_{\text{sym}} = \tilde{\mathbf{Q}}\tilde{\mathbf{\Lambda}}\tilde{\mathbf{Q}}^\top$  be the truncated eigendecomposition of  $\mathbf{T}_{\text{sym}}$ , where  $\tilde{\mathbf{\Lambda}} \in [-1, 1]^{m \times m}$  is a diagonal matrix containing the  $m$  largest eigenvalues (in magnitude) of  $\mathbf{T}_{\text{sym}}$  and  $\tilde{\mathbf{Q}} \in \mathbb{R}^{|V| \times m}$  hold the corresponding eigenvectors. Decomposing  $\mathbf{T}_{\text{sym}}$  takes  $O(m|E|)$  time with the Lanczos algorithm (Lanczos, 1950; Lehoucq et al., 1998) and requires  $O(m|V|)$  space. We approximate the  $h$ -th power of  $\mathbf{T}_{\text{sym}}$ , i.e. the random walk probabilities  $\mathbf{P}_{h,i,j} = (\mathbf{T}_{\text{sym}}^h)_{i,j}$ , by computing  $(\tilde{\mathbf{T}}_{\text{sym}}^h)_{i,j} = (\tilde{\mathbf{Q}}\tilde{\mathbf{\Lambda}}^h\tilde{\mathbf{Q}}^\top)_{i,j} = (\tilde{\mathbf{Q}}_{:,i} \odot \tilde{\mathbf{Q}}_{:,j}) \cdot \text{diag}(\tilde{\mathbf{\Lambda}}^h)$ . Here,  $\odot$  denotes the Hadamard product. Computing this approximation for all nodes  $(i, i)$ , edges  $(i, j)$ , and random walk steps  $1 \leq h \leq k$  requires  $O(km(|V| + |E|))$  time and  $O(k(|V| + |E|))$  space. This is efficient because raising the diagonal matrix  $\tilde{\mathbf{\Lambda}}$  to the powers  $1$  to  $k$  only costs  $O(km)$  time and space. If  $\mathbf{T}_{\text{sym}}$  were not diagonalizable and we had to use SVD instead, efficient power computation would no longer be possible.
+
+Since  $\tilde{\mathbf{\Lambda}}^h$  can take at most  $m$  linearly independent values as we vary  $h$ , increasing  $k$  beyond  $m$  does not add additional information to the encoding. Consequently, we fix  $k = m$  in our experiments.
+
+{4}------------------------------------------------
+
+### 3.2 RANDOM REWIRING
+
+To achieve *Effective Communication*, GRASS rewires the input graph by superimposing a random regular graph. We present some motivations for using random regular graphs instead of deterministic or non-regular graphs in Appendix A.1. Shirzad et al. (2023) uses a similar technique in generalizing BigBird (Zaheer et al., 2020) to graphs, and discusses additional motivations. We also demonstrate the advantage of using random regular graphs with empirical results shown in Figure 4 and Table 3. Here, we provide details on random regular graph generation and input graph rewiring.
+
+**Generating Random Regular Graphs.** We generate random regular graphs with the Permutation Model (Friedman et al., 1989) that we describe here and with pseudocode in Appendix A.2. For a given positive, even parameter  $r \geq 2$ , and for the input graph  $G = (V_G, E_G)$ , we randomly generate a corresponding  $r$ -regular graph by independently and uniformly sampling  $\frac{r}{2}$  random permutations  $\sigma_1, \sigma_2, \dots, \sigma_{\frac{r}{2}}$  from  $S_{|V_G|}$ , the symmetric group defined over the nodes of the graph  $G$ . Using these random permutations, we construct a random pseudograph  $\tilde{R} = (V_G, E_{\tilde{R}})$ , where the edge set  $E_{\tilde{R}}$  of the graph  $\tilde{R}$  is
+
+$$E_{\tilde{R}} = \bigsqcup_{i \in V_G, j=1, \dots, \frac{r}{2}} \{\{i, \sigma_j(i)\}\}. \quad (5)$$
+
+Here,  $\bigsqcup$  denotes the disjoint union of sets. The resulting graph  $\tilde{R}$  is a random regular pseudograph, and the probability that  $\tilde{R}$  is any given regular pseudograph with  $|V_G|$  nodes and degree  $r$  is uniform (Friedman et al., 1989).
+
+Being a pseudograph,  $\tilde{R}$  might not be simple—it might contain self-loops and multi-edges. Even when  $|V_G|$  is large, the probability that  $\tilde{R}$  is simple—that it does not contain self-loops or multi-edges—would not be prohibitively small. In particular, it has an asymptotically tight lower bound (Ellis, 2011)
+
+$$\lim_{|V_G| \rightarrow \infty} \Pr[\tilde{R} \text{ is simple}] = e^{-\left(\frac{r^2}{2} + r\right)}. \quad (6)$$
+
+Therefore, if we regenerate  $\tilde{R}$  when it is not simple, the expected number of trials required for us to obtain a simple  $\tilde{R}$  is upper-bounded by  $e^{\frac{r^2}{2} + r}$ , which can be kept low by keeping  $r$  low. In practice, GRASS requires the superimposed graph to be simple to avoid passing duplicate messages. Meanwhile, the regularity of the graph is desired but not strictly required. Therefore, when  $\tilde{R}$  is not simple, we remove self-loops and multi-edges from  $\tilde{R}$  to obtain  $R$ , which is always simple but not necessarily regular.
+
+Our empirical results presented in Figure 4 and Table 3 suggest that a small value of  $r$  is often sufficient. In our experiments, we use  $r \leq 6$ .
+
+**Rewiring the Input Graph.** To rewrite the input graph  $G$ , GRASS superimposes the edges of  $R$  on  $G$ , producing a new graph  $H = (V_G, E_G \sqcup E_R)$  that is used as input for subsequent stages of the model. Since it is possible that  $E_G \cap E_R \neq \emptyset$ , there might be multi-edges in  $H$ , and in these cases,  $H$  is not a simple graph. GRASS does not remove these multi-edges to avoid biasing the distribution of the superimposed random regular graph.
+
+As illustrated in Figure 1, the added edges  $E_R$  are given a distinct embedding to distinguish them from the existing edges  $E_G$ . This aids *Selective Aggregation*, as it allows a node to select between its neighbors and a random node. The added edges also receive (D-)RRWP encodings to enhance *Relationship Representation*. Although an added edge  $(i, j) \in E_R$  lacks edge features that represent semantic relationships in the input graph, the structural relationship between nodes  $i$  and  $j$  can be represented by the random walk probabilities  $\mathbf{P}_{:,i,j}$  given to that edge as its (D-)RRWP encoding.
+
+### 3.3 ATTENTION MECHANISM
+
+Many GTs emulate the structure of Transformers designed for Euclidean data (Dwivedi and Bresson, 2020; Kreuzer et al., 2021; Ying et al., 2021; Hussain et al., 2022; Shirzad et al., 2023). Meanwhile, GRASS uses attentive node aggregators with attention scores computed by MLP edge aggregators, which is a more tailored attention mechanism for graph-structured data. Figure 3 provides a simple
+
+{5}------------------------------------------------
+
+![Figure 2: Visualization of the proposed random rewiring technique. (a) shows an input graph G with 6 nodes and 4 edges. (b) and (c) show two different rewired versions of G, each with 6 nodes and 6 edges, where some original edges are removed and new ones are added to improve connectivity.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Figure 2: Visualization of the proposed random rewiring technique. (a) shows an input graph G with 6 nodes and 4 edges. (b) and (c) show two different rewired versions of G, each with 6 nodes and 6 edges, where some original edges are removed and new ones are added to improve connectivity.
+
+Figure 2: Visualization of the proposed random rewiring technique. Solid lines denote existing edges of the input graph and dashed lines denote added edges. (a) An example of the input graph  $G$  that has poor connectivity. (b, c) Two among all possible instances of the randomly rewired graph  $H$  with  $r = 2$ . They have better connectivity than the input graph.
+
+![Figure 3: Simplified visualization of the GRASS attention mechanism. (a) shows an edge aggregator that extracts node relations to update edge representations. (b) shows an attentive node aggregator that weights attention from a node to itself, residual connections, and activation functions.](88b0f3f4393228e9ea4d6542aef7c399_img.jpg)
+
+Figure 3: Simplified visualization of the GRASS attention mechanism. (a) shows an edge aggregator that extracts node relations to update edge representations. (b) shows an attentive node aggregator that weights attention from a node to itself, residual connections, and activation functions.
+
+Figure 3: Simplified visualization of the GRASS attention mechanism. (a) The edge aggregator extracting node relations to update edge representations. (b) The attentive node aggregator weighted by edge representations. For simplicity, connections, and activation functions are omitted here. Figure 5 provides a more detailed visualization.
+
+visualization, and Figure 5 illustrates its structure in detail. The GRASS attention mechanism is defined as follows, where  $\mathcal{N}^-$  denotes in-neighbors,  $\mathbf{W}$  denotes trainable weights, and  $\varepsilon$  denotes a small constant added for numerical stability. For simplicity, biases are not shown in these equations.
+
+$$\mathbf{s}_{i,j}^l = \text{dropout}(\text{exp}(\mathbf{W}_{\text{attn}\leftarrow\text{edge}}^l \mathbf{e}_{i,j}^{l-1})) \in \mathbb{R}^{+n}, \quad (7)$$
+
+$$\mathbf{a}_{i,j}^l = \frac{\mathbf{s}_{i,j}^l}{\sum_{h \in \mathcal{N}^-(j) \cup \{j\}} \mathbf{s}_{h,j}^l + \varepsilon} \in \mathbb{R}^{+n}, \quad (8)$$
+
+$$\tilde{\mathbf{x}}_j^l = \mathbf{W}_{\text{tail}\leftarrow\text{tail}}^l \mathbf{x}_j^{l-1} + \sum_{i \in \mathcal{N}^-(j) \cup \{j\}} \mathbf{a}_{i,j}^l \odot (\mathbf{W}_{\text{tail}\leftarrow\text{head}}^l \mathbf{x}_i^{l-1} + \mathbf{W}_{\text{tail}\leftarrow\text{edge}}^l \mathbf{e}_{i,j}^{l-1}) \in \mathbb{R}^n, \quad (9)$$
+
+$$\tilde{\mathbf{e}}_{j,i}^l = \mathbf{W}_{\text{edge}\leftarrow\text{edge}}^l \mathbf{e}_{i,j}^{l-1} + \mathbf{W}_{\text{edge}\leftarrow\text{head}}^l \mathbf{x}_i^{l-1} + \mathbf{W}_{\text{edge}\leftarrow\text{tail}}^l \mathbf{x}_j^{l-1} \in \mathbb{R}^n. \quad (10)$$
+
+**Attention Weights.** This attention mechanism is unique in the way it uses edge representations as the medium of attention weights. To achieve *Relationship Representation*, edge representations must be updated alongside node representations (Zhou et al., 2023). A directed edge is an ordered pair of nodes, and an undirected edge can be represented by two directed edges with opposite directions. The orderedness of nodes connected by an edge allows us to use an MLP as the edge aggregator while preserving *Permutation Equivariance*. Assuming that *Relationship Representation* is satisfied, edge features would already represent node relationships, which could be used as attention weights  $\mathbf{a}_{i,j}$  after applying a linear layer and performing a component-wise softmax over the neighborhood.
+
+**Random Edge Removal.** To complement the proposed random rewiring technique, which adds edges but never removes them, GRASS attention randomly removes edges in computing attention weights with the dropout function in Equation 7. The goal is to reduce the model’s dependence on the presence of particular edges in the graph, facilitating *Selective Aggregation*. This can also be seen as a generalization of DropKey (Li et al., 2022) to graphs, because it randomly masks the attention matrix prior to the softmax operation, unlike DropAttention (Zehui et al., 2019).
+
+**Edge Flipping.** While the proposed attention mechanism naturally achieves *Directionality Preservation* by aggregating information in the same direction as edges, it can severely restrict the flow of information, putting it in conflict with *Effective Communication*. As a solution, the direction of each edge is switched from one layer to the next: in odd-numbered layers, the directions match those of the edges in the rewired graph  $H$ , while in even-numbered layers, they are reversed. This enables the model to propagate information in both directions even when the input graph is directed, improving its expressivity. In Equation 10, we compute  $\tilde{\mathbf{e}}_{j,i}^l$ , the updated representation of edge  $j \rightarrow i$  by using  $\mathbf{e}_{i,j}^{l-1}$ , the representation of edge  $i \rightarrow j$  from the previous layer, effectively flipping the edge.
+
+**Feed-Forward Network.** Similar to Transformers, the output of the attention mechanism is passed through an FFN. Here,  $\phi$  denotes a ReLU-like (Nair and Hinton, 2010; Ramachandran et al., 2017) nonlinear activation function, which we choose to be Mish (Misra, 2019).
+
+$$\tilde{\mathbf{x}}_i^l = \mathbf{W}_{\text{node-out}}^l \phi(\tilde{\mathbf{x}}_i^l + \mathbf{b}_{\text{node-act}}^l) + \mathbf{b}_{\text{node-out}}^l \in \mathbb{R}^n, \quad (11)$$
+
+$$\tilde{\mathbf{e}}_{i,j}^l = \mathbf{W}_{\text{edge-out}}^l \phi(\tilde{\mathbf{e}}_{i,j}^l + \mathbf{b}_{\text{edge-act}}^l) + \mathbf{b}_{\text{edge-out}}^l \in \mathbb{R}^n. \quad (12)$$
+
+{6}------------------------------------------------
+
+Table 1: Performance on GNN Benchmark Datasets. The performance of GRASS shown here is the mean  $\pm$  s.d. of 16 runs on ZINC, and 8 runs on other datasets. The **best** and **second-best** results are highlighted. Performance numbers other than that of GRASS are adapted from Ma et al. (2023), Shirzad et al. (2023), and Chen et al. (2024). “-” indicates experiments not reported in these works.
+
+| Model | ZINC<br>MAE $\downarrow$ | MNIST<br>Accuracy $\uparrow$ | CIFAR10<br>Accuracy $\uparrow$ | PATTERN<br>Accuracy $\uparrow$ | CLUSTER<br>Accuracy $\uparrow$ |
+|-|-|-|-|-|-|
+| GCN | $0.367 \pm 0.011$ | $90.705 \pm 0.218$ | $55.710 \pm 0.381$ | $71.892 \pm 0.334$ | $68.498 \pm 0.976$ |
+| GIN | $0.526 \pm 0.051$ | $96.485 \pm 0.252$ | $55.255 \pm 1.527$ | $85.387 \pm 0.136$ | $64.716 \pm 1.553$ |
+| GAT | $0.384 \pm 0.007$ | $95.535 \pm 0.205$ | $64.223 \pm 0.455$ | $78.271 \pm 0.186$ | $70.587 \pm 0.447$ |
+| GatedGCN | $0.282 \pm 0.015$ | $97.340 \pm 0.143$ | $67.312 \pm 0.311$ | $85.568 \pm 0.088$ | $73.840 \pm 0.326$ |
+| GatedGCN-LSPE | $0.090 \pm 0.001$ | - | - | - | - |
+| PNA | $0.188 \pm 0.004$ | $97.94 \pm 0.12$ | $70.35 \pm 0.63$ | - | - |
+| DGN | $0.168 \pm 0.003$ | - | $72.838 \pm 0.417$ | $86.680 \pm 0.034$ | - |
+| GSN | $0.101 \pm 0.010$ | - | - | - | - |
+| CIN | $0.079 \pm 0.006$ | - | - | - | - |
+| CRaWI | $0.085 \pm 0.004$ | $97.944 \pm 0.050$ | $69.013 \pm 0.259$ | - | - |
+| GIN-AK+ | $0.080 \pm 0.001$ | - | $72.19 \pm 0.13$ | $86.850 \pm 0.057$ | - |
+| SAN | $0.139 \pm 0.006$ | - | - | - | $76.691 \pm 0.65$ |
+| Graphormer | $0.122 \pm 0.006$ | - | - | - | - |
+| K-Subgraph SAT | $0.094 \pm 0.008$ | - | - | $86.848 \pm 0.037$ | $77.856 \pm 0.104$ |
+| EGT | $0.108 \pm 0.009$ | $98.173 \pm 0.087$ | $68.702 \pm 0.409$ | $86.821 \pm 0.020$ | $79.232 \pm 0.348$ |
+| Graphormer-URPE | $0.086 \pm 0.007$ | - | - | - | - |
+| Graphormer-GD | $0.081 \pm 0.009$ | - | - | - | - |
+| GPS | $0.070 \pm 0.004$ | - | $72.298 \pm 0.356$ | $86.685 \pm 0.059$ | $78.016 \pm 0.180$ |
+| Exphormer | - | $98.55 \pm 0.039$ | $74.69 \pm 0.125$ | $86.74 \pm 0.015$ | $78.07 \pm 0.037$ |
+| GRIT | <b><math>0.059 \pm 0.002</math></b> | $98.108 \pm 0.111$ | $76.468 \pm 0.881$ | <b><math>87.196 \pm 0.076</math></b> | <b><math>80.026 \pm 0.277</math></b> |
+| NeuralWalker | $0.065 \pm 0.001$ | <b><math>98.760 \pm 0.079</math></b> | <b><math>80.027 \pm 0.185</math></b> | $86.977 \pm 0.012$ | $78.189 \pm 0.188$ |
+| GRASS (ours) | <b><math>0.047 \pm 0.001</math></b> | <b><math>98.932 \pm 0.076</math></b> | <b><math>83.750 \pm 0.141</math></b> | <b><math>89.177 \pm 0.313</math></b> | <b><math>79.541 \pm 0.173</math></b> |
+
+**Normalization and Residual Connection.** We use post-normalization in residual connections, which has been shown to improve the expressiveness of Transformers (Liu et al., 2020). The residual connection is scaled by a constant  $\alpha$  to improve training stability (Wang et al., 2022).
+
+$$\mathbf{x}'_i = \text{BN}(\mathbf{x}'^{l-1}_i + \alpha \mathbf{x}'_i) \in \mathbb{R}^n, \quad (13)$$
+
+$$\mathbf{e}'_{i,j} = \text{BN}(\mathbf{e}'^{l-1}_{i,j} + \alpha \mathbf{e}'_{i,j}) \in \mathbb{R}^n. \quad (14)$$
+
+**Graph Pooling.** For graph-level tasks, graph pooling is required at the output of a GNN to produce a vector representation of each graph, capturing global properties relevant to the task (Wu et al., 2020). GRASS employs sum pooling—a simple method as expressive as the Weisfeiler-Lehman graph isomorphism test (Leman and Weisfeiler, 1968)—while many more complicated pooling methods are not as expressive (Baek et al., 2021). Considering the randomness of the added edges, they are pooled separately from the preexisting edges in the input graph  $G$ , because the pooled output of the randomly added edges may exhibit a different distribution than that of the preexisting edges. Here,  $\parallel$  denotes concatenation.
+
+$$\mathbf{y} = \sum_{i \in V_G} \mathbf{x}'_i \parallel \sum_{(i,j) \in E_G} \mathbf{e}'_{i,j} \parallel \sum_{(i,j) \in E_R} \mathbf{e}'_{i,j} \in \mathbb{R}^{3n}. \quad (15)$$
+
+### 3.4 INTERPRETATIONS OF GRASS
+
+**A Message Passing Perspective.** GRASS is an MPNN on a noisy graph. In an MPNN, information is propagated along the edges of the input graph, defined by its adjacency matrix (Veličković, 2023). GRASS can be seen as an MPNN that injects additive and multiplicative noise into the adjacency matrix, through random rewiring and random edge removal, respectively. The adjacency matrix  $\mathbf{A}_M$  followed by message passing is given by
+
+$$\mathbf{A}_M = (\mathbf{A}_G + \mathbf{A}_R) \cdot \mathbf{A}_D, \quad (16)$$
+
+where  $\mathbf{A}_G$  is the adjacency matrix of the input graph  $G$ ,  $\mathbf{A}_R$  is that of the superimposed random regular graph  $R$ ,  $\mathbf{A}_D$  is a random attention mask sampled by the dropout function in Equation 7 (which can also be seen as the adjacency matrix of a random graph),  $+$  denotes element-wise OR, and  $\cdot$  denotes element-wise AND. Noise injection is well known as an effective regularizer (Noh et al., 2017), and for graph-structured data, the random removal of edges has demonstrated regularization effects (Rong et al., 2019).
+
+{7}------------------------------------------------
+
+Table 2: Performance on LRGB datasets. The performance of GRASS shown here is the mean  $\pm$  s.d. of 8 runs. The **best** and **second-best** results are highlighted. Performance numbers other than that of GRASS are adapted from Gutteridge et al. (2023), Tönshoff et al. (2023), Ma et al. (2023), Shirzad et al. (2023), and Chen et al. (2024). “-” indicates experiments not reported in these works. \*These models are re-tuned by Tönshoff et al. (2023) to provide stronger baselines.
+
+| Model | Peptides-func<br>AP $\uparrow$ | Peptides-struct<br>MAE $\downarrow$ | PascalVOC-SP<br>Macro F1 $\uparrow$ | COCO-SP<br>Macro F1 $\uparrow$ |
+|-|-|-|-|-|
+| GCN* | $0.6860 \pm 0.0050$ | <b><math>0.2460 \pm 0.0007</math></b> | $0.2078 \pm 0.0031$ | $0.1338 \pm 0.0007$ |
+| GINE* | $0.6621 \pm 0.0067$ | $0.2473 \pm 0.0017$ | $0.2718 \pm 0.0054$ | $0.2125 \pm 0.0009$ |
+| GatedGCN* | $0.6765 \pm 0.0047$ | $0.2477 \pm 0.0009$ | $0.3880 \pm 0.0040$ | $0.2922 \pm 0.0018$ |
+| DiGL+MPNN | $0.6469 \pm 0.0019$ | $0.3173 \pm 0.0007$ | $0.2824 \pm 0.0039$ | - |
+| DiGL+MPNN+LapPE | $0.6830 \pm 0.0026$ | $0.2616 \pm 0.0018$ | $0.2921 \pm 0.0038$ | - |
+| MixHop-GCN | $0.6592 \pm 0.0036$ | $0.2921 \pm 0.0023$ | $0.2506 \pm 0.0133$ | - |
+| MixHop-GCN+LapPE | $0.6843 \pm 0.0049$ | $0.2614 \pm 0.0023$ | $0.2218 \pm 0.0174$ | - |
+| DRew-GCN | $0.6996 \pm 0.0076$ | $0.2781 \pm 0.0028$ | $0.1848 \pm 0.0107$ | - |
+| DRew-GCN+LapPE | <b><math>0.7150 \pm 0.0044</math></b> | $0.2536 \pm 0.0015$ | $0.1851 \pm 0.0092$ | - |
+| DRew-GIN | $0.6940 \pm 0.0074$ | $0.2799 \pm 0.0016$ | $0.2719 \pm 0.0043$ | - |
+| DRew-GIN+LapPE | <b><math>0.7126 \pm 0.0045</math></b> | $0.2606 \pm 0.0014$ | $0.2692 \pm 0.0059$ | - |
+| DRew-GatedGCN | $0.6733 \pm 0.0094$ | $0.2699 \pm 0.0018$ | $0.3214 \pm 0.0021$ | - |
+| DRew-GatedGCN+LapPE | $0.6977 \pm 0.0026$ | $0.2539 \pm 0.0007$ | $0.3314 \pm 0.0024$ | - |
+| Transformer+LapPE | $0.6326 \pm 0.0126$ | $0.2529 \pm 0.0016$ | $0.2694 \pm 0.0098$ | $0.2618 \pm 0.0031$ |
+| SAN+LapPE | $0.6384 \pm 0.0121$ | $0.2683 \pm 0.0043$ | $0.3230 \pm 0.0039$ | $0.2592 \pm 0.0158$ |
+| GPS+LapPE* | $0.6534 \pm 0.0091$ | $0.2509 \pm 0.0014$ | $0.4440 \pm 0.0065$ | $0.3884 \pm 0.0055$ |
+| Exphormer | $0.6527 \pm 0.0043$ | $0.2481 \pm 0.0007$ | $0.3975 \pm 0.0037$ | $0.3455 \pm 0.0009$ |
+| GRIT | $0.6988 \pm 0.0082$ | <b><math>0.2460 \pm 0.0012</math></b> | - | - |
+| NeuralWalker | $0.7096 \pm 0.0078$ | $0.2463 \pm 0.0005$ | <b><math>0.4912 \pm 0.0042</math></b> | <b><math>0.4398 \pm 0.0033</math></b> |
+| GRASS (ours) | $0.6737 \pm 0.0064$ | <b><math>0.2459 \pm 0.0007</math></b> | <b><math>0.5670 \pm 0.0049</math></b> | <b><math>0.4752 \pm 0.0032</math></b> |
+
+**A Graph Transformer Perspective.** GRASS is a sparse Graph Transformer. Graph Transformers allow each node to aggregate information from other nodes through graph attention mechanisms, with a general definition (Veličković, 2023) being
+
+$$\mathbf{x}'_j = \phi \left( \mathbf{x}_j, \bigoplus_{i \in \mathcal{N}(j)} a(\mathbf{x}_i, \mathbf{x}_j) \psi(\mathbf{x}_i) \right), \quad (17)$$
+
+where  $\phi$  and  $\psi$  are neural networks,  $a$  is an attention weight function, and  $\bigoplus$  is a permutation-invariant aggregator. Many GTs compute attention weights using scaled dot-product attention (Vaswani et al., 2017), with node features as keys and queries. However, we observe that edge features in GRASS, which are updated by aggregating information from its head and tail nodes with an MLP, could be used to directly compute attention weights as a form of additive attention (Bahdanau et al., 2014). *Relationship Representation* would then be critical for the attention weights to be meaningful, which GRASS satisfies through expressive edge encodings and the deep processing of edge features. Many GTs achieve sparsity by integrating (Rampášek et al., 2022) or generalizing (Shirzad et al., 2023) BigBird’s sparse dot-product attention. Meanwhile, GRASS achieves sparsity in a graph-native way: attention is always local, so non-adjacent nodes in the rewired graph would naturally never attend to each other. Seeing GRASS as a Transformer, its attention mask would be  $\mathbf{A}_M$  as defined in Equation 16, which contains  $O(r|V| + |E|)$  nonzero elements.
+
+## 4 EXPERIMENTS
+
+### 4.1 BENCHMARKING GRASS
+
+**Experimental Setup.** To measure the performance of GRASS, we train and evaluate it on five of the GNN Benchmark Datasets (Dwivedi et al., 2023): ZINC, MNIST, CIFAR10, CLUSTER, and PATTERN, as well as four of the Long Range Graph Benchmark (LRGB) (Dwivedi et al., 2022) datasets: Peptides-func, Peptides-struct, PascalVOC-SP, and COCO-SP. Following the experimental setup of Rampášek et al. (2022) and other work that we compare, we configure GRASS to around 100k parameters for MNIST and CIFAR10, and 500k parameters for all other datasets. Additional information on the datasets can be found in Appendix F.1.
+
+Due to the use of random rewiring, the output of the model is not deterministic. Therefore, we evaluate the trained model 100 times for ZINC, and 10 times for other datasets, for each training run. The average performance is reported as the performance of that run. We use D-RRWP encoding
+
+{8}------------------------------------------------
+
+Table 3: Ablation study results for the number of added edges per node, with random regular and non-regular graphs, on ZINC. Reported values for ablated models, except peak VRAM consumption, are the mean  $\pm$  s.d. over 8 runs. The variance of model performance due to random rewiring are measured by evaluating the test set 100 times on each trained model. For comparison, the variance of model performance due to randomness in the training process is  $1.79\text{e-}6$ .
+
+| # Added Edge per Node |  | 0 | 3 | 6 | 9 | 12 | Fully Connected |
+|-|-|-|-|-|-|-|-|
+| MAE $\downarrow$ | Regular | 0.0557<br>$\pm 0.0021$ | 0.0480<br>$\pm 0.0019$ | 0.0470<br>$\pm 0.0013$ | 0.0484<br>$\pm 0.0018$ | 0.0483<br>$\pm 0.0012$ | 0.0492<br>$\pm 0.0008$ |
+|  | Non-Regular |  | 0.0488<br>$\pm 0.0015$ | 0.0486<br>$\pm 0.0020$ | 0.0480<br>$\pm 0.0019$ | 0.0475<br>$\pm 0.0021$ |  |
+| Variance in MAE Due to Random Rewiring | Regular |  | $7.60\text{e-}8$<br>$\pm 3.67\text{e-}8$ | $1.37\text{e-}7$<br>$\pm 1.00\text{e-}7$ | $1.67\text{e-}7$<br>$\pm 8.51\text{e-}8$ | $2.24\text{e-}7$<br>$\pm 1.11\text{e-}7$ |  |
+|  | Non-Regular |  | Deterministic | Deterministic | Deterministic | Deterministic |  |
+| Training Time per Epoch (s) | Regular | 1.74<br>$\pm 0.02$ | 1.81<br>$\pm 0.10$ | 1.95<br>$\pm 0.07$ | 2.02<br>$\pm 0.05$ | 2.19<br>$\pm 0.05$ | 2.40<br>$\pm 0.03$ |
+|  | Non-Regular |  | 1.75<br>$\pm 0.04$ | 1.87<br>$\pm 0.07$ | 2.00<br>$\pm 0.03$ | 2.20<br>$\pm 0.04$ |  |
+| Peak VRAM Consumption (MiB) | Regular | 1415 | 1911 | 2529 | 3051 | 3569 | 4273 |
+|  | Non-Regular |  | 1889 | 2489 | 3009 | 3511 |  |
+
+on Peptides-func, PascalVOC-SP and COCO-SP, and RRWP encoding on other datasets. Models are trained with the Lion optimizer (Chen et al., 2023). Hyperparameters can be found in Appendix F.2.
+
+**Results.** As shown in Tables 1 and 2, GRASS ranks first on ZINC, MNIST, CIFAR10, PATERN, Peptides-struct, PascalVOC-SP, and COCO-SP, while ranking second on CLUSTER and fifth on Peptides-func, among the models compared. Notably, GRASS achieves 20.3% lower MAE on ZINC compared to GRIT (Ma et al., 2023), the second-best model, which has  $O(|V|^2)$  time and space complexity.
+
+### 4.2 ABLATION STUDY
+
+**Experimental Setup.** We examine the impact of RRWP encoding and D-RRWP encoding by comparing their performance with each other and with LapPE (Dwivedi et al., 2021), a widely used graph encoding technique. We examine the effects of random rewiring by varying the number of added edges per node, and superimposing random non-regular graphs instead of random regular graphs. Furthermore, we assess the effects of the GRASS attention mechanism by replacing it with the attention mechanisms of GAT (Veličković et al., 2017), GatedGCN (Bresson and Laurent, 2017), and Transformer (Vaswani et al., 2017), while keeping the rest of the model intact. These experiments are conducted on ZINC, a well-known GNN benchmark that represents tasks on smaller graphs, and PascalVOC-SP, which represents tasks on larger graphs that require long-range interaction. Detailed results on PascalVOC-SP are presented in Appendix D. Additionally on ZINC, we explore the impact of minor design choices, including random edge removal, edge flipping, normalization, graph pooling, and the optimizer. Our findings suggest that the combination of (D-)RRWP encoding, random rewiring, and GRASS attention demonstrates superior effectiveness compared to alternative combinations on the evaluated datasets.
+
+**Random Walk Encoding.** On both ZINC and PascalVOC-SP, switching between RRWP and D-RRWP results in an insignificant change in performance: 0.64% on ZINC and 0.35% on PascalVOC-SP. Meanwhile, replacing D-RRWP with RRWP results in a  $17.73\times$  larger preprocessed dataset on PascalVOC-SP. This highlights the viability of D-RRWP as an efficient replacement of RRWP on certain graphs, but we also notice that D-RRWP does not perform as well as RRWP on Peptides-struct. Replacing RRWP or D-RRWP with LapPE results in a significant degradation of performance on ZINC, but a much smaller degradation on PascalVOC-SP, indicating that the combination of LapPE with other components of GRASS is more dataset-dependent and generally not as effective.
+
+![Figure 4: Visualized ablation study results for the number of added edges per node, with random regular and non-regular graphs, on ZINC. The chart shows MAE (left y-axis, 0.042 to 0.057) and Peak VRAM Consumption (right y-axis, 0 to 12000 MiB) across different edge counts (0, 3, 6, 9, 12, Fully Connected). Data series include Regular (MAE), Non-Regular (MAE), Common (MAE), Regular (Peak VRAM Consumption), Non-Regular (Peak VRAM Consumption), and Common (Peak VRAM Consumption).](0d5fdb87a392819c7d2e3b6230912a0b_img.jpg)
+
+| # Added Edges per Node | Regular (MAE) | Non-Regular (MAE) | Common (MAE) | Regular (Peak VRAM) | Non-Regular (Peak VRAM) | Common (Peak VRAM) |
+|-|-|-|-|-|-|-|
+| 0 | 0.0557 | - | 0.0557 | 1415 | - | 1415 |
+| 3 | 0.0480 | 0.0488 | 0.0484 | 1911 | 1889 | 1889 |
+| 6 | 0.0470 | 0.0486 | 0.0480 | 2529 | 2489 | 2489 |
+| 9 | 0.0484 | 0.0480 | 0.0483 | 3051 | 3009 | 3009 |
+| 12 | 0.0483 | 0.0475 | 0.0482 | 3569 | 3511 | 3511 |
+| Fully Connected | 0.0492 | - | 0.0492 | 4273 | - | 4273 |
+
+Figure 4: Visualized ablation study results for the number of added edges per node, with random regular and non-regular graphs, on ZINC. The chart shows MAE (left y-axis, 0.042 to 0.057) and Peak VRAM Consumption (right y-axis, 0 to 12000 MiB) across different edge counts (0, 3, 6, 9, 12, Fully Connected). Data series include Regular (MAE), Non-Regular (MAE), Common (MAE), Regular (Peak VRAM Consumption), Non-Regular (Peak VRAM Consumption), and Common (Peak VRAM Consumption).
+
+Figure 4: Visualized ablation study results for the number of added edges per node, with random regular and non-regular graphs, on ZINC. Error bars represent one standard error of the mean. The setup is identical to that described in Table 3.
+
+{9}------------------------------------------------
+
+Table 4: Ablation study results for random rewiring, graph encoding, attention mechanism, and minor design decisions on ZINC. This table shows the performance of each ablated model as the mean  $\pm$  s.d. over 8 runs. The implementations of replacement attention mechanisms are provided by PyTorch Geometric (Fey and Lenssen, 2019), and we adjust the head size to approach 500k parameters. <sup>\*</sup>The maximum number of Laplacian eigenvectors to use for LapPE on ZINC is 8, which is constrained by the smallest graph in the dataset. For a fair comparison, we include a setup that pads the LapPE of smaller graphs with zeros to raise the maximum number of eigenvectors to 32. <sup>†</sup>The learning rate is adjusted for these configurations to stabilize training. <sup>‡</sup>The batch size, learning rate, betas, and weight decay factor are adjusted for this configuration to stabilize training.
+
+| Setup | MAE $\downarrow$ |
+|-|-|
+| GRASS | $0.0470 \pm 0.0013$ |
+| Rewire at every epoch $\rightarrow$ Rewire once before training | $0.0645 \pm 0.0015$ |
+| RRWP (32 steps) $\rightarrow$ D-RRWP (32 eigenvectors, 32 steps) | $0.0473 \pm 0.0021$ |
+| RRWP (32 steps) $\rightarrow$ LapPE (8 eigenvectors) <sup>*</sup> | $0.0829 \pm 0.0041$ |
+| RRWP (32 steps) $\rightarrow$ Padded LapPE (32 eigenvectors) <sup>*</sup> | $0.0879 \pm 0.0067$ |
+| GRASS attention $\rightarrow$ GAT attention (Veličković et al., 2017) | $0.0592 \pm 0.0023$ |
+| GRASS attention $\rightarrow$ GatedGCN attention <sup>†</sup> (Bresson and Laurent, 2017) | $0.0651 \pm 0.0030$ |
+| GRASS attention $\rightarrow$ Transformer attention <sup>‡</sup> (Vaswani et al., 2017) | $0.0652 \pm 0.0016$ |
+| No random edge removal | $0.0500 \pm 0.0018$ |
+| No edge flipping | $0.0470 \pm 0.0010$ |
+| BN $\rightarrow$ LN (Ba et al., 2016) | $0.0497 \pm 0.0009$ |
+| Sum pooling $\rightarrow$ Mean pooling | $0.0493 \pm 0.0024$ |
+| Lion $\rightarrow$ AdamW <sup>‡</sup> (Loshchilov et al., 2017) | $0.0499 \pm 0.0006$ |
+
+**Random Rewiring.** On both ZINC and PascalVOC-SP, the optimal number of added edges per node is 6 when using random regular graphs, with any deviation from this value leading to degraded performance. On ZINC, replacing random regular graphs with non-regular random graphs requires adding more edges to achieve comparable performance, which in turn increases runtime and memory consumption. Moreover, fixing the added edges across epochs rather than resampling them at every epoch results in a 37.2% increase in MAE. These findings demonstrate that both the regularity and the randomness of the superimposed graphs are crucial for the model’s efficiency and performance.
+
+**GRASS Attention.** On both ZINC and PascalVOC-SP, replacing GRASS attention with alternative attention mechanisms substantially degrades performance, by at least 26.0% on ZINC and 14.7% on PascalVOC-SP. This indicates that GRASS attention, our novel design, is a vital component for GRASS to achieve its competitive performance.
+
+**Minor Design Decisions.** None of the minor design decisions, when altered or removed, results in a significant performance degradation on ZINC: an advantage of at least 15.2% is maintained compared to GRIT, the second-best model. This verifies that the performance advantage of GRASS is achieved mainly by the proposed combination of encoding, rewiring, and attention mechanism.
+
+## 5 CONCLUSION
+
+We have presented GRASS, a novel GNN architecture that synergistically integrates (D-)RRWP encoding, random rewiring, and a new graph-tailored additive attention mechanism. Our empirical evaluations show that GRASS achieves and often surpasses state-of-the-art performance across a diverse set of benchmark problems.
+
+### 5.1 LIMITATIONS
+
+**Empirical Evaluation of Scalability.** GRASS has  $O(|V|+|E|)$  time and space complexity, which implies good scalability to large and sparse graphs. While evaluating GRASS on extremely large graphs could provide additional insights, it is beyond the scope of this work due to time constraints.
+
+**Nondeterministic Output.** The output of GRASS is inherently random due to random rewiring. The relationship between performance variance and the number of randomly added edges is demonstrated in Table 3 and Table 6. In scenarios that strictly require deterministic output, the random number generator used for random rewiring needs to be made deterministic with respect to the input graph. For example, the random number generator can be seeded with a hash of the input graph.
+
+ Rest of paper (reference and Appendix) is removed.

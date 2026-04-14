@@ -1,0 +1,375 @@
+
+
+{0}------------------------------------------------
+
+# GLANCE: GLOBAL ACTIONS IN A NUTSHELL FOR COUNTERFACTUAL EXPLAINABILITY
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The widespread deployment of machine learning systems in critical real-world decision-making applications has highlighted the urgent need for counterfactual explainability methods that operate effectively. Global counterfactual explanations, expressed as actions to offer recourse, aim to provide succinct explanations and insights applicable to large population subgroups. Effectiveness is measured by the fraction of the population that is provided recourse, ensuring that the actions benefit as many individuals as possible. Keeping the cost of actions low ensures the proposed recourse actions remain practical and actionable. Limiting the number of actions that provide global counterfactuals is essential to maximize interpretability. The primary challenge, therefore, is balancing these trade-offs—maximizing effectiveness, minimizing cost, while maintaining a small number of actions. We introduce GLANCE, a versatile and adaptive framework, comprising two algorithms, that allows the careful balancing of the trade-offs among the three key objectives, with the size objective functioning as a tunable parameter to keep the actions few and easy to interpret. C-GLANCE employs a clustering approach that considers both the feature space and the space of counterfactual actions, thereby accounting for the distribution of points in a way that aligns with the structure of the model. T-GLANCE provides additional features to enhance flexibility. It employs a tree-based approach, that allows users to specify split features, to build a decision tree with a single counterfactual action at each node that can be used as a subgroup policy. Our extensive experimental evaluation demonstrates that our method consistently shows greater robustness and performance compared to existing methods across various datasets and models.
+
+## 1 INTRODUCTION
+
+Machine learning models are increasingly deployed in critical domains such as loan approvals, hiring, and healthcare. This widespread adoption has intensified the need for transparency and interpretability in model decisions, requiring users to understand how their input features influence the outcomes and how they might change them to achieve favorable outcomes, known as recourse (Miller, 2019). Counterfactual explanations have gathered extensive attention for their suitability for achieving algorithmic recourse (Karimi et al., 2020), their interpretability (Wachter et al., 2017), actionability (Ustun et al., 2019), utility in fairness audits (Sharma et al., 2019; Kavouras et al., 2023), etc. A counterfactual action, or simply an *action*, defines the specific feature changes needed to convert an unfavorable decision into a favorable one.
+
+Traditionally, counterfactual explanations refer to *local explainability*, being tied to a particular negatively affected instance. However, in many real-world scenarios, *global counterfactual explainability* is more useful, offering generalized explanations that apply across the affected population. While a collection of all local counterfactuals could technically cover all affected individuals, this approach sacrifices interpretability, which is central to global explainability.
+
+Similar to past work (Rawal & Lakkaraju, 2020; Kanamori et al., 2022), we define Global Counterfactual Explanations (GCE) as a small set of *global actions* that provide effective recourse for the affected population. Any global counterfactual solution must meet three objectives as identified from previous research: (1) be composed of a small number of actions to ensure interpretability (size),
+
+{1}------------------------------------------------
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+(2) minimize the cost of implementing those actions (cost), and (3) offer recourse to as many affected individuals as possible (effectiveness).
+
+As noted by Branke (2008), the relationships between multiple optimization objectives are often complex, and aggregating them into a single objective, which is common in practice (Rawal & Lakkaraaju, 2020), can be problematic since they are typically non-commensurable. Framing GCEs as multi-objective optimization, allows us to explore the inherent *trade-offs* between effectiveness and cost, especially when the solution size is constrained.
+
+To understand this optimization problem, assume a 2-d numerical feature space, and consider the two affected instances  $x_1, x_2$  depicted in Figure 1a. Assume that recourse cost equals the distance to the decision boundary, drawn as a line in the figure. Observe that  $a_1$  (resp.  $a_2$ ) is the local action that provides recourse for  $x_1$  (resp.  $x_2$ ) at minimum cost.
+
+Further, consider the *action space* depicted in Figure 1b, where every action is represented as a point (or equivalently as a vector relative to the center  $o$  of the coordinate system). The blue  $l_1$  and red  $l_2$  lines represent the decision boundary seen from the perspectives of  $x_1$  and  $x_2$ , respectively. The blue line  $l_1$  separates the actions that provide recourse for  $x_1$  (any action on the outside, away from  $o$ ) from those that do not. Action  $a_1$  lies on  $l_1$ , and is the closest point to  $o$ , and thus the min-cost local action for  $x_1$ . Similarly, the red line  $l_2$  concerns  $x_2$  and contains its min-cost action  $a_2$ .
+
+Consider now the problem of finding a single action GCE. To provide recourse for both  $x_1$  and  $x_2$ , we look for an action that lies outside both lines in Figure 1b. Among all such actions,  $a_3$  has the minimum cost and thus is the optimal global action that maximizes effectiveness. If we trade off effectiveness for cost,  $a_2$  is the optimal global action that minimizes cost, but has 50% effectiveness (brings recourse to  $x_2$  but not to  $x_1$ ).
+
+GCE gives rise to a different optimization problem than its local counterpart. Even if optimal local actions are generated for each instance and a small subset is chosen as the global actions, this may still result in a suboptimal GCE. In our example, the optimal global action  $a_3$  is not an optimal local action for either  $x_1$  or  $x_2$ ; in fact,  $a_3$  can be viewed as a compromise between  $a_1$  and  $a_2$ , the locally optimal actions. Finding good GCEs requires a nuanced exploration of the action space.
+
+In this work, we distinguish between two variants of GCE that differ in how they assign actions to individuals. In *implicit* GCE, each individual chooses the best (i.e., min-cost) global action in GCE to achieve (if possible) recourse (as in e.g., Ley et al., 2023). Implicit GCE is helpful when one wishes to obtain a model-level understanding of recourse, or to select a global (horizontal) policy to apply to the entire affected population. In *explicit* GCE, individuals are partitioned according to their features and a single action applies to each partition (as in e.g., Rawal & Lakkaraaju, 2020; Kanamori et al., 2022). Explicit GCE provides a more interpretable summary as it associates actions to partitions of the feature space, and can also be used to implement targeted policies to bring recourse to subpopulations.
+
+### 1.1 KEY CONTRIBUTIONS
+
+Recognizing that both the effectiveness and the cost of actions depend on the individuals’ features and the model’s decision boundary, we propose a novel clustering approach for GCEs that considers both feature and action spaces. Unlike previous claims that clustering is ineffective for global counterfactuals (see e.g., Kanamori et al. (2022)), we are the first to propose the joint clustering in feature and action spaces and demonstrate its effectiveness. We introduce GLANCE, a novel and highly adaptable framework, that consists of two algorithms based on hierarchical clustering techniques, C-GLANCE and T-GLANCE. GLANCE bridges local and global explanations by combining
+
+![Figure 1: A toy example depicting two negative instances x1, x2, and five actions: a1, a2, a3, a4, a5. (a) Feature space: A 2D plot showing a decision boundary (a line) and two points x1 and x2. Actions a1, a2, a3, a4, a5 are shown as points. a1 and a2 are the optimal local actions for x1 and x2 respectively. a3 is the optimal GCE maximizing effectiveness. a4 and a5 are actions along the optimal direction d. (b) Action space: A 2D plot showing the decision boundary from the perspective of x1 and x2. The blue line l1 separates actions that provide recourse for x1 from those that do not. The red line l2 separates actions that provide recourse for x2 from those that do not. a1 lies on l1, and a2 lies on l2. a3 is the optimal global action that maximizes effectiveness.](3910648e3591af72a40473bb403cbe2d_img.jpg)
+
+Figure 1: A toy example depicting two negative instances x1, x2, and five actions: a1, a2, a3, a4, a5. (a) Feature space: A 2D plot showing a decision boundary (a line) and two points x1 and x2. Actions a1, a2, a3, a4, a5 are shown as points. a1 and a2 are the optimal local actions for x1 and x2 respectively. a3 is the optimal GCE maximizing effectiveness. a4 and a5 are actions along the optimal direction d. (b) Action space: A 2D plot showing the decision boundary from the perspective of x1 and x2. The blue line l1 separates actions that provide recourse for x1 from those that do not. The red line l2 separates actions that provide recourse for x2 from those that do not. a1 lies on l1, and a2 lies on l2. a3 is the optimal global action that maximizes effectiveness.
+
+Figure 1: A toy example depicting two negative instances  $x_1, x_2$ , and five actions:  $a_1, a_2$  are the optimal local actions for  $x_1, x_2$ ;  $a_3$  is the optimal GCE maximizing effectiveness;  $a_4$  and  $a_5$  are actions along the optimal direction  $d$  as defined in Ley et al. (2023) (a) The feature space, where the line is the decision boundary. (b) The action space, where  $l_1, l_2$  depict the decision boundary from the perspective of  $x_1, x_2$ , respectively.
+
+{2}------------------------------------------------
+
+![Figure 2: Intuition behind clustering approaches. (a) shows four fine-grained clusters with centroids and diverse candidate actions. (b) shows the merging of clusters based on similarity in feature space or action space. (c) shows an alternative where clusters are formed solely based on feature space, leading to suboptimal global actions.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 2 consists of three subplots labeled (a), (b), and (c). Each subplot shows a 2D feature space with data points (circles) and centroids (crosses). Arrows represent candidate actions originating from centroids. In (a), there are four distinct clusters, each with a centroid and a diverse candidate action. In (b), some clusters are merged based on similarity in feature space or action space. In (c), clusters are formed solely based on feature space, leading to suboptimal global actions.
+
+Figure 2: Intuition behind clustering approaches. (a) shows four fine-grained clusters with centroids and diverse candidate actions. (b) shows the merging of clusters based on similarity in feature space or action space. (c) shows an alternative where clusters are formed solely based on feature space, leading to suboptimal global actions.
+
+Figure 2: Intuition behind clustering approaches. (a) First, C-GLANCE generates diverse candidate action from the centroids of feature-based clusters. (b) Then, C-GLANCE merges clusters based on similarity in either the feature space or the possible recourse actions, grouping instances that may be further apart but can be explained by similar actions. (c) An alternative where clusters are formed solely based on the feature space may lead to suboptimal global actions—either high effectiveness at a very high cost or low cost but very low effectiveness.
+
+clustering with local counterfactual generation, offering a scalable and effective methodology for GCEs. GLANCE balances actionable, minimal changes with interpretability through a tunable size objective, ensuring practical and interpretable solutions.
+
+**C-GLANCE.** We present C-GLANCE, a clustering-based approach for the implicit GCE problem that returns  $s$  global actions. At a high level, C-GLANCE consists of two phases: candidate action generation, and action selection.
+
+To generate candidates, C-GLANCE first performs a fine-grained clustering of the individuals in the feature space. For each cluster, C-GLANCE then discovers a few diverse actions that bring recourse to the cluster centroid. The intuition here is that highly similar individuals are expected to have a similar perspective of the decision boundary, and can thus achieve recourse through similar cost-efficient actions. Figure 2a shows an example with four fine-grained clusters, where three diverse actions are discovered from each centroid. Each action represents an alternate way to bring recourse to cluster members, giving C-GLANCE the flexibility to later select among them.
+
+At the end of the first phase, C-GLANCE has associated each cluster of individuals with a set of actions. In the second phase, C-GLANCE iteratively merges such clusters until exactly  $s$  clusters remain. Two clusters are merged if they either concern similar individuals or contain similar actions. The intuition behind the former is similar to that of the candidate generation phase. The intuition for the latter is that if similar actions bring recourse to them it should be easier to identify a common low-cost, highly effective action, even though they are dissimilar feature-wise. Figure 2b shows an example where the red individuals are grouped together either through affinity in the feature or in the action space.
+
+As discussed in (Kanamori et al., 2022), performing a coarse-grained clustering on feature space and then assigning a single action per cluster leads to inadequate global actions, that suffer either in cost or effectiveness. For example, in Figure 2c, individuals are clustered based on feature similarity and a single action is selected per cluster. Because the blue cluster is associated with rather dissimilar actions, choosing a single actions leads to a compromise in either effectiveness (as depicted) or cost.
+
+**T-GLANCE.** Recognizing the need for explicit GCE, we present T-GLANCE, an algorithm employing a tree-based approach, similar to explainable clustering techniques (e.g., Moshkovitz et al., 2020). This allows assigning actions to individuals while satisfying the transparency and consistency properties required by Kanamori et al. (2022). T-GLANCE also allows users to select features that define specific groups, to produce targeted GCEs. For the user’s facilitation, we also provide suggestions based on the importance feature permutation score for selecting features to be used in splits. T-GLANCE directly supports policymaking and audit scenarios—an application not addressed by existing methods. As shown in our experiments, T-GLANCE delivers competitive results, outperforming previous tree-based methods while maintaining efficiency.
+
+**Experimental Evaluation.** We perform a comprehensive evaluation across various datasets and models, demonstrating that GLANCE consistently outperforms or matches state-of-the-art methods in both cost and effectiveness while remaining computational efficiency. To facilitate comparison in global counterfactual methods, we invoke Pareto dominance criteria from multiobjective opti-
+
+{3}------------------------------------------------
+
+mization, further showcasing GLANCE’s stable, superior performance across diverse datasets and models.
+
+### 1.2 RELATED WORK
+
+**Counterfactual Explanations.** There has been a plethora of work with an emphasis on counterfactual explanations (Verma et al., 2020). An overview of methods on algorithmic recourse, which provides explanations and recommendations to individuals impacted by automated decision-making systems is presented by Karimi et al. (2020). These methods can be model-agnostic or model-specific (e.g., for trees Carreira-Perpiñán & Hada, 2021), focus on properties like diversity (Mothilal et al., 2020) or feasibility (Ustun et al., 2019), global or local. While local counterfactuals are well defined, global counterfactuals present challenges, as they must provide recourse for all individuals within a specific group in the same manner while maintaining explainability and staying true to the notion of local counterfactual, which focuses on minimal changes. Achieving this balance globally presents significant difficulties.
+
+Prior work does not make the distinction between explicit and implicit GCE. Regarding explicit GCE, Rawal & Lakkaraju (2020) introduced AReS, a framework for global counterfactual explanations, that jointly optimizes recourse correctness, coverage, and cost, providing an interpretable summary of recourses, expressed in a two-level rule set. However, the AReS framework may fail to cover the entire population. Ley et al. (2022) later improved the computational efficiency with Fast AReS. In another direction, Kanamori et al. (2022) introduced CET, which partitions the space and assigns an action to each part transparently and consistently. Although effective, its computational complexity limits scalability.
+
+Regarding implicit GCE, Warren et al. (2023) developed Group-CF, that generates counterfactuals that seeks to maximize effectiveness, though it can result in higher costs. Ley et al. (2023) proposed GLOBE-CE, where global counterfactual explainability is defined differently, as a small set of action directions along which individuals can “move” to achieve recourse. Therefore, GLOBE-CE attacks a different optimization problem than the one we study here. For the toy example in Figure 1, the single direction that minimizes the total recourse cost for  $x_1$  and  $x_2$  is the direction  $d$  depicted in Figure 1b. This direction contains actions  $a_4$  and  $a_5$  that bring recourse to  $x_2$  and  $x_1$ , respectively, with minimum cost along  $d$ . It is important to note that neither  $a_4$  nor  $a_5$  is optimal as a GCE (or for local explainability). Even the set  $\{a_4, a_5\}$  is a suboptimal GCE—the set  $\{a_1, a_2\}$  dominates it with equal size and effectiveness but lower total cost. In general, (1) directly translating the output of GLOBE-CE into a GCE leads to numerous micro-actions (two in our example, but potentially as many as the number of individuals), which reduces interpretability, (2) choosing a few actions along the optimal directions may result in suboptimal GCEs (in our example, any single action along  $d$  is dominated by  $a$ ), and (3) since directions lack clear endpoints, they fail to specify the magnitude of change required, leading to uncertainty for individuals seeking recourse and limiting real-world applicability.
+
+Other works include Carrizosa et al. (2024a;b), who use mixed-integer quadratic models for group-level explanations, and Koo et al. (2020), who employ Lagrangian methods. Research has also extended to generating global counterfactuals for graphs (Huang et al., 2023) and auditing subgroup fairness (Kavouras et al., 2023).
+
+**Global Explainability.** Many works in global explainability are related to our approach. For instance, Chowdhury et al. (2022) summarize model logic by dividing the desired region of explanation features into subspaces based on similar logic, referred to as equi-explanation maps. Similarly, Lakkaraju et al. (2019) provides explanations for different subspaces characterized by specific features. Their method also allows users to customize the model explanations by selecting features of interest, akin to the flexibility offered by T-GLANCE. While these works share a conceptual focus on subspace-based explanations, they differ fundamentally from ours in their ultimate goals and outcomes. Both primarily aim to summarize model behavior or provide faithful subspace-level explanations, whereas GLANCE seeks to generate actionable global counterfactual explanations tailored to decision-making processes. Consequently, the direct comparison of these approaches with T-GLANCE is not entirely applicable.
+
+**Other Related Work.** Many clustering algorithms lead to clusters that are hard to explain. There is a plethora of work on explainable or interpretable clustering, mainly using decision trees that under
+
+{4}------------------------------------------------
+
+specific assumptions come with provable guarantees, including the works of Dasgupta et al. (2020); Moshkovitz et al. (2020); Frost et al. (2020); Makarychev & Shan (2022); Bertsimas et al. (2021); Laber & Murtinho (2021), etc. Another area of related work is multiobjective optimization and Pareto optimality. We refer the reader to Branke (2008).
+
+## 2 PROBLEM FORMULATION
+
+We consider a black box binary classifier  $h : \mathcal{X} \rightarrow \{-1, 1\}$ , where the positive outcome is favorable and the negative is unfavorable. We will focus on the set  $\mathcal{X}_{\text{aff}} \subseteq \mathcal{X}$  of **adversely affected individuals**, i.e., those who receive the unfavorable outcome. We denote as  $\mathbb{A}$  the set of all possible actions (which is potentially infinite), where an **action**  $a \in \mathbb{A}$  is a set of changes to feature values, e.g.,  $a = \{\text{country} \rightarrow \text{US}, \text{education-num} \rightarrow +2\}$ , which, when applied to an instance  $x \in \mathcal{X}_{\text{aff}}$ , results in a **counterfactual** instance  $x' = a(x)$ . Every action  $a$  has a cost, denoted as  $\text{cost}(a, x)$ , and is effective for an instance  $x$  if  $h(a(x)) = h(x') = 1$ . Let  $\mathbb{C} \subseteq \mathbb{A}$ . The recourse cost  $\text{rc}(\mathbb{C}, x)$  of an instance  $x$  is the minimum cost incurred from an effective action in  $\mathbb{C}$ :
+
+$$\text{rc}(\mathbb{C}, x) = \min\{\text{cost}(a, x) | a \in \mathbb{C} : h(a(x)) = 1\}$$
+
+Let  $X_{\mathbb{C}} = \{x \in \mathcal{X}_{\text{aff}} | h(a(x)) = 1, a \in \mathbb{C}\}$  be the set of instances that flip their prediction using one of the actions in  $\mathbb{C}$ . Then the effectiveness, also known as coverage Ley et al. (2022), of  $\mathbb{C}$  for the affected instances  $\mathcal{X}_{\text{aff}}$  is defined as the percentage of  $\mathcal{X}_{\text{aff}}$  that managed to flip their prediction using one of the actions in  $\mathbb{C}$ :
+
+$$\text{eff}(\mathbb{C}, \mathcal{X}_{\text{aff}}) = \frac{|X_{\mathbb{C}}|}{|\mathcal{X}_{\text{aff}}|}.$$
+
+The cost of  $\mathbb{C}$  in  $\mathcal{X}_{\text{aff}}$  is defined as the **average recourse cost** of the instances in  $\mathcal{X}_{\text{aff}}$ :
+
+$$\text{avc}(\mathbb{C}, \mathcal{X}_{\text{aff}}) = \frac{\sum_{x \in X_{\mathbb{C}}} \text{rc}(\mathbb{C}, x)}{|X_{\mathbb{C}}|}.$$
+
+Finally, let  $\text{size}(\mathbb{C}) = |\mathbb{C}|$  denote the cardinality of a set  $\mathbb{C}$ .
+
+As it is clear, multiple sets of actions can produce recourse for  $\mathcal{X}_{\text{aff}}$  and the quality of such a set is a factor of the three notions we introduced: effectiveness, cost, and size. An ideal global counterfactual should maximize effectiveness while minimizing the cost and the size, based on the properties that state-of-the-art works (Rawal & Lakkaraju, 2020; Kanamori et al., 2022; Ley et al., 2023; Huang et al., 2023) have argued are essential. Formally, we define the global counterfactual explanation problem as follows:
+
+**Problem 1** (Global Counterfactual Explanations (GCE)). *Given a black box model  $h$  that classifies the  $\mathcal{X}_{\text{aff}}$  instances to the negative class, our goal is to find the set  $\mathbb{C} \subseteq \mathbb{A}$ ,  $\mathbb{C} \neq \emptyset$  that represents a solution to the following multi-objective optimization:*
+
+$$\text{minimize} \quad \left( \text{size}(\mathbb{C}), -\text{eff}(\mathbb{C}, \mathcal{X}_{\text{aff}}), \text{avc}(\mathbb{C}, \mathcal{X}_{\text{aff}}) \right)$$
+
+The requirement for a small set of actions is to enhance the interpretability of the explanation. This can also be expressed as a constraint to the set size we can afford. In this case, the third objective of Problem 1 is replaced by the constraint  $\text{size}(\mathbb{C}) \leq s$ , where  $s$  is a small positive integer. For the rest of the paper, we will use the following problem formulation:
+
+**Problem 2** ( $s$ -GCE). *Given a black box model  $h$  that classifies the  $\mathcal{X}_{\text{aff}}$  instances to the negative class, our goal is to find the set  $\mathbb{C} \subseteq \mathbb{A}$  that represents a solution to the following bi-objective optimization problem:*
+
+$$\begin{aligned} \text{minimize} \quad & \left( -\text{eff}(\mathbb{C}, \mathcal{X}_{\text{aff}}), \text{avc}(\mathbb{C}, \mathcal{X}_{\text{aff}}) \right) \\ \text{s.t.} \quad & \text{size}(\mathbb{C}) \leq s \end{aligned}$$
+
+If the set of actions  $\mathbb{A}$  is finite and explicitly given,  $s$ -GCE is NP-hard. For more details, we refer the reader to Appendix A. For insights into how increasing the size impacts effectiveness and average cost, and the importance of selecting actions to maintain a desirable balance, see Appendix B.
+
+{5}------------------------------------------------
+
+#### **Algorithm 1** C-GLANCE
+
+---
+
+**Input:**  $\mathcal{X}_{\text{aff}}, m, k, s$  { $\mathcal{X}_{\text{aff}} :=$  affected individuals,  $m :=$  number of candidate actions to generate,  $k :=$  initial number of clusters,  $s :=$  number of global counterfactual actions}
+
+**Output:**  $s$  global counterfactual actions
+
+- 1:  $C \leftarrow \text{cluster}(\mathcal{X}_{\text{aff}}, k)$  {Cluster  $\mathcal{X}_{\text{aff}}$  into  $k$  initial clusters}
+- 2: **for**  $c \in C$  **do**
+- 3:    $\text{ca}(c) \leftarrow \text{actions}(\text{centroid}(c), m)$  {For each cluster centroid generate  $m$  actions}
+- 4: **end for**
+- 5: **while**  $|C| > s$  **do**
+- 6:    $\{c_1, c_2\} \leftarrow \arg \min_{\{c_1, c_2\} \in C} (d_1(\text{centroid}(c_1), \text{centroid}(c_2)) + d_2(\text{average}(\text{ca}(c_1)), \text{average}(\text{ca}(c_2))))$   
+          {Find  $c_1, c_2$  that minimize  $d_1 + d_2$ }
+- 7:    $C \leftarrow \text{merge}(\{c_1, c_2\} \in C)$  {Merge  $c_1, c_2$  into one cluster}
+- 8:    $\text{ca}(\{c_1, c_2\}) \leftarrow \text{ca}(c_1) \cup \text{ca}(c_2)$  {Merge their action sets}
+- 9: **end while**
+- 10: **return**  $\text{bca}(\text{ca}(c))$  for each  $c \in C$  {Return optimal action from each of the  $s$  clusters}
+
+---
+
+## **3 C-GLANCE**
+
+C-GLANCE (Algorithm 1) presents a clustering algorithm that follows an agglomerative approach. The first step is to establish multiple small clusters and determine representative diverse actions for each. The initial clusters will undergo merging, exploiting the notion of proximity in both the original feature space and the action space, until no more than  $s$  clusters exist. Finally, a single action will be extracted from each cluster with universal applicability across all instances. For the time complexity analysis we refer the reader to Appendix C.
+
+**Algorithm Description.** (1) *Initial clusters and actions generation.* The feature space is partitioned into  $k$  clusters, by a clustering algorithm (e.g.,  $k$ -means, line 1, alg. 1). We compute the *centroid* of each cluster and generate  $m$  *diverse* counterfactual actions for each centroid (line 3, alg. 1), employing any candidate counterfactual generation method (see Appendix G for the methods used in the experimental evaluation). We aim to efficiently and effectively explore the action space by generating actions from widely dispersed points within the feature space and guiding them in diverse directions that cross the decision boundary.
+
+(2) *Merging.* Similar to agglomerative clustering, our approach merges clusters with the goal of maximizing intra-cluster similarity and minimizing inter-cluster similarity with respect to both the feature and action spaces. Specifically, similarity is computed by a metric  $D$ , which is the sum of two distances:  $d_1 : \mathcal{X}_{\text{aff}} \times \mathcal{X}_{\text{aff}} \rightarrow \mathbb{R}$ , the distance between the centroids of each cluster, and  $d_2 : \mathbb{A} \times \mathbb{A} \rightarrow \mathbb{R}$ , the distance between the average counterfactual actions of each cluster; other formulations for  $d_2$  are also possible, e.g., *Wasserstein distance*. Thus, clusters are combined based on both their feature proximity and the proximity of their respective actions. Until the desired number  $s$  of clusters is reached, we merge (line 7, alg. 1) the two clusters that minimize the total distance  $d_1 + d_2$  (line 6, alg. 1). Merging two clusters means that their action sets are combined, ensuring that the most effective actions for each cluster are retained (line 8, alg. 1).
+
+(3) *GCE extraction and optimality.* For each of the  $s$  clusters, we extract a single candidate action, and return the set of these  $s$  actions (line 10, alg. 1). Assuming that the action generation and subsequent merging has successfully grouped together individuals that can achieve recourse through similar cost-efficient actions, in the final step we target effectiveness, selecting at each cluster the optimal action, in terms of effectiveness, among those associated with the cluster.
+
+**Approach Strengths.** C-GLANCE supports various clustering methods, cost metrics, and action generation techniques making it adaptable to different applications. In the App. Table 13, we present the results using various action generation methods, all of which lead to near-optimal solutions in terms of the effectiveness-cost tradeoff. Additionally, C-GLANCE demonstrates speed, robustness, and near-optimal solution quality across datasets, as shown in the experimental evaluation.
+
+## **4 T-GLANCE**
+
+T-GLANCE (Algorithm 2) constructs a hierarchical partitioning of the feature space. Each partition level is derived by splitting one cell of the previous level partition along a feature, resulting in a decision tree like structure akin to classification and regression trees (CART) (Breiman et al., 1984; Bertsimas & Dunn, 2017). Each cell (whether an internal or leaf tree node) can be described as a conjunction of feature predicates, and is associated with a single counterfactual action, providing
+
+{6}------------------------------------------------
+
+### **Algorithm 2** T-GLANCE
+
+---
+
+```
+
+324 Input:  $\mathcal{X}_{\text{aff}}, m, s, D'$ . { $\mathcal{X}_{\text{aff}}$  := affected individuals,  $m$  := number of candidate actions to generate,  $s$  := maximum number of leaf nodes,
+325  $D'$ , a subset of possible features}
+326 Output:  $\mathcal{P}$  {The tree and the actions assigned in each node.}
+327 1:  $\mathcal{P}_0 \leftarrow \{\mathcal{X}_{\text{aff}}\}$  {The partition associated with the root of the tree.}
+328 2: Assign to  $\mathcal{P}_0$  action  $a_0 = \text{bca}(\text{ca}(\mathcal{P}_0), \mathcal{P}_0)$  {Generate actions  $\text{ca}(\mathcal{P}_0)$ .  $a_0$  maximizes eq.(1)}
+329 3:  $\text{level} = 0, \text{n\_nodes} = 1, \text{queue} \leftarrow \mathcal{P}_0$ 
+330 4: while  $\text{n\_nodes} + 1 \leq s$  do
+331 5:   if  $\text{queue} = \emptyset$  then
+332 6:      $\text{level} \leftarrow \text{level} + 1, \text{queue} \leftarrow \mathcal{P}_{\text{level}}$ 
+333 7:   end if
+334 8:   Pick  $A$  the first element in  $\text{queue}$ .
+335 9:    $i \leftarrow \arg \max_{j \in D'} V(A, j)$  {Choose the split that maximizes the criterion of eq.(2).}
+336 10:  if  $V(A, i) \geq 0$  then
+337 11:    Split the cell  $A$  into cells  $A_k^i = \{x | x \in A \wedge x_i \in v_i(k)\}, k = 0, 1$ 
+338 12:    Assign to  $A_k^i$  action  $a_k^i = \text{bca}(\text{ca}(A_k^i), A_k^i)$  {Generate actions  $\text{ca}(A_k^i)$ .  $a_k^i$  maximizes eq.(1).}
+339 13:     $\text{queue} \leftarrow \text{queue} \setminus \{A\}, \mathcal{P}_{\text{level}+1} \leftarrow \mathcal{P}_{\text{level}+1} \cup \{A_0^i, A_1^i\}$ 
+340 14:  else
+341 15:     $\text{queue} \leftarrow \text{queue} \setminus \{A\}$  {Do not split this node and continue to the next.}
+342 16:  end if
+343 17: end while
+344 18:  $\mathcal{P}_{\text{level}+1} \leftarrow \mathcal{P}_{\text{level}+1} \cup \text{queue}$ 
+345 19: return  $\mathcal{P}_{\text{level}+1}$  {Return the tree and the assigned actions.}
+
+```
+
+---
+
+thus *interpretable* counterfactual explanations at multiple granularity levels. T-GLANCE decides to split a cell if more effective actions can be found for the child cells. Splits are performed along a user-provided subset of features. Once a feature is used to split a cell, it is not considered again for further splits. As a result, the height of the tree is limited by the cardinality of the user-provided feature subset. We next present the necessary definitions to introduce Algorithm 2. For the time complexity analysis, please refer to Appendix C.
+
+**Definitions.** A partition  $\mathcal{P}$  of  $\mathbb{R}^d$  is a family of sets  $\{A_1, \dots, A_l\}$  such that  $A_j \subseteq \mathbb{R}^d, A_j \cap A_k = \emptyset$  for all  $j, k \in [l]$  and  $\bigcup_{j=1}^l A_j = \mathbb{R}^d$ . Let  $\mathcal{P}$  a partition of  $\mathcal{X}_{\text{aff}}$ . Every element  $A$  of  $\mathcal{P}$  is called a cell of  $\mathcal{P}$  or just a cell. Each cell can be further divided into two subcells  $A_0^i, A_1^i$  with respect to any direction  $i$ , defined as  $A_0^i = \{x \in A | x_i \in v_i(0)\}$  and  $A_1^i = \{x \in A | x_i \in v_i(1)\}$ , where  $v_i(k)$  represent the values that correspond to the specific split (e.g., 0 or 1 if it is a binary feature, specific ranges for continuous features). Let  $\text{ca}(A) := \text{actions}(c, m)$  be the set of  $m$  generated actions for the centroid  $c$  of the cell  $A$ . For simplicity, we will use  $\text{bca}(\text{ca}(A), A)$  to refer to the action in  $\text{ca}(A)$  with the highest effectiveness. Formally,
+
+$$\text{bca}(\text{ca}(A), A) = \arg \max_{a \in \text{ca}(A)} \{\text{eff}(\{a\}, A)\} \quad (1)$$
+
+We define a local version of the *total effectiveness gain* achieved by a specific portion split  $i$  to a local cell  $A$ .
+
+$$\begin{aligned} V(A, i) &\triangleq \text{eff}(\{\text{bca}(\text{ca}(A), A)\}, A) - \overline{\text{eff}}(\{\text{bca}(\text{ca}(A_k^i), A_k^i)\}, A_k^i) \\ &= \text{eff}(\{\text{bca}(\text{ca}(A), A)\}, A) - \frac{1}{|k|} \sum_{k=\{0,1\}} \text{eff}(\{\text{bca}(\text{ca}(A_k^i), A_k^i)\}, A_k^i) \end{aligned} \quad (2)$$
+
+**Algorithm Description.** T-GLANCE selects a different direction for splitting at each iteration at every cell in the current partition. Specifically, the algorithm begins with a single cluster containing all affected instances and generates  $m$  *diverse* actions for the centroid, retaining the best action according to the criterion in eq. (1) (lines 1–2, alg. 2). The root then is established as the first cell  $A$  to be examined, and the possible splits are examined based on the actions that were generated for each split (lines 8–9, alg. 2). For simplicity, we present the algorithm with binary splits (branching factor of 2), though it can be generalized to accommodate any branching factor. We proceed with the split that maximizes eq. (2), provided it yields a nonnegative value, and add the new cells as nodes of the tree to be examined in the next repetitions (lines 10–13, alg. 2); otherwise the node is not split. Importantly, the set of directions allowed for splitting is a subset of the features, provided by the user, allowing for controlled and interpretable partitioning of the data.
+
+**Termination Criteria.** This process continues until one of the following termination criteria occurs: (1) a node has no remaining features to consider for splitting, (2) the maximum score of the actions
+
+{7}------------------------------------------------
+
+from all remaining features is negative, or (3) the specified number of leaf nodes has been reached (i.e., size constraints).
+
+**Approach Strengths.** A key strength of T-GLANCE is its user-driven flexibility, allowing policy-makers or auditors to select the features that determine tree partitioning. By allowing users to guide the feature selection, T-GLANCE can adapt to specific policy needs or audit requirements, making it highly customizable. T-GLANCE provides multi-level solutions, assigning a single optimal counterfactual action to each tree node, ensuring transparency and consistency across decision-making processes. This enables both high-level and granular solutions for additional user flexibility, in contradiction with Kanamori et al. (2022), who optimize actions only at the leaf nodes. Additionally, the method remains efficient, robust, and effective across various datasets and scenarios, as shown in our evaluations, making it well-suited for real-world applications. Finally, unlike the stochastic local search used by Kanamori et al. (2022), which may not converge (in about 20% of our experiments), T-GLANCE guarantees a solution at every node.
+
+## 5 EXPERIMENTAL EVALUATION
+
+### 5.1 EXPERIMENTAL SETTING
+
+**Baselines.** We compare GLANCE framework methods against state-of-the-art methods in Global Counterfactual Explanations, specifically: AReS (using the Fast AReS implementation), CET, GroupCF, and GLOBE-CE, all of which are constrained by a predefined action set size. Details on the implementation used for each method can be found in Appendix F.
+
+**Datasets.** We use four established benchmark datasets from previous research: COMPAS (Angwin et al., 2016), German Credit (Dua & Graff, 2019), Default Credit (Yeh & Lien, 2009), and HELOC (Brown et al., 2018). Additionally, we introduce the Adult dataset (Becker & Kohavi, 1996) for further evaluation. Details on the datasets and their preprocessing can be found in Appendix D.
+
+**Models.** We trained three different model types: XGBoost (XGB), Logistic Regression (LR), and Deep Neural Network (DNN). Hyperparameters and training accuracy statistics are provided in Appendix E. We used 5-fold cross-validation, to also evaluate the robustness of the results.
+
+**Recourse Cost.** For computing recourse costs, we adhered to the guidelines established by Ley et al. (2023).
+
+**Reproducibility.** All experiments were conducted on an in-house server with cloud infrastructure equipped with an Intel(R) Core(TM) i9-10900X CPU @ 3.70GHz, 128 GB of RAM. No GPU acceleration was utilized during these experiments. We provide the code for the reproducibility of our experiments as supplementary material.
+
+**Running Time.** In our experiments, GLOBE-CE and dGLOBE-CE were the fastest methods, consistently delivering solutions within 20 seconds across all datasets and models. C-GLANCE and T-GLANCE followed, typically completing in under 300 seconds, although T-GLANCE reached up to 850 seconds in four cases. Other methods were slower, with Fast AReS ranging typically between 150–400 seconds, and peaking at 1,400 seconds in some runs. The least computationally efficient were GroupCF and CET, with maximum runtimes of 3,500 and 17,000 seconds, respectively, and CET failed to solve the underlying optimization problem after 20 hours of runtime for the Adult dataset across all models.
+
+### 5.2 EXPERIMENTAL EVALUATION
+
+Table 1 presents the summarized results of all competing methods. We compare C-GLANCE and T-GLANCE against the five other competitors across five datasets and three models, resulting in 75 head-to-head comparisons for each method, totaling 150. However, since CET failed to solve the underlying optimization problem for the Adult dataset across all models, the final count is 72 comparisons per GLANCE method. Furthermore, we perform additional evaluations by categorizing the competitors into implicit and explicit methods. Specifically, C-GLANCE is evaluated against implicit—GroupCF, GLOBE-CE, and dGLOBE-CE—resulting to 45 head-to-head comparisons. Similarly, T-GLANCE is compared with explicit competitors — Fast AReS, CET — yielding 27 head-to-head comparisons. Recall that all reported results concern the  $s$ -GCE problem for  $s = 4$ :
+
+{8}------------------------------------------------
+
+Table 1: Evaluating the effectiveness and average cost of T-GLANCE against explicit (Fast ARES, CET) and C-GLANCE against implicit (Group-CF, GLOBE-CE, and dGLOBE-CE) GCE methods for  $s$ -GCE problem with  $s = 4$ .  $s$ -GCE solutions with effectiveness below 80% (applicability threshold) are highlighted in red. Non-robust GCEs, identified by either a standard deviation (std) in effectiveness greater than 5% across folds or a std in cost greater than half the average cost, are highlighted in blue.
+
+| MODELS | ALGORITHMS | DATASETS |  |  |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | ADULT |  | COMPAS |  | DEFAULT CREDIT |  | GERMAN CREDIT |  | HELOC |  |
+|  |  | eff | avg | eff | avg | eff | avg | eff | avg | eff | avg |
+| DNN | PART ARES | 12.9 ± 1.06 | 1.0 ± 0.0 | 55.0 ± 0.86 | 1.22 ± 0.09 | 18.8 ± 2.16 | 1.0 ± 0.0 | 52.9 ± 1.93 | 1.0 ± 0.0 | 12.19 ± 0.58 | 1.03 ± 0.05 |
+|  | CET | NAN ± NAN | 63.62 ± 10.35 | 0.06 ± 0.24 | 6.32 ± 2.28 | 98.87 ± 0.62 | 6.32 ± 2.28 | 1.59 ± 0.54 | 86.78 ± 10.62 | 8.67 ± 3.25 | 10.9 ± 1.22 |
+|  | T-GLANCE | 100.0 ± 0.0 | 0.43 ± 0.43 | 99.53 ± 0.22 | 2.63 ± 0.24 | 100.0 ± 0.0 | 1.48 ± 0.43 | 96.97 ± 3.48 | 1.59 ± 0.83 | 99.8 ± 0.24 | 10.9 ± 1.22 |
+|  | GroupCF | 100.0 ± 0.0 | 10.06 ± 0.03 | 100.0 ± 0.0 | 4.48 ± 3.31 | 79.6 ± 20.79 | 1.55 ± 0.62 | 97.8 ± 4.4 | 1.85 ± 0.13 | 86.4 ± 10.17 | 3.09 ± 0.91 |
+|  | GLOBE-CE | 99.92 ± 0.0 | 4.24 ± 0.42 | 100.0 ± 0.0 | 4.54 ± 3.31 | 76.84 ± 37.55 | 5.14 ± 0.35 | 93.31 ± 3.48 | 2.0 ± 1.55 | 42.72 ± 46.97 | 11.77 ± 15.87 |
+|  | dGLOBE-CE | 99.92 ± 0.0 | 4.08 ± 1.37 | 100.0 ± 0.0 | 7.96 ± 3.91 | 87.38 ± 18.69 | 5.96 ± 1.14 | 97.36 ± 0.32 | 2.09 ± 0.27 | 99.98 ± 0.05 | 11.07 ± 8.6 |
+|  | C-GLANCE | 100.0 ± 0.0 | 4.6 ± 0.73 | 100.0 ± 0.0 | 7.34 ± 0.43 | 100.0 ± 0.0 | 1.2 ± 0.4 | 95.31 ± 3.15 | 1.23 ± 0.33 | 99.94 ± 0.05 | 11.24 ± 1.37 |
+| LR | PART ARES | 11.74 ± 2.4 | 1.0 ± 0.0 | 62.5 ± 1.82 | 1.24 ± 0.14 | 10.85 ± 5.45 | 1.07 ± 0.15 | 75.27 ± 2.96 | 1.0 ± 0.0 | 9.23 ± 1.24 | 1.12 ± 0.1 |
+|  | CET | NAN ± NAN | 73.18 ± 4.34 | 1.23 ± 0.15 | 100.0 ± 0.0 | 3.79 ± 1.31 | 96.83 ± 3.85 | 2.42 ± 0.24 | 100.0 ± 0.0 | 3.57 ± 1.48 | 1.58 ± 0.37 |
+|  | T-GLANCE | 100.0 ± 0.0 | 0.69 ± 0.01 | 99.79 ± 0.22 | 2.19 ± 0.1 | 100.0 ± 0.0 | 1.43 ± 0.36 | 99.58 ± 0.83 | 1.54 ± 0.32 | 100.0 ± 0.0 | 1.58 ± 0.37 |
+|  | GroupCF | 100.0 ± 0.0 | 1.71 ± 0.39 | 100.0 ± 0.0 | 3.97 ± 2.38 | 95.4 ± 9.2 | 1.94 ± 1.2 | 97.6 ± 2.94 | 9.34 ± 3.85 | 90.6 ± 3.93 | 2.4 ± 1.38 |
+|  | GLOBE-CE | 99.92 ± 0.0 | 2.68 ± 0.17 | 95.74 ± 8.52 | 5.14 ± 3.77 | 99.94 ± 0.07 | 3.42 ± 1.79 | 57.09 ± 20.03 | 0.73 ± 0.14 | 99.9 ± 0.0 | 0.6 ± 0.54 |
+|  | dGLOBE-CE | 99.92 ± 0.0 | 3.91 ± 0.93 | 100.0 ± 0.0 | 10.38 ± 7.76 | 69.89 ± 15.35 | 2.47 ± 0.23 | 99.9 ± 0.0 | 99.9 ± 0.0 | 1.63 ± 0.35 | 1.63 ± 0.35 |
+|  | C-GLANCE | 100.0 ± 0.0 | 1.04 ± 0.07 | 100.0 ± 0.0 | 2.33 ± 0.38 | 100.0 ± 0.0 | 1.05 ± 0.11 | 100.0 ± 0.0 | 1.21 ± 0.06 | 100.0 ± 0.0 | 1.55 ± 0.54 |
+| XGB | PART ARES | 6.13 ± 0.42 | 1.0 ± 0.0 | 59.83 ± 3.12 | 1.1 ± 0.05 | 31.06 ± 4.32 | 1.05 ± 0.04 | 51.27 ± 1.57 | 1.0 ± 0.0 | 8.49 ± 1.32 | 1.16 ± 0.13 |
+|  | CET | NAN ± NAN | 58.4 ± 4.3 | 1.06 ± 0.34 | 4.5 ± 2.64 | 86.29 ± 9.94 | 4.5 ± 2.64 | 100.0 ± 0.0 | 2.73 ± 0.49 | 86.78 ± 6.7 | 12.51 ± 2.75 |
+|  | T-GLANCE | 99.86 ± 0.14 | 1.8 ± 0.51 | 99.02 ± 0.93 | 2.6 ± 0.46 | 94.6 ± 3.13 | 2.75 ± 1.42 | 99.46 ± 1.08 | 1.33 ± 0.42 | 99.42 ± 2.45 | 2.85 ± 8.84 |
+|  | GroupCF | 96.8 ± 1.72 | 1.41 ± 0.54 | 100.0 ± 0.0 | 4.06 ± 2.1 | 95.2 ± 1.6 | 1.41 ± 0.64 | 100.0 ± 0.0 | 5.78 ± 4.11 | 78.4 ± 8.82 | 5.63 ± 1.93 |
+|  | GLOBE-CE | 82.87 ± 12.14 | 30.1 ± 10.39 | 87.13 ± 11.14 | 9.75 ± 7.2 | 82.7 ± 2.26 | 20.82 ± 1.73 | 77.05 ± 11.26 | 1.14 ± 1.24 | 27.06 ± 5.06 | 12.52 ± 32.48 |
+|  | dGLOBE-CE | 93.76 ± 1.98 | 64.76 ± 11.29 | 99.84 ± 0.31 | 12.46 ± 3.42 | 97.47 ± 0.82 | 42.58 ± 3.57 | 86.96 ± 9.79 | 2.66 ± 0.77 | 77.64 ± 11.51 | 10.8 ± 0.0 |
+|  | C-GLANCE | 99.85 ± 0.12 | 5.98 ± 4.22 | 99.51 ± 0.46 | 2.96 ± 0.82 | 98.13 ± 1.05 | 3.68 ± 1.64 | 100.0 ± 0.0 | 1.06 ± 0.03 | 98.94 ± 0.66 | 19.99 ± 1.91 |
+
+Appendix H presents an extensive experimental evaluation, including: additional and more detailed results for  $s = 4$ ; results for  $s = 8$  for all methods and results under no size constraints for GLOBE-CE; results utilizing different counterfactual generation methods.
+
+**Pareto Dominance.** We summarize method performance by determining whether one solution dominates another based on effectiveness and cost. Specifically, a solution  $\mathcal{C}$  of  $s$ -GCE Pareto dominates another solution  $\mathcal{C}'$  if it offers equal or better effectiveness and cost, and is strictly better in at least one of these objectives. As shown in Table 2, C-GLANCE dominates other methods in 39 out of 72 cases (54%), while is dominated only once by dGLOBE-CE (in HELOC-DNN—cf. Table 1). T-GLANCE dominates other methods in 30 out of 72 cases (41%), while it is dominated once by Group-CF (in Default Credit-XGB) and once by CET (in German Credit-DNN). In the three cases in which our method is dominated, the performance in terms of effectiveness is comparable. Overall, the GLANCE methods dominate other solutions in almost half of the cases (48%) and are dominated in only 2%.
+
+**Solution Practicality.** In the prior Pareto-dominance evaluation (Table 2) we compare solutions with optimal or near-optimal effectiveness to many solutions that exhibit unacceptable or unsatisfactory effectiveness. These lower-performing solutions are impractical for GCE, as the goal is to offer recourse to a large population segment. Solutions with low effectiveness fail to meet this goal, limiting their applicability in real-world scenarios. A solution that leaves a significant percentage of individuals without recourse undermines the very purpose of GCE, as noted by Ley et al. (2023). It is also important to note that achieving low recourse costs is easier for smaller subpopulations, especially those near the decision boundary, which explains the lower domination number when
+
+Table 2: Pareto domination evaluation of solutions, for  $s$ -GCE problem with  $s = 4$ . The table reports the rate (number of times over available comparisons) at which GLANCE methods dominate competitors (listed in the DOMINATES column) and the rate at which GLANCE methods are dominated by competitors (listed in the IS DOMINATED column).
+
+|  | C-GLANCE (IMPLICIT) |  | T-GLANCE (EXPLICIT) |  |
+|-|-|-|-|-|
+|  | DOMINATES | IS DOMINATED | DOMINATES | IS DOMINATED |
+| PART ARES (EXPLICIT) | 1/15 | 0/15 | 1/15 | 0/15 |
+| CET (EXPLICIT) | 6/12 | 0/12 | 5/12 | 1/12 |
+| GroupCF (IMPLICIT) | 9/15 | 0/15 | 6/15 | 1/15 |
+| GLOBE-CE (IMPLICIT) | 11/15 | 0/15 | 9/15 | 0/15 |
+| dGLOBE-CE (IMPLICIT) | 12/15 | 1/15 | 9/15 | 0/15 |
+| COMPETITORS (EXPLICIT) | 23/45 | 1/45 | 6/27 | 1/27 |
+| COMPETITORS (IMPLICIT) | 39/72 | 1/72 | 30/72 | 2/72 |
+| COMPETITORS (ALL) | 39/72 | 1/72 | 30/72 | 2/72 |
+
+{9}------------------------------------------------
+
+Table 3: Pareto domination evaluation of solutions, for  $s$ -GCE problem with  $s = 4$ , after applying the  $\text{eff} > 80\%$  threshold. The table reports the rate (number of times over available comparisons) at which GLANCE methods dominate competitors (listed in the DOMINATES column) and the rate at which GLANCE methods are dominated by competitors (listed in the IS DOMINATED column).
+
+|  | C-GLANCE (IMPLICIT) |  | T-GLANCE (EXPLICIT) |  |
+|-|-|-|-|-|
+|  | DOMINATES | IS DOMINATED | DOMINATES | IS DOMINATED |
+| FAST ARES (EXPLICIT) | 0/0 | 0/0 | 0/0 | 0/0 |
+| CET (EXPLICIT) | 6/9 | 0/9 | 5/9 | 1/9 |
+| GROUPCE (IMPLICIT) | 8/13 | 0/13 | 5/13 | 1/13 |
+| GLOBE-CE (IMPLICIT) | 8/10 | 0/10 | 7/10 | 0/10 |
+| dGLOBE-CE (IMPLICIT) | 10/13 | 1/13 | 7/13 | 0/13 |
+| COMPETITORS (EXPLICIT) |  |  | 5/9 | 1/9 |
+| COMPETITORS (IMPLICIT) | 26/36 | 1/36 |  |  |
+| COMPETITORS (ALL) | 32/45 | 1/45 | 24/45 | 2/45 |
+
+comparing with explicit methods. We consider a solution to be practical if it achieves effectiveness of at least 80%. In Table 1, we highlight the impractical solutions in red. GLANCE methods never return impractical solutions. In contrast, all the solutions returned by Fast ARES are deemed impractical, while the other methods return 2–5 impractical solutions each. Table 3 summarizes the head-to-head comparisons only when considering practical solutions. GLANCE framework dominates other methods in a much larger percentage—over 62% of the cases. It remains dominated in the same three cases, maintaining the percentage of dominated cases at a low 3%.
+
+**Explicit-Implicit Evaluation.** When evaluating our methods within their respective explicit or implicit categories, C-GLANCE dominates other implicit methods in 71% of cases (32 out of 45), compared to a 54% domination rate across all methods. When focusing solely on practical solutions, this rate increases to 72% (26 out of 36). For T-GLANCE, the domination rate against explicit methods is 22% (6 out of 27), lower than the 48% achieved when considering all methods. This drop is attributed to the high number of impractical solutions provided by competing explicit methods. However, after removing impractical solutions, T-GLANCE dominates 56% of cases, slightly higher than the 53% in head-to-head comparisons across all methods. Overall, the GLANCE framework demonstrates strong performance, dominating 52% of cases within categories (69% when considering only practical solutions) while keeping the percentage of dominated cases at a low 4% (3% when considering only practical solutions).
+
+**Robustness.** We expect methods to be robust, *consistently* generating highly effective and low-cost GCEs across different data splits, which is crucial for real-world deployment. Without robustness, recourse actions can vary significantly, undermining trust and leading to unfair outcomes, especially in critical areas like healthcare or finance. Evaluating the stability of effectiveness and cost metrics across different folds is key to determining the practical applicability of a counterfactual explanation method. Standard deviation measures this stability. An effectiveness deviation above 5% indicates an inconsistency in providing recourse, while a cost deviation exceeding half the average suggests unpredictable, impractical actions. These fluctuations make a solution unreliable and we highlight them in red in Table 1. Figure 3 visualizes Table 1’s results, i.e., the effectiveness of each solution vs. the cost (scaled to 0–1 values), along with their standard deviation. This figure provides a clear comparison of the trade-offs between cost and effectiveness, underscoring the robustness and consistency of the methods across different scenarios.
+
+## 6 CONCLUSION
+
+This paper introduces GLANCE, a robust and flexible framework for generating global counterfactual explanations that effectively balances the trade-offs between effectiveness, cost, and interpretability. An extensive experimental evaluation demonstrates that GLANCE constructs counterfactual explanations that are more effective and cheaper than those produced by the state of the art under size constraints.
+
+## REFERENCES
+
+Julia Angwin, Jeff Larson, Surya Mattu, and Lauren Kirchner. Machine bias. *Ethics of Data and Analytics*, pp. 254–264, 5 2016. doi: 10.1201/9781003278290-37.
+
+ Rest of paper (reference and Appendix) is removed.

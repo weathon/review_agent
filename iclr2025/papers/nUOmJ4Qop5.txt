@@ -1,0 +1,459 @@
+
+
+{0}------------------------------------------------
+
+# PEACOCK: MULTI-OBJECTIVE OPTIMIZATION FOR DEEP NEURAL NETWORK CALIBRATION
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The rapid adoption of deep neural networks underscores an urgent need for models to be safe, trustworthy and well-calibrated. Despite recent advancements in network calibration, the optimal combination of techniques remains relatively unexplored. By framing the task as a multi-objective optimization problem, we demonstrate that combining state-of-the-art methods can further boost calibration performance. We feature a total of seven state-of-the-art calibration algorithms and provide both theoretical and empirical motivation for their equal and weighted importance unification. We conduct experiments on both in-distribution and out-of-distribution computer vision and natural language benchmarks, investigating the speeds and contributions of different components. Our code is available anonymously at: <https://anonymous4open.science/r/Peacock-1CE8>.
+
+## 1 INTRODUCTION
+
+Key requirements for the safe deployment of neural networks include multiple desirable qualities, such as high accuracy, fast training speeds and trustworthy predictions. While the recent successes in deep learning have increased the use of complex neural networks, a common observation is that deep models tend to be miscalibrated, exhibiting either under- or over-confident predictions (Guo et al., 2017).
+
+Miscalibration can be particularly dangerous for high-stakes, safety-critical tasks such as medical prognosis (Esteva et al., 2017; Bandi et al., 2019), object-detection (Munir et al., 2023a,b; Liu et al., 2024), AI fairness and decision-making (Pleiss et al., 2017; Corvelo Benz & Rodriguez, 2023). Such tasks demand reliable decision-making algorithms, necessitating accurate confidence estimates that reflect a model’s uncertainty (Jiang et al., 2018; Kendall & Gal, 2017). Specifically, calibration ensures that a model’s predicted confidences align with its actual correctness. For instance, if a model assigns 0.9 confidence to a set of 100 samples, we should expect the model to be correct for 90 instances only.
+
+Modern neural networks must not only remain well-calibrated in-distribution (ID), but also display invariance properties and remain robustly calibrated against out-of-distribution (OOD) shifts (Wald et al., 2021). This is crucial for real-world deployment, where models must generalize well and express uncertainty when handling unseen inputs (see Fig. 2b). For instance, OOD shifts in computer vision might involve changes in saturation and illumination, while in natural language tasks, they can arise from differences in syntax or spelling mistakes (Zhang et al., 2023).
+
+While most calibration techniques tend to outperform the vanilla cross-entropy (CE) loss, they each tackle radically different issues, enabling independent performance boosts through different approaches. Each of these techniques exhibit varying trade-offs in ID/OOD performance (see Fig. 1 showing the 100% - ECE%)
+
+![Radar chart comparing calibration performance across various benchmarks for seven different methods. The methods are MaxE (2024), CPC (2022), ACLS (2023), AdaFocal (2023), Dual (2023), Peacock (Ours), and RandMixup (2023). The benchmarks are CIFAR100, TinyImageNet, CIFAR10-C, CIFAR100-C, FmoW, iMidCam, Cityscapes-17, and Amazon. The chart shows that Peacock (Ours) generally achieves the highest performance across most benchmarks, particularly in the OOD tasks (CIFAR10-C, CIFAR100-C, FmoW, iMidCam).](ea11d7fce37edc22702de204c57abeb1_img.jpg)
+
+| Benchmark | MaxE (2024) | CPC (2022) | ACLS (2023) | AdaFocal (2023) | Dual (2023) | Peacock (Ours) | RandMixup (2023) |
+|-|-|-|-|-|-|-|-|
+| CIFAR100 | 98.1 | 98.5 | 98.8 | 98.2 | 98.6 | 99.1 | 98.3 |
+| TinyImageNet | 85.2 | 86.5 | 87.1 | 85.8 | 86.9 | 88.4 | 85.5 |
+| CIFAR10-C | 89.6 | 90.2 | 91.5 | 89.8 | 90.7 | 92.3 | 89.9 |
+| CIFAR100-C | 89.6 | 90.5 | 91.8 | 89.9 | 90.9 | 92.5 | 90.1 |
+| FmoW | 88.2 | 89.1 | 90.4 | 88.5 | 89.5 | 91.2 | 88.7 |
+| iMidCam | 88.2 | 89.5 | 90.8 | 88.7 | 89.7 | 91.5 | 88.9 |
+| Cityscapes-17 | 90.5 | 91.2 | 92.1 | 90.8 | 91.5 | 92.8 | 90.7 |
+| Amazon | 90.0 | 91.5 | 92.5 | 90.5 | 91.8 | 93.1 | 90.6 |
+
+Radar chart comparing calibration performance across various benchmarks for seven different methods. The methods are MaxE (2024), CPC (2022), ACLS (2023), AdaFocal (2023), Dual (2023), Peacock (Ours), and RandMixup (2023). The benchmarks are CIFAR100, TinyImageNet, CIFAR10-C, CIFAR100-C, FmoW, iMidCam, Cityscapes-17, and Amazon. The chart shows that Peacock (Ours) generally achieves the highest performance across most benchmarks, particularly in the OOD tasks (CIFAR10-C, CIFAR100-C, FmoW, iMidCam).
+
+Figure 1: By unifying multiple calibration algorithms, *Peacock* outperforms individual methods, achieving state-of-the-art ID and OOD calibration. (Bigger is better)
+
+{1}------------------------------------------------
+
+![Figure 2: Motivated by recent contributions, we propose Peacock for calibration under OOD shifts. The diagram is divided into two parts: (a) Peacock architecture and (b) OOD shift challenge.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 2 consists of two parts, (a) and (b), illustrating the motivation for the Peacock framework.
+
+**(a) Peacock Architecture:** This part shows the structure of the Peacock framework. At the top, "Deep Neural Network Algorithms" lead to "Objective Functions". These functions are categorized into four groups: "Entropy-based", "Margin-based", "Regularizers", and "Post-hoc Processing". Each group contains a list of specific methods. A dashed line indicates components selected for Peacock. The selected components are: Entropy-based (AdaFocal (2022), Dual Focal (2023), MaxEnt (2024)), Margin-based (CPC (2022), CALS-ALM (2023), ACLS (2023)), Regularizers (RankMixup (2023)), and Post-hoc Processing (DACS (2023)).
+
+**(b) OOD Shift Challenge:** This part illustrates the challenge of Out-of-Distribution (OOD) shifts. It shows two scenarios: "In Distribution" and "Out of Distribution". In the "In Distribution" scenario, a model predicts "GT (Malignant)" with a confidence of 0.99, which is correct. In the "Out of Distribution" scenario, the same model predicts "GT (Malignant)" with a confidence of 0.92, which is incorrect (indicated by a red X). The Peacock framework (Ours) corrects this by predicting "GT (Malignant)" with a confidence of 0.53, which is correct (indicated by a green checkmark).
+
+Figure 2: Motivated by recent contributions, we propose Peacock for calibration under OOD shifts. The diagram is divided into two parts: (a) Peacock architecture and (b) OOD shift challenge.
+
+Figure 2: Motivated by recent contributions, we propose *Peacock* for calibration under OOD shifts.
+
+and computational complexity, making it difficult to pinpoint a clear winner (Cheng & Vasconcelos, 2022). Although it is theoretically possible for many calibration methods to be combined, the question remains on *which* of and *how* can these methods be fruitfully integrated together?
+
+In this paper, our main goal is to *unify* different proposed calibration approaches into a single calibration framework named *Peacock*. Our claim is that by jointly optimizing multiple calibration objectives, performance boosts can be achieved for ID + OOD classification tasks. Theoretically, we demonstrate that *Peacock*’s calibration errors will always be bounded by the average calibration errors of all its components. We also propose a novel weighted importance form of *Peacock* that is fast and effective in balancing the contributions of different components. Apart from presenting *Peacock*, this paper is also doubly positioned as a literature survey of recently published calibration strategies (see Fig. 2a).
+
+To demonstrate the combined efficacy of different calibration methods, we revisit a total of seven different SOTA calibration baselines and pick the final six to be integrated into *Peacock*. We further evaluate both ID and OOD performances of *Peacock* on popular synthetic and in-the-wild computer vision and natural language tasks. Our contributions can be summarized into the following points.
+
+- **Peacock:** We present *Peacock*, a fully integrated multi-objective framework for deep neural network calibration.
+- **Equal and Weighted Importance:** We motivate *Peacock* with theoretical guarantees and propose novel ways to weight the contributions of different calibration components.
+- **Review of Literature:** This paper additionally serves as a condensed survey<sup>1</sup> of all existing algorithms proposed in the calibration literature.
+- **Evaluation and Analysis:** We evaluate across popular synthetic and in-the-wild OOD vision and text benchmarks, empirically analyzing the speeds, effects and contributions of different components.
+
+## 2 RELATED WORK
+
+**Multi-Objective Optimization** The primary goal of multi-objective optimization (MOO) is to simultaneously optimize multiple loss<sup>2</sup> terms  $\{\mathcal{L}_1, \dots, \mathcal{L}_A\}$  on a single model. As these differing loss functions may possibly contrast and conflict with each other (Sener & Koltun, 2018). Obtaining a way to balance/weight these losses during optimization is of great interest, since learned representations between losses can be shared (Caruana, 1997; Zamir et al., 2018), with the added benefit
+
+<sup>1</sup> To the best of our ability, we cover all published works and further discuss them in Appendix A
+
+<sup>2</sup> For clarity, the term **loss** loosely refers to auxiliary functions, whilst **objective function** represents the final learning goal during model training.
+
+{2}------------------------------------------------
+
+of avoiding model redundancy in the form of large ensembles (Dosovitskiy & Djolonga, 2020). Prevalent methods include grid-search tuning, which can be cumbersome and fixating predefined weights during training may not guarantee optimal performance (Groenendijk et al., 2021). Other approaches include learning the hardest task first (Guo et al., 2018), self-paced learning (Li et al., 2017), aleatoric uncertainty estimation (Kendall & Gal, 2017; Kendall et al., 2018), gradient normalization (Chen et al., 2018), pareto frontiers (Sener & Koltun, 2018; Lin et al., 2019; Xiao et al., 2023; Liu et al., 2021) and co-efficient of variations (Groenendijk et al., 2021). Additionally, we refer readers to (Zhang & Yang, 2017; Gong et al., 2019) for a comprehensive review and comparisons on multi-objective methods. In this work, our focus is directed towards gradient-based multi-objective optimization for balancing calibration loss terms.
+
+**Deep Uncertainty Calibration** In Fig. 2a, we provide an overview of recent calibration algorithms and metrics. Examples of these algorithms include (1) *Entropy-based* methods that control the entropy of the model (Mukhoti et al., 2020; Wang et al., 2021; Leng et al., 2022; Ghosh et al., 2022; Tao et al., 2023; Neo et al., 2024). (2) *Margin-based* methods that directly limit model confidences (Hebbalaguppe et al., 2022; Liu et al., 2022a; Cheng & Vasconcelos, 2022; Liu et al., 2023a;b) (3) *Regularizers* that augment the training inputs or model (Zhang et al., 2020; Sapkota et al., 2023; Noh et al., 2023). (4) *Post-hoc processing*, which requires tuning the model on a hold-out validation set in order to scale predictions (Wenger et al., 2020; Tomani et al., 2021; Gupta et al., 2021; Tomani et al., 2022; Kuleshov & Deshpande, 2022; Gruber & Buettner, 2022; Yu et al., 2022; Tomani et al., 2023; Joy et al., 2023). Calibration metrics include binning and binning-free approaches (Gupta et al., 2021; Roelofs et al., 2022; Yang et al., 2023; Xiong et al., 2023). Additionally, we refer readers to Appendix A.5 for a discussion on calibration metrics. To keep the scale of our experiments manageable, we highlight only the latest algorithms of each sub-group used in *Peacock* (e.g., AdaFocal).
+
+## 3 BACKGROUND
+
+### 3.1 DEEP NEURAL NETWORK CALIBRATION
+
+Consider a classification problem over an input feature space  $X$  and output space  $Y$ , where  $N$  labelled i.i.d pairs  $(x_i, y_i)_{i=1}^N$  are randomly sampled from a training set  $\mathcal{D}$ . The model/hypothesis is then simply a mapping  $h_\theta : X \rightarrow Y$ , where  $Y \in [0, 1]$  and  $\theta$  denotes a deep neural network consisting of  $K$  neurons. The model is tasked to estimate a valid posterior such that  $\sum_{k=1}^K P_k(y_k|x) = 1$ , with the predicted top-1 class label  $\hat{y} := \arg \max h_i^\theta(x)$  obtained from the logits with the top softmax confidence  $\bar{P}(h^\theta) := \max_k P_k(y_k|x)$ . The model is considered *perfectly calibrated* if and only if its confidence matches its probability of being correct, satisfying the formal definition  $\mathbb{P}(\hat{y} = y | \bar{P} = P) = P \quad \forall P \in [0, 1]$ . As this definition of calibration cannot be computed with finite samples, the most widely used approximation is the expected calibration error (ECE) (Naeini et al., 2015):
+
+**Definition 3.1 (Expected Calibration Error)** *The empirical expected calibration error of a single hypothesis  $h^\theta(x)$  can be written as Eq.3 in (Zhang et al., 2020) and Eq.7 in (Yang et al., 2023):*
+
+$$\text{ECE}^d(h^\theta) = \sum_{b=1}^B \frac{n_b}{N} \|\bar{P}(h_\theta^\theta(x)) - \bar{y}_b\|_d^d \quad (1)$$
+
+whereby the average predicted confidences  $\bar{P}(h_\theta^\theta(x))$  and targets  $\bar{y}_b$  are partitioned into  $B$  bins, each containing  $n_b$  samples and  $\|\cdot\|_d^d$  is the  $d$ -th power of the  $\mathcal{L}_d$  norm between the predictions and targets.
+
+For OOD scenarios, the test distribution may diverge from the samples observed during training. Specifically, these OOD shifts can be caused by either concept shifts to the classes (changes in the posterior distribution  $P(Y|X)$ ) or covariate shifts to input features (changes in the marginal distribution  $P(X)$ ) (Shen et al., 2021). These OOD shifts tend to degrade model accuracy and calibration (Ovadia et al., 2019) which can be problematic for deployment. Unfortunately, achieving good calibration on both ID and OOD problem sets is non-trivial, since OOD samples typically vary
+
+{3}------------------------------------------------
+
+greatly from ID samples with the type and magnitude of shift unknown (Neo et al., 2024). In this work, our focus is on the problem of covariate shifts, with the goal of achieving good top-1 calibration and generalization across both ID and OOD settings.
+
+### 3.2 CALIBRATION ALGORITHMS AND TECHNIQUES
+
+Although many calibration algorithms have been proposed, each of these works tackle fundamentally different issues, with varying results and no consensus on which approach is the best. We diagnose the prevalent issues in deep neural network calibration and highlight the approaches of seven SOTA algorithms.
+
+**Adaptive Focal Parameter Selection** The Focal loss (FL) (Lin et al., 2017) has been a pivotal contribution in network calibration (Mukhoti et al., 2020). As a trade-off between minimizing the Kullback-Leibler divergence and maximizing entropy, the FL:  $\mathcal{L}_F = -\sum_k (1 - P_i(y_k|x_i))^\gamma \log P_i(y_k|x_i)$  is sensitive to the hyper-parameter  $\gamma$ , which controls the convexity of the entropy term. While strictly setting  $\gamma > 1$  reduces over-confidence, it can also cause under-confidence. To circumvent this, Adaptive FL (AdaFocal) (Ghosh et al., 2022) conditionally switches between the FL and Inverse FL (Wang et al., 2021) with different selected values of  $\gamma$ .
+
+$$\mathcal{L}_{\text{Ada}} = \begin{cases} -\sum_k (1 - P_i(y_k|x_i))^{\gamma_{t,b}} \log P_i(y_k|x_i) & \text{if } \gamma_{t,b} \geq 0 \\ -\sum_k (1 + P_i(y_k|x_i))^{\gamma_{t,b}} \log P_i(y_k|x_i) & \text{if } \gamma_{t,b} < 0, \end{cases} \quad (2)$$
+
+**Maximum Entropy Constraints** Based on the Principle of Maximum Entropy (Jaynes, 1957) and an extension of the FL. MaxEnt loss (Neo et al., 2024) is designed to handle OOD samples using statistical constraints computed from the prior distribution of the training set.
+
+$$\mathcal{L}_M^{ME} = -\sum_k (1 - P_i(y_k|x_i))^\gamma \log P_i(y_k|x_i) + \lambda_\mu \left[ \underbrace{\sum_k f(\mathcal{Y}) P_i(y_k|x_i) - \mu_G}_{\text{Global Expectation}} + \underbrace{\sum_k f(\mathcal{Y}) P_i(y_k|x_i) - \mu_{Lk}}_{\text{Local Expectation}} \right] \quad (3)$$
+
+Whereby the global expectations are computed from the entire training set such as  $\mathbb{E}[\mathcal{Y}] = \sum_k P_i(y_k|x_i) f(\mathcal{Y}) = \mu_G$  and the local expectations are computed sample-wise from the class value characteristic function  $f(\mathcal{Y})$ . The Lagrange multiplier  $\lambda_\mu$  controls the strength of the constraints, which can be solved cheaply using a numerical root-finder.
+
+**Under- and Over-confidence Trade-off** A caveat to FL and its extensions alike, is that maximizing the entropy term tends to penalize all output predictions, causing under-confidence (Charoenphakdee et al., 2021). Dual FL (Tao et al., 2023) maximizes the gap between the ground truth  $P_i(y_{GT}|x)$  and the highest confidence  $P_i(y_j|x)$  after the arg max class, balancing the trade-off between over- and under-confident predictions.
+
+$$\mathcal{L}_{\text{Dual}} = -\sum_k (1 - P_i(y_k|x) + P_i(y_j|x))^\gamma \log P_i(y_k|x) \quad (4)$$
+
+where  $P_i(y_j|x) = \max_k \{P_i(y_k|x) | P_i(y_k|x) < P_i(y_{GT}|x)\}$
+
+**Pairwise Binary Discriminatory Constraints** As binary problems are easier to calibrate, CPC loss (Cheng & Vasconcelos, 2022) proposes to decompose the original multi-class problem into  $\frac{K(K-1)}{2}$  binary classification problems. Whereby the predictions  $P_i(y_k|x)$  are calibrated against the confidences  $P_i(y_l|x)$  of the remaining  $(K - 1)$  pairs that do not involve the true class:
+
+{4}------------------------------------------------
+
+$$\mathcal{L}_{\text{CPC}}^{\text{lvl}} = -\frac{1}{(K-1)} \sum_{i \neq k} \log \frac{P_i(y_k|x)}{P_i(y_k|x) + P_i(y_l|x)} \quad (5)$$
+
+**Conditional Label Smoothing** Label smoothing (LS) (Müller et al., 2019) improves calibration by artificially softening targets with a constant margin  $\epsilon$ . However, LS often leads to under-confident predictions and requires time-consuming grid searches to find an optimal  $\epsilon$ . To address these limitations, several approaches have proposed adaptive or conditional label smoothing functions (see Appendix A). Building upon these methods, Adaptive Conditional Label Smoothing (ACLS) (Park et al., 2023) aims to dynamically approximate the label smoothing function.
+
+$$\mathcal{L}_{\text{ACLS}} = \begin{cases} \lambda_1 \max(0, h_k^\theta(x) - \min_k(h_k^\theta(x)) - m_{\text{ACLS}})^2 & \text{if } k = \hat{y} \\ \lambda_2 \max(0, h_{\hat{y}}^\theta(x) - h_k^\theta(x) - m_{\text{ACLS}})^2 & \text{if } k \neq \hat{y} \end{cases} \quad (6)$$
+
+When  $k = \hat{y}$ , the smoothing function is directly proportional to  $h_k^\theta(x)$ , thereby lowering confidences. Similarly, when  $k \neq \hat{y}$ , the effects of the smoothing function decreases, allowing the logits and confidences to increase.  $m_{\text{ACLS}}$  denotes the ACLS margin and  $\lambda_1, \lambda_2$  are hyperparameters for cases when  $k = \hat{y}$  and  $k \neq \hat{y}$ .
+
+**Feature and Label Regularization** Mixup (Zhang et al., 2018) is highly effective for network calibration (Thulasidasan et al., 2019; Chidambaram & Ge, 2024; Zhang et al., 2022). By interpolating a pair of inputs  $(x_i, x_j)$  and targets  $(y_i, y_j)$ , the augmented inputs and smoothed labels  $(\tilde{x}, \tilde{y})$  are obtained using the following equations:
+
+$$\begin{aligned} \tilde{x} &= \beta x_i + (1 - \beta) x_j \\ \tilde{y} &= \beta y_i + (1 - \beta) y_j \end{aligned} \quad (7)$$
+
+where  $\beta \in [0, 1] \sim \text{Beta}(\alpha, \alpha)$  is a blending coefficient, randomly drawn from a Beta distribution. By considering the ordinal ranking of training samples, RankMixup (Noh et al., 2023) further improves vanilla mixup by enforcing the confidences of interpolated samples to be lower than the confidences of original samples. The ordinal relationship between “easy” and “hard” samples is maintained by a margin  $m_{\text{MRL}}$ .
+
+$$\mathcal{L}_{\text{MRL}} = \max(0, \max_k \tilde{P}_i(\tilde{y}|\tilde{x}) - \max_k P_i(y|x) + m_{\text{MRL}}) \quad (8)$$
+
+RankMixup (Noh et al., 2023) can be computationally inefficient due to its requirement for two forward passes: one for the original samples  $P_i(y|x)$  and another for the mixed samples  $\tilde{P}_i(\tilde{y}|\tilde{x})$ . To improve computational efficiency, we propose an optimized version of RankMixup within *Peacock* that performs image and label mixing *batchwise*, enabling a single forward pass and faster compute times for  $\tilde{P}_i(\tilde{y}|\tilde{x})$ . Additional details for speeding up RankMixup can be found in Appendix B.2.
+
+**Adaptive Temperature Scaling** As a post-hoc method, temperature scaling (TS) (Platt & Karampatziakis, 2007) manipulates the predictions by a scalar  $\mathcal{T} \in \mathcal{R}^+$ . Similar to LS, TS tends to reduce the confidence of every sample - even for correct predictions and finding a suitable  $\mathcal{T}$  requires a grid-search over a separate validation set. Adaptive Temperature scaling (AdaTS) (Joy et al., 2023) aims to learn samplewise temperatures from the features  $h^\theta(x)$ . By jointly learning a conditional variational autoencoder (Kingma & Welling, 2014) and a multi-layer perceptron  $\phi$ , the samplewise temperatures are obtained as a post-processing step.
+
+$$\mathcal{L}_{\text{AdaTS}} = -\mathbb{E}_{\text{LB}}[\phi(h_i^\theta(x))] - \log \left( \frac{\exp(h_i^\theta(x)/\mathcal{T}_i)}{\sum_{k=1}^K \exp(h_k^\theta(x)/\mathcal{T}_i)} \right) \quad (9)$$
+
+## 4 MOTIVATION AND PEACOCK (PUTTING IT ALL TOGETHER)
+
+**Component Synergy** Why combine calibration methods? Despite their diverse approaches, all calibration algorithms discussed in Section 3.2 share the common goal of enhancing model cali-
+
+{5}------------------------------------------------
+
+bration. This suggests that they can be effectively integrated into a unified framework, leveraging their complementary strengths to achieve even better results. This section outlines our theoretical motivation for unifying calibration algorithms into *Peacock*. We first demonstrate how their equal combination improves calibration performance, subsequently we propose a novel weighted importance formulation that dynamically balances loss terms to further boost performance.
+
+### 4.1 EQUAL IMPORTANCE FORMULATION
+
+Consider a multi-objective function  $\mathcal{L}(\theta) = \frac{1}{A} \sum_{t=1}^A \mathcal{L}_t(\theta)$  comprising of a linear, equally weighted sum of  $A$  correlated loss terms/algorithms. From Definition 3.1, each empirical loss term  $\mathcal{L}_t(\theta) \triangleq \frac{1}{N} \sum_i \mathcal{L}(\hat{P}_t(h_t^\theta), y_i)$  yields an individual hypothesis  $\hat{P}(h_t^\theta)$  with a corresponding calibration error  $\hat{P}(h_t^\theta) = \bar{y} + \text{ECE}^d(h_t^\theta)$ . The unified hypothesis  $H^\theta$  of the multi-objective learner  $\mathcal{L}(\theta)$  can then be interpreted as the average of each individual hypothesis  $\hat{P}(H^\theta) = \frac{1}{A} \sum_{t=1}^A \hat{P}(h_t^\theta) = \bar{y} + \text{ECE}^d(H^\theta)$ . When  $d = 2$ , the averaged squared ECE across all individual hypotheses is given by:
+
+$$\overline{\text{ECE}}^2(h^\theta) = \frac{1}{A} \sum_{t=1}^A \text{ECE}^2(h_t^\theta) = \frac{\text{ECE}(h_1^\theta)^2 + \text{ECE}(h_2^\theta)^2 + \dots + \text{ECE}(h_A^\theta)^2}{A} \quad (10)$$
+
+As we equally consider the contributions of each individual hypotheses/loss term, with some rearrangement the expected squared ECE of the unified multi-objective learner can be obtained as:
+
+$$\text{ECE}^2(H^\theta) = \mathbb{E}_x \left[ \left( \frac{1}{A} \sum_{t=1}^A \text{ECE}(h_t^\theta(x)) \right)^2 \right] = \int \left( \frac{1}{A} \sum_{t=1}^A \text{ECE}(h_t^\theta(x)) \right)^2 p(x) dx \quad (11)$$
+
+where  $p(x)$  is the prior probability of each input. Then from Eq. (10) and Eq. (11), the combined learner is safely bounded by the averaged squared ECE of all individual hypotheses.
+
+$$\text{ECE}^2(H^\theta) \leq \overline{\text{ECE}}^2(h^\theta) \quad (12)$$
+
+As the  $\text{ECE}^1$  and  $\text{ECE}^2$  are highly correlated (Zhang et al., 2020), we expect the upper bound in Eq. (12) to hold. This upper bound remains applicable even for temperature-scaled variants of each hypothesis, where  $\mathcal{T}$  is a temperature function.
+
+$$\text{ECE}^2(\mathcal{T}(H^\theta)) \leq \overline{\text{ECE}}^2(\mathcal{T}(h^\theta)) \quad (13)$$
+
+*Proof.* See Appendix C.
+
+Similar to model ensembles (Zhou, 2012), loss ensembles allows a single model to perform well on multiple tasks, with additional practical benefits, such as sharing lower-level features and better compute times (Dosovitskiy & Djolonga, 2020). However, loss terms can often be conflicting, requiring trade-offs between different objectives.
+
+### 4.2 WEIGHTED IMPORTANCE FORMULATION
+
+To address these challenges, we propose a weighted importance formulation in the following section. This approach aims to find a suitable set of weights that optimizes the overall performance of the multi-objective learner. The weighted multi-objective optimization problem generally yields the following minimization problem:
+
+$$\min_{\theta} \mathcal{L}(\theta) = \sum_{t=1}^A w_t \mathcal{L}_t(\theta) \quad (14)$$
+
+where  $w_t$  are a set of unknown scalar weights controlling each loss term. In many cases, obtaining a suitable set of weights for Eq. (14) is highly desirable. However, common approaches would either typically require expensive grid searches or predefined heuristics (Kendall et al., 2018; Chen et al., 2018). A well-studied approach in multi-objective optimization are Pareto optimal solutions, which delivers different trade-offs amongst loss terms. The goal of achieving Pareto optimality (Sener & Koltun, 2018; Lin et al., 2019) is defined with the following necessary conditions.
+
+{6}------------------------------------------------
+
+**Definition 4.1** (Conditions for Pareto Optimal Calibration)
+
+1. **Pareto dominance** A solution  $\theta$  dominates another solution  $\bar{\theta}$  where  $\theta \prec \bar{\theta}$ , if  $\mathcal{L}^t(\theta) \leq \mathcal{L}^t(\bar{\theta})$  for all objectives  $t$  and  $\mathbf{L}(\theta_1, \dots, \theta_A) \neq \mathbf{L}(\bar{\theta}_1, \dots, \bar{\theta}_A)$ .
+2. **Pareto optimality** Solution  $\theta^*$  is considered Pareto optimal if there exists no other solution  $\theta$  that dominates  $\theta^*$  such that  $\theta \prec \theta^*$ .
+
+Assuming loss terms are convex and optimizable with gradient descent, Pareto optimal weights for each loss can be obtained through the Karush-Kuhn-Tucker (KKT) conditions (Fliege & Svaiter, 2000; Schäffler et al., 2002), by minimizing the following objective (Désidéri, 2012; Sener & Koltun, 2018):
+
+$$\min_{w_1, \dots, w_t} \left\{ \left\| \sum_{t=1}^A w_t \nabla_{\theta} \mathcal{L}_t(\theta) \right\|_2^2 \middle| \sum_{t=1}^A w_t = 1, w_t \geq 0 \quad \forall t \right\} \quad (15)$$
+
+Previous works (Désidéri, 2012; Sener & Koltun, 2018) have shown that the solution to Eq. (15) is either zero or provides a gradient direction that improves all loss components.
+
+**Practical Considerations** Generally, optimizing for  $w_t$  in Eq. (15) requires a separate optimizer and the recomputation of the gradients  $\nabla_{\theta} \mathcal{L}_t(\theta)$  for each loss term. This involves retaining the computational graph<sup>3</sup> for A backward passes, which slows down training speeds and grows prohibitively more expensive as A becomes larger.
+
+To circumvent this, we propose a fast, elegant and efficient alternative to recomputing gradients, by replacing  $\nabla_{\theta} \mathcal{L}_t(\theta)$  with decrease rate estimates for each loss term. Assuming model parameters  $\theta$  are updated via  $\theta' \leftarrow \theta - \eta \nabla_{\theta} \mathcal{L}_t(\theta)$ , we propose to balance learning loss terms with the following direction-orientated objective:
+
+$$\min_{w_1, \dots, w_t} \left\{ \left\| \sum_{t=1}^A w_t \sqrt{\frac{\Delta_{\theta} \mathcal{L}_t(\theta)}{\eta}} \right\|_2^2 \middle| \sum_{t=1}^A w_t = 1, w_t \geq 0 \quad \forall t \right\} \quad (16)$$
+
+*Proof.* See Appendix C.2.
+
+where the decrease rate estimates  $\sqrt{\frac{\Delta_{\theta} \mathcal{L}_t(\theta)}{\eta}}$ , are derived using the first-order Taylor approximation with a sufficiently small step size  $\eta$ . As long as the KKT conditions are satisfied and loss terms  $\mathcal{L}_t(\theta)$  are monotonically decreasing, faster performance can be achieved using Eq. (16). With the added benefit of  $w_t \propto \sqrt{\frac{\Delta_{\theta} \mathcal{L}_t(\theta)}{\eta}}$  which ensures balanced learning rates across all loss terms, preventing any single term from dominating the optimization process.
+
+**Direction Weighted Self-Attention** To optimize the objective in Eq. (16), we propose using a direction weighted self-attention block. Fig. 3 illustrates our self-attention block, which accepts an array of loss terms  $\mathcal{L}_t(\theta)$  as inputs and outputs a set of weights  $w_t$ . The Value (V), Key (K) and Query (Q) neurons are of size  $A \times A$  and the softmax function  $\sigma$  is applied to ensure that  $\sum_t w_t = 1$ . The learning dynamics of the direction weighted self-attention block are discussed in Appendix B.3.
+
+Full details can be found in Algorithm 1, which shows all calibration components of *Peacock* and an optional step for obtaining importance weights. A peculiar finding in our ablation study, is that removing ACLS tends to lead to better performance in *Peacock*. Since  $\mathcal{L}_{\text{AdaFocal}}^{\text{Dual}}$  contains the CE loss, we only apply importance weights to the auxiliary loss terms with the final objective function given by:  $\mathcal{L}^{\text{Peacock}} = \mathcal{L}_{\text{AdaFocal}}^{\text{Dual}} + w_1 \mathcal{L}_{\text{constraints}}^{\text{Dual}} + w_2 \mathcal{L}_{\text{CPC}}^{\text{Dual}} + w_3 \mathcal{L}_{\text{MRL}}$ .
+
+![Diagram of the Direction Weighted Self-Attention block. The input L_t = [L_1, L_2, L_3, ..., L_A] is processed through three parallel Linear layers to produce Query (Q), Key (K), and Value (V) vectors. These are then processed by a 'Scaled Dot-Product Attention' block, which outputs a matrix of size Q x K x T. This is followed by an 'Average and Normalize' block to produce the final output W_t = [W_1, W_2, W_3, ..., W_A].](34f788b0e5bc8af774fa5561c22e6d01_img.jpg)
+
+Diagram of the Direction Weighted Self-Attention block. The input L\_t = [L\_1, L\_2, L\_3, ..., L\_A] is processed through three parallel Linear layers to produce Query (Q), Key (K), and Value (V) vectors. These are then processed by a 'Scaled Dot-Product Attention' block, which outputs a matrix of size Q x K x T. This is followed by an 'Average and Normalize' block to produce the final output W\_t = [W\_1, W\_2, W\_3, ..., W\_A].
+
+Figure 3: Our direction weighted self-attention block learns the importance of each loss term.
+
+<sup>3</sup> For more details, see Pytorch autograd framework: <https://pytorch.org/docs/stable/autograd.html>
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+| Dataset | Metric | CE | MaxEnt | AdaFocal | RankMixup | CPC | Dual | ACLS | Peacock (Eq.) | Peacock (Impt.) |
+|-|-|-|-|-|-|-|-|-|-|-|
+| CIFAR10-C | Acc. ↑ | 77.9 <sub>±0.3</sub> | 78.3 <sub>±0.2</sub> | 77.7 <sub>±0.3</sub> | 77.8 <sub>±0.3</sub> | 77.6 <sub>±0.2</sub> | 77.9 <sub>±0.3</sub> | 78.1 <sub>±0.4</sub> | <b>76.8<sub>±0.2</sub></b> | 77.3 <sub>±0.4</sub> |
+|  | ECE ↓ | 14.5 <sub>±0.4</sub> | 6.5 <sub>±0.2</sub> | 6.8 <sub>±0.2</sub> | 11.9 <sub>±0.3</sub> | 11.2 <sub>±0.2</sub> | 7.4 <sub>±0.3</sub> | 11.2 <sub>±0.4</sub> | <b>6.3<sub>±0.1</sub></b> | <b>6.2<sub>±0.3</sub></b> |
+|  | CECE ↓ | 3.3 <sub>±0.1</sub> | 2.6 <sub>±0.1</sub> | 2.6 <sub>±0.1</sub> | 2.9 <sub>±0.1</sub> | 2.8 <sub>±0.1</sub> | 2.7 <sub>±0.1</sub> | 2.8 <sub>±0.1</sub> | <b>2.7<sub>±0.1</sub></b> | <b>2.6<sub>±0.1</sub></b> |
+|  | KSE ↓ | 14.5 <sub>±0.4</sub> | 6.2 <sub>±0.1</sub> | 6.9 <sub>±0.3</sub> | 11.8 <sub>±0.2</sub> | 11.1 <sub>±0.1</sub> | 7.0 <sub>±0.3</sub> | 11.3 <sub>±0.4</sub> | <b>6.1<sub>±0.2</sub></b> | <b>6.1<sub>±0.3</sub></b> |
+| CIFAR100-C | Acc. ↑ | 52.5 <sub>±0.1</sub> | 52.4 <sub>±0.1</sub> | 52.9 <sub>±0.2</sub> | 52.3 <sub>±0.1</sub> | 52.0 <sub>±0.1</sub> | 52.8 <sub>±0.1</sub> | 52.6 <sub>±0.1</sub> | 51.8 <sub>±0.1</sub> | 52.0 <sub>±0.1</sub> |
+|  | ECE ↓ | 10.6 <sub>±0.1</sub> | 11.6 <sub>±0.6</sub> | 11.0 <sub>±1.4</sub> | 13.2 <sub>±0.5</sub> | 15.7 <sub>±0.1</sub> | 12.2 <sub>±0.2</sub> | 9.6 <sub>±0.2</sub> | <b>9.3<sub>±0.1</sub></b> | <b>9.3<sub>±0.1</sub></b> |
+|  | CECE ↓ | 0.4 <sub>±0.1</sub> | 0.5 <sub>±0.1</sub> | 0.5 <sub>±0.1</sub> | 0.4 <sub>±0.1</sub> | 0.4 <sub>±0.1</sub> | 0.5 <sub>±0.1</sub> | 0.4 <sub>±0.1</sub> | <b>0.4<sub>±0.1</sub></b> | <b>0.4<sub>±0.1</sub></b> |
+|  | KSE ↓ | 9.3 <sub>±0.1</sub> | 11.4 <sub>±0.6</sub> | 13.3 <sub>±0.1</sub> | 10.3 <sub>±1.5</sub> | 11.5 <sub>±0.5</sub> | 15.3 <sub>±0.1</sub> | 11.7 <sub>±0.3</sub> | <b>9.6<sub>±0.4</sub></b> | <b>9.2<sub>±0.6</sub></b> |
+| TinyImageNet-C | Acc. ↑ | 25.2 <sub>±0.1</sub> | 22.0 <sub>±0.1</sub> | 25.1 <sub>±0.1</sub> | 23.1 <sub>±0.3</sub> | 23.7 <sub>±0.1</sub> | 22.9 <sub>±0.6</sub> | 22.1 <sub>±0.1</sub> | 23.3 <sub>±0.5</sub> | 25.0 <sub>±0.2</sub> |
+|  | ECE ↓ | 15.7 <sub>±0.5</sub> | 12.8 <sub>±0.1</sub> | 13.8 <sub>±0.4</sub> | 20.2 <sub>±0.1</sub> | 16.0 <sub>±0.5</sub> | 19.2 <sub>±0.4</sub> | 19.8 <sub>±0.2</sub> | <b>10.6<sub>±0.2</sub></b> | <b>10.4<sub>±0.2</sub></b> |
+|  | CECE ↓ | 0.3 <sub>±0.1</sub> | 0.3 <sub>±0.1</sub> | 0.3 <sub>±0.1</sub> | 0.4 <sub>±0.1</sub> | 0.3 <sub>±0.1</sub> | 0.3 <sub>±0.1</sub> | 0.3 <sub>±0.1</sub> | <b>0.3<sub>±0.1</sub></b> | <b>0.3<sub>±0.1</sub></b> |
+|  | KSE ↓ | 15.7 <sub>±0.5</sub> | 12.8 <sub>±0.2</sub> | 13.8 <sub>±0.3</sub> | 20.2 <sub>±0.2</sub> | 15.7 <sub>±0.2</sub> | 19.2 <sub>±0.7</sub> | 19.8 <sub>±0.1</sub> | <b>10.6<sub>±0.2</sub></b> | <b>10.3<sub>±0.2</sub></b> |
+| Camelyon17 | Acc. ↑ | 81.7 <sub>±0.7</sub> | 79.7 <sub>±1.7</sub> | 74.5 <sub>±0.1</sub> | 74.9 <sub>±4.0</sub> | 77.7 <sub>±1.6</sub> | 78.4 <sub>±2.9</sub> | 77.0 <sub>±1.2</sub> | 79.3 <sub>±2.7</sub> | 83.2 <sub>±1.1</sub> |
+|  | ECE ↓ | 15.5 <sub>±1.1</sub> | 12.4 <sub>±0.6</sub> | 20.4 <sub>±0.4</sub> | 22.4 <sub>±4.6</sub> | 20.2 <sub>±1.6</sub> | 15.4 <sub>±2.5</sub> | 19.8 <sub>±0.2</sub> | 11.7 <sub>±0.7</sub> | <b>9.8<sub>±1.8</sub></b> |
+|  | CECE ↓ | 16.7 <sub>±1.3</sub> | 16.2 <sub>±0.1</sub> | 23.7 <sub>±0.7</sub> | 23.6 <sub>±4.8</sub> | 21.3 <sub>±2.0</sub> | 20.3 <sub>±2.9</sub> | 22.0 <sub>±1.1</sub> | 14.0 <sub>±0.4</sub> | <b>13.7<sub>±1.6</sub></b> |
+|  | KSE ↓ | 15.5 <sub>±1.1</sub> | 12.3 <sub>±0.8</sub> | 20.4 <sub>±0.1</sub> | 22.4 <sub>±4.6</sub> | 20.2 <sub>±1.6</sub> | 15.4 <sub>±2.4</sub> | 19.6 <sub>±0.1</sub> | 11.7 <sub>±0.7</sub> | <b>9.8<sub>±1.8</sub></b> |
+| iWildCam | Acc. ↑ | 52.2 <sub>±0.3</sub> | 50.9 <sub>±1.0</sub> | 54.1 <sub>±1.7</sub> | 56.7 <sub>±0.3</sub> | 55.8 <sub>±2.2</sub> | 54.6 <sub>±2.1</sub> | 55.2 <sub>±2.2</sub> | 51.7 <sub>±0.8</sub> | 54.5 <sub>±0.8</sub> |
+|  | ECE ↓ | 30.6 <sub>±0.8</sub> | 21.0 <sub>±3.2</sub> | 23.0 <sub>±0.5</sub> | 25.5 <sub>±0.7</sub> | 20.3 <sub>±1.1</sub> | 13.0 <sub>±2.5</sub> | 20.6 <sub>±1.8</sub> | <b>9.7<sub>±0.3</sub></b> | <b>12.6<sub>±1.4</sub></b> |
+|  | CECE ↓ | 0.4 <sub>±0.1</sub> | 0.4 <sub>±0.1</sub> | 0.3 <sub>±0.1</sub> | 0.4 <sub>±0.1</sub> | 0.3 <sub>±0.1</sub> | 0.4 <sub>±0.1</sub> | 0.3 <sub>±0.1</sub> | <b>0.3<sub>±0.1</sub></b> | <b>0.3<sub>±0.1</sub></b> |
+|  | KSE ↓ | 30.6 <sub>±0.8</sub> | 21.0 <sub>±3.2</sub> | 23.0 <sub>±0.5</sub> | 25.5 <sub>±0.7</sub> | 19.5 <sub>±1.6</sub> | 13.0 <sub>±2.5</sub> | 20.6 <sub>±1.8</sub> | <b>9.7<sub>±0.3</sub></b> | <b>12.6<sub>±1.4</sub></b> |
+| FmoW | Acc. ↑ | 35.1 <sub>±0.5</sub> | 33.3 <sub>±0.1</sub> | 35.5 <sub>±0.7</sub> | 35.8 <sub>±0.1</sub> | 36.4 <sub>±0.1</sub> | 35.1 <sub>±0.2</sub> | 37.5 <sub>±0.1</sub> | 35.1 <sub>±0.2</sub> | 35.2 <sub>±0.1</sub> |
+|  | ECE ↓ | 39.8 <sub>±0.2</sub> | 20.0 <sub>±0.9</sub> | 20.9 <sub>±8.6</sub> | 41.7 <sub>±0.1</sub> | 22.4 <sub>±0.9</sub> | 10.7 <sub>±0.1</sub> | 21.7 <sub>±0.2</sub> | <b>10.6<sub>±0.3</sub></b> | <b>10.5<sub>±0.1</sub></b> |
+|  | CECE ↓ | 1.5 <sub>±0.1</sub> | 1.0 <sub>±0.1</sub> | 1.0 <sub>±0.2</sub> | 1.5 <sub>±0.1</sub> | 0.9 <sub>±0.1</sub> | 0.6 <sub>±0.1</sub> | 0.9 <sub>±0.1</sub> | <b>0.6<sub>±0.1</sub></b> | <b>0.6<sub>±0.1</sub></b> |
+|  | KSE ↓ | 39.8 <sub>±0.2</sub> | 20.0 <sub>±0.9</sub> | 20.9 <sub>±8.8</sub> | 41.7 <sub>±0.1</sub> | 22.4 <sub>±0.9</sub> | 10.7 <sub>±0.1</sub> | 21.7 <sub>±0.2</sub> | <b>10.6<sub>±0.4</sub></b> | <b>10.5<sub>±0.3</sub></b> |
+| Amazon | Acc. ↑ | 55.8 <sub>±0.3</sub> | 64.6 <sub>±0.4</sub> | 59.6 <sub>±2.7</sub> | 56.9 <sub>±0.1</sub> | 56.9 <sub>±0.1</sub> | 60.7 <sub>±3.8</sub> | 56.9 <sub>±0.2</sub> | 57.5 <sub>±0.4</sub> | 64.9 <sub>±0.8</sub> |
+|  | ECE ↓ | 7.0 <sub>±0.5</sub> | 5.0 <sub>±0.6</sub> | 6.7 <sub>±1.0</sub> | 43.1 <sub>±0.1</sub> | 7.4 <sub>±0.5</sub> | 5.8 <sub>±2.3</sub> | 42.0 <sub>±0.1</sub> | 6.5 <sub>±3.2</sub> | <b>5.0<sub>±1.1</sub></b> |
+|  | CECE ↓ | 6.4 <sub>±0.3</sub> | 3.8 <sub>±0.6</sub> | 3.3 <sub>±0.8</sub> | 17.2 <sub>±0.1</sub> | 4.8 <sub>±0.2</sub> | 2.5 <sub>±0.9</sub> | 16.8 <sub>±0.1</sub> | <b>2.9<sub>±1.3</sub></b> | <b>2.3<sub>±0.3</sub></b> |
+|  | KSE ↓ | 7.0 <sub>±0.5</sub> | 5.1 <sub>±0.6</sub> | 7.3 <sub>±0.6</sub> | 43.1 <sub>±0.3</sub> | 10.9 <sub>±3.3</sub> | 8.1 <sub>±0.1</sub> | 42.1 <sub>±0.1</sub> | 8.6 <sub>±1.0</sub> | <b>6.0<sub>±0.4</sub></b> |
+| CivilComments | Acc. ↑ | 90.3 <sub>±1.0</sub> | 91.5 <sub>±0.1</sub> | 91.4 <sub>±0.1</sub> | 88.6 <sub>±1.0</sub> | 88.6 <sub>±0.8</sub> | 91.5 <sub>±0.1</sub> | 88.6 <sub>±0.1</sub> | 90.1 <sub>±0.7</sub> | 90.8 <sub>±0.5</sub> |
+|  | ECE ↓ | 10.4 <sub>±0.4</sub> | 4.8 <sub>±0.2</sub> | 7.8 <sub>±1.7</sub> | 11.4 <sub>±0.5</sub> | 2.4 <sub>±0.4</sub> | 4.2 <sub>±0.1</sub> | 11.1 <sub>±0.1</sub> | <b>2.1<sub>±0.8</sub></b> | <b>4.2<sub>±1.0</sub></b> |
+|  | CECE ↓ | 10.4 <sub>±0.5</sub> | 5.6 <sub>±0.1</sub> | 8.1 <sub>±1.8</sub> | 11.4 <sub>±0.5</sub> | 2.4 <sub>±0.4</sub> | 4.8 <sub>±0.3</sub> | 11.1 <sub>±0.2</sub> | <b>2.2<sub>±0.3</sub></b> | <b>4.6<sub>±0.8</sub></b> |
+|  | KSE ↓ | 10.4 <sub>±0.4</sub> | 6.7 <sub>±0.1</sub> | 7.7 <sub>±1.7</sub> | 5.8 <sub>±0.1</sub> | 2.9 <sub>±0.4</sub> | 4.3 <sub>±0.1</sub> | 11.0 <sub>±0.1</sub> | <b>3.3<sub>±0.8</sub></b> | <b>4.2<sub>±1.0</sub></b> |
+
+Table 1: We report the OOD test scores (%) computed across 3 seeds, evaluated on both synthetic and wild benchmarks for *Peacock* and recent baselines. *Peacock* greatly improves calibration and maintains model accuracy. The best calibration scores in bold, second best are underlined.
+
+## 5 EXPERIMENTS AND ANALYSIS
+
+### 5.1 EXPERIMENT SETUP
+
+**Evaluation Metrics** Following (Guo et al., 2017; Mukhoti et al., 2020; Neo et al., 2024), we use the Expected Calibration Error (ECE), Classwise Calibration Error (CECE) (Nixon et al., 2019) and Kolmogorov-Smirnov Error (KSE) (Gupta et al., 2021) for evaluation. For fair comparisons, we follow the evaluation protocols of other authors and compute calibration errors using 15 bins with the mean and standard deviation shown across seeds. Additional details of each metric are included in Appendix A.5.
+
+**Datasets** We evaluate *Peacock* on a total of eight OOD image and text benchmarks. For synthetic datasets, we use CIFAR (Krishnan & Tickoo, 2020) and TinyImageNet (Deng et al., 2009) for training/validation and CIFAR-C/TinyImageNet-C (Hendrycks & Dietterich, 2019) for testing. For Wild datasets, we use Camelyon-17 (Bandi et al., 2019), iWildCam (Beery et al., 2020), FmoW (Christie et al., 2018), Amazon (Ni et al., 2019) and CivilComments(Borkan et al., 2019) from the Wilds benchmark (Koh et al., 2021). OOD data is never used for training or validating a model, only for testing.
+
+**Baselines** We compare equal and importance weighted *Peacock* against an uncalibrated baseline (CE) and six components, specifically MaxEnt (Neo et al., 2024), AdaFocal (Ghosh et al., 2022), RankMixup (Noh et al., 2023), CPC (Cheng & Vasconcelos, 2022), Dual (Tao et al., 2023), ACLS (Park et al., 2023). For our analysis on image tasks, we use ResNet-18, ResNet-50 (He et al., 2016), SWINv2 (Liu et al., 2022b) and RoBERTa Liu et al. (2019b) for text tasks. We perform post-hoc processing with AdaTS (Joy et al., 2023) and compare different weighted formulations analyzing the overall contributions of each component used in *Peacock*. For additional details of each dataset task, hyper-parameters and illustrations of synthetic and wild OOD shifts, we refer readers to Appendix D.1.
+
+{8}------------------------------------------------
+
+432  
+433  
+434  
+435  
+436  
+437  
+438  
+439  
+440  
+441  
+442  
+443  
+444  
+445  
+446  
+447  
+448  
+449  
+450  
+451  
+452  
+453  
+454  
+455  
+456  
+457  
+458  
+459  
+460  
+461  
+462  
+463  
+464  
+465  
+466  
+467  
+468  
+469  
+470  
+471  
+472  
+473  
+474  
+475  
+476  
+477  
+478  
+479  
+480  
+481  
+482  
+483  
+484  
+485
+
+| Dataset | ECE ↓ | CE | MaxEnt | AdaFocal | RankMixup | CPC | Dual | ACLS | Peacock (Eq.) | Peacock (Impt.) |
+|-|-|-|-|-|-|-|-|-|-|-|
+| CIFAR10-C | Pre | 14.5 <sub>0.4</sub> | 6.5 <sub>0.2</sub> | 6.8 <sub>0.2</sub> | 11.9 <sub>0.3</sub> | 11.2 <sub>0.2</sub> | 7.4 <sub>0.3</sub> | 11.2 <sub>0.4</sub> | <b>6.3</b> <sub>0.1</sub> | <b>6.2</b> <sub>0.3</sub> |
+|  | Post | 7.5 <sub>0.1</sub> | 6.9 <sub>0.2</sub> | 6.9 <sub>0.4</sub> | 7.1 <sub>0.3</sub> | 7.0 <sub>0.1</sub> | 7.3 <sub>0.3</sub> | 7.3 <sub>0.1</sub> | <b>6.6</b> <sub>0.1</sub> | <b>6.9</b> <sub>0.3</sub> |
+|  | Avg. | 11.0 <sub>0.3</sub> | 6.7 <sub>0.2</sub> | 6.9 <sub>0.3</sub> | 9.5 <sub>0.3</sub> | 9.1 <sub>0.2</sub> | 7.4 <sub>0.3</sub> | 9.3 <sub>0.3</sub> | <b>6.4</b> <sub>0.1</sub> | <b>6.6</b> <sub>0.3</sub> |
+| CIFAR100-C | Pre | 10.6 <sub>0.1</sub> | 11.6 <sub>0.6</sub> | 13.6 <sub>0.1</sub> | 11.0 <sub>1.1</sub> | 13.2 <sub>0.5</sub> | 15.7 <sub>0.1</sub> | 12.2 <sub>0.2</sub> | <b>9.6</b> <sub>0.2</sub> | <b>9.3</b> <sub>0.1</sub> |
+|  | Post | 8.1 <sub>1.4</sub> | <b>7.2</b> <sub>0.1</sub> | 7.5 <sub>0.1</sub> | 8.0 <sub>0.1</sub> | 10.2 <sub>0.2</sub> | 8.4 <sub>1.2</sub> | 8.1 <sub>0.4</sub> | <b>8.7</b> <sub>0.2</sub> | <b>8.9</b> <sub>0.2</sub> |
+|  | Avg. | 9.4 <sub>0.3</sub> | 9.4 <sub>0.4</sub> | 10.6 <sub>0.1</sub> | 9.5 <sub>1.0</sub> | 11.7 <sub>0.3</sub> | 12.1 <sub>0.2</sub> | 10.2 <sub>0.3</sub> | <b>9.2</b> <sub>0.2</sub> | <b>9.1</b> <sub>0.2</sub> |
+| TinyImageNet-C | Pre | 15.7 <sub>0.5</sub> | 12.8 <sub>0.1</sub> | 13.8 <sub>0.4</sub> | 20.2 <sub>0.1</sub> | 16.0 <sub>0.5</sub> | 19.2 <sub>0.1</sub> | 19.8 <sub>0.2</sub> | <b>10.6</b> <sub>0.2</sub> | <b>10.4</b> <sub>0.2</sub> |
+|  | Post | 25.4 <sub>0.3</sub> | 20.2 <sub>0.2</sub> | 26.1 <sub>1.4</sub> | 24.3 <sub>0.3</sub> | 20.7 <sub>0.4</sub> | 24.3 <sub>0.3</sub> | 24.4 <sub>0.4</sub> | <b>11.9</b> <sub>0.2</sub> | <b>12.6</b> <sub>0.2</sub> |
+|  | Avg. | 20.5 <sub>0.4</sub> | 16.5 <sub>0.2</sub> | 20.0 <sub>0.4</sub> | 22.3 <sub>0.3</sub> | 18.4 <sub>0.5</sub> | 21.8 <sub>0.4</sub> | 22.1 <sub>0.3</sub> | <b>11.2</b> <sub>0.4</sub> | <b>11.5</b> <sub>0.4</sub> |
+| Camelyon17 | Pre | 15.5 <sub>1.1</sub> | 12.4 <sub>0.1</sub> | 13.8 <sub>0.4</sub> | 20.2 <sub>0.1</sub> | 16.0 <sub>0.5</sub> | 19.2 <sub>0.4</sub> | 19.8 <sub>0.2</sub> | <b>11.7</b> <sub>0.7</sub> | <b>9.87</b> <sub>1.8</sub> |
+|  | Post | 33.1 <sub>0.4</sub> | 11.2 <sub>1.1</sub> | 15.4 <sub>1.5</sub> | 14.9 <sub>1.4</sub> | 12.2 <sub>1.4</sub> | 18.1 <sub>0.3</sub> | 11.6 <sub>0.7</sub> | <b>9.87</b> <sub>1.3</sub> | <b>12.2</b> <sub>1.7</sub> |
+|  | Avg. | 24.3 <sub>0.8</sub> | 11.8 <sub>0.6</sub> | 14.6 <sub>1.0</sub> | 17.6 <sub>0.8</sub> | 14.1 <sub>0.9</sub> | 18.7 <sub>0.4</sub> | 15.7 <sub>0.4</sub> | <b>10.8</b> <sub>1.5</sub> | <b>11.0</b> <sub>1.8</sub> |
+| iWildCam | Pre | 30.6 <sub>0.8</sub> | 21.0 <sub>3.2</sub> | 23.0 <sub>0.5</sub> | 25.5 <sub>1.7</sub> | 20.3 <sub>1.1</sub> | 13.0 <sub>2.5</sub> | 20.6 <sub>1.8</sub> | <b>12.0</b> <sub>0.1</sub> | <b>11.7</b> <sub>2.3</sub> |
+|  | Post | 8.0 <sub>2.2</sub> | 8.6 <sub>0.6</sub> | 7.9 <sub>1.3</sub> | 9.5 <sub>2.5</sub> | 11.7 <sub>1.9</sub> | 8.0 <sub>1.0</sub> | <b>7.9</b> <sub>0.4</sub> | <b>8.9</b> <sub>0.6</sub> | <b>9.2</b> <sub>2.5</sub> |
+|  | Avg. | 19.3 <sub>1.5</sub> | 14.8 <sub>2.4</sub> | 15.5 <sub>1.1</sub> | 17.5 <sub>1.9</sub> | 16.0 <sub>1.6</sub> | 10.5 <sub>1.6</sub> | 14.3 <sub>1.2</sub> | <b>10.5</b> <sub>0.4</sub> | <b>9.2</b> <sub>2.4</sub> |
+| FmoW | Pre | 39.8 <sub>0.2</sub> | 20.0 <sub>0.9</sub> | 20.9 <sub>0.6</sub> | 41.7 <sub>0.1</sub> | 22.4 <sub>0.9</sub> | 10.7 <sub>0.1</sub> | 21.7 <sub>0.2</sub> | <b>10.6</b> <sub>0.4</sub> | <b>10.5</b> <sub>0.3</sub> |
+|  | Post | 25.6 <sub>0.8</sub> | <b>4.9</b> <sub>0.9</sub> | 6.2 <sub>0.5</sub> | 7.9 <sub>0.3</sub> | 7.6 <sub>0.9</sub> | 5.6 <sub>0.9</sub> | 6.1 <sub>0.5</sub> | <b>5.3</b> <sub>0.8</sub> | <b>5.9</b> <sub>0.5</sub> |
+|  | Avg. | 32.7 <sub>0.5</sub> | 12.5 <sub>0.5</sub> | 13.6 <sub>1.7</sub> | 24.8 <sub>0.5</sub> | 15.0 <sub>0.8</sub> | 8.2 <sub>0.2</sub> | 13.9 <sub>0.2</sub> | <b>7.9</b> <sub>0.4</sub> | <b>8.2</b> <sub>0.8</sub> |
+
+Table 2: ECE (%) scores before and after AdaTS (Joy et al., 2023) for the different OOD datasets. Peacock delivers the best overall calibration performance, despite using temperatures obtained ID.
+
+### 5.2 COMPARISONS TO PUBLISHED BASELINES
+
+**In-Distribution Performance** Fig. 1 and Table 5 showcase the ID results, demonstrating *Peacock*’s consistently strong calibration performance across datasets. Following Eq. (12), *Peacock*’s ECE is significantly lower than the empirical average ECE of all methods. While individual algorithms may vary in performance across datasets, we demonstrate that combining them through *Peacock* consistently improves calibration - with no significant loss in accuracy. Additional ID results and discussions are included in Appendix D.2.
+
+**Out-of-Distribution Performance** Similar to the ID results, each individual algorithm’s independent performance varies across different datasets. Table 1 shows that by combining algorithms through equal importance *Peacock*, consistent improvements in OOD performance can be achieved on both synthetic and real-world image and text datasets. Our findings further demonstrate that the equal importance formulation of *Peacock* also adheres to the theoretical upper bound in Eq. (12) for OOD performance. Finally, *Peacock* can be further enhanced using our weighted importance formulation, achieving improved results and good generalization properties across all datasets.
+
+**Training Time per Epoch** Fig. 4 shows the average wall-clock time per epoch (forward pass, loss-calculation and back-propagation) for each method trained on CIFAR10. We report the wall-clock time in seconds on a NVIDIA GeForce RTX 2070 GPU with i7-10700 CPU. In general, each algorithm has similar speeds, with RankMixup taking the longest since another forward pass is required to obtain the logits of interpolated samples. On the other hand, *Peacock* is optimized (see Appendix B.2) to remain competitive with other baselines, despite combining multiple algorithms together.
+
+### 5.3 POST-HOC PROCESSING
+
+For post-hoc calibration, we apply AdaTS (Joy et al., 2023) to each method. The samplewise temperatures are obtained from an ID validation set and applied to the OOD test sets. Table 2 presents the ECE scores of each algorithm before and after applying AdaTS for all six OOD image datasets. Our findings demonstrate that *Peacock* delivers the best overall calibration performance, both before and after temperature scaling. In cases where *Peacock* does not deliver the best calibration, we can see that its performance is relatively close to the best score. While AdaTS generally improves OOD ECE, applying it to already well-calibrated models can sometimes lead to degraded performance. For instance, MaxEnt Loss achieves the best OOD calibration with 4.9% on FmoW without AdaTS, but applying it subsequently would cause the ECE to worsen to 12.5%. This discrepancy can be
+
+![Bar chart showing Wall-clock time per epoch for various methods on CIFAR10. The methods are Uncalib, MaxEnt, AdaFocal, RankMixup, CPC, Dual, and Peacock. The Y-axis is 'Sec./epoch' ranging from 0 to 40. The bars show that Peacock is one of the fastest methods, taking approximately 20 seconds per epoch, while RankMixup is the slowest at over 40 seconds.](4495fbec19aac6861f1a0b35c4dc38bc_img.jpg)
+
+| Method | Sec./epoch |
+|-|-|
+| Uncalib | ~22 |
+| MaxEnt | ~22 |
+| AdaFocal | ~22 |
+| RankMixup | ~42 |
+| CPC | ~22 |
+| Dual | ~22 |
+| Peacock | ~22 |
+
+Bar chart showing Wall-clock time per epoch for various methods on CIFAR10. The methods are Uncalib, MaxEnt, AdaFocal, RankMixup, CPC, Dual, and Peacock. The Y-axis is 'Sec./epoch' ranging from 0 to 40. The bars show that Peacock is one of the fastest methods, taking approximately 20 seconds per epoch, while RankMixup is the slowest at over 40 seconds.
+
+Figure 4: Wall-clock time for each method on CIFAR10. *Peacock* is as fast as each of its components.
+
+{9}------------------------------------------------
+
+![Figure 5: Three scatter plots showing the trade-offs between different auxiliary test losses for various MOO algorithms. The left plot shows RankMixup Loss (Task 2) vs MaxE Loss (Task 1). The middle plot shows CPC Loss (Task 3) vs RankMixup Loss (Task 2). The right plot shows MACE Loss (Task 1) vs CPC Loss (Task 3). In all plots, the 'Importance (Ours)' method (pink stars) is shown to be closer to the MT-MOO method (blue diamonds) than other methods like Equal (orange circles), MTAN (red triangles), CoVV (cyan pluses), and GradNorm (green crosses).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 5: Three scatter plots showing the trade-offs between different auxiliary test losses for various MOO algorithms. The left plot shows RankMixup Loss (Task 2) vs MaxE Loss (Task 1). The middle plot shows CPC Loss (Task 3) vs RankMixup Loss (Task 2). The right plot shows MACE Loss (Task 1) vs CPC Loss (Task 3). In all plots, the 'Importance (Ours)' method (pink stars) is shown to be closer to the MT-MOO method (blue diamonds) than other methods like Equal (orange circles), MTAN (red triangles), CoVV (cyan pluses), and GradNorm (green crosses).
+
+Figure 5: Solution given by different MOO algorithms for each of the auxiliary test losses. Our importance formulation effectively balances trade-offs between loss terms. Bottom-left is better.
+
+| Algorithm | Acc (%) | ECE (%) | Speed (Sec) | w1 | w2 | w3 | $\sum_{i=1}^3 w_i = 1$ |
+|-|-|-|-|-|-|-|-|
+| Equal-Importance | $51.8 \pm 0.1$ | $9.6 \pm 0.2$ | $50.1 \pm 0.2$ | 0.33 | 0.33 | 0.33 | Yes |
+| MTAN (Liu et al., 2019a) | $50.8 \pm 0.1$ | $10.2 \pm 0.4$ | $50.7 \pm 0.2$ | 0.33 | 0.33 | 0.33 | Yes |
+| CoVV (Groenendijk et al., 2021) | $52.6 \pm 0.1$ | $12.0 \pm 0.4$ | $50.6 \pm 0.2$ | 0.01 | 0.52 | 0.47 | Yes |
+| GradNorm (Chen et al., 2018) | $48.9 \pm 0.6$ | $9.3 \pm 0.7$ | $85.8 \pm 0.7$ | 2.99 | 0.00 | 0.00 | No |
+| MT-MOO (Sener & Koltun, 2018) | $51.9 \pm 0.5$ | $9.3 \pm 0.5$ | $67.5 \pm 0.5$ | 0.36 | 0.47 | 0.16 | Yes |
+| Weighted-Importance (Ours) | $52.6 \pm 0.1$ | $9.3 \pm 0.3$ | $50.5 \pm 0.2$ | 0.00 | 0.51 | 0.49 | Yes |
+
+Table 3: Comparisons of different multi-objective optimization methods for *Peacock*. Our weighted importance formulation is fast and effective.
+
+attributed to the disconnect between the training, validation sets and test set, explaining the higher calibration errors after temperature scaling (Ovadia et al., 2019). However, by combining multiple calibration algorithms together, *Peacock* displays the best generalization behavior even when using temperatures obtained ID. As AdaTS is designed solely for image tasks, we apply vanilla TS for Amazon and CivilComments indicating their results and ideal temperatures obtained from grid-search in Table 7. We further highlight that temperature scaling only manipulates the predicted confidences and does not affect recognition accuracy.
+
+### 5.4 WEIGHTED PEACOCK PERFORMANCE AND ANALYSIS
+
+We compare various weighted objective optimization methods for *Peacock*. Namely, using equal weights, MTAN (Liu et al., 2019a), GradNorm (Chen et al., 2018), CoVV (Groenendijk et al., 2021), MT-MOO (Sener & Koltun, 2018) and our proposed weighted importance variant, on CIFAR100/100-C using ResNet-18. All MOO methods are initialized with uniform weights, with the final test accuracy, ECE and weights shown upon convergence with the average training wall clock time per epoch in Table 3. Our results indicate that while each algorithm yields distinct solutions/weights for each loss term, they achieve comparable accuracies and calibration errors. GradNorm and MT-MOO have longer training times (about 65% and 35% respectively) since they require the recomputation of  $\nabla_{\theta} \mathcal{L}_i(\theta)$  for each loss term. Conversely, MTAN and CoVV offers faster performance, but has higher ECE. Fig. 5 further demonstrates that the auxiliary test losses for each MOO method yield similar solutions, with MT-MOO achieving the optimal solution. Our method closely approximates MT-MOO but is faster and more efficient. We further discuss contributions of each calibration loss term in Appendix D.3 and the limitations of our work in Appendix E.
+
+## 6 CONCLUSIONS
+
+We present *Peacock*, a unified framework for neural network calibration. By formulating unification as a multi-objective optimization problem, we demonstrate that combining calibration components improves performance on both ID and OOD tasks. Our proposed weighted importance form of *Peacock* is fast and effective in delivering good Pareto Optimal performance. Despite incorporating multiple algorithms, *Peacock*’s complements post-hoc processing and remains fast in terms of computational speed. Our method shows clear performance gains with RankMixup and MaxEnt loss offering the most improvements.
+
+ Rest of paper (reference and Appendix) is removed.

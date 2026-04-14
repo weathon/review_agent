@@ -1,0 +1,279 @@
+
+
+{0}------------------------------------------------
+
+# DERIVATIVES ARE ALL YOU NEED FOR LEARNING PHYSICAL MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Physics-Informed Neural Networks (PINNs) explicitly incorporate Partial Differential Equations (PDEs) into the loss function, thus learning representations that are inherently consistent with the physical system. We claim that it is possible to learn physically consistent models without explicit knowledge about the underlying equations. We propose Derivative Learning (DERL) to model a physical system by learning its partial derivatives, as they contain all the necessary information to determine the system’s dynamics. Like in PINNs, we also train the learning model on the initial and boundary conditions of the system. We provide theoretical guarantees that our approach learns the true solution and is consistent with the underlying physical laws, even when using empirical derivatives. DERL outperforms PINNs and other state-of-the-art approaches in tasks ranging from simple dynamical systems to PDEs. Finally, we show that distilling the derivatives enables the transfer of physical information from one model to another. Distillation of higher-order derivatives improves physical consistency. Ultimately, learning and distilling the derivatives of physical systems turns out to be a powerful tool to learn physical models.
+
+## 1 INTRODUCTION
+
+Machine Learning (ML) techniques have found great success in modeling dynamical and physical systems, including Partial Differential Equations (PDEs). The growing interest around this topic is driven by the many real-world problems that would benefit from accurate prediction of dynamical systems, such as weather prediction (Pathak et al., 2022), fluid modeling (Zhang et al., 2024), quantum mechanics (Mo et al., 2022), and molecular dynamics (Behler & Parrinello, 2007). These problems require grasping the essence of the system by modeling its evolution while following the underlying physical laws. Purely data-driven models often fail at this task: while being able to approximate any function, they do not usually learn to maintain consistency with the physical dynamics of the system (Greydanus et al., 2019; Hansen et al., 2023), or fail to approximate it when only a few data points are available (Czarnecki et al., 2017). Physics-Informed Neural Networks (PINNs) (Raissi et al., 2019) emerged as an effective paradigm to learn the dynamics of a PDE, by explicitly including in the loss the PDE components evaluated using automatic differentiation (Baydin et al., 2018). This imposes physical consistency by design and allows to use PINNs in regimes where data is scarce. Unfortunately, PINNs suffer from optimization issues (Wang et al., 2022) which can lead to poor generalization (Wang et al., 2021). Other physics-inspired models exploit classical formalisms of mechanics such as Hamiltonians (Greydanus et al., 2019) and Lagrangians (Cranmer et al., 2019), but they are restricted to problems where the system is conservative and require an external solver to calculate complete trajectories.
+
+In this paper, we propose Derivative Learning (DERL), a new approach to train neural networks using only the partial derivatives of the objective function, as they perfectly describe its evolution in time and space. Like PINNs, DERL also learns the initial and boundary conditions, as they are needed to retrieve the full solution. The idea behind learning the partial derivatives can be understood by looking at a simple dynamical system such as the pendulum, or any other system that can be described by a Cauchy problem  $\dot{x}(t) = f(x(t))$ ,  $x(0) = x_0$ . The initial position and velocity give the starting point, while the time derivative of such quantities along the trajectory can completely determine the rest of the evolution. This is a consequence of the uniqueness theorem for Ordinary Differential Equations (ODEs). A similar result holds for PDEs (Evans, 2022). We
+
+{1}------------------------------------------------
+
+![Figure 1: Comparison between how DERL and PINN learn a function u(t, x, y). The diagram shows a Neural Network (green) taking inputs x, y, t and outputting u-hat. This u-hat is processed by Automatic Differentiation (AD, blue) to compute partial derivatives. The PINN (orange) uses these derivatives to calculate the PDE residual F(u-hat, Du-hat) = 0 and the initial condition u-hat(0) = u(0). The DERL (pink) uses the derivatives to calculate the initial condition u(0) and the partial derivatives du/dx, du/dy, du/dt. A graph on the right shows the function u(t, x, y) and its partial derivatives du/dx and du/dt at a point x.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: Comparison between how DERL and PINN learn a function u(t, x, y). The diagram shows a Neural Network (green) taking inputs x, y, t and outputting u-hat. This u-hat is processed by Automatic Differentiation (AD, blue) to compute partial derivatives. The PINN (orange) uses these derivatives to calculate the PDE residual F(u-hat, Du-hat) = 0 and the initial condition u-hat(0) = u(0). The DERL (pink) uses the derivatives to calculate the initial condition u(0) and the partial derivatives du/dx, du/dy, du/dt. A graph on the right shows the function u(t, x, y) and its partial derivatives du/dx and du/dt at a point x.
+
+Figure 1: Comparison between how DERL and PINN learn a function  $u(t, x, y)$ . Partial derivatives  $\frac{\partial \hat{u}}{\partial t}, \frac{\partial \hat{u}}{\partial x}, \frac{\partial \hat{u}}{\partial y}$  of the network output  $\hat{u}$  are computed by Automatic Differentiation (AD) (Baydin et al., 2018). PINNs consider  $\hat{u}$ ,  $\nabla \hat{u}$  and entangle all derivatives when calculating the PDE residual. Instead, DERL *learns* the partial derivatives as independent targets, together with the initial or boundary condition. Derivatives can be calculated as finite differences (right-most plot).
+
+prove that learning partial derivatives is sufficient to learn the underlying system and enables better in-domain generalization compared to data-driven approaches like supervised learning and PINNs. We also discovered that DERL enables the transfer of physical knowledge from a trained model to a student model by *distilling* the derivatives. Distilling higher-order derivatives improves the result.
+
+The main contributions of this paper are: (a) DERL, a new methodology to learn dynamical systems and solutions to PDEs by only using the partial derivatives of the target functions, along with initial and boundary conditions (figure 1). (b) A theoretical validation of DERL which proves that the learned solution converges to the true one when the loss goes to zero. Our results hold even with empirical derivatives when the analytical ones are not available. (c) An empirical assessment of DERL on a variety of dynamical systems and PDEs, including systems of PDEs, against data-driven supervised learning, PINNs, and other state-of-the-art methodologies. (d) An application of DERL to the transfer of physical knowledge from a reference model to a student one. To the best of our knowledge, this is the first attempt at this task. We hope it can pave the way to an *incremental and compositional* way (Xiang et al., 2020; Soltoggio et al., 2024) of learning physical systems.
+
+## 2 ON THE IMPORTANCE OF DERIVATIVE LEARNING
+
+A model that learns dynamical systems must be capable of simulating the evolution of the system over a large timespan, possibly in regions or at resolutions not available during training. This makes the consistency of our model to the underlying physical laws a key factor to ensure it is a reliable and robust predictor. Concretely, given a set of evaluation points and their outputs  $\{(x_i, u(x_i))\}, i = 1, \dots, N$ , where  $x \in \mathbb{R}^n$  and  $u(x) \in \mathbb{R}$ , multiple curves pass through those points. We are interested in learning *the one curve* that is compatible with the underlying physical model.
+
+Continuous dynamical systems are completely determined by two components: an initial state  $u_0$ , and an ODE describing its evolution  $du/dt = f(u(t))$ . The existence and uniqueness of a solution are guaranteed under hypotheses such as Lipschitz continuity of  $f$ . As a running example, we consider the damped pendulum. Its state is defined by the current angle and angular velocity  $x(t) = (\theta(t), \omega(t))$ . The corresponding ODE reads:
+
+$$\begin{cases} \dot{\theta} = \omega \\ \dot{\omega} = \ddot{\theta} = -\frac{g}{l} \sin(\theta) - \frac{b}{m} \omega, \end{cases} \quad (1)$$
+
+where  $g, b, m, l$  are scalar parameters that represent physical quantities such as gravity, dampening, mass, and rope length, respectively. Dynamical systems teach us an interesting fact: the initial state and the state derivatives are all that is *necessary and sufficient* to predict the full trajectory of the system. From a mathematical point of view, two functions with the same continuous derivative differ up to a constant, which is determined by some initial condition. Of greater complexity, PDEs
+
+{2}------------------------------------------------
+
+describe physical systems of the form:
+
+$$\begin{cases} \mathcal{L}u(t, \mathbf{x}) = 0 & t \in [0, T], \mathbf{x} \in \Omega, & (\text{PDE}) \\ u(0, \mathbf{x}) = g(\mathbf{x}) & \mathbf{x} \in \Omega, & (\text{IC}) \\ u(t, \mathbf{x}) = b(t, \mathbf{x}) & \mathbf{x} \in \partial\Omega, & (\text{BC}) \end{cases} \quad (2)$$
+
+where  $\mathcal{L}$  is the differential operator of the ODE/PDE, which usually involves derivatives,  $\Omega$  is the domain of the solution, and  $\partial\Omega$  is its boundary. Well-posed problems of this kind are completely determined by the dynamics of the PDE, which determines the evolution and propagation of information in the domain, initial conditions (IC), and boundary conditions (BC).
+
+With this in mind, it is worth asking if this concept can be leveraged for neural networks that learn an underlying physical system. If partial derivatives are sufficient to determine the evolution starting from a given state, can we train a model with just these terms to completely describe the behavior of the system? Hence, we propose to train a neural network using the following DERL loss:
+
+$$\begin{aligned} L(\hat{u}, u) = & \lambda_u \underbrace{\|\hat{D}u(t, \mathbf{x}) - Du(t, \mathbf{x})\|_{L^2([0, T] \times \Omega)}^2}_{\text{Derivative learning}} + \lambda_B \underbrace{\|\hat{u}(t, \mathbf{x}) - b(t, \mathbf{x})\|_{L^2([0, T] \times \partial\Omega)}^2}_{\text{Boundary cond.}} + \\ & + \lambda_I \underbrace{\|\hat{u}(0, \mathbf{x}) - g(\mathbf{x})\|_{L^2(\Omega)}^2}_{\text{Initial cond.}}, \end{aligned} \quad (3)$$
+
+that is a combination of the  $L^2$  loss on the function jacobians  $Du$  or gradients  $\nabla u$  when  $u(\mathbf{x}) \in \mathbb{R}$ , the BC and the IC, where  $\lambda_u, \lambda_B, \lambda_I$  are hyperparameters. In practice, the  $L^2$  losses are substituted by empirical ones such as the Mean Squared Error over collocation points. See Appendix A for more details. In the case of time-independent problems, such as the Allen-Cahn equation (E2) in table 1, the last term is dropped. Compared to PINNs our method is simpler to train as the network's partial derivatives have individual targets instead of being entangled together (see figure 1). Therefore, we expect better generalization capabilities. When the derivatives are not available as data, we will show that empirical derivatives obtained with finite differences on  $u$  (Anderson et al., 2020) are sufficient to train the network.
+
+**Derivative distillation for transfer of physical knowledge.** Combining knowledge from different experts is a powerful approach in deep learning (Xiang et al., 2020; Carta et al., 2024), still unexplored in the context of physical systems. We leverage DERL and distillation to transfer the physical knowledge contained in a pre-trained model to a randomly initialized student. This relieves from the burden of learning exclusively from raw data and it enables continual exchange of physical information across models. We train the student to minimize the MSE loss between the derivative  $\nabla \hat{u}_T$  computed by the (frozen) teacher and the derivative computed by the (trainable) student  $\nabla \hat{u}_S$  in the interior of the domain. The MSE replaces the KL divergence commonly used in distillation for classification problems. We will show that *distilling higher-order derivatives* leads to substantial improvements in the physical consistency of the final model.
+
+### 2.1 THEORETICAL ANALYSIS
+
+Neural networks are universal approximators in the Sobolev space  $W^{m,p}(\Omega)$  of  $p$ -integrable functions with  $p$ -integrable derivatives up to order  $m$  (Hornik, 1991). The only requirement is for the activation function to be continuously differentiable  $m$  times (as is the tanh function we will use). We now prove that learning the derivatives  $Du$ , together with the IC and BC, is sufficient to learn  $u$ . We show that minimizing the loss in 3 is equivalent to minimizing the distance between our solution  $\hat{u}$  and the true one  $u$ . Our first result involves ODEs and one-dimensional functions, which resembles the fundamental theorem of calculus:
+
+**Theorem 2.1.** *Let  $u(t)$  be a (continuous) function in the space  $W^{1,2}([0, T])$  on the interval  $[0, T]$ . If  $L(u, \hat{u}) \rightarrow 0$ , then  $u \rightarrow \hat{u}$ .*
+
+We give the proof in Appendix B.1. The generalization of this result to higher dimensions turned out to be more challenging. We state the final result as:
+
+**Theorem 2.2.** *Let  $\Omega$  be a bounded open set and  $u \in W^{1,2}(\Omega)$  a function in the Sobolev space with square norm. If the neural network  $\hat{u}$  is trained such that  $L(\hat{u}, u) \rightarrow 0$ , then  $\|\hat{u} - u\|_{W^{1,2}(\Omega)} \rightarrow 0$*
+
+{3}------------------------------------------------
+
+and  $\|\hat{u} - u\|_{L^2(\partial\Omega)} \rightarrow 0$ . To have a numerical approximation, if  $L(\hat{u}, u) \leq \epsilon$ , then  $\|\hat{u} - u\|_{W^{1,2}(\Omega)} \leq 2(C+1)\epsilon$  for some constant  $C$ . Furthermore, at the limit, the two functions coincide  $\hat{u}_\infty = u$  inside  $\Omega$  and at the boundary.
+
+The proof is provided in Appendix B.2. This result can be extended to include higher-order derivatives by adding the corresponding terms to the loss  $L$ . We can use these theorems to prove that a neural network trained to optimize the loss in equation 3 learns the solution to a PDE. We prove the following theorem in Appendix B.3.
+
+**Theorem 2.3.** *Let  $u$  be a solution to a PDE of the form of equation 2, which can be time-dependent or time-independent. A Neural Network  $\hat{u}$  trained to optimize  $L(\hat{u}, u)$  as in equation 3 converges to the solution of the PDE  $u$  and fulfills all three conditions.*
+
+When analytical derivatives are not available, we use empirical derivatives obtained via finite differences (Anderson et al., 2020):  $\frac{\partial u}{\partial x_j}(\mathbf{x}) \simeq \frac{u(\mathbf{x} + h e_j) - u(\mathbf{x})}{h}$ , where  $e_j$  is the unit vector in the direction of  $x_j$  and  $h$  is a small positive real number. Appendix C shows that finite differences converge on the whole domain to the true derivatives when  $h \rightarrow 0$ . This guarantees that we can still approximate  $u$  using empirical derivatives. We provide additional statements and remarks in Appendix B.
+
+## 3 RELATED WORKS
+
+**Data-driven methods.** Neural approaches are commonly used to learn physical systems and PDEs. Recurrent neural networks (Schmidt, 2019) are a prototypical example of systems that evolve through time based on their previous state. ResNets (He et al., 2016) and NODEs (Chen et al., 2019) model the residual state update as a discrete or continuous derivative, but cannot predict complete trajectories at once or require an external ODE solver. Normalizing flows (Rezende & Mohamed, 2015) model dynamical systems such as particles by learning their distribution with iterative invertible mappings. Neural operators (Li et al., 2020b) and their evolution (Li et al., 2021) act as neural networks for entire functions by mapping initial conditions or parameters to a solution via kernel operators and Fourier transforms. While these methods are powerful and find many applications to real-world problems (Pathak et al., 2022), they require a large amount of data to generalize, are computationally intensive, and do not ensure that the solution is physically consistent. Our work shares similarities with Sobolev learning (Czarnecki et al., 2017; Srinivas & Fleuret, 2018), which adds derivative learning terms to the supervised loss with application to reinforcement learning and machine vision tasks. Instead, we are the first to consider a pure derivative approach and to apply it to physical and dynamical systems.
+
+**Physics-inspired and Physics-Informed methods.** PINNs (Raissi et al., 2019) incorporate PDEs that describe the underlying physical system directly into the loss (as well as the  $L^2$  residual), using automatic differentiation (Baydin et al., 2018). PINNs reduce the amount of training data needed and increase the physical consistency of the solution. However, PINNs suffer from optimization problems (Wang et al., 2021) and can fail to reach a minimum of the loss (Sun et al., 2020). To alleviate these issues, there exist methodologies to simplify the objective (Sun et al., 2020) or to choose the collocation points where the PDE residual is evaluated (Zhao, 2021; Lau et al., 2024). Both approaches are problem-specific and add complexity to the optimization process. Models inspired by physics exploit the formalisms of Hamiltonian (Greydanus et al., 2019) and Lagrangian (Cranmer et al., 2019) mechanics to be inherently consistent with the properties of the system, but they require the system to be conservative and to be formulated explicitly or implicitly in the Lagrangian or Hamiltonian formalism, which is generally not the case.
+
+**Exact consistency by design.** Adopting ad-hoc architectural choices for the model allows the learning process to be exactly consistent with the physical properties of the underlying system. Hansen et al. (2023) takes a probabilistic approach by modeling the predicted distribution of the solution and by projecting it on a subspace that is conservative. However, they only consider global conservation of quantities, and the approach is only tested on one-dimensional systems. Neural Conservation Laws (NCL) (Richter-Powell et al., 2022) take advantage of the mathematical theory of geometric analysis to make the output of the model divergence-free by design. However, NCL is very slow and it is only built for systems that are described by a divergence-free equation. Similarly,
+
+{4}------------------------------------------------
+
+Table 1: Summary of the tasks we consider in the experiments.
+
+| Experiment | Equation | Description |
+|-|-|-|
+| <b>Pendulum</b> | (E1) $\dot{\theta} = \omega, \quad \dot{\omega} = -\frac{g}{l} \sin(\theta) - \frac{b}{m} \omega$ | ODE |
+| <b>Allen-Cahn</b> | (E2) $\lambda(u_{xx} + u_{yy}) + u(u^2 - 1) = f$ | Second-order PDE |
+| <b>Continuity</b> | (E3) $\frac{\partial \rho}{\partial t} + \nabla \cdot (v\rho) = 0$ | Time-dependent PDE |
+| <b>Navier-Stokes</b> | (E4.M) $\frac{\partial \mathbf{u}}{\partial t} - \mu \Delta \mathbf{u} + \rho[\mathbf{Du}]\mathbf{u} = -\nabla p,$<br>(E4.I) $\nabla \cdot \mathbf{u} = 0$ | System of PDEs |
+| <b>KdV distillation</b> | (E5) $u + uu_t + \nu u_{xxx} = 0$ | Third-order PDE |
+| <b>NCL distillation</b> | (E6.C) $\frac{\partial \rho}{\partial t} + \nabla \cdot (\rho \mathbf{u}) = 0, \quad (E6.I) \quad \nabla \cdot \mathbf{u} = 0$<br>(E6.M) $\frac{\partial \mathbf{u}}{\partial t} + [\mathbf{Du}]\mathbf{u} + \frac{\nabla p}{\rho} = 0$ | System of PDEs |
+
+Torres et al. (2024) propose a divergence-free normalizing flow, but that requires invertible mappings and it can only work with densities. Again, this approach works only with divergence-free fields and cannot be extended to include other equations in the framework.
+
+## 4 EXPERIMENTS
+
+We validate our approach on a set of dynamical systems and physical PDEs. Table 1 summarizes the tasks we consider. For each experiment, we compare 4 training methods on a Multi-Layer Perceptron (MLP, Goodfellow et al. (2016)): our **DERL** that learns  $\mathbf{Du}$ , **Output Learning (OUTL)** that learns  $\mathbf{u}$ , **PINN** (Raissi et al., 2019), and **Sobolev learning (SOB)** (Czarnecki et al., 2017). Details on these models are in Appendix A. The approaches differ in the way they learn the solution in the interior of the domain, while they enforce the same IC and BC.
+
+To evaluate the accuracy of the prediction, we compute the  $L^2$  distance between the true function  $\mathbf{u}$  and the estimate  $\hat{\mathbf{u}}$ . To measure the physical consistency of a model, we either compute the  $L^2$  norm of the PDE residual of the network as for PINNs (Raissi et al., 2019) or the  $L^2$  distance between the true and the learned field in the phase space  $\hat{\mathbf{x}}$  for dynamical systems (Strogatz, 2019).
+
+For each experiment and each methodology, we tuned the hyperparameters for the respective losses and the learning rate independently, to obtain the top performance for each model. We report the implementation details in Appendix A and describe the tuning process in Appendix D.1. Specific experiment remarks along with many additional results are available in Appendix E.
+
+### 4.1 DAMPED PENDULUM
+
+We consider the dynamical system of a damped pendulum with state equation 1, which we briefly considered in Section 2. Additional details on the experimental setup are available in Section E.1. We sampled a total of 50 trajectories from different starting conditions  $(\theta_0, \omega_0)$ : 30 reserved for training, 10 for validation, and 10 reserved for testing. Each trajectory was sampled every  $\Delta t = 0.01\text{s}$ . For each method, we used a 4-layer MLP with 20 units per layer and tanh activation, trained for 200 epochs with batch size 32. The model takes as input the time and the initial condition  $(t, \theta_0, \omega_0)$  and is trained to predict the corresponding position and angular speed  $(\theta(t; \theta_0, \omega_0), \omega(t; \theta_0, \omega_0))$  at time  $t$ . Initial states are sampled randomly in  $[-\frac{\pi}{2}, \frac{\pi}{2}] \times [-1.5, 1.5]$ . The task consists in learning the vector field in the phase space, that is to learn the derivatives  $(\dot{\theta}, \dot{\omega})$  that best match the true ones from equation 1. The loss on the PDE residual measures the distance between  $\dot{\theta}$  and  $\omega$ , while the field error measures the distance between the derivative of each network’s output and the true derivative.
+
+Figure 2a shows a direct comparison of the errors in the learned field  $(\dot{\theta}, \dot{\omega})$  in the domain. We computed the local error on grid points for each method. Then, for each method, we computed the
+
+{5}------------------------------------------------
+
+Table 2: Results for the damped pendulum experiment. We report the loss on the state and its derivatives on testing trajectories, the  $L^2$  distance between true and predicted fields, the PDE residuals, and the PDE residual for the initial condition differentiability. Fields and PDE residuals are calculated at  $t = 0$ . Bold denotes the best model.
+
+| Model | State loss | Derivative loss | Field error | PDE res. | Init PDE res. |
+|-|-|-|-|-|-|
+| <b>DERL</b> (ours) | 0.025719 | <b>0.011121</b> | <b>0.28006</b> | <b>0.23656</b> | <b>0.58299</b> |
+| OUTL | 0.017737 | 0.032557 | 0.98303 | 0.76095 | 1.7741 |
+| PINN | 0.018198 | 0.018843 | 0.62468 | 0.47643 | 1.3161 |
+| <b>SOB</b> | <b>0.015823</b> | 0.014177 | 0.42762 | 0.34912 | 0.91480 |
+
+![Figure 2: Pendulum experiment. L^2 error difference in the learned field at t = 0 between each methodology and DERL. (a) shows OUTL - DERL, PINN - DERL, and SOB - DERL. (b) shows HNN - DERL and LNN - DERL. The blue area indicates where DERL performs better.](46f43cb4ffd47565e7c0ca306d461435_img.jpg)
+
+Figure 2 consists of two parts, (a) and (b), each showing contour plots of the  $L^2$  error difference in the learned field at  $t = 0$  between various methodologies and DERL. The x-axis represents the angle  $\theta$  from -1 to 1, and the y-axis represents the angular velocity  $\omega$  from -1 to 1. The color scale indicates the error difference, with blue representing areas where DERL performs better (negative values) and red representing areas where the comparison method performs better (positive values).
+
+Part (a) shows three plots: OUTL - DERL, PINN - DERL, and SOB - DERL. The OUTL - DERL plot shows a large blue area, indicating DERL performs better. The PINN - DERL plot shows a smaller blue area. The SOB - DERL plot shows a very small blue area, with a color scale ranging from -0.128 to 0.989.
+
+Part (b) shows two plots: HNN - DERL and LNN - DERL. Both plots show significant blue areas, indicating DERL performs better. The HNN - DERL plot has a color scale from -0.131 to 0.989. The LNN - DERL plot has a color scale from -0.2020 to 0.4175.
+
+Figure 2: Pendulum experiment. L^2 error difference in the learned field at t = 0 between each methodology and DERL. (a) shows OUTL - DERL, PINN - DERL, and SOB - DERL. (b) shows HNN - DERL and LNN - DERL. The blue area indicates where DERL performs better.
+
+Figure 2: Pendulum experiment.  $L^2$  error difference in the learned field at  $t = 0$  between each methodology and DERL. The blue area is where DERL performs better than the comparison.
+
+difference between its errors and DERL’s error, such that positive values (blue) are where DERL performs better. Table 2 shows the errors on the test trajectories, the  $L^2$  distance between the true and predicted fields, and the ODE residual  $L^2$  norm. These results show the generalization ability of the approaches for *unseen* starting conditions. The initial condition PDE (see Appendix E.1.2 for details) measures the regularity of the model with respect to  $(\theta_0, \omega_0)$  and, in particular, if the trajectories are differentiable up to the first order on these variables. DERL significantly outperforms the other approaches. DERL is therefore the best at generalizing equation E1 to new initial conditions, while OUTL and PINN are the worst-performing ones.
+
+For this task, we adapted Lagrangian Neural Networks (LNN) (Crammer et al., 2019) and Hamiltonian Neural Networks (HNN) (Greydanus et al., 2019) to the damped pendulum case. We train them on the conservative part of the field (see E.1.5 for details), where they excel as they are specifically designed for conservative fields. Unlike DERL, they also require trajectories to be calculated through external solvers. Remarkably, DERL outperforms both LNN and HNN (figure 2b): DERL scores a field error of 0.28006, against 0.44699 and 0.44277 for LNN and HNN, respectively.
+
+### 4.2 ALLEN-CAHN EQUATION
+
+We now move to PDEs. The Allen-Cahn (equation (E2) in table 1) is a time-independent non-linear PDE, with  $\lambda = 0.01$  and analytical solution  $u_{\text{true}} = \sin(\pi x) \sin(\pi y)$ . The BC and the external force  $f$  are calculated from  $u_{\text{true}}$  using the PDE. We sample the solution on a grid with  $\Delta x = \Delta y = 0.02$  both inside the domain and at the boundary. Partial derivatives are calculated analytically from the true solution. The MLP has 4 layers with 50 units and tanh activation and is trained for 100 epochs with batch size 32. Model selection details and results are provided in Appendix E.2.
+
+Table 3 shows the  $L^2$  distance between the true and predicted solution (including partial derivatives), as well as the  $L^2$  PDE residual, which is equivalent to the error in the learned forcing  $f$ . As for the
+
+Table 3: Results for the Allen-Cahn equation:  $L^2$  distances from the ground truth. The best results are in bold.
+
+| Model | $\ \hat{u} - u_{\text{true}}\ _2$ | $\ \nabla \hat{u} - \nabla u_{\text{true}}\ _2$ | PDE $L^2$ norm |
+|-|-|-|-|
+| <b>DERL</b> (ours) | <b>0.010380</b> | <b>0.033228</b> | <b>0.0096173</b> |
+| OUTL | 0.018174 | 0.15132 | 0.030412 |
+| <b>PINN</b> | 030950 | 0.11028 | 0.028795 |
+| <b>SOB</b> | 0.015356 | 0.048076 | 0.016461 |
+
+{6}------------------------------------------------
+
+![Figure 3: Allen-Cahn experiment. (a) u error comparison between DERL and the other methodologies. (b) PDE residual comparison between DERL and the other methodologies. Blue regions are where DERL performs better than the comparison.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 3 consists of two subplots, (a) and (b), each showing three heatmaps comparing DERL with OUTL and PINN methodologies. Subplot (a) shows the  $u$  error comparison, with color bars ranging from -0.00978 to 0.02904. Subplot (b) shows the PDE residual comparison, with color bars ranging from -0.00911 to 0.07421. In both cases, blue regions indicate where DERL performs better than the comparison methods.
+
+Figure 3: Allen-Cahn experiment. (a) u error comparison between DERL and the other methodologies. (b) PDE residual comparison between DERL and the other methodologies. Blue regions are where DERL performs better than the comparison.
+
+Figure 3: Allen-Cahn experiment: (a)  $u$  error comparison between DERL and the other methodologies. (b) PDE residual comparison between DERL and the other methodologies. Blue regions are where DERL performs better than the comparison.
+
+![Figure 4: Continuity equation experiment. (a) Comparison of L^2 PDE residual on the domain at t = 5. Differences between the other methods' residuals and DERL. Blue regions are where we perform better (b) Same plot but with L^2 distance w.r.t. the true solution rho_true.](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 4 consists of two subplots, (a) and (b), each showing three heatmaps comparing DERL with PINN and SOB methodologies. Subplot (a) shows the  $L^2$  PDE residual on the domain at  $t = 5$ , with color bars ranging from -0.1851 to 0.2084. Subplot (b) shows the same plot but with  $L^2$  distance w.r.t. the true solution  $\rho_{\text{true}}$ , with color bars ranging from -0.0428 to 0.1530. In both cases, blue regions indicate where DERL performs better than the comparison methods.
+
+Figure 4: Continuity equation experiment. (a) Comparison of L^2 PDE residual on the domain at t = 5. Differences between the other methods' residuals and DERL. Blue regions are where we perform better (b) Same plot but with L^2 distance w.r.t. the true solution rho\_true.
+
+Figure 4: Continuity equation experiment: (a) Comparison of  $L^2$  PDE residual on the domain at  $t = 5$ . Differences between the other methods' residuals and DERL. Blue regions are where we perform better (b) Same plot but with  $L^2$  distance w.r.t. the true solution  $\rho_{\text{true}}$ .
+
+damped pendulum, figure 3a shows the error difference on the solution  $u$  between DERL and the other approaches. Similarly, figure 3b shows the error difference for the PDE residual. Calculations and color definitions for the plots are the same as in the pendulum experiment. DERL outperforms all the other approaches in learning the true solution  $u_{\text{true}}$ . As expected, DERL also approximates best the derivatives. Finally, DERL satisfies the PDE 3 times better than OUTL and PINN. The fact that the second best method is SOB shows again the effectiveness of learning the derivatives. This is also an empirical confirmation of our theoretical results. In the case where data about  $u$  in  $\Omega$  is not available, the models have to propagate information from the boundary to the interior of the domain. PINN underperforms in this setup, while DERL successfully solves the task, while also showing a stronger consistency with the second-order derivatives PDE.
+
+### 4.3 CONTINUITY EQUATION
+
+As a first example of time-dependent PDE, we consider the continuity equation (equation (E3) in table 1), used to model conservation laws. The domain of the unknown density  $\rho(t, x, y)$  is the 2D plane region  $[-1.5, 1.5]^2$  for  $t \in [0, 10]$ . The velocity field  $\mathbf{v}$  is the rotational divergence-free field  $\mathbf{v}(x, y) = (-y, x)$ . The density is null at the boundary and the IC is given by 4 Gaussian densities (see Appendix E.3), as in Torres et al. (2024). The reference solution is calculated using the finite volumes method (Ferziger & Peric, 2001) on a regular grid characterized by  $\Delta x = \Delta y = 0.01$  and time discretization of  $\Delta t = 0.001$ .
+
+The MLP has the same architecture as the Allen-Cahn experiment and is trained for 200 epochs with batch size 128. Partial derivatives were calculated by finite difference approximation with  $\Delta x = \Delta y = \Delta t = 0.01$ , without any interpolation. The MLP takes as input  $(t, x, y)$  and predicts  $\rho(t, x, y)$ . See E.3 for further details and results, where we also report results for the interpolated data case.
+
+Table 4 reports the  $L^2$  error on the solution  $\rho(x, y, t)$  and the PDE residual  $L^2$  norm on the whole time-space domain. Figure 4a shows the comparison between DERL and the other methods
+
+Table 4: Continuity equation results.  $L^2$  norms w.r.t. the ground truth. Best models are in bold.
+
+| Model | $\ \rho - \rho_{\text{true}}\ _2$ | PDE $L^2$ norm |
+|-|-|-|
+| DERL (ours) | 0.028827 | 0.073379 |
+| OUTL | <b>0.027932</b> | 0.12411 |
+| PINN | 0.088850 | <b>0.041071</b> |
+| SOB | 0.052511 | 0.092739 |
+
+{7}------------------------------------------------
+
+on the PDE residual norm and the distance from the true solution at  $t = 5$ . We found DERL to be the most effective method: the distance from the ground truth is comparable to OUTL and two orders of magnitude smaller than all the others. Plus, DERL is also second best for PDE consistency, closely following PINNs (which, we recall, impose the PDE as a hard constraint). However, PINNs completely fail to propagate the solution through time correctly, as reported by both table 4 and figure 4b at  $t = 5$ . These results for PINNs are aligned with Wang et al. (2022), where the authors conjectured that PINN’s gradients are biased towards high values of  $t$  with the model failing to propagate information from the initial solution. DERL, on the other hand, correctly learns the complete solution *without ever seeing any data for  $t > 0$* . The continuity equation is a strong example showing how derivatives are all that is needed to learn the system. It is also interesting to see how SOB performed worse in all metrics. This is probably due to the more challenging and conflicting loss terms, which require Sobolev to learn both the derivatives and the outputs at the same time.
+
+### 4.4 NAVIER STOKES EQUATIONS
+
+We now consider a *system of time-dependent PDEs with multiple outputs*, the most challenging among our tasks. As in Raissi et al. (2019), we consider the transient 2D Navier-Stokes equations, made of the momentum equation (E4.M) and the incompressibility equation (E4.I) (table 1), with uniform density  $\rho = 1$  and viscosity  $\mu = 10^{-3}$ . The unknowns are the 2D fluid’s velocity  $u$  and the pressure  $p$ . For the setup, please refer to Appendix E.4.1. Following Raissi et al. (2019), we considered the region adjacent to the right side of the circular obstacle. The domain is  $(x, y) \in [0, 1.7] \times [0, 0.41]$  for times  $t \in [0, 2]$ . IC, BC and internal data are given by the true solution obtained with the finite volumes method (Anderson et al., 2020). The training data has a grid size of  $\Delta x = \Delta y = \Delta t = 0.01$ . The MLP is made of 8 tanh layers with 128 units. The training lasted for 200 epochs with a batch size of 512. In Raissi et al. (2019), the solution is parametrized such that equation (E4.I) is satisfied by design. Here, the network takes as input  $(t, x, y)$  and predicts  $u$  and  $p$  so that both equations have to be learned at the same time.
+
+Table 5: Results for the Navier Stokes experiments.  $L^2$  error on the final solution,  $L^2$  norms of the residuals of the 2 PDEs. Norms are calculated across the entire time-space domain. Best model in bold.
+
+| Model | $L^2$ error | (E4.M) $L^2$ norm | (E4.I) $L^2$ norm |
+|-|-|-|-|
+| DERL (ours) | 0.021687 | <b>0.36237</b> | 0.30337 |
+| OUTL | <b>0.011950</b> | 0.81446 | 0.33483 |
+| PINN | 0.63828 | 6.9591 | 3.9806 |
+| SOB | 0.015714 | 0.60096 | <b>0.29979</b> |
+
+ing equation. All models except PINN perform similarly on (E4.I). We again stress how DERL achieves these results without having access to the solution in the interior of the time-space domain. We provide results with randomly sampled points and empirical derivatives in Appendix E.4.3.
+
+### 4.5 TRANSFERRING PHYSICAL INFORMATION ACROSS MODELS
+
+We investigate the ability of DERL to transfer physical constraints from a pre-trained model to a student model by *distilling* the teacher’s derivatives. To the best of our knowledge, we are the first to leverage distillation for this purpose. We experimented with a PINN on the Korteweg-de Vries (KdV) equation and a Neural Conservation Laws (NCL) model (Richter-Powell et al., 2022) on the Euler equations.
+
+#### 4.5.1 PINN DISTILLATION
+
+We consider the Korteweg-de Vries (KdV) equation, a third-order non-linear PDE (equation (E5) in table 1), with  $\nu = 0.0025$ . The IC is  $u(0, x) = \cos(\pi x)$  with periodic BC for  $u$  and  $u_x$ . A PINN is trained on a reference solution on a grid with  $\Delta x = \Delta t = 0.005$ . The resulting model is treated as the teacher model. The architecture of the student is the same as the teacher. More details are provided in Appendix E.5.1. Since this is a third-order PDE, we are also interested in understanding
+
+Numerical results are in table 5. The PINN learns the IC at  $t = 0$  but fails to propagate it to later time steps (see Appendix E.4), thus learning a solution which diverges from the true one by a large margin. DERL outperforms all other approaches in the momentum equation residual (E4.M), the most challeng-
+
+{8}------------------------------------------------
+
+Table 6: Results for the KdV equation, PINN distillation. Results are empirical  $L^2$  norms over the time-space domain. Derivative and Hessian losses are computed with respect to the PINN. Best model(s) in bold, second best underlined.
+
+| Model | $\ \hat{u} - u_{\text{true}}\ _2$ | $\ \nabla \hat{u} - \nabla u_{\text{PINN}}\ _2$ | $\ \mathbf{H}_{\hat{u}} - \mathbf{H}_{\text{PINN}}\ _2$ | PDE loss | BC loss |
+|-|-|-|-|-|-|
+| PINN (teacher) | 0.037171 | / | / | 0.16638 | 0.33532 |
+| <b>DERL</b> (ours) | 0.038331 | 0.098188 | 3.9872 | 0.32480 | 0.014197 |
+| <b>HESL</b> (ours) | <b>0.037380</b> | 0.065454 | 1.1662 | <b>0.19153</b> | 0.014220 |
+| <b>DER+HESL</b> (ours) | 0.038524 | <b>0.041988</b> | <b>0.85280</b> | 0.19317 | 0.031850 |
+| <b>OUTL</b> | 0.038589 | 0.22580 | 31.582 | 17.366 | <b>0.012830</b> |
+| <b>SOB</b> | 0.037447 | 0.10097 | 4.0967 | 0.38523 | 0.013644 |
+| <b>SOB+HES</b> | 0.041353 | 0.13119 | 3.2684 | 0.23184 | 0.016222 |
+
+the impact of higher-order derivatives on the performance, both in terms of physical consistency (the PDE residual norm) and in terms of matching the true solution  $u_{\text{true}}$  or the BC. We implemented **Hessian learning (HESL)**, which learns the Hessian matrices of the teacher model. We also explored its combination with DERL (DER+HESL), which learns both  $\nabla u_{\text{PINN}}$  and  $\mathbf{H}_{\text{PINN}}(x, t)$  and Sobolev (SOB+HES). In this last case, we use the approximation of the Hessian matrix as suggested in Czarnecki et al. (2017), while for HESL we use the full Hessian of the network, at the cost of an increase in computational time (see Section D.2 for further details). We remark that each methodology has been tuned individually to find the hyperparameters that provide the best approximation of the true solution  $u_{\text{true}}$ . Table 6 reports the  $L^2$  distance to the true solution, relevant distillation metrics, BC errors, and the PDE residual norm on the domain. First, we notice that all methods successfully learned to approximate the solution  $u_{\text{true}}$  with the same performance as the teacher model, with SOB+HES being the worst by a small margin. We observe that (a) distilling a PINN can lead to noticeable **performance improvements**. In particular, our HESL and DER+HESL achieved the same PDE residual norm and distance to the true solution of the teacher model but with a BC loss smaller by at least one order of magnitude. This may be due to the easier optimization objective of the student models. (b) OUTL fails to distill the physical knowledge of an architecturally identical PINN, as the PDE residual is two orders of magnitude larger than any other model. Interestingly, the best methods in terms of physical consistencies are those that did not see the values of  $u$  directly. (c) When boundary conditions are available for both  $u$ ,  $u_x$ , **second order derivatives are sufficient** to learn the true solution with PDE consistency comparable to PINN. (d) HESL and DER+HESL showed the best overall results. This tells us that adding one more derivative helps learning and distilling high-order PDEs. Furthermore, approximating Hessians as in SOB+HES (Czarnecki et al., 2017) slightly reduces the performance compared to using the full Hessian of the network.
+
+#### 4.5.2 NCL DISTILLATION
+
+Table 7: Results for the NCL distillation experiment.  $L^2$  distance between the NCL and our distilled solutions,  $L^2$  norms of the residuals of the 2 PDEs. Norms are calculated across the entire time-space domain. The best results are in bold.
+
+| Model | $L^2$ error | (E6.M) $L^2$ norm | (E6.I) $L^2$ norm |
+|-|-|-|-|
+| <b>DERL</b> (ours) | 0.015287 | <b>0.28566</b> | <b>0.095044</b> |
+| <b>OUTL</b> | 0.022247 | 0.52101 | 0.17159 |
+| <b>SOB</b> | <b>0.013282</b> | 0.28620 | 0.10134 |
+
+and momentum (6.M) equations (table 1), where  $\rho$  is the density,  $\mathbf{u}$  the velocity and  $p$  the pressure. IC and BC are from Richter-Powell et al. (2022). Equation (E6.D) is guaranteed by the specific architecture of the NCL model, while (E6.M) and (E6.I) are learned with the usual PINN style PDE residual loss. The teacher and student models' setup is the same as in Richter-Powell et al. (2022).
+
+As Equation (E6.D) is guaranteed by NCL design, table 7 reports results for Equations (E6.M) and (E6.I). Although minimal, distillation reported an improvement in the BC (from 0.09 for the
+
+{9}------------------------------------------------
+
+teacher to around 0.07 for the students). DERL and SOB outperform OUTL, with almost 50% error reduction in each metric. Even with a different architecture like NCL, these results highlight the effectiveness of derivative distillation for the transfer of physical knowledge across models.
+
+## 5 CONCLUSION
+
+We proposed DERL, a methodology to learn dynamical and physical systems using only the partial derivatives of the solution together with the initial and boundary conditions of the problem. We showed theoretically and experimentally that our method successfully learns the solution to a problem and remains consistent with its physical constraints, outperforming PINN and other supervised learning methods. We also found DERL to be effective in transferring physical knowledge across models through distillation, and we showed how higher-order derivatives can contribute to an increased physical consistency of the learned solution. Much like other deep learning applications (e.g. natural language processing, computer vision), in the future learning physical and dynamical systems may not require always starting from scratch. Instead, the learning process may be based on the continual composition and integration of physical information across different models. A more general and flexible paradigm that is still underexplored to date, for which DERL can be a good candidate to provide the foundational mechanisms and core principles.
+
+## ETHICS STATEMENT
+
+We do not identify any ethical concerns or societal risks for this work. The datasets do not contain any sensitive or privacy-related information. Our work does not involve human subjects or crowdsourcing methods.
+
+## REPRODUCIBILITY STATEMENT
+
+The code to reproduce all experiments is available as supplementary material. The main text and the appendix (A and D.) provide all the details about the experiments setup.
+
+## REFERENCES
+
+- Dale Anderson, John C Tannehill, Richard H Fletcher, Ramakanth Munipalli, and Vijaya Shankar. *Computational fluid mechanics and heat transfer*. CRC Press, Boca Raton, FL, 4 edition, December 2020.
+- Atilim Gunes Baydin, Barak A. Pearlmutter, Alexey Andreyevich Radul, and Jeffrey Mark Siskind. Automatic differentiation in machine learning: a survey. *Journal of Machine Learning Research*, 18(153):1–43, 2018. URL <http://jmlr.org/papers/v18/17-468.html>.
+- Jörg Behler and Michele Parrinello. Generalized neural-network representation of high-dimensional potential-energy surfaces. *Phys. Rev. Lett.*, 98:146401, Apr 2007. doi: 10.1103/PhysRevLett.98.146401. URL <https://link.aps.org/doi/10.1103/PhysRevLett.98.146401>.
+- James Bergstra, Daniel Yamins, and David Cox. Making a science of model search: Hyperparameter optimization in hundreds of dimensions for vision architectures. In Sanjoy Dasgupta and David McAllester (eds.), *Proceedings of the 30th International Conference on Machine Learning*, volume 28 of *Proceedings of Machine Learning Research*, pp. 115–123, Atlanta, Georgia, USA, 17–19 Jun 2013. PMLR. URL <https://proceedings.mlr.press/v28/bergstra13.html>.
+- Antonio Carta, Andrea Cossu, Vincenzo Lomonaco, Davide Bacciu, and Joost van de Weijer. Projected Latent Distillation for Data-Agnostic Consolidation in distributed continual learning. *Neu-rocomputing*, 598:127935, September 2024. ISSN 0925-2312. doi: 10.1016/j.neucom.2024.127935.
+- Ricky T. Q. Chen, Yulia Rubanova, Jesse Bettencourt, and David Duvenaud. Neural ordinary differential equations, 2019. URL <https://arxiv.org/abs/1806.07366>.
+
+ Rest of paper (reference and Appendix) is removed.

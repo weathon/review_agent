@@ -1,0 +1,285 @@
+
+
+{0}------------------------------------------------
+
+# --- CHECKEMBED: EFFECTIVE VERIFICATION OF LLM SOLUTIONS TO OPEN-ENDED TASKS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large Language Models (LLMs) are revolutionizing various domains, yet verifying their answers remains a significant challenge, especially for intricate open-ended tasks such as consolidation, summarization, and extraction of knowledge. In this work, we propose CHECKEMBED: an accurate, scalable, and simple LLM verification approach. CHECKEMBED is driven by a straightforward yet powerful idea: in order to compare LLM solutions to one another or to the ground-truth (GT), compare their corresponding answer-level embeddings obtained with a model such as GPT Text Embedding Large. This reduces a complex textual answer to a single embedding, facilitating straightforward, fast, and meaningful verification. We develop a comprehensive verification pipeline implementing the CHECKEMBED methodology. The CHECKEMBED pipeline also comes with metrics for assessing the truthfulness of the LLM answers, such as embedding heatmaps and their summaries. We show how to use these metrics for deploying practical engines that decide whether an LLM answer is satisfactory or not. We apply the pipeline to real-world document analysis tasks, including term extraction and document summarization, showcasing significant improvements in accuracy, cost-effectiveness, and runtime performance compared to existing token-, sentence-, and fact-level schemes such as BERTScore or SelfCheckGPT.
+
+## 1 INTRODUCTION
+
+Large Language Models (LLMs) (Zhao et al., 2024b; Minaee et al., 2024) are transforming the world. One particular ongoing challenge in the LLM design is hallucination detection (Petroni et al., 2019; Huang et al., 2023a; Zhang et al., 2023b) and the corresponding overall verification of LLM answers (Chang et al., 2024; Rawte et al., 2023). Numerous works tried to address this issue, focusing on – for example – grounding knowledge or explainability, and even giving rise to questions regarding methodology and epistemology of artificial intelligence (AI) in general (Fleisher, 2022).
+
+Recent verification methods and their building blocks, such as SelfCheckGPT (Manakul et al., 2023) and BERTScore (Zhang et al., 2020) focus on individual fact checking and token- as well as sentence-level analysis. To achieve this, all these methods have to use some form of *comparison* of two passages of text. This could be comparing an LLM answer to a ground-truth (if available), or comparing two different LLM answers to the same question to determine whether these answers are similar (which implies the LLM is certain of its answer) or different (which implies that the LLM is unsure of what the answer really is). For example, with BERTScore, comparing two passages of text involves computing embeddings of *all* words in each passage, and calculating certain scores for *all pairs* of embeddings from both passages.
+
+However, the problem of verifying LLM answers to more complex tasks, such as open-ended document analyses, still poses a challenge. As an example of such a task, consider extracting legal terms and their definitions from a document. The difficulty of verifying the answers to such a task is due to the inherent lack of structure, even assuming one has the ground-truth answer. Namely, the output of such a request would be a potentially long list of definitions. To verify this answer, existing methods such as SelfCheckGPT or BERTScore would go ahead and compare all pairs of words between different solutions and/or the ground-truth. This is fundamentally infeasible, because their token-, sentence-, and fact-based approaches scale poorly with growing task sizes. Moreover, we observe that while two different LLM answers can comprise of very different sets of sentences, their
+
+{1}------------------------------------------------
+
+meaning could indeed be very similar. This aspect is not well reflected by sentence- and token-level schemes, leading to them being inaccurate for such complex tasks.
+
+In this work, we propose CHECKEMBED: an approach for *simple, scalable, and accurate* verification of LLM solutions to such tasks (**contribution 1**). The **key idea** behind CHECKEMBED is to *obtain and compare embeddings of full LLM answers*, or their sizeable chunks, instead of focusing on individual sentences, facts, or tokens. CHECKEMBED relies on the fact that modern embedding models are highly capable; for example, they can be based on powerful Decoder-only LLMs (Lee et al., 2024). Thus, they provide high-dimensional embeddings that can faithfully reflect the *meaning* of the embedded text. *We harness this observation as a basis for CHECKEMBED.* To motivate this idea and assumption, consider Figure 1. In this figure, we illustrate two *very different* passages of text that still describe the *same concept*, and two *very similar* passages of text that describe two *very different concepts*. Interestingly, the cosine similarities as proposed in CHECKEMBED between the embeddings of two different and two similar passages are – respectively – low and very high, supporting the key idea behind CHECKEMBED. BERTScore and SelfCheckGPT are outperformed by CHECKEMBED in both accuracy and runtime.
+
+![Figure 1: Comparison of LLM replies and assessment metrics. The figure shows two sets of replies: 'Replies with different meaning' (left) and 'Replies with similar meaning' (right). For each set, two replies are shown, and assessment metrics (BERTScore, SelfCheckGPT, and CheckEmbed) are provided for each pair. The metrics show that CHECKEMBED correctly identifies semantically related but unrelated replies, while BERTScore and SelfCheckGPT fail to do so.](e05232e09f8d0a603eef5812f7313d4b_img.jpg)
+
+| Replies with different meaning | Assessment | Replies with similar meaning |
+|-|-|-|
+| <b>Reply 1</b><br>The ancient oak tree stands proudly in the heart of the forest, its gnarled bark etched with the passage of centuries. Each towering branch stretches out like a giant, wooden arm, clothed in a dense canopy of vibrant green leaves. The roots, thick and twisted, delve deep into the earth, anchoring this majestic titan firmly in place. A tapestry of moss and lichen covers the trunk, a testament to its longstanding presence. Echoes of whispered winds and the rustle of leaves seem to tell the stories of countless seasons gone by, giving the oak an aura of timeless wisdom and resilience. | BERTScore<br>→ 0.458 ⊗ 0.351 ←<br>Runtime: 80s<br><br>SelfCheckGPT (BERTScore)<br>→ 0.378 ⊗ 0.324 ←<br>Runtime: 80s | <b>Reply 1</b><br>Nestled deep within the whispering woods, the cozy cottage emits a warm, inviting glow from its candlelit windows. Ivy embraces its stone walls, and a winding path leads to a sturdy wooden door. The interior offers a snug retreat, filled with soft furnishings, the flicker of candle flames dancing on the walls, and the scent of pine wafting through the air. Rustic charm abounds, with wooden beams overhead and plush, hand-woven rugs underfoot, creating an ambience of serene seclusion and timeless comfort. |
+| <b>Reply 2</b><br>The modern art sculpture stands proudly in the center of the gallery, its sleek surfaces marked by daring, abstract forms. Each curve and angle reaches out like a futuristic appendage, finished in a glossy, metallic sheen. The base, solid and unyielding, anchors this contemporary marvel to its pedestal, commanding attention. A play of light and shadow dances across its surfaces, a testament to the artist's innovative vision. Echoes of the artist's thoughts and emotions resonate through the room, giving the sculpture an aura of cutting-edge creativity and profound expression. | SelfCheckGPT (NLI)<br>→ 0.198 ⊗ 0.797 ←<br>Runtime: 360 s<br><br>CheckEmbed<br>→ 0.201 ⊗ 0.913 ←<br>Runtime: 10 s | <b>Reply 2</b><br>Huddled beneath the towering pines of the ancient forest, the cozy cottage stands as a sanctuary of warmth and tranquility. Its walls, gracefully aged with stones interwoven by tendrils of ivy, speak of timeless elegance and history. The path that leads to its inviting wooden door is a testament to countless footsteps of those who sought its comforting embrace. From within, the soft, golden light of countless candles spills forth, casting a mesmerizing glow that seems to breathe life into the very walls. Inside, the atmosphere is a haven of rustic splendor, every corner of the cottage whispers quiet contentment. The scent of pine and wax melts seamlessly, wrapping you in a fragrant hug. Wooden beams stretch across the ceiling, an enduring testament to the cottage's sturdy craftsmanship. Beneath, intricately woven rugs cushion your steps, adding to the feeling of homely comfort. Plush furnishings beckon you to sink into their embrace, while the candlelight's gentle flicker plays upon the walls, painting shadows that dance to silent melodies. This candlelit haven in the woods is more than a retreat; it is a timeless refuge where one can find solace and connection in the heart of nature. |
+
+Figure 1: Comparison of LLM replies and assessment metrics. The figure shows two sets of replies: 'Replies with different meaning' (left) and 'Replies with similar meaning' (right). For each set, two replies are shown, and assessment metrics (BERTScore, SelfCheckGPT, and CheckEmbed) are provided for each pair. The metrics show that CHECKEMBED correctly identifies semantically related but unrelated replies, while BERTScore and SelfCheckGPT fail to do so.
+
+Figure 1: We show two sets of two LLM replies each: Replies explaining different concepts using similar wording (left) and ones explaining similar concepts using different wording (right); the queries used to generate these replies can be found in the Appendix. We compare CHECKEMBED to two variants of SelfCheckGPT: one that uses BERTScore as a subroutine, and one that harnesses the Natural Language Inference (NLI), which classifies relationships between texts as entailment, neutral, or contradiction, and utilizes a fine-tuned DeBERTa-v3 model (He et al., 2021) to detect textual contradictions by computing a contradiction score based on the logits for ‘entailment’ and ‘contradiction’. We also compare to BERTScore as a standalone baseline. While BERTScore and SelfCheckGPT (BERTScore) assess the semantically unrelated replies as more related than the related ones (because these two baselines have been designed to mostly target the verification of individual sentences or facts), CHECKEMBED correctly differentiates between semantically related and unrelated replies, and outperforms SelfCheckGPT (NLI). We use ChatGPT-4o with temperature = 1.0 for replies and the gpt-embedding-large model for generating embeddings.
+
+We design and implement a comprehensive verification pipeline based on CHECKEMBED (**contribution 2**). The pipeline uses the notion of “stability” of the LLM answer, introduced by SelfCheckGPT, as a supporting mechanism. The idea behind “stability” is to prompt an LLM to reply to a given question several times. If the LLM repeatedly outputs the same solution, it means that it has high confidence in its answer and the hallucination risk is low (i.e., high stability of the LLM answers). Contrarily, if there is a large variance in the LLM answers (i.e., low stability of the LLM answers), the risk of hallucinations is high. In CHECKEMBED, we harness this approach for comparing embeddings of *whole LLM answers*, or their *sizeable chunks*, pairwise to one another, and to the potential ground-truth (GT), if available. Using such answer-level embeddings enables extracting the *meaning* of a given whole reply and to compare it effectively to others and to GT. We show that this strategy is effective and results in embeddings that are close to each other with respect to different distance metrics in cases where the LLM gives correct answers, and with embeddings that are far away, if the LLM is uncertain of the answer or the answer is not of high quality.
+
+As a part of the CHECKEMBED pipeline, we offer assessment metrics that show both how each of the LLM answers compares to any other answer and to the potential GT, and succinct summaries.
+
+{2}------------------------------------------------
+
+The former is provided in the form of embedding heatmaps. The latter are statistical summaries that can be used as user-specified thresholds to drive decision engines in practical deployments on whether a given LLM answer is good enough to be accepted, or not and thus has to be re-generated.
+
+We apply our verification pipeline that implements the CHECKEMBED idea to several real-world use cases in document analysis, namely extracting terms and definitions as well as summarizing documents (**contribution 3**). In addition to the high accuracy, a large advantage of this approach is its *speed and simplicity*: all one has to do is to embed the LLM answers and compare them to one another using cosine similarity or other vector distance measures.
+
+We show high advantages in accuracy and runtimes (**contribution 4**). When the ground-truth is available, CHECKEMBED offers closely matching scores for LLM answers. Specifically, we obtain very high scores for high-quality LLM answers and low scores when the LLM answer is a mismatch. This provides an advantage over comparison baselines that often provide mismatching scores.
+
+## 2 THE CHECKEMBED DESIGN & PIPELINE
+
+We now describe the CHECKEMBED pipeline, which is summarized in Figure 2.
+
+![Figure 2: Overview of the CHECKEMBED pipeline (left) and comparison between BERTScore, SelfCheckGPT, and CHECKEMBED (right).](d244183a8ff3d94b0dcf30140f51020d_img.jpg)
+
+The diagram illustrates the CHECKEMBED pipeline and its comparison with other methods. The left side shows the pipeline flow: a user provides a query (1) and an optional ground-truth (2). The pipeline uses a language model to generate multiple replies (3) for the query. These replies are then processed by an embedding model (4) to create an embedding space. A similarity matrix (5) is computed using cosine distance between the embeddings. The matrix is visualized as a heatmap where high confidence (green) indicates tightly clustered embeddings (e.g., Reply 1 and Reply 2) and low confidence (red) indicates embeddings that are spread apart (e.g., Reply 3). The right side compares CHECKEMBED with BERTScore and SelfCheckGPT. BERTScore and SelfCheckGPT compute scores for each pair of sentences from replies 1 and 2, then aggregate results. CHECKEMBED computes the distance between reply embeddings directly, which is faster and more efficient. The example text shows a science-related query and two replies, with CHECKEMBED's process shown below them.
+
+Figure 2: Overview of the CHECKEMBED pipeline (left) and comparison between BERTScore, SelfCheckGPT, and CHECKEMBED (right).
+
+Figure 2: Overview of the CHECKEMBED pipeline (left) and comparison between BERTScore, SelfCheckGPT, and CHECKEMBED (right).
+
+The CHECKEMBED pipeline for verification of LLM’s responses consists of the following key parts. First, a user sends a **question** (1) to the LLM (2) with all the essential input data. The pipeline enables batching these questions, i.e., it is possible to send multiple questions in the same pipeline and they pass through each of the next stages individually. Next, the pipeline **prompts the LLM** (3) **several times** (4) with the same question (5); the user sets this number ( $k$ ). Each reply (6) has no prior knowledge of the previous answer guaranteeing that there is no bias.  $k$  introduces a tradeoff: more responses (higher  $k$ ) means more compute time and cost (more tokens used), but also a better check of correctness. However, as we show in Section 4, CHECKEMBED enables high level of confidence in its verification outcome even when  $k$  is low. The next stage of the pipeline is the **embedding of the answers** (7). Each reply is embedded, using a pre-specified embedding model (another user input). The potential ground-truth answer (8) is also embedded. In the final stage, the **embeddings of the replies are compared pairwise** (9). We use established metrics, most importantly the cosine similarity; we also experiment with Pearson correlation. Other measures are possible as the pipeline enables seamless integration. The pairwise similarity scores of embeddings are grouped into a (symmetric) heatmap matrix, which is summarized using a selected measure in order to provide a simple threshold number that can be used to drive decision making in practical deployments.
+
+## 3 SCALABILITY ANALYSIS
+
+We provide a brief scalability analysis showing why CHECKEMBED is fundamentally faster than BERTScore and SelfCheckGPT. We denote the number of answers requested from the LLM with  $k$ . We assume the same dimensionality of all used embeddings and that computing a score of two embeddings is negligible and takes  $O(1)$  time (e.g., Numpy supports highly efficient Pearson correlation and cosine similarity). Without loss of generality, we also assume that a single reply or the ground-truth contain  $s$  sentences, and each sentence contains  $t$  tokens. When comparing the baselines, we consider counts of two most compute intense operations within the pipeline: the number of embeddings to be constructed and the number of similarity operations to be conducted.
+
+{3}------------------------------------------------
+
+In CHECKEMBED, there are  $k$  embeddings to construct, and  $O(k^2)$  similarity operations to run.
+
+Next, one can apply BERTScore straightforwardly to two passages treated as long sentences, each such passage consists of  $st$  tokens. This means  $O((st)^2) = O(s^2t^2)$  embedding comparisons have to be performed for any two passages (for each pair of compared sentences, one compares every pair of individual tokens/words), resulting in a total of  $O(k^2s^2t^2)$  embedding comparisons as this is done for  $O(k^2)$  pairs of LLM answers, and a total of  $O(k^2)$  embedding constructions.
+
+Finally, SelfCheckGPT assesses a given LLM reply by comparing it to all sample replies collected. To simplify the following derivations, assume that in an individual comparison of two LLM replies, these replies consist of  $s_1$  and  $s_2$  sentences, respectively. Now, for each such comparison, SelfCheckGPT uses BERTScore, where the two input passages  $x$  and  $y$  to BERTScore consist of  $s_1s_2$  sentences each, i.e., both passage  $x$  and passage  $y$  contain all the sentences from its corresponding LLM reply, repeated as many times as the number of sentences in the other LLM reply (this is conducted to enable comparing all sentences from each reply pairwise). This gives (using the above BERTScore formulae)  $O(ks^2)$  embedding constructions (there are  $k$  LLM replies) and  $O(ks^2s^2t^2) = O(ks^4t^2)$  embedding comparisons.
+
+## 4 EVALUATION
+
+We now show the advantages of CHECKEMBED over the state of the art.
+
+**Comparison Baselines** We compare CHECKEMBED to two key baselines, **SelfCheckGPT** and **BERTScore**. SelfCheckGPT comes with **different variants**; we consider the **BERTScore variant** (where BERTScore is used as a subroutine within SelfCheckGPT, and not a standalone method) because of its similarity to our approach, and the **NLI variant**, as it provides a tradeoff between accuracy and cost and comes with top scores.
+
+**Considered Models** First, when prompting the LLM, we explore GPT-3.5, GPT-4, and GPT-4o. Second, when embedding LLM replies, we experiment with different embedding models, namely Salesforce/SFR-Embedding-Mistral (SFR) (Meng et al., 2024), intfloat/e5-mistral-7b-instruct (E5) (Wang et al., 2024b;c), Alibaba-NLP/gte-Qwen1.5-7B-instruct (GTE) (Li et al., 2023b), which all have around 7B parameters, as well as smaller models such as dunzhang/stella\_en\_1.5B\_v5 (STE1.5, 1.5B parameters) (Zhang, 2024a) and dunzhang/stella\_en\_400M\_v5 (STE400, 400M parameters) (Zhang, 2024b). We also use an API-based GPT Text Embedding Large (GPT) model (Zhuang et al., 2024). For BERTScore and SelfCheckGPT, we use the best possible models available for these baselines (i.e., microsoft/deberta-xlarge-mnli (He et al., 2021) and roberta-large (Liu et al., 2019)). We use the default embedding sizes (listed in the Appendix A.2).
+
+**Considered Similarity Measures** We use cosine similarity and the Pearson correlation score. These two follow the same accuracy patterns, and we only show the data for the cosine similarity. We then use the Frobenius norm to extract a single value from the cosine similarity matrices as well as Spearman’s rank correlation coefficient for summarization.
+
+**Considered Datasets** In addition to our own datasets, we use one more benchmark: WikiBio. Specifically, we use a subset of the WikiBio dataset (Lebret et al., 2016) that was modified by Manakul et al. (2023) for their evaluation of SelfCheckGPT. It consists of 238 documents based on Wikipedia articles, that were used to generate samples in which hallucinations were introduced. Each sentence of those samples were manually labeled as either “major inaccurate”, “minor inaccurate”, or “accurate”.
+
+### 4.1 DISTINGUISHING SIMILAR AND DIFFERENT TEXT PASSAGES FAITHFULLY
+
+We start the evaluation by extending the motivating example from Figure 1. Specifically, we analyze whether a given verification method is able to clearly distinguish two passages of text that (1) look similar, but come with very different meanings (“Different replies”, see the left side of Figure 1 for an example), as well as (2) look different, but have similar or identical meanings (“Similar replies”, see the right side of Figure 1 for an example). The used prompts can be found in the Appendix A.1. The prompt sizes used for these two groups are in the range of 25–250 and 100–200 tokens, respectively. To broaden the analysis, we further consider two subtypes of such passages: “Generic” and “Precise”. The former are brief while the latter are rich in detailed information (e.g., “Vintage bike” vs. “Old, rusted bicycle leaning against a weathered fence”). We illustrate the results for these two subtypes in Figures 3a and 3b, respectively.
+
+{4}------------------------------------------------
+
+216  
+217  
+218  
+219  
+220  
+221  
+222  
+223  
+224  
+225  
+226  
+227  
+228  
+229  
+230  
+231  
+232  
+233  
+234  
+235  
+236  
+237  
+238  
+239  
+240  
+241  
+242  
+243  
+244  
+245  
+246  
+247  
+248  
+249  
+250  
+251  
+252  
+253  
+254  
+255  
+256  
+257  
+258  
+259  
+260  
+261  
+262  
+263  
+264  
+265  
+266  
+267  
+268  
+269
+
+![Figure 3: Analysis of distinguishing similar and different LLM replies. The figure consists of two rows of violin plots. Row (a) is for the 'Generic' dataset and row (b) is for the 'Precise' dataset. Each row contains three plots for GPT-3.5, GPT-4-turbo, and GPT-4o models. Each plot compares 'Different' (red) and 'Similar' (green) replies across seven methods: BERTScore, SelfCheckGPT (BERT), SelfCheckGPT (NLI), CheckEmbed (GPT), CheckEmbed (E5), CheckEmbed (GTE400), and CheckEmbed (GTE1.5). Annotations highlight that CHECKEMBED methods show high distinctness between similar and different replies, while BERTScore and SelfCheckGPT (BERT) show significant overlap.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+(a) "Generic" dataset
+
+(b) "Precise" dataset
+
+Figure 3: Analysis of distinguishing similar and different LLM replies. The figure consists of two rows of violin plots. Row (a) is for the 'Generic' dataset and row (b) is for the 'Precise' dataset. Each row contains three plots for GPT-3.5, GPT-4-turbo, and GPT-4o models. Each plot compares 'Different' (red) and 'Similar' (green) replies across seven methods: BERTScore, SelfCheckGPT (BERT), SelfCheckGPT (NLI), CheckEmbed (GPT), CheckEmbed (E5), CheckEmbed (GTE400), and CheckEmbed (GTE1.5). Annotations highlight that CHECKEMBED methods show high distinctness between similar and different replies, while BERTScore and SelfCheckGPT (BERT) show significant overlap.
+
+Figure 3: Analysis of distinguishing similar and different LLM replies, details explained in Section 4.1. CHECKEMBED is (highly) effective at appropriately recognizing the similarities and differences in the meaning of the verified text passages. This can be seen from moderate to no overlap between groups of data points corresponding to scores for – respectively – similar and different LLM replies, regardless of the model used. Contrarily, there is a large overlap between these groups for both BERTScore and SelfCheckGPT (BERT), indicating that these baselines perform worse in distinguishing such replies effectively, while SelfCheckGPT (NLI) shows a better, but still noticeably inferior to CHECKEMBED, distinction between those two groups.
+
+Importantly, CHECKEMBED comes with *no* (or very minor) overlap of scores for similar and different replies. Similar replies come with consistently high similarity scores, while different replies have consistently lower similarity scores. Thus, the **key takeaway** is that CHECKEMBED is highly effective at appropriately recognizing the similarities and differences in the *meaning* of the considered text passages, regardless of their length and style, and also regardless of the harnessed generative and embedding models. Contrarily, both BERTScore and SelfCheckGPT, especially its BERTScore variant, have high overlaps for these passages; thus, CHECKEMBED improves upon the state of the art.
+
+An interesting feature of CHECKEMBED is that, while it *does* distinguish similar and different passages very effectively, it gives *relatively high* scores to the *different* passages; these scores are usually *higher* than the BERTScore or SelfCheckGPT scores for *similar* passages. Despite this, it is still straightforward to distinguish between answers implying similar or different passages, because the CHECKEMBED scores for *similar* passages are *consistently* very high (e.g., with means higher than 0.9 for SFR or E5).
+
+Interestingly, GPT-4-turbo generates replies that are ‘the most difficult to distinguish’, i.e., it comes with visible (still very low) overlap between similar and different ones, across all embedding models. Contrarily, GPT-4o comes with no overlap whatsoever, while GPT-3.5 has very minor overlap.
+
+{5}------------------------------------------------
+
+![Figure 4: Analysis of the verification of LLM answers (GPT-4). The figure consists of two heatmaps: 'CheckEmbed' (left) and 'BERTScore' (right). The top heatmap is for 'Legal Example 0 (High Confidence)' and the bottom is for 'Legal Example 4 (Low Confidence)'. Each heatmap shows similarity scores between 10 LLM replies and the ground-truth (GT) reply. A color bar at the bottom indicates scores from -1.00 (dark blue) to 1.00 (dark red).](431b8889a0e7f676f0eef40859590349_img.jpg)
+
+The figure displays two heatmaps comparing CheckEmbed and BERTScore for LLM answer verification. The top heatmap for 'Legal Example 0 (High Confidence)' shows high similarity scores (mostly red/orange) for both models. The bottom heatmap for 'Legal Example 4 (Low Confidence)' shows that CheckEmbed maintains high similarity scores (red/orange) even when confidence is low, while BERTScore scores are significantly lower (mostly blue/cyan). The color bar at the bottom ranges from -1.00 (dark blue) to 1.00 (dark red).
+
+Figure 4: Analysis of the verification of LLM answers (GPT-4). The figure consists of two heatmaps: 'CheckEmbed' (left) and 'BERTScore' (right). The top heatmap is for 'Legal Example 0 (High Confidence)' and the bottom is for 'Legal Example 4 (Low Confidence)'. Each heatmap shows similarity scores between 10 LLM replies and the ground-truth (GT) reply. A color bar at the bottom indicates scores from -1.00 (dark blue) to 1.00 (dark red).
+
+Figure 4: Analysis of the verification of LLM answers (GPT-4), details explained in Section 4.2. We compare to BERTScore; SelfCheckGPT comes with significantly higher runtimes (detailed in Section 4.5) and less competitive scores as it does not focus on open-ended answer-level analysis. The results form a heatmap of the CHECKEMBED’s, or BERTScore’s, cosine similarity between all LLM replies, and between each reply and the human expert prepared ground-truth (GT). Rows correspond to two representative legal documents, that come with – respectively – high and low LLM confidence in its replies. Embedding model used in both rows: GPT Text Embedding Large.
+
+### 4.2 VERIFYING LLM ANSWERS EFFECTIVELY
+
+Next, we illustrate how CHECKEMBED enables effective verification of LLM answers. As a use case, we consider extracting terms and their definitions from legal documents; the used data is real and it comes from an in-house legal analytics project. In this use case, a prompt to the LLM consists of the contents of a legal document (e.g., an NDA), as well as a request to extract respective terms and their definitions. The prompts can also be found in the Appendix A.1. The prompt sizes used in this task are in the range of 25–600 tokens (we split the documents into chunks as whole documents are often very long and come with total token counts that significantly exceed the recommended maximal sizes for the input of the used embedding models). CHECKEMBED asks the LLM to generate 10 replies ( $k = 10$ ). We illustrate the results for GPT-4 in combination with GPT Text Embedding Large in Figure 4 with additional results presented in Appendix A.4.1. Each figure shows the cosine similarity between all respective LLM replies, and also between each reply and the ground-truth (GT) reply that has been prepared by a human expert.
+
+The results illustrate that whenever CHECKEMBED has very high confidence in its answer (top row in Figure 4), which is visible by consistently having very high similarities between different replies, it corresponds to very high similarity scores between the LLM replies and the ground-truth.
+
+{6}------------------------------------------------
+
+This is the case for all the considered models. Other baselines show mixed results for individual replies, and low similarities between their replies and GT. It shows that, whenever CHECKEMBED has high confidence it the LLM replies, there is high likelihood that these replies are close to the corresponding GT.
+
+In the bottom row of the figure, we provide example results where CHECKEMBED indicates low or mixed LLM’s confidence. While many scores are still high (e.g., 0.97), many are much lower, even negative. We manually verified that these particularly low individual scores correspond to LLM replies of very low quality (e.g., only a single term with its definition has been extracted). The low scores overall indicate model’s low confidence, which is further supported by corresponding low similarity scores to GT. Here, BERTScore also has low confidence – overall, its scores have a smaller ranger than those of CHECKEMBED, but its relative drop in similarity to GT is similarly as low as that of CHECKEMBED.
+
+Note that the results in the heatmaps directly correspond to the results from Section 4.1 and Figures 3a and 3b in that very high CHECKEMBED scores (e.g., 0.9) indicate high confidence while scores that are lower consistently mean low LLM’s confidence.
+
+A useful simple CHECKEMBED measure that indicates the low quality of the LLM answer is a selected summarization measure for a heatmap, for example mean or a matrix norm combined with a standard deviation (std). Whenever the mean is *very high* (e.g.,  $>0.9$ ) and the std is *low* (e.g.,  $<0.05$ ), the answer is of high quality with very high likelihood. Otherwise, one may want to investigate a given situation in more detail. For example, in the top row (example 0), the LLM is very certain of what the answer is; the mean is 0.95 with very low std of 0.06; BERTScore seems to imply hallucinations with lower scores and even more importantly, an std of 0.18.
+
+### 4.3 ANALYZING WIKIBIO DATASET
+
+Next, we discuss the CHECKEMBED performance on an existing benchmark, WikiBio, used to assess SelfCheckGPT (Manakul et al., 2023). Their subset consists of 238 documents based on Wikipedia articles with introduced hallucinations. Each sentence of those samples were manually labeled as either “major inaccurate”, “minor inaccurate”, or “accurate”. Consistently with the SelfCheckGPT evaluation by Manakul et al. (2023), we employed a passage scoring system that aggregates sentence scores: assigning 0 for major inaccuracies, 0.5 for minor inaccuracies, and 1 for accurate sentences—before calculating the average score. This construction allows the utilization of Pearson and Spearman correlation scores to reflect a more nuanced output to quantify the extent of hallucination within passages over more simplistic black-and-white approaches.
+
+Table 1: Passage level correlation on the WikiBio-gpt3 dataset using Pearson and Spearman’s Rank Correlation
+
+| Method | Pearson | Spearman |
+|-|-|-|
+| BertScore | 67.7 | 67.9 |
+| SelfCheckGPT |  |  |
+| w/ BERTScore | 57.4 | 54.6 |
+| w/ NLI | <b>74.1</b> | 73.8 |
+| <b>CheckEmbed</b> |  |  |
+| w/ GPT | 66.8 | 72.6 |
+| w/ STE400 | 68.5 | 72.9 |
+| w/ STE1.5 | 69.9 | 73.8 |
+| w/ E5 | 71.6 | 74.1 |
+| w/ SFR | 72.2 | 76.2 |
+| w/ GTE | 73.6 | <b>76.2</b> |
+
+An overview of the results is in Table 1, with the full results being presented in Appendix A.4.3. CheckEmbed demonstrates robust performance compared to existing baselines, particularly in Spearman’s correlation, where its results are significantly higher. For Pearson’s correlation, CHECKEMBED is marginally outperformed by SelfCheckGPT’s NLI variant, but it is more than  $30\times$  faster to compute.
+
+### 4.4 DETECTING FINE-GRAINED HALLUCINATIONS
+
+While CHECKEMBED is primarily targeted at verification of open-ended tasks, we also investigate whether CHECKEMBED can be used to detect small fine-grained hallucinations, such as mistakes in individual facts. The results are in Figure 5 and 6 and the used prompts can be found in the Appendix A.1. The task analyzed is summarizing scientific and legal articles. For each article considered, we generate a summary with no errors (labeled as “ground truth”), and we also ask the
+
+{7}------------------------------------------------
+
+![Figure 5: Violin plot showing the analysis of fine-grained hallucination verification of LLM answers (GPT-4o) when summarizing scientific documents. The x-axis represents the 'Number of introduced errors' from 0 to 10. The y-axis represents the 'Score (higher: assessed as more similar)' from 0.0 to 1.0. Four baselines are compared: BERTScore (yellow), SelfCheckGPT (BERT) (purple), SelfCheckGPT (NLI) (cyan), and CheckEmbed (blue). The plot shows that as the number of errors increases, the scores for all baselines generally decrease. CheckEmbed maintains high scores even with errors, while BERTScore and SelfCheckGPT (BERT) show more significant drops. SN (Sentence Nucleus) and SB (Sentence Boundary) markers are present above some data points.](c3c305cefbac2e7b13be34ab87054d1e_img.jpg)
+
+Figure 5: Violin plot showing the analysis of fine-grained hallucination verification of LLM answers (GPT-4o) when summarizing scientific documents. The x-axis represents the 'Number of introduced errors' from 0 to 10. The y-axis represents the 'Score (higher: assessed as more similar)' from 0.0 to 1.0. Four baselines are compared: BERTScore (yellow), SelfCheckGPT (BERT) (purple), SelfCheckGPT (NLI) (cyan), and CheckEmbed (blue). The plot shows that as the number of errors increases, the scores for all baselines generally decrease. CheckEmbed maintains high scores even with errors, while BERTScore and SelfCheckGPT (BERT) show more significant drops. SN (Sentence Nucleus) and SB (Sentence Boundary) markers are present above some data points.
+
+Figure 5: Analysis of fine-grained hallucination verification of LLM answers (GPT-4o) when summarizing scientific documents, details explained in Section 4.4.
+
+![Figure 6: Violin plot showing the analysis of fine-grained hallucination verification of LLM answers (GPT-4o) when summarizing legal documents. The x-axis represents the 'Number of introduced errors' from 0 to 10. The y-axis represents the 'Score (higher: assessed as more similar)' from 0.0 to 1.0. Four baselines are compared: BERTScore (yellow), SelfCheckGPT (BERT) (purple), SelfCheckGPT (NLI) (cyan), and CheckEmbed (blue). The plot shows that as the number of errors increases, the scores for all baselines generally decrease. CheckEmbed maintains high scores even with errors, while BERTScore and SelfCheckGPT (BERT) show more significant drops. SN (Sentence Nucleus) and SB (Sentence Boundary) markers are present above some data points.](a71911ad87414271aeb190e0eebcb989_img.jpg)
+
+Figure 6: Violin plot showing the analysis of fine-grained hallucination verification of LLM answers (GPT-4o) when summarizing legal documents. The x-axis represents the 'Number of introduced errors' from 0 to 10. The y-axis represents the 'Score (higher: assessed as more similar)' from 0.0 to 1.0. Four baselines are compared: BERTScore (yellow), SelfCheckGPT (BERT) (purple), SelfCheckGPT (NLI) (cyan), and CheckEmbed (blue). The plot shows that as the number of errors increases, the scores for all baselines generally decrease. CheckEmbed maintains high scores even with errors, while BERTScore and SelfCheckGPT (BERT) show more significant drops. SN (Sentence Nucleus) and SB (Sentence Boundary) markers are present above some data points.
+
+Figure 6: Analysis of fine-grained hallucination verification of LLM answers (GPT-4o) when summarizing legal documents, details explained in Section 4.4.
+
+LLM to summarize these documents, while forcing deliberate small fact-level mistakes, from 1 to 10 mistakes per summary. CHECKEMBED is able to recognize when samples contains no errors, as illustrated by very large scores for GT. Moreover, interestingly, it can also recognize hallucinations after introducing a single error, as visible by no overlap between the GT and the consecutive data points. Finally, we can observe that the amount of low-confidence scores is somewhat increasing with the growing number of introduced errors. However, this increase only starts to be distinctive beyond 5 errors. The trends for BERTScore and SelfCheckGPT are similar, which illustrates that these baselines perform well for their intended use case.
+
+### 4.5 ENSURING FAST PROCESSING & SCALABILITY
+
+We also investigate the running times of all considered baselines. Example results are in Figure 7. The numbers for each datapoint correspond to the total runtime required to construct 20 embeddings and to compute similarity scores between all embedding pairs. We show runtimes for CHECKEMBED with the Stella models as their smaller model sizes (435M, 1.5B) are comparable to the best available bidirectional embedding models that can be used with BERTScore and SelfCheckGPT (e.g., microsoft/deberta-xlarge-mnli has 750M parameters). CHECKEMBED, while using the Stella models, maintains a constant evaluation time regardless of the sample size or token number for the text chunks. All comparison baselines exhibit an inflation of their runtime, as we increase the number of samples or the token length of the inputs, making CHECKEMBED  $30\times - 300\times$  faster. We present additional results for GPT and other embedding models in Appendix A.4.2. These results further showcases the high performance of CHECKEMBED, rooted in its simplicity: *all that is required to compute is a single embedding of a textual answer or its chunk.*
+
+{8}------------------------------------------------
+
+![Figure 7: Comparison of running times of CHECKEMBED and other baselines while varying the number of samples per datapoint. The figure consists of three line graphs for 2, 4, and 6 samples. The y-axis is Runtime [s] on a log scale from 10^0 to 10^4. The x-axis is Number of Tokens from 200 to 4000. Baselines include BERTScore (yellow), SelfCheckGPT (BERTScore) (purple), SelfCheckGPT (NLI) (cyan), CheckEmbed (STE400) (green), and CheckEmbed (STE1.5) (blue).](352c5fab6f936356e9570761a02ab71e_img.jpg)
+
+Figure 7: Comparison of running times of CHECKEMBED and other baselines while varying the number of samples per datapoint. The figure consists of three line graphs for 2, 4, and 6 samples. The y-axis is Runtime [s] on a log scale from 10^0 to 10^4. The x-axis is Number of Tokens from 200 to 4000. Baselines include BERTScore (yellow), SelfCheckGPT (BERTScore) (purple), SelfCheckGPT (NLI) (cyan), CheckEmbed (STE400) (green), and CheckEmbed (STE1.5) (blue).
+
+Figure 7: Comparison of running times of CHECKEMBED and other baselines while varying the number of samples per datapoint. We used an NVIDIA RTX3090 GPU for this experiment. Please note the logscale y axis.
+
+### 4.6 ABLATION STUDY
+
+Finally, we also look how the accuracy of CHECKEMBED is influenced by the sample size per datapoint. We conducted this evaluation on the WikiBio dataset and plot the Spearman’s rank correlation coefficient while varying the number of samples in Figure 8. While all embedding models show an accuracy increase with more samples, the accuracy starts to stabilize with 8 samples (6 samples for SFR and E5), at which point the gain from using additional samples might be offset by the additional cost.
+
+![Figure 8: Comparison of the accuracy of CHECKEMBED with different embedding models while varying the number of samples per datapoint. The graph shows Spearman's rank Correlation (y-axis, 60 to 78) versus Number of Samples (x-axis, 2 to 20). Models include E5 (black), STE (grey), SFR (cyan), STE1.5 (blue), GPT (red), and STE400 (green).](891ff9b651838b7f59e9a1612a739e15_img.jpg)
+
+Figure 8: Comparison of the accuracy of CHECKEMBED with different embedding models while varying the number of samples per datapoint. The graph shows Spearman's rank Correlation (y-axis, 60 to 78) versus Number of Samples (x-axis, 2 to 20). Models include E5 (black), STE (grey), SFR (cyan), STE1.5 (blue), GPT (red), and STE400 (green).
+
+Figure 8: Comparison of the accuracy of CHECKEMBED with different embedding models while varying the number of samples per datapoint.
+
+## 5 RELATED WORK
+
+Trustworthy AI is a broad research area focusing on the transparency, fairness, and reliability of AI systems. Efforts in this field aim to develop frameworks and guidelines that ensure AI systems are trustworthy and align with human values (Huang et al., 2024; Liu et al., 2024). Initiatives like differential privacy (Behnia et al., 2022), fairness constraints in machine learning models (Jui & Rivas, 2024), and transparent reporting of AI capabilities and limitations (Liao & Vaughan, 2023) are prominent in this context. These approaches strive to build AI systems that are not only effective, but also ethically sound and socially acceptable.
+
+Explainable AI (XAI) (Longo et al., 2024) is another critical area of research with the goal of making AI systems more transparent and interpretable to users. Several works have developed methods to enhance explainability in AI systems (Zhao et al., 2024a; Luo & Specia, 2024). For instance, self-explaining models that generate explanations alongside predictions have been explored to improve user trust and understanding (Huang et al., 2023b; Madsen et al., 2024). Other approaches include post-hoc explanation methods, which provide insights into model decisions after predictions are made, thus facilitating better human-AI interaction (Vale et al., 2022; Kroeger et al., 2024). These advancements are crucial for deploying AI in sensitive areas where understanding the rationale behind decisions is imperative.
+
+The rise of AI has also prompted methodological and epistemological inquiries. Researchers are examining the foundational questions regarding how AI systems generate knowledge and the implications of these processes (Fleisher, 2022). Discussions in this domain focus on the nature of machine learning (Shanahan, 2023), the validity of AI-generated knowledge (Mahowald et al., 2024), and the ethical considerations surrounding AI deployment (Li, 2023; Radanliev & Santos, 2023). These inquiries are essential for framing the theoretical underpinnings of AI and addressing concerns related to bias, fairness, and accountability in AI systems.
+
+The problem of hallucinations in LLMs has gathered significant attention (Rawte et al., 2023; Zhang et al., 2023b; Huang et al., 2023a; Ji et al., 2023; Bai et al., 2024). Chrysostrou et al. (2024) find that hallucinations are less prevalent in pruned LLM for summarization tasks, which they attribute
+
+{9}------------------------------------------------
+
+to an increased dependence on the original source. Various methods on detecting hallucination have been proposed, including SelfCheckGPT (Manakul et al., 2023), fact checking (Zhang et al., 2024a; Chern et al., 2023) and others (Su et al., 2024; Zhang et al., 2023a; Shi et al., 2023). Another focus is the reduction of hallucinations. Ever (Kang et al., 2024) dynamically verifies generated content against evidence during the generation process. Zhang et al. (2024b) propose the use of the human user and knowledge bases to align their knowledge to let the LLM answer truthfully. One of the goals of Retrieval Augmented Generation (RAG) (Zhu et al., 2024a) has been hallucination reduction by fetching relevant information for the LLM context. Benchmark efforts have also been proposed (Li et al., 2023a; Zhu et al., 2024b; Sun et al., 2024). We do not compare CHECKEMBED to schemes like MIND (Su et al., 2024), BARTScore (Yuan et al., 2021), UniEval (Zhong et al., 2022), or G-Eval (Liu et al., 2023) because their focuses differ from hallucination detection. MIND analyzes internal LLM states, which are often unavailable (we focus on simplicity); BARTScore evaluates text generation on multiple factors, with only one being loosely related to hallucinations; UniEval and G-Eval, while focused on text generation quality, do not center on detecting hallucinations as their primary goal.
+
+LLM-based agents represent a burgeoning area (Xi et al., 2023), where LLMs are utilized as autonomous agents to perform complex tasks. These agents leverage the generative capabilities of LLMs to interact with users, perform tasks, and make decisions, often resorting to different prompt engineering techniques (Wei et al., 2023; Long, 2023; Yao et al., 2023; Besta et al., 2024a; Wang et al., 2023; Qiao et al., 2023; Besta et al., 2024b). Recent studies focus on enhancing the autonomy and effectiveness of these agents by improving their ability to understand and respond to nuanced user inputs (Barua, 2024). Techniques such as fine-tuning on specific tasks (Chen et al., 2024) and incorporating external knowledge sources (Guan et al., 2024; Liu et al., 2022) are employed to enhance the performance of LLM-based agents in real-world applications.
+
+Finally, evaluating LLMs is an ongoing challenge given their complexity and the diverse range of tasks they can perform (Zhao et al., 2024b; Minace et al., 2024). Traditional evaluation metrics often fall short in capturing the full spectrum of LLM capabilities. Hence, researchers are developing new benchmarks and evaluation frameworks that better reflect real-world use cases (Chang et al., 2024). These include task-specific evaluations, user-centric assessments (Wang et al., 2024a), and adversarial testing (Radharapu et al., 2023; Xu et al., 2024) to ensure that LLMs perform reliably across different scenarios and are resilient to manipulation.
+
+## 6 CONCLUSION
+
+Large Language Models (LLMs) are revolutionizing various domains, yet effective verification for open-ended tasks remains a significant challenge. Established methods, which focus on token- and sentence-level analysis, fall short in scalability and effectiveness. Addressing this gap is crucial as applications of LLMs expand, necessitating robust mechanisms to ensure the accuracy and reliability of their outputs.
+
+To this end, we introduce CHECKEMBED, a scalable approach to LLM verification. CHECKEMBED leverages the effectiveness of answer-level embeddings to compare LLM answers with one another and the potential ground-truth. By transforming complex textual answers into individual embeddings using modern decoder-only based models like GPT Text Embedding Large, CHECKEMBED makes the verification process simple, accurate, and scalable. This straightforward methodology integrates seamlessly with modern data analytics infrastructure, highlighting its practical applicability and ease of deployment.
+
+CHECKEMBED comes with a comprehensive verification pipeline that includes metrics and tools for assessing the veracity of LLM answers, such as heatmaps of similarities between embeddings of answers, the ground-truth, and statistical summaries. These tools provide detailed insights into the quality of LLM outputs and facilitate practical decision-making in real-world deployments. The simplicity of our approach allows for the extension of these metrics to various other applications, further enhancing its utility and flexibility.
+
+Our pipeline has been tested on document analysis tasks, including term extraction. The results demonstrated significant improvements in accuracy and runtime performance compared to existing methods such as BERTScore (Zhang et al., 2020) and SelfCheckGPT (Manakul et al., 2023). These findings underscore the potential of CHECKEMBED to transform LLM verification in industrial settings, ensuring that LLM outputs are both reliable and scalable.
+
+ Rest of paper (reference and Appendix) is removed.

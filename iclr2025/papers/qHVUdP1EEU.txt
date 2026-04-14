@@ -1,0 +1,377 @@
+
+
+{0}------------------------------------------------
+
+# --- JIGSAW++: IMAGINING COMPLETE SHAPE PRIORS FOR OBJECT REASSEMBLY
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+The automatic assembly problem has attracted increasing interest due to its complex challenges that involve 3D representation. This paper introduces Jigsaw++, a novel generative method designed to tackle the multifaceted challenges of reconstructing complete shape for the reassembly problem. Existing approach focusing primarily on piecewise information for both part and fracture assembly, often overlooking the integration of complete object prior. Jigsaw++ distinguishes itself by learning a category-agnostic shape prior of complete objects. It employs the proposed “retargeting” strategy that effectively leverages the output of any existing assembly method to generate complete shape reconstructions. This capability allows it to function orthogonally to the current methods. Through extensive evaluations on Breaking Bad dataset and PartNet, Jigsaw++ has demonstrated its effectiveness, reducing reconstruction errors and enhancing the precision of shape reconstruction, which sets a new direction for future reassembly model developments.
+
+## 1 INTRODUCTION
+
+The challenge of object reassembly spans numerous applications from digital archaeology to robotic furniture assembly, and even to the medical field with fractured bone restoration. Object reassembly problems are classified into part assembly, which deals with semantically significant parts (Zhan et al., 2020; Schor et al., 2019; Li et al., 2020; Wu et al., 2020; Dubrovinia et al., 2019), and fractured assembly, which handles pieces broken by substantial forces (Huang et al., 2006; Lu et al., 2023; Wu et al., 2023b). However, existing approaches face a critical limitation: they lack comprehensive understanding of the complete object when working with fragmentary inputs. This limitation is particularly acute in real-world scenarios where only a subset of fragments is available, and current reconstruction methods heavily rely on category-specific templates, c.f. (Thuswaldner et al., 2009; Papaioannou et al., 2017). It underscores the need for a new approach that could address these gaps and provide a complete shape prior to future research.
+
+To address this fundamental challenge, we introduce Jigsaw++, a novel framework that bridges the gap between partially assembled pieces and the complete object prior. Rather than replacing existing assembly algorithms, our approach learns to synthesize plausible complete shape priors that can guide the reassembly process. While previous methods have attempted to compose shape priors (Yin et al., 2011; Zhang et al., 2015; Deng et al., 2023), they typically impose restrictive constraints, such as requiring specific object categories or pre-existing complete shape templates. In contrast, Jigsaw++ learns to generate complete shape directly from partial assemblies, which enables our method to support a broader range of assembly scenarios.
+
+Our approach draws inspiration from the recent success of 3D shape generators employing diffusion models, which map Gaussian noise to instances on the data manifold. Based on this principle, we propose to learn a complete shape prior through the generative model, then optimize the mapping from the partially assembled input towards this complete shape space. Ideally, this method will provide a realistic representation of what the complete object would look like based on the given input. Among many 3D representations, we focus on the point-cloud representation, due to its tight connection to the data acquisition devices and problem settings (Lu et al., 2023; Zhan et al., 2020).
+
+Learning a point cloud generative model for fractured object reassembly is difficult. Most approaches require a fixed number of points and are also restricted to specific categories or need class conditioning. Another challenge is the scale of training data for learning shape priors. We overcome these challenges
+
+{1}------------------------------------------------
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+![Figure 1: Overview of the problem setting. The figure shows three rows of point cloud reconstructions for four different objects (a, b, c, d). The first row, labeled 'Partially Assembled Input', shows the initial fragmented point clouds. The second row, labeled 'Jigsaw++', shows the reconstructed complete objects. The third row, labeled 'Ground Truth', shows the reference complete objects. The reconstructions from Jigsaw++ closely match the ground truth in terms of shape and alignment.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+Figure 1: Overview of the problem setting. The figure shows three rows of point cloud reconstructions for four different objects (a, b, c, d). The first row, labeled 'Partially Assembled Input', shows the initial fragmented point clouds. The second row, labeled 'Jigsaw++', shows the reconstructed complete objects. The third row, labeled 'Ground Truth', shows the reference complete objects. The reconstructions from Jigsaw++ closely match the ground truth in terms of shape and alignment.
+
+Figure 1: Overview of the problem setting. The input consists of a partially assembled object represented as a point cloud. The task requires the method to reconstruct a complete object from this input. We identify several representative challenges: (a) When the object is nearly fully assembled, the output should maintain the overall shape. (b) Although all parts are visible and present, their positions are misaligned. The algorithm needs to adjust their positions correctly. (c, d) In cases where parts are incomplete or significantly misplaced, the method should not only complete the object but also correct the displacements.
+
+by adopting the LEAP image-to-3D reconstruction model (Jiang et al., 2024) under the point cloud representation. Our goal is to leverage its training on broad 2D datasets (Oquab et al., 2023), by developing a suitable mapping between raw point clouds and RGB images.
+
+Drawing insights from contemporary image editing approaches (Song et al., 2021a; Mokady et al., 2022; Meng et al., 2022), our model interprets the partially assembled object as user input, with the target being the complete object. This setup helps to utilize the learned shape generative model to predict the complete object from partial inputs. However, the difference in our setting is that the input is inaccurate and incomplete. Naively conditioning the output on the input still leads to inaccurate output. To address this issue, we introduce a “retargeting” phase which fine-tunes the mapping from the encoding of inaccurate input to the complete object output. This fine-tuning step significantly improves reconstruction quality.
+
+In summary, our main contributions are as follows.
+
+- We introduce Jigsaw++, a novel method that imagine the complete shape prior through retargeted rectified flow. The method generates comprehensive complete objects to serve as guides for the assembly process.
+- We develop an object-level point cloud generation module capable of adapting to a large or arbitrary size of input and output point numbers. This model leverages the image-to-3D model and encompasses a joint generation of global embeddings and reconstruction latent via the rectified flow technique.
+- The proposal of a “retargeting” strategy that links the reconstruction challenges in reassembly tasks with guided generation processes. This strategy facilitates the reconstruction of complete objects from partially assembled inputs and takes advantage of the straightness provided by rectified flow, resulting in lower tuning costs and higher flexibility.
+- Jigsaw++ is orthogonal to the existing object reassembly methods. Our experiments on both the Breaking Bad dataset and PartNet demonstrate its adaptability to various assembly challenges and its ability to achieve significant improvements over baseline inputs.
+
+## 2 RELATED WORK
+
+### 2.1 OBJECT REASSEMBLY
+
+Object reassembly problem falls into two primary categories: part assembly and fractured assembly. In part assembly, semantic-aware learning methods have emerged in recent years. Specific tools designed for the assembly of CAD mechanics have been developed (Jones et al., 2021; Willis et al., 2022). For the assembly of categorical everyday objects, research efforts (Schor et al., 2019; Li et al., 2020; Wu et al., 2020; Dubrovinia et al., 2019) have concentrated on generating missing parts based on an accumulated shape prior to completing the entire object, although this approach can lead to shape distortions relative to the input parts. More recent works (Zhan et al., 2020; Harish et al., 2022; Li et al., 2023; Du et al., 2024) learns the part positions directly through regression or generative methods. However, these methods require the input objects to be semantically decomposed in a consistent manner and necessitate specific training for each object category.
+
+{2}------------------------------------------------
+
+The fractured assembly problem specifically addresses objects broken by extreme external forces. Previous research in this area typically falls into two categories: assembly based on fracture surface features or complete shape template. The former approach focuses on detecting fractured surfaces and extracting robust descriptors, with early work (Ruiz-Correa et al., 2001; Gelfand et al., 2005; Sali et al., 2014; Huang et al., 2006) employing hand-crafted features for assembly. More recent learning-based techniques have introduced methods (Chen et al., 2022; Wu et al., 2023b; Lu et al., 2023; Scarpellini et al., 2024) using learned features for matching local geometries, or predicting or generating piece positions. Another significant limitation of existing approaches is that they require that most of the fragments be available as input. However, this assumption is violated in real settings where a significant portion of fragments is missing (Thuswaldner et al., 2009; Papaioannou et al., 2017), in which prior knowledge of the complete object is critical.
+
+Existing approaches that use information of complete shapes are template-based methods (Yin et al., 2011; Zhang et al., 2015; Deng et al., 2023). However, they often assume a specific complete shape for assembly, but are typically constrained by specific categories or challenges in generating accurate shape priors. Such settings do not apply to general-purpose fracture object reassembly.
+
+### 2.2 3D OBJECT GENERATION
+
+The field of 3D shape generation has witnessed significant progress, driven by the application of various generative models that produce high-quality point clouds and meshes. Techniques such as variational autoencoders (Yang et al., 2018; Gadelha et al., 2018; Kim et al., 2021) and generative adversarial networks (GANs) (Valsesia et al., 2018; Achlioptas et al., 2017) have been widely implemented to process 3D data. Further enhancements have been achieved through the integration of normalizing flows and diffusion models, which have spurred the development of state-of-the-art approaches (Yang et al., 2019; Kim et al., 2020; Zhou et al., 2021; Luo & Hu, 2021; Zeng et al., 2022; Lyu et al., 2023; Wu et al., 2023a; Mo et al., 2023; Zhang et al., 2023a; Gao et al., 2022). People also studied using 2D images and implicit neural fields to create text-guided 3D shapes (Xu et al., 2023; Ruiz et al., 2023; Lin et al., 2023; Cheng et al., 2023). Some approaches (Zhou et al., 2021; Lyu et al., 2021) also explored the generative shape completion which is highly relative to our task. These techniques strive to generate point clouds, SDFs, and meshes with both high fidelity and diversity, with some employing latent-based generation to even support multimodal 3D generation.
+
+Our approach adopts comparable results in this space and addresses two fundamental challenges in point cloud generation. The first challenge is limited paired 3D data we have for learning a shape prior. Our approach develops a mapping between point clouds and RGB images, allowing us to use pretrained models that take 2D images as the input. The second challenge is point clouds with varying number of points. We again address this issue using the mapping between RGB images and point clouds, which enable us to generate 3D point clouds with many more points than prior approaches.
+
+### 2.3 DIFFUSION MODEL AND RECTIFIED FLOW
+
+Our approach uses state-of-the-art diffusion-based techniques for learning the shape prior and the mapping from inaccurate input to complete object output. Diffusion models (Ho et al., 2020; Song et al., 2021a; Dhariwal & Nichol, 2021; Zhang et al., 2023b; Podell et al., 2023; Song et al., 2021b) have demonstrated their versatility and effectiveness in a variety of generative tasks, including image, audio, and video generation (Saharia et al., 2022; Kong et al., 2020; Ho et al., 2022). These models operate via a forward process that incrementally adds Gaussian noise, coupled with a reverse process that gradually restores the original data, thus achieving high fidelity in the generated outputs. Beyond stochastic differential equation (SDE)-based approaches (Song et al., 2021b;a), recent efforts have emerged (Liu et al., 2023; Liu, 2022; Lipman et al., 2022; Albergo et al., 2023) focusing on directly learning probability flow ordinary differential equations (ODEs) between two distributions. This shift has led to improvements in generative efficiency and quality. Specifically, the introduction of Rectified Flow (Liu et al., 2023; Liu, 2022) implements a reflow process that significantly speeds up the generation process, which is effective in large-scale image generation (Esser et al., 2024; Liu et al., 2024). These collective advances highlight the transformative impact of diffusion models in various generative modeling tasks. This work focuses on developing a fractured object reassembly approach that uses these generative models under novel 2D-3D representations.
+
+{3}------------------------------------------------
+
+## 3 PROBLEM STATEMENT AND APPROACH OVERVIEW
+
+We begin with the problem statement of Jigsaw++ in Section 3.1. Section 3.2 then presents an overview of Jigsaw++.
+
+### 3.1 PROBLEM STATEMENT
+
+Denote a collection of  $n$  pieces as  $\mathcal{P} = \{P_1, P_2, \dots, P_n\}$ , represented as point clouds of the surface of each piece. An assembly algorithm (e.g., Zhan et al. (2020); Lu et al. (2023)) produces a set of 6-DoF poses  $\{T_1, T_2, \dots, T_n\}$ . These poses, derived from existing methods, partially restore the underlying object  $\hat{O} = T_1(P_1) \cup T_2(P_2) \cup \dots \cup T_n(P_n)$ , where  $T_i(\cdot)$ ,  $1 \leq i \leq n$  is an operator that applies the transformation  $T_i$  to piece  $P_i$ . The objective is to infer a possible set of complete 3D shapes  $\mathcal{S} = \{S_1, S_2, \dots, S_k\}$  based on  $\hat{O}$  that share a similar outer shape with the original object  $O$ . **Importantly, we aim for a data-driven approach where the complete restorations may contain geometries not present in the input.** Fig. 1 provides a comprehensive overview of this problem.
+
+To clearly establish the scope of this problem, we elucidate the following key aspects: (1) The **input** is the partially assembled objects from a prior algorithm, represented as point clouds. The state of this partially assembled object is not provided. There is no quantification of whether a piece is correctly assembled or how accurate the assembling is. (2) The **output** is a complete shape prior in point cloud form. This prior is not required to exactly replicate the geometric details of the input pieces, aligning with the template shape used in previous works (Yin et al., 2011; Zhang et al., 2015; Deng et al., 2023). However, a more accurate representation of the outer shape is preferred, as reflected in our evaluation metrics. (3) The **purpose** of this method is not to design a reassembly algorithm, but rather an additional layer of information to improve the reassembly algorithm. (4) Given the absence of prior work addressing this specific problem, we demonstrate how intuitive solutions fail in Fig. 2, highlighting the problem’s **difficulty and uniqueness**. A detailed analysis of these results is presented in Appendix A.
+
+### 3.2 APPROACH OVERVIEW
+
+Jigsaw proceeds in two stages. The first stage learns a generative model to capture the shape space of complete objects. The second stage focuses on “regargetting” which reconstructs the complete shape from partially assembled inputs. Below we highlight the main characteristics of each stage.
+
+**Learning Complete Shape Priors.** The first stage learns a generative model of point clouds that capture shape prior of the underlying objects. There are many available point cloud generative models (Zhou et al., 2021; Zeng et al., 2022; Lyu et al., 2023). However, there are two fundamental challenges in adopting them for our setting. First, most point cloud generative models are category specific and use a fixed number of points. Therefore, it is difficult to adopt them to learn a category agnostic model that requires different numbers of points capture geometric details of different categories of objects. Second, 3D data is sparse, which is insufficient to learn a category agnostic model to encode the shape space of objects in diverse categories.
+
+Jigsaw++ adopts LEAP (Jiang et al., 2024), a pretrained multi-image-2-3D model to learn shape priors. LEAP uses DINOv2 features, which are trained from massive image data. In doing so, our generative model uses not only 3D data, but also 2D large-scale data. We introduce a bidirectional mapping between uncolored point clouds and RGB images. This mapping addresses the domain gap between raw 3D geometry and colored inputs to LEAP (as well as many other image-based 3D reconstruction model). It also nicely addresses the issue of having a limited number of 3D points. We will discuss details in Sec. 4.
+
+![Figure 2: Intuitive methods for point cloud completion. The figure shows six point cloud reconstructions of a vase-like object arranged in a 2x3 grid. The top row shows the input (partially assembled), AdaPointTr (reconstruction), and LION+SDEdit (reconstruction). The bottom row shows Jigsaw (reconstruction), Jigsaw++ (reconstruction), and Ground Truth (complete shape). The reconstructions from AdaPointTr, LION+SDEdit, and Jigsaw are incomplete, while Jigsaw++ and Ground Truth are complete.](4b9457ad2400572dbf0c0c9f7c825643_img.jpg)
+
+Figure 2: Intuitive methods for point cloud completion. The figure shows six point cloud reconstructions of a vase-like object arranged in a 2x3 grid. The top row shows the input (partially assembled), AdaPointTr (reconstruction), and LION+SDEdit (reconstruction). The bottom row shows Jigsaw (reconstruction), Jigsaw++ (reconstruction), and Ground Truth (complete shape). The reconstructions from AdaPointTr, LION+SDEdit, and Jigsaw are incomplete, while Jigsaw++ and Ground Truth are complete.
+
+Figure 2: Intuitive methods, including point cloud completion method AdaPointTr (Yu et al., 2021), LION (Zeng et al., 2022) VAE’s reconstruction, and editing method SDEdit (Meng et al., 2022), fails in providing shape prior when given partially assembled object.
+
+{4}------------------------------------------------
+
+**Reconstruction through Retargeting.** The second stage learns the reconstruction model that takes the assembly result of an off-the-shelf method as input and outputs a complete 3D model. A standard approach is to formulate this procedure as *inversion-based methods* (Song et al., 2021a; Mokady et al., 2022; Meng et al., 2022; Liu et al., 2023). In the image generation setting, the input is first *inverted or mixed with noise and then re-generated*.
+
+The difference in our setting is that the inputs are biased partially assembled objects, and we do not have quantification of which part of the input is correct and which is not. In contrast, image-based conditions in existing approaches are unbiased complete objects. Due to this distribution shift, if we naively condition the learned generative model on the biased inputs, the resulting 3D shape is also biased. This is because not all latent codes in standard latent spaces correspond to valid 3D shapes. Addressing this issue requires a “retargeting” phase where the model is fine-tuned to understand the disparities between the partially assembled and complete objects.
+
+In addition to fine-tuning, the typical approach for guidance-based generation in diffusion models involves performing reverse sampling, mixing the latent representation with a certain level of noise, and then executing forward sampling (standard generation). As diffusion-based models often require extensive sampling steps, we opt for the rectified flow (Liu et al., 2023) formulation, which allows for skip-over of steps during inverse sampling, thereby accelerating the fine-tuning process. This necessitates the use of rectified flow as the formulation for our generative model in the first stage. We will discuss details in Sec. 5.
+
+## 4 GENERATION ON IMAGES-TO-3D
+
+This section presents details on how to build a rectified flow based generation model for point cloud generation using an image-2-3D mapping. The generation pipeline is presented in Fig. 3.
+
+**Bi-directional Mapping between Point Clouds and Images** Our generative framework is built upon a bi-directional mapping between point clouds and 2D images. Specifically, consider a normalized point cloud represented as  $o \in [0, 1]^{N \times 3}$ . Each point  $o_i \in [0, 1]^3$  within this cloud, is associated with a function  $f : [0, 1]^3 \rightarrow [0, 255]_2^3$ . This function maps each point  $o_i$  to a color vector  $c_i \in [0, 255]_2^3$  in the RGB space, where the mapping process is described by  $c_i = f(o_i) = \lfloor 255o_i \rfloor$ . Please note that, although the color space is treated with integer values in this context, for applications involving image-to-3D reconstruction models, the color values can be maintained as fractional, thereby preserving accuracy throughout the transformation process. While similar coordinate-to-color mappings have been explored in pose estimation and reconstruction tasks (Wang et al., 2019; Sridhar et al., 2019), our work presents its first application to 3D generation.
+
+The forward mapping from point cloud to image space is achieved through rasterization under specified camera poses. Conversely, the inverse mapping  $f'$  reconstructs 3D coordinates from color values as  $o_i = f'(c_i) = \frac{1}{255}c_i$ . This enables the recovery of point clouds from colored images encoded under our scheme. We further refine the reconstructed points through camera-ray alignment, projecting each decoded 3D point onto the ray connecting its corresponding pixel to the camera center. By aggregating multiple views from strategically selected camera poses, we can reconstruct a complete object point cloud with controllable point density.
+
+This bi-directional mapping establishes a cyclic relationship: given a set of camera poses, we can render a sequence of images from a colored point cloud, and conversely, reconstruct the original point cloud from these images and camera parameters with high fidelity.
+
+**A category agnostic image encoder.** The point cloud to image map described above opens the door to employ rich results in multi-view to 3D reconstruction models. Such models are trained from massive datasets. Some of them, including LEAP (Jiang et al., 2024), use the pretrained DINOV2 (Caron et al., 2021; Oquab et al., 2023) feature extractor, which boosts generalizability to novel categories. Jigsaw++ uses LEAP as the image encoder backbone. It provides a global embedding  $g$  from the input images and a reconstruction latent  $r$  for 3D reconstruction, we harness these global embeddings as the desired global latent for our generation model, aiming to simultaneously generate both the global and the reconstruction latents. Although only the latent reconstruction is directly utilized in the decoding phase, the global latent is generated throughout to help the model grasp global information of the input, which is vital for complete object reconstruction for object reassembly.
+
+{5}------------------------------------------------
+
+270  
+271  
+272  
+273  
+274  
+275  
+276  
+277  
+278  
+279  
+280  
+281  
+282  
+283  
+284  
+285  
+286  
+287  
+288  
+289  
+290  
+291  
+292  
+293  
+294  
+295  
+296  
+297  
+298  
+299  
+300  
+301  
+302  
+303  
+304  
+305  
+306  
+307  
+308  
+309  
+310  
+311  
+312  
+313  
+314  
+315  
+316  
+317  
+318  
+319  
+320  
+321  
+322  
+323
+
+![Figure 3: Generation on image-to-3D. The diagram illustrates the process of generating a 3D point cloud from images. It starts with a point cloud being rendered into images for encoding. These images are then processed by a 'Multi-view Encoder & 2D-3D Mapping' block, which outputs a 'reconstruction latent r' and a 'global latent g'. The latent r is shown as a decoded version. A 'Rectified Flow' model is used for 'forward sampling' (generating latents from a standard distribution) and 'reverse sampling' (generating the final point cloud from the latents). The final output is a rendered and mapped point cloud.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Figure 3: Generation on image-to-3D. The diagram illustrates the process of generating a 3D point cloud from images. It starts with a point cloud being rendered into images for encoding. These images are then processed by a 'Multi-view Encoder & 2D-3D Mapping' block, which outputs a 'reconstruction latent r' and a 'global latent g'. The latent r is shown as a decoded version. A 'Rectified Flow' model is used for 'forward sampling' (generating latents from a standard distribution) and 'reverse sampling' (generating the final point cloud from the latents). The final output is a rendered and mapped point cloud.
+
+Figure 3: Generation on image-to-3D. The point cloud (or mesh if presented) is first rendered under specific camera parameters by mapping positions to RGB space. The image-to-3D reconstruction model then encodes these rendered images into both a reconstruction latent  $r$  (here shows the decoded version of  $r$ ) and a global latent  $g$ . A rectified flow model is trained to jointly generate these latents. Subsequently, the generated latents are decoded, rendered, and mapped back to a point cloud.
+
+**Rectified Flow Generation.** Rectified Flow, as outlined in (Liu et al., 2023; Lipman et al., 2022), presents a unified ODE-based framework for generative modeling, facilitating the learning of transport mappings  $T$  between two distributions,  $\pi_0$  and  $\pi_1$ . In our images-to-3D model,  $\pi_0$  typically represents a standard Gaussian distribution, while  $\pi_1$  corresponds to the latent output of the image encoder.
+
+The method involves an ordinary differential equation (ODE) to transform  $\pi_0$  to  $\pi_1$ :
+
+$$\frac{dZ_t}{dt} = v(Z_t, t), \text{ initialized from } Z_0 \sim \pi_0 \text{ to final state } Z_1 \sim \pi_1, \quad (1)$$
+
+where  $v : \mathbb{R}^d \times [0, 1] \rightarrow \mathbb{R}^d$  represents the velocity field. This field is learned by minimizing the objective:
+
+$$\mathbb{E}_{(X_0, X_1) \sim \pi_0 \times \pi_1} \left[ \int_0^1 \left\| \frac{d}{dt} X_t - v(X_t, t) \right\| dt \right], \quad (2)$$
+
+where  $X_t = \phi(X_0, X_1, t)$  is an arbitrary time-differentiable interpolation between  $X_0$  and  $X_1$ . The rectified flow specifically suggests a simplified setting where
+
+$$X_t = (1 - t)X_0 + tX_1 \implies \frac{d}{dt} X_t = X_1 - X_0, \quad (3)$$
+
+and the solver
+
+$$Z_{t+\frac{1}{N}} = Z_t + \frac{1}{N} v(Z_t, t), \forall t \in \{0, \dots, N-1\} / N. \quad (4)$$
+
+This linear interpolation facilitates straight trajectories, promoting fast generation, as discussed in (Liu et al., 2024).
+
+Rectified Flow offers two significant advantages: (1) it avoids assuming a fixed distribution for  $\pi_1$ , thus providing more flexibility in integrating the reconstruction encoder’s learned distribution; (2) the model’s ability to learn linear trajectories expedites both the forward and reverse sampling processes, benefiting the fine-tuning phase outlined in Sec. 5.
+
+**Pipeline.** Given a set of 3D objects, our generator learns to generate objects that match the data space of the provided shapes through a three-stage process. In the *encode* stage, the colored 3D objects are rendered into images following camera settings from Kubric-ShapeNet (Greff et al., 2022). These images are then fed into DINOv2 (Oquab et al., 2023) and passed through a 2D-3D mapping layer both pre-trained using LEAP (Jiang et al., 2024), resulting in two types of latents: a voxel-based reconstruction latent  $r$  and a global latent  $g$  containing categorical information. The *generation* stage follows, where a joint latent rectified flow model is trained on the encoded latents. During inference, two latents are jointly generated as described in Eq. 4. The final stage, *decode*, involves converting the generated reconstruction latent  $r$  into a neural volume. This neural volume is then rendered and converted into a point cloud, which represents the output of the entire pipeline.
+
+To effectively handle the joint generation of the global and reconstruction latents, we employ the U-ViT (Bao et al., 2022) framework as our generative backbone. This structure has proven its
+
+{6}------------------------------------------------
+
+efficacy in image generation tasks (Bao et al., 2023; Esser et al., 2024), affirms its suitability for our application.
+
+## 5 COMPLETE OBJECT RECONSTRUCTION
+
+This section presents the details of the Jigsaw++ reconstruction module. We take inspiration from relevant approaches in image generation which transform user guidance into realistic outputs (Song et al., 2021a; Meng et al., 2022; Mokady et al., 2022; Liu et al., 2023). A common theme begins with inverse sampling based on given guidance, followed by forward sampling (generation) to produce the desired image in the target space.
+
+In the context of the reassembly problem, the partially assembled pieces using an off-the-shelf approach serve as the user-provided guidance Challenges, however, arise as previously discussed in Sec. 3. Unlike the 2D case where inputs are assumed accurate, our scenario demands larger adaptations, such as positional adjustments or the handling of non-observable overlapping pieces. These extensive modifications necessitate a targeted fine-tuning stage, which we term “retargeting”.
+
+Given the partially assembled object  $\hat{O}$  and its associated latent  $\hat{x}_1 = (\hat{g}_1, \hat{r}_1)$  (representing a set of global and reconstruction latents), we can employ a reverse ODE solver to determine the latent  $x_0$ . Since the input is not a naturally assembled complete object,  $x_0$  is likely to have low likelihood under  $\pi_0 = \mathcal{N}(0, I)$ . To adjust this, we apply Langevin dynamics:
+
+$$x_0 = \alpha \hat{x}_0 + \sqrt{1 - \alpha^2} \xi, \quad \xi \sim \mathcal{N}(0, I), \quad (5)$$
+
+which moves it to a region of higher likelihood.
+
+Ideally, a subsequent forward sampling from  $x_0$  should yield a  $x_1$  that accurately represents the learned complete shape space. However, given the significant discrepancies between the input partially assembled object and the target, we find that fine-tuning with data pairs  $(x_0, x_1)$  is necessary to more effectively guide our generative model. The objective for this stage is,
+
+$$\mathbb{E}_{x_0, x_1} \|(x_0 - x_1) - v(x_t, t)\|^2, \quad (6)$$
+
+where  $x_0$  is computed as Eq. 5 and  $x_1$  corresponds to the ground truth of the complete object.
+
+We again use rectified flow (Liu et al., 2023; Liu, 2022) to train this reconstruction module. The efficiency and straightness of the rectified flow is critical; they enable a substantial reduction in the number of steps required during the reverse sampling phase - to just 1/25 of the original steps - while preserving a faithful latent representation. This efficiency is key to decreasing the fine-tuning cost.
+
+## 6 EXPERIMENT AND EVALUATION
+
+### 6.1 EXPERIMENT SETUP
+
+**Dataset.** We use the Breaking Bad dataset (Sellán et al., 2022) for the fracture assembly problem. The Breaking Bad Dataset encompasses a diverse array of synthetic physically broken patterns for the task of fracture assembly problem. Our experiments were conducted on the *everyday* subset of this dataset, consisting of 498 models with 41,754 distinct fracture patterns. This subset is segmented into a training set with 34,075 fracture patterns from 407 objects, and a testing set containing 7,679 fracture patterns from 91 objects. The average diameter of the objects in both the training and testing sets is 0.8. The generative model is trained only on the training set to ensure a fair comparison. Categorical information is not provided during the experiments.
+
+For the part assembly problem, we employed PartNet (Mo et al., 2019), following the approach of previous work DGL (Zhan et al., 2020) for training and evaluation. PartNet offers a large collection of
+
+![Figure 4: Reconstruction and retargeting diagram. The diagram illustrates the process of object reconstruction. On the left, a 3D grid represents the 'Latent of low likelihood' x_0 -> x_0. A 'reverse sampling' arrow points to a set of colored blocks representing the latent space. A 'forward sampling' arrow points to a set of colored blocks representing the latent space x_1. On the right, a 2D plot shows the latent space with points x_0 and x_1. A dashed line connects x_0 to x_1, and a solid line connects x_1 to a green circle representing the 'Finished' state. A legend indicates that a dashed line represents 'Finished' and a solid line represents 'Frozen'.](06da11ab76cacc38bbcd714e437797ea_img.jpg)
+
+Figure 4: Reconstruction and retargeting diagram. The diagram illustrates the process of object reconstruction. On the left, a 3D grid represents the 'Latent of low likelihood' x\_0 -> x\_0. A 'reverse sampling' arrow points to a set of colored blocks representing the latent space. A 'forward sampling' arrow points to a set of colored blocks representing the latent space x\_1. On the right, a 2D plot shows the latent space with points x\_0 and x\_1. A dashed line connects x\_0 to x\_1, and a solid line connects x\_1 to a green circle representing the 'Finished' state. A legend indicates that a dashed line represents 'Finished' and a solid line represents 'Frozen'.
+
+Figure 4: Reconstruction and retargeting. The reconstruction involves a reverse sampling stage to convert input to a latent. The latent will be perturbed to generate a complete shape. The retargeting is to provide guidance for those latent of low likelihood in  $\mathcal{N}(0, I)$ .
+
+{7}------------------------------------------------
+
+Table 1: Quantitative results of baseline methods and Jigsaw++ on the Breaking Bad dataset and PartNet. Jigsaw++ consistently improves performance of the baseline method across all settings.
+
+| Breaking Bad Dataset |  |  |  |  |  |  |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+| Method | CD ( $\times 10^{-3}$ ) ↓ |  | Precision (%) ↑ |  | Recall (%) ↑ |  |  |  |  |  |  |
+| SE(3) (Wu et al., 2023b) | 22.4 |  | 20.2 |  | 22.5 |  |  |  |  |  |  |
+| w/ Jigsaw++ | 14.3 |  | 37.8 |  | 36.6 |  |  |  |  |  |  |
+| Difference | -8.1 |  | +17.6 |  | +14.1 |  |  |  |  |  |  |
+| Jigsaw (Lu et al., 2023) | $10.5 \pm 0.1$ |  | $45.6 \pm 0.1$ |  | $42.7 \pm 0.1$ |  |  |  |  |  |  |
+| w/ Jigsaw++ | $4.5 \pm 0.3$ |  | $48.7 \pm 0.2$ |  | $49.5 \pm 0.3$ |  |  |  |  |  |  |
+| Difference | -6.0 |  | +3.1 |  | +6.8 |  |  |  |  |  |  |
+| PartNet |  |  |  |  |  |  |  |  |  |  |  |
+|  | Chair |  |  | Table |  |  | Lamp |  |  |  |  |
+| Method | CD | Pre. | Rec. | CD | Pre. | Rec. | CD | Pre. | Rec. |  |  |
+| DGL (Zhan et al., 2020) | 47.8 | 21.5 | 20.0 | 53.6 | 16.6 | 15.4 | 68.8 | 18.6 | 17.9 |  |  |
+| w/ Jigsaw++ | 41.0 | 52.0 | 33.6 | 42.6 | 53.6 | 31.0 | 46.3 | 42.3 | 28.5 |  |  |
+| Difference | -6.8 | +30.5 | +13.6 | -11.0 | +37.0 | +15.6 | -22.5 | +23.7 | +10.6 |  |  |
+
+daily objects with detailed and hierarchical part information. We selected the same three categories as prior work: 6,323 chairs, 8,218 tables, and 2,207 lamps, adhering to the standard train/validation/test splits with the finest level of segmentation used. We independently trained the model on three subsets, ensuring that the validation/test sets were not included in the training set of the generation model.
+
+**Metrics.** We adopted two types of evaluation metrics to evaluate the performance of our proposed methods. (1) *Shape difference*. The chamfer distance defined by  $CD(S_1, S_2) = \frac{1}{|S_1|} \sum_{x \in S_1} \min_{y \in S_2} \|x - y\|_2^2 + \frac{1}{|S_2|} \sum_{y \in S_2} \min_{x \in S_1} \|x - y\|_2^2$ , is used to assess the differences between the ground truth shape, the partially assembled shape, and the reconstructed global shape. (2) *Shape accuracy*. We follow a similar idea of F-score to define the precision and recall metric as  $\text{precision} = \frac{1}{|S_g|} \sum_{x \in S_g} \mathbb{1}_{\text{Dis}(x, \text{NN}(x, S)) \leq \eta}$ , and  $\text{recall} = \frac{1}{|S|} \sum_{x \in S} \mathbb{1}_{\text{Dis}(x, \text{NN}(x, S_g)) \leq \eta}$ , to evaluate how closely the reconstructed shape matches the ground truth. Here,  $\text{Dis}(\cdot, \cdot)$  is a distance function, and  $\text{NN}(\cdot, \cdot)$  is to find the nearest neighbor of one point in another shape.
+
+**Baseline Methods.** We compare our methods with state-of-the-art assembly algorithms for the fracture and part assembly problem: SE(3) (Wu et al., 2023b), Jigsaw (Lu et al., 2023) and DGL (Zhan et al., 2020). All methods are open-source with available model checkpoints, which we used to generate the partially assembled inputs for our model and comparison. Since our algorithm works orthogonally to existing methods, it is sufficient to demonstrate its superiority by demonstrating improvements over these methods.
+
+### 6.2 PERFORMANCE
+
+**Overall Performance.** We evaluated the performance of baseline methods with our proposed Jigsaw++ on both Breaking Bad dataset (Sellán et al., 2022) for the fracture assembly problem and PartNet (Mo et al., 2019) for the part assembly problem. A quantitative analysis is detailed in Table 1.
+
+Jigsaw++ consistently outperformed the baseline methods, demonstrating its capability to reconstruct a meaningful underlying complete shape that corresponds closely to the input partially assembled objects. Even with a less favorable initialization algorithm SE(3) (Wu et al., 2023b), our algorithm can give a large improvement on their results. Specifically, Jigsaw++ achieves significantly better results in terms of reconstruction error in the fracture assembly problem. We draw three insights: (1) The original size of the objects in the Breaking Bad Dataset is considerably smaller compared to those in PartNet (please refer to Sec. 6.3 for a failed reconstruction case on PartNet). This small size discrepancy enables the mapping between point clouds and images to pose minimal impacts on the representation of the complete shape. (2) The diversity of complete shapes in the Breaking Bad Dataset is less varied than in PartNet, simplifying the modeling of the complete shape space.
+
+Despite less favorable initialization in part assembly, Jigsaw++ significantly improves the precision and recall metrics to depict complete shapes on PartNet. Since the assembled object from DGL could be significantly displaced or reordered, Jigsaw++ offers valuable insights into the likely overall
+
+{8}------------------------------------------------
+
+Table 2: **Left:** Reconstruction performance of Jigsaw++ when presented with input with missing pieces. The model are tested on the Bottle category of the Breaking Bad dataset. **Right:** Fracture assembly performance with original-shape matching with the shape prior generated by Jigsaw++.
+
+| Breaking Bad - Bottle |  |  |  |  | Breaking Bad |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+| Method | Input | CD $\downarrow$<br>$\times 10^{-3}$ | Precision $\uparrow$<br>% | Recall $\uparrow$<br>% | Method | Matching Type | MAE( $R_L$ )<br>degree | MAE( $T_L$ )<br>$\times 10^{-2}$ | PA $\uparrow$<br>% |
+| Jigsaw | complete | 3.4 | 52.8 | 49.9 | Jigsaw | fracture | 36.3 | 8.7 | 57.3 |
+| Jigsaw++ | complete | 1.8 | 61.0 | 59.4 | Jigsaw++ | + GT shape prior | 17.8 | 3.6 | 73.1 |
+| Jigsaw++ | 20% missing | 2.0 | 59.5 | 59.4 | Jigsaw++ | + 20% noise shape prior | 18.2 | 3.7 | 72.6 |
+
+shape. Such insight on the complete shape is essential for the general object reassembly problem, and provides a new possibility for developing better algorithms for the object reassembly problem.
+
+**Performance with Missing Pieces.** To demonstrate the effectiveness and the robustness of the proposed method, we conduct a test using the Bottle category from the Breaking Bad dataset. Each piece will have 20% probability of been removed and we ensure at least one piece is presented in one object. We input the Jigsaw’s result with pieces removed to the Jigsaw++ model.
+
+As shown in Table 2 left, the resilience of Jigsaw++ is evidenced when processing inputs with 20% missing pieces. Under these conditions, the model maintained a low CD of  $2.0 \times 10^{-2}$ , with precision and recall approximately at 59.4%. This performance closely aligns with that seen in fully intact inputs, highlighting Jigsaw++’s robustness in dealing with data incompleteness.
+
+**Performance for Fracture Reassembly Algorithm.** While our primary interest lies in applying the generated shapes to reassembly algorithms, we encountered challenges in finding an algorithm that effectively utilizes the complete shape prior. To demonstrate the potential of our approach in assembly problems, we present an alternative evaluation method.
+
+We augment the Jigsaw algorithm (Lu et al., 2023) by providing a matching between the original object surface and our generated shape prior during its global alignment stage. This matching is computed by finding the closest point from the ground truth position of each point to the generated shape. It is important to note that the fractured surface matching and global alignment algorithm remain unchanged from Jigsaw and may contain errors.
+
+Table 2 right shows that when using the closest point matching with ground truth, we can reduce Jigsaw’s error by 50%. Even with the introduction of 20% noise to this “ground truth” matching, performance remains significantly improved over the baseline Jigsaw algorithm. These results demonstrate that our generated shape can indeed assist assembly algorithms. This suggests that future research efforts to develop algorithms that can fully utilize these complete shape priors could yield significant advancements in reassembly tasks.
+
+**Ablation Study on varying Parameters.** We now show how different parameter settings influence the performance during the “reargeting” phase of Jigsaw++. We first examine the effect of the rectified flow formulation under varying reverse sampling steps. As discussed in Sec. 5, this formulation significantly reduces the required number of reverse sampling steps. Letting  $N$  denote the forward sampling steps, and  $N_r = kN$  the reverse sampling steps, we explore the effects of altering  $k$  on reconstruction outcomes. The results, illustrated in the upper row of Fig. 5, show that the model performs best when  $k = 1/10$ . A full reverse sampling phase tends to overly mimic the input, which is suboptimal for reconstruction. Moreover, setting  $k$  too low can cause the latent to deviate excessively, leading to a different output.
+
+Further, we explored the impact of modifying the latent composition  $x_0 = \alpha \hat{x}_0 + \sqrt{1 - \alpha^2} \xi$ ,  $\xi \sim \mathcal{N}(0, I)$  on reconstruction quality. Research in image generation, such as those by (Liu et al., 2023; Meng et al., 2022), indicates that a larger  $\alpha$  generally replicates the input more closely, while a smaller  $\alpha$  pushes the generation towards the data domain. We observed a similar trend in our generative model as in Fig. 5 lower row. At  $\alpha = 1$ , the output is very similar to the input, whereas decreasing  $\alpha$  makes the result progressively diverge towards representing a complete object. Interestingly, although the precise shape might not be replicated, the reconstructed form invariably aligns visually with the ground truth category.
+
+{9}------------------------------------------------
+
+![Figure 5: Ablation study of Jigsaw++ with varying parameters on the Breaking Bad dataset. The figure shows two rows of point cloud reconstructions. The top row shows the reverse sampling steps for different values of k (1, 1/5, 1/10, 1/25, 1/50). The bottom row shows the effect of varying the alpha parameter (1.0, 0.9, 0.7, 0.5, 0.3) in the Langevin dynamics. The input is a partially assembled point cloud, and the ground truth is the fully assembled point cloud.](e7cb11f042fc58088dff4b6d9306845e_img.jpg)
+
+Figure 5: Ablation study of Jigsaw++ with varying parameters on the Breaking Bad dataset. The figure shows two rows of point cloud reconstructions. The top row shows the reverse sampling steps for different values of k (1, 1/5, 1/10, 1/25, 1/50). The bottom row shows the effect of varying the alpha parameter (1.0, 0.9, 0.7, 0.5, 0.3) in the Langevin dynamics. The input is a partially assembled point cloud, and the ground truth is the fully assembled point cloud.
+
+Figure 5: Ablation study of Jigsaw++ with varying parameters on the Breaking Bad dataset. Top: Varies the reverse sampling steps to  $N_r = kN$  to assess how well the rectified flow model accommodates step reductions. Bottom: Alter the  $\alpha$  parameter in the Langevin dynamics to explore how changes in latent resampling during the retargeting phase affect model performance.
+
+### 6.3 LIMITATION AND FAILURE CASES
+
+While we have investigated various strategies to enhance the robustness of point cloud generation, our model still struggles to generalize to unseen object types or significantly varied objects. We identify three main types of failure cases as in Fig. 6: (a) Size limitation in color mapping. Converting object point clouds into color spaces imposes significant size constraints. Objects like tall street lights might not be adequately visible in the rendered images, causing the reconstruction process to fail. Conversely, the model tends to perform better with smaller objects. (b) Dataset limitations. Given that our model is trained on selected datasets, it struggles to recognize and reconstruct rarely encountered or unseen object types. Specific details cannot be accurately reconstructed using the current methodology. Larger datasets are in need for adapting to more complex scenarios which we leave for future work. (c) Topological and Geometrical Accuracy: The model exhibits limitations in preserving complex topological structures, particularly when reconstructing objects with intricate geometric features. For example, when processing images of mugs where the handle is partially occluded or ambiguous in the input, the model successfully reconstructs the main body but struggles to accurately reproduce the handle geometry and its connectivity. The generative process occasionally introduces spurious artifacts that deviate from the ground truth geometry, a limitation inherent to the current probabilistic formulation of the reconstruction problem. While our approach improves upon existing methods, the outlined limitations underscore the necessity for employing larger and better models, as well as richer datasets, in future research efforts to address these challenges.
+
+![Figure 6: Three types of failure cases of Jigsaw++. (a) Size limitation in color mapping: a tall street light is not adequately visible. (b) Limitation on unseen objects: a mug with a complex handle. (c) Topology constraints: a mug with a partially occluded handle.](e9b30aeb317ed964fa6de36804acf24c_img.jpg)
+
+Figure 6: Three types of failure cases of Jigsaw++. (a) Size limitation in color mapping: a tall street light is not adequately visible. (b) Limitation on unseen objects: a mug with a complex handle. (c) Topology constraints: a mug with a partially occluded handle.
+
+Figure 6: Three types of failure cases of Jigsaw++. (a) Size limitation in color mapping. (b) Limitation on unseen objects. (c) Topology constraints.
+
+## 7 CONCLUSIONS AND FUTURE WORK
+
+In this study, we present Jigsaw++, a novel framework developed to tackle the challenge of complete shape reconstruction in object reassembly tasks. Jigsaw++ utilizes a novel point cloud generative model that reimagines the complete object shape from partially assembled inputs. By incorporating image-to-3D reconstruction techniques, Jigsaw++ adeptly navigates the challenges of scale and diversity in training data. Additionally, we show the rectified flow formulation enhances our proposed “retargeting” phase, establishing a more robust connection between the latent space and the complete object space. Experimental results demonstrate Jigsaw++’s superior reconstruction performance, marking a significant improvement over existing methods. Although we have achieved successful reconstructions, we have yet to devise methods to effectively leverage our outputs as guidance for further reconstructions. This limitation opens up new avenues for research in the field of object reassembly.
+
+ Rest of paper (reference and Appendix) is removed.

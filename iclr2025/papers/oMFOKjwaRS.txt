@@ -1,0 +1,300 @@
+
+
+{0}------------------------------------------------
+
+# KNOWLEDGE GRAPH FINETUNING ENHANCES KNOWLEDGE MANIPULATION IN LARGE LANGUAGE MODELS
+
+Hanzhu Chen<sup>1</sup>, Xu Shen<sup>2</sup>, Jie Wang<sup>1\*</sup>, Zehao Wang<sup>1</sup>, Qitan Lv<sup>1</sup>, Junjie He<sup>1</sup>, Rong Wu<sup>3</sup>, Feng Wu<sup>1</sup>, Jieping Ye<sup>2</sup>
+
+<sup>1</sup> MoE Key Laboratory of Brain-inspired Intelligent Perception and Cognition,  
+University of Science and Technology of China  
+{chenhz, zh-wang, qitanlv, hjunjie}@mail.ustc.edu.cn
+
+<sup>2</sup> Independent Researcher  
+{shenxuustc, jieping}@gmail.com
+
+<sup>3</sup> Zhejiang University  
+{wurong1159}@zju.edu.cn
+
+## ABSTRACT
+
+Despite the impressive performance of general large language models(LLMs), many of their applications in specific domains (e.g., low-data and knowledge-intensive) still confront significant challenges. Supervised fine-tuning (SFT)—where a general LLM is further trained on a small labeled dataset to adapt for specific tasks or domains—has shown great power for developing domain-specific LLMs. However, existing SFT data primarily consist of Question and Answer (Q&A) pairs, which poses a significant challenge for LLMs to comprehend the correlation and logic of knowledge underlying the Q&A. To address this challenge, we propose a conceptually flexible and general framework to boost SFT, namely **Knowledge Graph-Driven Supervised Fine-Tuning (KG-SFT)**. The key idea of KG-SFT is to generate high-quality explanations for each Q&A pair via a structured knowledge graph to enhance the knowledge comprehension and manipulation of LLMs. Specifically, KG-SFT consists of three components: *Extractor*, *Generator*, and *Detector*. For a given Q&A pair, (i) *Extractor* first identifies entities within Q&A pairs and extracts relevant reasoning subgraphs from external KGs, (ii) *Generator* then produces corresponding fluent explanations utilizing these reasoning subgraphs, and (iii) finally, *Detector* performs sentence-level knowledge conflicts detection on these explanations to guarantee the reliability. KG-SFT focuses on generating high-quality explanations to improve the quality of the Q&A pair, which reveals a promising direction for supplementing existing data augmentation methods. Extensive experiments on **fifteen** different domains and **six** different languages demonstrate the effectiveness of KG-SFT, leading to an accuracy improvement of up to 18.1% and an average of 8.7% in low-data scenarios.
+
+## 1 INTRODUCTION
+
+Large language models (LLMs), such as GPT-4(Achiam et al., 2023), LLaMA 3(Touvron et al., 2023a), and Claude 3 (cla), have exhibited remarkable power and impressive versatility across a wide range of domains (Zhao et al., 2021; Brown et al., 2020; El-Kassas et al., 2021). However, applying LLMs to low-data and knowledge-intensive domains (e.g., a specific medical field (Nori et al., 2023) or private data with niche protocols (Cui et al., 2023; Li et al., 2023)) remain still challenging.
+
+Recently, extensive research efforts have been devoted to boosting general LLMs performance in particular domains. One innovative training paradigm, Supervised Fined-Tuning (SFT), has emerged as a new trend and shown superior performance to enhance capabilities and controllability of general LLMs in certain domains (Zhang et al., 2023). The key idea of SFT is to adapt pre-trained LLMs to a specific task by continuing the training process on a labeled dataset, which
+
+---
+
+\*Corresponding author.
+
+{1}------------------------------------------------
+
+allows the model to refine its parameters for enhanced performance on task-relevant features (Wei et al., 2021). However, for certain domains, off-the-shelf SFT data in knowledge-intensive and low-data domains is generally scarce, and the process of creating high-quality SFT data necessitates considerable human effort and expertise, limiting the wide application of domain LLMs construction (Li et al., 2024a). Canonical methods to enrich the quantity of Q&A in SFT data and enhance LLMs performance are data augmentation. Traditional natural language processing methods such as easy-data-augmentation (EDA) including synonym replacement, character replacement, random swapping, and back translation (Wei & Zou, 2019; Belinkov & Bisk, 2017; Coulombe, 2018; Wang et al., 2022). Recently, several endeavors have explored using an LLM to expand the SFT dataset. AugGPT (Dai et al., 2023) utilizes an LLM (such as ChatGPT) to rephrase questions. GPT3Mix (Yoo et al., 2021) enhances SFT data by prompting an LLM to generate similar questions to those in the SFT data through few-shot prompts.
+
+Despite the effectiveness of these augmentation methods in scaling up the quantity of SFT data, the vanilla SFT data augmentation method still confronts a significant challenge that may hinder the domain-specific fine-tuning of LLMs—the lack of correlation and logic between the knowledge underlying the SFT data. Existing SFT data are mainly structured merely in the form of Q&A, whereby LLMs during the SFT process simply acquire the superficial patterns (such as the output space and format) of Q&A (Kung & Peng, 2023) and do not comprehend the correlation and logic of knowledge underlying the Q&A pairs. For example, for the question: *Which is not a common symptom of cancer, persistent fever, or weight gain?* The answer: *Weight gain.* This involves multiple pieces of knowledge, such as "Cancer can cause a decrease in the body's resistance", "A decrease in resistance usually causes persistent fever", "Cancer cells consume a large amount of energy", and "Energy consumption can lead to weight loss". This fragmented knowledge in pre-training makes it difficult for LLMs to recall relevant knowledge for logical reasoning when answering questions. As a result, even after undergoing substantial training with sufficient SFT data, fine-tuned LLMs still cannot effectively manipulate the knowledge within the pre-training data, specifically in terms of recall, reasoning, and transfer (Zhu & Li, 2023; Allen-Zhu & Li, 2023).
+
+Therefore, in this paper, we seek to answer the question: *Can we not only focus on just augmenting the quantity but also the quality of the SFT training data, i.e., revealing the correlation and logic of knowledge underlying the SFT data?* With the previous Q&A pair as an example, it involves the correlation and logic of knowledge as follows: "*cancer—may cause—>decreased resistance—may cause—>persistent fever*", and "*cancer cells—may cause—>energy consumption—may cause—>weight loss*". This corresponds well to the content within a series of triples (i.e., subgraphs) in the knowledge graph (KG). We explore the introduction of KGs to generate high-quality explanations to promote better comprehension for each Q&A pair. Thus, we propose a novel approach, namely **Knowledge Graph-Enhanced Supervised Fine-Tuning (KG-SFT)**, which can elucidate the correlation and logic of knowledge to enhance the knowledge manipulation (e.g., knowledge recall, reasoning, and transfer) ability of LLMs.
+
+KG-SFT is a novel framework and effectively generates explanations that are logical, fluent, and trustworthy. Specifically, these three characteristics are aligned with the three components of KG-SFT.
+
+- (i) *Extractor* integrates external open-source knowledge graphs such as UMLS (Bodenreider, 2004) to identify entities within Q&A pairs. *Extractor* also retrieves their multi-hop reasoning subgraph between them to reveal the correlation and logic of knowledge underlying the Q&A pairs.
+- (ii) *Generator* uses a graph-structure significance scoring algorithm, HIST (Kleinberg, 1999), to score entities and relations within the reasoning subgraph. *Generator* selects the higher-scoring parts as the significant content for LLMs to let the LLMs generate a fluent draft explanation to the Q&A pairs.
+- (iii) *Detector* splits the draft explanations at the sentence level and detects the potential knowledge conflicts with the reasoning subgraph. *Detector* also reprompts to regenerate the conflict explanations.
+
+Extensive experiments on **fifteen** different domains and **six** different languages demonstrate the effectiveness of KG-SFT, leading to a maximum accuracy improvement of up to 18.1% and an average of 8.7% in low-data scenarios. Indeed, given the significant emphasis on accuracy in many practical low-data domains, an average improvement of 8.7% may represent substantial economic potential (Hendrix et al., 2022; Wolff et al., 2020). We also conduct knowledge manipulation
+
+{2}------------------------------------------------
+
+experiments to evaluate the model’s advancements in recall, reasoning, and transfer capabilities. KG-SFT can also be an effective plug-and-play module to incorporate with quantity augmenting methods.
+
+## 2 RELATED WORK
+
+### 2.1 TEXT DATA AUGMENTATION
+
+Data augmentation is a classical research area in natural language processing. Traditional data augmentation techniques primarily focus on character and word-level enhancements. For example, EDA (Wei & Zou, 2019) utilizes random insertion, random swapping, random deletion, and synonym replacement to enrich data diversity (Belinkov & Bisk, 2017; Coulombe, 2018; Wang et al., 2022). Recently, techniques based on language models have enabled sentence or even document-level augmentation, with methods based on cutting-edge LLMs demonstrating powerful competitive advantages (Deng et al., 2023; Fang et al., 2023; Ubani et al., 2023). A noteworthy example is AugGPT (Dai et al., 2023), which utilizes an LLM (such as ChatGPT) to rephrase questions in SFT data to diversify the expression forms of Q&A. Moreover, GPT3Mix (Yoo et al., 2021) enhances SFT data by prompting an LLM to generate similar questions to those in the SFT data through few-shot prompts.
+
+### 2.2 KNOWLEDGE GRAPH ENHANCED LLMs
+
+Knowledge graphs (KGs) are considered a promising technology for addressing the limitations of large language models (LLMs) in terms of inference and interpretability, given their advantages in structured knowledge representation (Pan et al., 2024). Recent research has mainly focused on converting structured knowledge from KGs into textual prompts to enhance the question-answering capabilities of LLMs (Chen et al., 2024; Lv et al., 2024). For example, Think-on-Graph (ToG) (Sun et al., 2023) utilizes iterative beam search on a KG to improve reasoning; KGR (Guan et al., 2024) autonomously retrofits LLM responses with validated factual statements from KGs; and KAPING (Baek et al., 2023) enhances zero-shot question answering by appending retrieved facts from KGs to LLM inputs. Retrieval-augmented methods primarily provide factual knowledge to LLMs during the reasoning phase. In contrast, our KG-SFT focuses on elucidating the correlation and logic between knowledge by generating high-quality training data, thereby significantly enhancing the knowledge manipulation capabilities of LLMs.
+
+## 3 PRELIMINARIES
+
+### 3.1 BM25 ALGORITHM
+
+For a given document  $d$  and a query  $q$  containing keywords  $q_1, q_2, \dots, q_n$ , the BM25 score of  $d$  with respect to  $q$  is computed as follows:  $\text{BM25}(d, q) = \sum_{i=1}^n \text{IDF}(q_i) \cdot \frac{f(q_i, d) \cdot (k_1 + 1)}{f(q_i, d) + k_1 \cdot (1 - b + b \cdot \frac{\text{len}(d)}{\text{avgd}})}$ , where  $f(q_i, d)$  is the term frequency of  $q_i$  in  $d$ ,  $\text{len}(d)$  is the length of the document  $d$  (in words),  $\text{avgd}$  is the average document length in the text collection from which documents are drawn,  $k_1$  and  $b$  are free parameters usually chosen, without loss of generality, as  $k_1 = 1.2$  to  $2.0$  and  $b = 0.75$ , and  $\text{IDF}(q_i)$  is the inverse document frequency of  $q_i$  across the collection of documents, defined as:  $\text{IDF}(q_i) = \log \frac{N - n(q_i) + 0.5}{n(q_i) + 0.5}$ , where  $N$  is the total number of documents in the collection and  $n(q_i)$  is the number of documents containing  $q_i$ .
+
+### 3.2 HITS ALGORITHM
+
+The Hyperlink-Induced Topic Search (HITS) (Kleinberg, 1999), also known as Hubs and Authorities, is an algorithm used to rate web pages. As for knowledge graphs, entities can be viewed as pages, where a hub is an entity that points to many other entities (authorities), and authority is an entity that is pointed to by many hubs. The iterative algorithm updates the hub and authority scores for each entity based on its relationships, with the key equations being:  $h(e_i) = \sum_{e_j \in O(e_i)} a(e_j)$  and  $a(e_i) = \sum_{e_j \in I(e_i)} h(e_j)$ , where  $h(e_i)$  and  $a(e_i)$  are the hub and authority scores of entity  $e_i$ ,
+
+{3}------------------------------------------------
+
+![Figure 1: An overview of the KG-SFT framework. The diagram is divided into three main components: Extractor, Generator, and Detector. The Extractor component takes a Q&A pair and performs Named Entity Recognition (NER) to identify entities like 'cancer', 'persistent fever', and 'weight gain'. It then searches for neighboring entities in a Knowledge Graph to form a reasoning subgraph. The Generator component uses the reasoning subgraph to calculate HITS scores and preserve core subgraphs. It also generates a reasoning explanation via an external LLM. The Detector component uses a Natural Language Inference Model and the reasoning subgraph to detect knowledge conflicts. The final output shows a corrected explanation and a list of common symptoms that cancer may cause, with weight gain identified as a non-typical symptom.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1: An overview of the KG-SFT framework. The diagram is divided into three main components: Extractor, Generator, and Detector. The Extractor component takes a Q&A pair and performs Named Entity Recognition (NER) to identify entities like 'cancer', 'persistent fever', and 'weight gain'. It then searches for neighboring entities in a Knowledge Graph to form a reasoning subgraph. The Generator component uses the reasoning subgraph to calculate HITS scores and preserve core subgraphs. It also generates a reasoning explanation via an external LLM. The Detector component uses a Natural Language Inference Model and the reasoning subgraph to detect knowledge conflicts. The final output shows a corrected explanation and a list of common symptoms that cancer may cause, with weight gain identified as a non-typical symptom.
+
+Figure 1: An overview of KG-SFT. KG-SFT integrates *Extractor*, *Generator*, and *Detector* to enhance the quality of vanilla SFT data. The workflow is as follows. (1) Perform Named Entity Recognition on the Q&A pair to extract potential entity list of question, options, and answer respectively. (2) Search the neighboring entities for each entity to obtain the reasoning subgraph. (3) Preserve core subgraphs that are strongly related to the Q&A pair via the HITS algorithm. (4) Generate reasoning explanation via an external LLM (5) Detect knowledge conflict via the Natural language inference model and the reasoning subgraph.
+
+respectively,  $O(e_i)$  is the set of entities that  $e_i$  points to (out-links), and  $I(e_i)$  is the set of entities that point to  $e_i$  (in-links). The scores are normalized over all entities after each iteration. We refer to the mean of the final authority and hub score as the HIST score.
+
+## 4 METHOD
+
+We propose the KG-SFT framework to enhance the quality of the SFT data by revealing their underlying correlation and logic of knowledge. Specifically, KG-SFT consists of three components: *Extractor*, *Generator*, and *Detector*. An overview of KG-SFT is shown in Figure 1.
+
+### 4.1 EXTRACTOR
+
+*Extractor* first derives relevant reasoning subgraphs in the knowledge graph based on the Q&A pair to reveal the underlying correlation and logic of knowledge. Specifically, for a given Q&A pair, the workflow of *Extractor* is as follows:
+
+- (i) *Extractor* first conducts named entity recognition (NER) on the question, options, and answer to derive the entity list of question, options, and answer, respectively. Regarding the NER model, we employ the existing NER tools provided by the open-source knowledge graphs, specifically leveraging tools like Metamap from UMLS.
+- (ii) To mine the correlation between knowledge underlying the Q&A pair, after obtaining the list of entities, *Extractor* then enrich the neighbors of these entities within the external knowledge graph. We further apply the off-the-shelf BM25 (Robertson et al., 2009) algorithm to rank the triples (entity, relation, neighbor) based on their relevance to the Q&A text, retaining the top (default 20) related triples as candidates.
+- (iii) To mine the comprehensive logic between knowledge underlying the Q&A pair, *Extractor* finally retrieved three types of inference paths: from question entity to question entity, from option entity to option entity, and from question entity to answer entity.
+
+By deduplicating and merging the triples obtained from the neighbor subgraph and inference path, we can derive a triple list to represent the reasoning subgraph. For a given Q&A pair, "Which of the following is not a typical symptom of cancer?" with options "A. Weight gain", "B. Persistent fever" and the correct answer is "B. Persistent fever". **First**, *Extractor* conducts NER to derive
+
+{4}------------------------------------------------
+
+the *entity list<sub>question</sub>* = [Cancer], the *entity list<sub>options</sub>* = [Weight gain, Persistent fever], and the *entity list<sub>answer</sub>* = [Persistent fever]. **Then**, *Extractor* enriches the neighbors of these entities. For example, for "Cancer," *Extractor* enriches highly relevant triples such as (Cancer, May cause, Weight loss) and (Cancer, May cause, Fever of unknown origin). **Finally**, *Extractor* retrieves the inference paths, e.g., (Cancer, May cause, Decreased resistance) followed by (Decreased resistance, May cause, Persistent fever). The triples are finally combined to form the final list of triples for the reasoning subgraph.
+
+### 4.2 GENERATOR
+
+After extracting the reasoning subgraphs, *Generator* applies an LLM to create explanations for the given Q&A and transform the structured knowledge and logic underlying the questions into a natural language text format. *Generator* employs the off-the-shelf Hyperlink-Induced Topic Search (HITS) algorithm (Kleinberg, 1999) to filter the significant content within the reasoning subgraph.
+
+Specifically, *Generator* **first** calculates the HIST scores of entities within the reasoning subgraphs via the HITS algorithm, which relies on the iterative updating of initial scores based on the structure of graphs. Note that to find content related to the Q&A, we will assign a higher initial score to the entity when it appears in the Q&A pair, while other entities will receive a lower score if the entity does not appear in the Q&A pair. **Then**, *Generator* selects the top (default 10) ranked neighbor subgraphs and inference paths by HIST scores as input to the LLMs (e.g. ChatGPT) to create draft explanations. The prompt used instructs the LLMs to generate clear explanations based on the provided question, answer, and triples. Please refer to Appendix A.4 for details.
+
+Applying the HITS algorithm to the above-mentioned reasoning subgraph, we observe "Cancer" as an entity exhibiting high authority due to its close association with "May cause" across multiple central paths, notably highlighted through the relational chain of (Cancer, May cause, Fever of unknown origin). Meanwhile, "persistent fever," as the answer entity, achieves significant centrality through the path (Decreased resistance, May cause, Persistent fever).
+
+Upon receiving these core triples, *Generator* produces draft explanations that reflect the logical relationship between the question and the answer: "The common symptoms that cancer may cause include decreased resistance, which can lead to fever of unknown origin, usually manifested as persistent fever. Moreover, it is generally common for cancer to cause weight loss due to the large amount of energy consumed by cancer cells. Weight gain, on the other hand, is only associated with appetite rather than being a usual symptom of cancer. Therefore, the correct answer is A, weight gain typically is not a symptom of cancer." Therefore, *Generator* conveys the underlying medical knowledge in a more fluent and clear manner.
+
+### 4.3 DETECTOR
+
+After generating draft explanations for each Q&A pair, *Detector* further examines these explanations using the triples from the inference graph to ensure their correctness. *Detector* aims to enhance the correctness of the generated explanations and minimize potential misguidance that may occur during the generation process by LLMs. Specifically, to generate the draft explanation, the detection process is as follows:
+
+- (i) Segment the draft explanation into sentences and then match them with the initially obtained entities list to form the matched comparison triples.
+- (ii) Input the matched comparison triples and segmented sentence explanations into an NLI model to assess for knowledge conflicts. Considering the input length and capability constraints of the NLI model, we directly input the comparison triples (five per group), combined with sentences, into an off-the-shelf state-of-the-art NLI model, DeBERTa (He et al., 2020; Xie et al., 2023) to determine the knowledge conflicts issue.
+- (iii) Mark a sentence with subsequent deletion tag, if it is detected with knowledge conflict. If an excessive number of sentences (default 30%) are found with knowledge conflicts, the re-prompt mechanism will re-guide the LLM to re-generate the explanations. The re-prompt instructs the model to reference the marked sentences containing knowledge conflicts and regenerate a new correct explanation. Please refer to Appendix A.4 for details.
+
+For example, for "Weight gain, on the other hand, is only associated with appetite rather than being a usual symptom of cancer." combined with a triple (Appetite, May cause, weight gain) input into
+
+{5}------------------------------------------------
+
+DeBERTa, the probability of knowledge conflict obtained is greater than the predefined threshold and thus will be marked as a knowledge conflict.
+
+## 5 EXPERIMENTS
+
+To evaluate the effectiveness of our KG-SFT, we design a suite of experiments that not only demonstrate a significant enhancement in the SFT process for LLMs but also provide high-quality analytical experiments. To simulate a more realistic application scenario and prove the versatility of KG-SFT, we conduct experiments across six language settings: English, Chinese, French, Japanese, Russian, and Spanish. Specifically, we divide the experiments into *eight* parts:
+
+- To comprehensively evaluate the enhancements of KG-SFT over the original SFT, we retain various proportions of the training set to simulate different scales of low-data scenarios.
+- To demonstrate the superiority of KG-SFT, we conduct comparative experiments with existing baselines on datasets across six languages.
+- To validate the potential of KG-SFT as a plug-and-play module, we conduct joint experiments on quantity and quality augmentation.
+- To investigate the contribution of each component within KG-SFT, we conduct the ablation study of each component.
+- To demonstrate the generalizability of KG-SFT, we incorporate over 10 diverse domain datasets from the multi-task language understanding benchmark.
+- To further analyze why KG-SFT is effective, we conduct experiments on knowledge manipulation to explore the fine-tuned LLMs with KG-SFT.
+ 1. We explore the LLMs' knowledge recall ability by locating factual knowledge.
+ 2. We explore the LLMs' knowledge reasoning ability by multi-hop reasoning Q&A experiments.
+ 3. We explore the LLMs' knowledge transfer ability by multilingual transfer experiments, please refer to Appendix B.4 for details.
+- To prove the generalizability of KG-SFT, we perform experiments on LLaMA-2-7B-chat (Touvron et al., 2023b), BLOOMZ-7B-chat (Muennighoff et al., 2022), and MMedLM2-7B (Qiu et al., 2024), please refer to Appendix B.5 for details.
+- To investigate potential data leakage, we conduct a thorough analysis to ensure that the performance improvements of LLMs on the test set are not directly attributable to the KG content added to the training set, please refer to Appendix B.1 for details.
+
+### 5.1 EXPERIMENT SETUP
+
+**Task and Datasets.** We choose the medical field as a canonical low-data and knowledge-intensive field, as high-quality supervised data is usually sparse, and medicine has rich and difficult factual knowledge. Moreover, evaluating LLMs conventionally relies on multiple-choice questions, which can provide an objective score (Qiu et al., 2024). Therefore, our evaluation task adopts multiple-choice questions and selects medical examination questions in six languages as the evaluation data. Please refer to Appendix A.1 for the statistics of our datasets.
+
+**Models and Metrics.** Unless specified, we use LLaMA-2-7B-chat as the default backbone to evaluate our KG-SFT. We choose ChatGPT (gpt-3.5-turbo) and DeBERTa-v2 as our *Generator* and *Detector*. We use the accuracy rate of multiple-choice questions as metrics.
+
+**Baseline Models.** We implement *twelve* variants of methods as our baselines for a comprehensive comparison. **(i) Vanilla:** standalone LLMs without any modification. **(ii) Vanilla SFT:** original supervised fine-tuning method based on Q&A dataset. **(iii) EDA-RS:** easy data augmentation by randomly removing words within sentences. **(iv) EDA-RS:** easy data augmentation by randomly swapping word positions within sentences. **(v) EDA-RI:** easy data augmentation by randomly inserting new words within sentences. **(vi) EDA-SR:** easy data augmentation by swapping words within sentences with their synonyms. **(vii) AugGPT:** utilizing an LLM (such as ChatGPT) to rephrase questions in SFT data to diversify the expression forms of Q&A. **(viii) GPT3Mix:** prompting an
+
+{6}------------------------------------------------
+
+LLM to generate similar questions to those in the SFT data through few-shot prompts. **(ix) CoT:** prompting an LLM to directly generate explanations based on Chain of Thought. Moreover, we introduce knowledge graph (KG)-enhanced methods, such as **(x) Think-on-Graph (ToG)**, which utilizes iterative beam search on a knowledge graph for improved reasoning; **(xi) KGR**, which autonomously retrofits LLM responses with validated factual statements from knowledge graphs; and **(xii) KAPING**, which enhances zero-shot question answering by appending retrieved facts from knowledge graphs to LLM inputs.
+
+### 5.2 MAIN RESULTS
+
+Table 1: Experiment results on the multiple-choice questions benchmarks in six languages range from different data ratios. For each dataset and data ratio, the numbers before/after the slash represent the accuracy rates for SFT and KG-SFT, respectively, with the **bold** indicating the best results.
+
+| % Data | MedQA<br>(English) | MedQA<br>(Chinese) | IgakuQA<br>(Russian) | RuMedDaNet<br>(Spanish) | MedMCQA<br>(French) | HeadQA<br>(Japanese) |
+|-|-|-|-|-|-|-|
+| 5% | 26.02/ <b>40.00</b> | 35.57/ <b>38.83</b> | 21.80/ <b>58.20</b> | 29.35/ <b>36.49</b> | 12.90/ <b>14.69</b> | 13.56/ <b>16.58</b> |
+| 10% | 39.89/ <b>43.76</b> | 37.65/ <b>43.63</b> | 42.57/ <b>61.32</b> | 35.84/ <b>40.66</b> | 13.56/ <b>17.36</b> | 17.93/ <b>19.90</b> |
+| 20% | 43.04/ <b>47.21</b> | 44.16/ <b>47.70</b> | 46.88/ <b>65.23</b> | 39.24/ <b>42.37</b> | 16.12/ <b>20.10</b> | 21.11/ <b>21.60</b> |
+| 50% | 44.61/ <b>48.63</b> | 55.66/ <b>57.85</b> | 53.12/ <b>67.57</b> | 41.90/ <b>44.71</b> | 21.73/ <b>28.45</b> | 25.63/ <b>28.14</b> |
+| 100% | 47.80/ <b>49.25</b> | 65.02/ <b>67.86</b> | 65.62/ <b>68.75</b> | 43.44/ <b>46.49</b> | 27.37/ <b>33.51</b> | 30.16/ <b>32.66</b> |
+
+In this section, we explore different data ratios to comprehensively evaluate the enhancements of KG-SFT over the original SFT. We set the data ratio from 5% to 100% to demonstrate the superiority of our KG-SFT in different augmented data scenarios. As shown in Table 1, KG-SFT achieves superior results across all data ratio and language settings over the vanilla SFT methods by a large margin. Notably, in the English scenarios, with only 5% of the augmented training data, KG-SFT leads to nearly 14% improvements over the vanilla methods. In the Russian scenarios, KG-SFT exhibits the most substantial performance gain at the 5% data ratio, from 21.8% to 58.20%. As the data ratio increases, KG-SFT still maintains superiority in all language scenarios as well.
+
+It is worth noting that KG-SFT demonstrates superior performance across all languages, particularly in low-data scenarios. This highlights the effectiveness of generating high-quality explanations with corresponding the correlation and logic of knowledge underlying the Q&A pair. In high data ratio scenarios, although the improvement is limited, KG-SFT still maintains a performance lead across all language settings. This not only highlights the distinct advantages of KG-SFT when data availability is limited, but also indicates that KG-SFT can consistently enhance model performance, even in high-data scenarios.
+
+### 5.3 RESULTS OF DIFFERENT BASELINES
+
+First, as shown in Table 2, KG-SFT significantly outperforms these knowledge-enhanced methods / retrieval-augmented methods, such as TOG, KGR, and KAPING. This indicates that relying on simple retrieval-augmented methods may struggle to address the complexities of medical question-answering, as these questions often involve intricate knowledge and reasoning. Second, compared with the existing data augmentation baseline methods, KG-SFT achieves the optimal results across datasets in all six languages. Specifically, compared with traditional data augmentation methods such as random deletion, random swapping, random insertion, and synonym replacement, KG-SFT demonstrates higher performance scores across all languages. For instance, EDA-RD achieves an average score of 34.12, whereas KG-SFT shows an improvement of 7.67%. Furthermore, when compared with advanced data augmentation methods based on LLMs, such as AugGPT and GPT3Mix, KG-SFT still maintains its superior performance. An appealing feature of KG-SFT is that it generates high-quality explanations for each Q&A which enhances the correlation and logic of knowledge during the supervised fine-tuning process. These results demonstrate the effectiveness in real-world knowledge-intensive and low-data domains.
+
+{7}------------------------------------------------
+
+Table 2: Experiment results for vanilla LLM and different SFT variants. #Tuning QA refers to the final number of QA pairs for training enhanced by each method, with 1000 before augmentation. If the method does not require training, the #Tuning QA is "-". We **bold** the best results for each dataset.
+
+| Method | #Tuning QA | MedQA (English) | MedQA (Chinese) | IgakuQA (Russian) | RuMedDaNet (Spanish) | MedMCQA (French) | HeadQA (Japanese) | Avg. |
+|-|-|-|-|-|-|-|-|-|
+| Vanilla | - | 28.20 | 28.37 | 51.17 | 32.97 | 12.76 | 11.10 | 27.43 |
+| TOG | - | 34.27 | 28.13 | 48.42 | 35.59 | 12.47 | 19.61 | 29.75 |
+| KGR | - | 33.15 | 26.88 | 47.52 | 34.74 | 13.39 | 17.29 | 28.83 |
+| KAPING | - | 36.39 | 27.24 | 54.66 | 34.98 | 11.54 | 15.91 | 30.12 |
+| StructGPT | - | 35.16 | 24.50 | 55.32 | 36.16 | 14.24 | 20.01 | 30.90 |
+| SFT | 1000 | 33.62 | 29.33 | 66.40 | 35.19 | 12.67 | 21.11 | 33.05 |
+| EDA-RD | 2000 | 40.14 | 17.83 | 62.50 | 41.39 | 16.72 | 26.13 | 34.12 |
+| EDA-RS | 2000 | 40.84 | 32.51 | 66.41 | 39.89 | 15.59 | 25.12 | 36.73 |
+| EDA-RI | 2000 | 39.67 | 32.37 | 65.63 | 40.11 | 18.81 | 26.13 | 37.12 |
+| EDA-SR | 2000 | 38.25 | 33.65 | 65.23 | 40.95 | 17.04 | 23.11 | 36.37 |
+| AugGPT | 2000 | 40.29 | 36.54 | 62.14 | 40.70 | 22.99 | 27.13 | 38.30 |
+| GPT3Mix | 2000 | 39.35 | 37.97 | 66.01 | 41.50 | 25.08 | 26.13 | 39.34 |
+| CoT | 1000 | 37.65 | 39.01 | 65.23 | 40.33 | 25.08 | 23.63 | 38.49 |
+| <b>KG-SFT</b> | <b>1000</b> | <b>41.71</b> | <b>39.31</b> | <b>68.75</b> | <b>44.40</b> | <b>28.45</b> | <b>28.14</b> | <b>41.79</b> |
+
+Table 3: Experiment results for joint experiments on quantity and quality. We **bold** the best results for each comparative experiment. The row of MAX in the table is filled in with the best result for each dataset.
+
+| Method | MedQA (English) | MedQA (Chinese) | IgakuQA (Russian) | RuMedDaNet (Spanish) | MedMCQA (French) | HeadQA (Japanese) |
+|-|-|-|-|-|-|-|
+| AugGPT | 40.29 | 36.54 | 62.14 | 40.70 | 22.99 | 27.13 |
+| AugGPT+KG-SFT | <b>40.92</b> | <b>40.45</b> | <b>68.35</b> | <b>43.14</b> | <b>27.33</b> | <b>28.63</b> |
+| GPT3Mix | 39.35 | 37.97 | 66.01 | 41.50 | 25.08 | 26.13 |
+| GPT3Mix+KG-SFT | <b>41.79</b> | <b>40.11</b> | <b>69.14</b> | <b>45.25</b> | <b>28.93</b> | <b>33.31</b> |
+| EDA-RD | 40.14 | 17.83 | 62.5 | 41.39 | 16.72 | 26.13 |
+| EDA-RD+KG-SFT | <b>41.39</b> | <b>37.62</b> | <b>69.92</b> | <b>43.18</b> | <b>27.81</b> | <b>28.14</b> |
+| EDA-RS | 40.84 | 32.51 | 66.41 | 39.89 | 15.59 | 25.12 |
+| EDA-RS+KG-SFT | <b>41.71</b> | <b>40.02</b> | <b>71.48</b> | <b>43.36</b> | <b>29.42</b> | <b>30.15</b> |
+| EDA-RI | 39.67 | 32.37 | 65.63 | 40.11 | 18.81 | 26.13 |
+| EDA-RI+KG-SFT | <b>41.24</b> | <b>38.29</b> | <b>67.18</b> | <b>42.26</b> | <b>29.58</b> | <b>33.16</b> |
+| EDA-SR | 38.25 | 33.65 | 65.23 | 40.95 | 17.04 | 23.11 |
+| EDA-SR+KG-SFT | <b>40.84</b> | <b>38.67</b> | <b>68.75</b> | <b>42.74</b> | <b>29.09</b> | <b>30.15</b> |
+| KG-SFT | 41.71 | 39.31 | 68.75 | 44.40 | 28.45 | 28.14 |
+| MAX | <b>41.79</b> | <b>40.45</b> | <b>71.48</b> | <b>45.25</b> | <b>29.42</b> | <b>33.31</b> |
+
+### 5.4 JOINT EXPERIMENTS ON QUANTITY AND QUALITY
+
+We conduct joint experiments on quantity and quality to demonstrate that KG-SFT can be incorporated with quantity-augmenting baselines as a plug-and-play module. As shown in Table 3, all quantity augmenting baselines achieve significant improvements by incorporating KG-SFT. For example, the accuracy of traditional EDA-RS in French increased from 15.59 to 29.42 with incorporating KG-SFT for quality enhancement, marking a relative improvement of 88.71% and even surpassing the original KG-SFT. Moreover, advanced baselines such as GPT3Mix achieve significant improvements by incorporating KG-SFT, outperforming the original KG-SFT in all values. These results highlight the significant potential when combining quantity augmenting methods with KG-SFT.
+
+### 5.5 ABLATION STUDY
+
+To further investigate the contribution of each component within KG-SFT, we conduct a series of ablation experiments on the KG-SFT entire framework. Specifically, We denote KG-SFT without *Extractor*, i.e., without the knowledge graph, the LLM directly generates explanations, as KG-
+
+{8}------------------------------------------------
+
+Table 4: Results of ablation study on multi-Q&amp;A datasets on all six languages, using LLaMA-2-7B-chat as the backbone.
+
+| Method | MedQA (English) | MedQA (Chinese) | IgakuQA (Russian) | RuMedDaNet (Spanish) | MedMCQA (French) | HeadQA (Japanese) |
+|-|-|-|-|-|-|-|
+| KG-SFT <sub><i>w/o Extractor</i></sub> | 37.65 | 39.01 | 40.33 | 65.23 | 25.08 | 23.63 |
+| KG-SFT <sub><i>w/o Generator</i></sub> | 36.22 | 38.02 | 41.61 | 66.40 | 23.79 | 27.13 |
+| KG-SFT <sub><i>w/o Detector</i></sub> | 37.24 | 40.05 | 41.61 | 67.66 | 26.52 | 25.13 |
+| KG-SFT | <b>39.31</b> | <b>41.71</b> | <b>44.40</b> | <b>68.75</b> | <b>28.45</b> | <b>28.14</b> |
+
+SFT<sub>*w/o Extractor*</sub>, KG-SFT without *Generator*, i.e., without LLMs, KG-SFT directly utilizes triples without converting them into natural language form, as KG-SFT<sub>*w/o Generator*</sub>, and KG-SFT without *Detector*, i.e., without *Detector* to alleviate knowledge conflict, as KG-SFT<sub>*w/o Detector*</sub>, respectively.
+
+As shown in Table 4, the absence of any component within KG-SFT results in a performance degradation of the entire framework. Notably, the absence of *Extractor* has a more significant impact on the performance of KG-SFT, which demonstrates the importance of extracting reasoning subgraphs via external knowledge graphs to promote better comprehension during the SFT process.
+
+### 5.6 RESULTS ON MULTI DOMAINS
+
+Table 5: Accuracy results of SFT, GPT3Mix, AugGPT, TOG, KGR, KAPING and KG-SFT across multi-domains. For each domain, we **bold** the best results and underline the suboptimal ones.
+
+| Domain | SFT | GPT3Mix | AugGPT | TOG | KGR | KAPING | StructGPT | KG-SFT |
+|-|-|-|-|-|-|-|-|-|
+| Nutrition | 51.29 | 56.45 | <u>59.68</u> | 43.55 | 45.16 | 40.32 | 50.84 | <b>62.35</b> |
+| Astronomy | 48.39 | 49.39 | <u>50.01</u> | 38.71 | 41.94 | 35.48 | 49.50 | <b>54.84</b> |
+| Microeconomics | 39.58 | 41.67 | <u>41.67</u> | 35.42 | 39.58 | 29.17 | 34.15 | <b>47.92</b> |
+| Formal Logic | 38.46 | <u>42.31</u> | 34.62 | 31.12 | 32.65 | 34.42 | <b>45.63</b> | 39.61 |
+| Computer Security | <u>55.00</u> | 40.00 | <u>55.00</u> | 45.00 | 45.00 | 45.00 | 50.00 | <b>60.00</b> |
+| Psychology | <u>45.53</u> | <u>47.97</u> | <u>44.72</u> | 45.08 | 44.26 | 43.09 | 45.32 | <b>52.03</b> |
+| Professional Accounting | 49.12 | 47.36 | <b>50.87</b> | 42.55 | 46.18 | 47.24 | 48.88 | <u>49.62</u> |
+| International Law | 74.00 | 82.00 | <u>84.00</u> | 72.00 | 72.00 | 68.00 | 65.00 | <b>88.00</b> |
+| Management | 70.00 | 71.43 | <u>72.67</u> | 57.14 | 52.38 | 57.14 | 68.42 | <b>75.00</b> |
+| History | <u>62.50</u> | 52.08 | 58.33 | 52.64 | 51.32 | 49.50 | 47.18 | <b>67.08</b> |
+| Professional Law | 40.07 | <u>43.00</u> | 39.41 | 34.31 | 34.43 | 32.35 | 36.45 | <b>43.65</b> |
+| Commonsense Reasoning | 55.50 | <u>63.00</u> | 62.90 | 59.20 | 57.20 | 61.20 | 62.16 | <b>64.50</b> |
+| <b>Avg</b> | 52.45 | 53.06 | <u>54.49</u> | 46.39 | 46.84 | 45.25 | 50.29 | <b>58.72</b> |
+
+To demonstrate the generalizability of our approach, we broaden the scope of our datasets. Specifically, we have incorporated over 10 diverse domain datasets from the multi-task language understanding benchmark (Hendrycks et al., 2020). As shown in Table 5, the experimental results indicate that our KG-SFT consistently achieves state-of-the-art performance across most domains, when compared to other data augmentation and knowledge-enhanced methods. In addition, our method has achieved suboptimal results in formal logic and professional accounting. These domains require precise numerical computation or symbolic reasoning, such as mathematics or logical reasoning, where the emphasis is less on knowledge-based inference. This is one direction for the future.
+
+### 5.7 FACTUAL KNOWLEDGE RECALL
+
+To explore the capacity of LLM in manipulating (e.g., recall) factual knowledge within models, we conduct an interpretability analysis following (Yu et al., 2023). This work primarily investigated methods for locating factual knowledge in LLMs, particularly mapping the key neurons (also known as Important Subvalues) to the vocabulary space.
+
+We conduct case analyses and select the representative case as Table 6. More cases can be found in Appendix B.3. For questions related to "cold", the KG-SFT model could directly recall related terms such as "cold", "Cold", "flu", and related to illness states like "sick", "ill", "III", and even cause-related terms such as "vir", "virus". In contrast, the knowledge recalled by the original SFT model is mostly unrelated to "cold", and even included special characters like "➔". Overall, KG-SFT performs well on multiple datasets, probably because it provides a lot of correlation and logic of knowledge, which enhances the LLM's ability to recall and locate relevant knowledge during pre-training.
+
+{9}------------------------------------------------
+
+Table 6: Important subvalues’ top10 tokens on vocabulary space. Please note that for each model, we analyze the top2 neurons (also known as Important Subvalues) that have the greatest impact on answering the question. In the table,  $\text{ffn}_{19}^{2683}$  represents the 2683th neuron located at the 19th MLP layer.
+
+| Input Text | Probing Token |
+|-|-|
+| A common viral respiratory infection presenting symptoms like sneezing, sore throat, and runny nose is | cold |
+| Method—subvalue | Top Tokens |
+| SFT— $\text{ffn}_{31}^{6404}$ | partially, designated, swing, phys, direct, regularly, straight, controlled |
+| SFT— $\text{ffn}_{19}^{2683}$ | →, eign, lak, Alo, haupt, ufen, eclipse, isie, illing, hmen |
+| KG-SFT— $\text{ffn}_{31}^{6404}$ | partially, designated, phys, swing, direct, regularly, straight, potentially |
+| KG-SFT— $\text{ffn}_{21}^{4355}$ | cold, Cold, sick, ill, vir, col, Ill, flu, resp, virus |
+
+### 5.8 COMMONSENSE MULTI-HOP REASONING
+
+Table 7: Commonsense Multi-Hop Reasoning on 3-hop Meta QA
+
+| 3-hop Meta QA | Semantic Similarity | Accuracy |
+|-|-|-|
+| GPT-3.5 | 66.10 | 53.0 |
+| GPT-4o | 67.49 | 55.0 |
+| OpenAI o1 | 34.28 | 58.0 |
+| SFT | 80.25 | 55.5 |
+| AugGPT | 83.00 | 62.9 |
+| GPT3Mix | 83.35 | 63.0 |
+| Think on Graph | 81.20 | 59.2 |
+| KGR | 80.79 | 57.2 |
+| KAPING | 81.79 | 61.2 |
+| KG-SFT | <b>84.25</b> | <b>64.5</b> |
+
+To explore the LLMs’ knowledge reasoning ability and demonstrate that the remarkable performance of KG-SFT is not limited to specific domains, we conduct experiments on the common sense question-answering dataset Meta QA (Zhang et al., 2018). Specifically, Meta QA is a multi-hop reasoning question-answering dataset. We select the most complex 3-hop questions from it as our experimental data. As shown in Table 7, KG-SFT significantly outperforms the baselines in both semantic similarity and accuracy of the answers, and even the strong baseline OpenAI o1. For example, the accuracy of KG-SFT achieves a notable increase of 9.0% compared to SFT. In summary, KG-SFT continues to achieve remarkable results in the domain of common sense and can enhance the LLMs’ multi-hop reasoning capabilities. This may be one of the reasons behind the superior performance of KG-SFT.
+
+## 6 CONCLUSION AND DISCUSSION
+
+In this paper, we propose a conceptually flexible, and general framework **Knowledge Graph-Driven Supervised Fine-Tuning** that focuses on **quality** augmentation to boost supervised fine-tuning. Specifically, we propose *extractor*, *generator*, and *detector* to generate high-quality explanations for each Q&A pair via structured knowledge graph to promote better **knowledge manipulation** for LLMs. Extensive experiments demonstrate the effectiveness of our KG-SFT, leading to a maximum accuracy improvement of up to 18.1% and an average of 8.7% in low-data scenarios. Moreover, KG-SFT also serves as a plug-and-play framework for existing **quantity** augmenting methods that achieve a maximum relative improvement of 88.71% in the accuracy metric and achieve the new state-of-the-art methods.
+
+ Rest of paper (reference and Appendix) is removed.

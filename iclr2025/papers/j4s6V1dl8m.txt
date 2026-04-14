@@ -1,0 +1,462 @@
+
+
+{0}------------------------------------------------
+
+# PROVER-VERIFIER GAMES IMPROVE LEGIBILITY OF LLM OUTPUTS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+One way to increase confidence in the outputs of Large Language Models (LLMs) is to support them with reasoning that is clear and easy to check — a property we call legibility. We study legibility in the context of solving grade-school math problems and show that optimizing chain-of-thought solutions only for answer correctness can make them less legible. To mitigate the loss in legibility, we propose a training algorithm inspired by Prover-Verifier Game from Anil et al. (2021). Our algorithm iteratively trains small verifiers to predict solution correctness, “helpful” provers to produce correct solutions that the verifier accepts, and “sneaky” provers to produce incorrect solutions that fool the verifier. We find that the helpful prover’s accuracy and the verifier’s robustness to adversarial attacks increase over the course of training. Furthermore, we show that legibility training transfers to time-constrained humans tasked with verifying solution correctness. Over course of LLM training human accuracy increases when checking the helpful prover’s solutions, and decreases when checking the sneaky prover’s solutions. Hence, training for checkability by small verifiers is a plausible technique for increasing output legibility. Our results suggest legibility training against small verifiers as a practical avenue for increasing legibility of large LLMs to humans, and thus could help with alignment of superhuman models.
+
+## 1 INTRODUCTION
+
+As machine learning systems become increasingly powerful and find applications in high-stakes areas, ensuring their outputs are trustworthy and understandable becomes crucial. One approach to building trust is requiring systems to produce *legible* explanations—outputs that can be fully understood and verified by humans or other trusted systems.
+
+In this paper, we investigate whether we can make the outputs of capable Large Language Models (LLMs) more legible to humans. One direct approach is to optimize model outputs for legibility via human feedback (e.g., RLHF; Christiano et al. 2017), which has its limitations (Casper et al., 2023). We study a complementary approach, and ask whether optimizing larger LLM provers to produce Chain-of-Thought (CoT) solutions *checkable* by smaller LLM verifiers makes them more *legible* to humans. We propose a novel approach: optimizing larger LLM “provers” to produce Chain-of-Thought (CoT) solutions that are *checkable* by smaller LLM “verifiers,” with the hypothesis that this will improve legibility to humans. Our key motivations for using smaller verifiers as proxies for humans include: (1) scalability compared to direct human feedback, (2) the ability to study legibility as a function of the capability gap between prover and verifier, and (3) the potential to incrementally aid human legibility when direct human feedback is limited for advanced systems.
+
+We define *checkability* through two properties:
+
+1. **Completeness:** The prover generates correct solutions that the verifier accepts.
+2. **Soundness:** The verifier rejects incorrect solutions from adversarial provers.
+
+To achieve checkability, we propose an iterative algorithm inspired by the Prover-Verifier Game (PVG; Anil et al. 2021). Our method alternates between training a verifier to predict solution correctness and optimizing a prover using reinforcement learning to produce convincing solutions, conditioned on either a “helpful” or “sneaky” role.
+
+{1}------------------------------------------------
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+![Figure 1: A scatter plot titled 'grade school math performance' showing accuracy (human evaluator) on the y-axis (0.65 to 0.85) versus accuracy (model generator) on the x-axis (0.3 to 0.9). Three points are plotted: 'init.' at (0.4, 0.82), 'checkability game (ours)' at (0.6, 0.82), and 'legibility tax. RL' at (0.8, 0.72). A red bracket labeled 'legibility tax. RL' indicates the trade-off between accuracy and legibility.](e05232e09f8d0a603eef5812f7313d4b_img.jpg)
+
+Figure 1: A scatter plot titled 'grade school math performance' showing accuracy (human evaluator) on the y-axis (0.65 to 0.85) versus accuracy (model generator) on the x-axis (0.3 to 0.9). Three points are plotted: 'init.' at (0.4, 0.82), 'checkability game (ours)' at (0.6, 0.82), and 'legibility tax. RL' at (0.8, 0.72). A red bracket labeled 'legibility tax. RL' indicates the trade-off between accuracy and legibility.
+
+Figure 1: **Key result.** Optimizing for solution correctness leads to high accuracy, but poor legibility. Initialization (pretrained on a variety of human-written math derivations) has higher legibility, but worse accuracy. Our proposed method retains high legibility with an accuracy in between the initialization and the correctness-only baseline. The resulting trade-off illustrates a **legibility tax**.
+
+![Figure 2: Three sample solutions produced by the helpful prover from different rounds of checkability training. The first solution (init.) is a short, unstructured derivation. The second solution (round 1) is more structured but still somewhat terse. The third solution (round 5) is highly structured and legible, showing clear steps and reasoning.](8d2f4e036a5e0205a1ea3f0b3378f584_img.jpg)
+
+**init**
+
+Shawna's father is five times as old as Shawna. Shawna is currently three times as old as Aliya. If Aliya is 3 years old, how old is Shawna's father?
+
+It follows that Shawna is currently  $3 \cdot 3 = 9$  years old. Subsequently, this implies that Shawna's father is currently  $5 \cdot 9 = 45$  years old. Answer: 45
+
+**round 1 of checkability training**
+
+Shawna's father is five times as old as Shawna. Shawna is currently three times as old as Aliya. If Aliya is 3 years old, how old is Shawna's father?
+
+First we need to determine the age of Aliya. From the problem description, it says that Aliya is 3 years old. Then we need to determine the age of Shawna. From the problem description, we know that Shawna is currently three times as old as Aliya, so the age of Shawna is  $3 \text{ times } 3$ , or  $< 3 \cdot 3 = 9 \rangle$ . Next, we need to determine Shawna's father. The problem states that Shawna's father is five times as old as Shawna. Therefore, the age of Shawna's father becomes  $5 \text{ times } 9$ , or  $< 5 \cdot 9 = 45 \rangle$ . Answer: 45
+
+**round 5 of checkability training**
+
+It says that Aliya is 3 years old. We start by calculating the age of Aliya. It says that Aliya is 3 years old. Then, we need to calculate Shawna's current age. Shawna is currently three times as old as Aliya. Thus, Shawna's current age is  $3 \cdot 3 = < 3 \cdot 3 = 9 \rangle$ . Now we need to calculate Shawna's father's age. Shawna's father is five times as old as Shawna. Therefore, Shawna's father's age is  $5 \cdot 9 = < 5 \cdot 9 = 45 \rangle$ . Therefore Shawna's father's age is 45. Answer: 45
+
+Figure 2: Three sample solutions produced by the helpful prover from different rounds of checkability training. The first solution (init.) is a short, unstructured derivation. The second solution (round 1) is more structured but still somewhat terse. The third solution (round 5) is highly structured and legible, showing clear steps and reasoning.
+
+Figure 2: **Checkability training produces legible and well structured solutions.** Three sample solutions produced by the helpful prover from different rounds of checkability training.
+
+We demonstrate our approach in the domain of grade-school math problems (Cobbe et al., 2021), showing that:
+
+- Direct optimization for correctness leads to high performance but poor legibility (Fig. 1, Fig. 4, and Sec. 4.1).
+- The resulting verifiers show increasing robustness over training rounds (Fig. 5, Fig. 6, and Sec. 4.3.1).
+- The helpful prover produces increasingly legible solutions, as judged by humans (Fig. 8 and Sec. 4.3.3).
+- The sneaky prover generates increasingly subtle flaws, challenging both verifiers and humans (Fig. 7 and Sec. 4.3.2).
+
+Our results suggest that training for checkability by smaller verifiers is a promising technique for increasing the legibility of large LLM outputs to humans. This approach could help with the alignment of superhuman models in scenarios where direct human oversight becomes challenging.
+
+## 2 RELATED WORK
+
+**Prover-Verifier Games, Computational Complexity.** Our approach builds on verification protocols for NP problems (Micali, 2000) and interactive proofs (Babai, 1985; Goldwasser et al., 2019).
+
+{2}------------------------------------------------
+
+While previous work (Anil et al., 2021; Wälchlen et al., 2024; Amit et al., 2024) applied these concepts to PAC learning and alignment in toy settings, we extend this to training legible LLMs in non-trivial domains. PVG is also similar to the Actor-Critic framework in reinforcement learning (Witten, 1977; Barto et al., 1983), where the critic is trained to predict the value of an action and the actor learns an optional policy.
+
+**Scalable oversight.** The central hypothesis that discrimination is easier than generation is common to many scalable oversight methods (Bowman et al., 2022) including critiques (Saunders et al., 2022; McAleese et al., 2024) and debate (Irving et al., 2018). Parrish et al. (2022) showed negative results for improving time-limited human judge accuracy through human debate. Previous works have also studied using LLMs as judges or debaters, although they differ on whether ground truth labels are available for training. Our setup is similar to single-turn simultaneous debate where the helpful and sneaky provers try to convince the model judge of different answers, assuming that some ground truth labels are available for improving both the provers and the verifier. Similarly, using supervised training, Radhakrishnan (2023) trained model debaters and judges and showed that the optimization makes the debaters more convincing and the judges more accurate. Michael et al. (2023) showed that debate works better than consultancy (showing the argument from a helpful prover half the time and sneaky half the time) for human judges. In our setup the judge does not see both sides at the same time, so it is more similar to the consultancy approach. Khan et al. (2024) showed that LLMs trained using persuasiveness signal only (no ground truth labels) can help both non-expert model and human judges. All of those works mainly use the QuALITY dataset (Pang et al., 2022), where the task is question-answering about a fictional story, so the justifications mainly consist of verified quotes from the text. In contrast, we focus on a less artificial, more challenging reasoning domain where the difference between provers and verifiers isn’t privileged information but capability gap.
+
+**Chain-of-Thought.** Prompting LLMs to produce Chain-of-Thought (CoT) solutions is useful for boosting accuracy (Wei et al., 2022) and CoTs can be used as natural justifications for the final answer. However, CoTs are not guaranteed to be legible a priori and our checkability training is one way to train CoTs to be more legible. Many works guide the model to produce a specific type of structured CoT, such as task decomposition (Christiano et al., 2018; Radhakrishnan et al., 2023; Wen et al., 2024), recursive summarization (Wu et al., 2021), and symbolic reasoning (Lyu et al., 2023). Lightman et al. (2024) use expensive step-wise human supervision to train models that can solve math. In contrast, we do not enforce any output structure, and rely solely on final answer supervision. Our checkability training method is general and can be readily studied in any domain where we have some ground truth labels. Legibility emerges as a natural consequence of the training dynamics (Figure 2).
+
+**Explainability** Explainability (Zhao et al., 2024; Wu et al., 2024) tries to give an account of the prover model’s reasoning, i.e. how it derived as the final answer. The resulting explanations can be arbitrarily complex (Nanda et al., 2023). In contrast, legibility of a prover model’s output allows to verify if a given solution is correct, ignoring how the prover reasoned about it. Consequently, legibility requires model outputs that are coherent and accessible to human understanding (Rudin, 2019). It is possible to have either without the other, but especially in high-stakes settings correctness is more important than understanding (Ziegler et al., 2022).
+
+**Adversarial Robustness.** Our checkability training relates to adversarial training in neural networks (Szegedy et al., 2013; Biggio et al., 2013; Elsayed et al., 2018; Carlini et al., 2019). We demonstrate that our approach improves verifier robustness against various attacks, contributing to the broader goal of creating more reliable AI systems.
+
+**Legibility in Applications.** We build on prior work studying legibility in various contexts, such as robotics and coding (Dragan et al., 2013; Oliveira et al., 2020; Wen et al., 2024). Our focus on solution correctness in time-limited settings offers a specific, practical measure of human legibility. By addressing these interconnected areas, our work aims to advance the development of trustworthy and understandable AI systems, particularly in scenarios where direct human oversight may be challenging.
+
+{3}------------------------------------------------
+
+162  
+163  
+164  
+165  
+166  
+167  
+168  
+169  
+170  
+171  
+172  
+173  
+174  
+175  
+176  
+177  
+178  
+179  
+180  
+181  
+182  
+183  
+184  
+185  
+186  
+187  
+188  
+189  
+190  
+191  
+192  
+193  
+194  
+195  
+196  
+197  
+198  
+199  
+200  
+201  
+202  
+203  
+204  
+205  
+206  
+207  
+208  
+209  
+210  
+211  
+212  
+213  
+214  
+215
+
+![Figure 3: Schematic illustrating the legibility problem. A Human asks a Superhuman AI to 'Write me a fast sorting algorithm'. The AI responds with a complex, dense block of Python code for a parallelized bitonic sorter. The Human responds with '???'.](ddfe517a5ad9c77c89a57a5e780b24ca_img.jpg)
+
+The image shows a Human figure on the left and a Superhuman AI robot on the right. The Human has a speech bubble saying "Write me a fast sorting algorithm" and another saying "???". The AI has a large speech bubble containing a complex Python code snippet for a parallelized bitonic sorter. The code is dense and includes imports like `itertools` and `numba`, and uses decorators like `@jit` and `@parallel`. The labels "Human" and "Superhuman AI" are placed below their respective figures.
+
+Figure 3: Schematic illustrating the legibility problem. A Human asks a Superhuman AI to 'Write me a fast sorting algorithm'. The AI responds with a complex, dense block of Python code for a parallelized bitonic sorter. The Human responds with '???'.
+
+Figure 3: **Schematic illustrating the legibility problem.** A poorly aligned, superhumanly capable AI might produce highly efficient code that sacrifices legibility for conciseness or performance. Code is slightly adapted from the bitonic sorter for parallelized sorting of elements in a list (Wikipedia contributors, 2023).
+
+## 3 SETUP
+
+We consider a dataset of problems with ground truth answers  $(x, y) \in \mathcal{X} \times \mathcal{Y}$ , where  $x$  is a problem statement and  $y(x)$  is the unique correct answer. For a proposed solution  $z$ ,  $\mathbb{1}_{\text{correct}}(x, z)$  indicates correctness. We use a SymPy grader (Meurer et al., 2017) for evaluating grade-school math (GSM) problems.
+
+### 3.1 CHECKABILITY AND THE PROVER-VERIFIER GAME
+
+Our framework involves a prover  $\pi(z|x)$  from model family  $\mathcal{H}$  generating solutions and a verifier  $v(x, z) \in [0, 1]$  estimating solution correctness. We define checkability through two properties:
+
+- **Completeness:**  $\forall x \in \mathcal{X}, \mathbb{1}_{\text{correct}}(x, \pi(x)) = v(x, \pi(x)) = 1$
+- **Soundness:**  $\forall \pi' \in \mathcal{H}, \forall x \in \mathcal{X}, \mathbb{1}_{\text{correct}}(x, \pi'(x)) = 0 \implies v(x, \pi'(x)) = 0$
+
+In practice, we seek approximate completeness and soundness, comparing verifiers’ soundness via their ranking on various attacks.
+
+We formulate checkability training as a two-player game between a role-conditioned prover  $\pi$  (helpful  $h(x)$  or sneaky  $s(x)$ ) and the verifier  $v$ . The verifier’s utility and prover’s reward are defined as:
+
+$$R_V = -\frac{1}{2} \mathbb{E}_{x \sim P_X} l(v(x, h(x)), \mathbb{1}_{\text{correct}}(x, h(x))) - \frac{1}{2} \mathbb{E}_{x \sim P_X} l(v(x, s(x)), \mathbb{1}_{\text{correct}}(x, s(x)))$$
+
+$$R_P = \frac{1}{2} \mathbb{E}_{x \sim P_X} r(v(x, h(x)), \mathbb{1}_{\text{correct}}(x, h(x))) + \frac{1}{2} \mathbb{E}_{x \sim P_X} r(v(x, s(x)), 1 - \mathbb{1}_{\text{correct}}(x, s(x)))$$
+
+where  $r(v, q)$  satisfies conditions to prioritize role-aligned solutions (see Appendix A.1) and  $l(v, c) : [0, 1] \times \{0, 1\} \rightarrow \mathbb{R}$  is a loss function minimized if and only if  $v = c$ .
+
+We establish a connection between the prover-verifier game and checkability as defined above:
+
+**Theorem 1.** Assuming  $\mathcal{H}$  is the set of all deterministic mappings from  $\mathcal{X}$  to  $\mathcal{Z}$ , in the PVG where verifier’s utility is  $R_V$  and the prover’s utility is  $R_P$ , the existence of a verifier-leading Stackelberg equilibrium ( $v \cdot h \cdot s$ ) is necessary and sufficient for the completeness and soundness properties to hold for  $(v \cdot \pi^*)$ .
+
+The proof is provided in Appendix C.
+
+### 3.2 CHECKABILITY TRAINING
+
+We implement checkability training using models from the GPT-4 family (Achiam et al., 2023). In particular, we leverage an augmented version of the GSM dataset (Cobbe et al., 2021) with 100k
+
+{4}------------------------------------------------
+
+![Figure 4: Learning from a binary grader leads to strong performance, but poor legibility. The figure contains four subplots: (a) Model accuracy vs. RL steps, showing a sharp drop at 8k steps. (b) Mean accuracy of human contractors at different training stages. (c) Mean time required by human contractors. (d) Mean accuracy of contractors per solution as a function of model accuracy.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 4 consists of four subplots labeled a, b, c, and d.   
+ Subplot (a) is a line graph titled 'baseline: correctness training only'. The y-axis is 'accuracy (model)' ranging from 0.4 to 0.9. The x-axis is 'RL steps' ranging from 0 to 8k. A blue line with error bars shows accuracy increasing from ~0.45 at 0 steps to ~0.85 at 4k steps, then dropping sharply to ~0.4 at 8k steps. A vertical dashed line at 4k steps is labeled 'initialization'.   
+ Subplot (b) is a bar chart titled 'accuracy (human)'. The y-axis is 'accuracy (human)' ranging from 0.65 to 0.9. The x-axis has three categories: 'Init.' (grey bar), 'step 3k\*' (dashed blue bar), and 'step 7k\*' (solid blue bar). The 'Init.' bar is at ~0.82, 'step 3k\*' is at ~0.73, and 'step 7k\*' is at ~0.74.   
+ Subplot (c) is a bar chart titled 'time to solve (sec)'. The y-axis is 'time to solve (sec)' ranging from 24 to 32. The x-axis has the same three categories: 'Init.' (grey bar), 'step 3k\*' (dashed blue bar), and 'step 7k\*' (solid blue bar). The 'Init.' bar is at ~26.5, 'step 3k\*' is at ~26.8, and 'step 7k\*' is at ~27.5.   
+ Subplot (d) is a line graph titled 'accuracy (human)'. The y-axis is 'accuracy (human)' ranging from 0.6 to 0.9. The x-axis is 'fraction correct (model)' ranging from 0.2 to 0.9. There are three data series: 'init.' (black line with circles), 'step 3k\*' (blue line with triangles), and 'step 7k\*' (blue line with stars). The 'init.' series starts at ~0.78 and increases to ~0.88. The 'step 3k\*' series starts at ~0.75 and decreases to ~0.65. The 'step 7k\*' series starts at ~0.75 and decreases to ~0.65.
+
+Figure 4: Learning from a binary grader leads to strong performance, but poor legibility. The figure contains four subplots: (a) Model accuracy vs. RL steps, showing a sharp drop at 8k steps. (b) Mean accuracy of human contractors at different training stages. (c) Mean time required by human contractors. (d) Mean accuracy of contractors per solution as a function of model accuracy.
+
+Figure 4: **Learning from a binary grader leads to strong performance, but poor legibility.** **a** Model accuracy as a function of RL training steps. The pronounced drop at 8k steps is due to solutions reaching the maximum completion length. **b** Mean accuracy of time-constrained human contractors when evaluating solutions from the initialization ( $\bullet$ ), after 3k steps ( $\blacktriangle$ ), or 7k steps ( $\star$ ). **c** Mean time required by the time-constrained human contractor to correctly label solutions. **d** Mean accuracy of contractors per solution as a function of model accuracy on the same solution for solutions from the initialization (grey), the prover after 3k steps (dashed blue), or 7k steps (solid blue). For each experiment, we separate data into quartiles according to the model accuracy before averaging. See Appendix K for details on the experiment set-up.
+
+additional synthetic examples generated by ChatGPT. The checkability training occurs over multiple rounds, where each round consists of a verifier and a prover training phase. We randomly partitioned the training dataset  $\mathcal{D}$  into two equally-sized subsets  $\mathcal{D}_\pi$  and  $\mathcal{D}_V$  that are used for training the prover  $\pi$  and the verifier  $V$  respectively.
+
+During verifier training, we minimize a regularized comparison loss (Bradley & Terry, 1952),
+
+$$\mathbb{E}_{x \sim \mathcal{D}_V} \left[ \mathbb{E}_{z_1, z_2 \sim \pi^*} - \log \sigma \left( [V(x, z_1) - V(x, z_2)] \cdot \text{sign}(\mathbb{I}_{\text{correct}}(z_1) - \mathbb{I}_{\text{correct}}(z_2)) \right) + \lambda \mathbb{E}_{z \sim \pi^*} V(x, z)^2 \right],$$
+
+where  $V(x, z) \in \mathbb{R}$  is a scoring function and not restricted to range  $[0, 1]$  like the theoretical formulation.  $\sigma$  is the sigmoid function,  $\lambda$  is a scaling constant, and the prover  $\pi^*$  used for sampling solutions for verifier training is a mixture of an initial base prover and previous round provers, each balanced to have equal number of correct and incorrect solutions. The first term is the reward modeling objective that maximizes log likelihood of correct solutions being ranked higher than incorrect solutions under the Bradley-Terry model, similar to Ouyang et al. (2022). The second term is a regularizer that is meant to center  $V$  at 0.
+
+During the prover training phase, we use Proximal Policy Optimization (PPO Schulman et al. 2017) to maximize expected reward minus a small KL regularization towards the initialization,
+
+$$\mathbb{E}_{x \sim \mathcal{D}_\pi, \text{role} \sim \{\text{helpful, sneaky}\}, z \sim \pi(\cdot | x, \text{role})} R(z | x, \text{role}). \quad (1)$$
+
+## 4 RESULTS
+
+### 4.1 BASELINE: DIRECT OPTIMIZATION FOR CORRECTNESS
+
+We establish a baseline by training the prover model to optimize solely for correctness using PPO against a binary grader Havrilla et al. (2024). This approach achieves strong performance on grade-school math problems (Fig. 4a), but leads to solutions that become increasingly difficult for humans to evaluate.
+
+To quantify this effect, we conducted a human evaluation study with time-constrained contractors judging the validity of solutions from different training stages. While contractors could reliably evaluate solutions from the prover’s initialization, their accuracy and speed deteriorated significantly when assessing solutions from the trained prover (Fig. 4b,c). This decrease in human legibility is most pronounced for questions the model struggles to solve consistently (Fig. 4d).
+
+{5}------------------------------------------------
+
+![Figure 5: Dynamics of the prover training phase across rounds for one pair of verifier and prover. The figure consists of three subplots: (a) verifier score, (b) accuracy, and (c) average accuracy. Subplot (a) shows verifier scores for correct (solid) and incorrect (dashed) solutions across four rounds (0, 1, 2, 5) for honest (red), sneaky (green), and incorrect (black) provers. Subplot (b) shows accuracy for correct and incorrect solutions for the same provers. Subplot (c) shows average accuracy for helpful (top) and sneaky (bottom) provers as a function of the fraction of the round completed.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 5: Dynamics of the prover training phase across rounds for one pair of verifier and prover. The figure consists of three subplots: (a) verifier score, (b) accuracy, and (c) average accuracy. Subplot (a) shows verifier scores for correct (solid) and incorrect (dashed) solutions across four rounds (0, 1, 2, 5) for honest (red), sneaky (green), and incorrect (black) provers. Subplot (b) shows accuracy for correct and incorrect solutions for the same provers. Subplot (c) shows average accuracy for helpful (top) and sneaky (bottom) provers as a function of the fraction of the round completed.
+
+Figure 5: **Dynamics of the prover training phase across rounds for one pair of verifier and prover.** Mean verifier score of correct (solid) and incorrect (dashed) solutions (a) and accuracy (b) as a function of RL training steps, for subsequent rounds (columns) and for the helpful (red) or sneaky (brown) prover. Arrow indicates increasing number of steps before the accuracy of the sneaky prover drops below 10%. We early stop when sneaky incorrect solutions become as convincing as helpful correct solutions. This verifier is  $10^{-3}$  the size of the prover. c Average accuracy for the helpful (top) and sneaky (bottom) provers as a function of the completed fraction of each round.
+
+Inspection of the prover’s outputs reveals that solutions become longer and less coherent as training progresses, often each question in multiple ways and later in training become largely unintelligible (Appendix Fig. S3) despite still producing the correct answer.
+
+This baseline demonstrates a critical challenge: as the model’s problem-solving accuracy improves, the interpretability of its solutions decreases. Our findings highlight the need for training approaches that balance performance with human legibility, especially in scenarios requiring oversight or collaboration between AI systems and humans.
+
+### 4.2 DYNAMICS OF CHECKABILITY TRAINING
+
+We investigate whether checkability training can improve performance while maintaining legibility, focusing on results using the Signed Relative Convincingness (SRC; Eq. 3) reward, which proved most effective for improving legibility.
+
+Figure 5 illustrates the dynamics of prover training across rounds. Within each round, both sneaky and helpful provers improve their convincingness to the verifier (Fig 5a). However, their accuracy evolves differently: the helpful prover generally produces increasingly correct solutions, while the sneaky prover’s accuracy decreases, eventually generating incorrect solutions that are as convincing as the helpful prover’s correct ones (Fig 5b,c).
+
+We explored these dynamics across various verifier sizes relative to the prover. The pattern holds for verifiers ranging from  $10^{-3}$  to  $10^{-1.8}$  times the prover’s compute. However, very small verifiers ( $10^{-4}$ ) lead to unstable training and poor legibility, while verifiers matching the prover’s size ( $10^0$ ) fail to become more robust over rounds (see Supplementary Figures S6 and S7). These outcomes likely stem from fundamental limitations: extremely small verifiers may lack the capacity for effective verification, while verifiers similar to provers may be too easily fooled by sneaky provers simulating their decision process.
+
+In summary, our checkability training demonstrates a characteristic dynamic where the helpful prover improves at problem-solving while the sneaky prover finds it increasingly difficult to produce convincing, incorrect solutions. This suggests that the approach can potentially balance performance improvement with maintained legibility.
+
+### 4.3 EVALUATIONS OF CHECKABILITY TO SMALLER VERIFIERS AND LEGIBILITY TO HUMANS
+
+At the end of each round of checkability training, we obtain three artifacts:
+
+{6}------------------------------------------------
+
+![Figure 6: Verifiers increase in robustness as measured by difficulty of sneaky-only attacks and balanced best-of-n accuracy. Panel (a) shows RL steps until exploit for SRC, goodharting, and CGC adversaries across rounds 0-4 for verifier sizes 10^-2, 10^-3, and 10^-4. Panel (b) shows accuracy/best-of-n for different rounds and verifier sizes.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 6 consists of two panels, (a) and (b). Panel (a) is a line graph showing 'RL steps until exploit' on the y-axis (ranging from 2k to 8k) against 'round' on the x-axis (0 to 4). It features three sets of lines for SRC (blue), goodharting (orange), and CGC (green) adversaries, with markers for verifier sizes  $10^{-2}$ ,  $10^{-3}$ , and  $10^{-4}$ . SRC lines show a general upward trend, indicating increasing steps until exploit. Goodharting lines show a peak around round 2. CGC lines show a sharp increase in steps until exploit starting around round 2. Panel (b) is a line graph showing 'accuracy/best of n' on the y-axis (ranging from 0.2 to 0.6) against 'number of completions n' on the x-axis (0 to 600). It features lines for rounds 0, 1, 2, 3, and 4. The lines for later rounds (e.g., round 4) are generally higher than those for earlier rounds (e.g., round 0), indicating improved accuracy.
+
+Figure 6: Verifiers increase in robustness as measured by difficulty of sneaky-only attacks and balanced best-of-n accuracy. Panel (a) shows RL steps until exploit for SRC, goodharting, and CGC adversaries across rounds 0-4 for verifier sizes 10^-2, 10^-3, and 10^-4. Panel (b) shows accuracy/best-of-n for different rounds and verifier sizes.
+
+Figure 6: **Verifiers increase in robustness as measured by difficulty of sneaky-only attacks and balanced best-of- $n$  accuracy** Number of steps until sneaky finds an exploit for the SRC (blue), goodharting (orange), and CGC (green) adversaries as a function of verifier sizes. We declare an attack ‘successful’ for the SRC and CGC adversaries when the sneaky becomes 95% incorrect and the average verifier score of sneaky incorrect samples become as high as that of helpful correct samples from the same round. We declare a goodharting adversary ‘successful’ when optimizing a prover on the verifier score reaches accuracy  $< 0.2$ . **b** Fraction of correct solutions when selecting the most convincing out of  $n$  balanced samples for varying  $n$  and different rounds. The solutions are from the last checkpoints of current-round helpful provers, balanced to have 50% correctness.
+
+1. a verifier trained on diverse adversarial examples,
+2. a sneaky prover that produces convincing, subtly incorrect solutions,
+3. a helpful prover that produces convincing, correct solutions.
+
+In this section, we perform various evaluations of the soundness of verifiers and the legibility of sneaky and correct solutions across rounds of training shown in Figure 5.
+
+#### 4.3.1 THE VERIFIER BECOMES MORE ROBUST THROUGHOUT CHECKABILITY TRAINING
+
+A key aspect of legibility in our framework is the verifier’s ability to soundly evaluate adversarial inputs from a sneaky prover of equal capability to the helpful prover. While we observe that the sneaky prover requires increasingly many steps to discover convincing, incorrect solutions throughout training (Fig. 5b), this could be due to weight sharing between the helpful and sneaky provers. To address this, we conduct additional experiments with separately trained sneaky-only provers.
+
+We performed three attacks with sneaky-only provers using the following reward functions:
+
+1. the SRC reward (3) to ablate the effect of weight sharing between the helpful and the sneaky prover.
+2. the CGC reward (4) to test generalization of verifier soundness to different variations of checkability training.
+3. the goodharting reward (5) to straightforwardly test robustness to optimization for convincingness (Gao et al., 2023).
+
+We apply these attacks to verifiers of different sizes across five rounds of checkability training. We observe that the number of steps required for each adversary to find an exploit increases over rounds and that larger verifiers are generally harder to exploit (Fig. 6a). In fact, verifiers of relative size  $10^{-2}$  become unexploitable through PPO beyond round 0 within 8000 steps, while smaller verifiers ( $10^{-3}$ ) remain vulnerable to some attacks until later rounds.
+
+While these test attacks are not exhaustive, the increasing difficulty of exploitation suggests a general improvement in verifier robustness. To further assess this, we evaluate the verifiers using balanced best-of- $n$  accuracy (Fig. 6b), where we analyze the correctness of the highest-scoring solution out of  $n$  balanced samples. The improving performance at higher  $n$  and later rounds indicates that verifiers become better at judging the helpful prover’s correctness, even when controlling for pass rates.
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+![Figure 7: Flaws introduced by the sneaky prover become more localized and harder to time-limited humans to spot. a Mean (circle) and minimum (triangle) validity score over portions of correct (solid) and incorrect (dotted) solutions from the initialization (left) and from different rounds of checkability training. b Mean accuracy of time-constrained human contractors when evaluating solutions from the sneaky prover at different rounds of checkability training. This plot is from a potentially flawed campaign (see Appendix K). c Two examples of incorrect solutions with high verifier score from different points of training. Flaws are highlighted in red. Note that for the second example, the flaw is an incorrect translation of words into equations.](a71911ad87414271aeb190e0eebcb989_img.jpg)
+
+Figure 7 consists of three panels. Panel (a) is a line graph showing GPT-4 validity score (y-axis, 0 to 1) versus round (x-axis, init, 0, 1, 2, 3, 4). It plots four series: correct min (solid line with triangles), correct avg (solid line with circles), incorrect min (dotted line with triangles), and incorrect avg (dotted line with circles). The correct min score starts high (~0.85) and decreases to ~0.1. The correct avg score starts at ~0.6, peaks at ~0.75 in round 1, and then decreases to ~0.4. The incorrect min score starts at ~0.2 and increases to ~0.5. The incorrect avg score starts at ~0.2 and increases to ~0.5. Panel (b) is a bar chart showing accuracy (human) (y-axis, 0.7 to 0.9) versus round (x-axis, 0, 1, 2, 3). The accuracy decreases from ~0.84 in round 0 to ~0.81 in round 3. Panel (c) shows two examples of incorrect solutions. The first example is from round 1 and the second is from round 3. Both show a problem description, a step-by-step solution, and an answer. Flaws are highlighted in red.
+
+Figure 7: Flaws introduced by the sneaky prover become more localized and harder to time-limited humans to spot. a Mean (circle) and minimum (triangle) validity score over portions of correct (solid) and incorrect (dotted) solutions from the initialization (left) and from different rounds of checkability training. b Mean accuracy of time-constrained human contractors when evaluating solutions from the sneaky prover at different rounds of checkability training. This plot is from a potentially flawed campaign (see Appendix K). c Two examples of incorrect solutions with high verifier score from different points of training. Flaws are highlighted in red. Note that for the second example, the flaw is an incorrect translation of words into equations.
+
+Figure 7: Flaws introduced by the sneaky prover become more localized and harder to time-limited humans to spot. **a** Mean (circle) and minimum (triangle) validity score over portions of correct (solid) and incorrect (dotted) solutions from the initialization (left) and from different rounds of checkability training. **b** Mean accuracy of time-constrained human contractors when evaluating solutions from the sneaky prover at different rounds of checkability training. This plot is from a potentially flawed campaign (see Appendix K). **c** Two examples of incorrect solutions with high verifier score from different points of training. Flaws are highlighted in red. Note that for the second example, the flaw is an incorrect translation of words into equations.
+
+These results demonstrate that our checkability training process produces increasingly robust verifiers, capable of better distinguishing correct from incorrect solutions across a range of adversarial scenarios.
+
+#### 4.3.2 THE SNEAKY PROVER BECOMES INCREASINGLY SUBTLE THROUGHOUT CHECKABILITY TRAINING
+
+Having established the verifier’s increasing robustness, we now analyze the sneaky attacks that *do* manage to fool the verifier.
+
+While early-round sneaky solutions often contain obvious mistakes, later-round solutions feature increasingly subtle flaws (Fig. 7c and Sup. Fig. S4). To quantify this evolution, we used GPT-4 to assess the validity of small portions of sneaky solutions across training rounds (Fig. 7a). The results show that while the minimum score remains low (indicating a detectable flaw), the average score increases over rounds, suggesting improved overall soundness of the solutions.
+
+We also investigated whether these increasingly subtle attacks transfer to human evaluators. Interestingly, when time-constrained contractors assessed the sneaky solutions, their accuracy in correctly labeling these solutions decreased throughout the rounds (Fig. 7b). This suggests that the sneaky prover’s outputs become more challenging for humans to evaluate, mirroring the increased difficulty for the verifier<sup>1</sup>.
+
+These findings indicate that our checkability training produces a sneaky prover capable of generating subtly flawed solutions that are non-trivial for both automated verifiers and time-constrained humans
+
+<sup>1</sup>Fig. 7b is from a pilot study with potential design flaws (see Appendix K for details).
+
+{8}------------------------------------------------
+
+![Figure 8: Checkability training jointly increases model performance and legibility. The figure contains three bar charts labeled a, b, and c, all with 'round' on the x-axis (0 to 5). Chart (a) shows 'accuracy (model)' on the y-axis (0.40 to 0.70). Chart (b) shows 'accuracy (human)' on the y-axis (0.65 to 0.9). Chart (c) shows 'time to solve (sec)' on the y-axis (24 to 32). All charts show an upward trend in accuracy and a downward trend in time as training progresses.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+| Round | Model Accuracy (a) | Human Accuracy (b) | Time to Solve (sec) (c) |
+|-|-|-|-|
+| 0 | ~0.57 | ~0.76 | ~27.5 |
+| 1 | ~0.59 | ~0.78 | ~26.5 |
+| 2 | ~0.56 | ~0.81 | ~25.5 |
+| 3 | ~0.61 | ~0.82 | ~25.5 |
+| 4 | ~0.63 | ~0.76 | ~26.5 |
+| 5 | ~0.63 | ~0.84 | ~26.0 |
+
+Figure 8: Checkability training jointly increases model performance and legibility. The figure contains three bar charts labeled a, b, and c, all with 'round' on the x-axis (0 to 5). Chart (a) shows 'accuracy (model)' on the y-axis (0.40 to 0.70). Chart (b) shows 'accuracy (human)' on the y-axis (0.65 to 0.9). Chart (c) shows 'time to solve (sec)' on the y-axis (24 to 32). All charts show an upward trend in accuracy and a downward trend in time as training progresses.
+
+Figure 8: **Checkability training jointly increases model performance and legibility.** **a** Mean accuracy of the helpful prover at different rounds of checkability training. **b,c** Mean accuracy (**b**) and time required to correctly label solutions (**c**) of time-constrained human contractors when evaluating solutions from the helpful prover at different rounds of checkability training.
+
+to detect. This capability could potentially be leveraged for training more robust critique models in future work.
+
+#### 4.3.3 THE HELPFUL PROVER BECOMES INCREASINGLY LEGIBLE THROUGHOUT CHECKABILITY TRAINING
+
+We now examine the helpful prover’s evolution across training rounds, focusing on both its accuracy and the legibility of its solutions to human evaluators.
+
+As checkability training progresses, the helpful prover’s accuracy improves (Fig 8a). Unlike the correctness-only training approach, solutions from the helpful prover remain coherent throughout training (Fig. 2), indicating effective use of verifier feedback to enhance problem-solving capabilities.
+
+To assess human legibility, we conducted evaluations with time-constrained contractors. Results show improvements in both the contractors’ mean accuracy in evaluating solutions (Fig. 8b) and the time required for evaluation (Fig. 8c) as training advances. By the end of training, the helpful prover matches the initialization’s legibility while achieving substantially stronger performance.
+
+However, the helpful prover’s performance does not reach that of the correctness-only baseline (Fig. 4), highlighting a tension between high performance and legibility (Leike, 2022). Potential approaches to address this trade-off, such as separating the model’s chain-of-thought from proof of correctness, are discussed in Appendix 5.1.
+
+In summary, checkability training produces a helpful prover that generates increasingly correct and legible solutions. This dual improvement is crucial for applications requiring human oversight and collaboration with AI systems.
+
+## 5 DISCUSSION
+
+### 5.1 LIMITATIONS
+
+**Only domains that allow natural language justifications.** We studied the math domain because natural language explanations are common and often required for building trust in mathematical conclusions. However, in some domains it is difficult to support conclusions with natural language explanations. For example recognizing particular faces is easy for humans, but it’s hard to communicate to others in natural language why a particular face belongs to a particular person.
+
+**Need for ground truth answers and reliance on generalization.** One prerequisite for our setup is being able to certify correctness of answers of solutions produced by the prover. For the grade
+
+{9}------------------------------------------------
+
+school math domain we rely on having a training dataset of problems with known ground truth answers (Cobbe et al., 2021). We anticipate this setup to be less relevant to domains where collecting any ground truth is too hard or expensive. One possible approach in this case could be to hope for favorable out-of-distribution generalization properties of legibility from solutions to problems with known ground truth answers to other domains. We don’t study out-of-domain generalization in this paper because we train on only one dataset, but we expect that training on a diverse set of domains could potentially lead to good generalization from domains with ground truth labels to the domains without labels (Burns et al., 2023).
+
+**Conflating the model’s chain-of-thought with legible solutions.** By training the CoTs to be legible, we potentially limited the provers’ accuracy. A better method could be training a first model using CoT to maximize accuracy, and then training a second model to turn the CoT used to produce the answer into a legible justification to humans. Hence, our measurement of accuracy-legibility tradeoff may be overly pessimistic; the prover may be able to achieve legibility at less or no cost to accuracy. For the correctness-only baseline, we could have early stopped at less accurate but more legible checkpoint. However, we don’t know of a principled way to do early stopping for legibility.
+
+**Dataset diversity and difficulty.** We conducted our empirical study on only one dataset (GSM). The dataset is relatively easy and the solutions are quite standardized. Using ChatGPT to augment this dataset could result in some incorrect labels, but based on preliminary data analysis we did not see significant difference between verifier test accuracies trained on synthetic vs. real data. We would like to extend the checkability training framework to harder math datasets and coding, as well as fuzzier domains such as human preference data (Ouyang et al., 2022). Our method is fully general as long as there is a finite set of final answer labels.
+
+**Initialization with human-written math derivations.** Our prover initialization has relatively high performance in GSM. We used a prover that has been lightly finetuned on a variety of math data to learn the correct format, and the finetuning dataset contains some of the GSM trainset data. We believe this doesn’t qualitatively affect our results and only makes it easier for the helpful prover to produce correct answers. Figure S11 shows that initialization with a base model without math finetuning leads to qualitatively similar training dynamics.
+
+**Heterogeneous experiment set-ups.** We have different stopping criteria for different training schemes presented throughout the paper. We trained the prover for a fixed number of RL steps in each round for certain training schemes (4k steps in Fig. 6a, 5c, 8k steps in Fig. 4, 5c, S6, S7), whereas in Fig. 5, S1, S2 we trained until early stopping criteria are met (the criteria are already discussed in those section). We do not observe qualitative different between early stopping and non early stopping rounds in our experiments.
+
+**Hyperparameters.** We did not tune all hyperparameters thoroughly for all training schemes in this paper. The main hyperparameter we tuned are the ratios of samples from each of the previous rounds. We tuned the ratio for one verifier size ( $10^{-3}$ ) for the SRC reward based on whether training robustness increases across rounds, and used the same ratio for other sizes with SRC and CGC rewards, which could result in other training schemes being worse in robustness and legibility. We separately tuned the ratio for one verifier size ( $10^{-3}$ ) for the iterative goodharting training. We used the default ChatGPT post-training hyperparameters such as the optimizer, learning rate, or KL regularization coefficient for prover and verifier training. **6 rounds of checkability training (Fig 5) takes 2400 A100-40G GPU hours.**
+
+### 5.2 CONCLUSION
+
+We presented a tension between model performance and solution legibility in a concrete setting of judging grade-school math solutions, and proposed one way to address the tradeoff. Our results show promising signs for establishing trust in LLM outputs even if they become more capable than humans in the future. We hope to inspire future work on semi-supervised / unsupervised setups for improving human judge legibility with few or no ground truth labels.
+
+ Rest of paper (reference and Appendix) is removed.

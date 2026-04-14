@@ -1,0 +1,331 @@
+
+
+{0}------------------------------------------------
+
+# AN IMAGE IS WORTH MORE THAN $16 \times 16$ PATCHES: EXPLORING TRANSFORMERS ON INDIVIDUAL PIXELS
+
+Duy-Kien Nguyen<sup>2</sup> Mahmoud Assran<sup>1</sup> Unnat Jain<sup>1</sup> Martin R. Oswald<sup>2</sup>  
+Cees G. M. Snoek<sup>2</sup> Xinlei Chen<sup>1</sup>
+
+<sup>1</sup>FAIR, Meta AI
+
+<sup>2</sup>University of Amsterdam
+
+## ABSTRACT
+
+This work does not introduce a new method. Instead, we present an interesting finding that questions the necessity of the inductive bias of *locality* in modern computer vision architectures. Concretely, we find that vanilla Transformers can operate by directly treating each individual pixel as a token and achieve highly performant results. This is substantially different from the popular design in Vision Transformer, which maintains the inductive bias from ConvNets towards local neighborhoods (e.g. by treating each  $16 \times 16$  patch as a token). We showcase the effectiveness of pixels-as-tokens across three well-studied computer vision tasks: supervised learning for classification and regression, self-supervised learning via masked autoencoding, and image generation with diffusion models. Although it’s computationally less practical to directly operate on individual pixels, we believe the community must be made aware of this surprising piece of knowledge when devising the next generation of neural network architectures for computer vision.
+
+## 1 INTRODUCTION
+
+For computer vision, the deep learning revolution can be characterized as a revolution in *inductive biases*. Learning previously occurred on top of manually crafted features, such as those described in Lowe (2004); Dalal & Triggs (2005), which encoded preconceived notions about useful patterns and structures for specific tasks. In contrast, biases in modern features are no longer predetermined but instead shaped by direct learning from data using predefined model architectures. This paradigm shift’s dominance highlights the potential of reducing feature biases to create more versatile and capable systems that excel across a wide range of vision tasks.
+
+Beyond features, model architectures also possess inductive biases. Reducing these biases can potentially facilitate greater unification not only across tasks but also across data modalities. The *Transformer* architecture (Vaswani et al., 2017) serves as a great example. Initially developed to process natural languages, its effectiveness was subsequently demonstrated for images (Dosovitskiy et al., 2021), point clouds (Zhao et al., 2021), codes (Chen et al., 2021a), and many other types of data. Notably, compared to its predecessor in vision – ConvNets (LeCun et al., 1989; He et al., 2016), the Vision Transformer (ViT) (Dosovitskiy et al., 2021) carries much less image-specific inductive bias. Nonetheless, the initial advantage from such biases is quickly offset by more data (and models that have enough capacities to store patterns observed within the data), ultimately becoming *restrictions* that prevent ConvNets from scaling further (Dosovitskiy et al., 2021).
+
+Of course, ViT is not entirely free of inductive bias. It gets rid of the spatial hierarchy in the ConvNet and models multiple scales in a plain architecture. However, for other inductive biases, the removal is merely half-way through: location equivariance still exists in its patch projection layer and all the intermediate blocks;<sup>1</sup> and *locality* – the notion that neighboring pixels are more related than pixels that are farther apart – still exists in its ‘patchification’ step (that represents an image with  $16 \times 16$  2D patches) and position embeddings (when they are manually designed). Therefore, a natural question arises: can we *completely eliminate* either or both of these two major inductive biases? In this work, we aim to answer this important question.
+
+Surprisingly, we find locality can indeed be removed. We arrive at this conclusion by directly treating each individual pixel as a token for the Transformer and using position embeddings learned from
+
+<sup>1</sup>By ‘location equivariance’, we refer to the adoption of *weight-sharing* mechanism which ensures that the same weights are applied regardless of spatial locations.
+
+{1}------------------------------------------------
+
+| inductive bias | ConvNet | ViT | our work |
+|-|-|-|-|
+| spatial hierarchy | ✓ | ✗ | ✗ |
+| location equivariance | ✓ | ✓ | ✓ |
+| locality | ✓ | ✓ | ✗ |
+
+Table 1: **Major inductive biases for vision.** A ConvNet (LeCun et al., 1989; He et al., 2016) has all three: spatial hierarchy, location equivariance, and *locality*, with neighboring pixels being more related than pixels farther apart. Vision Transformer (ViT) (Dosovitskiy et al., 2021) removes the spatial hierarchy, reduces (but still retains) location equivariance and locality. We investigate the *complete removal* of locality by simply applying Transformers on individual pixels. It works surprisingly well, challenging the mainstream belief that locality is a necessity for vision architectures.
+
+scratch. In this way, we introduce zero priors about the 2D grid structure of images. Interestingly, instead of training divergence or steep performance degeneration, we can obtain *better* results in quality from this setup. The fact that this naïve, locality-free Transformer works so well suggests there are *more* signals Transformers can capture by viewing images as sets of individual pixels, rather than  $16 \times 16$  patches. This finding challenges the conventional community belief that ‘locality is a fundamental inductive bias for vision tasks’ (see Tab. 1).
+
+We showcase the effectiveness of Transformer on pixels via three different case studies: (i) supervised learning for object classification, where CIFAR-100 (Krizhevsky, 2009) is used for our main experiments thanks to its default  $32 \times 32$  input size, but the observation also generalizes well to ImageNet (Deng et al., 2009), fine-grained classification using Oxford-102-Flowers (Nilsback & Zisserman, 2008) and depth estimation via regression using NYU-v2 (Silberman et al., 2012); (ii) self-supervised learning on CIFAR-100 via Masked Autoencoding (MAE) (He et al., 2022) for pre-training, and fine-tuning for classification; and (iii) image generation with diffusion models, where we follow the architecture of the Diffusion Transformer (DiT) (Peebles & Xie, 2023), and study its pixel variant on ImageNet using the latent token space provided by VQGAN (Esser et al., 2021). In all three cases, we find Transformers on pixels exhibit reasonable behaviors, and achieves results better in quality than baselines equipped with the locality inductive bias.
+
+As a related investigation, we also examine the importance of two locality designs (position embedding and patchification) within the standard ViT architecture on ImageNet. For position embedding, we have three options: sin-cos (Vaswani et al., 2017), learned, and none – with sin-cos carrying the locality bias whilst the other two do not. To systematically ‘corrupt’ the locality bias in patchification, we perform a pixel *permutation* before dividing the input into 256-pixel (akin to a  $16 \times 16$  patch in ViT) tokens. The permutation is fixed across images, and consists of multiple steps that each swaps a pixel pair within a distance threshold. Our results suggest that patchification imposes a stronger locality prior, and removing both location equivariance and locality is not yet feasible.
+
+Treating each pixel as a token will lead to a sequence length much longer than commonly used for images. This is especially cumbersome as Self-Attention in Transformers demands quadratic computations. Therefore, the contribution of our work is on the finding, *not* on proposing a new method. In practice, patchification is still a simple and effective idea that trades quality for efficiency, and locality is still highly *useful*. Nevertheless, we believe our investigation delivers a clean, compelling message that locality is *not* a necessary inductive bias for vision. We believe this finding will be integrated into the community knowledge when exploring the next generations of vision architectures.
+
+## 2 INDUCTIVE BIAS OF LOCALITY
+
+Here we discuss about the inductive bias of locality in mainstream vision architectures: ConvNets and ViTs. Locality is the notion that neighboring pixels are more related than pixels farther apart.
+
+### 2.1 LOCALITY IN CONVNETS
+
+In a ConvNet, locality is reflected in the *receptive fields* of the features computed in each layer. Intuitively, receptive fields cover all the pixels involved in computing a specific feature, and for ConvNets, the fields are local. Specifically, ConvNets consist of several layers, each having convolutional kernels or pooling operations – both of which are local. The field is progressively expanded as the network stacks more layers, but the window is still locally centered at the location of the pixel.
+
+{2}------------------------------------------------
+
+![Diagram illustrating the Transformer architecture on pixels. An input image is processed into a grid of pixels, which are then mapped to Position Embeddings. These embeddings are fed into a Transformer block consisting of a norm layer, Self-Attention, another norm layer, and an MLP. The output is used for various tasks, visualized by a heatmap and a scatter plot.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+The diagram shows the flow from an input image to a grid of pixels, which are then processed by a Position Embedding block. The output is then passed through a Transformer block containing a norm layer, Self-Attention, another norm layer, and an MLP. The final output is used for various tasks, visualized by a heatmap and a scatter plot.
+
+Diagram illustrating the Transformer architecture on pixels. An input image is processed into a grid of pixels, which are then mapped to Position Embeddings. These embeddings are fed into a Transformer block consisting of a norm layer, Self-Attention, another norm layer, and an MLP. The output is used for various tasks, visualized by a heatmap and a scatter plot.
+
+Figure 1: **Transformer on pixels, or  $1 \times 1$  ‘patches’**, which we use to investigate the role of locality. Given an image, we simply treat it as a set of pixels. Besides, we also use randomly initialized and learnable position embeddings without prior about the 2D image grid, thus removing the remaining locality bias from previous architectures (e.g., ViT (Dosovitskiy et al., 2014)) that operate on non-degenerated patches. Transformers are employed on the top, with interleaved Self-Attention and MLP blocks (only showing one pair for clarity). We showcase the effectiveness of this *locality-free* architecture through three case studies, spanning both discriminative and generative tasks.
+
+### 2.2 LOCALITY IN VISION TRANSFORMERS
+
+At first glance, Transformers are locality-free. This is because the majority of Transformer operations are either global (e.g., Self-Attention), or purely within each individual token (e.g., MLP). However, a closer look will reveal two designs within ViT (Dosovitskiy et al., 2021) that can still retain the locality inductive bias: patchification and position embedding.
+
+**Locality in patchification.** In ViT, the tokens fed into the Transformer blocks are *patches*, not pixels. Each patch consists of  $16 \times 16$  pixels, and becomes the basic unit of operation after the first projection layer. This means the amount of computation imposed within the patch is substantially different from the amount across patches: the information outside the  $16 \times 16$  neighborhood can *only* be propagated with Self-Attention, and the information among the 256 pixels are always processed jointly as token. While the receptive field becomes global after the first Self-Attention block, the bias towards local neighborhoods is already inducted in the patchification step.
+
+**Locality in position embedding.** Position embeddings can be learned (Dosovitskiy et al., 2021), or manually designed and fixed during training. A natural choice for images is to use a 2D sin-cos embedding (Chen et al., 2021b; He et al., 2022), which extends from the original 1D one (Vaswani et al., 2017). As sin-cos functions are smooth, they tend to introduce locality biases that nearby tokens are more similar in the embedding space.<sup>2</sup> Other designed variants are also possible and have been explored (Dosovitskiy et al., 2021), but all of them can carry information about the 2D grid structure of images, unlike learned ones which do not make any assumption about the input.
+
+The locality bias has also been exploited when the position embeddings are *interpolated* (Dehghani et al., 2023; Li et al., 2021). Through bilinear or bicubic interpolation, spatially close embeddings are used to generate a new embedding of the current position, which also leverages locality as a prior.
+
+Compared to ConvNets, ViTs are designed with much less pronounced bias toward locality. This paves the way for our investigation to completely remove this bias, described next.
+
+## 3 EXPLORING TRANSFORMERS ON INDIVIDUAL PIXELS
+
+To study the impact of removing the locality inductive bias, we closely follow the standard Transformer encoder (Vaswani et al., 2017) which processes a sequence of tokens. Particularly, we apply the architecture directly on an unordered set of pixels from an input image with learnable position embeddings. This removes the remaining inductive bias of locality in the ViT (Dosovitskiy et al., 2021) (see Fig. 1). Conceptually, the resulting architecture can be viewed as a simplified version of ViT, with degenerated  $1 \times 1$  patches instead of non-degenerated ones (e.g.,  $16 \times 16$  or  $2 \times 2$ ).
+
+<sup>2</sup>While sin-cos functions are also cyclic, it’s easy to verify that the majority of their periods are longer than the typical sequence lengths encountered by ViTs.
+
+{3}------------------------------------------------
+
+| model | layers ( $N$ ) | hidden dim ( $d$ ) | MLP dim | heads | param (M) |
+|-|-|-|-|-|-|
+| T(giny) | 12 | 192 | 768 | 12 | 5.6 |
+| S(small) | 12 | 384 | 1536 | 12 | 21.8 |
+| B(ase) | 12 | 768 | 3072 | 12 | 86.0 |
+| L(arge) | 24 | 1024 | 4096 | 16 | 303.5 |
+
+Table 2: **Specifications of size variants explored.** We use ViT (Dosovitskiy et al., 2021) or DiT (Peebles & Xie, 2023) with the same size but non-degenerated patches for head-on comparisons.
+
+Formally, we denote the input sequence as  $X = (x_1, \dots, x_L) \in \mathbb{R}^{L \times d}$ , where  $L$  is the sequence length and  $d$  is the hidden dimension. The Transformer maps the input sequence  $X$  to a sequence of representations  $Z = (z_1, \dots, z_L) \in \mathbb{R}^{L \times d}$ . The architecture is a stack of  $N$  layers, each of which contains two blocks: multi-headed Self-Attention block and MLP block:
+
+$$\begin{aligned}\hat{Z}^k &= \text{SelfAttention}(\text{norm}(Z^{k-1})) + Z^{k-1}, \\ Z^k &= \text{MLP}(\text{norm}(\hat{Z}^k)) + \hat{Z}^k,\end{aligned}$$
+
+where  $Z_0$  is the input sequence  $X$ ,  $k \in \{1, \dots, N\}$  the layer index, and  $\text{norm}(\cdot)$  is normalization (e.g., LayerNorm (Ba et al., 2016)). Both blocks use residual connections (He et al., 2016).
+
+**Pixels as tokens.** Given an image  $I \in \mathbb{R}^{H \times W \times 3}$  of RGB values, we denote  $(H, W)$  as the size of the original input. We follow a simple philosophy and treat  $I$  as an unordered set of pixels  $(p_l)_{l=1}^{H \cdot W}$ ,  $p_l \in \mathbb{R}^3$ . The first layer simply projects each pixel into a  $d$  dimensional vector via linear projection,  $f: \mathbb{R}^3 \rightarrow \mathbb{R}^d$ , resulting in the input set of tokens  $X = (f(p_1), \dots, f(p_L))$  with  $L = H \cdot W$ . We learn a content-agnostic position embedding for each position, and optionally append the sequence with a learnable [cls] token (Devlin et al., 2019). The pixel tokens are then fed into the Transformer to produce the set of representations  $Z$ .
+
+$$X = [\text{cls}, f(p_1), \dots, f(p_L)] + \text{PE},$$
+
+where  $\text{PE} \in \mathbb{R}^{L \times d}$  is a set of learnable position embeddings.
+
+Pixel transformer removes the locality inductive bias and is permutation equivariant at the pixel level. By treating individual pixels directly as tokens, we assume no spatial relationship in the architecture and let the model learn structures directly from data. This is in contrast to the design of the convolution kernel in ConvNets or the patch-based tokenization in ViT (Dosovitskiy et al., 2021), which enforces an inductive bias based on the proximity of pixels. In this regard, the resulting model is more versatile – it can naturally model arbitrarily sized images (no need to be divisible by the stride or patch size), or even generalize to irregular regions (Ke et al., 2022).
+
+While our focus is on the study of locality, using each pixel as a separate token has additional benefits. Similar to treating characters as tokens for language, we can greatly reduce the vocabulary size of input tokens to the Transformer. Specifically, given the pixel of RGB channels in the range of  $[0, 255]$ , the maximum size of vocabulary is  $256^3$  (as pixels take integer values); a patch token of size  $p \times p$  in ViT, however, can lead to a vocabulary size of up to  $256^{3 \cdot p \cdot p}$ . If modeled in a non-parametric manner, this will heavily suffer from out-of-vocabulary issues.
+
+Of course, Transformers on pixels are computationally expensive (or even prohibitive). However, given the rapid development of techniques that handle massive sequence lengths for large language models (up to a *million*) (Dao et al., 2022; Liu et al., 2023), it is entirely possible that soon, we can train Transformers on individual pixels directly (e.g., a standard  $224 \times 224$  crop on ImageNet ‘only’ contains 50,176 pixels). In this sense, our work is to scientifically verify the effectiveness and potential of locality-free architectures at an affordable scale (which we do next), and leave the engineering effort of scaling for the future.
+
+## 4 EXPERIMENTS
+
+We verify the effectiveness of the locality-free modification with three case studies: supervised learning with ViT (Dosovitskiy et al., 2014), self-supervised learning with MAE (He et al., 2022), and image generation with DiT (Peebles & Xie, 2023). We use four size variants: Tiny (T), Small
+
+{4}------------------------------------------------
+
+|  | Acc@1 | Acc@5 |  | Acc@1 | Acc@5 |
+|-|-|-|-|-|-|
+| ViT-T/2 | 83.6 | 94.6 | ViT-S/2 | 72.9 | 90.9 |
+| <b>ViT-T/1</b> | <b>85.1</b> | <b>96.4</b> | <b>ViT-S/1</b> | <b>74.1</b> | <b>91.7</b> |
+| ViT-S/2 | 83.7 | 94.9 | ViT-B/2 | 75.7 | 92.3 |
+| <b>ViT-S/1</b> | <b>86.4</b> | <b>96.6</b> | <b>ViT-B/1</b> | <b>76.1</b> | <b>92.6</b> |
+| ViT-B/2 (Shen et al., 2023) | 72.6 | - | ViT-L/2 | 75.6 | 92.3 |
+|  |  |  | <b>ViT-L/1</b> | <b>76.9</b> | <b>93.0</b> |
+
+(a) CIFAR-100 classification
+
+(b) ImageNet classification
+
+|  | Acc@1 | Acc@5 |
+|-|-|-|
+| ViT-S/2 | 45.8 | 68.3 |
+| <b>ViT-S/1</b> | <b>46.3</b> | <b>68.9</b> |
+
+(c) Oxford-102-Flower fine-grained classification
+
+|  | RMSE (↓) | RAE (↓) |
+|-|-|-|
+| ViT-S/2 | 0.80 | 0.78 |
+| <b>ViT-S/1</b> | <b>0.72</b> | <b>0.74</b> |
+
+(d) NYU-v2 depth estimation (regression)
+
+Table 3: **Results for case study #1: supervised learning.** We use ViT (Dosovitskiy et al., 2021), either with non-degenerated patch size  $2 \times 2$ , or with our locality-free modification that treats each pixel as a token (**in bold**). We report results on (a) **CIFAR-100** (Krizhevsky, 2009): the pixel variant *outperforms* ViT with  $2 \times 2$  patches of the same model size. Note that our baselines are already highly-optimized, e.g., Shen et al. (2023) reports significantly worse results despite larger model size; the observation generalizes well to the larger (b) **ImageNet** (Deng et al., 2009) dataset, fine-grained classification on (c) **Oxford-102-Flower** (Nilsback & Zisserman, 2008), and depth estimation (regression) on (d) **NYU-v2** (Silberman et al., 2012) which further requires spatial understanding. All these suggest Transformers can not just learn, but learn *well* without any inductive bias of locality.
+
+(S), Base (B) and Large (L) with the specifications shown in Tab. 2. Unless otherwise noted, we use Transformers with the *same* size but *non-degenerated* patches as our baselines. Our *only* goal in this section is to show locality-free architectures can still learn strong vision representations.
+
+### 4.1 CASE STUDY #1: SUPERVISED LEARNING
+
+In this study, we train and evaluate ViTs (Dosovitskiy et al., 2021) with or without locality for supervised learning tasks. Our baselines are ViTs with patch sizes  $2 \times 2$ . For more implementation details, please see Appendix A.
+
+**Datasets.** In total we use four datasets, with two for object classification: CIFAR-100 (Krizhevsky, 2009) has 100 classes and 60K images combined, and ImageNet (Deng et al., 2009) has 1K classes and 1.28M images for training, 50K for evaluation. CIFAR-100 is well-suited for exploring the effectiveness of locality-free architectures due to its intrinsic image size of  $32 \times 32$ . ImageNet has many more images and is more frequently used for modern architecture design. We also validate our finding on: fine-grained classification using the Oxford-102-Flower dataset (Nilsback & Zisserman, 2008) and depth estimation using the NYU-v2 dataset (Silberman et al., 2012).
+
+**Evaluation metrics.** For the classification datasets, we train our models on the `train` split and report the top-1 (Acc@1) and top-5 (Acc@5) accuracy on the `val` split. The root mean squared error (RMSE) and relative absolute error (RAE) are reported on the `val` split for depth estimation.
+
+**Main results.** As shown in Tab. 3, while our baselines for both ViT variants (ViT-T and ViT-S) are well-optimized on CIFAR-100 (e.g., Shen et al. (2023) reports 72.6% Acc@1 when training from scratch with ViT-B, whilst we achieve 80+% with smaller sized models), our locality-free variant, ViT-T/1, improves over ViT-T/2 by 1.5% of Acc@1; and when moving to the bigger model (S), ViT-S/1 leads to an improvement of 1.3% in Acc@1 over ViT-T/1, while ViT/2 starts to saturate. These results suggest compared to the patch-based ViT, ViT with our locality-free design is potentially learning new, data-driven patterns directly from individual pixels.
+
+Our observation also transfers to ImageNet – though with a much lower resolution our results are also lower than the state-of-the-art (Dosovitskiy et al., 2021; Touvron et al., 2021) (80+%), the pixel-based ViT still outperforms patch-based ViT with all model sizes we have experimented, and interestingly synergizes *better* with larger-sized models like ViT-L. To see what the models have learned, we visualize the attention maps, position embeddings in Appendix B.
+
+{5}------------------------------------------------
+
+![Figure 2: Two trends with ViT. (a) Acc@1 with fixed sequence length. (b) Acc@1 with fixed input size.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 2 consists of two line graphs, (a) and (b), showing the relationship between patch size and accuracy (Acc@1) for ViT models.
+
+**(a) Acc@1 with fixed sequence length.** The x-axis represents 'patch size (log-scale)' with values 16, 8, 4, 2, and 1. The y-axis represents accuracy from 60 to 80. The data points are: (16, 82.8), (8, 82.0), (4, 80.3), (2, 75.7), and (1, 63.4). The last point (1, 63.4) is labeled 'locality-free'.
+
+**(b) Acc@1 with fixed input size.** The x-axis represents 'patch size (log-scale)' with values 16, 8, 4, 2, and 1. The y-axis represents accuracy from 60 to 80. The data points are: (16, 63.7), (8, 74.5), (4, 79.0), (2, 81.0), and (1, 81.8). The last point (1, 81.8) is labeled 'locality-free'.
+
+Figure 2: Two trends with ViT. (a) Acc@1 with fixed sequence length. (b) Acc@1 with fixed input size.
+
+Figure 2: **Two trends with ViT.** Since our Transformer on pixels can be viewed as ViT with patch size  $1 \times 1$ , the trends w.r.t. patch size is crucial to our finding. In (a), we vary the ViT-B patch size but keep the sequence length fixed (last data point is locality-free) – so the input size is also varied. While Acc@1 remains constant in the beginning, the input size, or the amount of information quickly becomes the dominating factor that deteriorates accuracy. On the other hand, in (b) we vary the ViT-S patch size while keeping the input size fixed. The trend is *opposite* – reducing the patch size is always helpful and the last point (*locality-free*) becomes the best. The juxtaposition of these two trends gives a more complete picture of the relationship between input size, patch size and sequence length.
+
+At the expense of longer sequence length, our experiments on fine-grained classification and depth estimation further confirm the effectiveness of the locality-free architecture in boosting accuracies/reducing errors. Notably, fine-grained classification requires nuanced understanding in details; whereas depth estimation demands better capture of spatial relationships. It’s impressive that Transformers can learn useful patterns purely from data, *without* assuming inputs are on 2D image grids.
+
+**Two trends with ViT.** With learned position embeddings, our finding is simply based on a ViT variant with  $1 \times 1$  ‘patches’. Then why this is not discovered earlier? To us, the major reason is that there are two *different* trends with the three variables in concern: sequence length ( $L$ ), input size ( $H \times W$ ) and patch size ( $p$ ). They have a deterministic relationship:  $L = H \times W / (p^2)$ , and can be studied on ImageNet either via fixed sequence length or fixed input size:
+
+- **Fixed sequence length.** We show this trend with a fixed  $L$  in Fig. 2a. The model size is ViT-B. In this plot, the input size varies (from  $224 \times 224$  to  $14 \times 14$ ) as we vary the patch size (from  $16 \times 16$  to  $1 \times 1$ ). If we follow this trend, then a locality-free architecture (right most) is the *worst*. This means sequence length is not the only deciding factor – input size, or the amount of information fed into the model is arguably a more important factor, especially when it’s small. It’s only when the size is sufficiently large (e.g.,  $112 \times 112$ ), the additional benefit of further enlarging the size starts to diminish. This also gives an intuitive explanation that when there is no enough input information, advanced architecture or pre-training (e.g., iGPT (Chen et al., 2020a)) would struggle to recover this hard gap.
+- **Fixed input size.** Our finding is made when following the other trend – fixing the input size to  $64 \times 64$  (thus the amount of information), and varying the patch size on ImageNet in Fig. 2b. The model size is ViT-S. Interestingly, we observe an *opposite* trend here: it is always helpful to decrease the patch size (or increase the sequence length), aligned with the prior studies that find sequence length is highly important (Beyer et al., 2022; Hu et al., 2022). Note that the trend holds even when the architecture ultimately becomes locality-free (right-most). With the longest sequence length, it achieves the best accuracy.
+
+Together, the two trends in Fig. 2 *augment* the observations from prior work that mainly focused on sufficiently large input sizes (Beyer et al., 2022; Hu et al., 2022), and give a more complete picture.
+
+### 4.2 CASE STUDY #2: SELF-SUPERVISED LEARNING
+
+Next, we study the impact of removing locality with self-supervised pre-training and then fine-tuning for classification. In particular, we stick to ViT and choose MAE (He et al., 2022) for pre-training, thanks to its efficiency in computation and effectiveness for fine-tuning based evaluation protocols.
+
+**Setup.** We use CIFAR-100 (Krizhevsky, 2009) due to its inherent size of  $32 \times 32$ . This allows us to fully explore the use of pixels as tokens on the original resolution. After pre-training, we test the classification performance on the same set, reporting top-1 (Acc@1) and top-5 (Acc@5) accuracy. For more details, please see Appendix A.
+
+{6}------------------------------------------------
+
+|  | pre-train | Acc@1 | Acc@5 |
+|-|-|-|-|
+| <b>ViT-T/1</b> | ✓ | 85.1 | 96.4 |
+|  |  | <b>86.0</b> | <b>97.1</b> |
+| ViT-T/2 | ✓ | 85.7 | 97.0 |
+
+(a) Tiny-sized models.
+
+|  | pre-train | Acc@1 | Acc@5 |
+|-|-|-|-|
+| <b>ViT-S/1</b> | ✓ | 86.4 | 96.6 |
+|  |  | <b>87.7</b> | <b>97.5</b> |
+| ViT-S/2 | ✓ | 87.4 | 97.3 |
+
+(b) Small-sized models.
+
+Table 4: **Results for case study #2: self-supervised learning.** We still use ViT (Dosovitskiy et al., 2021) as the model architecture, but explore MAE (He et al., 2022) as a pre-training technique for enhanced performance. The observation that locality-free variants (in **bold**) work well still holds with pre-training and the two model sizes we experimented.
+
+**Results.** As shown in Tab. 4, the observation that locality-free variants of ViT work well still holds with MAE pre-training and the two model sizes we experimented.
+
+### 4.3 CASE STUDY #3: IMAGE GENERATION
+
+Next, we switch to image generation with a Diffusion Transformer (DiT) (Peebles & Xie, 2023), which has a modulation-based architecture different from the vanilla ViT, and operates on the latent token space from VQGAN (Esser et al., 2021) that shrinks the input size  $8\times$ . Dataset-wise, we use ImageNet for class-conditional generation, and each image is center-cropped to  $256\times 256$ , resulting in an input feature map size of  $32\times 32\times 4$ . More details are found in Appendix A. Our locality-free model, DiT/1, is fed with this feature map, same as its baseline DiT-L/2 with locality.
+
+**Evaluation metrics.** The generation quality is measured by standard metrics: Fréchet Inception Distance (FID) (Heusel et al., 2017) with 50K samples, sFID (Nash et al., 2021), Inception Score (IS) (Salimans et al., 2016), and precision/recall (Kynkäänniemi et al., 2019), using reference batches from the original TensorFlow evaluation suite of Dhariwal & Nichol (2021).
+
+**Qualitative results.** Sampled generations from DiT-L are shown in Fig. 3. The latent diffusion outputs are mapped back to the pixel space using the VQGAN decoder. A classifier-free guidance (Ho & Salimans, 2022) scale of 4.0 is used. For DiT/1, all generations are detailed and reasonable compared to the DiT/2 models with locality.
+
+**Quantitative comparisons.** Tab. 5 summarizes our observations. First, our baseline is strong: compared to the reference 10.67 FID (Peebles & Xie, 2023) with a larger model (DiT-XL/2) and longer training ( $\sim 470$  epochs), our DiT-L/2 achieves 8.90 without classifier-free guidance. Our main comparison (first two rows) uses a classifier-free guidance of 1.5. DiT-L/1, the locality-free variant, outperforms the baseline on all the 3 main metrics (FID, sFID and IS), and is on-par on precision/recall. With extended training of 1400 epochs, the gap is bigger: 2.68 FID with DiT-L/1 vs. 2.89 from DiT-L/2 (see Appendix C).
+
+![Figure 3: Qualitative results for case study #3: image generation. The figure shows two rows of generated images. Row (a) shows DiT-L/2 generations, and row (b) shows DiT-L/1 generations. Each row contains eight images: a spider, a cauliflower, a star, a mask, a lemon, a chili pepper, a dog, and a cat. The images in row (b) appear more detailed and realistic compared to those in row (a).](dc5460bda0c59ba9317dd5ba9b416b0b_img.jpg)
+
+Figure 3: Qualitative results for case study #3: image generation. The figure shows two rows of generated images. Row (a) shows DiT-L/2 generations, and row (b) shows DiT-L/1 generations. Each row contains eight images: a spider, a cauliflower, a star, a mask, a lemon, a chili pepper, a dog, and a cat. The images in row (b) appear more detailed and realistic compared to those in row (a).
+
+(a) DiT-L/2 generations.
+
+(b) DiT-L/1 generations.
+
+Figure 3: **Qualitative results for case study #3: image generation.** These  $256\times 256$  samples are generated from ImageNet-trained DiTs (Peebles & Xie, 2023). For direct comparisons, we fix random seeds and categories to prompt the model (none of the people classes from ImageNet are used), with the *only* difference that (a) uses locality-biased DiT-L/2, and (b) uses the locality-free variant (**DiT-L/1**). Overall, generations from locality-free models have fine features and detailed and reasonable, similar to locality-based models.
+
+{7}------------------------------------------------
+
+| model | FID (↓) | sFID (↓) | IS (↑) | precision (↑) | recall (↑) |
+|-|-|-|-|-|-|
+| DiT-L/2 | 4.16 | 4.97 | 210.18 | <b>0.88</b> | <b>0.49</b> |
+| <b>DiT-L/1</b> | <b>4.05</b> | <b>4.66</b> | <b>232.95</b> | <b>0.88</b> | <b>0.49</b> |
+| DiT-L/2, no guidance | 8.90 | 4.63 | 104.43 | 0.75 | 0.61 |
+| DiT-XL/2 (Peebles & Xie, 2023), no guidance | 10.67 | - | - | - | - |
+
+Table 5: **Results for case study #3: image generation.** We use references from the evaluation suite of Dhariwal & Nichol (2021), and report 5 metrics comparing locality-biased DiT-L/2 and locality-free DiT-L/1. Last row is from Peebles & Xie (2023), compared to which our baseline is significantly stronger (8.90 FID with DiT-L, vs. 10.67 with DiT-XL and longer training). Overall, our finding generalizes well to this new task with a different architecture and different input representations.
+
+Our demonstration on image generation is an important extension of our finding. Compared to the case studies on discriminative benchmarks in Sec. 4.1 and Sec. 4.2, the task is more challenging; the model architecture is changed to be conditional; the input space is also changed from raw pixels to latent tokens. The fact that locality-free modification works out-of-the-box suggests the observation can be generalized across different tasks, architectural variants, and operating representations.
+
+## 5 LOCALITY DESIGNS IN ViT
+
+Finally, we complete the loop of our investigation by revisiting the ViT architecture, and examining the importance of its two locality-related designs: (i) position embedding and (ii) patchification.
+
+**Setup.** We use ViT-B for ImageNet supervised classification, adopting the exact same hyperparameters, augmentations, and other training details from the scratch training recipe of He et al. (2022). Notably, images are crop-and-resized to  $224 \times 224$  and divided into  $16 \times 16$  patches.
+
+**Position embedding.** Similar to the investigation in Chen et al. (2021b), we choose from three candidates: sin-cos (Vaswani et al., 2017), learned, and none. The first option introduces locality into the model, while the other two do not. The results are summarized below:
+
+| PE | sin-cos | learned | none |
+|-|-|-|-|
+| Acc@1 | 82.7 | 82.8 | 81.2 |
+
+Our conclusion is similar to the one drawn by Chen et al. (2021b) for self-supervised representation evaluation: learnable position embeddings are on-par with fixed sin-cos ones. Interestingly, we observe only a minor drop in performance even if there is no position embedding at all – ‘none’ is only worse by 1.5% compared to sin-cos. Note that without position embedding, the classification model is fully *permutation invariant* w.r.t. patches, though not w.r.t. pixels.
+
+**Patchification.** Next, we use learnable position embeddings and study patchification. To systematically reduce locality from patchification, our key insight is that neighboring pixels should no longer be tied in the same patch. To this end, we perform a pixel-wise permutation before diving the resulting sequence into separate tokens. Each token contains 256 pixels, same in number to pixels in a  $16 \times 16$  patch. The permutation is shared, staying the same for all the images including testing ones.
+
+![Figure 4: Pixel permutation for ViT. The figure shows four 8x8 grids representing an image divided into 2x2 patches. Each grid illustrates a different pixel permutation strategy based on the Hamming distance delta. (a) delta=2: shows a local permutation within a 2x2 patch. (b) delta=4: shows a permutation across a 2x4 area. (c) delta=8: shows a permutation across a 4x4 area. (d) delta=inf: shows a global permutation across the entire 8x8 image. Double-headed arrows indicate the pixel swaps performed.](bfeb269e87832e1443c8d017e685dbc8_img.jpg)
+
+Figure 4: Pixel permutation for ViT. The figure shows four 8x8 grids representing an image divided into 2x2 patches. Each grid illustrates a different pixel permutation strategy based on the Hamming distance delta. (a) delta=2: shows a local permutation within a 2x2 patch. (b) delta=4: shows a permutation across a 2x4 area. (c) delta=8: shows a permutation across a 4x4 area. (d) delta=inf: shows a global permutation across the entire 8x8 image. Double-headed arrows indicate the pixel swaps performed.
+
+Figure 4: **Pixel permutation for ViT.** We swap pixels within a Hamming distance of  $\delta$  and do this  $T$  times (no distance constraint if  $\delta = \text{inf}$ ). Illustrated is an  $8 \times 8$  image divided into  $2 \times 2$  patches. Here we show permutation with  $T = 4$  pixel swaps (denoted by double-headed arrows).
+
+{8}------------------------------------------------
+
+![Figure 5: Results of pixel permutation for ViT-B on ImageNet. The figure contains two plots. The left plot is a table showing Acc@1 and ΔAcc for different numbers of pixel swaps T. The right plot is a line graph showing Acc@1 vs distance threshold δ for T=10K and T=20K. The graph shows that as δ increases, accuracy decreases, and the decrease is more pronounced for T=20K.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+| $T, \delta = \text{inf}$ | Acc@1 | $\Delta \text{Acc}$ |
+|-|-|-|
+| 0 | 82.8 | - |
+| 100 (0.4%) | 82.1 | -0.7 |
+| 1K (4.0%) | 81.9 | -0.9 |
+| 10K (39.9%) | 80.5 | -2.3 |
+| 20K (79.7%) | 77.5 | -5.3 |
+| 25K (99.6%) | 57.6 | -25.2 |
+
+% is the percentage among all pixel pairs
+
+| distance threshold $\delta$ | T=10K Acc@1 | T=20K Acc@1 |
+|-|-|-|
+| 2 | 82.0 | 81.9 |
+| 4 | 80.7 | 81.2 |
+| 8 | 79.1 | 80.5 |
+| 16 | 78.4 | 80.5 |
+| 32 | 78.3 | 80.9 |
+| 64 | 78.1 | 80.7 |
+| 128 | 77.6 | 80.7 |
+| inf | 77.5 | 80.5 |
+
+Figure 5: Results of pixel permutation for ViT-B on ImageNet. The figure contains two plots. The left plot is a table showing Acc@1 and ΔAcc for different numbers of pixel swaps T. The right plot is a line graph showing Acc@1 vs distance threshold δ for T=10K and T=20K. The graph shows that as δ increases, accuracy decreases, and the decrease is more pronounced for T=20K.
+
+Figure 5: **Results of pixel permutation for ViT-B on ImageNet.** We vary the number of pixel swaps  $T$  (left) and additionally varying the maximum distance of pixel swaps  $\delta$  (right). Pixel permutations can drop accuracy by 25.2% (when 25K pairs are swapped), compared to the relatively minor drop (1.6%) when the position embedding is completely removed. And when farther-away pixels are allowed for swapping, more damage is caused. These results suggest pixel permutation imposes a much more significant impact on performance, compared to swapping position embeddings.
+
+The permutation is performed in  $T$  steps, each step will swap a pixel pair within a distance threshold  $\delta \in [2, \text{inf}]$  (2 means within the  $2 \times 2$  neighborhood, inf means any pixel pair can be swapped). We use hamming distance on the 2D image grid.  $T$  and  $\delta$  control how ‘corrupted’ an image is – larger  $T$  or  $\delta$  indicates more damage to the local neighborhood and thus more locality bias is taken away. Fig. 4 illustrates four such permutations.
+
+Fig. 5 illustrates the results we have obtained. In the table (left), we vary  $T$  with no distance constraint (i.e.,  $\delta = \text{inf}$ ). As we increase the number of shuffled pixel pairs, the performance degenerates slowly in the beginning (up to 10K). Then it quickly deteriorates as we further increase  $T$ . And at  $T = 25K$ , Acc@1 drops to 57.2%, a 25.2% decrease from the intact image. Note that in total there are  $224 \times 224/2 = 25,088$  pixel pairs, so  $T = 25K$  means almost all the pixels have moved away from their original location. Fig. 5 (right) shows the influence of  $\delta$  given a fixed  $T$  (10K or 20K). We can see when farther-away pixels are allowed for swapping (with greater  $\delta$ ), performance gets hurt more. The trend is more salient when more pixel pairs are swapped ( $T = 20K$ ).
+
+Overall, pixel permutation imposes a much more significant impact on Acc@1, compared to changing position embeddings, suggesting that *patchification is much more crucial for the overall design of ViTs*, and underscores the value of our work that removes the patchification altogether.
+
+**Discussion.** As another way to remove locality, pixel permutation is highly destructive. On the other hand, we show successful elimination of locality is possible by treating individual pixels as tokens. We hypothesize this is because permuting pixels not only damages the locality bias, but also hurts the other inductive bias – *location equivariance*. Although locality is removed, the Transformer weights are still shared across pixels to preserve location equivariance; but with shuffling, this inductive bias is also largely removed. The difference suggests that proper weight-sharing remains important and should not be disregarded, especially after locality is already compromised.
+
+## 6 RELATED WORK
+
+**Locality for images.** To of our knowledge, most modern vision architectures (He et al., 2016; Parmar et al., 2018), including those aimed at simplifications of inductive biases (Dosovitskiy et al., 2021; Tolstikhin et al., 2021), still maintain locality in the design. Manual features before deep learning are also locally biased. For example, SIFT (Lowe, 2004) uses a local descriptor to represent each point of interest; HOG (Dalal & Triggs, 2005) locally normalizes the gradient strengths to account for changes in illumination and contrast. Interestingly, with these features, *bag-of-words* models (Csurka et al., 2004; Lazebnik et al., 2006) were popular – analogous to the *set-of-pixels* explored in our work.
+
+**Locality beyond images.** The inductive bias of locality is widely accepted beyond modeling images. For text, a natural language sequence is often pre-processed with ‘tokenizers’ (Sennrich et al., 2015; Kudo & Richardson, 2018), which aggregate the dataset statistics for grouping frequently-occurring adjacent characters into sub-words. Before Transformers, recurrent neural networks (Mikolov et al., 2010; Hochreiter & Schmidhuber, 1997) were the default architecture for such data, which exploit temporal connectivity to process sequences step-by-step. For even less structured data (e.g. point clouds (Chang et al., 2015; Dai et al., 2017)), modern networks (Qi et al., 2017; Zhao et al., 2021) will
+
+{9}------------------------------------------------
+
+resort to various sampling and pooling strategies to increase their sensitivity to the local geometric layout. In graph neural networks (Scarselli et al., 2009), nodes with edges are often viewed as locally connected, and information is propagated through these connections to farther-away nodes. Such designs make them particularly useful for analyzing social networks, molecular structures, etc. Despite its higher computational cost, Transformers with global Self-Attention is increasingly favored for real-world problems due to its powerful pattern-learning capabilities.
+
+**Other notable efforts.** We list four efforts in a rough chronological order, and hope it can provide historical context from multiple perspectives for our work:
+
+- To remove locality for ConvNets, Brendel & Bethge (2019) replaced all spatial convolutional filters in a ResNet (He et al., 2016) with  $1 \times 1$  filters. It has values in interpretability, but without inter-pixel communications the resulting network is substantially worse in performance. Our work instead uses Transformers, which are inherently built on *set* operations, with Self-Attention handling all-to-all communications; understandably, we obtain better results.
+- Before ViT gained popularity, iGPT (Chen et al., 2020a) was proposed to directly pre-train Transformers on pixels following their success on text (Radford et al., 2018; Devlin et al., 2019). In retrospect, iGPT is a locality-free model for self-supervised next- (or masked-) pixel prediction. But despite extensive scaling efforts, its performance still falls short compared to simple contrastive pre-training (Chen et al., 2020b) on ImageNet. Later, ViT (Dosovitskiy et al., 2014) *re-introduced* locality (e.g., via patchification) into the architecture, achieving impressive results on many benchmarks including ImageNet. This shift cemented  $16 \times 16$  patches as the standard for vision tasks. However, it remained unclear whether ViT’s performance gains were primarily due to higher resolution or patch-based locality. Through systematic analyses, our work puts a conclusive remark, pointing to resolution as the enabler for ViT, *not* locality.
+- Perceiver (Jaegle et al., 2021b;a) is another series of architectures that operate directly on pixels for images. Aimed at being modality-agnostic, Perceiver designs latent Transformers with cross-attention modules to tackle the *efficiency* issue when the input is high-dimensional. However, this design is not as widely adopted as plain Transformers, which have consistently demonstrated scalability across multiple domains (Brown et al., 2020; Dosovitskiy et al., 2021). We show Transformers can indeed work directly with pixels, and given the rapid development of Self-Attention implementations to handle massive sequence length (up to a *million*) (Dao et al., 2022; Liu et al., 2023), efficiency may not be a critical bottleneck even counting all the pixels.
+- Transformer has also been shown to work well for distribution modeling of generalized signals, including pixels in Tulsiani & Gupta (2021).
+- Our work can also be viewed as extending sequence length scaling to the *extreme* (individual pixels for images). Longer sequence (or higher resolution) is generally beneficial, as evidenced in Chen et al. (2021b); Hu et al. (2022); Peebles & Xie (2023). However, all of them stopped short of reaching the extreme case that completely gets rid of locality.
+- Besides individual pixels, there has been sustained interest in learning flexible and data-driven patches for vision models via *grouping* (Zhang & Maire, 2020; Ke et al., 2022; Ma et al., 2023; Deng et al., 2024). While conceptually appealing – e.g. can reconcile the long-sequence issue faced with pixels, they are yet to show salient practical promise in this context. Nonetheless, they are related work and we point to this direction for interested readers.
+
+## 7 CONCLUSION AND LIMITATIONS
+
+Through multiple case studies, we have demonstrated that Transformers can directly work with individual pixels. This is surprising, as it allows for a clean, potentially scalable architecture without *locality* – an inductive bias presumably fundamental for vision models. Given the spirit of deep learning that aims to replace manual priors with data-driven, learnable alternatives, we believe our finding is along the right direction and valuable to the community.
+
+However, the practicality and coverage of our current demonstrations remain limited. Given the quadratic computation complexity, treating pixel-based Transformer is more of an approach for investigation, and less for applications. And even with several tasks, the study is still not comprehensive. Nonetheless, we believe this work has sent out a clear, unfiltered message that *locality is not fundamental*, and patchification is simply a *useful* heuristic that trades-off efficiency vs. accuracy.
+
+ Rest of paper (reference and Appendix) is removed.

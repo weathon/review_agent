@@ -1,0 +1,310 @@
+
+
+{0}------------------------------------------------
+
+# AUTONOMOUS EVALUATION OF LLMs FOR TRUTH MAINTENANCE AND REASONING TASKS
+
+Rushang Karia\*, Daniel Bramblett, Daksh Dobhal, Siddharth Srivastava
+
+School of Computing and Augmented Intelligence
+
+Arizona State University
+
+{rushang.karia, drbrambl, ddobhal, siddharths}@asu.edu
+
+## ABSTRACT
+
+This paper presents AutoEval, a novel benchmark for scaling Large Language Model (LLM) assessment in formal tasks with clear notions of correctness, such as truth maintenance in translation and logical reasoning. AutoEval is the first benchmarking paradigm that offers several key advantages necessary for scaling objective evaluation of LLMs without human labeling: (a) ability to evaluate LLMs of increasing sophistication by auto-generating tasks at different levels of difficulty; (b) auto-generation of ground truth that eliminates dependence on expensive and time-consuming human annotation; (c) the use of automatically generated, randomized datasets that mitigate the ability of successive LLMs to overfit to static datasets used in many contemporary benchmarks. Empirical analysis shows that an LLM’s performance on AutoEval is highly indicative of its performance on a diverse array of other benchmarks focusing on translation and reasoning tasks, making it a valuable autonomous evaluation paradigm in settings where hand-curated datasets can be hard to obtain and/or update.
+
+## 1 INTRODUCTION
+
+Large Language Models (LLMs) have been demonstrated to perform well in many natural language tasks involving formal languages such as *autoformalization* – converting natural language (*NL*) to formal language (*FL*) such as source code, math etc., (Wu et al., 2022; Liang et al., 2023), *informalization* – converting *FL* to *NL* (e.g. code summarization), and *reasoning* – using LLMs to perform sound reasoning or derive proofs. Although these methods have been successful in small-scale scenarios, LLM’s effectiveness in maintaining factual accuracy or preserving which facts are true across translation remains unclear due to the difficulty in designing benchmarks that capture truth maintenance in such tasks. Multiple authors have noted that existing benchmarks and evaluation methodologies for such tasks are susceptible to the Benchmark Contamination Problem due to their use of static datasets, e.g., HumanEval (Chen et al., 2021; Wu et al., 2022; Han et al., 2024), and/or metrics that are insufficient/incomplete syntactic measures of evaluation (e.g. BLEU scores (Callison-Burch et al., 2006). As a result, existing methods provide misleading signals on the capabilities of LLM technology. One effective method to mitigate this problem in existing benchmarks is creating new data (Xu et al., 2024a). This is a tedious and expensive process since data generation requires expert annotators to hand-generate well-balanced datasets. While using LLMs as judges and/or metrics is a promising research direction (Zheng et al., 2023; Shankar et al., 2024; Xu et al., 2024b; Madaan et al., 2023), it is unknown whether LLMs can be used as accurate verifiers.
+
+This paper addresses three key desiderata for benchmarking LLM capabilities in truth maintenance across *NL* and *FL*: (D1) *Can we dynamically generate out-of-distribution datasets without human annotators?* (D2) *How do we accurately assess an LLM’s truth maintenance capabilities?* (D3) *Can we develop a benchmark predictive of LLM performance on formal translation and reasoning tasks?*
+
+**Main contributions** Our key contributions are as follows:
+
+1. A new approach for automatic synthesis of well-balanced test datasets using context-free grammars that are unlikely to be memorized during the LLM’s training process (§D1).
+
+\*These authors contributed equally.
+
+{1}------------------------------------------------
+
+2. The utilization of formal verifiers such as theorem provers to provably validate syntax-independent notions of correctness without having to exhaustively test over all possible truth valuations of formal syntax involving logic (§D2).
+3.  $\text{vuto}\exists\forall\text{VL}$ : a scalable, plug-and-play assessment system for benchmarking new LLMs as and when they are developed. Our system can be extended to any class of formal syntax that uses a grammar and admits an equivalence checker.
+4. We show that LLM performance on our metric serves as an effective indicator of LLM performance on other metrics across a wide variety of tasks, such as first-order logic reasoning (§D3). Thus, our metric offers a scalable and efficient surrogate for evaluating new LLMs in tasks where other metrics may be limited due to the unavailability of new datasets. We also show that SOTA LLMs are unable to maintain truth effectively.
+
+## 2 FORMAL FRAMEWORK
+
+Large Language Models (LLMs) are non-linear functions represented by (billions of) parameters  $\theta$  that, given a set of input tokens  $x_1, \dots, x_n$ , typically from natural language  $NL$ , predict the output token  $y_{i+1}$  using the distribution  $P(y_{i+1}|x_1, \dots, x_n, y_1, \dots, y_i; \theta)$ . The input tokens contain *context*  $\kappa$  (also known as a *prompt*) that provides the necessary information for the task (e.g., instructions, etc). It is known that  $\kappa$  significantly impacts the response quality  $y_1, \dots, y_n$  (Sahoo et al., 2024).
+
+Propositional Logic is a branch of logic that utilizes *propositions* and *logical operators* (e.g., conjunction:  $\wedge$ , etc) to construct sentences that can be used to perform reasoning using the rules of logic. For example, propositions,  $p_1 = \text{It is raining}$ ,  $p_2 = \text{It is sunny}$  can be used to create a sentence  $P = p_1 \vee p_2$ . If  $P$  is true and  $\neg p_1$  is observed, then one can use the rules of inference to deduce that  $p_2$  is true (Huth & Ryan, 2004). Two sentences in propositional logic,  $P_1$  and  $P_2$ , are equivalent,  $P_1 \equiv P_2$ , iff their truth values agree for all possible assignments. E.g.,  $\neg(p_1 \wedge p_2) \equiv \neg p_1 \vee \neg p_2$  since  $\forall p_1, p_2 \in \{\text{True}, \text{False}\} \times \{\text{True}, \text{False}\}, \neg(p_1 \wedge p_2) \equiv \neg p_1 \vee \neg p_2$ .
+
+First-order Logic (FOL) differs from propositional logic in that sentences are constructed using *predicates*, *quantifiers*, *constants*, *symbols*, and *variables*. A popular example is the syllogism, where, given two FOL sentences  $\forall x. \text{Man}(x) \rightarrow \text{Mortal}(x)$  and  $\text{Man}(\text{Socrates})$ , one can conclude that  $\text{Mortal}(\text{Socrates})$ . A FOL sentence  $F$  can be interpreted using a universe  $\mathcal{U}$ , a substitution operator  $\sigma$ , and an interpretation function  $\mathcal{I}$  (Russell & Norvig, 2020). Two FOL sentences,  $F_1, F_2$ , are equivalent,  $F_1 \equiv F_2$ , iff they are equivalent under all possible models. E.g.,  $\neg\forall x. \text{Man}(x) \equiv \exists y. \neg\text{Man}(y)$ .
+
+A regular expression (regex) is a sequence of characters used to determine whether a particular string matches the pattern or *language* induced by the regex. For example, the regex  $200(00)^*1$  using  $\Sigma = \{0, 1, 2\}$  matches all strings possible using  $\Sigma$  that begin with a two, followed by one or more pairs of zeroes, and end with a one (Hopcroft et al., 2001). Two regexes,  $R_1$  and  $R_2$  are equivalent,  $R_1 \equiv R_2$ , if they represent the same language. It is known that  $R_1 \equiv R_2$  if their corresponding minimal deterministic finite automata,  $D_1, D_2$ , are isomorphic, i.e.,  $D_1 \simeq D_2$  (Hopcroft et al., 2001).
+
+We refer to sentences (strings) in first-order and propositional logic (regexes) as formal language  $FL$  in this paper. We now provide a definition of (*Auto/In*)*formalization* in the context of LLMs.
+
+**Definition 2.1** (Autoformalization:  $\mathcal{A}$ ). Given an LLM  $L$ , a  $NL$   $N$ , a  $FL$   $F$ , a string  $\psi \in NL$ , and context  $\kappa'$ , autoformalization  $\mathcal{A}$ , is defined as using  $L$  to translate  $\psi$  to  $\varphi = \mathcal{A}_L(\psi, \kappa')$  s.t.  $\varphi \in FL$ .
+
+**Definition 2.2** (Informalization:  $\mathcal{I}$ ). Given an LLM  $L$ , a  $NL$   $N$ , a  $FL$   $F$ , a string  $\varphi \in FL$ , and context  $\kappa$ , informalization  $\mathcal{I}$ , is defined as using  $L$  to translate  $\varphi$  to  $\psi = \mathcal{I}_L(\varphi, \kappa)$  s.t.  $\psi \in NL$ .
+
+*Example* One possible autoformalization of “*Every human drinks coffee but some are not dependent on it*” in FOL is  $[\forall x. \text{Human}(x) \implies \text{Drinks}(x, \text{Coffee})] \wedge [\exists y. \text{Human}(y) \wedge \neg\text{Dependent}(y, \text{Coffee})]$ . Ideally, informalization will be an inverse of autoformalization. Therefore, the FOL formula  $[\forall x. \text{Human}(x) \implies \text{Drinks}(x, \text{Coffee})] \wedge [\exists y. \text{Human}(y) \wedge \neg\text{Dependent}(y, \text{Coffee})]$  can be informalized to the sentence “*Every human drinks coffee but some are not dependent on it*”.
+
+We assume that the context  $\kappa, \kappa'$  provided contains the prompt and any necessary vocabulary that is needed for the task (e.g.,  $\text{Human}(x)$  represents that  $x$  is a human, etc.). We omit  $\kappa, \kappa'$ , and  $L$  in the notation for  $\mathcal{A}$  and  $\mathcal{I}$  where they are clear from the context.
+
+{2}------------------------------------------------
+
+Informalization and autoformalization are non-deterministic functions. Therefore, it is possible that a different LLM (or the same LLM with a different seed) autoformalizes the same input text to a syntactically or even semantically different output. E.g., the example above could be autoformalized to the semantically equivalent form:  $\forall x. \text{Human}(x) \implies \text{Drinks}(x, \text{Coffee}) \wedge \neg \forall y. \text{Human}(y) \implies \text{Dependent}(y, \text{Coffee})$ . Similarly, an LLM can informalize differently. The example above could be informalized by the same LLM to “*All humans drink coffee but some are not dependent on it*”. Thus, the informalization (autoformalization) of an autoformalization (informalization) of a string is possibly different from that string:  $\mathcal{A}_L(\mathcal{I}_L(\varphi, \kappa'), \kappa) \neq \varphi$  and  $\mathcal{I}_L(\mathcal{A}_L(\psi, \kappa), \kappa') \neq \psi$ . Given  $n \in \mathbb{N}^+$ , let  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$  to refer to the sequence  $\varphi_0 \rightarrow \psi_0 \rightarrow \dots \rightarrow \varphi_n$  that is obtained using an LLM  $L$  when starting with  $FL \varphi_0$ , where  $\psi_i = \mathcal{I}(\varphi_i)$  and  $\varphi_{i+1} = \mathcal{A}(\psi_i)$ .
+
+While syntactic differences across  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$  operations may be acceptable, the ability of an LLM to maintain semantic content across  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$  for  $FL$  such as first-order logic, regular expressions, etc., is foundational and underlies many aspects of the capabilities of LLMs surrounding reasoning, semantically accurate translation, etc. For programming, it has been shown that autoformalization accuracy is indicative of the reasoning abilities of LLMs since they frame reasoning as generation of  $FL$  (Chen et al., 2021). Others (Wu et al., 2022) have made similar observations and have highlighted the need for benchmarks and metrics for assessing the truth maintenance capabilities of LLMs. In this paper, we further show through our empirical evaluation that an LLM’s ability to preserve factual information or semantic truth across translations is indicative of its performance on related tasks.
+
+Intuitively, truth maintenance captures an LLM’s ability to preserve truth across translation; operationally, it evaluates the ability of a system to be able to accurately invert its own translations. We say that an LLM maintains truth in translation iff  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$  always leads to a  $\varphi_n$  that is semantically equivalent to  $\varphi_0$ . Recall that  $\equiv$  denotes the semantic equivalence operator in  $FL$ . Formally,
+
+**Definition 2.3** (LLM Truth Maintenance). An LLM  $L$  maintains truth in translation iff  $\forall \varphi_0, n$ , and for all sequences  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$  obtained using  $L$ ,  $\varphi_n \equiv \varphi_0$ .
+
+In practice, we estimate the ability for truth maintenance through a sampling-based process. Naturally, LLMs may not autoformalize, reason, etc., correctly due to issues like hallucination (Ji et al., 2023), etc. For the earlier example, the LLM could autoformalize by omitting the  $\text{Human}(y)$  statement to yield  $[\forall x. \text{Human}(x) \implies \text{Drinks}(x, \text{Coffee})] \wedge [\exists y. \neg \text{Dependent}(y, \text{Coffee})]$ . This seems innocuous but changes the meaning since  $y$  is no longer required to be human, and thus it interprets as “*All humans drink coffee, but some element of the universe is not dependent on coffee*.” Such issues have profound implications in synthesizing specifications and/or programs. Thus, an LLM must be able to understand its own generated output across  $NL$  and  $FL$ , and it is imperative to create a benchmark that can faithfully assess the truth maintenance of LLMs.
+
+## 3 THE $\text{VUTO}\exists\text{VAL}$ APPROACH FOR ASSESSING TRUTH MAINTENANCE
+
+We now describe our approach,  $\text{VUTO}\exists\text{VAL}$ , for autonomously assessing an LLM’s ability for truth maintenance.  $\text{VUTO}\exists\text{VAL}$  provides dynamically generated datasets that can be scaled arbitrarily by systematically generating out-of-distribution, well-balanced ground-truth data (§D1 – Sec. 1), provides §D2 by using intrinsic LLM capabilities to automatically assess  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$  without requiring any labeled annotations and using formal verifiers to rigorously check and guarantee the correctness of  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$  without having to engage in an exhaustive search process.
+
+### 3.1 AUTOMATIC EVALUATION OF TRUTH MAINTENANCE
+
+We develop a novel technique that can soundly assess truth maintenance without any human annotations by evaluating  $\varphi_i \rightarrow \psi_i \rightarrow \varphi_{i+1}$ . Our approach is based on the following intuition. Let  $\mathcal{I} : \varphi \rightarrow \psi$  be a non-deterministic function that maps  $FL \varphi$  to  $NL \psi$ . Similarly, let  $\mathcal{A} : \psi \rightarrow \varphi$  be a non-deterministic function that maps  $NL \psi$  to  $FL \varphi$ . In general, there are many possible correct informalizations (autoformalizations) of  $\varphi \in FL$  ( $\psi \in NL$ ). Because  $\mathcal{I}$  and  $\mathcal{A}$  are non-deterministic functions, their inverses are thus not well-defined.
+
+Our key observation is that if  $\mathcal{I}$  and  $\mathcal{A}$  come from the same system (e.g., an LLM), then we can evaluate that system’s truth maintenance by composing  $\mathcal{I}$  and  $\mathcal{A}$ . Let  $\varphi$  be any  $FL$  expression and let  $L$  be an LLM. If  $L$  preserves truth, then  $\psi = \mathcal{I}(\varphi)$  will be an accurate  $NL$  representation of  $\varphi$  and
+
+{3}------------------------------------------------
+
+![Figure 1: The Vuto∃V/L process for autonomous evaluation of LLM truth maintenance w.r.t. (A ∘ I)^n(φ0).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram illustrates the Vuto∃V/L process for autonomous evaluation of LLM truth maintenance. It is divided into four main stages: Ground-truth Data and Context Generation, Informational:  $\mathcal{I}$ , Autoformalization:  $\mathcal{A}$ , and Verification.
+
+- Ground-truth Data and Context Generation:** A **Formal Syntax Generator** takes an **Input Grammar:  $\mathcal{G}$**  and produces a **Vocabulary Database**. This is used by **Automatic Vocabulary Generation** to produce a **FL  $\varphi_0$**  and a **Vocab**.
+- Informational:  $\mathcal{I}$ :** The **LLM  $\mathcal{I}$**  takes the **FL  $\varphi_0$**  and **Vocab** to produce an **NL  $\psi_0$**  and a **Vocab**. This step is labeled "Clear Eo Context".
+- Autoformalization:  $\mathcal{A}$ :** The **LLM  $\mathcal{A}$**  takes the **NL  $\psi_0$**  and **Vocab** to produce a **FL  $\varphi_1$** . This step is also labeled "Clear Eo Context".
+- Verification:** A **Query  $\varphi_0 \equiv \varphi_1$ ?** is performed to verify the equivalence.
+
+The process is evaluated on three cases:
+
+- Case 1 (Vocabulary is abstract):**  $\varphi_0 = p_1 \wedge p_2 \wedge p_1$  is transformed by  $\mathcal{I}(\varphi_0)$  into a conjunction of propositions  $p_1, p_2, p_1$ ; also expressed  $p_1$  and  $p_2$  by idempotence. This is then transformed by  $\mathcal{A}(\psi_0)$  into  $\varphi_1 = p_1 \wedge p_2 \wedge p_1$ . The query  $\varphi_0 \equiv \varphi_1$  is **True**.
+- Case 2 (Vocabulary is real-world):**  $\varphi_0 = p_1 \wedge p_2 \wedge p_1$  is transformed by  $\mathcal{I}(\varphi_0)$  into "The sun was bright the day before whilst it is raining heavily today". This is then transformed by  $\mathcal{A}(\psi_0)$  into  $\varphi_1 = p_1 \wedge p_2 \wedge p_1$ . The query  $\varphi_0 \equiv \varphi_1$  is **True**.
+- Case 3 (Vocabulary is real-world):**  $\varphi_0 = [a-z]*@[a-z].com$  is transformed by  $\mathcal{I}(\varphi_0)$  into "An regular expression for email with a set of characters separated by @, ending in .com". This is then transformed by  $\mathcal{A}(\psi_0)$  into  $\varphi_1 = [a-z]*@[a-z].com$ . The query  $\varphi_0 \equiv \varphi_1$  is **False** (numbers are not allowed in  $\varphi$ ).
+
+Figure 1: The Vuto∃V/L process for autonomous evaluation of LLM truth maintenance w.r.t. (A ∘ I)^n(φ0).
+
+Figure 1: The  $\text{Vuto}\exists\text{V/L}$  process for autonomous evaluation of LLM truth maintenance w.r.t.  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$ .
+
+$\varphi' = \mathcal{A}(\psi)$  will be a semantically equivalent *FL* representation of  $\psi$ . Since  $\psi$  is an *NL* description, it is quite challenging to check whether  $\mathcal{I}(\varphi)$  is indeed an accurate representation of  $\varphi$  without human intervention. However, if  $L$  preserves truth,  $\varphi' = \mathcal{A}(\mathcal{I}(\varphi))$  will be semantically equivalent to  $\varphi$  even if they are not syntactically identical. Thus, we only need to check if  $\varphi \equiv \varphi'$ . For example, let  $\varphi_0 = p_1 \wedge p_1, \psi_0 = \mathcal{I}(\varphi_1) = \text{"A conjunction of propositions } p_1 \text{ and } p_1 \text{ that can be simplified to } p_1 \text{ using Idempotence."}$ , and  $\varphi'_1 = \mathcal{A}(\psi_0) = p_1$  for a sequence  $(\mathcal{A} \circ \mathcal{I})^1(\varphi_0)$ . It is challenging to check if  $\psi_0$  accurately represents  $\varphi_0$ , but it is easy to check if  $\varphi_0 \equiv \varphi_1$  using a formal verifier.
+
+Since  $\text{Vuto}\exists\text{V/L}$  uses formal syntax  $\varphi$  as input and produces formal syntax  $\varphi'$  as output, we can use formal verifiers to check whether  $\varphi \equiv \varphi'$ . As a result,  $\text{Vuto}\exists\text{V/L}$  avoids brittle syntactic equivalence checks and exhaustive tests of semantic equivalence that require evaluations of all possible truth valuations of formulas or executions of regexes.
+
+We use the above insights to automatically assess LLM truth maintenance by using the same LLM  $L$  to represent  $\mathcal{I}$  and  $\mathcal{A}$  respectively. Fig. 1 shows our overall assessment process. Briefly, we use a context-free grammar  $\mathcal{G}$  to automatically generate a ground-truth *FL* expression  $\varphi_0$ . Next, we use a vocabulary generation process to generate a context for  $\varphi_0$ . This can either use abstract terms or use *NL* elements for more human-like scenarios (§D1). We then evaluate  $(\mathcal{A} \circ \mathcal{I})^1(\varphi_0)$  by using  $L$  to first generate  $\psi_0 = \mathcal{I}(\varphi_0, \kappa)$  using context  $\kappa$  designed for informationalization. The context of  $L$  is cleared (note that we only use the output of  $\mathcal{I}(\varphi_0)$ ), and we use  $L$  to generate  $\varphi_1 = \mathcal{A}(\psi_0, \kappa')$  using context  $\kappa'$  designed for autoformalization. We then use a verifier (e.g., Z3 (de Moura & Bjørner, 2008), Prover9 (McCune, 2010)) to assess if  $\varphi_0 \equiv \varphi_1$  since both are elements of *FL*. If  $\varphi_0 \equiv \varphi_1$  then we can repeat the process by evaluating  $(\mathcal{A} \circ \mathcal{I})^1(\varphi_1)$  similarly.
+
+**Example:** Consider case 2 in Fig. 1.  $\text{Vuto}\exists\text{V/L}$  uses the grammar in Fig. 2b to automatically generate a ground truth *FL* sentence as  $\varphi_0 = p_1 \wedge p_2 \wedge p_1$ . We can use any vocabulary to generate meaning for the propositions;  $p_1 : \text{It is raining today}, p_2 : \text{It was sunny yesterday}$ . Next, the LLM  $L$  is prompted with Prompt 1 to perform informationalization yielding *NL*  $\psi_0 = \mathcal{A}(\varphi_0)$ .  $L$  can perform any simplification or other paraphrasing necessary. For example,  $L$  could informationalize  $\varphi_0$  above to  $\psi_0 = \text{"The weather status was sunny yesterday whilst it is raining today."}$  Notice that the LLM-generated *NL* statement automatically reflects a simplification using the Commutative ( $a \wedge b \equiv b \wedge a$ ) and Idempotent ( $a \wedge a \equiv a$ ) properties. Next,  $L$  is asked to autoformalize  $\psi_0$  without any context other than the vocabulary to use and a prompt for autoformalization (App. F). In this case, the LLM could return  $\varphi_1 = \mathcal{A}(\psi_0) = p_1 \wedge p_2$ . We use a theorem prover such as Prover9 (McCune, 2010) to show that  $\varphi_0 \equiv \varphi_1$  and thus assess  $L$ 's truth maintenance capabilities w.r.t.  $(\mathcal{A} \circ \mathcal{I})^1(\varphi_0)$ .
+
+{4}------------------------------------------------
+
+### 3.2 VUTO $\exists\forall$ L METRICS
+
+**Vuto $\exists\forall$ L score** When evaluating an LLM’s truth-maintenance capabilities, it is crucial to consider the intended application, because performance on FL strings of similar complexity typically indicates how the model will fare in practice. As such, Vuto $\exists\forall$ L can be used in two distinct modes: parameterized and calibrated Vuto $\exists\forall$ L scores. The *parameterized* Vuto $\exists\forall$ L score computes performance with the descriptional complexity of FL strings as a parameter (e.g., the number of operators). The *calibrated* Vuto $\exists\forall$ L score  $S_{cal}(D, d)$  is computed using all FL strings from dataset  $D$  with complexity up to  $d$ , where there are equal number of examples for each complexity. In both modes, the score is computed as the fraction of FL strings in the corresponding dataset for which  $(\mathcal{A} \circ \mathcal{I})^1(\varphi_1) \equiv \varphi_1$ .
+
+**Bounding false positives in computation of Vuto $\exists\forall$ L scores** A key advantage of the Vuto $\exists\forall$ L score is its robustness to different formalizations of the same *FL*. Thus, when Vuto $\exists\forall$ L outputs that an LLM maintains truth  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$  on *FL*  $\varphi_0$ , the intermediate  $NL = \mathcal{I}(\psi_0)$  is a semantically equivalent translation of  $\varphi_0$ . We now bound the probability of false positives, i.e., cases where the LLM fails both autoformalizing and informalizing but yields an FL string equivalent to the original.
+
+Given an LLM  $L$ , let  $\varphi_0 \xrightarrow{\mathcal{I}_L(\varphi_0)} \psi_0 \xrightarrow{\mathcal{A}_L(\psi_0)} \varphi_1$  be an execution of the Vuto $\exists\forall$ L process for  $(\mathcal{A} \circ \mathcal{I})^1(\varphi_0)$  s.t.  $\varphi_0 \equiv \varphi_1$  but  $\psi_0$  is not an accurate representation of  $\varphi_0$ . We can derive the probability of Vuto $\exists\forall$ L providing such false positives. Let  $p_T$  be the probability with which  $L$  informalizes an *FL* expression  $\mathcal{I}(\varphi_0) = \psi_0$  s.t.  $\psi_0$  is an accurate representation of  $\varphi_0$ . Similarly, let  $p_A$  be the probability of autoformalizing  $\psi_0$ ,  $\mathcal{A}(\psi_0) = \varphi_1$ , s.t.  $\varphi_1$  is semantically equivalent to  $\psi_0$ , i.e.  $\varphi_0 \equiv \varphi_1$ . Let  $p_H$  be the probability that  $L$  hallucinates *FL*  $\varphi_1$  by autoformalizing  $\psi_0$  s.t.  $\varphi_1 \equiv \varphi_0$  given that  $\psi_0$  is not an accurate representation of  $\varphi_0$ .
+
+It can be seen that for a false positive to be outputted by Vuto $\exists\forall$ L, the sequence  $\varphi_0 \rightarrow \psi_0$  produces an incorrect *NL* description and the sequence  $\psi_0 \rightarrow \varphi_1$  autoformalizes incorrectly but hallucinates just right to yield  $\varphi_1 \equiv \varphi_0$ . The probability of such a sequence corresponds to  $L$  making two mistakes, with the second mistake being such that it generated an expression equivalent to  $\varphi_0$ . This can be expressed as  $(1 - p_T)(1 - p_A)p_H$ . For  $(\mathcal{A} \circ \mathcal{I})^n(\varphi_0)$ , this probability is  $(1 - p_T)^n(1 - p_A)^n p_H^n$  since Vuto $\exists\forall$ L computes  $(\mathcal{A} \circ \mathcal{I})^1(\varphi_i)$  if  $\varphi_{i-1} \equiv \varphi_i$  (Sec. 3). As LLM technology improves, we expect  $p_T, p_A \rightarrow 1$  and  $p_H \rightarrow 0$ . As a result, the probability of false positives provided by Vuto $\exists\forall$ L decreases as  $n$  increases. This low likelihood of false positives is further confirmed empirically by our analysis of correlation and predictive power w.r.t. other benchmarks (Sec. 4).
+
+**LLMs as verifiers score** The llm-verifier score evaluates a given llm’s ability to determine equivalence between FL strings. It is measured by using FL strings produced by a LLM from the Vuto $\exists\forall$ L process. For each dataset and descriptional complexity, we compute an  $F_1$  score by comparing the evaluated LLM’s equivalence predictions with the formal verifier’s results. We use Chain-of-Thought (CoT) to allow LLMs to utilize their generated outputs to improve their reasoning (Wei et al., 2022).
+
+**Predictive power** In addition to using calibrated and parameterized Vuto $\exists\forall$ L scores for assessing the ability for truth maintenance, we propose a new metric for evaluating the extent to which performance on a benchmark is indicative of performance on other benchmarks:
+
+**Definition 3.1** (Predictive Power). Let  $L_1$  and  $L_2$  be language models evaluated on two benchmarks  $A$  and  $B$  with ranks  $\geq_A$  and  $\geq_B$ . The *predictive power* of  $A$  over  $B$  is formally defined as  $\mathcal{P}_A(B) = \Pr(L_1 \geq_B L_2 | L_1 \geq_A L_2)$ .
+
+In practice, we compute predictive power as a sampling-based maximum-likelihood estimate over multiple auto-generated datasets.
+
+### 3.3 DYNAMIC DATASET GENERATION
+
+We use context-free grammars (CFGs) (Hopcroft et al., 2001) – a set of *production rules over terminal and non-terminal symbols* – for dynamically generating datasets. An *infix parse tree* is obtained by repeatedly applying the rules, where the depth of this tree is often used to measure the *descriptional complexity* of a given string generated using the CFG (Csuhaj-Varjú & Kelemenová, 1993). CFGs also can be used to generate arbitrarily large amounts of data dynamically.
+
+Another advantage is that CFGs can be customized with minimal human effort to generate diverse datasets whose ground-truth data possesses specific properties. For example, a dynamic dataset
+
+{5}------------------------------------------------
+
+$$\begin{array}{llll}
+S \rightarrow S \wedge S & S \rightarrow (S \wedge S)|(S \vee S) & S \rightarrow F|(\forall f. S)|(\exists f. S) & S \rightarrow (S)K|\Sigma K \\
+S \rightarrow (P \vee P \vee P) & S \rightarrow (\neg S) & F \rightarrow (F \wedge F)|(F \vee F) & S \rightarrow S\Sigma K \\
+P \rightarrow \neg v|v & S \rightarrow \neg v|v & F \rightarrow (\neg F)|\neg p|p & K \rightarrow *|\varepsilon
+\end{array}$$
+
+(a) 3-CNF      (b) Propositional Logic      (c) First-order Logic      (d) Regular Expression
+
+Figure 2: CFGs (described in Sec. 3.3.1) used for synthesizing the datasets in  $\text{Vuto}\exists\forall\text{AL}$ .
+
+that only consists of  $k$ -CNF sentences – propositional logic in the Canonical Normal Form  $(P_1^0 \vee \dots \vee P_k^0) \wedge (P_1^1 \vee \dots \vee P_k^1) \wedge \dots$  where  $P_i^j \in \{p_x, \neg p_x\}$  – can be easily generated. We enrich the generated sentence with context via a customizable *Vocabulary Generation* step, which automatically provides the necessary vocabulary for performing the task (e.g., providing English meanings to allow for human-like *NL*) by using terms from a vocabulary database or by using an LLM.
+
+#### 3.3.1 AUTO-GENERATED DATASETS
+
+$\text{Vuto}\exists\forall\text{AL}$  is open-source<sup>1</sup>, is written in Python 3, includes several pre-computed datasets, and is easily customizable for adding new datasets, prompts, LLMs, etc. We now describe the datasets that any newly developed LLM can be evaluated on by using  $\text{Vuto}\exists\forall\text{AL}$  out-of-the-box.
+
+Our dataset generator (described in App. B) takes a user-provided CFG and vocabulary to dynamically generate user-controlled, diverse datasets up to a user-specified metric such as the number of operators, parse tree depth, etc. It is guaranteed to generate any representable string using the CFG (App. B). As a result, users can easily generate out-of-distribution datasets in  $\text{Vuto}\exists\forall\text{AL}$  by simply providing CFGs and/or vocabularies.
+
+The  $\text{Vuto}\exists\forall\text{AL}$  core benchmark uses four CFGs (Fig. 2) for producing five datasets compromising FL strings. The 3-CNF( $n$ ) (Fig. 2a) and propositional logic PL( $n$ ) (Fig. 2b) CFGs replace the terminal by randomly selecting from a list of  $n$  propositions. First-order logic FOL( $n_p, n_o$ ) (Fig. 2c) CFG replaces the terminal with predicates of the form  $p(v_1, \dots, v_n)$  where  $p$  is a predicate name selected from a list of  $n_p$  predicates,  $v_i$  is either an object  $o$  from a list of  $n_o$  objects or is a free variable  $f \in \{x_1, x_2, \dots\}$  that is appropriately annotated within the scoping rules. Finally, the regular expression RE( $n$ ) (Fig. 2d) CFG uses the vocabulary set  $\Sigma = \{0, \dots, n-1\}$ .
+
+We provide 5 datasets with 2 generated from the FOL CFG and 1 each for the rest. We sampled 500 strings for each complexity level. The 3-CNF(12) dataset contains examples with up to 59 operators, totaling  $\sim 10k$  strings. PL(12) contains examples with up to 40 operators, for a total of  $\sim 20k$  strings. The RE(2) dataset contains examples with tree depth up to 40, also totaling  $\sim 20k$  strings.
+
+The FOL datasets, FOL(8, 12)–S and FOL(8, 12)–E, contain examples with up to 37 operators, for a total of  $\sim 19k$  strings each. FOL(8, 12)–S uses auto-generated synthetic object and predicate names. Conversely, FOL(8, 12)–E uses verbs from VerbNet (Schuler, 2005) for predicate names and names from Faker (Faraglia, 2024) for object names. Using more descriptive names allows for informalization to produce more *abstract* sentences that closely resemble the *NL* statements in SOTA autoformalization datasets. For example, a *FL* statement  $\text{Boom}(\text{Richard}) \wedge \text{Exercise}(\text{Yolonda})$  yields a more natural *NL* statement: “*Richard experiences a boom, and Yolonda engages in exercise*”.
+
+While each dataset was generated in 10 separate pieces, each produced independently, our datasets contain  $\sim 85k$  unique examples. We also provide zero-shot and 2-shot prompts for each dataset, for a total dataset size  $\sim 170k$  for off-the-shelf evaluation and continual assessment of any new LLM. Of these examples,  $\sim 85\%$  of them are composed of unique CFG parse trees (trees obtained by sampling the CFG but not injecting the vocabularies). Expressions with the same parse tree but different vocabularies (e.g.,  $p_1 \wedge p_2$  and  $p_2 \wedge p_1$ ) account for  $\sim 10\%$  of our dataset, providing a robust check against positional bias in the LLM. Additional information is presented in App. M.
+
+We use open-source libraries to robustly parse the LLM-generated output. We use the Natural Language Toolkit (NLTK) library (Bird et al., 2009) for parsing logic and use Reg2Dfa (Reg, 2017) for regexes. LLM output that cannot be parsed is said to be *syntactically non-compliant*. Additionally,
+
+<sup>1</sup>The code for this project is available at: <https://github.com/AIR-lab/autoeval>.
+
+{6}------------------------------------------------
+
+##### Prompt 1: Informalization ( $\mathcal{I}$ ) prompt for Fig. 1: Case 2 (other prompts available in App. F)
+
+Your task is to convert a (Propositional Logic, First-order Logic) formula, appearing after [FORMULA], to a natural description that represents the formula. Only natural language terms are allowed to be used and do not copy the formula in your description. Your description should allow one to reconstruct the formula without having access to it, so make sure to use the correct names in your description. Explicitly describe the predicates. You may use terms verbatim as specified in the vocabulary below.
+
+##### [VOCABULARY]
+
+- Operators: List of operators followed by their NL interpretations
+- Objects: The objects in the universe (if any)
+- Propositions: The propositions in the universe and their NL interpretations (if any)
+- Predicates: The predicates in the universe and their NL interpretations (if any)
+- Examples: Few-shot examples of the task (if any)
+
+##### *Example Prompt*
+
+Your task ...
+
+- Operators:  $\wedge$  represents conjunction,  $\vee$  represents disjunction, ...
+- Propositions:  $p_1$  : It is raining,  $p_2$  : It was sunny yesterday
+- Formula:  $p_1 \wedge p_2 \wedge p_1$
+
+*Example Response:* The sun was bright the day before whilst it is raining today.
+
+we also use scripts to ensure that the informalization step does not copy elements of *FL* into *NL* (e.g., complete or any parts of *FL*) that would otherwise make autoformalization trivial.
+
+## 4 ASSESSMENT OF SOTA LLMs ON THE $\forall\text{UTO}\exists\forall\text{L}$ BENCHMARK
+
+In this section we present an evaluation of several SOTA LLMs using  $\forall\text{UTO}\exists\forall\text{L}$ , as well as an evaluation of  $\forall\text{UTO}\exists\forall\text{L}$  as a benchmark for evaluating LLMs' reasoning and translation ability using the predictive power score. In particular, we use the following assessment criteria for evaluating LLMs using  $\forall\text{UTO}\exists\forall\text{L}$ : (A1) *Can LLMs produce FL translations that are syntactically compliant?* (A2) *Can LLMs maintain truth while translating FL?* (A3) *Can LLMs accurately verify whether two FL strings are logically equivalent?* In addition, we use the following criterion to assess  $\forall\text{UTO}\exists\forall\text{L}$  itself: (A4) *Is the performance on  $\forall\text{UTO}\exists\forall\text{L}$  indicative of performance on other benchmarks?*
+
+### 4.1 EVALUATING LLMs USING $\forall\text{UTO}\exists\forall\text{L}$
+
+We assessed §A1 - §A3 using 17 SOTA closed and open-source LLMs (Fig. 3). For clarity, we plot select models, grey out the data from the others, and refer the reader to App. N for a comprehensive overview. We evaluated §A1 and §A2 using the parameterized  $\forall\text{UTO}\exists\forall\text{L}$  score on our generated datasets. For §A3, we calculated the LLMs as verifiers score for each descriptional complexity class by having each LLM verify the results produced by GPT-4o.
+
+As stated in Sec. 2, prompts are crucial for LLM performance. To ensure our results reflect LLM capabilities rather than the effect of poorly designed prompts, we conducted extensive prompt engineering and ensured that at least one LLM could achieve a parameterized  $\forall\text{UTO}\exists\forall\text{L}$  score  $\geq 95\%$  on the 3-CNF(12) dataset, which has a constrained but representative grammar. Analysis on each LLM's performance on the 3-CNF(12) dataset is presented in App. C.
+
+As shown in Fig. 3, SOTA LLMs are able to produce syntactically compliant formal syntax (§A1) for formal syntax with low descriptional complexity (e.g., few operators in logic). However, as the complexity increases, the ability of LLMs to autoformalize their own informalizations diminishes. One surprising result here is that GPT-4o is less syntactically compliant for regexes than Phi and LLama-3, which are much smaller models. This is due to GPT-4o often repeating a token sequence
+
+{7}------------------------------------------------
+
+![Figure 3: Zero-shot Pass@1 results from using Vuto∃V/L to assess LLMs w.r.t. §A1, §A2, §A3 on the packaged datasets (Sec. 3.3.1). The figure is a 3x4 grid of line plots. The columns represent different datasets: Propositional Logic(12), FOL(8, 12)-S, FOL(8, 12)-E, and Regular Expression(2). The rows represent different metrics: Syntactic Compliance (1st row), Vuto∃V/L Score (2nd row), and LLMs as Verifiers F1 Score (3rd row). The x-axis for all plots is '# of Operators: ∧, ∨, ¬ (¬ is counted as an operator iff not succeeded by a terminal)' for the first three columns and 'CFG Parse Tree Depth' for the last column. The y-axis for all plots ranges from 0 to 1. The legend indicates: ChatGPT (solid blue line), GPT-4o (dashed orange line), GPT-4o-mini (dash-dot green line), Phi3 (dotted red line), Mistral (dash-dot-dot purple line), LLama3 (solid grey line), and Other LLMs (n=10) (light grey lines).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 3: Zero-shot Pass@1 results from using Vuto∃V/L to assess LLMs w.r.t. §A1, §A2, §A3 on the packaged datasets (Sec. 3.3.1). The figure is a 3x4 grid of line plots. The columns represent different datasets: Propositional Logic(12), FOL(8, 12)-S, FOL(8, 12)-E, and Regular Expression(2). The rows represent different metrics: Syntactic Compliance (1st row), Vuto∃V/L Score (2nd row), and LLMs as Verifiers F1 Score (3rd row). The x-axis for all plots is '# of Operators: ∧, ∨, ¬ (¬ is counted as an operator iff not succeeded by a terminal)' for the first three columns and 'CFG Parse Tree Depth' for the last column. The y-axis for all plots ranges from 0 to 1. The legend indicates: ChatGPT (solid blue line), GPT-4o (dashed orange line), GPT-4o-mini (dash-dot green line), Phi3 (dotted red line), Mistral (dash-dot-dot purple line), LLama3 (solid grey line), and Other LLMs (n=10) (light grey lines).
+
+Figure 3: Zero-shot Pass@1 results from using  $\text{Vuto}\exists\text{V/L}$  to assess LLMs w.r.t. §A1, §A2, §A3 on the packaged datasets (Sec. 3.3.1). The x-axis represents an increasing descriptional complexity. The y-axis is each evaluated LLM’s syntactic compliance rate (1st row), parameterized  $\text{Vuto}\exists\text{V/L}$  score (2nd row), and  $F_1$  score as a verifier (3rd row). Additional results (prompt calibration, few-shot, etc.) are included in the Appendix.
+
+when translating regex, resulting in hitting the token limit. For logic, we observed that LLMs often use the correct syntax but often misplace parentheses, creating malformed expressions.
+
+Our analysis further shows, except on the 3-CNF(12) dataset used for prompt calibration, LLMs cannot maintain truth in FL translation (§A2) as the descriptional complexity increases. For translating logic expressions with more than 20 operators, none exceeded 50% accuracy in maintaining truth. This is concerning since formal specifications often have hundreds of operators. A common issue was misunderstanding the formal syntax’s precedence and associativity rules. Misplaced operators led to quick verification failures. We provide an analysis of failing cases in App. G.
+
+Moreover, even with CoT prompting, LLMs cannot serve as accurate verifiers of logical equivalence (§A3) for anything but toy expressions (low descriptional complexity), after which  $F_1$  scores fall sharply. For small FL strings, we found that LLMs have difficulties with negations in logic. Due to space limitations, we present some examples and an analysis of the kinds of syntactic structures that LLMs fail to verify correctly in the Appendix (App. L, Fig. 21).
+
+### 4.2 EVALUATING $\text{Vuto}\exists\text{V/L}$ AS A BENCHMARK
+
+For assessing §A4, we used the same 17 LLMs to evaluate the predictive power (Sec. 3.2) of  $\text{Vuto}\exists\text{V/L}$  w.r.t 5 popular benchmarks: (a) FOLIO(R;{NL, FOL}) (Han et al., 2024), a popular logical reasoning benchmark with ground truth in both *NL* and *FL*; (b) FOLIO({ $\mathcal{A}/\mathcal{I}$ }) evaluates if an LLM can (auto/in)formalize *NL* (*FL*) accurately; (c) LogiEval(R;{PL, FOL}) (Patel et al., 2024) a reasoning benchmark with ground truth in propositional and first-order logic; (d) HumanEval( $\mathcal{A}$ ) (Chen et al., 2021), a code autoformalization benchmark; (e) Big Bench Hard (BBH) (Suzgun et al., 2023). These benchmarks are contrasted in Sec. 5, and example prompts of these benchmarks are included in App. K. We ran 5 runs on each benchmark except BBH. For BBH, we use the reported numbers in the literature as scores for the models (sources are included in App K). We measured the correlation between each benchmark’s score and the calibrated  $\text{Vuto}\exists\text{V/L}$  score (Fig. 4), which was calibrated based on the descriptional complexity of the examples found in the benchmark. We also measured the calibrated  $\text{Vuto}\exists\text{V/L}$  score’s predictive power w.r.t these benchmarks (Fig. 5).
+
+As shown in Fig. 4, there is a moderate-to-strong positive correlation between LLM performance on  $\text{Vuto}\exists\text{V/L}$  and other logic-based benchmarks on a myriad of tasks such as autoformalization, logical reasoning, code generation, etc. The calibrated  $\text{Vuto}\exists\text{V/L}$  score exhibits a strong, positive correlation ( $\rho \geq 0.7$ ) with other static benchmarks on *FL*-based tasks, as well as reasoning tasks such as FOLIO. Notably, calculating the parameterized  $\text{Vuto}\exists\text{V/L}$  score does not require hand-annotation unlike these benchmarks. Similar results appear in LogiEval for propositional logic, though the FOL version shows only a moderate correlation ( $0.5 \leq \rho < 0.7$ ). We traced this reduction to dataset imbalance, where 80% of samples are from the positive class. Furthermore, the dataset is skewed
+
+{8}------------------------------------------------
+
+![Figure 4: Correlation between scores on Vuto3V/L and static benchmarks. The figure consists of six scatter plots showing Benchmark Score vs. Calibrated Vuto3V/L Score for various benchmarks: FOLIO (R; NL), FOLIO (R; FOL), LogiEval (R; PL), FOLIO (A), and HumanEval (A). Each plot includes a trend line and Pearson correlation coefficient (rho) and p-value. Grey hexagons represent data from 10 other models.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4 shows six scatter plots of Benchmark Score vs. Calibrated Vuto3V/L Score. The benchmarks are FOLIO (R; NL), FOLIO (R; FOL), LogiEval (R; PL), FOLIO (A), and HumanEval (A). Each plot includes a trend line and Pearson correlation coefficient ( $\rho$ ) and p-value. Grey hexagons represent data from 10 other models.
+
+| Benchmark | $\rho$ | $p$ | Complexity Bound |
+|-|-|-|-|
+| FOLIO (R; NL) | 0.81 | 0.00 | $S_{cal}(FOL(8,12)-E,0)$ |
+| FOLIO (R; FOL) | 0.83 | 0.00 | $S_{cal}(FOL(8,12)-E,0)$ |
+| LogiEval (R; PL) | 0.79 | 0.00 | $S_{cal}(PL(12),30)$ |
+| FOLIO (A) | 0.64 | 0.01 | $S_{cal}(FOL(8,12)-E,30)$ |
+| FOLIO (A) | 0.84 | 0.00 | $S_{cal}(FOL(8,12)-E,0)$ |
+| HumanEval (A) | 0.75 | 0.00 | $S_{cal}(RE(2),7)$ |
+
+Figure 4: Correlation between scores on Vuto3V/L and static benchmarks. The figure consists of six scatter plots showing Benchmark Score vs. Calibrated Vuto3V/L Score for various benchmarks: FOLIO (R; NL), FOLIO (R; FOL), LogiEval (R; PL), FOLIO (A), and HumanEval (A). Each plot includes a trend line and Pearson correlation coefficient (rho) and p-value. Grey hexagons represent data from 10 other models.
+
+Figure 4: Correlation between scores on  $\text{Vuto3V/L}$  and static benchmarks from the literature. The Pearson correlation coefficient ( $\rho$ ) and the  $p$ -value (values  $\leq 0.05$  are statistically significant) are annotated in the top left. The calibrated  $\text{Vuto3V/L}$  score  $S_{cal}(D, d)$  use all strings in dataset  $D$  with descriptional complexity  $d$  bounded above, as shown in the plots (App. K.4). Grey hexagons ( $\circledast$ ) represent data from 10 other models.
+
+towards lower difficulty. This leads to lower overall performance (and consequently correlation) of models like GPT-4o-mini that actually try to reason and provide no answers compared to models like Llama-3.1-8b, which mostly answered yes.
+
+Our results (Fig. 5) show that an LLM’s calibrated  $\text{Vuto3V/L}$  score is a strong predictor of its performance on *FL*-based benchmarks. Our metric is also a more robust truth maintenance measure than length-dependent, *NL*-based metrics like BLEU scores (Papineni et al., 2002). For example, changing the generated *NL*  $\psi = \text{"the weather status was sunny yesterday and is raining today"}$  to  $\psi' = \text{"the weather status was sunny yesterday and is not raining today"}$  still achieves a high BLEU( $\psi', \psi$ ) score of 0.74 (BLEU( $\psi, \psi$ ) = 1) but does not maintain truth. Even as a predictor for such metrics,  $\text{Vuto3V/L}$  notably surpasses random-chance accuracy.
+
+![Figure 5: Bar chart showing the predictive power of Vuto3V/L w.r.t other benchmarks. The chart compares FL-based metrics (FOLIO(NL), FOLIO(A), BBN(NL), FOLIO(PL), LogiEval(PL)) with Length Dependent NL Metrics (HumanEval(A), LogiEval(FOL), FOLIO(FOL), METEOR, BLEU, ROUGE, BERT).](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 5 shows the predictive power of  $\text{Vuto3V/L}$  w.r.t other benchmarks. The chart compares FL-based metrics (FOLIO(NL), FOLIO(A), BBN(NL), FOLIO(PL), LogiEval(PL)) with Length Dependent NL Metrics (HumanEval(A), LogiEval(FOL), FOLIO(FOL), METEOR, BLEU, ROUGE, BERT).
+
+| Metric Type | Benchmark X | $P_{\text{Vuto3V/L}}(X)$ |
+|-|-|-|
+| FL-based metrics | FOLIO(NL) | 0.89 |
+|  | FOLIO(A) | 0.87 |
+|  | BBN(NL) | 0.85 |
+|  | FOLIO(PL) | 0.85 |
+|  | LogiEval(PL) | 0.81 |
+| Length Dependent NL Metrics | HumanEval(A) | 0.78 |
+|  | LogiEval(FOL) | 0.73 |
+|  | FOLIO(FOL) | 0.73 |
+|  | METEOR | 0.72 |
+|  | BLEU | 0.71 |
+|  | ROUGE | 0.25 |
+|  | BERT | 0.68 |
+
+Figure 5: Bar chart showing the predictive power of Vuto3V/L w.r.t other benchmarks. The chart compares FL-based metrics (FOLIO(NL), FOLIO(A), BBN(NL), FOLIO(PL), LogiEval(PL)) with Length Dependent NL Metrics (HumanEval(A), LogiEval(FOL), FOLIO(FOL), METEOR, BLEU, ROUGE, BERT).
+
+Figure 5: Predictive power of  $\text{Vuto3V/L}$  w.r.t other benchmarks. Benchmark metrics appear after the colon.
+
+### 4.3 EVALUATING LARGE REASONING MODELS USING $\text{Vuto3V/L}$
+
+Large Reasoning Models (LRMs) are LLMs that also perform some reasoning steps (e.g., search) as a part of their generation process. We assessed two SOTA LRMs – OpenAI’s o1 (OpenAI, 2024) and DeepSeek’s R1 (DeepSeek, 2024) – on  $\$A1$  and  $\$A2$  using  $\text{Vuto3V/L}$ . Due to cost limitations, we regenerated a small dataset with 10 examples for each operator number for approximately 400 total examples. Our results (Fig. 6) show that even SOTA LRMs cannot maintain truth effectively in  $(\mathcal{A} \circ \mathcal{I})^1(\varphi_0)$ .
+
+![Figure 6: Line graph showing the application of Vuto3V/L with zero-shot prompts to LRMs. The graph plots Syntactic Compliance (OpenAI o1, DeepSeek R1) and Vuto3V/L Score (OpenAI o1, DeepSeek R1) against the number of operators for PL(12) and FOL(8,12)-E benchmarks.](9d8d3d909d7fdccb631c519df2b86e61_img.jpg)
+
+Figure 6 shows the application of  $\text{Vuto3V/L}$  with zero-shot prompts to LRMs. The graph plots Syntactic Compliance (OpenAI o1, DeepSeek R1) and  $\text{Vuto3V/L}$  Score (OpenAI o1, DeepSeek R1) against the number of operators for PL(12) and FOL(8,12)-E benchmarks.
+
+Figure 6: Line graph showing the application of Vuto3V/L with zero-shot prompts to LRMs. The graph plots Syntactic Compliance (OpenAI o1, DeepSeek R1) and Vuto3V/L Score (OpenAI o1, DeepSeek R1) against the number of operators for PL(12) and FOL(8,12)-E benchmarks.
+
+Figure 6: Applying  $\text{Vuto3V/L}$  with zero-shot prompts to LRMs on a small dataset of 400 strings.
+
+## 5 RELATED WORK
+
+**Logical Reasoning** RuleTaker (Clark et al., 2020) and ProntoQA (Saparov & He, 2023) generate datasets by using simple “if-then” and syllogisms rules to create reasoning questions. Similar grammars are used by LogicNLQ (Tian et al., 2021) and CLUTRR (Sinha et al., 2019). LogiEval (Patel et al., 2024) uses fixed inference rules and LLMs to generate reasoning problems. Although these techniques are dynamic, they remain limited in generating interesting reasoning problems across different domains. In contrast,  $\text{Vuto3V/L}$  is multi-dimensional, offering five distinct datasets, multiple customization options, and the ability to produce an infinite number of unique syntax trees.
+
+{9}------------------------------------------------
+
+FOLIO (Han et al., 2024) utilizes human experts to generate a set of reasoning questions based on real-world text sources. They generate questions in both *NL* and *FL* for propositional and first-order logic that require 7 levels of reasoning. A similar approach is employed by ReClor (Yu et al., 2020) and (Srivastava et al., 2023). A key weakness of these approaches is their reliance on human experts.
+
+**Autoformalization** HumanEval is a popular benchmark for evaluating LLM capabilities of autoformalizing source code. LLM autoformalizations are evaluated via hand-written test cases. It has been shown by Liu et al. (2023) through the HumanEval+ dataset that the test cases in HumanEval are incomplete and can provide misleading rankings. StructuredRegex (Ye et al., 2020) used crowdsourcing for generating regex datasets. In contrast,  $\forall\text{uto}\exists\forall\text{L}$  requires no human annotations and utilizes formal verifiers for checking the truth maintenance and thus does not share such drawbacks.
+
+FOLIO $\{\mathcal{A}, \mathcal{T}\}$  (Han et al., 2024) tests the (auto/in)formalization abilities of LLMs by using hand-coded annotations of  $\langle \text{NL}, \text{FL} \rangle$  pairs. However, as noted by the authors, they cannot check truth maintenance effectively and rely on an inference engine to compute truth values for each conclusion.  $\forall\text{uto}\exists\forall\text{L}$  uses theorem provers to check equivalence and thus is sound in its accuracy evaluation.
+
+MALLS (Yang et al., 2024) is an autoformalization dataset for first-order logic that was generated using GPT-4. Their use of LLMs for generating the data limits the diversity of the dataset since and the authors suggest to only use this dataset for fine-tuning and not for evaluation. In contrast,  $\forall\text{uto}\exists\forall\text{L}$  generates correct *FL* and has a sound evaluation metric for truth maintenance.
+
+Autoformalization approaches such LeanEuclid (Murphy et al., 2024), DTV (Zhou et al., 2024), LINC (Olausson et al., 2023), SatLM (Ye et al., 2020), Logic-LM (Pan et al., 2023) and others (Wu et al., 2022) utilize formal verifiers to provide sound evaluation metrics but utilize hand-coded datasets that limit their use in evaluating newer LLMs unlike  $\forall\text{uto}\exists\forall\text{L}$ .
+
+**Informalization** Wu et al. (2022) and ProofNet (Azerbayev et al., 2023) use static datasets to evaluate LLM informalization capabilities. They use metrics such as BLEU scores that are known to not be indicative of accuracy for *FL*-based tasks (Ren et al., 2020). Jiang et al. (2023) develop MMA, a dataset of formal and informal pairs generated using GPT-4. They note that their dataset is an approximate measure due to using LLMs without manual validation. In contrast,  $\forall\text{uto}\exists\forall\text{L}$  is autonomous and provides sound measures of LLM capabilities w.r.t. truth maintenance.
+
+## 6 CONCLUSION
+
+We introduced  $\forall\text{uto}\exists\forall\text{L}$ , a new benchmark for autonomously assessing LLM truth maintenance in formal language translation.  $\forall\text{uto}\exists\forall\text{L}$  allows scalable data generation without human labeling and autonomously evaluates truth maintenance using formal verifiers to guarantee correctness. It is easily extensible and provides several prepackaged datasets and dataset generators to assess new LLMs quickly. Furthermore, our evaluation indicates that SOTA LLMs and LRM are not performant in this task. Finally, we show that our metric is predictive of performance on other formal-language-based tasks and thus can be used as a surrogate benchmark for evaluating future LLMs.
+
+**Broader Impact**  $\forall\text{uto}\exists\forall\text{L}$  provides a robust framework for evaluating the suitability and safety of LLMs in *FL*-based tasks such as autoformalization and code generation. It also serves as a surrogate for estimating performance as LLMs emerge. Our work lays the foundation for developing autonomous evaluation techniques for LLMs in more flexible syntaxes, such as conversational AI.
+
+**Limitations and Future Work** A limitation of our work is the use of formal verifiers: the equivalence problem for first-order logic is well known to be undecidable. We mitigate this by using an appropriate timeout and logging (only 0.66% of our results experienced a timeout). This issue can be removed by using CFGs that generate decidable strings. An interesting application of  $\forall\text{uto}\exists\forall\text{L}$  is using generated evaluations as datasets for back-translation, thereby improving the autoformalization capabilities of models (Jiang et al., 2023). One interesting extension of our work would be assessing truth maintenance in other applications (e.g., image generation). Finally, using formal verifiers as callable tools for an LLM is an intriguing extension of our benchmark, enhancing the assessment of §A.3.
+
+**Threats to Validity** Our results for paid APIs rely on the model checkpoints to be available. Due to cost limitations, our results report pass@1 scores. We do report the std. deviation across 10 runs on 10% of each dataset in App. H with similar conclusions. We assume that the verifier and parsing libraries are sound. We mitigate this risk by using popular open-source tools like Prover9 and NLTK.
+
+ Rest of paper (reference and Appendix) is removed.

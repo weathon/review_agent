@@ -1,0 +1,409 @@
+
+
+{0}------------------------------------------------
+
+# LEARNING TO WATERMARK LLM-GENERATED TEXT VIA REINFORCEMENT LEARNING
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+We study how to watermark LLM outputs, i.e. embedding algorithmically detectable signals into LLM-generated text to track misuse. Unlike the current mainstream methods that work with a *fixed* LLM, we expand the watermark design space by including the LLM *tuning* stage in the watermark pipeline. While prior works focus on *token-level* watermark that embeds signals into the *output*, we design a *model-level* watermark that embeds signals into the LLM *weights*, and such signals can be detected by a *paired* detector. We propose a co-training framework based on reinforcement learning that iteratively (1) trains a detector to detect the generated watermarked text and (2) tunes the LLM to generate text easily detectable by the detector while keeping its normal utility. We empirically show that our watermarks are more accurate, robust, and adaptable (to new attacks) with no generation overhead. It also allows watermarked model open-sourcing. In addition, if used together with alignment, the extra overhead introduced is low – we only need to train an extra reward model (i.e. our detector). We hope our work can bring more effort into studying a broader watermark design that is not limited to working with LLMs with unchanged model weights.
+
+## 1 INTRODUCTION
+
+Watermarking LLM (Large Language Model) outputs, i.e., embedding algorithmically detectable signals into LLM-generated text, has recently become a potential solution to track LLM misuse Kirchenbauer et al. (2023a); Kuditipudi et al. (2023). So far, LLM watermarking methods focus on *token-level* distortion in the LLM output. This framework has several limitations. (1) Since we still need the watermarked text to be humanly readable, the output distortion induced needs to be minimized. As a result, watermark accuracy might be suboptimal because the watermark signal injected in the output space is constrained by the readability tradeoff. (2) For the same reason, the limited output distortion leads to vulnerability to paraphrasing attacks Kirchenbauer et al. (2023b). (3) The design space of watermark is inflexible – all the practitioners can do is post-processing the generated text from a fixed LLM, which leads to certain problems, e.g. lack of adaptability to newly discovered adversarial attacks. (4) It forbids practitioners from open-sourcing the watermarked LLMs. If they want to do so, they would also have to release the unwatermarked LLM because the watermarks are added post hoc, defeating the original purpose of protecting intellectual property.
+
+In this work, we ask: Can we watermark LLM texts by directly finetuning the LLM, so that we can enlarge the watermark design space? The watermark in our case is injected by model-level changes, and the resulting LLM outputs carry the signals that can be identified by detection.
+
+In other words, we include the LLM *tuning* stage into the watermark pipeline as opposed to the prior methods that only work with a fixed LLM, and thus expand the design space of watermark. Unlike prior works whose detectors are statistical tests, our detector is a language model that directly predicts whether a text is watermarked or not. Specifically, we tune the LLM to inject the watermark signal while training a *paired* detector model that detects the signal. The key insight is: by tuning the LLM to adapt to the detector, we make the detection easier and more accurate.
+
+Figure 1 (right) shows the overview of our reinforcement learning-based watermark framework. We iteratively co-train both the LLM and the detector. In each step, we instruction-tune the LLM to distort its weights and therefore its output distribution. Then, we train the detector to detect the signal from the distorted outputs.
+
+{1}------------------------------------------------
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+![Figure 1: Overview of our framework compared to the prior works. The diagram is split into two panels. The left panel, 'Fixed-model Approach', shows a linear flow: Original LLM -> Generated Text -> Watermarked Text (with a 'Token-level Watermark Signal') -> Statistical Test. The right panel, 'Our Approach', shows a more complex flow: Original LLM -> Watermarked LLM (receiving a 'Model-level Watermark Signal') -> Watermarked Text and Non-watermarked Text -> Paired Detector (producing a 'Detection Score').](aa9e46d6f962be5cebcbb5c654c9b13e_img.jpg)
+
+Figure 1: Overview of our framework compared to the prior works. The diagram is split into two panels. The left panel, 'Fixed-model Approach', shows a linear flow: Original LLM -> Generated Text -> Watermarked Text (with a 'Token-level Watermark Signal') -> Statistical Test. The right panel, 'Our Approach', shows a more complex flow: Original LLM -> Watermarked LLM (receiving a 'Model-level Watermark Signal') -> Watermarked Text and Non-watermarked Text -> Paired Detector (producing a 'Detection Score').
+
+Figure 1: Overview of our framework compared to the prior works. **Left:** The prior methods Kirchenbauer et al. (2023a); Kuditipudi et al. (2023) focus on working with a model with *unchanged model weights*. They induce distortions into the LLM *output* distribution used as the detection signal. **Right:** Our approach injects watermark into the LLM *weights* by finetuning. The watermark is propagated to the output and detected by a *paired detector* co-trained with the LLM in an RLHF framework, where a reward model can serve as the detector.
+
+We choose reinforcement learning Ouyang et al. (2022); Arulkumaran et al. (2017) as the co-training framework for several reasons. (1) We can adapt the reward model as a detector. (2) We can leverage the strong generalizability of the RL algorithm Ouyang et al. (2022) to make sure the finetuned LLM can generate text that is easily detectable by the detector. (3) We still need to preserve the text readability in general, which can be done by RLHF’s utility-preserving objective.
+
+Our approach has several advantages compared to the prior works. (1) **Detection Accuracy:** Since we tune the LLM to fit the detector, we create more space for the detector because we explicitly ask the LLM to generate text easily detectable to the detector. (2) **Robustness:** Because we do not aim to rely on low-level (e.g. token-level) output distortion for watermark detection, our watermark can be more robust to adversarial attacks like paraphrasing. (3) **Adaptability:** Since our framework is data-driven, we can easily iterate the LLM to adapt to new attacks by incorporating adversarially generated text into the training data, in the style of adversarial training. This is not a feature supported by the traditional fixed-model approach. (4) **Zero Watermark-Generation Cost:** Once the LLM is deployed, we do not need any special operations during text generation to embed watermarks. This zero-cost watermark generation makes our approach appealing when the LLM is deployed to serve at a very large scale. (5) **Open-source Feasibility:** Since our watermarks are internally embedded into the LLM weights and no special operation is needed in a post-hoc text generation, practitioners can release the watermarked LLM without being forced to release an unwatermarked version.
+
+Through the experiments, we show that our framework achieves near-perfect detection rate and outperforms existing token-level approaches. We observe that our watermark is also robust to small perturbations on the watermarked text. If we encounter large perturbations, we can include the perturbed samples in the training stage, following the style of adversarial training, and achieve high detection rate (AUC over 0.99), showing a strong adaptability of our approach unsupported by the token-level watermarks.
+
+## 2 PRELIMINARY
+
+**Notations.** Let  $\mathcal{V}$  denote the LLM token space. We use  $x = [x_1, x_2, x_3, \dots] \in \mathcal{V}^*$  to denote a sequence of tokens (i.e. a sentence). An LLM is a function that, given a sequence of tokens, predicts the probability of the next token using the model with parameters  $\theta$ . Given a prompt  $x$ , we use  $\pi_\theta(a_t|s_t)$  to denote the probability distribution of the next token, where  $s_t = x$  is the current “state” following notations in the RLHF literature. We use  $f(x; \theta)$  to represent the text  $y \sim \pi_\theta(\cdot|x)$  generated by  $\theta$  given prompt  $x$  in the autoregressive way.<sup>1</sup>
+
+**Reinforcement Learning with Human Feedback.** Reinforcement learning with human feedback (RLHF) Ouyang et al. (2022) is the standard pipeline at this moment to align an LLM with human preferences. In RLHF, we first train a reward model (RM)  $r: \mathcal{V}^* \times \mathcal{V}^* \rightarrow \mathbb{R}$ , where  $r(x, y)$  is the
+
+<sup>1</sup>We slightly misuse the notation to use a function  $f(\cdot)$  to represent the sampling process of text generation.
+
+{2}------------------------------------------------
+
+reward that measures whether the completion  $y$  given the prompt  $x$  is desired by human or not.<sup>2</sup> The RM training requires an RM dataset  $\mathcal{D}_{RM} = \{(x_i, y_i^r, y_i^l)\}_{i=1}^n$ , where  $x$  is the prompt,  $y_r$  is a rejected completion and  $y_l$  is a chosen completion based on human preference, and the RM is optimized to minimize  $r(x_i, y_i^r) - r(x_i, y_i^l)$ .<sup>3</sup>
+
+Second, we use Proximal Policy Optimization (PPO) Ouyang et al. (2022) to maximize the following objective for the LLM  $\theta$ 's policy given the trained reward model  $\theta^{RM}$  and the original model  $\theta^o$ :
+
+$$\text{objective}(\theta, \theta^{RM}) = \mathbb{E}_{(x,y) \sim \mathcal{D}_\theta} \left[ r_{\theta^{RM}}(x, y) - \beta \cdot \log \left( \frac{\pi_\theta(y|x)}{\pi_{\theta^o}(y|x)} \right) \right] + \gamma \cdot \text{KL}(\pi_{\theta^o}(y|x), \pi_\theta(y|x)) \quad (1)$$
+
+where  $\pi_\theta$  is the learned RL policy for model  $\theta$ ,  $\beta$  is the KL reward coefficient, and  $\gamma$  is the strength of KL penalty.
+
+## 3 SCENARIO AND GOAL
+
+**Scenario.** We assume we are LLM service providers who aim to track the generated text from the LLMs we develop through watermarks. In addition, we have the computational resources to finetune the LLM and the ability to collect relevant finetuning data. The goal is to distinguish the text generated by our LLM from any other sources (e.g. written by humans or generated by different LLMs) as accurately as possible within a reasonable cost while not hurting the utility of the LLMs on normal tasks.
+
+**Goal.** Given the original LLM with parameter  $\theta^o$ , we want to finetune it into another LLM  $\theta^w$  paired with a detector  $D : \mathcal{V}^* \times \mathcal{V}^* \rightarrow \mathbb{R}$  that has the same architecture as an RM, except that it outputs a detection score that quantifies how likely the output  $y$  given a prompt  $x$  is generated by our watermarked model  $\theta^w$ .
+
+Let  $\theta^d$  denote the parameter of the detector,  $D(x, y; \theta^d)$  denote the predicted score from  $\theta^d$  that output  $y$  is generated by model  $\theta^w$  given prompt  $x$ .<sup>4</sup> We want  $\theta^w$  and  $\theta^d$  to satisfy the following properties: (1) Given an output  $y^w := f(x; \theta^w)$  generated by the watermarked model  $\theta^w$  from prompt  $x$ , the detection score  $D(x, y^w; \theta^d)$  is high; (2) Given an output  $y^{nw}$  not generated by the watermarked model  $\theta^w$ , e.g. written by humans or generated by other LLMs, the detection score  $D(x, y^{nw}; \theta^d)$  is low; (3) Our procedure should distort the output distribution as little as possible, preserving the utility from the original LLM, i.e.  $f(x; \theta^w) \approx f(x; \theta^o)$ .
+
+## 4 REINFORCEMENT LEARNING-BASED WATERMARK
+
+### 4.1 OVERVIEW
+
+Our key insight is: *we design the watermark detector to be the reward model in the RLHF pipeline so that LLM can be finetuned to get a high detection score*. Given a non-watermarked dataset  $\mathcal{D}^{nw} := \{(x_i, y_i^{nw})\}_{i=1}^n$  where  $y_i^{nw}$  is the non-watermarked (e.g. human-written) output corresponding to the prompt  $x$ , our overall objective is:
+
+$$\min_{\theta^d, \theta^w} \mathbb{E}_{(x, y^{nw}) \sim \mathcal{D}^{nw}} [D(x, y^{nw}; \theta^d) - D(x, f(x; \theta^w); \theta^d)] + \lambda \cdot \text{Reg}(\theta^w, \theta^o) \quad (2)$$
+
+where  $f(x; \theta^w)$  is the generated watermarked text from the watermarked LLM  $\theta^w$  that detector  $\theta^d$  needs to distinguish from the non-watermarked text  $y^{nw}$ .  $\text{Reg}(\cdot, \cdot)$  is the regularization term that ensures the reliability of generated text not deviated much from the original LLM  $\theta^o$ , and  $\lambda$  is the penalty strength. We directly use the KL penalty as the regularization in Eqn.(1).
+
+<sup>2</sup>Since we do not want the optimized LLM to deviate from the reference model to avoid out-of-distribution problems, we also add a KL divergence term to the reward Zheng et al. (2023); Holtzman et al. (2019), i.e.,  $r_{total}(x, y; \theta) = r(x, y) - \eta \text{KL}(\pi_\theta(a_t|s_t), \pi_{ref}(a_t|s_t))$
+
+<sup>3</sup>More precisely, the full RM objective is  $\log \sigma(r(x_i, y_i^r) - r(x_i, y_i^l))$  where  $\sigma(\cdot)$  is the sigmoid function. We omit it for simplicity. Whenever we say  $r(x_i, y_i^r) - r(x_i, y_i^l)$  in the paper, e.g. in Eqn.(2), we mean the full objective.
+
+<sup>4</sup>We omit  $\theta^w$  in the inputs for simplicity. The detector  $\theta^d$  is paired with the watermarked LLM  $\theta^w$ .
+
+{3}------------------------------------------------
+
+However, the objective in Eqn.(2) cannot be directly optimized because obtaining the generated text  $f(x; \theta^w)$  involves sampling  $y^w \sim \pi_{\theta^w}(\cdot|x)$ . We therefore propose a RL-based algorithm that iteratively switches between updating  $\theta^w$  and  $\theta^d$ .
+
+### 4.2 ALGORITHM
+
+In the practical algorithm, we alternate between updating  $\theta^w$  and updating  $\theta^d$ :
+
+1. Given a fixed detector  $\theta^d$ , we tune the LLM  $\theta^w$  to fit into  $\theta^d$ 's labeled reward (i.e. detection score) with PPO in the objective (1) where  $r_{\theta^{RM}}(x, y) = D(x, y; \theta^d)$ .
+2. Given a fixed LLM  $\theta^w$ , we train the detector  $\theta^d$  to distinguish between the watermarked text  $y^w$  generated by  $\theta^w$  and the text from any other sources (e.g. written by humans)  $y^{nw}$ :
+
+$$\min_{\theta^d} [D(x, y^{nw}; \theta^d) - D(x, y^w; \theta^d)]. \quad (3)$$
+
+Note that, unlike the conventional RLHF, we also update the reward model, i.e. our detector  $\theta^d$ , along with the LLM  $\theta^w$  in the PPO.
+
+Algorithm 1 shows our overall pipeline. We first pretrain the detector to distinguish between non-watermarked text  $y^{nw}$  and text generated by the original LLM  $\theta^o$  (line 1-8). Then we fine-tune the LLM to obtain the watermarked LLM weights  $\theta^w$  while simultaneously training the detector  $\theta^d$  (line 9-18). In particular, in each training step, we first freeze  $\theta^d$  and update  $\theta^w$  using the PPO objective to increase the labeled detection score from  $\theta^d$  on the text generated by  $\theta^w$  (line 12-14). Then we generate the latest version of generated watermarked text  $y_w$ , and train the detector to classify between the watermarked and non-watermarked text (line 15-17).
+
+**Detection.** The detection of watermark is a simple forward pass through the detector. Given prompt  $x$  and output  $y$ , we calculate the detection score  $D(x, y; \theta^d)$ . A high score indicates that the output  $y$  is likely to be generated by our LLM. We pick the threshold based on the criteria that the True Positive Rate (TPR) reaches a certain value.
+
+### 4.3 COMBINING WITH ALIGNMENT
+
+Since we need to use RL to co-train the LLM and the detector, we have a computationally expensive stage for offline preparation. Therefore, it is best used together with the standard alignment so that the additional overhead induced by our watermarking can be reduced significantly.
+
+Given a normal alignment task where the reward model is  $\theta^{RM}$ , we can use the combined reward from both  $\theta^{RM}$  and our detector  $\theta^d$  in the PPO objective (1), i.e. replacing the labelled reward in objective (1) with the following:
+
+$$\alpha \cdot r_{\theta^{RM}}(x, y) + (1 - \alpha) \cdot D(x, y; \theta^d) \quad (4)$$
+
+where  $\alpha$  is the weight balancing the alignment task's reward and the watermarking task. All other steps, e.g. LLM finetuning, are the same.
+
+Compared with the standard RLHF pipeline, the extra cost we introduce is only training an extra reward model (i.e. our detector) and running inference on it (i.e. labeling detection score). Today's RLHF already tends to use multiple reward models, and our watermarking reward model can be incorporated into the current RLHF pipeline easily.
+
+### 4.4 ADAPTING TO SEQUENTIAL-CODE WATERMARKS
+
+Our method so far focuses on binary detection, i.e. given a text, the detector will produce a binary prediction on the entire text to determine if it is watermarked or not. Alternatively, we can also adapt our method to generate a sequence of binary code in a text, in the same style of Kirchenbauer et al. (2023a).
+
+Specifically, we partition the text and train the detector to predict each segment, and their predicted labels together form the sequential code of the text. Then, we check whether the code matches our pre-defined code to determine whether the text is watermarked. By doing it, we open up the possibility
+
+{4}------------------------------------------------
+
+#### **Algorithm 1** Reinforcement Learning-based Watermark pipeline.
+
+##### **Inputs:**
+
+ $\theta^o$ : The original LLM. $\mathcal{D}^{nw}$ : A dataset containing prompt  $x$  and its corresponding output  $y^{nw}$  generated by any source that is not  $\theta^o$  (e.g. written by humans).
+
+##### **Outputs:**
+
+ $\theta^w$ : The watermarked LLM. $\theta^d$ : The detector paired with  $\theta^w$ .
+
+```
+
+1: /* Pretrain the detector weights*/
+2: Initialize  $\theta^d$ 
+3: for iteration = 1, 2 . . . do
+4:    $(x, y^{nw}) \sim \mathcal{D}^{nw}$ 
+5:    $y^w \leftarrow f(x; \theta^o)$ 
+6:   /* Train the detector like a reward model*/
+7:   Update  $\theta^d$  with Eqn.(3)
+8: end for
+9: /* Use RL to iteratively update the LLM  $\theta^w$  and the detector  $\theta^d$ */
+10:  $\theta^w \leftarrow \theta^o$ 
+11: for iteration = 1, 2 . . . do
+12:   /* Tune the LLM  $\theta^w$  to fit the detector  $\theta^d$ */
+13:    $(x, y^{nw}) \sim \mathcal{D}^{nw}$ 
+14:   Freeze  $\theta^d$  and update  $\theta^w$  with the PPO objective (1) where  $r_{GRM}(x, y) = D(x, y; \theta^d)$ 
+15:   /* Tune the detector  $\theta^d$  to fit the LLM  $\theta^w$ */
+16:    $y^w \leftarrow f(x; \theta^w)$ 
+17:   Freeze  $\theta^w$  and update  $\theta^d$  with Eqn.(3)
+18: end for
+Return:  $\theta^w$  and  $\theta^d$ 
+
+```
+
+of guaranteed false positive rate of watermark detection: Suppose the chance of a non-watermarking sentence being marked as watermarked is  $\text{FPR}_s$ . With the increasing length of the code and number of sentences  $L$ , the chance of exactly matching the code sequence drops as  $(\text{FPR}_s)^L$ , similar to the statistical test-based methods Kirchenbauer et al. (2023a); Kuditipudi et al. (2023). We show the detailed methodology and results in Appendix A.
+
+## 5 EXPERIMENTS
+
+We empirically verify the effectiveness of our watermarks, along with a series of ablation studies.
+
+### 5.1 SETTING
+
+**Task and Data.** We choose two LLMs: OPT-1.3B Zhang et al. (2022) and Llama2-7B Touvron et al. (2023) in the experiment, and two tasks: (1) prompt completion and (2) safety alignment in Q&A. For (1) we use C4 RealNewsLike Dataset Raffel et al. (2019) for the completion task and we follow the same data preprocessing procedure as prior works Kirchenbauer et al. (2023a); Kuditipudi et al. (2023) with completion length 128. For (2) we use PKU safe RLHF Ji et al. (2023) dataset for the alignment task. Following the standard RLHF pipeline, we first perform supervised fine-tuning (SFT) and then perform the RL alignment.
+
+**Metric.** We evaluate (1) watermark detection performance and (2) original task performance (i.e. completion and safety alignment). For detecting watermarks, we evaluate 1K prompts and distinguish between their human-written and LLM-generated responses. We compute detection AUC and false positive rate when the true positive rate is over 90% and 99%, denoted as  $\text{FPR@90}$  and  $\text{FPR@99}$  respectively. For the original utility on the completion task, we evaluate log-perplexity, denoted as  $\log\text{PPL}$ , of the generated text on the C4 dataset following previous works Kirchenbauer et al. (2023a).
+
+{5}------------------------------------------------
+
+Table 1: Detection performance of our watermarks compared to baselines. Our watermarks achieve better detection performance at the same level of utility while inducing negligible distortion on the original utility.
+
+| Model | Method | C4 Data (Prompt Completion) |  |  |  | PKU Data (Safety Alignment) |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  | AUC ↑ | FPR@90 ↓ | FPR@99 ↓ | logPPL ↓ | AUC ↑ | FPR@90 ↓ | FPR@99 ↓ | Safety Score ↑ |
+| OPT-1.3B | KGW | 0.9698 | 5.1% | 57.7% | 2.5289 | 0.7930 | 52.4% | 81.8% | 10.38 |
+|  | ITS | 0.9937 | 0.0% | 23.6% | 2.4406 | 0.8659 | 33.7% | 70.7% | 10.19 |
+|  | EXP | 0.9762 | <b>0.0%</b> | 1.0% | 2.4239 | 0.1523 | 99.2% | 99.8% | 9.712 |
+|  | Ours (No-FT) | 0.9820 | 1.8% | 34.6% | 2.4484 | 0.9904 | 1.1% | 8.3% | 10.46 |
+|  | Ours | <b>0.9985</b> | 0.1% | <b>0.9%</b> | <b>2.4177</b> | <b>0.9997</b> | <b>0.0%</b> | <b>0.4%</b> | <b>10.73</b> |
+| Llama2-7B | KGW | 0.9509 | 13.0% | 76.1% | 3.1280 | 0.8613 | 45.7% | 82.5% | 2.012 |
+|  | ITS | 0.9964 | <b>0.0%</b> | 0.6% | 3.0821 | 0.8324 | 43.2% | 57.8% | 2.745 |
+|  | EXP | 0.9777 | <b>0.0%</b> | 100.0% | <b>3.0461</b> | 0.6656 | 94.2% | 98.9% | 2.875 |
+|  | Ours (No-FT) | 0.9963 | 0.4% | 1.3% | 3.1180 | 0.9864 | 1.3% | 17.0% | <b>2.946</b> |
+|  | Ours | <b>0.9989</b> | <b>0.0%</b> | <b>0.1%</b> | 3.0531 | <b>0.9947</b> | <b>0.7%</b> | <b>3.8%</b> | 2.698 |
+
+For the original utility on the alignment task, we evaluate the safety score on the PKU dataset using the safety evaluation model released with the dataset <sup>5</sup>.
+
+**Baseline.** We compare with the following baselines using the name convention in Kuditipudi et al. (2023)<sup>6</sup>: **KGW** Kirchenbauer et al. (2023a) randomly split the vocabulary into two partitions for each token and increase the probability of sampling for one partition during training; **ITS** Kuditipudi et al. (2023) define a pre-set random key and sample for each token location based on the key; **EXP** Kuditipudi et al. (2023) is similar to ITS, but the key is used to adjust the sampling probability; **Ours (No-FT)** is our watermark pipeline but only training the detector  $\theta^d$  without finetuning the LLM  $\theta^w$ . Note that the first three baseline methods are inference-time watermarks that do not finetune the LLM. When generating watermarks using those methods, we generate them on the pretrained model for the C4 dataset and on the aligned model after performing RLHF on the PKU dataset.
+
+**Hyper-parameters.** For both datasets, we finetune the LLM for  $10K$  steps with batch size 4. For the PPO hyperparameters in Eqn.(1), we use  $\beta = 0.1$  for the KL reward coefficient,  $\gamma = 0.01$  on Llama2-7B and  $\gamma = 0.0$  on OPT-1.3B as the KL penalty. On the alignment task, we use  $\alpha = 0.5$  in Eqn.(4) to balance with the normal safety alignment task.
+
+### 5.2 MAIN RESULTS
+
+We show detection performance in Table 1. We can observe that our pipeline can indeed achieve a good watermarking performance, outperforming existing baselines on most tasks in detection rate. Meanwhile, if we only train the detector but not finetune the LLM, the performance would be much worse. This showcases the importance of finetuning the LLM model besides training a detector. In addition, we can observe that the benign performance of the LLM will not be affected when we finetune it to carry the watermark information, which matches our intuition that there are semantic-level signal that we can to the sentences without affecting its actual utility. We show examples of generated texts with and without the watermark in Appendix C.
+
+### 5.3 WORD SUBSTITUTION ATTACKS
+
+We conduct a study to understand the robustness of our method under substitution attacks. One of the unique advantages of our method, compared to the fixed-model approaches, is our watermark can be adapted to different newly discovered attacks, in the style of adversarial training Madry et al. (2017).
+
+To perform the substitution attack, we randomly replace a fraction of tokens in the response with random tokens from the vocabulary, and then see if watermarks can still be detected or not. In addition, we include our method when combined with adversarial training. Specifically, we generate
+
+<sup>5</sup><https://huggingface.co/PKU-Alignment/beaver-7b-v1.0-cost>
+
+<sup>6</sup>We follow the implementation in <https://github.com/jthickstun/watermark>
+
+{6}------------------------------------------------
+
+324  
+325  
+326  
+327  
+328  
+329  
+330  
+331  
+332  
+333  
+334  
+335  
+336  
+337  
+338  
+339  
+340  
+341  
+342  
+343  
+344  
+345  
+346  
+347  
+348  
+349  
+350  
+351  
+352  
+353  
+354  
+355  
+356  
+357  
+358  
+359  
+360  
+361  
+362  
+363  
+364  
+365  
+366  
+367  
+368  
+369  
+370  
+371  
+372  
+373  
+374  
+375  
+376  
+377
+
+![Figure 2: Detection performance of the watermarked text under word substitution attacks. The figure consists of four line plots for OPT-1.3b, C4; OPT-1.3b, PKU; Llama2-7b, C4; and Llama2-7b, PKU. The x-axis is 'Substitution ratio' (0 to 0.5) and the y-axis is 'AUC' (0.65 to 1.00). Five methods are compared: KGW (blue), ITS (orange), EXP (green), Ours (red), and Ours+AdvTrain (purple). Ours+AdvTrain maintains high AUC across all substitution ratios, while other methods show a significant drop as the ratio increases.](c0843c6d138705289960d9f53a6e72a1_img.jpg)
+
+Figure 2: Detection performance of the watermarked text under word substitution attacks. The figure consists of four line plots for OPT-1.3b, C4; OPT-1.3b, PKU; Llama2-7b, C4; and Llama2-7b, PKU. The x-axis is 'Substitution ratio' (0 to 0.5) and the y-axis is 'AUC' (0.65 to 1.00). Five methods are compared: KGW (blue), ITS (orange), EXP (green), Ours (red), and Ours+AdvTrain (purple). Ours+AdvTrain maintains high AUC across all substitution ratios, while other methods show a significant drop as the ratio increases.
+
+Figure 2: Detection performance of the watermarked text under word substitution attacks.
+
+![Figure 3: Detection performance of the watermarked text under paraphrasing attacks with Pegasus. The figure consists of four line plots for OPT-1.3b, C4; OPT-1.3b, PKU; Llama2-7b, C4; and Llama2-7b, PKU. The x-axis is 'Paraphrasing Temperature' (0 to 2.0) and the y-axis is 'AUC' (0.65 to 1.00). Five methods are compared: KGW (blue), ITS (orange), EXP (green), Ours (red), and Ours+AdvTrain (purple). Ours+AdvTrain maintains high AUC across all paraphrasing temperatures, while other methods show a significant drop as the temperature increases.](c64e9e9f3b0b828a5f6ac70441877764_img.jpg)
+
+Figure 3: Detection performance of the watermarked text under paraphrasing attacks with Pegasus. The figure consists of four line plots for OPT-1.3b, C4; OPT-1.3b, PKU; Llama2-7b, C4; and Llama2-7b, PKU. The x-axis is 'Paraphrasing Temperature' (0 to 2.0) and the y-axis is 'AUC' (0.65 to 1.00). Five methods are compared: KGW (blue), ITS (orange), EXP (green), Ours (red), and Ours+AdvTrain (purple). Ours+AdvTrain maintains high AUC across all paraphrasing temperatures, while other methods show a significant drop as the temperature increases.
+
+Figure 3: Detection performance of the watermarked text under paraphrasing attacks with Pegasus.
+
+![Figure 4: Detection performance of the watermarked text adversarially trained with Pegasus paraphrasing, tested with DIPPER paraphrasing. The figure consists of four line plots for OPT-1.3b, C4; OPT-1.3b, PKU; Llama2-7b, C4; and Llama2-7b, PKU. The x-axis is 'Paraphrasing diversity' (0 to 60) and the y-axis is 'AUC' (0.6 to 1.0). Five methods are compared: KGW (blue), ITS (orange), EXP (green), Ours (red), and Ours+AdvTrain (purple). Ours+AdvTrain maintains high AUC across all paraphrasing diversities, while other methods show a significant drop as the diversity increases.](01da0d212fb571933f10f96556157745_img.jpg)
+
+Figure 4: Detection performance of the watermarked text adversarially trained with Pegasus paraphrasing, tested with DIPPER paraphrasing. The figure consists of four line plots for OPT-1.3b, C4; OPT-1.3b, PKU; Llama2-7b, C4; and Llama2-7b, PKU. The x-axis is 'Paraphrasing diversity' (0 to 60) and the y-axis is 'AUC' (0.6 to 1.0). Five methods are compared: KGW (blue), ITS (orange), EXP (green), Ours (red), and Ours+AdvTrain (purple). Ours+AdvTrain maintains high AUC across all paraphrasing diversities, while other methods show a significant drop as the diversity increases.
+
+Figure 4: Detection performance of the watermarked text adversarially trained with Pegasus paraphrasing, tested with DIPPER paraphrasing.
+
+substituted responses on the training set, used as the adversarial examples, as the training samples used in our RL pipeline. In other words, when we train the detector  $\theta^d$ , we label the substituted response,  $f(x; \theta^w) + \Delta$  where  $\Delta$  is the substitution perturbations, as still watermarked. We then test if the detector’s ability to identify substituted responses as watermarked in the training set can generalize to the unseen test set.
+
+We show the results in Figure 2 and include the numbers in Table 14 of Appendix D. Unsurprisingly, ITS and EXP outperform us because they are designed to be robust against word substitutions Kuditipudi et al. (2023). However, when we incorporate adversarial examples into our training, we can achieve much stronger robustness, especially when the substitution ratio is high – we can achieve almost no AUC loss even when substituting 50% tokens.
+
+{7}------------------------------------------------
+
+### 5.4 PARAPHRASING ATTACKS
+
+We evaluate the robustness of our method under paraphrasing attacks. We paraphrase responses by two paraphrasing models: Pegasus Zhang et al. (2019) and DIPPER Krishna et al. (2023). Similarly in Section 5.3, we incorporate the paraphrased responses as the watermarked text into our training in the style of adversarial attack. Paraphrasing strength in Pegasus is quantified by temperature  $T$ , and we evaluate at  $T = 1.0, 1.5, 2.0$ . Paraphrasing strength in DIPPER is quantified by diversity  $q$  for both lexical diversity and order diversity, and we evaluate at  $q = 20, 40, 60$ .
+
+Figure 3 shows the results w.r.t. Pegasus. The full results are in Table 15 in Appendix E. Unlike substitution attacks, our method can already achieve decent robustness against paraphrasing and outperform the baselines even when the paraphrasing strength is low. It is because token-level methods are known to be vulnerable to paraphrasing while our model-level approach watermarks the response not based on replacing specific tokens, but modifying the response as a whole, therefore the change we induce is at the semantic level, which is less vulnerable to paraphrasing. In addition, similar to substitution attacks, our method can achieve stronger robustness by adversarial training.
+
+Figure 4 shows the robustness of the model adversarially trained on Pegasus-paraphrased responses and tested on DIPPER-paraphrased responses. The full results are in Table 16 in Appendix E. We can see that finetuning the LLM with Pegasus attacks can also improve the robustness against DIPPER attacks, showing the flexibility to incorporate new attacks into the watermarks.
+
+### 5.5 RUNTIME OVERHEAD
+
+There are three types of runtime overhead for a LLM watermark: the offline preparation cost, the generation overhead and the detection overhead. We emphasize that in practice, the generation overhead is the most concerning, followed by the detection overhead and finally one-time preparation cost. This is because the offline preparation needs to be done only once, while the demand for generating texts with LLMs is usually much higher than detecting whether a text is LLM-generated or not. In practice, only suspected text (e.g. user-flagged) need to be checked by the detector. In addition, the latency requirement for generation is much higher than detection. Generation needs to be fast because users will wait for it to complete in real time. By comparison, it is more acceptable if it takes a longer time for the text to be detected (which, in some settings, can be done offline).
+
+Table 2 shows the per-sample generation and detection time on the PKU task. The time cost on the C4 dataset is similar and thus omitted. The time is evaluated by an A100-80GB GPU and a 32-core CPU. In addition to per-sample time cost, our method also requires the one-time finetuning, which takes around 3 hours for the OPT model and around 1.7 days for the Llama-2 model (which can be accelerated when combined with standard alignment). Our method has the lowest generation time and the second lowest detection time compared to the baseline methods. This is because the baseline methods require multiple hashing and sampling processes as the generation overhead and multiple hashing and statistical tests for the detection. Note that these are CPU-heavy tasks and cannot be parallelized with GPUs. By comparison, our method has no generation overhead while our detection overhead can be further reduced by GPU parallelization. Considering an LLM is normally deployed on a large scale, we believe our generation time minimization design is a more appealing tradeoff.
+
+Table 2: The generation and detection time (sec) per sample of our method and baselines. Note that the generation efficiency is more important because the demand for generation is usually much higher, while the detection may be done in an offline fashion.
+
+| Method | OPT-1.3b |  | Llama2-7b |  |
+|-|-|-|-|-|
+|  | Generation | Detection | Generation | Detection |
+| KGW | 0.36760 | <b>0.03236</b> | 0.60676 | <b>0.03466</b> |
+| ITS | 0.59770 | 0.27249 | 0.90553 | 0.34814 |
+| EXP | 0.92858 | 2.53019 | 1.23683 | 3.36683 |
+| Ours | <b>0.33066</b> | 0.03442 | <b>0.59735</b> | 0.05678 |
+
+{8}------------------------------------------------
+
+### 5.6 ADDITIONAL EXPERIMENTS
+
+In Appendix A, we show the results of the sequential-code version of our watermark, as discussed in Section 4.4. We achieve over 0.9 watermark detection AUC by checking the match rate of the sentence to a predefined code. We observe that human cannot tell a significant difference between generated sentences, while the detector can accurately tell apart the watermark signals.
+
+In Appendix D, we conduct further experiments to evaluate our method, including the experiments on distinguishing texts by other LLMs (Appendix B.1), the out-of-distribution scenario (Appendix B.2), different token lengths (Appendix B.3) and detection without knowledge of prompts (Appendix B.4). These results show that our pipeline maintains a high performance under various different settings.
+
+## 6 RELATED WORK
+
+**LLM Watermark.** KGW Kirchenbauer et al. (2023a) is the first work to show how to watermark an LLM output by randomly splitting the vocabulary into two parts and setting a higher probability to samples from one. In a follow-up work Kirchenbauer et al. (2023b), researchers further show that the approach works when the watermarked text is long. Many follow-up works follow a similar approach. Lee et al. (2023) adapt KGW to code generation by only focusing on high-entropy tokens. Zhao et al. (2023) uses a fixed vocabulary splitting and shows it can lead to a provable watermark. Fernandez et al. (2023); Hu et al. (2023) proposes better techniques to improve the generation and detection performance. Hou et al. (2023); Liu et al. (2023) proposes to sample vocabulary based on the semantic meaning so that the watermark can be robust against paraphrasing attacks.
+
+KGW-based approach has certain limitations, e.g. distributional change and inability to be publicly verifiable Ajith et al. (2023). Partially motivated to overcome those limitations, Kuditipudi et al. (2023) proposes a distortion-free watermark schema by pre-sampling a random key for the LLM generation. Christ et al. (2023) uses a private key and proposes the undetectable watermark from the view of cryptography. Fairoze et al. (2023) proposes that the message can be publicly verifiable using rejection sampling. Note that those approaches are inference-time techniques and do not fine-tune the model. More recently, Gu et al. (2023) proposes to fine-tune an LLM to distill the model with inference-time watermark, making it a model-level watermark which is similar to our approach. However, the detection pipeline is still statistical tests rather than model-based detection. Furthermore, the method is often underperformed by KGW-based approaches.
+
+**LLM Text Detection.** Another related field is LLM text detection Wu et al. (2023). The problem is to directly detect whether a text is generated by LLMs or not, without changing any model training or text generation procedures. Mitchell et al. (2023) proposes to detect GPT-generated texts with curvature analysis on the text log probability function. Wang et al. (2023b) shows that the previous work can be improved with self-masking prediction. Wang et al. (2023a) propose to do classification based on the prediction logits. These works aim to detect general LLM texts and do not interfere with model’s training or generation. By comparison, our goal is to only detect texts generated by a specific (watermarked) model, and we finetune the LLM model to help us achieve the goal so that the detection is more accurate.
+
+## 7 CONCLUSION
+
+We propose a model-based watermarking pipeline to track the outputs generated by LLMs. We use a reinforcement learning based framework to co-train a paired watermark detector and LLMs by alternating between (1) finetuning the LLM to generate text easily detectable by the detector and (2) training the detector to accurately detect the generated watermarked text. We empirically show that our watermarks are more accurate, robust, and adaptable to new attacks. It also supports open-sourcing. We hope our work can bring more effort into studying a broader watermark design.
+
+**Limitation.** We point out several limitations. First, the need for finetuning might make our computational cost higher than the fixed-model approach. Second, as we are a data-driven approach, we require relevant training data. Last, our detection is requires a more costly one-time fine-tuning than simple statistical tests in the fixed-model approach. Nevertheless, the first two issues can be mitigated when our watermark is integrated into a standard LLM alignment pipeline.
+
+{9}------------------------------------------------
+
+## REFERENCES
+
+- Anirudh Ajith, Sameer Singh, and Danish Pruthi. Performance trade-offs of watermarking large language models. *arXiv preprint arXiv:2311.09816*, 2023.
+- Kai Arulkumaran, Marc Peter Deisenroth, Miles Brundage, and Anil Anthony Bharath. Deep reinforcement learning: A brief survey. *IEEE Signal Processing Magazine*, 34(6):26–38, 2017.
+- Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislus Fort, Deep Ganguli, Tom Henighan, et al. Training a helpful and harmless assistant with reinforcement learning from human feedback. *arXiv preprint arXiv:2204.05862*, 2022.
+- Miranda Christ, Sam Gunn, and Or Zamir. Undetectable watermarks for language models. *arXiv preprint arXiv:2306.09194*, 2023.
+- Ganqu Cui, Lifan Yuan, Ning Ding, Guanming Yao, Wei Zhu, Yuan Ni, Guotong Xie, Zhiyuan Liu, and Maosong Sun. Ultrafeedback: Boosting language models with high-quality feedback, 2023.
+- Jaiden Fairoze, Sanjam Garg, Somesh Jha, Saeed Mahloujifar, Mohammad Mahmoody, and Mingyuan Wang. Publicly detectable watermarking for language models. *arXiv preprint arXiv:2310.18491*, 2023.
+- Pierre Fernandez, Antoine Chaffin, Karim Tit, Vivien Chappelier, and Teddy Furon. Three bricks to consolidate watermarks for large language models. In *2023 IEEE International Workshop on Information Forensics and Security (WIFS)*, pp. 1–6. IEEE, 2023.
+- Chenchen Gu, Xiang Lisa Li, Percy Liang, and Tatsunori Hashimoto. On the learnability of watermarks for language models. *arXiv preprint arXiv:2312.04469*, 2023.
+- Ari Holtzman, Jan Buys, Li Du, Maxwell Forbes, and Yejin Choi. The curious case of neural text degeneration. *arXiv preprint arXiv:1904.09751*, 2019.
+- Abe Bohan Hou, Jingyu Zhang, Tianxing He, Yichen Wang, Yung-Sung Chuang, Hongwei Wang, Lingfeng Shen, Benjamin Van Durme, Daniel Khashabi, and Yulia Tsvetkov. Semstamp: A semantic watermark with paraphrastic robustness for text generation. *arXiv preprint arXiv:2310.03991*, 2023.
+- Zhengmian Hu, Lichang Chen, Xidong Wu, Yihan Wu, Hongyang Zhang, and Heng Huang. Unbiased watermark for large language models. *arXiv preprint arXiv:2310.10669*, 2023.
+- Jiaming Ji, Mickel Liu, Juntao Dai, Xuehai Pan, Chi Zhang, Ce Bian, Ruiyang Sun, Yizhou Wang, and Yaodong Yang. Beavertails: Towards improved safety alignment of llm via a human-preference dataset. *arXiv preprint arXiv:2307.04657*, 2023.
+- John Kirchenbauer, Jonas Geiping, Yuxin Wen, Jonathan Katz, Ian Miers, and Tom Goldstein. A watermark for large language models. *arXiv preprint arXiv:2301.10226*, 2023a.
+- John Kirchenbauer, Jonas Geiping, Yuxin Wen, Manli Shu, Khalid Saifullah, Kezhi Kong, Kasun Fernando, Aniruddha Sahai, Micah Goldblum, and Tom Goldstein. On the reliability of watermarks for large language models. *arXiv preprint arXiv:2306.04634*, 2023b.
+- Kalpesh Krishna, Yixiao Song, Marzena Karpinska, John Wieting, and Mohit Iyyer. Paraphrasing evades detectors of ai-generated text, but retrieval is an effective defense. *arXiv preprint arXiv:2303.13408*, 2023.
+- Rohit Kuditipudi, John Thickstun, Tatsunori Hashimoto, and Percy Liang. Robust distortion-free watermarks for language models. *arXiv preprint arXiv:2307.15593*, 2023.
+- Taehyun Lee, Seokhee Hong, Jaewoo Ahn, Ilgee Hong, Hwaran Lee, Sangdoon Yun, Jamin Shin, and Gunhee Kim. Who wrote this code? watermarking for code generation. *arXiv preprint arXiv:2305.15060*, 2023.
+- Aiwei Liu, Leyi Pan, Xuming Hu, Shiao Meng, and Lijie Wen. A semantic invariant robust watermark for large language models. *arXiv preprint arXiv:2310.06356*, 2023.
+
+ Rest of paper (reference and Appendix) is removed.

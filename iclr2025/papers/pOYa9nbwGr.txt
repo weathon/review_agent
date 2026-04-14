@@ -1,0 +1,379 @@
+
+
+{0}------------------------------------------------
+
+# REDUCING TASK DISCREPANCY OF TEXT ENCODERS FOR ZERO-SHOT COMPOSED IMAGE RETRIEVAL
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Composed Image Retrieval (CIR) aims to retrieve a target image based on a reference image and conditioning text, enabling controllable image searches. Due to the expensive dataset construction cost for CIR triplets, a zero-shot (ZS) CIR setting has been actively studied to eliminate the need for human-collected triplet training datasets of the target domain. The mainstream methods of ZS-CIR research typically employ a projection module that projects a CLIP image embedding to the CLIP text token embedding space while all encoders are fixed. Using such a projected embedding, those methods then generate an image-text composed feature, which is used as a query for retrieval. However, we point out that using fixed CLIP encoders for ZS-CIR has an inherent limitation since there exists a significant task discrepancy between the original pre-training task of the encoders (text  $\leftrightarrow$  image) and the target CIR task (image + text  $\leftrightarrow$  image). To reduce such a discrepancy, a naïve solution would be to train both image and text encoders with CIR triplets in a supervised manner. Instead, we introduce the Reducing Task Discrepancy of text encoders for Zero-Shot Composed Image Retrieval (**RTD**), an efficient post-processing approach designed to enhance the capability of text encoders for ZS-CIR. Namely, we devise a novel target-anchored text contrastive learning, which solely updates the text encoder using cheap *text* triplets, consisting of reference and target texts instead of images. We also introduce two enhancements to this approach: a refined batch sampling strategy and a sophisticated concatenation scheme. Integrating RTD into existing projection-based ZS-CIR methods significantly improves performance across various datasets and backbones, achieving competitive or superior results compared to other resource-intensive state-of-the-art CIR methods beyond projection-based approaches.
+
+## 1 INTRODUCTION
+
+Composed Image Retrieval (CIR) is an emerging task aimed at retrieving a target image that closely resembles a reference image while reflecting the changes described in a conditioning text. Using a query composed of image and text allows users to conduct more precise and flexible searches by specifying the desired modifications to the image through text. Supervised CIR methods (Baldrati et al., 2022a; Delmas et al., 2022; Lee et al., 2021) have been introduced to fuse the information from the bi-modal query, using labeled data from the target domain in the form of triplets  $(I_r, T_c, I_t)$ , in which  $I_r$  is a reference image,  $T_c$  is a conditioning text, and  $I_t$  is a target image. However, unlike the typical web-crawled image-text datasets (Schuhmann et al., 2022b), acquiring sufficient triplets for training needs expensive manual human annotations. Hence, the existing CIR triplet datasets are typically small, limiting the capability of supervised approaches trained on such datasets.
+
+To overcome the dependency on small-scale, human-verified triplets of the target domain, a new task, Zero-Shot Composed Image Retrieval (ZS-CIR), has been recently introduced. The first approach for this task utilizes the power of recent vision-language (VL) generative models. For example, a line of studies (Gu et al., 2023; Ventura et al., 2024; Levy et al., 2024; Zhang et al., 2024) uses text-to-image models like IP2P (Brooks et al., 2023) to synthesize large-scale CIR triplets for training, in place of the target CIR triplet datasets. Another example can be found in CIR<sup>e</sup>VL (Karthik et al., 2023), which eliminates the need for training by using image captioning models and large-language models (LLM) during inference. While these methods achieve decent performance, they are impractical due to high computational and memory requirements for utilizing generative models.
+
+{1}------------------------------------------------
+
+![Figure 1: Diagram illustrating the task discrepancy between projection-based ZS-CIR methods and the CLIP pre-training task. The diagram is split into two main sections. On the left, the 'Projection-based ZS-CIR task' shows an image of a person with a dog being processed by a Visual Encoder (psi_v) and a projection module (phi) to produce a projected image embedding. Simultaneously, a 'Concatenated caption' (a photo of [S] that [T_c], where [S] is 'has a person and shows the sky in the background') is processed by a Text Encoder (psi_T) to produce a projected text embedding. These two embeddings are compared for 'Text-to-Image Retrieval', resulting in 'Aligned' (green double arrow) or 'Non-aligned' (dashed double arrow) states. On the right, the 'CLIP Pre-training task' shows an 'Ideal target caption' ('Under a clear sky, a person and a dog are playing with a frisbee') and a 'Target image' (the same person and dog) being processed by their respective encoders to produce embeddings that are naturally aligned. The diagram highlights that the ZS-CIR task uses a concatenated caption that may not perfectly describe the target image, leading to a discrepancy in alignment compared to the pre-training task.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+054  
+055  
+056  
+057  
+058  
+059  
+060  
+061  
+062  
+063  
+064  
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076  
+077  
+078  
+079  
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091  
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100  
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+Figure 1: Diagram illustrating the task discrepancy between projection-based ZS-CIR methods and the CLIP pre-training task. The diagram is split into two main sections. On the left, the 'Projection-based ZS-CIR task' shows an image of a person with a dog being processed by a Visual Encoder (psi\_v) and a projection module (phi) to produce a projected image embedding. Simultaneously, a 'Concatenated caption' (a photo of [S] that [T\_c], where [S] is 'has a person and shows the sky in the background') is processed by a Text Encoder (psi\_T) to produce a projected text embedding. These two embeddings are compared for 'Text-to-Image Retrieval', resulting in 'Aligned' (green double arrow) or 'Non-aligned' (dashed double arrow) states. On the right, the 'CLIP Pre-training task' shows an 'Ideal target caption' ('Under a clear sky, a person and a dog are playing with a frisbee') and a 'Target image' (the same person and dog) being processed by their respective encoders to produce embeddings that are naturally aligned. The diagram highlights that the ZS-CIR task uses a concatenated caption that may not perfectly describe the target image, leading to a discrepancy in alignment compared to the pre-training task.
+
+Figure 1: The task discrepancy of projection-based ZS-CIR methods between the pre-training task (image-text alignment) and the ZS-CIR task (image-text composition).
+
+The second approach for removing the dependency on the CIR triplet datasets, which has become the mainstream due to its simplicity, employs an integrable projection module on top of the pre-trained, frozen, and shared VL embedding space, such as CLIP (Radford et al., 2021). Namely, a projection module  $\phi$ , which maps a CLIP image embedding to the CLIP text token embedding space, can be trained by solely using images (Saito et al., 2023; Baldrati et al., 2023) or texts (Gu et al., 2024). During inference, as illustrated in Figure 1, these methods first project the embedding of the query image to a text token embedding  $[S]$  using the function  $\phi$ . This embedding is then combined with the conditioning text  $[T_c]$  to create the prompt “a photo of  $[S]$  that  $[T_c]$ ”, which is used as a query for the text-to-image retrieval.
+
+The core assumption of the above second approach, which often is referred to as projection-based ZS-CIR (Saito et al., 2023; Baldrati et al., 2023; Gu et al., 2024), is that the pre-trained text encoder should be robust enough to combine information from both the projected text token embedding and the conditioning text. However, we argue that this can cause significant *task discrepancy* for the pre-trained text encoder between the original image-text alignment pre-training task (of CLIP) and the ZS-CIR task. For example, in Figure 1, consider an *ideal caption* that accurately describes the target image. Since the CLIP text and image encoders are learned through contrastive learning, we can expect that the target image embedding (Fig. 1c) will align well with the embedding (Fig. 1b) of the ideal caption. In contrast, in the projection-based ZS-CIR, the text encoder receives a concatenated caption that combines the projected token  $[S]$  and the conditioning text, in place of the ideal caption. However, the text encoder typically is not trained to encode complex textual modifications—such as addition, negation, or spatial relationships—to the reference image, which are common in conditioning texts. As a result, there is no guarantee that the textual embedding of the concatenated caption (Fig. 1a) closely aligns with that of the target image embedding (Fig. 1c), which will undermine the final retrieval performance.
+
+To that end, we propose a post-processing approach that can be directly applied to existing projection-based ZS-CIR methods, reducing the task discrepancy of the text encoder only with *cheap text triplets*. These triplets  $(T_r, T_c, T_t)$  – in which  $T_r$ ,  $T_c$ , and  $T_t$  is a reference caption, a conditioning text, and a target caption, respectively – can be automatically generated without human labor (Liu et al., 2021; Wu et al., 2021) and intensive resources (Gu et al., 2023; Ventura et al., 2024; Levy et al., 2024; Zhang et al., 2024), but with simple rule-based templates and reference captions  $T_r$ . Using these triplets, we introduce a *target-anchored text contrastive learning*, which trains the text encoder to update the embeddings of the concatenated caption  $T_{r+c}$  (formed by concatenation of reference caption  $T_r$  and conditioning text  $T_c$ ) to align closely with the fixed embedding of the target caption  $T_t$ , which serves as an anchor point obtained from the frozen text encoder. We also propose two techniques to enhance the effectiveness of such language-only supervision further: a batch sampling strategy that incorporates hard negatives in each mini-batch and a refined concatenation scheme for  $T_r$  and  $T_c$  to improve generalization capability. We note our approach can be seamlessly integrated with existing projection-based ZS-CIR methods (Saito et al., 2023; Baldrati et al., 2023; Gu et al., 2024) by replacing their text encoder with our updated text encoder while fixing other modules, e.g., the image encoder and  $\phi$ . Moreover, our approach is highly efficient in the training process due to the benefits of language-only training, as highlighted by (Gu et al., 2024).
+
+{2}------------------------------------------------
+
+Our experimental results demonstrate that our proposed method, dubbed as **RTD** (Reducing Task Discrepancy of text encoders for Zero-Shot Composed Image Retrieval), substantially improves the ZS-CIR performance in diverse evaluation datasets (CIRR (Liu et al., 2021), CIRCO (Baldrati et al., 2023), FashionIQ (Wu et al., 2021), COCO object composition (Saito et al., 2023), and GeneCIS (Vaze et al., 2023)). Namely, when integrated into the existing projection-based ZS-CIR methods (SEARLE (Baldrati et al., 2023), Pic2Word (Saito et al., 2023), and LinCIR (Gu et al., 2024)), RTD consistently enhances performance across different size backbones, underscoring the generality of our approach. Compared to other CIR methods beyond projection-based ZS-CIR approaches, particularly those based on synthetic training CIR triplets, RTD delivers comparable or superior performance with significantly higher efficiency. Our systematic ablation analyses reveal that the performance enhancement primarily results from reducing the task discrepancy of the text encoder, rather than merely tuning the textual backbone network with additional data. We investigate the impact of various text triplet generation strategies and verify that RTD consistently improves ZS-CIR performances across them. Moreover, instead of updating all parameters of the text encoder, we show that a more efficient approach, which selectively updates only a few layers of the text encoder, can be effective as well.
+
+## 2 RELATED WORK
+
+**Projection-based ZS-CIR methods.** Pic2Word (Saito et al., 2023), SEARLE (Baldrati et al., 2023), and LinCIR (Gu et al., 2024), are built upon the frozen CLIP model, where a projection module  $\phi$  is trained without CIR triplets. Each projection-based CIR methods employ a different training scheme for  $\phi$  (See Section 4.1 for details). While these approaches demonstrate promising ZS-CIR performances, they are dependent on the pre-trained CLIP visual and text encoders, leading to a task discrepancy between the CLIP pretext task and the CIR task. In this paper, to address this, we devise an efficient text encoder-only updating scheme that utilizes *cheap* text triplets. While our method is built upon projection-based ZS-CIR methods, our approach is also related to another category of ZS-CIR methods (Gu et al., 2023; Ventura et al., 2024; Levy et al., 2024), using synthetically generated CIR triplets instead of the target CIR triplets, with some updating CLIP backbones. However, our method stands out by utilizing text triplets and updating only the text encoder, resulting in significantly more efficient training. Despite its efficiency, our method achieves performance that is competitive with, or even superior to, these other approaches.
+
+**Task discrepancy between the CLIP pretext task and CIR.** Combiner (Baldrati et al., 2022b) updates the text encoder to minimize the gap between the target caption feature and the summation of the reference image feature and the instruction text feature. However, Combiner needs expensive CIR triplets  $(I_r, T_c, I_t)$  for training. Our approach uses text-only triplets  $(T_r, T_c, T_t)$ , cheap and automatically generated. As another example, Chen & Lai (2023) synthesizes a triplet of an original image, the corresponding caption, and the masked image, where treating the original image as the target image, the caption as the conditioning text, and the masked image as the reference image. This approach, however, still has a gap between conditioning text (e.g., “change the dog to a cat”) and image caption (e.g., “a dog is jumping to catch a frisbee”); furthermore, it needs the full fine-tuning of the CLIP model, resulting in changing the visual embeddings in the retrieval database. On the other hand, RTD directly uses the instruction texts for training and does not change the target visual encoder, which enables the reuse of pre-extracted CLIP visual embeddings. Lastly, CIReVL (Karthik et al., 2023) reduces the task discrepancy by making a descriptive caption of the composed query using a large captioning model and LLM. Although CIReVL shows great performance without any training, this method needs inefficient and expensive inferences of BLIP (Li et al., 2023) and GPT (Brown et al., 2020). Furthermore, it needs a well-tuned task-specific prompt by a skilled user. RTD is much more efficient than CIReVL and fully automated without direct human intervention.
+
+## 3 MAIN METHOD
+
+### 3.1 OBTAINING TEXT TRIPLETS
+
+To address the task discrepancy described in the Introduction and Figure 1, we aim to employ text triplets  $(T_r, T_c, T_t)$ , which can be cheaply and automatically generated, instead of directly using
+
+{3}------------------------------------------------
+
+![Figure 2: Overview of RTD. The diagram illustrates the RTD framework, which includes Target-anchored text contrastive loss, Refined Batch Sampling, Simple Concatenation Scheme, and Refined Concatenation Scheme. It shows how text triplets (T_r, T_c, T_t) are processed through a concatenation module and text encoders to generate features for contrastive learning. The Refined Batch Sampling section shows a matrix of positive and hard negative samples. The Simple Concatenation Scheme shows a basic concatenation of T_r and T_c. The Refined Concatenation Scheme shows a more complex concatenation of T_r and T_c with noise and a projection module.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+The diagram illustrates the RTD framework. It is divided into four main components:
+
+- Target-anchored text contrastive loss:** Shows three text inputs:  $T_r$  ("A dog catching a frisbee"),  $T_c$  ("has a person and shows the sky in the background"), and  $T_t$  ("Under a clear sky, a person and a dog are playing with a frisbee").  $T_r$  and  $T_c$  are processed through a "Concatenation module" to produce  $T_{r+c}$ , which is then encoded by a "Text Encoder  $\psi_T^r$ " to produce  $\tilde{e}_{r+c}$ .  $T_t$  is encoded by a "Text Encoder  $\psi_T^t$ " to produce  $e_t$ . These features are used for "Target-anchored Contrastive Learning", visualized by a circle with a dashed line and a point.
+- Refined Batch Sampling:** Shows a matrix of positive and hard negative samples. The matrix has rows for  $T_r$ ,  $T_c$ , and  $T_t$ , and columns for  $T_r$ ,  $T_c$ , and  $T_t$ . The diagonal elements are positive (green), and the off-diagonal elements are hard negatives (red). The matrix is labeled "A dog catching a frisbee" for the rows and "A photo of S that [T\_r]" for the columns.
+- Simple Concatenation Scheme:** Shows  $T_{r+c}$  ("A dog catching a frisbee + has a person and shows the sky in the background") being processed by a "Text Encoder  $\psi_T^r$ " to produce  $e_{r+c}$ .
+- Refined Concatenation Scheme:** Shows  $T_r$  ("A dog catching a frisbee") being processed by a "Text Encoder  $\psi_T^r$ " to produce  $e_r$ .  $T_c$  ("has a person and shows the sky in the background") is processed by a "Text Encoder  $\psi_T^c$ " to produce  $e_c$ .  $e_r$  and  $e_c$  are combined with "noise" and a "projection module  $\phi$ " to produce  $T_{r+c}$  ("A photo of S that [T\_r] has a person and shows the sky in the background").
+
+Figure 2: Overview of RTD. The diagram illustrates the RTD framework, which includes Target-anchored text contrastive loss, Refined Batch Sampling, Simple Concatenation Scheme, and Refined Concatenation Scheme. It shows how text triplets (T\_r, T\_c, T\_t) are processed through a concatenation module and text encoders to generate features for contrastive learning. The Refined Batch Sampling section shows a matrix of positive and hard negative samples. The Simple Concatenation Scheme shows a basic concatenation of T\_r and T\_c. The Refined Concatenation Scheme shows a more complex concatenation of T\_r and T\_c with noise and a projection module.
+
+Figure 2: Overview of RTD.
+
+the expensive CIR triplets  $(I_r, T_c, I_t)$ . There are two strategies to generate these text triplets: via large language models (LLMs) (Gu et al., 2023; Brooks et al., 2023; Levy et al., 2024; Ventura et al., 2024) or, more efficiently, through rule-based templates (Gu et al., 2023). We investigate both generation strategies and demonstrate that RTD consistently improves performance across them. Below, we briefly introduce both strategies, with detailed explanations and examples provided in Appendix A.2, and a comprehensive comparison of generation costs is provided in Appendix C.
+
+For the LLM-generated text triplets, we use the public text triplets proposed by Compodiff (Gu et al., 2023), which are employed in our main experiments unless otherwise noted. These triplets are generated by taking a caption  $T_r$  as an input of the fine-tuned LLM, whose output predicts the corresponding conditioning text  $T_c$  and the target caption  $T_t$ . Other works, such as IP2P (Brooks et al., 2023), CoVR (Ventura et al., 2024), and CASE (Levy et al., 2024), have also explored generating text triplets using LLMs, differing in LLM model types, input data, and fine-tuning strategies. The original purpose of these text triplet generation is to construct CIR triplets  $(I_r, T_c, I_t)$ , but they also release their text triplets used for their CIR triplet construction. In addition to these publicly available text triplets, we also implement and evaluate an efficient in-context learning-based generation strategy using LLaMA3-8B (Dubey et al., 2024), which removes the need for a fine-tuning phase. We conduct experiments with all the aforementioned text triplets in Table 7 and observe that RTD consistently delivers significant performance enhancements, demonstrating the reproducibility and effectiveness of our approach.
+
+We also investigate LLM-less text triplet generation strategies. For example, we can extract a “keyword” (e.g., nouns) from a given caption and randomly change the keyword from a randomly chosen keyword (Gu et al., 2023). The modification caption is automatically generated by using predefined templates (e.g., “change [original keyword] to [altered keyword]”). Our experiments show that this simple rule-based approach performs similarly to the LLM-based approach.
+
+### 3.2 TARGET-ANCHORED TEXT CONTRASTIVE LEARNING
+
+Now, we explain our approach to update the text encoder for mitigating the task discrepancy solely with the generated text triplets  $(T_r, T_c, T_t)$ . We first assume that there exists a pre-trained projection module  $\phi$  obtained by the projection-based ZS-CIR methods (Saito et al., 2023; Baldrati et al., 2023; Gu et al., 2024). Recall that for a given reference image  $I_r$  and conditioning text  $T_c$ , the final composed feature is generated by passing the text prompt “a photo of  $\phi(\psi_V(I_r))$  that  $T_c$ ” to the text encoder  $\psi_T$ , where  $\psi_V$  is the visual encoder and  $\phi$  is the projection module (See Figure 1). We aim to update the text encoder  $\psi_T$  to reduce the discrepancy between the pretext task and ZS-CIR task using the text triplets while maintaining  $\psi_V$  and  $\phi$  frozen.
+
+**[Target-anchored text contrastive loss]** We apply contrastive learning using a paired caption  $(T_{r+c}, T_t)$ , where  $T_{r+c}$  denotes a concatenated caption of reference caption  $T_r$  and conditioning text  $T_c$ . Namely, we let the representation of the concatenated caption closely approximate that of the target caption. However, solely updating the text encoder while fixing the image encoder can break the alignment between image and text encoders. To prevent the issue, we extract the text
+
+{4}------------------------------------------------
+
+embedding of  $T_i$  using the frozen text encoder  $\psi_T$ , while the concatenated caption  $T_{r+c}$  is extracted from the learnable text encoder  $\psi_T^H$ , initialized from  $\psi_T$ . Here, we assume that as the target caption  $T_i$  is a standard caption, a text embedding  $\psi_T(T_i)$ , is well-aligned with the frozen image embedding space. Following the assumption, we fix the target textual embedding to serve as an anchor point. This approach helps maintain the pre-trained alignment while learning new relationships. As shown in Section 4.4, this anchoring is essential for fine-tuning the text encoder with our objective.
+
+Now, we introduce our target-anchored text contrastive loss  $\mathcal{L}_{TCL}$  using two text encoders: a frozen pre-trained text encoder  $\psi_T$  and a learnable text encoder  $\psi_T^H$  which is initialized with  $\psi_T$ . Textual latent embeddings  $\tilde{t}_{r+c}$  and  $t_i$  are extracted from  $\psi_T^H$  and  $\psi_T$ , respectively. Namely,  $\tilde{t}_{r+c} = \psi_T^H(E_w^H(T_{r+c}))$  and  $t_i = \psi_T(E_w(T_i))$ , where  $E_w$  is a word embedding layer. We aim to tune  $\psi_T^H$  to minimize the distance between the concatenated textual embedding  $\tilde{t}_{r+c}$  and the target textual embedding  $t_i$  while maximizing the distance from other textual embeddings within the batch. We employ a symmetric InfoNCE loss (Chen et al., 2020; Cohen et al., 2022), as follows:
+
+$$\mathcal{L}_{TCL} = \frac{1}{B} \sum_{k=1}^B -\log \frac{e^{c(\tilde{t}_{r+c}^k, t_i^k)/\tau}}{\sum_{j=1}^B e^{c(\tilde{t}_{r+c}^k, t_i^j)/\tau} + \sum_{j \neq k}^B e^{c(t_i^k, t_i^j)/\tau}} - \log \frac{e^{c(t_i^k, \tilde{t}_{r+c}^k)/\tau}}{\sum_{j=1}^B e^{c(t_i^k, \tilde{t}_{r+c}^j)/\tau} + \sum_{j \neq k}^B e^{c(\tilde{t}_{r+c}^k, \tilde{t}_{r+c}^j)/\tau}} \quad (1)$$
+
+where  $c(\cdot, \cdot)$  denotes the cosine similarity,  $B$  is the batch size, and  $\tau$  is a temperature.
+
+**[Refined batch sampling strategy for hard negatives]** To further enhance the efficacy of updating the text encoder, we devise a simple yet effective batch sampling strategy that incorporates pairs of  $(T_{r+c}, T_i)$  and  $(T_r, T_r)$  within the same batch. For example, as presented in Figure 2, a pair such as  $(T_{r+c}$ : "A dog catching a frisbee + has a person and shows in the background",  $T_i$ : "Under a clear sky, a person and a dog are playing with a dog") is sampled along with its corresponding reference pair  $(T_r$ : "A dog catching a frisbee",  $T_r$ : "A dog catching a frisbee") in the same batch. This setup ensures that the concatenated text  $T_{r+c}$  and its corresponding reference text  $T_r$  implicitly act as hard negatives for each other, as their semantics are much more similar  $(T_{r+c}$  is derived from  $T_r$ ) than those of other randomly sampled texts in the batch. Moreover, we believe including  $(T_r, T_r)$  pairs in the contrastive learning helps the learnable text encoder  $\psi_T^H$  remain closely aligned with the pre-trained encoder  $\psi_T$ .
+
+**[Refined concatenation of reference and conditioning texts]** A naive concatenation strategy also can suffer from training-inference task discrepancy because we actually use "a photo of [S] that  $[T_c]$ " for inference. To tackle this issue, rather than simply concatenating the  $T_r$  and  $T_c$ , we also use the prompt "a photo of [S] that  $[T_c]$ " for updating the text encoder, where [S] is obtained by the reference caption  $T_r$  with the projection module  $\phi$ . Instead of obtaining a pseudo-word token with latent image embedding  $v$ , we utilize a textual latent embedding from the reference caption  $T_r$ , i.e.,  $\phi(t_r)$ . However, Gu et al. (2024) showed that naively replacing the image encoder with the text encoder for the input of  $\phi$  will suffer from the modality gap (Liang et al., 2022), a phenomenon where text and image embeddings have a gap between them. Thus, to reduce the potential negative effect of the modality gap, following Gu et al. (2024), we inject random noise into the textual token representation before it is processed by  $\phi$ . More analyses on variations of noise are in Appendix B.6.
+
+Figure 2 illustrates the overview of RTD. We use CLIP backbone and pre-trained projection module  $\phi$  produced by the existing projection-based ZS-CIR methods. The text encoder is trained using the proposed loss function (Eq. (1)) while applying the refined batch sampling and concatenation scheme. During inference, the procedure mirrors that of existing ZS-CIR methods, except we utilize the updated text encoder  $\psi_T^H$  instead of the frozen one  $\psi_T$ . Note that our method only updates the text encoder while the image encoder and the projection module are frozen.
+
+**Remark.** We note that our entire training process is highly efficient due to the advantages of language-only training as highlighted by Gu et al. (2024). First, the generation cost of text triplets we use is significantly lower than that of CIR triplets. Namely, text triplet generation avoids resource-intensive text-to-image generation (Gu et al., 2023; Brooks et al., 2023), making it 15 times faster than CIR triplet generation, in the process used in CompoDiff (Gu et al., 2023). If we opt for the rule-based text triplet generation approach, efficiency is further enhanced by eliminating the LLM fine-tuning and generation steps, making the process 570 times faster—generating 1M text
+
+{5}------------------------------------------------
+
+triplets takes just 0.1 hours—compared to the CIR triplet generation case. Moreover, the text triplets we used take up only 100MB, whereas storing a similar quantity of images requires significantly more space (e.g., around 400GB in the case of CC3M (Sharma et al., 2018)). Second, the training complexity for the text encoder is substantially lower than that for the visual encoder due to the relatively short token lengths of texts ( $\sim 12$ ) compared to images (256). The average inference time of the CLIP ViT-L/14 image encoder is  $\times 3.5$  times slower than that of the text encoder. As a result, the additional training cost of RTD is small: 0.5 hours using 8 A100 for CLIP ViT-L/14, which is reasonable compared to the original training times of projection-based ZS-CIR methods: LinCIR (0.5 hours), SEARLE (4.3 hours), and Pic2Word (3 hours). Further details and analyses on training efficiency are provided in Appendix C. Moreover, in Appendix B.3, we present a more efficient implementation option by selectively updating only a few layers of the text encoder.
+
+### 3.3 CAN RTD REALLY REDUCE THE TASK DISCREPANCY OF THE TEXT ENCODER?
+
+In this subsection, we quantitatively verify whether RTD indeed reduces the task discrepancy. We first conduct a toy experiment that measures the text-to-image (T2I) retrieval performance of the text encoder with conditional texts. We retrieve the target images  $I_t$  with the concatenated text query  $T_{r+c}$  or the ideal target caption  $T_t$ . If our text encoder successfully handles the discrepancy due to the concatenated caption, the text encoder updated by RTD will perform better than the frozen one. We use the CLIP ViT-L/14 and CIRCO (Baldrati et al., 2023) validation dataset for evaluation. Since the CIRCO dataset only has CIR triplets  $(I_r, T_c, I_t)$ , we use the BLIP (Li et al., 2022) captioner to generate  $T_r$  and  $T_t$  corresponding to the  $I_r$  and  $I_t$ , respectively. Here, the simple concatenation scheme is applied for the text query  $T_{r+c}$  in all cases for a fair comparison. Table 1 shows that when the text encoder is frozen, the retrieval results using the concatenated caption  $T_{r+c}$  are significantly worse than those using the target caption  $T_t$ . It supports the claim that the frozen text encoder suffers from the negative effects of task discrepancy between the pretext task and the CIR task. In contrast, the text encoder updated by RTD shows a significant improvement over the frozen text encoder, showing that it successfully reduces the task discrepancy.
+
+Table 1: T2I retrieval performance of different text encoders on CIRCO validation dataset.
+
+| Query | Text encoder | mAP@5 | mAP@10 | mAP@25 |
+|-|-|-|-|-|
+| $T_t$ | Frozen | 18.96 | 19.31 | 21.05 |
+| $T_{r+c}$ | Frozen | 10.12 | 10.71 | 12.34 |
+| $T_{r+c}$ | RTD | 15.12 | 15.80 | 17.77 |
+
+We additionally measure the average cosine similarity between the composed textual features with the prompt “a photo of  $\phi(\psi_V(I_r))$  that  $T_c$ ” (Fig. 1a) and the target image features (Fig. 1c). The similarity is measured by the LinCIR ViT-L/14 model on the CIRCO validation split. When we use the frozen CLIP text encoder ( $\psi_T$ ), the average similarity is 0.1. By changing the text encoder to our updated text encoder ( $\psi_T^{\text{RTD}}$ ), the similarity becomes 0.29 (+0.19). This result shows again that RTD successfully aligns the composed query features using  $\phi$  to the frozen CLIP image features.
+
+Lastly, since RTD updates the text encoder backbone (unlike prior projection-based ZS-CIR methods that freeze both backbones), some may question whether the performance gains are due to reducing task discrepancy or simply from updating the text encoder. As will be shown in Table 8, the effectiveness of RTD comes from reducing task discrepancy, not from simple text encoder backbone tuning. We will further elaborate on this point in Section 4.5.
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETUP
+
+**Implementation details.** We use the AdamW optimizer (Loshchilov & Hutter, 2019) with a weight decay of 0.01. The learning rate is set to  $10^{-5}$ , with a batch size of 512. For a fair comparison, we select the text encoder model with the best zero-shot CIRR (Liu et al., 2021) dev R@1 score for evaluating RTD. We evaluate the CIR performances of the model in a zero-shot manner by evaluating it across five different benchmarks. We mainly use the visual and textual encoders of the CLIP ViT-B/32 and ViT-L/14 (Radford et al., 2021) as our backbone. Unless otherwise noted, we use LLM-based 2.5M text triplets provided by CompoDiff (Gu et al., 2023) for the training. We set the  $\tau$  as 0.07 in Eq. (1) and scale the standard deviation of Gaussian distribution as 0.5 for the noise
+
+{6}------------------------------------------------
+
+324  
+325  
+326  
+327  
+328  
+329  
+330  
+331  
+332  
+333  
+334  
+335  
+336  
+337  
+338  
+339  
+340  
+341  
+342  
+343  
+344  
+345  
+346  
+347  
+348  
+349  
+350  
+351  
+352  
+353  
+354  
+355  
+356  
+357  
+358  
+359  
+360  
+361  
+362  
+363  
+364  
+365  
+366  
+367  
+368  
+369  
+370  
+371  
+372  
+373  
+374  
+375  
+376  
+377
+
+**Table 2: FashionIQ validation results.** The results of RTD combined with Pic2Word (Saito et al., 2023), SEARLE (Baldrati et al., 2023), and LinCIR (Gu et al., 2024) across different CLIP backbones (ViT-B/32 and ViT-L/14) are shown. **Blue** denotes the performance gain achieved by RTD.
+
+|  |  | Shirt |  | Dress |  | Toptee |  | Average |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  | R@10 | R@50 | R@10 | R@50 | R@10 | R@50 | R@10 | R@50 |
+| ViT-B/32 | Pic2Word | 13.40 | 28.46 | 8.48 | 20.77 | 13.31 | 29.68 | 11.73 | 26.30 |
+|  | +RTD | 23.06 <b>(+9.66)</b> | 40.48 <b>(+12.02)</b> | 20.33 <b>(+11.85)</b> | 41.75 <b>(+20.98)</b> | 24.12 <b>(+10.81)</b> | 46.35 <b>(+16.67)</b> | 22.5 <b>(+10.77)</b> | 42.86 <b>(+16.56)</b> |
+|  | SEARLE | 24.78 | 41.85 | 17.90 | 36.99 | 25.24 | 46.71 | 22.64 | 41.85 |
+|  | +RTD | 26.69 <b>(+1.91)</b> | 44.31 <b>(+2.46)</b> | 20.72 <b>(+2.82)</b> | 43.13 <b>(+6.14)</b> | 26.67 <b>(+1.43)</b> | 48.75 <b>(+2.04)</b> | 24.7 <b>(+2.06)</b> | 45.4 <b>(+3.55)</b> |
+| ViT-L/14 | LinCIR | 18.55 | 34.64 | 15.67 | 33.86 | 20.19 | 40.08 | 18.14 | 36.20 |
+|  | +RTD | 23.65 <b>(+5.10)</b> | 42.74 <b>(+8.10)</b> | 19.98 <b>(+4.31)</b> | 41.75 <b>(+7.89)</b> | 24.73 <b>(+4.54)</b> | 46.56 <b>(+6.48)</b> | 22.79 <b>(+4.65)</b> | 43.68 <b>(+7.48)</b> |
+|  | Pic2Word | 26.59 | 42.93 | 21.32 | 43.53 | 28.10 | 48.19 | 25.34 | 44.88 |
+|  | +RTD | 27.97 <b>(+1.38)</b> | 46.96 <b>(+4.03)</b> | 23.50 <b>(+2.18)</b> | 46.65 <b>(+3.12)</b> | 31.31 <b>(+3.21)</b> | 53.09 <b>(+4.90)</b> | 27.59 <b>(+2.25)</b> | 48.90 <b>(+4.02)</b> |
+| ViT-L/14 | SEARLE | 26.94 | 45.34 | 19.58 | 40.80 | 28.45 | 49.77 | 24.99 | 45.30 |
+|  | +RTD | 32.63 <b>(+5.69)</b> | 50.39 <b>(+5.05)</b> | 23.2 <b>(+3.62)</b> | 47.25 <b>(+6.45)</b> | 32.18 <b>(+3.73)</b> | 54.56 <b>(+4.79)</b> | 29.34 <b>(+4.35)</b> | 50.73 <b>(+5.43)</b> |
+|  | LinCIR | 30.42 | 47.99 | 21.86 | 44.77 | 29.98 | 50.38 | 27.42 | 47.71 |
+|  | +RTD | 32.83 <b>(+2.41)</b> | 50.44 <b>(+2.45)</b> | 24.49 <b>(+2.63)</b> | 48.24 <b>(+3.47)</b> | 33.4 <b>(+3.42)</b> | 54.56 <b>(+4.18)</b> | 30.24 <b>(+2.82)</b> | 51.08 <b>(+3.37)</b> |
+
+injection. More results on various noise distributions can be found in the Appendix. All experiments were conducted using four NVIDIA A100 GPUs with Python 3.8 and Pytorch (Paszke et al., 2019).
+
+**Evaluation datasets and metrics.** We compare ZS-CIR methods on five benchmark datasets: CIRR (Liu et al., 2021), CIRCO (Baldrati et al., 2023), FashionIQ (Wu et al., 2021), COCO object composition (Saito et al., 2023), and GeneCIS (Vaze et al., 2023). Details of each dataset are in the Appendix A.1. For CIRR, FashionIQ, COCO, and GeneCIS, we have reported their recall scores at the top K retrieval results (R@K). Since the CIRCO dataset includes multiple positive images for each query, we use a ranking-based metric—mean Average Precision scores at the top K results (mAP@K)—which provides a more robust and reliable assessment (Musgrave et al., 2020; Chun et al., 2022). For the main results, we compare the results on the three categories (Shirt, Dress, Toptee) of the FashionIQ validation split, as well as the test sets of CIRR and CIRCO. For the ablation studies and analyses, the validation splits of these three datasets are utilized. GeneCIS and COCO object composition results and their detailed explanations can be found in the Appendix B.1.
+
+**Baselines.** We evaluate the effect of our method when combined with three representative projection-based ZS-CIR methods: Pic2Word (Saito et al., 2023), SEARLE (Baldrati et al., 2023), and LinCIR (Gu et al., 2024). All three methods share the same core concept shown in Figure 1, but use different training schemes. Pic2Word (Saito et al., 2023) optimizes contrastive loss between the image embedding and its projected text embedding of “a photo of [S]” to obtain the projection module  $\phi$ . Similarly, SEARLE (Baldrati et al., 2023) employs a two-stage approach, starting with an optimization-based textual inversion phase followed by a distillation phase for the projection module  $\phi$ . LinCIR (Gu et al., 2024) introduces a language-only self-supervised task involving keyword token replacement by letting the original text embedding and the replaced text embedding whose keyword tokens are changed to the projected original text embedding by  $\phi$ .
+
+We train all these methods with the same backbone (CLIP ViT-B/32 and ViT-L/14). For LinCIR, we also conduct experiments with a larger backbone (ViT-G/14), enabled by its fast training capability. We use the publicly available pre-trained model for SEARLE (ViT-B/32, ViT-L/14) and Pic2Word (ViT-L/14). Otherwise, we reproduce the results using the official implementation. When reproducing, we adhere to the same settings in the original papers. For example, we select the final last epoch model for the Pic2Word ViT-B/32 model and choose the model based on the best zero-shot CIRR dev R@1 score for LinCIR. Moreover, we compare our method with a broader range of CIR methods: (1) recent projection-based ZS-CIR methods: KEDs (Suo et al., 2024), Context-I2W (Tang et al., 2024), (2) attempt to tackle task discrepancy: MTCIR (Chen & Lai, 2023), (3) synthetically generated CIR triplets-based approach: CoVR (Ventura et al., 2024), CASE (Levy et al., 2024), Compodiff (Gu et al., 2023), and (4) training-free approach: CIReVL (Karthik et al., 2023).
+
+### 4.2 MAIN RESULTS: INTEGRATION WITH ZS-CIR METHODS
+
+Table 2 summarizes the evaluation results on the FashionIQ dataset. In the table, we observe that the incorporation of our approach with ZS-CIR methods significantly improves the performance across all three existing ZS-CIR methods (SEARLE, Pic2Word, and LinCIR) and all backbones (ViT-B/32 and ViT-L/14). For example, regardless of the choice of ZS-CIR methods and backbones, the
+
+{7}------------------------------------------------
+
+Table 3: **CIRR and CIRCO test results.** Details are the same as Table 2.
+
+|  |  | CIRR |  |  | CIRCO |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  |  | R@1 | R@5 | R@10 | mAP@5 | mAP@10 | mAP@25 | mAP@50 |
+| ViT-B/32 | Pic2Word | 13.64 | 37.45 | 52.22 | 2.85 | 3.24 | 3.89 | 4.31 |
+|  | +RTD | 23.59 (+9.95) | 51.76 (+14.31) | 65.16 (+12.94) | 6.39 (+3.54) | 6.66 (+3.42) | 7.64 (+3.75) | 8.16 (+3.85) |
+|  | SEARLE | 23.71 | 53.3 | 66.84 | 8.90 | 9.42 | 10.64 | 11.34 |
+|  | +RTD | 26.29 (+2.58) | 56.41 (+3.11) | 69.74 (+2.90) | 11.26 (+2.36) | 12.11 (+2.69) | 13.63 (+2.99) | 14.37 (+3.03) |
+| ViT-L/14 | LinCIR | 18.87 | 45.66 | 66.46 | 6.25 | 6.74 | 7.62 | 8.10 |
+|  | +RTD | 24.82 (+5.95) | 53.47 (+7.81) | 66.87 (+8.44) | 8.94 (+2.69) | 9.35 (+2.61) | 10.57 (+2.95) | 11.21 (+3.11) |
+|  | Pic2Word | 24.22 | 51.49 | 64.05 | 8.27 | 9.10 | 10.09 | 10.75 |
+|  | +RTD | 27.86 (+3.64) | 56.24 (+4.75) | 68.48 (+4.43) | 9.13 (+0.86) | 9.63 (+0.53) | 10.68 (+0.59) | 11.27 (+0.52) |
+|  | SEARLE | 24.89 | 52.31 | 65.69 | 11.62 | 12.72 | 14.33 | 15.13 |
+|  | +RTD | 26.63 (+1.74) | 56.17 (+3.86) | 68.96 (+3.27) | 16.53 (+4.91) | 17.89 (+5.17) | 19.77 (+5.44) | 20.68 (+5.55) |
+|  | LinCIR | 23.76 | 52.89 | 66.46 | 13.00 | 14.11 | 15.81 | 16.68 |
+|  | +RTD | 26.63 (+2.87) | 56.17 (+3.28) | 68.96 (+2.50) | 17.11 (+4.11) | 18.11 (+4.00) | 20.06 (+4.25) | 21.01 (+4.33) |
+
+Table 4: **Results on larger backbone.** LinCIR with OpenCLIP ViT-G/14 (Ilharco et al., 2021). We use the FashionIQ validation split, as well as the test splits of CIRR and CIRCO, for evaluation.
+
+| Method | CIRR |  | CIRCO |  | FashionIQ |  | Avg |
+|-|-|-|-|-|-|-|-|
+|  | R@5 | R@10 | mAP@10 | mAP@25 | R@10 | R@50 |  |
+| LinCIR | 64.51 | 76.12 | 21.93 | 24.12 | 44.53 | 65.53 | 49.46 |
+| +RTD | <b>67.47 (+2.96)</b> | <b>78.31 (+2.19)</b> | <b>22.29 (+0.36)</b> | <b>24.46 (+0.34)</b> | <b>46.21 (+1.68)</b> | <b>67.26 (+1.73)</b> | <b>50.99 (+1.53)</b> |
+
+minimum performance gain for average R@10 and R@50 scores is greater than 2 and 3.5 points, respectively. Table 3 shows a similar trend on the CIRR and CIRCO datasets. Notably, in some metrics on the CIRR and CIRCO datasets, the performance improvements achieved through our method (ViT-B/32) even exceed those obtained by employing a larger backbone (ViT-L/14), which demonstrates the effect of our method. Specifically, in the CIRR R@1 score, SEARLE + RTD (26.29) and LinCIR + RTD (24.82) using ViT-B/32 surpasses the original results of SEARLE (24.89) and LinCIR (23.76) using ViT-L/14. We verify that a similar tendency is observed in the GeneCIS and COCO object composition task datasets, as detailed in the Appendix.
+
+We further evaluate the performance of RTD using the significantly larger backbone (ViT-G/14). In Table 4, combining RTD and LinCIR (chosen due to its fast training capabilities) achieves strong ZS-CIR performances on all benchmarks. Details and the full results are provided in the Appendix B.2. We also provide additional qualitative retrieval results in the Appendix D.
+
+### 4.3 MAIN RESULTS: COMPARISON WITH STATE-OF-THE-ARTS
+
+Table 5 shows the overview of comparison results with state-of-the-art CIR methods. First, we observe that LinCIR + RTD outperforms recent projection-based ZS-CIR methods (KEDs and Context-I2W), which use external knowledge databases or complex projection modules. Additionally, RTD even can also be integrated with them. We conduct experiments only with Context-I2W since KEDs do not provide pre-trained weights, and observe that Context-I2W + RTD considerably enhances the performance of Context-I2W, further demonstrating the compatibility of RTD. Second, RTD offers competitive performance while being more computationally efficient compared to MT-CIR, which shares a similar motivation, and methods that rely on synthetically generated CIR triplets (CoVR, CASE, and Compodiff). As noted in the Remark section (Section 3), using images during training incurs significant overhead due to the slow inference time of the image encoder (slower than the text encoder). Note that methods like MTCIR and those utilizing synthetic CIR triplets require the forwarding passes of the image encoder during training. Moreover, as detailed in Appendix C, the cost of generating synthetic CIR triplets is notably high, while MT-CIR and CASE necessitate additional updating of the visual features in the retrieval database. In contrast, RTD requires only *cheap* text triplets, without the need for retrieval updates or forwarding passes of the image encoder during training. Third, LinCIR + RTD outperforms training-free CIREVL, whose inference time is 79 times slower and 13 times higher memory usage than existing projection-based methods (including RTD) due to the use of costly inferences from image captioners and LLMs. Note that the incorporation of RTD does not increase inference time because there is no change in the model architecture. Lastly, LinCIR + RTD (CLIP ViT-G) ranks high in every benchmark compared to all other methods. We believe the scalability of RTD, enabling the use of a larger backbone (ViT-G/14), further highlights the simplicity and efficiency, as it also benefits from the language-only training approach highlighted
+
+{8}------------------------------------------------
+
+Table 5: **Comparison with other baselines.** In the “Training data type” column, “ $I$ ” and “ $T$ ” denote conventional pair-based images and their corresponding captions (not triplets). Note that this comparison is not entirely fair due to differences in backbone models and training data across categories. The same evaluation datasets are used as in Table 4. Best scores are highlighted in red.
+
+| Category | Method | Arch | Training data type | CIRR |  | CIRCO |  | FashionIQ |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  |  |  | R@5 | R@10 | mAP@10 | mAP@25 | R@10 | R@50 |
+| (1) | KEDs (Suo et al., 2024) | CLIP ViT-L | $I, T$ | 54.8 | 67.2 | - | - | 26.8 | 47.9 |
+|  | Context-I2W (Tang et al., 2024) | CLIP ViT-L | $I$ | 55.4 | 68.6 | - | - | 27.9 | 49.1 |
+|  | Context-I2W + RTD | CLIP ViT-L | $(T_r, T_c, T_t)$ | 58.4 | 70.5 | - | - | 28.1 | 49.5 |
+|  | LinCIR | CLIP ViT-L | $T$ | 52.9 | 66.5 | 14.1 | 15.8 | 27.4 | 47.7 |
+|  | LinCIR + RTD | CLIP ViT-L | $(T_r, T_c, T_t)$ | 56.2 | 69.0 | 18.1 | 20.1 | 30.2 | 51.1 |
+|  | LinCIR | CLIP ViT-G | $T$ | 64.5 | 76.1 | 21.9 | 24.1 | 44.5 | 65.5 |
+| (2) | LinCIR + RTD | CLIP ViT-G | $(T_r, T_c, T_t)$ | 67.5 | 78.3 | 22.3 | 24.5 | 46.2 | 67.3 |
+|  | MT-CIR (Chen & Lai, 2023) | CLIP ViT-L | $I, T$ | 54.6 | 67.6 | 11.6 | 13.0 | 35.4 | 57.4 |
+| (3) | Compodiff (Gu et al., 2023) | CLIP ViT-L | $(I_r, T_c, I_t)$ | 55.0 | 72.6 | 13.4 | 15.8 | 36.0 | 48.6 |
+|  | CoVR (Ventura et al., 2024) | BLIP ViT-L | $(I_r, T_c, I_t)$ | 68.2 | 78.9 | - | - | 27.7 | 44.6 |
+| (4) | CASE (Levy et al., 2024) | BLIP ViT-L | $(I_r, T_c, I_t)$ | 65.8 | 78.5 | - | - | - | - |
+|  | CIRgVL (Karthik et al., 2023) | CLIP ViT-L | $\star$ | 52.3 | 64.9 | 19.0 | 20.9 | 28.6 | 48.6 |
+
+in LinCIR (Gu et al., 2024). Considering the strong performance and practical advantages (efficient training and inference), we believe RTD stands for a promising direction in the CIR domain.
+
+### 4.4 ABLATION STUDIES
+
+Table 6 presents the effectiveness of the proposed components: target-anchored text contrastive loss (TCL), refined batch sampling (RB), and refined concatenation scheme (RC). All evaluation results are on the validation splits. All model variants use ViT-L/14 and a projection module  $\phi$  from LinCIR, making the results in row 1 indicative of the original performance of LinCIR. We first compare the impact of the text pairs fed into TCL loss. We compare our design choice  $(T_{r+e}, T_t)$  (from the generated text triplets) with  $(T_r, T_t)$ , which is the sole option for constructing a pair giving a single conventional caption  $T_r$ . The results demonstrate that, on average, using generated triplets (3rd row) is more effective than using original conventional text pairs (2nd row), particularly in the CIRR and CIRCO datasets. In addition, RB (4th row) and RC (6th row) significantly enhance the overall performance, demonstrating the effectiveness of these components. Finally, we measure the impact of using the frozen text encoder for target caption  $T_t$ , denoted as “Anchor” in the table. Significant performance degradation is observed when the learnable text encoder is used for extracting the embedding of the target caption  $T_t$  (5th row) compared to the target-anchored case (4th row), supporting the importance of the anchoring design choice.
+
+Table 6: **Ablation study.** Unlike in Tables 2 to 5, for ablation studies and analyses, validation splits of three CIR datasets are used for evaluation. We measure the impact of TCL loss (Eq. (1)), refined batch sampling (RB), and refined concatenation scheme (RC). All models are based on LinCIR ViT-L/14. The first row denotes the vanilla LinCIR without RTD.
+
+| TCL |  | RB | RC | CIRR |  | CIRCO |  | FashionIQ |  | Avg |
+|-|-|-|-|-|-|-|-|-|-|-|
+| Text pair | Anchor |  |  | R@5 | R@10 | mAP@10 | mAP@25 | R@10 | R@50 |  |
+| - | - | $\times$ | $\times$ | 54.29 | 67.76 | 12.67 | 14.45 | 27.42 | 47.71 | 37.38 |
+| $(T_r, T_t)$ | $\checkmark$ | $\times$ | $\times$ | 55.99 | 69.72 | 13.40 | 15.18 | 28.16 | 48.82 | 38.54 |
+| $(T_{r+e}, T_t)$ | $\checkmark$ | $\checkmark$ | $\times$ | <b>58.19</b> | <b>71.54</b> | 14.36 | 16.03 | 26.93 | 47.94 | 39.17 |
+| $(T_{r+e}, T_t)$ | $\checkmark$ | $\checkmark$ | $\times$ | <b>58.19</b> | 71.27 | 14.96 | 16.67 | 27.42 | 49.33 | 39.64 |
+| $(T_{r+e}, T_t)$ | $\times$ | $\checkmark$ | $\times$ | 54.34 | 66.97 | 12.23 | 13.64 | 25.02 | 45.31 | 36.25 |
+| $(T_{r+e}, T_t)$ | $\checkmark$ | $\checkmark$ | $\checkmark$ | 57.90 | 71.13 | <b>16.10</b> | <b>17.84</b> | <b>30.24</b> | <b>51.08</b> | <b>40.72</b> |
+
+### 4.5 MORE ANALYSES ON RTD
+
+Here, we show more analyses on RTD with the same setting to Table 6. Namely, we use the same evaluation dataset, ViT-L/14 CLIP backbone, and a projection module  $\phi$  from LinCIR.
+
+**[Impact of the text triplet generation strategies]** As explained in Section 3.1, we evaluate RTD using both 1) publicly available LLM-based text triplets (from IP2P, Compodiff, CoVR, and CASE) along with efficient in-context learning-based text triplets, and 2) LLM-free, rule-based triplets.
+
+{9}------------------------------------------------
+
+Table 7: **The effectiveness of different types of text triplets for RTD.** “Efficient in-context learning” denotes an efficient implementation using in-context learning with LLaMA3-8B, without a fine-tuning phase. Details and examples of each text triplet dataset are summarized in Table A.1 and Table A.2, respectively. Other details are the same as Table 6.
+
+| Method | Text Triplet Datasets | Use LLM | CIRR |  | CIRCO |  | FashionIQ |  | Avg |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  |  | R@5 | R@10 | mAP@10 | mAP@25 | R@10 | R@50 |  |
+| LinCIR | - | - | 54.29 | 67.76 | 12.67 | 14.45 | 27.42 | 47.71 | 37.38 |
+| +RTD | Rule-based | ✗ | 56.71 | 70.34 | 15.01 | 16.98 | 30.37 | 51.94 | 40.23 (+ 2.85) |
+|  | IP2P (Brooks et al., 2023) | ✓ | 58.65 | 71.59 | 15.94 | 17.97 | 29.62 | 50.67 | 40.67 (+ 3.29) |
+|  | CompoDiff (Gu et al., 2023) | ✓ | 57.90 | 71.13 | 16.10 | 17.84 | 30.24 | 51.08 | 40.72 (+ 3.34) |
+|  | Efficient in-context learning | ✓ | 59.27 | 71.78 | 15.81 | 17.45 | 29.69 | 51.44 | 40.91 (+ 3.53) |
+|  | CoVR (Ventura et al., 2024) | ✓ | 59.82 | 72.64 | 15.35 | 17.01 | 29.58 | 50.79 | 41.86 (+ 4.48) |
+|  | CASE (Levy et al., 2024) | ✓ | 56.28 | 69.29 | 11.13 | 12.66 | 26.63 | 47.78 | 37.69 (+ 0.31) |
+
+Table 8: **Impact of the update scheme.** Two update schemes are compared: (1) using the original objective from baseline and (2) using RTD. For a fair comparison, in both schemes,  $\phi$  is updated first and  $\psi_T$  is updated top on the frozen modules. Other details are the same as Table 6.
+
+|  | CIRR |  | CIRCO |  | FashionIQ |  | Avg |
+|-|-|-|-|-|-|-|-|
+|  | R@5 | R@10 | mAP@10 | mAP@25 | R@10 | R@50 |  |
+| Baseline(Pic2Word) | 51.40 | 64.43 | 8.77 | <b>10.12</b> | 25.34 | 44.88 | 32.15 |
+| +naïve tuning | 19.21 | 27.51 | 1.29 | 1.61 | 4.4 | 11.15 | 10.86 |
+| + RTD | <b>56.64</b> | <b>69.77</b> | <b>8.83</b> | 9.81 | <b>27.59</b> | <b>48.90</b> | <b>36.92</b> |
+| Baseline(LinCIR) | 54.29 | 67.76 | 12.67 | 14.45 | 27.42 | 47.71 | 36.86 |
+| +naïve tuning | 52.67 | 66.78 | 11.40 | 12.99 | 26.34 | 45.92 | 35.52 |
+| + RTD | <b>57.90</b> | <b>71.13</b> | <b>16.10</b> | <b>17.84</b> | <b>30.24</b> | <b>51.08</b> | <b>40.72</b> |
+
+Table 7 shows that RTD consistently improves ZS-CIR performance across them (+3.29 for IP2P, +3.34 for CompoDiff, +3.53 for in-context learning, +4.48 for CoVR, and +0.31 for CASE, and rule-based triplets achieve 2.85, respectively). We believe this result demonstrates the reproducibility and consistency of RTD, with the rule-based triplets performing comparably to LLM-generated ones, indicating that efficient rule-based triplets are sufficient to achieve strong ZS-CIR performance. The marginal improvement in CASE is largely due to the poor quality of text triplets resulting from its construction pipeline that prioritizes CIR triplet quality over text triplet quality, as shown in Table A.1. Further details can be found in Appendix A.2, and additional analyses, including data scales related to text triplets, are provided in Appendix B.4.
+
+**[Impact of the update scheme for the text encoder]** To verify that our improvements cannot be achievable solely by tuning the text encoder backbone without considering the task discrepancy, we additionally measure the results of previous methods (Pic2Word and LinCIR) when naively updating text encoders. Namely, after training  $\phi$  while keeping all other networks frozen as in previous methods, we additionally update the text encoder using the original loss function, while fixing other modules including  $\phi$ . We denote this update rule as “naïve tuning” in the Table 8. Unlike RTD, we observe that just naively updating the text encoder (“naïve tuning”) significantly degrades the performance of the baseline. The results indicate that merely updating the text backbone is not beneficial for ZS-CIR; instead, mitigating task discrepancy through RTD is necessary.
+
+## 5 CONCLUSION
+
+Our research presents RTD, a novel post-processing approach that is easily integrable into existing projection-based ZS-CIR methods, aimed at enhancing text encoder capabilities. By leveraging easily obtainable text triplets, RTD addresses the challenges posed by task discrepancies in these ZS-CIR methods. Empirical evaluations demonstrate that RTD significantly boosts the performance of existing projection-based ZS-CIR methods across diverse datasets and model backbones, competing with or outperforming other state-of-the-art CIR methods beyond projection-based approaches with much greater efficiency, underscoring its effectiveness and versatility.
+
+ Rest of paper (reference and Appendix) is removed.

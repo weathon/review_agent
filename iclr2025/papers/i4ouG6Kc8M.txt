@@ -1,0 +1,318 @@
+
+
+{0}------------------------------------------------
+
+# A DUAL-METRIC APPROACH FOR MODEL SELECTION IN SELF-SUPERVISED LEARNING FOR HISTOPATHOLOGY
+
+###### Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Selecting appropriate models during self-supervised training of vision transformers in histopathology is challenging. Recent efforts to quantify the quality of self-supervised learning representations through rank estimation approaches have shown promise in natural image classification tasks. However, their effectiveness in histopathology, particularly for non-linear tasks such as instance segmentation and classification from whole slide images, remains unexplored. This study proposes an approach for model selection in histopathology by combining task-specific metrics (such as accuracy) and task agnostic metrics (such as rank estimation). This work shows that by training several small-scale histopathology models and applying the proposed model selection approach, one can achieve instance segmentation performance comparable to state-of-the-art models trained on much larger datasets. The proposed approach also allows for obtaining a model based on the type of downstream task. Towards this end, three types of model selection based on the downstream task performance were evaluated: classification-best, segmentation-best, and a best all-round one. When evaluated on held-out classification and weakly supervised learning tasks, the most performant checkpoints often occur earlier in training, indicating potential performance saturation mid way in the training for histopathology models. These results highlight the importance of appropriate model selection for self-supervised learning in histopathology.
+
+## 1 INTRODUCTION
+
+### 1.1 MOTIVATIONS
+
+Mirroring advancements in self-supervised pre-training of vision transformers (ViT) (Dosovitskiy et al., 2020) for natural images, a significant number of models have been proposed in computational pathology literature. As transformers significantly benefit from scaling in dataset size and compute (Kolesnikov et al., 2020), histopathology models are increasingly getting larger, with proportional increases in the amount of data, compute and therefore the associative power consumption required for training these models.
+
+Despite considerable interest and progress of self-supervised learning (SSL) in histopathology, there is an important and often overlooked challenge: estimating the the generalizability of a model in order to terminate training is challenging. This is because minimizing the typical training objective in self-supervised learning may not translate to better downstream task performance (Geiping et al., 2023). Furthermore, as label-free learning algorithms strive for generality in a diverse landscape of downstream tasks, finalizing on a predefined set of training iterations may trade balance in favor of one type of downstream task over another, such as trading image classification performance over image segmentation performance. Under current practices in histopathology literature, gauging model efficacy is done based on tile-level (patches<sup>1</sup> extracted from scanned tissue images, also called whole slide images, or WSI) benchmark tasks, and slide-level benchmark tasks. But does benchmark performance correlate with downstream task performance? Is one kind of benchmark
+
+<sup>1</sup>patches here are typically 224×224 pixel non-overlapping sub-sections of a larger image, and is distinct from patches used in vision transformer, which typically is around 16×16.
+
+{1}------------------------------------------------
+
+task suitable over the other? As of writing this article, answers to these questions remain unclear. Some effort to quantify the quality of SSL representations, particularly by estimating the rank of representations, have been made in natural image literature (briefly elaborated in §2.2). The main idea here is that there are some salient, desirable properties that representations must have in order to be beneficial to downstream tasks, thus making the assumption that these quality metrics directly correlate with downstream performance. Yet, they have only thus far been tested on linear probing tasks, which indeed benefit from an appropriate structure within the representation’s eigenvectors, such as its eigenspectrum decay for instance, or its entropy. Therefore, their usefulness on other tasks, particularly instance segmentation tasks that are crucial to histopathology, is not known.
+
+In the absence of theoretical frameworks that explore stopping criteria in self-supervised learning approaches, the core thesis of this work is that the appropriate approach is a combination of out-of-distribution benchmark performance, which is termed task-dependent metrics, and representation quality estimation approaches, which is termed task-agnostic metrics<sup>2</sup>. Therefore, this work attempts to build a bridge between these two topics by proposing a simple but effective model selection procedure that give improved performance on downstream tasks.
+
+### 1.2 CONTRIBUTIONS
+
+This study proposes a model selection procedure for field of histopathology by combining publicly available histopathology benchmark task-specific metrics and representation quality based task-agnostic metrics to propose a simple approach for model selection for self-supervised histopathology models. The approach is described in §3.
+
+Several encoders are trained by varying the dataset, model size, and model architecture, in order to identify appropriate checkpoints for downstream clinical use using the proposed approach. The model selection is segregated into three approaches based on the type of tile-level tasks: a classification-best checkpoint obtained using only classification benchmarks, a segmentation-best checkpoint on benchmark tasks based only on instance segmentation benchmarks, and a task-agnostic model that provides favorable performance on both types of tasks. The performance of each checkpoint type is investigated on out-of-distribution benchmark tasks in §5.2 and slide-level tasks in §5.3.
+
+The code and accompanying task-specific and task-agnostic metric data for all of our experiments will be released with this paper.
+
+### 1.3 SCOPE
+
+The encoders trained in this work are kept small-scale, since training data from multiple tissue-types can become prohibitive in the training stage. Therefore, only one tissue type is chosen, i.e., those obtained from patients with Lung Adenocarcinoma (LUAD), a variant of Non-Small Cell Lung Cancers (NSCLC) (Kundra et al., 2021). The classification of the Epithelial Growth Factor Receptor (EGFR) biomarker serves as a held-out downstream task at the slide-level, alongside the prediction of LUAD subtypes at the patch level, while several publicly available benchmarks (introduced in appendix A) are utilized as surrogate tasks to study model convergence. As these public datasets often contain data from diverse cancer types, studying benchmarking performance explicitly measures out-of-distribution generalization of the relational-distribution type (Farquhar & Gal, 2022), which is useful in determining the efficacy of the proposed model selection approach. The scope of this work is further limited by choosing the dinov1 self-supervised learning method (Caron et al., 2021) to train the vision encoders as this is a relatively simpler SSL framework compared to ones employed in training larger models with bigger batch sizes, for which approaches like dinov2 (Oquab et al., 2023) were designed.
+
+<sup>2</sup>Here we use the relational distribution definition from Farquhar & Gal (2022) to define the out-of-distribution type of the benchmarks.
+
+{2}------------------------------------------------
+
+## 2 RELATED WORKS
+
+### 2.1 SELF-SUPERVISED LEARNING IN DIGITAL HISTOPATHOLOGY
+
+**Self-supervised learning approaches:** The surge in foundation model training for digital histopathology follows the successes of joint-embedding self-supervised learning (SSL) techniques in natural images (Geiping et al., 2023). The goal of these techniques is to embed and align two separately augmented variations of an image using various alignment objectives, such as the contrastive learning target used in Azizi et al. (2023); Ciga et al. (2022). This target utilizes the infoNCE loss (Oord et al., 2018) introduced in methods like SimCLR (Chen et al., 2020), where representations of image augmentations are aligned, or CLIP (Radford et al., 2021) and SigLIP (Zhai et al., 2023), where text and image pairs are aligned.
+
+A common SSL framework used by many foundation models is the dinov1 (Caron et al., 2021) and dinov2 (Oquab et al., 2023) approach, both of which employ a teacher-student network. In this network, the teacher’s representations are skewed from the student’s using a centered softmax, and the teacher’s weights are updated using an exponential moving average over the student. Dinov2 improves upon dinov1 in terms of training stability over larger batch sizes using the Ko-Leo regularizer (Sabluyrolles et al., 2018) and by replacing the centering step in dinov1 with a Sinkhorn-Knopp centering step (Caron et al., 2020). Dinov2 also includes the iBOT loss (Zhou et al., 2021), which introduces patch-level losses in addition to the image-level losses present within Dinov1. The vanilla dino framework has been immensely successful in digital histopathology and forms the foundation for a majority of models trained on histopathology data (Zimmermann et al., 2024; Vorontsov et al., 2024; Chen et al., 2024; Saillard et al., 2024; Nechaev et al., 2024; Campanella et al., 2023; Dippel et al., 2024; Xu et al., 2024; Juyal et al., 2024).
+
+Recently, modifications to the Dino framework have been proposed to cater to the specialized field of digital histopathology. For example, Zimmermann et al. (2024) replaced the Ko-Leo regularizer with the Kernel Density Estimator (KDE) and observed an increase in performance and stability, since a typical minibatch of digital histopathology images is relatively more similar compared to natural images spanning thousands of classes. Juyal et al. (2024) proposed merging masked image modelling with the vanilla Dino approach by including the Masked Auto-Encoder (MAE) loss objective (He et al., 2022). This is a similar style of including a patch-level modeling approach as in iBOT, but is an image modelling approach instead of a joint-embedding approach. Therefore, the loss is estimated over a reconstruction of the masked image with the input. In this work, they also introduce a Fourier reconstruction loss (Wang et al., 2024), which decomposes the Fourier transform of the reconstructed image from the MAE branch into low and high frequency components using a band-pass filter. This is perhaps included in order to counter a known issue with MAE which causes the representations to favor high-frequency components in an image over low-frequency ones (Bao et al., 2021; Ramesh et al., 2021). As these developments continue to progress, this work chose to use the original Dino framework by Caron et al. (2021), as modifications can successively be introduced to the learning approach later on. Training stability in the dinov1 approach can be achieved using small batch-sizes, which is ideal for the single-tissue scale of the experiments in this work.
+
+**Multi-scale adaptation:** In a typical slide-evaluation procedure, histopathologists examine tissue samples at multiple scales. This is because at larger fields of view, the tissue architecture is distinct, while higher magnifications enables cellular features to be distinguished. Therefore, histopathology benchmarks tend to be distributed across magnifications, from 2 microns/px to 0.25 microns/px, the latter being more favorable for cell segmentation tasks. Histopathology models often exposed to increasingly larger resolutions of patches extracted from whole-slide images in the final stage of the pre-training (Chen et al., 2024). Recently that some works have considered the multi-scale aspect of histopathology during pre-training. For example, the HIPT model (Chen et al., 2022) considers a hierarchical set of feature extractors on a series of varying patch sizes of the vision transformer patch embedding module ( $16 \times 16$ ,  $256 \times 256$ , and  $4096 \times 4096$ ) in order to capture cellular, tile level, and region level information. Juyal et al. (2024) use the FlexiViT architecture (Beyer et al., 2023) to introduce a range of scales into the encoder training. Finally, GigaPath (Xu et al., 2024) utilizes the LongNet architecture (Ding et al., 2023) as a decoder to produce slide-level embeddings from a set of tile-level embeddings extracted using a standard vision transformer backbone. These multi-scale adaptations are largely architectural, but a simpler approach is to pre-train vanilla architectures on multi-scale data, thus introducing data variability and the ability of the encoder to adapt to the
+
+{3}------------------------------------------------
+
+myriad of scales of downstream tasks. Published works include Kang et al. (2023) and Zimmermann et al. (2024), which randomly mix the FOV of the images during pre-training without changes to the image resolution. Kang et al. (2023) uses tiles extracted from magnifications of 0.25 and 0.5  $\mu\text{m}/\text{px}$ , while Zimmermann et al. (2024) use 0.25, 0.5, 1, and 2  $\mu\text{m}/\text{px}$  in their dataset. One of the benefits observed by Kang et al. (2023) seems to be improved convergence during training. But the most important benefit is that this enables the encoder to use a benchmark’s native resolution and magnification for assessment, and therefore is the approach followed by this work.
+
+### 2.2 TASK-AGNOSTIC QUALITY METRICS
+
+Joint-embedding self-supervised learning (SSL) approaches train encoders solely at the representation level, making it challenging to predict when the training process has reached a level suitable for downstream tasks. To address this, recent research has focused on rank-based representation quality metrics, which operate under the assumption that optimal metric values will lead to improved benchmark performance, and have been reported to correlate with downstream performance. Garrido et al. (2023) introduced RankMe, which computes the Shannon entropy of the eigenvalues of a set of representations as the effective rank of the embedding matrix, serving as a proxy for representational power. RankMe demonstrated a strong correlation with downstream linear probing performance across various SSL methods and architectures. Thilak et al. (2023) extended RankMe by applying linear discriminant analysis (Martinez & Kak, 2001), estimating a generalized covariance matrix using representations of different images and transformed variants of the same image, particularly those used in the SSL method. They then estimate the entropy of the eigenvalues of the generalized covariance matrix, capturing the representation behavior explicitly as determined by the SSL objective. Building on theoretical insights, Agrawal et al. (2022) proposed  $\alpha$ -ReQ, which measures the decay rate of the eigenspectrum of the representation covariance matrix, arguing that an optimal rate balances expressiveness and generalization. However, as noted by Thilak et al. (2023),  $\alpha$ -ReQ is sensitive to linear transformations that arbitrarily influence the eigenspectrum matrix, allowing for high rank registration despite potential degradation in downstream performance.
+
+One of the key advantages of rank-based representation quality metrics is their ability to measure dimensional collapse, where one eigenvalue dominates while others contribute minimally towards the representation. This provides valuable insights into the expressiveness and generalization capabilities of the learned representations. However, a significant limitation of rank approximation as a quality metric is their reliance on the linear behavior of eigenvalues in representing the quality of learned features. While this linear approach may be suitable for linear-probing tasks, it may not be adequate for inherently non-linear tasks in the histopathology domain, such as multiple instance learning. Using these task-agnostic metrics in conjunction with task-specific metrics from a set of benchmark tasks can help mitigate the drawbacks of rank-estimation approaches, and is the track followed in this work.
+
+## 3 MODEL SELECTION PROCEDURE
+
+The approach described in Algorithm 1 is a simple process that identifies the best-performing checkpoint across a set of out-of-distribution benchmark tasks, yielding task-specific metrics such as the aggregated jaccard index (Kumar et al., 2019) or the weighted F1 metric, and task-agnostic representation quality metrics, such as RankMe, LiDAR, and  $\alpha$ -ReQ. Given  $N$  task-specific metrics,  $M$  task-agnostic metrics, and  $E$  checkpoints saved during a particular run (e.g., every 5 epochs), an  $N \cdot M$  number of samples are obtained, indicating the result between a performance metric for each task and its representation quality across the  $E$  saved checkpoints.
+
+The task-agnostic metrics (e.g., RankMe, LiDAR, or  $\alpha$ -ReQ, detailed in Appendix C) are calculated from the test set of the pre-training dataset, which is distinct from the benchmark performance dataset. Each task’s result is determined by a normalized benchmark metric between 0 and 1, such as the aggregated Jaccard index for instance segmentation (Kumar et al., 2019) and the weighted F1 score for classification tasks<sup>3</sup>. To estimate the best checkpoint for each benchmark task-representation metric pair, the sum of the normalized representation metric (scaled to its range)
+
+<sup>3</sup>In the classification tasks presented in this work, the output probability of the predicted classes is thresholded to maximize Youden’s index Youden (1950), unless explicitly defined.
+
+{4}------------------------------------------------
+
+#### **Algorithm 1** Proposed Dual-Metric Model Selection Approach
+
+---
+
+**Inputs:**  $U_1, \dots, U_N$ : Set of  $N$  task-specific metrics,  
+ $V_1, \dots, V_M$ : Set of  $M$  task-agnostic metrics,  
+ $\mathbf{P}^{ts} \in \mathbb{R}^{E \times N}$ : Performance matrix of  $E$  epochs for  $N$  task-specific metrics,  
+ $\mathbf{P}^{ta} \in \mathbb{R}^{E \times M}$ : Performance matrix of  $E$  epochs for  $M$  task-agnostic metrics
+
+**Output:** Selected epoch  $e^*$
+
+- 1:  $\mathbf{N}^{ts} \in \mathbb{R}^{E \times N}$ , where  $N_{e,j}^{ts} = \text{MinMaxNormalize}(\mathbf{P}_{e,j}^{ts})$ 
+ - $\forall i \in [1, \dots, E], j \in [1, \dots, N]$  ▷ Normalize task-specific metrics
+- 2:  $\mathbf{N}^{ta} \in \mathbb{R}^{E \times M}$ , where  $N_{e,j}^{ta} = \text{MinMaxNormalize}(\mathbf{P}_{e,j}^{ta})$ 
+ - $\forall i \in [1, \dots, E], j \in [1, \dots, M]$  ▷ Normalize task-agnostic metrics
+- 3:  $\mathbf{C} \in \mathbb{R}^{N \times M}$ , where  $C_{i,j} = \text{argmax}_e (N_{e,i}^{ts} + N_{e,j}^{ta})$ 
+ - $\forall e \in [1, \dots, E], i \in [1, \dots, N], j \in [1, \dots, M]$  ▷ Selected epoch for each metric pair
+- 4:  $S = \{\text{unique}(C_{i,j}) \mid i \in \{1, \dots, N\}, j \in \{1, \dots, M\}\}$  ▷ Set of unique epochs from  $\mathbf{C}$
+- 5:  $\mathbf{r} \in \mathbb{R}^{|S|}$ , where  $r_k = \sum_{j=1}^N N_{s_k,j}^{ts}$  for  $s_k \in S$  ▷ Relative improvement summed over tasks
+- 6:  $e^* = C_{i^*,j^*}$ , where  $(i^*, j^*) = \text{argmax}_n r_n$  ▷ Epoch with highest relative improvement
+
+7: **return**  $e^*$
+
+---
+
+and the benchmark value, with similar normalization, is maximized<sup>4</sup>. This process yields  $N \cdot M$  models for each benchmark result-representation metric pair. To select a single checkpoint, the relative improvement for each of the  $N \cdot M$  models is computed using the best benchmark value. The epoch with the highest average relative improvement across all tasks is chosen as the final model.
+
+Three separate model selections are made:  $e_a^*$ ,  $e_c^*$ , and  $e_s^*$ , representing the best checkpoint considering all benchmark tasks (both instance segmentation and classification benchmarks), the classification-best checkpoint, and the instance segmentation-best checkpoint, respectively. The performance of all three types of checkpoints on the downstream EGFR prediction task is studied, and remarks are made in the discussions.
+
+## 4 EXPERIMENTS
+
+The description of the pre-training, benchmarking, and downstream datasets can be found in Appendix A. The appendices also provide the pre-training, slide-level benchmarking, and downstream task training procedures in Appendix B. The steps taken in estimating task-agnostic representation quality metrics are described in Appendix C. To state briefly, the benchmark tasks considered here are of two types: classification (BACH Aresta et al. (2019), MHIST Wei et al. (2021), CRC Kather et al. (2018)), and nuclei instance segmentation (PanNuke Gampner et al. (2020), MoNuSeg Kumar et al. (2019)). The task-agnostic metrics used in this work are the LiDAR metric (Thilak et al., 2023), RankMe (Garrido et al., 2023), and  $\alpha$ -ReQ (Agrawal et al., 2022). The following briefly describes the models and their associated motivations.
+
+Nine distinct models were trained using the vanilla dinov1 framework (Caron et al., 2021) for greater than 230 epochs, all utilizing Vision Transformer (Dosovitskiy et al., 2020) (ViT) backbones with four registers (Darcet et al., 2023). This included three ViT-B models and three ViT-S models, with variations in the number of magnifications in the data and, consequently, the number of images per epoch, as the reduction in the number of magnifications used in the dataset was not compensated by increasing the dataset size. Architectural variation was also introduced by implementing soft mixture-of-experts (Puigserver et al., 2023), a model paradigm that allows increasing model capacity without sacrificing throughput. This was done at the ViT-S scale, varying the number of experts (4, 32, and 128) while maintaining one slot per expert, thus allowing variation in parameter count.
+
+The models presented in this work, described in Table 1, ranged in size from 21.6M to 922.3M parameters, with training datasets varying from 3.27M to 10.25M images. Variation in the for-
+
+<sup>4</sup>In the special case of  $\alpha$ -ReQ, the sum of the negative of the quality metric subtracted by 1 and the benchmark task performance is maximized, as the authors proposed that an optimal  $\alpha$ -ReQ value lies around this value.
+
+{5}------------------------------------------------
+
+Table 1: Tabulated details of a diverse set of vision transformer encoders trained using the Dino pretraining approach (Caron et al., 2021). *Magnification* column indicates dataset diversity and the *Encoder* columns indicate the base encoder. Soft mixture of experts models (Puigcerver et al., 2023) are indicated using the shorthand *SMoE* followed by a hyphen and an integer indicating the total number of experts in the feed forward layer of the transformer. †indicates models trained on single magnification dataset, including both 20 $\times$  and 40 $\times$  encoders.
+
+| Model | Magnification |  |  |  | Encoder | Params | Training |
+|-|-|-|-|-|-|-|-|
+|  | 5 $\times$ | 10 $\times$ | 20 $\times$ | 40 $\times$ |  |  | Images |
+| ViT-S <sup>†</sup> |  |  | ✓ |  | ViT-S | 21.6M | 3.36M |
+| ViT-S <sup>†</sup> |  |  |  | ✓ | ViT-S | 21.6M | 3.27M |
+| ViT-S | ✓ |  | ✓ | ✓ | ViT-S | 21.6M | 10.25M |
+| ViT-B <sup>†</sup> |  |  | ✓ |  | ViT-B | 85.8M | 3.36M |
+| ViT-B <sup>†</sup> |  |  |  | ✓ | ViT-B | 85.8M | 3.27M |
+| ViT-B | ✓ |  | ✓ | ✓ | ViT-B | 85.8M | 10.25M |
+| ViT-S<br>SMoE-4 | ✓ |  | ✓ | ✓ | ViT-S | 42.9M | 10.25M |
+| ViT-S<br>SMoE-32 | ✓ |  | ✓ | ✓ | ViT-S | 241.5M | 10.25M |
+| ViT-S<br>SMoE-128 | ✓ |  | ✓ | ✓ | ViT-S | 922.3M | 10.25M |
+| Virchow | ✓ | ✓ | ✓ | ✓ | ViT-H | 632M | 2B |
+| Virchow2 |  |  | ✓ |  | ViT-H | 632M | 1.7B |
+| UNI |  |  | ✓ |  | ViT-L | 307M | 100M |
+
+mer occurred either due to increasing the scale of the model from ViT-S to ViT-B or its capacity by switching the feed-forward layer with soft mixture-of-experts at various numbers of experts, whereas variation in the latter was introduced by introducing additional fields of view. The training loss curves plotted along epoch can be found in figure 1. Models from the literature, including Virchow2 (Zimmermann et al., 2024), Virchow (Vorontsov et al., 2024), and UNI (Chen et al., 2024), which utilized ViT-H and ViT-L architectures respectively and were trained on substantially larger datasets, have also been included. These external models were also benchmarked using the procedures described in Appendix B.
+
+## 5 RESULTS AND DISCUSSIONS
+
+### 5.1 MODEL SELECTION
+
+Figures 2 and 3 present the complete set of data points of task specific and task agnostic metrics for the ViT-S model trained on the 20 $\times$  dataset. These sub-figures, including those in Appendix I, reveal several phases of development in the task-specific and task-agnostic metrics. These figures also help in understanding the intermediate step 3 of algorithm 1, where individual checkpoints from each task-specific and task-agnostic metric pair is extracted from the normalized metric space. Each intermediate checkpoint extracted jointly maximizes benchmark performance and representation quality, and the final model selection maximizes the relative improvement over all tasks, which in this example is the CRC, BACH, and PanNuke 20 $\times$  tasks.
+
+Looking at this example, the development of model performance in conjunction with the representation rank is observed in the early epochs, followed by a degradation in performance for all segmentation tasks after a certain epoch during training. This suggests that representation ranks are poor indicators of segmentation performance, likely due to the non-linear nature of the task. For the classification tasks, with the exception of BACH, which employs an aggregation function instead of a linear layer (see Appendix B), a clear correlation between the representation rank and performance
+
+{6}------------------------------------------------
+
+![Figure 1: Loss curves for all experiments plotted over epoch. The y-axis is 'Loss' on a logarithmic scale from 10^-1 to 10^1. The x-axis is 'Epoch' from 0 to 300. The legend includes: ViT-S SMoE-4 (purple), ViT-S SMoE-32 (blue), ViT-S SMoE-128 (light blue), ViT-B 20x (cyan), ViT-B 40x (green), ViT-B (light green), ViT-S 20x (orange), ViT-S 40x (red), and ViT-S (dark red).](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 1: Loss curves for all experiments plotted over epoch. The y-axis is 'Loss' on a logarithmic scale from 10^-1 to 10^1. The x-axis is 'Epoch' from 0 to 300. The legend includes: ViT-S SMoE-4 (purple), ViT-S SMoE-32 (blue), ViT-S SMoE-128 (light blue), ViT-B 20x (cyan), ViT-B 40x (green), ViT-B (light green), ViT-S 20x (orange), ViT-S 40x (red), and ViT-S (dark red).
+
+Figure 1: Loss curves for all experiments plotted over epoch.
+
+![Figure 2: Scaled (between 0 to 1) task-specific and task-agnostic metrics for the case of ViT-S 20x, with the selected models highlighted using vertical lines. The y-axis is 'Metric Value' from 0.0 to 1.2. The x-axis is 'Epoch' from 0 to 250. The legend includes: LiDAR (blue), RankMe (orange), alpha-ReQ (green), AJI (PanNuke 20x) (red), Weighted F1 (BACH) (purple), and Weighted F1 (CRC) (dark red). Vertical lines are labeled e_s (green), e_c (purple), and e_a (red).](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 2: Scaled (between 0 to 1) task-specific and task-agnostic metrics for the case of ViT-S 20x, with the selected models highlighted using vertical lines. The y-axis is 'Metric Value' from 0.0 to 1.2. The x-axis is 'Epoch' from 0 to 250. The legend includes: LiDAR (blue), RankMe (orange), alpha-ReQ (green), AJI (PanNuke 20x) (red), Weighted F1 (BACH) (purple), and Weighted F1 (CRC) (dark red). Vertical lines are labeled e\_s (green), e\_c (purple), and e\_a (red).
+
+Figure 2: Scaled (between 0 to 1) task-specific and task-agnostic metrics for the case of ViT-S 20 $\times$ , with the selected models highlighted using vertical lines.
+
+is noticed. Consequently, for the case shown in Figure 3, the classification-best checkpoint occurs much later in the training compared to the segmentation-best checkpoint.
+
+### 5.2 OUT-OF-DISTRIBUTION BENCHMARK PERFORMANCE
+
+Table 2 presents the benchmark performance values for all models described in Table 1, including results for the three different checkpoint types, their corresponding epoch numbers, and the best overall result for each model. Also included are task-specific metric results at the final checkpoint of training for each model.
+
+In figure 1, it is evident that the training loss converges as epochs progress, but in conjunction with the results in table 2, when the task-specific metric results are compared between the final checkpoints and the checkpoints selected using the procedure proposed in this work, the results rarely match, and never exceed those from the selected checkpoints. This shows that training for longer is often detrimental to generalization when it comes to histopathology data, which is in sharp contrast to observations from other data modalities, such as natural language and natural images.
+
+The analysis further reveals that the best-classification model consistently occurs at a later stage of training compared to other checkpoint types, while the best all-round model typically aligns closely with the best-segmentation model. Notably, the models in this study, trained on a single cancer modality with approximately 10 million images, often achieve comparable performance to the provided foundation models, which were trained on pan-cancer data with at least an order of
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+![Figure 3: A 3x3 grid of scatter plots showing task-agnostic metrics (AII, Weighted F1) on the y-axis against task-specific metrics (LIDAR, RankMe, alpha-ReQ) on the x-axis for the ViT-small model. The plots are color-coded by epoch, with a color bar on the right indicating epochs from 0 to 300. Dashed arrows show training progression through warm-up, convergence, and degradation stages. Best models are encircled: all-round (red), segmentation (green), and classification (blue).](a71911ad87414271aeb190e0eebcb989_img.jpg)
+
+Figure 3: A 3x3 grid of scatter plots showing task-agnostic metrics (AII, Weighted F1) on the y-axis against task-specific metrics (LIDAR, RankMe, alpha-ReQ) on the x-axis for the ViT-small model. The plots are color-coded by epoch, with a color bar on the right indicating epochs from 0 to 300. Dashed arrows show training progression through warm-up, convergence, and degradation stages. Best models are encircled: all-round (red), segmentation (green), and classification (blue).
+
+Figure 3: Scatter plots of task-agnostic metrics on the x-axis calculated from the test set against task-specific metrics from out-of-distribution benchmark tasks on the y-axis for the ViT-small model trained on the 20 $\times$  dataset. Epoch values are used as colours to indicate the evolution of the metric pairs alongside training progression. Dashed arrows show self-interpreted training stages: warm-up, convergence, and degradation. Best models are encircled: all-round ( $e_a^*$ , red), segmentation ( $e_s^*$ , green), and classification ( $e_c^*$ , blue).
+
+magnitude more training samples. For instance, in the MHIST classification task, the best results fall only 3% short of the performance achieved by Zimmermann et al. (2024), despite their model being trained on a substantially larger dataset. In segmentation tasks, the models demonstrate competitive and often superior performance. Specifically, for the PanNuke benchmark (Gampfer et al., 2020) at 20 $\times$  magnification and the MoNuSeg benchmark (Kumar et al., 2019), the best-segmentation and best all-round model frequently outperform the foundation models.
+
+### 5.3 HELD-OUT DOWNSTREAM TASK PERFORMANCE
+
+In the following discussion, only the models trained on multiple FOVs are utilized. Figure 4 presents the AUC performance of three distinct checkpoints for the averaged AUC in the tile-level LUAD subtyping task (Fig. 4a) and the slide-level EGFR classification task (Figs. 4b and 4c). The latter corresponds to aggregation performed over  $224 \times 224$  patches (40 $\times$  magnification) and  $448 \times 448$  patches resized to  $224 \times 224$  (20 $\times$  magnification), called pseudo 20 $\times$  in this work. Notably, these tasks were not used in the model selection procedure, ensuring the independence of the individual checkpoint types ( $e_a^*$ ,  $e_s^*$ , and  $e_c^*$ ) from these tasks.
+
+The LUAD subtyping task results (fig. 4a) indicate that best-segmentation and best all-round model selection criteria can be comparable to or better than best-classification ones in terms of AUC performance, despite the latter typically being trained for longer durations. For the ViT-S model, the bestclassification model selection criteria clearly outperform the other two checkpoints. However, Table 2 reveals that this checkpoint occurs much earlier than the best-segmentation and best all-
+
+{8}------------------------------------------------
+
+Table 2: Model Performance on various out-of-distribution tile-level datasets. Results are rounded to 2 decimal places. **Bold**: best-segmentation model result; **Bold underline**: best-classification model result; **Bold overline**: best all-round model result. †indicates encoders trained on single magnification dataset, including both 20 $\times$  and 40 $\times$  encoders. External models have been provided under **Reference**, but have been excluded from the comparative highlighting. Gray highlights cases where the final epoch value result is similar to the best, or exceeds the best task-specific metric among all checkpoints selected for a specific encoder.
+
+| Task-specific metric →<br>Model/L Benchmark →<br>Magnification → | Weighted F1-score |  |  | Aggregated Jaccard Index |  |  |
+|-|-|-|-|-|-|-|
+|  | MIHIST<br>[5 $\times$ ] | CRC<br>[20 $\times$ ] | BACH<br>[20 $\times$ ] | PanNuke<br>[20 $\times$ ] | PanNuke<br>[40 $\times$ ] | MoNuSeg<br>[40 $\times$ ] |
+| <b>VIT-S†</b> |  |  |  |  |  |  |
+| $e_n^*$ : 96 $^{20\times}/91^{40\times}$ | - | <b><u>0.99</u></b> | 0.67 | 0.46 | 0.51 | 0.57 |
+| $e_n^*$ : 81 $^{20\times}/91^{40\times}$ | - | 0.98 | 0.63 | 0.46 | 0.51 | 0.57 |
+| $e_n^*$ : 246 $^{20\times}$ | - | <b><u>0.99</u></b> | 0.66 | 0.44 | - | - |
+| Final | - | 0.99 | 0.64 | 0.44 | 0.51 | 0.57 |
+| <b>VIT-B†</b> |  |  |  |  |  |  |
+| $e_n^*$ : 76 $^{20\times}/281^{40\times}$ | - | 0.98 | 0.66 | <b><u>0.48</u></b> | 0.52 | 0.58 |
+| $e_n^*$ : 76 $^{20\times}/281^{40\times}$ | - | 0.98 | 0.66 | <b><u>0.48</u></b> | 0.52 | 0.58 |
+| $e_n^*$ : 276 $^{20\times}$ | - | <b><u>0.99</u></b> | 0.68 | 0.46 | - | - |
+| Final | - | 0.99 | 0.61 | 0.47 | 0.52 | 0.57 |
+| <b>VIT-S</b> |  |  |  |  |  |  |
+| $e_n^*$ : 166 | 0.84 | 0.98 | <b><u>0.68</u></b> | 0.46 | <b><u>0.53</u></b> | 0.57 |
+| $e_n^*$ : 166 | <b><u>0.84</u></b> | 0.98 | <b><u>0.68</u></b> | 0.46 | <b><u>0.53</u></b> | 0.57 |
+| $e_n^*$ : 81 | <b><u>0.85</u></b> | <b><u>0.99</u></b> | 0.63 | <b><u>0.47</u></b> | 0.51 | 0.50 |
+| Final | 0.80 | 0.98 | 0.67 | 0.44 | 0.52 | 0.56 |
+| <b>VIT-B</b> |  |  |  |  |  |  |
+| $e_n^*$ : 51 | <b><u>0.85</u></b> | 0.98 | 0.65 | <b><u>0.48</u></b> | 0.51 | 0.57 |
+| $e_n^*$ : 61 | 0.83 | <b><u>0.99</u></b> | 0.60 | <b><u>0.48</u></b> | 0.51 | 0.57 |
+| $e_n^*$ : 231 | 0.83 | <b><u>0.99</u></b> | <b><u>0.71</u></b> | 0.46 | 0.50 | 0.56 |
+| Final | 0.82 | 0.99 | 0.66 | 0.46 | 0.50 | 0.57 |
+| <b>VIT-S SMoE-4</b> |  |  |  |  |  |  |
+| $e_n^*$ : 111 | 0.84 | 0.98 | 0.64 | 0.47 | <b><u>0.53</u></b> | 0.59 |
+| $e_n^*$ : 111 | <b><u>0.84</u></b> | 0.98 | 0.64 | 0.47 | <b><u>0.53</u></b> | 0.59 |
+| $e_n^*$ : 241 | 0.82 | 0.98 | 0.70 | 0.44 | 0.51 | 0.56 |
+| Final | 0.83 | 0.98 | 0.64 | 0.44 | 0.52 | 0.56 |
+| <b>VIT-S SMoE-32</b> |  |  |  |  |  |  |
+| $e_n^*$ : 131 | 0.84 | 0.98 | 0.67 | 0.46 | <b><u>0.53</u></b> | <b><u>0.60</u></b> |
+| $e_n^*$ : 131 | 0.84 | 0.98 | 0.67 | 0.46 | <b><u>0.53</u></b> | <b><u>0.60</u></b> |
+| $e_n^*$ : 236 | 0.83 | 0.98 | 0.68 | 0.44 | 0.52 | 0.56 |
+| Final | 0.81 | 0.98 | 0.60 | 0.44 | 0.52 | 0.56 |
+| <b>VIT-S SMoE-128</b> |  |  |  |  |  |  |
+| $e_n^*$ : 166 | 0.84 | <b><u>0.99</u></b> | 0.65 | 0.46 | <b><u>0.53</u></b> | 0.59 |
+| $e_n^*$ : 146 | <b><u>0.84</u></b> | 0.98 | 0.61 | 0.46 | <b><u>0.53</u></b> | 0.59 |
+| $e_n^*$ : 186 | 0.84 | <b><u>0.99</u></b> | 0.70 | 0.46 | <b><u>0.53</u></b> | <b><u>0.58</u></b> |
+| Final | 0.81 | 0.98 | 0.56 | 0.45 | 0.53 | 0.57 |
+| <b>Reference</b> |  |  |  |  |  |  |
+| Virchow | - | 1.00 | 0.76 | 0.38 | - | - |
+| Virchow2 | 0.88 | 1.00 | 0.80 | 0.48 | 0.57 | 0.58 |
+| UNI | - | 1.00 | 0.76 | 0.49 | - | - |
+
+round models, reaffirming that the model performance usually peaks during training. In the slide-level aggregation task (figures 4b and 4c), where classification was performed using ten different train/test splits, we estimate the AUC from the set of predictions that are concatenated from all ten splits. While the AUC performance values do not substantially deviate between checkpoint types, the better performing checkpoint type typically occur in earlier checkpoints rather than later ones, as is seen consistently from the assessments done prior.
+
+{9}------------------------------------------------
+
+![Figure 4: Performance comparison across different magnifications and tasks for encoders trained on patches spanning multiple fields of view. The figure contains three bar charts: (a) AUC performance for LUAD subtyping at 5x magnification, (b) AUC performance for EGFR classification at pseudo 20x magnification, and (c) AUC performance for EGFR classification at 40x magnification. Each chart compares five models: ViT5, ViT8, ViT5-SMdE-4, ViT5-SMdE-32, and ViT5-SMdE-128. Three selection criteria are shown: e_s^1 (green), e_s^2 (orange), and e_s^3 (blue).](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+(a) AUC performance for LUAD subtyping at  $5\times$  magnification.
+
+(b) AUC performance for EGFR classification at pseudo  $20\times$  magnification.
+
+(c) AUC performance for EGFR classification at  $40\times$  magnification.
+
+Figure 4: Performance comparison across different magnifications and tasks for encoders trained on patches spanning multiple fields of view. The figure contains three bar charts: (a) AUC performance for LUAD subtyping at 5x magnification, (b) AUC performance for EGFR classification at pseudo 20x magnification, and (c) AUC performance for EGFR classification at 40x magnification. Each chart compares five models: ViT5, ViT8, ViT5-SMdE-4, ViT5-SMdE-32, and ViT5-SMdE-128. Three selection criteria are shown: e\_s^1 (green), e\_s^2 (orange), and e\_s^3 (blue).
+
+Figure 4: Performance comparison across different magnifications and tasks for encoders trained on patches spanning multiple fields of view.
+
+## 6 CONCLUSIONS
+
+This study addressed the challenge of model selection for histopathology encoders trained in a self-supervised manner. It was shown that training histopathology models for arbitrarily large number of training epochs is actually detrimental to its downstream performance, despite the training loss behavior continuing to monotonically reduce as epochs progress. A model selection procedure for self-supervised encoder training was proposed that combines out-of-distribution task-specific metrics and task-agnostic metrics. In the analyses conducted on several models trained on histopathology data, it was observed that the instance segmentation performance (quantified using the aggregated Jaccard index) was comparable and often exceeded state-of-the-art models from the literature, despite significantly smaller model size, dataset size, and dataset scope in terms of tissue types.
+
+As part of the analyses, model selection criteria were constructed, which differentiated based on the type of benchmark tasks involved in the selection procedure: checkpoints that yield the best results on classification tasks, instance segmentation tasks, and an all-round model considering both task types. These checkpoints were then used to estimate the performance of two held-out tasks measured in terms of AUC: a patch-level LUAD subtype classification task and a slide-level EGFR classification task. While some models showed a preference for one checkpoint type over others, the most performant checkpoints generally occurred mid-way in the training process relative to the final epoch. This is in contrast with the experiences in self-supervised model training on natural images which suggest that longer training leads to better generalization.
+
+A key limitation of this work is that exploring the generalization of each checkpoint is expensive. This is due to the broad range of benchmark tasks, both in terms of scope and field of view, typically encountered in histopathology and the limited ability of current representation quality estimation approaches to estimate instance segmentation performance. Rank estimation approaches may only predict linear probing performance, while typical histopathology classification tasks involve slide-level aggregation of patch-level features, introducing a non-linearity that cannot be directly modeled by an embedding rank. While this limitation was ameliorated in this work by using out-of-distribution benchmark tasks in conjunction with the representation rank, further work is necessary in developing more comprehensive representation quality metrics. This involves a deeper understanding of properties of representations that correlate with the performance of complex downstream tasks beyond classification.
+
+## REFERENCES
+
+- Kumar K Agrawal, Arnab Kumar Mondal, Arna Ghosh, and Blake Richards.  $\alpha$ -req: Assessing representation quality in self-supervised learning by measuring eigenspectrum decay. *Advances in Neural Information Processing Systems*, 35:17626–17638, 2022.
+
+ Rest of paper (reference and Appendix) is removed.

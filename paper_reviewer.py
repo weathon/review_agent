@@ -46,6 +46,8 @@ MODEL_RELATED_WORK = f"{base_model}:online"
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
 # MODEL_MERGER = f"ollama:glm-5:cloud" 
+MODEL_HUMAN_FINDER = f"claude:claude-haiku-4-5"
+MODEL_HUMAN_MERGER = f"claude:claude-sonnet-4-6"
 MODEL_MERGER = f"z-ai/glm-5" 
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
@@ -514,7 +516,7 @@ async def _run_reviewer_claude_sdk(
             "mcp__reviewer_fs__glob_files",
         ],
         permission_mode="bypassPermissions",
-        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent"],
         mcp_servers={"reviewer_fs": reviewer_fs},
         max_turns=30,
     )
@@ -525,6 +527,8 @@ async def _run_reviewer_claude_sdk(
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         result_text += block.text
+                        print(block.text)
+            
 
     print(f"  [{name}] done — {model_id} (Claude Agent SDK)")
     return result_text, 0.0
@@ -722,10 +726,11 @@ async def run_merge(
     merger_fs = _make_sandboxed_mcp_server("merger_fs", [paper_dir])
 
     options = ClaudeAgentOptions(
-        model="claude-sonnet-4-6",
+        model=MODEL_HUMAN_MERGER.split(":")[1],
         allowed_tools=[
             "mcp__merger_fs__read_file",
             "mcp__merger_fs__glob_files",
+            "mcp__scorer_fs__grep_files",
         ],
         permission_mode="bypassPermissions",
         disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
@@ -742,6 +747,7 @@ async def run_merge(
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         review_text += block.text
+                        print(block.text)
 
     if not review_text.strip():
         raise ValueError("merger agent returned empty output")
@@ -798,7 +804,7 @@ async def run_scorer(
 
     result_text = ""
     options = ClaudeAgentOptions(
-        model="claude-sonnet-4-6",
+        model=MODEL_HUMAN_MERGER,
         cwd=cal_dir_abs or None,
         allowed_tools=[
             "mcp__scorer_fs__read_file",
@@ -934,6 +940,7 @@ async def run_pipeline(
         if not skip_related_work:
             tasks.append(run_related_work_search(client, cleaned_paper_content))
 
+        
         results_list = await asyncio.gather(*tasks)
         idx = 0
         harsh_review, c = results_list[idx]; total_cost += c; idx += 1
@@ -1085,6 +1092,7 @@ async def review_paper(
     cal_dir: str = "",
     calibration_path: str | None = None,
     api_key: str | None = None,
+    merger_output_score: bool = False,
 ) -> tuple[str, float]:
     """
     Main entry point. All agents via OpenRouter chat completions — can fully parallelize.
@@ -1125,95 +1133,32 @@ async def review_paper(
         print(f"  Related Work:   {MODEL_RELATED_WORK}")
     print(f"  Merger:         {MODEL_MERGER}")
     print(f"  Scorer:         claude-sonnet-4-6 (Agent SDK)\n")
+    print(f"Score source: {'merger output' if merger_output_score else 'scorer'}")
 
     client = _get_client(api_key=api_key)
     pp = str(path)
 
-    # ── Phase 1: All reviewers (parallel or sequential) ───────────
-    total_cost = 0.0
-    if parallel:
-        if MODEL_HARSH.startswith("ollama:"):
-            tasks = [
-                run_reviewer(ollama_client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH.replace("ollama:", "", 1), venue=venue),
-            ]
-        else:
-            tasks = [
-                run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue),
-            ]
-        if not skip_neutral:
-            if MODEL_NEUTRAL.startswith("ollama:"):
-                tasks.append(run_reviewer(ollama_client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL.replace("ollama:", "", 1), venue=venue))
-            else:
-                tasks.append(run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue))
-        if not skip_spark:
-            if MODEL_SPARK.startswith("ollama:"):
-                tasks.append(run_reviewer(ollama_client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK.replace("ollama:", "", 1), venue=venue))
-            else:
-                tasks.append(run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue))
-        if not skip_related_work:
-            tasks.append(run_related_work_search(client, paper_content))
-
-        print("Phase 1: All reviewers in parallel ...")
-        results_list = await asyncio.gather(*tasks)
-
-        idx = 0
-        harsh_review, c = results_list[idx]; total_cost += c; idx += 1
-        if not skip_neutral:
-            neutral_review, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            neutral_review = "Neutral reviewer was skipped."
-        if not skip_spark:
-            spark_review, c = results_list[idx]; total_cost += c; idx += 1
-        else:
-            spark_review = "Spark finder was skipped."
-        if not skip_related_work:
-            related_work, c = results_list[idx]; total_cost += c
-        else:
-            related_work = "Related work search was skipped."
-    else:
-        print("Phase 1: Reviewers sequentially ...")
-        if MODEL_HARSH.startswith("ollama:"):
-            harsh_review, c = await run_reviewer(ollama_client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH.replace("ollama:", "", 1), venue=venue)
-        else:
-            harsh_review, c = await run_reviewer(client, "harsh_critic", HARSH_CRITIC_PROMPT, pp, paper_content, MODEL_HARSH, venue=venue)
-        total_cost += c
-        if not skip_neutral:
-            if MODEL_NEUTRAL.startswith("ollama:"):
-                neutral_review, c = await run_reviewer(ollama_client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL.replace("ollama:", "", 1), venue=venue)
-            else:
-                neutral_review, c = await run_reviewer(client, "neutral", NEUTRAL_REVIEWER_PROMPT, pp, paper_content, MODEL_NEUTRAL, venue=venue)
-            total_cost += c
-        else:
-            neutral_review = "Neutral reviewer was skipped."
-        if not skip_spark:
-            if MODEL_SPARK.startswith("ollama:"):
-                spark_review, c = await run_reviewer(ollama_client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK.replace("ollama:", "", 1), venue=venue)
-            else:
-                spark_review, c = await run_reviewer(client, "spark_finder", SPARK_FINDER_PROMPT, pp, paper_content, MODEL_SPARK, venue=venue)
-            total_cost += c
-        else:
-            spark_review = "Spark finder was skipped."
-        if not skip_related_work:
-            related_work, c = await run_related_work_search(client, paper_content)
-            total_cost += c
-        else:
-            related_work = "Related work search was skipped."
-
-    # ── Phase 2: Merger + Score (same conversation) ───────────────
-    print("\nPhase 2: Merger ...")
-    final_review, final_score, merger_cost = await run_merger(
-        client, harsh_review, neutral_review,
-        spark_review, related_work,
-        paper_path=str(path),
+    print("Phase 1 + 2: Delegating to run_pipeline ...")
+    pipeline_result = await run_pipeline(
+        paper_path=pp,
         paper_content=paper_content,
+        client=client,
+        parallel=parallel,
+        skip_related_work=skip_related_work,
+        skip_spark=skip_spark,
+        skip_neutral=skip_neutral,
+        venue=venue,
         calibration_context=calibration_context,
         cal_dir=cal_dir,
-        skip_neutral=skip_neutral,
-        skip_spark=skip_spark,
-        skip_related_work=skip_related_work,
+        merger_output_score=merger_output_score,
     )
-    total_cost += merger_cost
-    final_score = round(float(final_score), 1)
+    harsh_review = pipeline_result["harsh_review"]
+    neutral_review = pipeline_result["neutral_review"]
+    spark_review = pipeline_result["spark_review"]
+    related_work = pipeline_result["related_work"]
+    final_review = pipeline_result["merged_review"]
+    final_score = pipeline_result["score"]
+    total_cost = pipeline_result["cost"]
     print(f"Total cost for this paper: ${total_cost:.4f}")
     final_decision = score_to_decision(final_score)
 
@@ -1271,6 +1216,7 @@ async def review_paper_text(
     calibration_path: str | None = None,
     api_key: str | None = None,
     output_dir: str | None = None,
+    merger_output_score: bool = False,
 ) -> tuple[str, str]:
     """Review paper content provided directly as text."""
     cleaned_text = sanitize_text(paper_text)
@@ -1298,6 +1244,7 @@ async def review_paper_text(
         cal_dir=cal_dir,
         calibration_path=calibration_path,
         api_key=api_key,
+        merger_output_score=merger_output_score,
     )
     return result, str(input_path.with_name(f"{input_path.stem}_review.md"))
 
@@ -1313,6 +1260,7 @@ if __name__ == "__main__":
         print("  --with-related-work Enable related work search & filter")
         print("  --no-spark          Skip spark finder agent")
         print("  --no-neutral        Skip neutral reviewer agent")
+        print("  --merger-output-score Use merger predicted score instead of scorer")
         print("  --venue <name>      Set venue (e.g. ICLR, NeurIPS, ICML)")
         print("  --calibration <p>   Calibration file/path (default: calibration.md if present)")
         print()
@@ -1332,6 +1280,7 @@ if __name__ == "__main__":
     skip_related = "--with-related-work" not in sys.argv
     skip_spark = "--no-spark" in sys.argv
     skip_neutral = "--no-neutral" in sys.argv
+    merger_output_score = "--merger-output-score" in sys.argv
     venue = "ICLR"
     calibration_path = None
     if "--venue" in sys.argv:
@@ -1353,6 +1302,7 @@ if __name__ == "__main__":
             skip_neutral=skip_neutral,
             venue=venue,
             calibration_path=calibration_path,
+            merger_output_score=merger_output_score,
         )
     )
     print(result)

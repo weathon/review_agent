@@ -1,0 +1,330 @@
+
+
+{0}------------------------------------------------
+
+# STOCHASTIC SEMI-GRADIENT DESCENT FOR LEARNING MEAN FIELD GAMES WITH POPULATION-AWARE FUNCTION APPROXIMATION
+
+Chenyu Zhang
+
+MIT
+
+Cambridge, MA 02139
+
+zcysxy@mit.edu
+
+Xu Chen
+
+Columbia University
+
+New York, NY 10025
+
+xc2412@columbia.edu
+
+Xuan Di
+
+Columbia University
+
+New York, NY 10025
+
+sharon.di@columbia.edu
+
+## ABSTRACT
+
+Mean field games (MFGs) model interactions in large-population multi-agent systems through population distributions. Traditional learning methods for MFGs are based on fixed-point iteration (FPI), where policy updates and induced population distributions are computed separately and sequentially. However, FPI-type methods may suffer from inefficiency and instability due to potential oscillations caused by this forward-backward procedure. In this work, we propose a novel perspective that treats the policy and population as a unified parameter controlling the game dynamics. By applying stochastic parameter approximation to this unified parameter, we develop SemiSGD, a simple stochastic gradient descent (SGD)-type method, where an agent updates its policy and population estimates simultaneously and fully asynchronously. Building on this perspective, we further apply linear function approximation (LFA) to the unified parameter, resulting in the first population-aware LFA (PA-LFA) for learning MFGs on continuous state-action spaces. A comprehensive finite-time convergence analysis is provided for SemiSGD with PA-LFA, including its convergence to the equilibrium for linear MFGs—a class of MFGs with a linear structure concerning the population—under the standard contractivity condition, and to a neighborhood of the equilibrium under a more practical condition. We also characterize the approximation error for non-linear MFGs. We validate our theoretical findings with six experiments on three MFGs.
+
+## 1 INTRODUCTION
+
+Mean field games (MFGs) (Huang et al., 2006; Lasry & Lions, 2007) offer a tractable framework for modeling multi-agent systems with a large homogeneous population. In MFGs, the impact of other agents on a particular agent is encapsulated by a *population mass* (or *mean field*), providing a reliable approximation of actual interactions among agents when the number of agents is large. Consequently, understanding the *population* is fundamental in MFGs, as learning these games entails considering both the agent’s policy and the population dynamics.
+
+Prior work on learning MFGs has mainly focused on fixed-point iteration (FPI) methods and their variations, which is characterized by a *forward-backward* procedure that *alternately* calculate the policy update w.r.t. a *fixed* population and the induced population distribution w.r.t. a *fixed* policy (Guo et al., 2019; Elie et al., 2020; Perrin et al., 2020; Xie et al., 2021; Cui & Koeppel, 2021; Laurière et al., 2022b; Anahtarci et al., 2023). However, FPI-type methods face several limitations: 1) The policy learning and population learning in FPI-type methods typically involves distinct iterative processes, and are implemented separately and executed sequentially, potentially increasing the overall *computational burden* (Mao et al., 2022; Zaman et al., 2023). 2) Vanilla FPI methods suffer from *instability*. As the policy or population is fixed while updating the other, the differences between updates in consecutive iterations can be drastic, causing oscillations in the learning process, a phenomenon commonly observed in practice (Cui & Koeppel, 2021). 3) Separating the forward and backward processes prevents us from applying abundant methods developed for policy learning, such as function approximation (Mao et al., 2022; Huang et al., 2024), to population learning.
+
+{1}------------------------------------------------
+
+This work delves into the rapidly growing field of online learning for MFGs (Mao et al., 2022; Angiuli et al., 2022; Zaman et al., 2023; Yardim et al., 2023; Zhang et al., 2024a; Zeng et al., 2025), where an online agent interacts with the environment and gathers observations on a Markov chain to update its policy and population estimate. A key aspect of our approach is recognizing that the Markov chain is jointly *parameterized* by both the policy and population distribution, which together define the transition kernel. From this perspective, finding the mean field equilibrium (MFE) becomes a problem of identifying the *optimal parameter*—the fixed point of the Bellman and transition operators. This viewpoint unlocks a large toolbox of stochastic parameter approximation methods for learning MFGs, including simple stochastic gradient descent (SGD)-type methods. Specifically, by treating the policy and population as a *unified parameter*, we update both estimates *fully asynchronously* using the same batch of samples, thereby eliminating the need for a forward-backward process.
+
+Building on this perspective, we introduce another powerful technique: linear function approximation (LFA), a widely used approach in stochastic approximation methods for policy learning on large or continuous state-action spaces (Melo et al., 2008; Jin et al., 2020). By applying LFA to the unified parameter—encompassing both the policy and population—we develop the first *population-aware* LFA (PA-LFA) for learning MFGs on continuous state-action spaces. This is particularly significant, as many common MFGs, such as autonomous driving (Huang et al., 2021; Chen et al., 2023a,b; Mo et al., 2024), flocking (Perrin et al., 2021), and crowd modeling (Lachapelle & Wolfram, 2011; Burger et al., 2013), inherently involve continuous state-action spaces. With PA-LFA, our method enables a simple, fully online, model-free SGD-type method for learning MFGs in these settings, supported by strong theoretical guarantees.
+
+While elegant, treating the policy and population as a unified parameter raises several questions: 1) Updating policy and population estimates fully asynchronously creates a *strong coupling* between the two, which is absent in forward-backward or multi-loop structures (Yardim et al., 2023; Zhang et al., 2024a) or is alleviated in multi-timescale approaches (Mao et al., 2022; Angiuli et al., 2023; Zaman et al., 2023). How can we analyze this coupling and the non-stationary Markov chain it generates to establish convergence guarantees? 2) Empirically, our method—a simple SGD-type method without additional stabilization mechanisms—outperforms vanilla FPI in *stability and efficiency* (Section 7). What theoretical explanation underpins this? 3) How can we design PA-LFA for continuous state-action spaces such that each population update maintains comparable *operational complexity* to that in the finite state-action case? 4) How does PA-LFA influence convergence? Under what conditions does it converge to an MFE, and if it doesn’t, how large is the *approximation error*?
+
+**Main results.** With the above questions in mind, we highlight the key contributions of this work:
+
+- We propose SemiSGD, a simple online SGD-type method for learning MFGs. We innovatively treat the policy and the population as a unified parameter. Algorithmically, we update both simultaneously and asynchronously using the same online observations and learning rate, thus eliminating the forward-backward process typical of FPI methods. Theoretically, we show that the unified parameter in SemiSGD follows a *descent direction* towards the MFE, whereas neither the policy nor population alone is guaranteed to do so (Lemma 1). This gives a potential explanation for the stability and efficiency of SemiSGD over vanilla FPI (Section 7).
+- We formulate a novel framework of linear MFGs, characterizing a class of MFGs with linear structure concerning the population measure. Linear MFGs accommodates continuous state-action spaces and includes MFGs on finite state-action spaces as a special case. We prove that linear MFGs enable linear parameterization of both the value function and the population measure.
+- We extend the linear parameterization to develop a *population-aware linear function approximation (PA-LFA)* for general MFGs. SemiSGD equipped with PA-LFA is the first method to apply LFA to the population measure in MFGs. Notably, updates in SemiSGD with PA-LFA maintain the same operation complexity as in the finite state-action space case, highlighting the simplicity and efficiency of our method.
+- Finite-time convergence analysis is provided for SemiSGD with PA-LFA. We novelly regard the learning process as a *stochastic approximation on a non-stationary Markov chain parameterized by the unified parameter*. This perspective enables a straightforward SGD-type analysis, elegantly handling the strong coupling between the policy and population and offering insights into the learning dynamics of SemiSGD. We prove that, under a contractivity condition no stronger than prior work, SemiSGD converges to the MFE. The contractivity condition can be hard to
+
+{2}------------------------------------------------
+
+verify in practice and potentially implies large regularization. In response, we propose a new condition that is more practical. This condition allows general non-regularized policies, under which SemiSGD converges to a neighborhood centered at the MFE. In both scenarios, SemiSGD enjoys state-of-the-art sample complexities.
+
+- For non-linear MFGs, SemiSGD with PA-LFA converges to the *projected* MFE (or its neighborhood). We characterize the distance between this projected MFE and the actual MFE in terms of the intrinsic approximation error in the linear representation.
+- We conduct six experiments on three MFGs to demonstrate the properties of our methods: 1) For continuous state-action spaces, PA-LFA is more efficient and accurate than discretization; 2) SemiSGD automatically stabilizes without additional mechanics, achieves a higher accuracy, and is faster by eliminating the forward-backward procedure.
+
+**Related work.** Learning MFGs has garnered increasing attention, with recent comprehensive reviews by Laurière et al. (2022a); Cui et al. (2022). To address the instability issue of FPI, various stabilization mechanisms have been proposed, broadly categorized into: 1) regularization (Cui & Koepl, 2021; Anahartci et al., 2023); 2) fictitious play (Elie et al., 2020; Perrin et al., 2020; Cardaliaguet & Hadikhanloo, 2017); and 3) mirror descent (Perolat et al., 2021; Xie et al., 2021; Yardim et al., 2023; Laurière et al., 2022b). Recently, Angiuli et al. (2022); Zaman et al. (2023); Yardim et al. (2023); Zhang et al. (2024a) developed online oracle-free methods for the population learning in MFGs, where a population estimate is updated using online observations without requiring an oracle to manipulate the population or directly return the population measure. Angiuli et al. (2023); Zaman et al. (2023); Mao et al. (2022); Zeng et al. (2025) further proposed single-loop multi-timescale schemes to asynchronously update the policy and population estimates. On the policy learning side, Mao et al. (2022); Huang et al. (2024) considered function approximation, though they both assume access to the population measure rather than learning it. An extended literature review with detailed comparisons of existing setups and methods is provided in Appendix A.
+
+**Notation.** A complete list of symbols and their meanings is provided in Table 3. We denote the set of probability measures on a space  $\mathcal{X}$  as  $\mathcal{D}(\mathcal{X})$ , and the set of signed measures as  $\mathcal{M}(\mathcal{X})$ . When  $\mathcal{X}$  is finite with  $d$  elements, the probability simplex on it is denoted as  $\Delta^d \subset \mathbb{R}^d$ .  $\delta_x$  is the Dirac delta measure at  $x$ . Without subscript, the inner product denotes the vector inner product  $\langle x, y \rangle = x^\top y$ .  $x \oplus y$  is the direct sum of elements in linear spaces, which reduces to their concatenation  $(x; y)$  when  $x$  and  $y$  are vectors. The norm without subscript denotes the  $\ell_2$  norm for vectors, and  $\ell_2$  operator norm for matrices. For (vector-valued) functions on  $\mathcal{S}$ , the  $L_2$  inner product is defined as  $\langle f, g \rangle_{L_2} = \int_{\mathcal{S}} f(s)g(s)ds$ , and the  $L_1$  norm is denoted as  $\|f\|_{TV} = \int_{\mathcal{S}} \|f(s)\|_1 ds$ .
+
+## 2 STOCHASTIC SEMI-GRADIENT DESCENT FOR MFGS ON FINITE STATE-ACTION SPACES
+
+### 2.1 REVISIT ONLINE LEARNING FOR MFGS ON FINITE STATE-ACTION SPACES
+
+We consider an infinite-horizon Markov decision process (MDP) denoted by  $(\mathcal{S}, \mathcal{A}, r, P, \gamma)$ , with the state space  $\mathcal{S}$  and action space  $\mathcal{A}$  being finite. In MFGs, the reward function  $r$  and transition kernel  $P$  depend on the population distribution over the state space. Specifically, for a given state-action pair  $(s, a) \in \mathcal{S} \times \mathcal{A}$  and population distribution  $\mu \in \mathcal{D}(\mathcal{S})$ ,  $r(s, a, \mu)$  and  $P(s' | s, a, \mu)$  denote the reward received and the probability of transitioning to state  $s' \in \mathcal{S}$ . We consider a bounded reward function with  $\|r\|_\infty \leq R$ .  $\gamma$  is the discount factor.
+
+An agent in an MFG aims to find a policy  $\pi$ , which maps a state to a distribution on the action space determining the agent's actions, that maximizes its expected cumulative discounted reward while interacting with the population. We utilize a value-based approach to calculate policies and assume access to a policy operator  $\Gamma_\pi$  (Zou et al., 2019; Zhang et al., 2024a) that returns a policy based on an (action-)value function  $Q: \mathcal{S} \times \mathcal{A} \rightarrow \mathbb{R}$ . We write  $\pi_Q := \Gamma_\pi(Q)$ . We define two operators for any value functions  $Q, Q' \in \mathbb{R}^{|\mathcal{S}| \times |\mathcal{A}|}$  and population measures  $M, M' \in \mathcal{D}(\mathcal{S})$ :
+
+$$\begin{aligned} \mathcal{T}_{(Q, M)} Q'(s, a) &:= \mathbb{E}_{(Q, M)} [r(s, a, M) + \gamma Q'(s', a')], \text{ with } a' \sim \pi_Q, s' \sim P(\cdot | s, a, M) \quad (\text{Bellman}) \\ \mathcal{P}_{(Q, M)} M'(s') &:= \mathbb{E}_{(M', Q)} [P(s' | s, a, M)], \text{ with } s \sim M', a \sim \pi_Q. \quad (\text{Transition}) \end{aligned}$$
+
+{3}------------------------------------------------
+
+Then our learning goal, the mean field equilibrium (MFE), is defined as the fixed point of these two operators. With an argmax policy operator, the fixed point of the Bellman operator satisfies the Bellman optimality equation, leading to the standard MFE definition in the reward-maximizing setting (Laurière et al., 2022b; Angiuli et al., 2023); with a regularized policy operator, e.g., softmax, the fixed point corresponds to the regularized MFE (Cui & Koepll, 2021; Zaman et al., 2023). See Appendix B.1 for more discussions on our MFE definition.
+
+**Definition 1** (Mean field equilibrium). A value function-population distribution pair  $(Q, M)$  is a *mean field equilibrium (MFE)* if it satisfies  $Q = \mathcal{T}_{(Q, M)}Q$  and  $M = \mathcal{P}_{(Q, M)}M$ .
+
+A typical FPI-type method (approximately) calculates the fixed point of the Bellman operator given the current population distribution, i.e., the best response, and the fixed point of the transition operator given the current value function, i.e., the induced population distribution, alternately. Under certain contractivity conditions, FPI converges to the MFE (Guo et al., 2019).
+
+This work focuses on model-free online learning methods for MFGs. In such methods, an agent maintains estimates about the value function and population measure, and uses online observations to update its estimates. For the value function, temporal difference (TD) methods (Sutton & Barto, 2018) are widely used. Given an online observation tuple  $O = (s, a, s', a')$  and step-size  $\alpha$ , on-policy TD (or SARSA (Sutton & Barto, 2018)) updates the Q-value function as follows:
+
+$$Q(s, a) \leftarrow Q(s, a) - \alpha g(Q; O), \quad \text{with } g(Q; O) := Q(s, a) - r(s, a, M) - \gamma Q(s', a'). \quad (1)$$
+
+For the population distribution, Monte Carlo (MC) sampling (Łatuszyński et al., 2013) is a common choice. Given a new state sample  $s'$  and step-size  $\alpha$ , MC updates the population measure as follows:
+
+$$M \leftarrow M - \alpha g(M; O), \quad \text{with } g(M; O) := M - \delta_{s'}, \quad (2)$$
+
+where  $\delta_{s'}$  is the Dirac delta measure and is a one-hot vector for finite state spaces.
+
+TD and MC updates are widely used in online learning for MFGs (Angiuli et al., 2022; Zaman et al., 2023; Zhang et al., 2024a). Fixing the policy and population measure (i.e., fixing the Markov kernel), TD converges to the optimal value function, and MC converges to the induced population distribution.
+
+### 2.2 STOCHASTIC SEMI-GRADIENT DESCENT
+
+Combining (1) and (2) in a single pass gives a simple SGD-type method.  $g$  in (1) and (2) is referred as semi-gradients, as it does not represent the actual gradient of any loss function but provides a similar descent direction to the *stationary point*, i.e., the zero point of  $g$ .<sup>1</sup> We term our method SemiSGD and present it in Algorithm 1, where  $(Q_t; M_t)$  denotes the concatenated representation of the value function and population measure, as they are both vectors for finite state-action spaces. Similarly,  $g$  represents the concatenation of the semi-gradients for the value function and population measure.
+
+#### --- Algorithm 1: Stochastic semi-gradient descent (SemiSGD) ---
+
+- 1 **input:** Initial value function  $Q_0 (= \langle \phi, \theta_0 \rangle)$ , population estimate  $M_0 (= \langle \psi, \eta_0 \rangle)$ , and state  $s_0$ .
+ - 2 **for**  $t = 0, 1, \dots, T$  **do**
+ - 3   Observe  $a_t \sim \Gamma_\pi(Q_t)[s_t]$ ,  $r_t = r(s_t, a_t, M_t)$ ,  $s_{t+1} \sim P(\cdot | s_t, a_t, M_t)$ ,  $a_{t+1} \sim \Gamma_\pi(Q_t)[s_{t+1}]$ .
+ - 4   Update for finite MFGs:  $(Q_{t+1}; M_{t+1}) = (Q_t; M_t) - \alpha_t g((Q_t; M_t); s, a, s', a')$ ;
+ - 5   or with PA-LFA:  $\xi_{t+1} = \Pi(\xi_t - \alpha_t g_t(\xi_t))$ .
+ - 6 **return**  $(Q_T, M_T)$  or  $\xi_T$ .
+- 
+
+Algorithm 1 is an online, single-loop, uni-timescale method that is free from any forward-backward process. Not only does it update the value function and population measure estimates in an SGD-like manner, but it provides an actual descent direction through the *mean-path* semi-gradient, defined as  $\bar{g}_{(Q, M)}(\cdot) := \mathbb{E}_{(Q, M)} g(\cdot; O)$ , where  $O$  is the online observation tuple following the steady distribution induced by the policy and transition kernel determined by  $Q$  and  $M$ .
+
+<sup>1</sup>With a slight abuse of notation, we use a single operator  $g$  to return semi-gradients throughout the paper, for both the action-value function and population measure; it should be clear from the context and its arguments which one it refers to.
+
+{4}------------------------------------------------
+
+**Lemma 1** (Descent direction; informal). Suppose  $(Q_*, M_*)$  is an MFE. Suppose the reward function, transition kernel, and policy operator are Lipschitz continuous with Lipschitz constant  $L$ . For any value function  $Q$  and population measure  $M$ , with  $\Delta Q := Q - Q_*$  and  $\Delta M := M - M_*$ , we have
+
+$$\begin{aligned} -\langle \Delta M, \bar{q}_{(Q,M)}(M) \rangle &\lesssim -\|\Delta M\|^2 + L\|\Delta M\|(\|\Delta Q\| + \|\Delta M\|), \\ -\langle \Delta Q, \bar{q}_{(Q,M)}(Q) \rangle &\lesssim -\|\Delta Q\|^2 + L\|\Delta Q\|(\|\Delta Q\| + \|\Delta M\|). \end{aligned}$$
+
+Due to the coupling between  $Q$  and  $M$ , neither  $-\bar{q}_{(Q,M)}(M)$  nor  $-\bar{q}_{(Q,M)}(Q)$  is guaranteed to be a descent direction, no matter how small the Lipschitz constant  $L$  is. However, if  $L \lesssim 1/2$ , adding the two inequalities gives
+
+$$-\langle (Q; M) - (Q_*; M_*), \bar{q}_{(Q,M)}((Q; M)) \rangle \lesssim -\|(Q; M) - (Q_*; M_*)\|^2/2.$$
+
+A formal and generalized version of Lemma 1 for linear MFGs, which encompasses finite MFGs (Example 2), is proved in Appendix H.1. We now discuss some key insights from Lemma 1.
+
+**Descent direction.** The concatenated semi-gradient points to a descent direction for the concatenated estimate  $(Q; M)$ , while neither the value function nor population measure alone is guaranteed to follow a descent direction, no matter how small the Lipschitz constant is when far from equilibrium (i.e., large  $\|M - M_*\|$  and  $\|Q - Q_*\|$ ). This strongly suggests treating the value function and population measure as a unified parameter and updating them simultaneously at the same rate. The small Lipschitz constant condition  $L \lesssim 1/2$  in the lemma, formalized as Assumption 4 in Section 5, ensures contractivity. Thus, while both methods converge under the contractivity assumption, SemiSGD follows a descent direction but FPI may not, hinting the *sample efficiency* of SemiSGD. See Figure 1 for an illustration.
+
+![Figure 1: Learning dynamics. The diagram shows two paths in a parameter space (pi, mu). The FPI-type path starts at pi_0 and moves to pi_1, then pi_2, and so on, with corresponding mu values mu_0, mu_1, mu_2, etc. The path is jagged and oscillatory. The SGD-type path starts at pi_0 and moves directly to pi_* (the equilibrium), with a corresponding mu_* value. The SGD-type path is a straight line, indicating a more direct descent direction.](1b896a95bc9974ad01fac7ac6f541a96_img.jpg)
+
+Figure 1: Learning dynamics. The diagram shows two paths in a parameter space (pi, mu). The FPI-type path starts at pi\_0 and moves to pi\_1, then pi\_2, and so on, with corresponding mu values mu\_0, mu\_1, mu\_2, etc. The path is jagged and oscillatory. The SGD-type path starts at pi\_0 and moves directly to pi\_\* (the equilibrium), with a corresponding mu\_\* value. The SGD-type path is a straight line, indicating a more direct descent direction.
+
+Figure 1: Learning dynamics.
+
+**Incremental update by design.** Incrementally updating parameters or damping update steps, rather than switching to entirely new estimates, is a common stabilization technique in learning MFGs (Laurière et al., 2022a), used in methods like fictitious play and mirror descent (Laurière et al., 2022b). As an SGD-type method, updates in SemiSGD are incremental by design. This, combined with the previous point, suggests that SemiSGD enjoys *automatic stabilization* without needing additional stabilization mechanisms, as confirmed by our experiments (Section 7). These two insights also offer a potential explanation for the oscillation issues seen in FPI-type methods.
+
+**Stochastic approximation on non-stationary Markov chains.** The lemma highlights that the value function and population measure jointly shape the landscape of learning MFGs and should be treated as a unified parameter. SemiSGD naturally fits as a *stochastic approximation* method on a *non-stationary* Markov chain for finding the equilibrium parameter, with non-stationarity arising from the changing transition kernel as the value function and population measure are updated. Two-timescale approaches are used to mitigate the non-stationarity and parameter coupling (Angiuli et al., 2023; Zaman et al., 2023; Mao et al., 2022). Using a unified parameter, our approach enables a simpler uni-timescale scheme with a straightforward SGD-type analysis that accounts for coupling and achieves better sample complexities (see Table 2). Moreover, for general policy operators, which may fail the small Lipschitz constant condition, the stochastic approximation is on a *rapidly changing* Markov chain (Zhang et al., 2023). Building on the results for this class of methods, we are able to, for the first time, characterize the finite-time convergence performance of learning MFGs without a contractivity or monotonicity condition.
+
+## 3 LINEAR MEAN FIELD GAMES
+
+We now extend our setup beyond finite state-action spaces. Viewing the value function and population measure as a unified parameter, we can naturally extend linear MDP (Jin et al., 2020) and LFA for the value function to handle population measures on large or continuous state spaces. Before extending LFA to population measures in the next section, we first introduce linear MFGs, a class of MFGs based on linear MDPs with a linear structure in the transition kernel w.r.t. the population measure.
+
+**Definition 2** (Linear mean field games). An MDP  $(\mathcal{S}, \mathcal{A}, P, r, \gamma)$  is a linear MDP (Jin et al., 2020) with feature map  $\phi: \mathcal{S} \times \mathcal{A} \rightarrow \mathbb{R}^{d_1}$  if there exists  $d_1$  (signed) population-dependent measures
+
+{5}------------------------------------------------
+
+$\omega_M = (\omega_M^{(i)})_{i=1}^{d_1} \in \mathcal{M}(\mathcal{S})^{d_1}$  and an *unknown* population-dependent vector  $\nu_M \in \mathbb{R}^{d_1}$ , such that for any state-action pair  $(s, a) \in \mathcal{S} \times \mathcal{A}$  and population distribution  $M \in \mathcal{D}(\mathcal{S})$ , we have
+
+$$P(s' | s, a, M) = \langle \phi(s, a), \omega_M(s') \rangle, \quad r(s, a, M) = \langle \phi(s, a), \nu_M \rangle.$$
+
+A linear MFG further assumes a measure basis  $\psi \in \mathcal{D}(\mathcal{S})^{d_2}$  such that for any population  $M$ , there exists an *unknown* matrix  $\Omega_M \in \mathbb{R}^{d_1 \times d_2}$  such that  $\omega_M = \Omega_M \psi$ , indicating that  $P(s' | s, a, M) = \langle \phi(s, a), \Omega_M \psi(s') \rangle$ . We require  $\phi$  to be  $L_\infty$  and  $\psi$  to be  $L_\infty$  and  $L_2$  (thus its Gram matrix exists). Without loss of generality, we assume  $\sup_{s, a} \|\phi(s, a)\|_2 \leq 1$  and  $\sup_s \|\psi(s)\|_1 \leq F$ .
+
+A linear MFG assumes MDP components, the transition kernel and reward function, lie in the linear span of known basis functions, giving a linear structure to the value function and population measure.
+
+**Proposition 1.** *For a linear MFG, for any population distribution  $M$  and policy  $\pi$ , we denote  $Q_M^\pi$  as the action-value function and  $\mu_M^\pi$  as the induced population measure w.r.t. the MDP determined by  $M$  and  $\pi$ . Then, there exist vector parameters  $\theta \in \mathbb{R}^{d_1}$  and  $\eta \in \mathbb{R}^{d_2}$  such that*
+
+$$Q_M^\pi(s, a) = \langle \phi(s, a), \theta \rangle, \quad \mu_M^\pi(s') = \langle \psi(s'), \eta \rangle, \quad \forall (s, a, s') \in \mathcal{S} \times \mathcal{A} \times \mathcal{S}.$$
+
+The proof of Proposition 1 is deferred to Appendix E. Remarkably, requiring that the transition kernel being linear w.r.t. a measure basis is essential for the linear structure of the population measure. In this paper, we reserve letters  $\theta$  for the value function parameter and  $\eta$  for the population measure parameter. And we denote the *concatenated parameter* as  $\xi = (\eta; \theta)$ . Additionally, we will use parameters  $(\eta, \theta, \xi)$  and their corresponding functions  $(Q, M, (Q, M))$  interchangeably in our analysis. For example, we say  $\xi \in \mathbb{R}^{d_1+d_2}$  is a mean field equilibrium (MFE) if its corresponding value function  $Q = \langle \phi, \theta \rangle$  and population measure  $M = \langle \psi, \eta \rangle$  satisfy Definition 1.
+
+**Example 1** (Linear MDP plus population-independent transition kernel). MFGs with a linear MDP and population-independent transition kernel are a trivial example of linear MFGs, where  $\Omega_M = I$  for all  $M \in \mathcal{D}(\mathcal{S})$ .
+
+**Example 2** (Finite state-action space). For finite MFGs, let the feature map  $\phi$  return the one-hot vector of each state-action pair, i.e.,  $\phi(s, a) = e_{(s, a)} \in \mathbb{R}^{|\mathcal{S}||\mathcal{A}|}$ , and the measure basis  $\psi$  return the Dirac delta measure at each state, i.e.,  $\psi(s') = \delta_{s'} \in \Delta^{|\mathcal{S}|}$ . Construct the matrix  $\Omega_M \in \mathbb{R}^{|\mathcal{S}||\mathcal{A}| \times |\mathcal{S}|}$  such that  $(\Omega_M)_{(s, a), s'} = P(s' | s, a, M)$ . Similarly, construct the vector  $\nu_M \in \mathbb{R}^{|\mathcal{S}||\mathcal{A}|}$  such that  $(\nu_M)_{(s, a)} = r(s, a, M)$ . Then, for any  $(s, a, s') \in \mathcal{S} \times \mathcal{A} \times \mathcal{S}$ , we have
+
+$$P(s' | s, a, M) = e_{(s, a)}^T \Omega_M \delta_{s'} = \langle e_{(s, a)}, \Omega_M \delta(s') \rangle, \quad r(s, a, M) = e_{(s, a)}^T \nu_M = \langle e_{(s, a)}, \nu_M \rangle.$$
+
+Example 2 implies that all the analysis for linear MFGs applies to finite MFGs (see also Appendix K).
+
+## 4 SEMISGD WITH POPULATION-AWARE LINEAR FUNCTION APPROXIMATION
+
+Proposition 1 presents the first linear parameterization of the population measure in MFGs. Applying this to general MFGs leads to population-aware linear function approximation (PA-LFA). More discussions on motivations of PA-LFA can be found in Appendix B.2. PA-LFA necessitates a tailored stochastic update rule for the population measure estimate. Let  $M_*$  be the objective population measure and define the loss function  $\mathcal{L} := \frac{1}{2} \|M - M_*\|_{L_2}^2$ . Then, the gradient of the loss is
+
+$$\nabla_\eta \mathcal{L} = \langle \nabla_\eta M, M - M_* \rangle_{L_2} = \langle \psi, \langle \psi, \eta \rangle - M_* \rangle_{L_2}.$$
+
+As the MFE population measure  $M_*$  is unknown, we replace it with the empirical Delta distribution (bootstrapping), giving the semi-gradient
+
+$$g(\eta; s') = \langle \psi, \langle \psi, \eta \rangle - \delta_{s'} \rangle_{L_2} = \int_{\mathcal{S}} \psi(s) \psi(s)^T \eta ds - \int_{\mathcal{S}} \psi(s) \delta_{s'}(s) ds =: G_\psi \eta - \psi(s'), \quad (3)$$
+
+where  $G_\psi := \int_{\mathcal{S}} \psi(s) \psi(s)^T ds$  is the Gram matrix of measure basis  $\psi$ .
+
+For finite MFGs, (2) retains the updated population measure as a probability vector, which is not necessarily the case when using (3) as the semi-gradient, due to the presence of general  $G_\psi$  and  $\psi(s')$  that may not be an identity matrix or a probability vector. Therefore, we need to apply a projection to the updated parameter to ensure that it remains a probability vector, giving our stochastic update rule:
+
+$$\eta_{t+1} = \Pi_\Delta(\eta_t - \alpha_t g_t(\eta_t)), \quad (4)$$
+
+where  $g_t(\eta) := g(\eta; s_{t+1})$  and  $\Pi_\Delta$  is the projection operator onto the probability simplex  $\Delta^{d_2}$ .
+
+{6}------------------------------------------------
+
+*Remark 1* (Operation complexity). The simplex projection has a worst-case complexity of  $O(d_2^2)$  (Condat, 2016). In semi-gradient evaluation,  $G_\psi$  is a constant matrix, and thus we only need to evaluate  $\psi$  at the next state  $s'$  and multiply parameter with a fixed matrix, with the matrix-vector multiplication having a complexity of  $O(d_2^2)$ . Therefore, the total worst-case operation complexity of the update rule (4) is  $O(d_2^2)$ . Moreover, the simplex projection has an expected complexity of  $O(d_2)$  (Condat, 2016). And if  $G_\psi$  has precomputed properties and/or special structures, such as being sparse with  $O(d_2)$  non-zero elements, the complexity of the semi-gradient evaluation is  $O(d_2)$ , giving a total expected operation complexity of  $O(d_2)$ , which is the same as that of (2) for finite MFGs with a state space of size  $|\mathcal{S}| = O(d_2)$ .
+
+Similarly, we can get the TD update rule for the value function parameter  $\theta$  (Sutton & Barto, 2018):
+
+$$g(\theta; O) = \phi(s, a) (\langle \phi(s, a) - \gamma \phi(s', a'), \theta \rangle - r) =: G_\phi(O)\theta - \varphi(O),$$
+
+where  $O = (s, a, r, s', a')$ , and  $G_\phi(O) := \phi(s, a)(\phi(s, a) - \gamma \phi(s', a'))^T$  and  $\varphi(O) := \phi(s, a)r$ . The update rule for the action-value function parameter is
+
+$$\theta_{t+1} = \Pi_D(\theta_t - \alpha_t g_t(\theta_t)), \quad (5)$$
+
+where we denote  $g_t(\theta) := g(\theta; O_t)$ ,  $O_t = (s_t, a_t, r_t, s_{t+1}, a_{t+1})$ , and  $\Pi_D$  is the projection operator onto the Euclidean ball  $B_D^{\theta_1} := \{\theta \in \mathbb{R}^{d_1} : \|\theta\| \leq D\}$ . Similar to the population measure update, the projection is commonly used with LFA to ensure that the value function parameter remains bounded (Bhandari et al., 2018; Zou et al., 2019), which is automatically satisfied in finite MFGs (Appendix K). Specifically, we need  $D \geq \|\theta_*\|$ , where  $\theta_*$  is the MFE value function parameter.
+
+Combining (4) and (5) gives the update rule for the unified parameter:
+
+$$\xi_{t+1} = \Pi((\xi_t - \alpha_t g_t(\xi_t)) := \Pi_{B_D^{\theta_1} \times \Delta^{d_2}}(\xi_t - \alpha_t ((G_\phi(O_t) \oplus G_\psi)\xi_t - (\varphi \oplus \psi)(O_t))). \quad (6)$$
+
+(6) updates the action-value function and population measure using the same online observations with the same learning rate. Replacing Line 3 in Algorithm 1 with (6) gives SemiSGD with LFA.
+
+The next section shows that SemiSGD converges to a zero point of the mean-path semi-gradient  $\bar{g}(\xi) := \mathbb{E}_{O \sim \mu_\xi} g(\xi; O)$ , where  $\mu_\xi$  is the observation distribution induced by the parameter  $\xi$ . The next proposition states that this point is an MFE, thus validating the derivation in this section.
+
+**Proposition 2** (MFE as a stationary point). *For linear MFGs,  $\xi$  is an MFE if and only if  $\bar{g}(\xi) = 0$ .*
+
+We prove an extended version of Proposition 2 in Appendix F, showing that the stationary point actually corresponds to a *projected* MFE for general (non-linear) MFGs.
+
+## 5 SAMPLE COMPLEXITY ANALYSIS
+
+This section provides a finite-sample analysis of the convergence of SemiSGD with LFA, thus covering finite MFGs as a special case. We denote  $P_M(s', s, a) := P(s' | s, a, M)$  and  $r_M(s, a) := r(s, a, M)$  for short. For transition kernels, we define the total variation operator norm  $\|P\|_{\text{TV}} := \sup_{P \in \mathcal{M}(\mathcal{S} \times \mathcal{A}), \|P\|_{\text{TV}} \leq 1} \int P(\cdot | s, a) p(ds, da) \|_{\text{TV}}$ . We now state the assumptions for the analysis.
+
+**Assumption 1** (Lipschitz MDP). *The transition kernel and reward function are Lipschitz continuous w.r.t. the population measure. That is, there exists positive constants  $L_P$  and  $L_r$  such that for any state-action pair  $(s, a)$  and population measures  $M_1, M_2$ , we have*
+
+$$\|P_{M_1} - P_{M_2}\|_{\text{TV}} \leq (L_P / \sqrt{d_2}) \|M_1 - M_2\|_{\text{TV}}, \quad \|r_{M_1} - r_{M_2}\|_\infty \leq (L_r / \sqrt{d_2}) \|M_1 - M_2\|_{\text{TV}}.$$
+
+**Assumption 2** (Lipschitz policy operator). *There exists a constant  $L_\pi$  such that for any state  $s$  and value functions  $Q_1, Q_2$ , we have  $\|\Gamma_\pi(Q_1)(\cdot | s) - \Gamma_\pi(Q_2)(\cdot | s)\|_{\text{TV}} \leq L_\pi \|Q_1 - Q_2\|_\infty$ .*
+
+**Assumption 3** (Uniform ergodicity). *The MDP is uniformly ergodic for any parameter any value function  $Q$  and population measure  $M$ . That is, there exists constants  $m \geq 1, \rho \in (0, 1)$ , and  $\mu_{(Q, M)}$ , such that for any initial distribution  $M_0 \in \mathcal{D}(\mathcal{S})$ , it holds that  $\|\mu_{(Q, M)} - \mathcal{P}_{(Q, M)}^t M_0\|_{\text{TV}} \leq m \rho^t$ .*
+
+For notational convenience, we define an ergodicity constant  $\sigma := 2 + \hat{n} + m \rho^{\hat{n}} / (1 - \rho)$  with  $\hat{n} := \lceil \log_\rho m^{-1} \rceil$ , and  $H := (1 + \gamma)D + R + 2F$ , which can be regarded as the scale of the problem.
+
+{7}------------------------------------------------
+
+**Assumption 4.** The Lipschitz constants are sufficiently small such that  $3\sigma \max\{L_P, L_\pi\}H + L_r \leq 2w$ , where  $w \in (0, 1/2]$  is a problem-dependent constant (defined in Lemma 9 in Appendix H.1)
+
+*Remark 2.* Assumption 1 is a standard regularity condition for MFGs that do not assume a blanket contractivity assumption (Cui & Koepll, 2021; Angiuli et al., 2023; Anahtarci et al., 2023; Yardim et al., 2023; Huang et al., 2024). Assumption 2 ensures the smoothness of policy updates, a condition typically met through regularization. Example policy operators satisfying Assumption 2 include softmax (Cui & Koepll, 2021; Zaman et al., 2020; Angiuli et al., 2023), mirror descent (Perolat et al., 2021; Laurière et al., 2022b), and mirror ascent (Yardim et al., 2023). Assumption 3 is a standard mixing assumption for online methods with Markovian sampling (Bhandari et al., 2018; Zou et al., 2019; Angiuli et al., 2022; Zaman et al., 2023), ensuring that the agent’s exploration adequately covers the state-action space. Notably, Assumption 3 is also typically satisfied by regularizing behavior policies (Yardim et al., 2023). It is noteworthy that even earlier works using a blanket contractivity assumption recognize that contractivity can be achieved through regularization, provided that “the transition kernel and reward function are Lipschitz and the corresponding Lipschitz constants are small enough” (Xie et al., 2021). Therefore, Assumption 4 is the key assumption that guarantees the contractivity of learning dynamics. In summary, our assumptions closely align with those in Angiuli et al. (2023); Anahtarci et al. (2023), and are not more restrictive than those in the literature for contractive MFGs. See also Appendix I for convergence results in the absence of Assumption 4.
+
+We can now bound the mean squared error of SemiSGD recursively, which directly gives several finite-time error bounds.
+
+**Theorem 1** (One-step progress). *Let  $\xi_* = (\theta_*, \eta_*)$  be an MFE parameter. Let  $\{\xi_t = (\theta_t, \eta_t)\}$  be a sequence of parameters generated by SemiSGD. Then, under Assumptions 1 to 4, we have*
+
+$$\mathbb{E}\|\xi_{t+1} - \xi_*\|^2 \leq (1 - \alpha_t w) \mathbb{E}\|\xi_t - \xi_*\|^2 + H^2 \cdot O(\alpha_t^2 \log \alpha_t^{-1}) + \frac{\max\{L_P, L_\pi, L_r\}^2 H^4}{w} \cdot O(\alpha_t^3 \log^4 \alpha_t^{-1}).$$
+
+**Corollary 1** (Constant step-size). *Given a constant step-size  $\alpha_t \equiv \alpha_0$ , we have*
+
+$$\mathbb{E}\|\xi_T - \xi_*\|^2 \leq e^{-\alpha_0 w T} \|\xi_0 - \xi_*\|^2 + w^{-1} H^2 \cdot O(\alpha_0 \log \alpha_0^{-1}).$$
+
+Let  $\alpha_0 = (\log T)/(wT)$ . Then Corollary 1 states  $\mathbb{E}\|\xi_T - \xi_*\|^2 = O((H^2 \log^2 T)/(w^2 T))$ , giving an  $O(\epsilon^{-2} \log^2 \epsilon^{-1})$  sample complexity for an  $\epsilon$ -MFE ( $\mathbb{E}\|\xi_T - \xi_*\| \leq \epsilon$ ). A linearly decaying step-size sequence improves the logarithmic factor, giving a convergence rate of  $O((H^2 \log T)/(w^2 T))$  (see Corollary 3). Reducing to finite MFGs, the complexity becomes  $\tilde{O}\left(\frac{S A R^2}{\lambda^2 (1-\gamma)^4 T}\right)$  (see Corollary 4).
+
+These results also imply the uniqueness of the MFE under the assumptions of Theorem 1. The sample complexity is tight up to a logarithmic factor, consistent with other stochastic approximation methods, and strictly better than existing results for learning MFGs (Table 2). See Appendix B.3 for more discussions.
+
+## 6 APPROXIMATION ERROR FOR NON-LINEAR MFGS
+
+SemiSGD with PA-LFA applies to non-linear MFGs as long as the feature map  $\phi$  and measure basis  $\psi$  are specified. However, for non-linear MFGs, it remains unclear: 1) What point does SemiSGD with PA-LFA converge to? 2) What factors characterize the approximation error caused by PA-LFA?
+
+For the first question, it turns out that the convergence point of SemiSGD with PA-LFA, i.e., the zero point of the mean-path semi-gradient developed in Section 4, corresponds to a *projected MFE*  $\langle \theta, \eta \rangle$  defined by  $\langle \theta, \phi \rangle = \Pi_\phi \mathcal{T}_\xi \langle \theta, \phi \rangle$  and  $\langle \eta, \psi \rangle = \Pi_\psi \mathcal{P}_\xi \langle \eta, \psi \rangle$ , where  $\Pi_\phi$  and  $\Pi_\psi$  are orthogonal projection operators onto the linear spans of  $\phi$  and  $\psi$ , respectively. The formal definitions and proof of the statement are deferred to Appendix F. For linear MFGs, as images of  $\mathcal{T}$  and  $\mathcal{P}$  are within the linear spans of  $\phi$  and  $\psi$  (Appendix E), the projected MFE coincides with the MFE itself (Proposition 2). The following theorem answers the second question.
+
+**Theorem 2** (Approximation error). *Let  $\xi_\diamond = (\theta_\diamond, \eta_\diamond)$  be the convergence point of SemiSGD with PA-LFA. Let  $(q_*, \mu_*)$  be the actual MFE. Write  $\mathcal{P}_\diamond := \mathcal{P}_{\xi_\diamond}$  for short, and similarly for  $\mathcal{P}_*$ ,  $\mathcal{T}_\diamond$ , and  $\mathcal{T}_*$ .*
+
+{8}------------------------------------------------
+
+Then, Assumption 3 indicates the existence of  $k \in \mathbb{N}$  such that
+
+$$\epsilon_q := \|q_* - \langle \phi, \theta_* \rangle\|_\infty \leq \left( \gamma + \frac{\gamma \sigma R L_\pi}{1 - \gamma} \right) \epsilon_q + \left( L_r + \frac{\gamma \sigma R L_p}{(1 - \gamma) \sqrt{d_2}} \right) \epsilon_\mu + \|q_* - \Pi_\phi q_*\|_\infty$$
+
+$$\epsilon_\mu := \|\mu_* - \langle \psi, \eta_* \rangle\|_{\text{TV}} \leq \left( \rho^k + \frac{k L_p}{\sqrt{d_2}} \right) \epsilon_\mu + k L_\pi \epsilon_q + k \|\mathcal{P}_* - \Pi_\psi \mathcal{P}_*\|_{\text{TV}}.$$
+
+If the Lipschitz constants are small enough:  $2L_\pi(\gamma\sigma R + (1 - \gamma)k) \leq (1 - \gamma)^2$  and  $2(L_p(\gamma\sigma R + (1 - \gamma)k) + L_r(1 - \gamma)/\sqrt{d_2}) \leq (1 + \rho - 2\rho^k)(1 - \gamma)\sqrt{d_2}$ , then
+
+$$\epsilon_q + \epsilon_\mu \leq \frac{2}{1 - \min\{\gamma, \rho\}} (\epsilon_\phi + k\epsilon_\psi),$$
+
+where  $\epsilon_\phi := \|q_* - \Pi_\phi q_*\|_\infty$  and  $\epsilon_\psi := \|\mathcal{P}_* - \Pi_\psi \mathcal{P}_*\|_{\text{TV}}$  are inherent approximation error induced by the projection onto the linear spans of basis  $\phi$  and  $\psi$ , which is independent of the algorithm. Moreover, if  $\|\mathcal{P}_* - \mathcal{P}_*^\infty\|_{\text{TV}} = \rho$  (e.g.,  $\mathcal{P}_*$  induces a reversible Markov chain),  $k = 1$ .
+
+The proof of Theorem 2 is given in Appendix J. The approximation error of PA-LFA scales with the inherent approximation error determined by the chosen basis, which is consistent with the approximation error of LFA for value function (Tsitsiklis & Van Roy, 1997).
+
+## 7 NUMERICAL EXPERIMENTS
+
+To evaluate SemiSGD with PA-LFA, we conduct six experiments on three MFG examples: speed control (Appendix C.2), flocking (Appendix C.4), and network routing (Appendix C.6). When comparing with FPI-type methods, alongside vanilla online FPI, we equip FPI with entropy regularization (ER), fictitious play (FP), and mirror descent (MD). Please refer to Appendix C for the detailed setup, full results and analysis, and additional experiments. Here, we present some highlights of the results.
+
+Figure 2a reports MSE curves for the **speed control** game. This example showcases the sample efficiency, stability, and accuracy of SemiSGD, particularly compared to vanilla FPI. The **flocking game** is highly sensitive to the reward (Appendix C.5). Large regularization may obscure the reward signal, leading to near-constant policies and population distributions, while other methods except SemiSGD cannot handle non-regularized policies well. Figure 2b reports exploitability curves for the flocking game, showing that only SemiSGD can effectively learn the game with near-greedy policies. The goal of the **network routing** game is to direct the traffic from the origin to the destination. Figure 2c reports the population distribution learned by SemiSGD on this highly non-smooth game. Figure 3 examines how the **number of inner loop iterations** ( $K$ ) affect the convergence of FPI (Appendix C.3): it suggests that, given the same number of total samples, reducing  $K$  monotonically improves the convergence. Notably, when  $K = 1$ , online FPI is equivalent to SemiSGD, which removes the forward-backward structure. Figure 4 and Table 1 compare **PA-LFA with discretization** (Appendix C.7) on learned distribution and accuracy respectively, demonstrating that with a proper choice of measure basis, PA-LFA generalizes better and achieves higher accuracy.
+
+![Figure 2: Convergence performance of SemiSGD and FPI. (a) Speed control: MSE vs Samples. (b) Flocking: Exploitability vs Samples. (c) Network routing: Population distribution on a graph.](4495fbec19aac6861f1a0b35c4dc38bc_img.jpg)
+
+Figure 2 consists of three subplots. Subplot (a) shows the Mean Squared Error (MSE) on the y-axis (ranging from 0 to 1.5) against the number of samples on the x-axis (ranging from 0 to 100,000). It compares FPI (blue), FPI + ER (orange), FPI + FP (yellow), FPI + MD (purple), and SemiSGD (green). SemiSGD shows a rapid decrease in MSE, reaching near-zero levels by 20,000 samples, while other methods remain at higher MSE levels. Subplot (b) shows Exploitability on the y-axis (ranging from 0 to 5) against the number of samples on the x-axis (ranging from 0 to 100,000). It compares the same five methods. SemiSGD (green) shows a sharp drop in exploitability to near-zero levels by 20,000 samples, while other methods remain high. Subplot (c) shows a graph representing the network routing game, with nodes labeled 0 to 21. Nodes 0 and 21 are highlighted in red, representing the origin and destination. The graph shows a complex network of edges connecting these nodes, with a color bar on the right indicating population distribution values ranging from 0 to 1.
+
+Figure 2: Convergence performance of SemiSGD and FPI. (a) Speed control: MSE vs Samples. (b) Flocking: Exploitability vs Samples. (c) Network routing: Population distribution on a graph.
+
+Figure 2: Convergence performance of SemiSGD and FPI.
+
+{9}------------------------------------------------
+
+![Figure 3: A line plot showing Mean Squared Error (MSE) on the y-axis (logarithmic scale from 10^-4 to 10^-2) versus Samples on the x-axis (linear scale from 0 to 200, with a multiplier of 10^3). The plot compares five different values of K (500, 250, 125, 50, 10) over time. The MSE for all K values decreases rapidly and stabilizes around 10^-3 after approximately 50 samples. The K=10 line shows the lowest MSE, while K=500 shows the highest.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 3: A line plot showing Mean Squared Error (MSE) on the y-axis (logarithmic scale from 10^-4 to 10^-2) versus Samples on the x-axis (linear scale from 0 to 200, with a multiplier of 10^3). The plot compares five different values of K (500, 250, 125, 50, 10) over time. The MSE for all K values decreases rapidly and stabilizes around 10^-3 after approximately 50 samples. The K=10 line shows the lowest MSE, while K=500 shows the highest.
+
+![Figure 4: A density plot comparing the distribution of Iterations for Discret (blue line) and MFE (yellow line). The x-axis represents Iterations from 0.0 to 1.0, and the y-axis represents Density from 0.0 to 1.0. The Discret distribution has two prominent peaks, one around 0.25 and another around 0.75. The MFE distribution is more spread out, with a peak around 0.75 and a smaller peak around 0.25.](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+Figure 4: A density plot comparing the distribution of Iterations for Discret (blue line) and MFE (yellow line). The x-axis represents Iterations from 0.0 to 1.0, and the y-axis represents Density from 0.0 to 1.0. The Discret distribution has two prominent peaks, one around 0.25 and another around 0.75. The MFE distribution is more spread out, with a peak around 0.75 and a smaller peak around 0.25.
+
+| Dim./Algo. | Discret. | PA-LFA |
+|-|-|-|
+| 2 | .20 $\pm$ .01 | .17 $\pm$ .00 |
+| 5 | .21 $\pm$ .01 | .15 $\pm$ .01 |
+| 8 | .21 $\pm$ .14 | .11 $\pm$ .05 |
+| 10 | .27 $\pm$ .08 | .12 $\pm$ .03 |
+| 20 | .15 $\pm$ .13 | .07 $\pm$ .04 |
+| 25 | .18 $\pm$ .15 | .06 $\pm$ .04 |
+| 40 | .15 $\pm$ .13 | .10 $\pm$ .05 |
+| 50 | .16 $\pm$ .13 | .11 $\pm$ .02 |
+
+Figure 3: On  $n$  inner iterations. Figure 4: LFA & Discretization. Table 1: MSE of LFA & Discretization
+
+## 8 CONCLUSION
+
+This work proposes a simple SGD-type method for learning MFGs, eliminating the forward-backward structure in FPI-type methods and the need for complex stabilization mechanisms. Our approach leverages a novel perspective that unifies the value function and population measure as a single parameter, enabling a straightforward analysis that elegantly handles the coupling between policy and population while offering insights into the learning dynamics.
+
+Building on this perspective, we develop the first population-aware linear function approximation for MFGs on large or continuous state-action spaces, with sample and operation efficiency guarantees, as well as approximation error characterization. Function approximation is just one example of how techniques from policy learning can be extended to population learning using this unified perspective, and we expect further advancements in this direction.
+
+More broadly, our methodology is generalizable to other dynamical systems that can be parameterized by learnable parameters, including (finite) population games (Sandholm, 2010), evolutionary games (Hilbe et al., 2018), graphon games (Zhou et al., 2024), and policy optimization for MFGs (Zeng et al., 2025).
+
+## ACKNOWLEDGMENTS
+
+This work is sponsored by NSF under CAREER award number CMMI-1943998.
+
+## REFERENCES
+
+- Berkay Anahtarci, Can Deha Kariksiz, and Naci Saldi. Q-learning in regularized mean-field games. *Dynamic Games and Applications*, 13(1):89–117, 2023.
+- Andrea Angiuli, Jean-Pierre Fouque, and Mathieu Laurière. Unified reinforcement Q-learning for mean field game and control problems. *Mathematics of Control, Signals, and Systems*, 34(2): 217–271, 2022.
+- Andrea Angiuli, Jean-Pierre Fouque, Mathieu Laurière, and Mengrui Zhang. Convergence of multi-scale reinforcement q-learning algorithms for mean field game and control problems. *arXiv preprint arXiv:2312.06659*, 2023.
+- Jalaj Bhandari, Daniel Russo, and Raghav Singal. A finite time analysis of temporal difference learning with linear function approximation. In *Conference on learning theory*, pp. 1691–1692. PMLR, 2018.
+- Rajendra Bhatia. *Matrix analysis*, volume 169. Springer Science & Business Media, 2013.
+- Martin Burger, Marco Di Francesco, Peter Markowich, and Marie-Therese Wolfram. Mean field games with nonlinear mobilities in pedestrian dynamics. *arXiv preprint arXiv:1304.5201*, 2013.
+- Pierre Cardaliaguet and Saeed Hadikhanloo. Learning in mean field games: The fictitious play. *ESAIM: Control, Optimisation and Calculus of Variations*, 23(2):569–591, 2017.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,311 @@
+
+
+{0}------------------------------------------------
+
+# TOKENFORMER: RETHINKING TRANSFORMER SCALING WITH TOKENIZED MODEL PARAMETERS
+
+Haiyang Wang<sup>1,3\*</sup>, Yue Fan<sup>1\*</sup>, Muhammad Ferjad Naeem<sup>2</sup>, Yongqin Xian<sup>2</sup>,  
+Jan Eric Lenssen<sup>1</sup>, Liwei Wang<sup>3</sup>, Federico Tombari<sup>2</sup>, Bernt Schiele<sup>1</sup>
+
+<sup>1</sup>Max Planck Institute for Informatics, SIC <sup>2</sup>Google <sup>3</sup>Peking University
+
+## ABSTRACT
+
+Transformers have become the predominant architecture in foundation models due to their excellent performance across various domains. However, the substantial cost of scaling these models remains a significant concern. This problem arises primarily from their dependence on a fixed number of parameters within linear projections. When architectural modifications (e.g., channel dimensions) are introduced, the entire model typically requires retraining from scratch. As model sizes continue growing, this strategy results in increasingly high computational costs and becomes unsustainable. To overcome this problem, we introduce Tokenformer, a natively scalable architecture that leverages the attention mechanism not only for computations among input tokens but also for interactions between tokens and model parameters, thereby enhancing architectural flexibility. By treating model parameters as tokens, we replace all the linear projections in Transformers with our token-parameter attention layer, where input tokens act as queries and model parameters as keys and values. This reformulation allows for progressive and efficient scaling without necessitating retraining from scratch. Our model scales from 124M to 1.4B parameters by incrementally adding new key-value parameter pairs, achieving performance comparable to Transformers trained from scratch while greatly reducing training costs. Code and models are available at <https://github.com/Haiyang-W/TokenFormer.git>.
+
+## 1 INTRODUCTION
+
+Designing a powerful neural network architecture is a long-standing goal in machine learning. Recent developments in foundation models (FMs) have shown the potential of Transformers (Vaswani et al., 2017) as a universal computational architecture. Thanks to their flexibility and scalability, Transformers have achieved state-of-the-art performance across various domains, including natural language processing (NLP) (Radford et al., 2018; Alec et al., 2019; Brown et al., 2020), visual modeling (Dosovitskiy et al., 2021; Liu et al., 2021), vision-language (Liu et al., 2023; Wang et al., 2024), graph representation (Ying et al., 2021), and 3D vision (Wang et al., 2023a;b).
+
+Transformers typically divide the computation required to process a single token into two distinct parts: interactions with other input tokens (*token-token* interaction) and computations involving the model’s parameters (*token-parameter* interaction). The attention mechanism (Vaswani et al., 2017) facilitates token-token interactions, allowing modern general-purpose foundation models to encode multi-modal data into a unified token sequence and effectively capture complex dependencies among them (Liu et al., 2023; Zhu et al., 2023; Wang et al., 2023d). Conversely, token-parameter computations rely heavily on linear projections (Dunford & Schwartz, 1988), where input tokens are multiplied by a fixed set of parameters. This prescribed design limits scalability because increasing the model size requires altering core architectural components, often necessitating retraining the entire model from scratch. As models grow larger, this results in excessive resource consumption, making it increasingly impractical. In this paper, we introduce a novel architecture that enhances the flexibility of token-parameter interactions, allowing for incremental scaling of model parameters and effectively reusing previously trained models, thus significantly reducing the training burden.
+
+\*Equal contribution.
+
+{1}------------------------------------------------
+
+![Figure 1: A line graph on the left shows Perplexity (y-axis, 11-17) vs. Training cost / TPU hours (x-axis, 2000-12000). Two series are plotted: 'Scaling Transformer from scratch' (blue line with dots) and 'Scaling Tokenformer incrementally' (red line with dots). The red line shows a steeper decline in perplexity, reaching a lower value at a lower training cost. Grey circles of increasing size represent model parameter counts: 124M, 354M, 757M, and 1.4B. The right panel is a diagram comparing the internal structures of a 'Transformer' and a 'Tokenformer'. The Transformer diagram shows a stack of layers: Input -> QKV Projection -> Token-Token Attn (Q, K, V) -> FFN. The Tokenformer diagram shows a similar stack but replaces the FFN and QKV Projection with 'Token-Param Attn' layers that take 'Key Param' and 'Value Param' as inputs, alongside the 'Token-Token Attn' layers.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: A line graph on the left shows Perplexity (y-axis, 11-17) vs. Training cost / TPU hours (x-axis, 2000-12000). Two series are plotted: 'Scaling Transformer from scratch' (blue line with dots) and 'Scaling Tokenformer incrementally' (red line with dots). The red line shows a steeper decline in perplexity, reaching a lower value at a lower training cost. Grey circles of increasing size represent model parameter counts: 124M, 354M, 757M, and 1.4B. The right panel is a diagram comparing the internal structures of a 'Transformer' and a 'Tokenformer'. The Transformer diagram shows a stack of layers: Input -> QKV Projection -> Token-Token Attn (Q, K, V) -> FFN. The Tokenformer diagram shows a similar stack but replaces the FFN and QKV Projection with 'Token-Param Attn' layers that take 'Key Param' and 'Value Param' as inputs, alongside the 'Token-Token Attn' layers.
+
+Figure 1: Traditionally, large transformer architectures are trained from scratch without reusing previous smaller-scale models (represented by blue dots on the left). In this paper, we propose a novel fully attention-based architecture that allows scaling model incrementally, thus greatly reducing the overall cost of training large transformer architectures (depicted by red dots on the left). The right panel delineates a comparison between conventional Transformer and our Tokenformer.
+
+To achieve this objective, we introduce Tokenformer, a novel architecture that unifies the computations of token-token and token-parameter interactions by entirely employing the attention mechanism. The flexibility of our token-parameter attention layer, along with its ability to handle a variable number of parameters, inherently enhances the model’s scalability, facilitating progressively efficient scaling.
+
+As shown in Figure 1, we extend the Transformer architecture by preserving the computational patterns between input tokens while reformulating all the linear projections using a cross-attention mechanism. Specifically, to project features with input and output dimensions  $D_1$  and  $D_2$ , we employ two sets of parameters, each comprising  $N$  learnable tokens with channel dimensions of  $D_1$  and  $D_2$ , respectively. In this formulation, input tokens serve as queries, and model parameters as keys and values. This flexibility renders our model’s parameters inherently scalable with variable  $N$ , allowing for efficient expansion by continuously adding new key-value parameter pairs. Figure 1 shows that our model can be scaled incrementally from 124M to 1.4B parameters, achieving performance similar to training from scratch while saving more than half of the training cost.
+
+The key contributions of this work are summarized as 1) As shown in Figure 1, we propose Tokenformer, a fully attention-driven neural network that treats model parameters as tokens, maximizing the flexibility of token-parameter computations while achieving competitive performance on standard benchmarks across both language and vision domains. 2) Thanks to this design, our model can be naturally scaled by progressively adding new key-value parameter pairs. Compared with the train-from-scratch approach (Biderman et al., 2023; Kaplan et al., 2020), our method achieves nearly the same performance while greatly reducing training costs.
+
+We hope that the idea of tokenizing everything-whether it be data, parameter, or memory-and utilizing attention mechanisms to build connections between them will introduce a unique perspective on model architecture, inspiring innovative designs for future networks.
+
+## 2 RELATED WORK
+
+**Transformer** (Vaswani et al., 2017) has emerged as a foundational architecture in deep learning due to its versatile attention mechanism, enabling it to process any tokenized data and adapt to numerous domains, including language modeling (Radford et al., 2018; Touvron et al., 2023), image processing (Dosovitskiy et al., 2021), multi-modal understanding (Liu et al., 2023; Wang et al., 2024; 2023b; 2022), decision making (Chen et al., 2021b), graph learning (Yun et al., 2019), among others. While the Transformer effectively handles interactions among input tokens with flexibility, this property does not extend to computations involving model parameters, which are conducted via prescribed linear projections. In this work, we seek to restructure token-parameter interactions by developing a fully attention-based network that unifies both token-token and token-parameter computations through attention mechanisms, thus further extending the network’s flexibility.
+
+{2}------------------------------------------------
+
+**Large Scale Training** has proven to be an effective approach for developing powerful foundation models. As demonstrated by models like the GPT series (Radford et al., 2018; Alec et al., 2019; Brown et al., 2020), simple architectures—when supported by larger training datasets and increased model sizes (measured in parameters)—often outperform more complex algorithms. Scaling up data is generally more cost-effective because it is independent of the model’s architecture and allows for the continuous integration of new data through fine-tuning existing models (Kaplan et al., 2020). In contrast, increasing the model size often incurs extremely high costs, as it alters architectural details and usually requires retraining the entire dataset from scratch at each scaling step (Biderman et al., 2023). This significantly raises the expenses for building progressively larger models in the industry.
+
+**Model Reusing.** Previous methods for reusing models have typically involved initializing larger models with pre-trained smaller models by duplicating (Chen et al., 2015; 2021a), stacking (Gong et al., 2019), or combining (Wang et al., 2023c) model weights. While these approaches can be effective, they often disturb the pre-established distribution of the smaller model, increasing the risk of losing pre-trained knowledge and slowing convergence. In contrast, our model allows for parameter scaling in a natural and seamless manner and preserves the integrity of the existing model.
+
+## 3 METHODOLOGY
+
+In this section, we first revisits the conventional attention mechanism in Section 3.1. Then, Section 3.2 introduces Tokenformer, a natively scalable architecture centered around a flexible token-parameter attention layer. Finally, incremental model scaling of Tokenformer is detailed in Section 3.3.
+
+### 3.1 PRELIMINARIES
+
+Transformer models (Vaswani et al., 2017) have established themselves as fundamental architectures in deep learning, demonstrating outstanding performance across a wide range of tasks. The cornerstone of their success is the self-attention mechanism, which allows the model to dynamically assess the importance of each token, efficiently modeling complex dependencies among them.
+
+Given a set of  $T$  input tokens  $X \in \mathbb{R}^{T \times d}$  with channel dimension  $d$ , the self-attention block first derives input-dependent query  $Q$ , key  $K$ , and value  $V$ , with three distinct linear projections as
+
+$$Q = X \cdot W^Q, \quad K = X \cdot W^K, \quad V = X \cdot W^V, \quad (1)$$
+
+where the  $W^Q, W^K \in \mathbb{R}^{d \times d_v}$  and  $W^V \in \mathbb{R}^{d \times d_v}$  are learnable weight matrices. The attention scores are calculated by measuring the similarity between query and key vectors, followed by a softmax function to obtain normalized weights. These scores are subsequently used to compute the output of the scaled dot-product attention as,
+
+$$\text{Attention}(Q, K, V) = \text{softmax}\left[\frac{Q \cdot K^\top}{\sqrt{d}}\right] \cdot V, \quad (2)$$
+
+where  $\sqrt{d}$  is a scale factor for alleviating small gradients caused by softmax. Finally, the output is,
+
+$$O = X_{\text{att}} \cdot W^O, \quad (3)$$
+
+with  $X_{\text{att}}$  being the attention output and  $W^O \in \mathbb{R}^{d_v \times d}$  as the output projection matrix.
+
+The above architectural design enables the model to flexibly manage interactions between tokens of varying lengths, thereby allowing modern general models to concurrently process any form and quantity of tokenized multi-modal data. This capability markedly enhances the development of current AI domain and is fundamental to the success of transformer-based systems.
+
+### 3.2 TOKENFORMER
+
+Although transformers excel across various domains, their scalability is limited by high computational overheads resulting from prescribed token-parameter interactions (*i.e.*, linear projections). As a result, scaling strategies that adjust architectural components (*e.g.*, channel dimensions) typically require retraining the entire model from the beginning, leading to inefficient use of computational resources.
+
+To overcome this challenge, we propose Tokenformer, an architecture entirely based on attention mechanisms. The central innovation of Tokenformer is token-**Parameter attention** (Pattention) layer,
+
+{3}------------------------------------------------
+
+![Diagram of the Tokenformer architecture. The main part shows a stack of Nx Tokenformer blocks. Each block consists of a Norm layer, a Token-Parameter Attention (Pattention) layer, a residual connection, another Norm layer, and another Pattention layer. A detailed view of the Pattention layer shows it takes Input Tokens and produces Key Param. Tokens and Value Param. Tokens. These are used for Matching (dot product) to produce Attention Scores, which are then used for Weighted Sum with the Input Tokens to produce Output Tokens. A second detailed view shows Parameter Reusing in Attention, where the Input is processed through Token-Parameter Cross-Attention using Old and New Key and Value parameter tokens.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Diagram of the Tokenformer architecture. The main part shows a stack of Nx Tokenformer blocks. Each block consists of a Norm layer, a Token-Parameter Attention (Pattention) layer, a residual connection, another Norm layer, and another Pattention layer. A detailed view of the Pattention layer shows it takes Input Tokens and produces Key Param. Tokens and Value Param. Tokens. These are used for Matching (dot product) to produce Attention Scores, which are then used for Weighted Sum with the Input Tokens to produce Output Tokens. A second detailed view shows Parameter Reusing in Attention, where the Input is processed through Token-Parameter Cross-Attention using Old and New Key and Value parameter tokens.
+
+Figure 2: Tokenformer is a fully attention-driven architecture featuring a new token-**Parameter attention** (Pattention) layer. The Pattention uses a set of learnable tokens to represent model parameters and lets the input tokens attend to them. As the model scales, Tokenformer adds new learnable tokens to expand the existing key-value parameter sets, while keeping the feature dimension constant and leaving the rest of the computation unaffected.
+
+which incorporates a set of trainable tokens functioning as model parameters and then employs cross-attention to manage interactions between input tokens and these parameter tokens. In this way, the Pattention layer introduces an additional dimension—the number of parameter tokens—which operates independently of the input and output channel dimensions. This decoupling enables input data to dynamically interact with a variable number of parameters, providing the flexibility required for incremental model scaling by reusing pre-trained models. Consequently, training larger models is greatly accelerated while achieving performance on par with transformers trained from scratch.
+
+| Notation | Description | Notation | Description |
+|-|-|-|-|
+| $Q, K, V$ | Input-dependent query, key, value. | $(K_P^Q, V_P^Q), (K_P^K, V_P^K), (K_P^V, V_P^V)$ | Param tokens for generating $Q, K, V$ . |
+| softmax | Standard softmax: $\exp + L_1\text{norm}$ | $\Theta$ | Modified softmax: $L_2\text{norm} + \text{gelu}$ |
+
+**Pattention Layer.** Let the input tokens and output tokens be represented as  $\mathcal{I} \in \mathbb{R}^{T \times d_1}$  and  $\mathcal{O} \in \mathbb{R}^{T \times d_2}$ , where  $T$  is the sequence length, and  $d_1$  and  $d_2$  are the input and output dimensions, respectively. To implement our Pattention mechanism, we introduce two sets of  $n$  learnable parameter tokens:  $K_P \in \mathbb{R}^{n \times d_1}$  representing the keys, and  $V_P \in \mathbb{R}^{n \times d_2}$  representing the values. The output  $\mathcal{O}$  from the scaled dot-product Pattention layer is computed as:
+
+$$\text{Pattention}(X, K_P, V_P) = \Theta(X \cdot K_P^\top) \cdot V_P, \quad (4)$$
+
+where  $\Theta$  is a modified softmax operation for stable optimization of Pattention layer. Standard softmax involves two steps: applying an element-wise exponential to the input matrix and then performing L1 normalization along the token dimension. Our modified softmax replaces this with L2 normalization along the token dimension, followed by applying the GeLU activation to each element. This design improves gradient stability in our architecture, smoothes the attention scores, and results in better performance compared to the standard softmax operation (see Appendix A and Table 4 for details).
+
+Our Pattention layer employs a cross-attention mechanism to manage interactions between tokens and parameters, thereby fully preserving the adaptability characteristic of attention mechanisms. Similar to how self-attention in Transformer models handles sequences with variable lengths, our Pattention layer is designed to process a flexible number of parameters independently of the input and output channel dimensions used in feature projection. This allows network parameters to be expanded seamlessly along the parameter token axis, enabling the effective reuse of pre-trained weights and offering a naturally incremental manner for model scaling.
+
+{4}------------------------------------------------
+
+**Overall Architecture.** Figure 2 illustrates the architecture of Tokenformer. Given the input tokens  $X_{\text{in}} \in \mathbb{R}^{\ell \times d}$ , we follow the design of the pre-norm transformer, the computation for the output of a Tokenformer layer is represented as follows:
+
+$$X_{\text{inter}} = X_{\text{in}} + \text{MHA}(\text{LN}(X_{\text{in}})), \quad (5)$$
+
+$$X_{\text{out}} = X_{\text{inter}} + \text{FFN}(\text{LN}(X_{\text{inter}})), \quad (6)$$
+
+where LN denotes the layer normalization (Ba, 2016; Zhang & Sennrich, 2019), and MHA and FFN refer to our modified multi-head self-attention and feed-forward layer, respectively.
+
+In the multi-head self-attention block, for simplicity, we consider a single-head variant and set both  $d_k$  and  $d_v$  equal to  $d$ . Then we replace all the linear projections with our Pattention layers. Let  $\text{LN}(X_{\text{in}})$  be denoted as  $X$ , this block is formulated as follows:
+
+$$Q = \text{Pattention}(X, K_P^Q, V_P^Q), \quad K = \text{Pattention}(X, K_P^K, V_P^K), \quad V = \text{Pattention}(X, K_P^V, V_P^V), \quad (7)$$
+
+$$X_{\text{att}} = \text{softmax} \left[ \frac{Q \cdot K^T}{\sqrt{d}} \right] \cdot V, \quad (8)$$
+
+$$O_{\text{att}} = \text{Pattention}(X_{\text{att}}, K_P^O, V_P^O), \quad (9)$$
+
+where Eq. 7 and 9 represent token-parameter attention while Eq. 8 represents token-token attention. The key-value parameter tokens for the QKV projections are  $(K_P^Q, V_P^Q) \in \mathbb{R}^{n_q \times d} \in \mathbb{R}^{n_k \times d}$ ,  $(K_P^K, V_P^K) \in \mathbb{R}^{n_v \times d}$ , while  $(K_P^O, V_P^O) \in \mathbb{R}^{n_o \times d}$  is used for the output projection layer.
+
+For consistency and simplicity, the feed-forward block in Tokenformer utilizes a single Pattention Layer. Denote  $\text{LN}(X_{\text{inter}})$  as  $X_{\text{ffn}}$ , and the FFN computation is given by:
+
+$$O_{\text{ffn}} = \text{Pattention}(X_{\text{ffn}}, K_P^{\text{ffn}}, V_P^{\text{ffn}}), \quad (10)$$
+
+where  $(K_P^{\text{ffn}}, V_P^{\text{ffn}}) \in \mathbb{R}^{n_{\text{ffn}} \times d}$  are learnable key-value pairs for FFN block.
+
+By designing the architecture in this manner, we represent all fundamental components—including both input data and model parameters—as tokens within the computational framework. This token-centric perspective allows the utilization of successful attention mechanisms to unify two primary computations within the transformer, token-token and token-parameter interactions, thereby establishing a fully attention-based neural network characterized by exceptional flexibility.
+
+**Architecture Configurations.** Our model meticulously mirrors the hyper-parameter configuration of the standard Transformer architecture. Taking GPT-2 (Radford et al., 2018) as an exemplar, which features 12 Transformer layers and a hidden dimension of 768, our model replicates this configuration with identical layer counts and dimensionality. The number of key-value parameter pairs in both the query-key-value and output projections corresponds directly to the hidden dimension. In contrast, the FFN module utilizes four times the number of parameter pairs relative to the hidden size. This architectural alignment facilitates the initialization of our model’s parameters using a pre-trained Transformer, thereby ensuring seamless integration into the Transformer pre-training ecosystem.
+
+### 3.3 PROGRESSIVE MODEL SCALING
+
+Our model demonstrates strong suitability for large-scale model training along the parameter axis, attributable to the versatile design of the Pattention layer, which allows for the incremental development of larger models by reusing parameters from smaller, pre-trained counterparts.
+
+To facilitate understanding without compromising generality, we employ a single Pattention layer to exemplify the intricacies of model scaling. Consider an existing Tokenformer model equipped with a set of pre-trained key-value parameter tokens, denoted as  $K_P^{\text{old}}, V_P^{\text{old}} \in \mathbb{R}^{n \times d}$ . As shown in Figure 2, to scale the model, we augment this set by appending new key-value parameter tokens  $K_P^{\text{new}}, V_P^{\text{new}} \in \mathbb{R}^{m \times d}$  as
+
+$$K_P^{\text{scale}} = [K_P^{\text{old}}, K_P^{\text{new}}], \quad V_P^{\text{scale}} = [V_P^{\text{old}}, V_P^{\text{new}}], \quad (11)$$
+
+where  $[\cdot^{\text{old}}, \cdot^{\text{new}}]$  means the concatenation operation along the token dimension and  $K_P^{\text{scale}}, V_P^{\text{scale}} \in \mathbb{R}^{(m+n) \times d}$  are scaled parameter sets. The forward pass of the scaled model is then defined as
+
+$$O = \text{Pattention}(X, K_P^{\text{scale}}, V_P^{\text{scale}}). \quad (12)$$
+
+{5}------------------------------------------------
+
+![Figure 3: Evaluating model scaling costs through cumulative computational budgets. The plot shows Perplexity (y-axis, 11 to 17) vs. Training cost / TPU hours (x-axis, 0 to 12000). Four series are shown: Scaling Transformer from scratch with 300B (blue line), Incrementally scaling Tokenformer with 15B (green line), Incrementally scaling Tokenformer with 30B (red line), and Incrementally scaling Tokenformer with 60B (yellow line). Grey circles of increasing size represent model sizes: 124M, 354M, 757M, and 1.4B. The Transformer baseline starts at a higher perplexity and cost, while the Tokenformer variants show lower perplexity and cost for the same model size.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 3: Evaluating model scaling costs through cumulative computational budgets. The plot shows Perplexity (y-axis, 11 to 17) vs. Training cost / TPU hours (x-axis, 0 to 12000). Four series are shown: Scaling Transformer from scratch with 300B (blue line), Incrementally scaling Tokenformer with 15B (green line), Incrementally scaling Tokenformer with 30B (red line), and Incrementally scaling Tokenformer with 60B (yellow line). Grey circles of increasing size represent model sizes: 124M, 354M, 757M, and 1.4B. The Transformer baseline starts at a higher perplexity and cost, while the Tokenformer variants show lower perplexity and cost for the same model size.
+
+Figure 3: Evaluating model scaling costs through cumulative computational budgets. The Transformer baseline incurs expenses for each individual scaling step performed independently from scratch, whereas Tokenformer aggregates costs across all scaling stages, including training a 124M model initially, progressively scaling to 354M, 757M, and 1.4B parameters.
+
+![Figure 4: Evaluating model scaling costs by measuring the budget required at each scaling stage. The plot shows Perplexity (y-axis, 11 to 16) vs. Training cost / TPU hours (x-axis, 0 to 12000). Three series are shown: Scaling Transformer from scratch with 300B (blue line), Scaling Transformer from scratch with 30B (light blue line), and Incrementally scaling Tokenformer with 30B (red line). Grey circles of increasing size represent model sizes: 354M, 757M, and 1.4B. The Transformer baselines show a sharp drop in perplexity at the first scaling stage, while the Tokenformer variant shows a more gradual decrease.](46f43cb4ffd47565e7c0ca306d461435_img.jpg)
+
+Figure 4: Evaluating model scaling costs by measuring the budget required at each scaling stage. The plot shows Perplexity (y-axis, 11 to 16) vs. Training cost / TPU hours (x-axis, 0 to 12000). Three series are shown: Scaling Transformer from scratch with 300B (blue line), Scaling Transformer from scratch with 30B (light blue line), and Incrementally scaling Tokenformer with 30B (red line). Grey circles of increasing size represent model sizes: 354M, 757M, and 1.4B. The Transformer baselines show a sharp drop in perplexity at the first scaling stage, while the Tokenformer variant shows a more gradual decrease.
+
+Figure 4: Evaluating model scaling costs by measuring the budget required at each scaling stage. The Transformer baselines used are consistent with those depicted in Figure 3, trained with 30B and 300B tokens. Similarly, for Tokenformer, the cost is the budget required for each incremental scaling step from a smaller one. All the experiments were conducted on TPU v4 hardware.
+
+This scaling scheme permits the integration of an arbitrary number of parameters without altering the input or output dimensions. As demonstrated in Figure 3, this approach notably enhances training efficiency for models at greater scales without degrading performance. Importantly, if we choose to initialize  $K_P^{\text{new}}$  with zero and  $V_P^{\text{new}}$  with random values, similar to LoRA technique (Hu et al., 2022), our model can effectively resume from pre-training phase without losing the well-learned knowledge, facilitating faster convergence and accelerating the overall scaling process. Moreover, this manner provides a new dimension for scaling beyond just the hidden dimension, which helps maintain manageable token-token interaction costs and is well-suited for long-context modeling.
+
+## 4 EXPERIMENTS
+
+In this section, we present experimental results for the techniques described above. Section 4.1 validates the continual expansion capability of our model. Section 4.2 highlights the model’s efficacy in handling tasks within both language and vision domains. Section 4.3 offers an in-depth comparison, highlighting our model’s advantages over standard Transformer models. Finally, Section 4.4 details the ablation experiments conducted to assess the significance of each module in Tokenformer.
+
+### 4.1 PROGRESSIVE MODEL SCALING
+
+**Datasets.** Our models are trained using the OpenWebText Corpus described in (Gokaslan & Cohen, 2019). This corpus serves as a widely recognized open-source approximation of OpenAI’s proprietary WebText dataset, which was employed in the development of GPT-2 (Alec et al., 2019). The dataset comprises textual data extracted from 8,013,769 Reddit-shared documents. During training, we randomly sample segments from these documents.
+
+**Baseline Transformer Training from Scratch.** To evaluate the effectiveness of our progressive model scaling strategy, we established a baseline by training a Transformer model from scratch. Following the training procedures outlined in Karpathy (2022); Kaplan et al. (2020), we employed the AdamW optimizer (Loshchilov & Hutter, 2019) with a batch size of 512 sequences, each containing 1024 tokens. For a fair comparison with our incremental scaling approach, we configured two training variants based on the total number of training tokens. The first variant underwent  $6 \times 10^5$  steps (approximately 300B tokens), consistent with the training steps utilized by Karpathy (2022) to replicate GPT-2 performance. The second variant was limited to  $6 \times 10^4$  steps (approximately 30B tokens) to ensure comparability with each stage of our progressive scaling. In all trainings included
+
+{6}------------------------------------------------
+
+| Model | #Param | Pile ppl ↓ | LAMBADA ppl ↓ | LAMBADA acc ↑ | HellaSwag acc ↑ | PIQA acc ↑ | ARC-E acc ↑ | ARC-C acc ↑ | Winogrande acc ↑ | Average acc ↑ |
+|-|-|-|-|-|-|-|-|-|-|-|
+| Pythia-160M (Biderman et al., 2023) | 160M | 29.64 | 37.25 | 35.4 | 30.3 | 62.3 | 43.6 | 23.6 | 51.3 | 40.1 |
+| <b>Ours (TokenFormer-150M)</b> | 150M | <b>10.45</b> | <b>16.38</b> | <b>45.0</b> | <b>35.5</b> | <b>64.9</b> | <b>47.3</b> | <b>24.9</b> | 50.4 | <b>44.7</b> |
+| Pythia-410M (Biderman et al., 2023) | 410M | 9.95 | 10.84 | 51.4 | 40.6 | 66.9 | 52.1 | 24.6 | 53.8 | 48.2 |
+| <b>Ours (TokenFormer-450M)</b> | 450M | <b>8.28</b> | <b>7.69</b> | <b>57.3</b> | <b>47.5</b> | <b>69.5</b> | <b>56.2</b> | <b>26.7</b> | <b>54.6</b> | <b>52.0</b> |
+| Pythia-1B (Biderman et al., 2023) | 1B | 7.82 | 7.92 | 56.1 | 47.2 | 70.7 | 57.0 | 27.1 | 53.5 | 51.9 |
+| <b>Ours (TokenFormer-900M)</b> | 900M | <b>7.38</b> | <b>5.46</b> | <b>64.0</b> | <b>55.3</b> | <b>72.4</b> | <b>59.9</b> | <b>30.6</b> | <b>56.4</b> | <b>56.4</b> |
+| GPT-Neo 1.3B (Black et al., 2021) | 1.3B | - | 7.50 | 57.2 | 48.9 | 71.1 | 56.2 | 25.9 | 54.9 | 52.4 |
+| GPT-1.3B (Zhang et al., 2022) | 1.3B | - | 6.64 | 58.0 | 53.7 | 72.4 | 56.7 | 29.6 | 59.5 | 55.0 |
+| Pythia-1.3B (Biderman et al., 2023) | 1.3B | 7.51 | 6.08 | 61.7 | 52.1 | 71.0 | 60.5 | 28.5 | 57.2 | 55.2 |
+| <b>Ours (TokenFormer-1.5B)</b> | 1.5B | <b>6.91</b> | <b>5.24</b> | <b>64.7</b> | <b>60.0</b> | <b>74.8</b> | <b>64.8</b> | <b>32.0</b> | <b>59.7</b> | <b>59.3</b> |
+
+Table 1: (**Zero-shot Evaluations.**) The best performance for each model size is highlighted in bold. Our comparisons are made with publicly available transformer-based LMs with various tokenizers. Following Pythia (Biderman et al., 2023), our model is trained for up to 300B tokens on pile dataset.
+
+in our analysis, unless otherwise indicated, a learning rate of  $6 \times 10^{-4}$  was employed, featuring a 2000-step warmup followed by a cosine decay to zero.
+
+**Tokenformer with Progressive Model Scaling.** Building upon the above training protocols, we testify the performance of our model scaling with parameter sizes ranging from 124M to 1.4B. Unlike the aforementioned scratch-training approach, each scaling iteration leverages a pre-trained smaller Tokenformer to partially initialize the weights of the larger one described in Section 3.3. The scaling procedure begins with training the initial source model from scratch on approximately 300B tokens, mirroring the Transformer baseline. For scaling, we select the pre-trained model closest in parameter count to the target size for weight initialization. For example, to train a model with 354M parameters, we employ the 124M model as a partial initializer and retrain the entire model using a reduced computational budget (e.g., 15B, 30B, or 60B tokens). This iterative process continues for scaling to 757M and then to 1.4B parameters. Notably, to simplify the scaling procedure, both new and existing parameters are trained equivalently with identical training hyperparameters throughout the process. Additionally, since the learning rate strategy in scaling follows a cosine schedule, the newly added parameters are randomly initialized to ensure a stable training process.
+
+Our training optimizes the autoregressive log-likelihood (i.e., cross-entropy loss) averaged over a 1024-token context and the log perplexity evaluated on the test set as the test score.
+
+**Experimental Analysis.** As illustrated in Figure 3, our progressive scaling methodology employing Tokenformer achieves performance comparable to that of a Transformer model trained from scratch, while substantially reducing the training budget. Specifically, Starting with a 124M parameter model trained on 300B tokens, we progressively scaled to 354M, 757M, and 1.4B parameters, requiring only an additional 30B tokens—just one-tenth of the computational budget compared to the scratch-trained Transformer. This scaling process achieved a test perplexity of 11.77 at the 1.4B parameter level. In comparison, a Transformer model of the same size trained from scratch achieved a similar perplexity of 11.63 but with  $3\times$  the training cost. Importantly, our approach reports cumulative training costs, encompassing all scaling stages, unlike the Transformer baseline that only accounts for individual stages. Even with this comparison, our method demonstrates a substantially lower computational cost than training a Transformer from scratch, thereby validating the effectiveness of our approach.
+
+Figure 4 presents the training costs at each scaling stage for both our model and the standard Transformer. When compared to Figure 3, the cost savings are even more significant. Specifically, our model requires only one-tenth of the training costs associated with Transformer baselines. To mitigate the effects of varying training data, we also included the performance curve of a Transformer trained from scratch using an equivalent computational budget of 30B tokens. Under the same computational constraints, our progressively scaled model achieves a lower perplexity of 11.77 compared to the Transformer’s 13.34, thereby highlighting the superior efficiency and scalability of our approach.
+
+### 4.2 BENCHMARKING OF MODEL EXPRESSIVENESS
+
+**Language Modeling.** We assess the efficacy of our proposed architecture through standard autoregressive language modeling tasks, benchmarking against existing transformer-based models. Evaluations are conducted using both pre-training metrics, specifically perplexity, and zero-shot performance measures. Training is performed on the Pile dataset (Gao et al., 2020), following the training protocol described in Biderman et al. (2023). Detailed training procedures and model sizes (depth and width) are provided in the Appendix F.
+
+{7}------------------------------------------------
+
+| Method | Image Size | #Param | Top-1 acc |
+|-|-|-|-|
+| ViT-B/16 (Dosovitskiy et al., 2021) | 384 <sup>2</sup> | 86M | 77.9 |
+| DeiT-B/16 (Touvron et al., 2021) | 224 <sup>2</sup> | 86M | 81.8 |
+| ViT-B/16 (MAE) (He et al., 2022) | 224 <sup>2</sup> | 86M | 82.3 |
+| Ours-B/16 <sup>†</sup> | 224 <sup>2</sup> | 86M | 82.1 |
+| <b>Ours-B/16</b> | 224 <sup>2</sup> | 109M | <b>82.5</b> |
+| ViT-L/16 (Dosovitskiy et al., 2021) | 384 <sup>2</sup> | 307M | 76.5 |
+| ViT-L/16 (MAE) (He et al., 2022) | 224 <sup>2</sup> | 307M | 82.6 |
+| Ours-L/16 <sup>†</sup> | 224 <sup>2</sup> | 307M | 83.0 |
+| <b>Ours-L/16</b> | 224 <sup>2</sup> | 407M | <b>83.1</b> |
+
+Table 2: (**Image Classification.**) Comparison of standard vision transformer on ImageNet-1K. The training hyperparameters are completely consistent (batch size, learning rate, etc.) with He et al. (2022). <sup>†</sup> denotes models where the parameter size has been matched to that of the standard ViT.
+
+| Operation | Parameter |  | Training FLOPs |  |
+|-|-|-|-|-|
+|  | Transformer | Ours | Transformer | Ours |
+| Embed | $n_{\text{vocab}}d_{\text{model}}$ | $n_{\text{vocab}}d_{\text{model}}$ | - | - |
+| Attention: QKV Project | $3n_{\text{layer}}d_{\text{token}}^2$ | $2n_{\text{layer}}d_{\text{token}}(n_q + n_k + n_v)$ | $6n_{\text{layer}}d_{\text{token}}^2T$ | $4n_{\text{layer}}d_{\text{token}}(n_q + n_k + n_v)T$ |
+| Attention: Token-Token | - | - | $2n_{\text{layer}}d_{\text{token}}^2T$ | $4n_{\text{layer}}d_{\text{token}}^2T$ |
+| Attention: Output Project | $n_{\text{layer}}d_{\text{model}}^2$ | $2n_{\text{layer}}d_{\text{token}}n_v$ | $2n_{\text{layer}}d_{\text{model}}^2T$ | $4n_{\text{layer}}d_{\text{token}}n_vT$ |
+| Feedforward | $8n_{\text{layer}}d_{\text{model}}^2$ | $2n_{\text{layer}}d_{\text{token}}n_t$ | $16n_{\text{layer}}d_{\text{model}}^2T$ | $4n_{\text{layer}}d_{\text{token}}n_tT$ |
+| De-embed | - | - | $2n_{\text{vocab}}d_{\text{model}}$ | $2n_{\text{vocab}}d_{\text{model}}$ |
+| Total (Non-Embedding) | $N = 12n_{\text{layer}}d_{\text{model}}^2$ | $N = 2n_{\text{layer}}d_{\text{token}}(n_q + n_k + n_v + n_o + n_t)$ | $2NT + 4n_{\text{layer}}d_{\text{model}}^2T^2$ | $2NT + 4n_{\text{layer}}d_{\text{token}}T^2$ |
+
+Table 3: Parameter counts and training compute estimates for Transformer and our Tokenformer. Sub-leading terms such as nonlinearities, biases, and layer normalization are omitted.
+
+Table 1 presents the performance of Tokenformer across various widely-recognized zero-shot downstream tasks. Comparisons are drawn against leading open-source transformer models of equivalent scale, notably Pythia (Biderman et al., 2023), which utilizes the same tokenizer, dataset, and training duration (300B tokens) as our models. As shown in this table, our model achieves competitive performance compared to the standard Transformer, demonstrating the potential of our architecture in terms of expressive power as a foundation model.
+
+**Visual Modeling.** Table 2 validates the expressiveness of our model in visual tasks. We compare our approach against the standard Vision Transformer (ViT) (Dosovitskiy et al., 2021) trained with supervised learning on the ImageNet-1K dataset (Deng et al., 2009). For a fair comparison, we used the MMDetection code base (MMDetection Contributors, 2018) and followed the hyperparameters and training strategy used in He et al. (2022). As shown in the table, our model achieves the same performance as ViT in visual modeling, confirming its expressiveness in visual tasks.
+
+### 4.3 COMPARISON WITH STANDARD TRANSFORMER
+
+Transformer can also achieve model reuse to a certain extent. Net2Net (Chen et al., 2015), a classical model growth method, proposes a technique to expand the width of neural networks by duplicating neurons. In this method, the pre-trained weight matrix of a transformer layer in the smaller model denoted  $W_l^{\text{old}} \in \mathbb{R}^{d_s \times d_s}$  is used to create a larger weight matrix  $W_l^{\text{new}} \in \mathbb{R}^{d_l \times d_l}$  ( $d_l > d_s$ ) to fill the larger model. This expansion is formulated as follows,
+
+$$W_l^{\text{new}} = \begin{bmatrix} W_{l(12)}^{\text{old}} & W_{l(12)}^{\text{new}} \\ W_{l(21)}^{\text{new}} & W_{l(22)}^{\text{new}} \end{bmatrix}, \quad (13)$$
+
+where  $W_{l(12)}^{\text{new}} \in \mathbb{R}^{(d_l - d_s) \times d_s}$ ,  $W_{l(21)}^{\text{new}} \in \mathbb{R}^{d_s \times (d_l - d_s)}$ , and  $W_{l(22)}^{\text{new}} \in \mathbb{R}^{(d_l - d_s) \times (d_l - d_s)}$  are new parameters for expansion. The scaling procedures are the same as schemes introduced in Section 4.1.
+
+**Controllable cost of token-token interaction for long-context modeling.** Recent advancements in Chain-of-Thought (CoT) modeling (Wei et al., 2022) have emphasized the critical importance of efficiently processing lengthy textual sequences (Tay et al., 2020) within Large Language Models (LLMs). As delineated in Section 1, the training costs of transformer architectures are primarily divided into two components: interactions involving model parameters and interactions among input sequences. Table 3 demonstrates that the computational complexity of transformer-based models exhibits a quadratic dependence on text length, scaling linearly with token-parameter interactions and quadratically with token-token interactions. Consequently, it is imperative to expand model parameters while controlling the computational burden of token-token interaction part.
+
+{8}------------------------------------------------
+
+![Figure 5: Three line graphs showing FLOPs / trillion vs Sequence Length / k for Transformer and Tokenformer models. The left graph is for 354M parameters, the middle for 757M, and the right for 1.4B. In all cases, the Transformer model (blue line) shows a steeper increase in FLOPs as sequence length increases compared to the Tokenformer model (red line), indicating higher computational cost for long sequences.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5: Three line graphs showing FLOPs / trillion vs Sequence Length / k for Transformer and Tokenformer models. The left graph is for 354M parameters, the middle for 757M, and the right for 1.4B. In all cases, the Transformer model (blue line) shows a steeper increase in FLOPs as sequence length increases compared to the Tokenformer model (red line), indicating higher computational cost for long sequences.
+
+Figure 5: The relationship between FLOPs and text length for both Transformer and Tokenformer. As shown in Table 3, Transformer exhibits an increase in computational cost for token-token interactions as  $d_{\text{model}}$  scales upwards. Our Tokenformer model, however, offers a flexible parameter scaling mechanism that maintains  $d_{\text{token}}$  at a constant value. This strategy results in controllable computational costs for token-token interactions and markedly enhances the efficiency of long-text modeling.
+
+![Figure 6: A line graph comparing Test loss vs Training iterations for Transformer (blue line) and Tokenformer (red line) models. The Tokenformer model converges more rapidly and reaches a lower final loss compared to the Transformer model.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 6: A line graph comparing Test loss vs Training iterations for Transformer (blue line) and Tokenformer (red line) models. The Tokenformer model converges more rapidly and reaches a lower final loss compared to the Transformer model.
+
+Figure 6: Loss curves comparing pre-trained Transformer and Tokenformer as their parameters are scaled during continued training on enwik8.
+
+![Figure 7: A line graph comparing Perplexity vs Training cost / TPU hours for Incrementally scaling Transformer (Net2Net) (blue line) and Incrementally scaling Tokenformer (red line). The Tokenformer model achieves a lower perplexity at a lower training cost compared to the Transformer model.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 7: A line graph comparing Perplexity vs Training cost / TPU hours for Incrementally scaling Transformer (Net2Net) (blue line) and Incrementally scaling Tokenformer (red line). The Tokenformer model achieves a lower perplexity at a lower training cost compared to the Transformer model.
+
+Figure 7: Performance benchmarking on incremental model scaling between Transformer with Net2Net scheme and our Tokenformer.
+
+Conventionally, scaling transformer models involves increasing the channel dimension. For a fixed text length, this results in higher computational costs, mainly because dominant token-token interactions become more intensive, which hampers the model’s performance with long texts. Our proposed model takes a different approach by decoupling the computation cost of token-token interactions from model scaling. We increase the parameter size without changing the token channel dimension, thereby maintaining the computational cost associated with token-token interactions. As shown in Figure 5, our model exhibits increasingly significant computational advantages over Transformers as the number of parameters grows, especially when processing longer sequences.
+
+**Scaling without losing the well-learned distribution.** Our Tokenformer can maintain the existing output distribution when new key parameters are initialized to zero. This characteristic is beneficial for continuously scaling models to incorporate additional data, as it facilitates an increase in model capacity without disrupting the ongoing training process, thereby promoting rapid convergence.
+
+To evaluate Tokenformer’s scaling efficacy, we compare the loss curves of Net2Net-based transformer scaling against Tokenformer scaling. Both models, initially with 354M parameters, were pre-trained on the OpenWebText dataset. We then introduced the EnWik8 dataset and continued training with one epoch, expanding the models to 757M parameters to accommodate new data. Figure 6 demonstrates Tokenformer not only converges more rapidly but also reaches a lower final loss, attributable to its ability to preserve the output distribution during the resumption of training.
+
+**Performance benchmarking on incremental scaling.** In this study, we progressively scale the standard Transformer using Net2Net approach detailed earlier. For a fair comparison, we aligned all hyperparameters, including the parameter size, learning rate, dataset, and so on. As shown in Figure 7, our model performs better in scaling compared to the standard Transformer.
+
+{9}------------------------------------------------
+
+### 4.4 ABLATION STUDY
+
+| Nonlinear Function | Normalization | Top-1 acc |
+|-|-|-|
+| $e^x$ | $L_1$ Norm | 79.6 |
+| GeLU | $L_1$ Norm | 81.7 |
+| GeLU | $L_2$ Norm | 82.5 |
+
+Table 4: Ablation of Softmax part on ImageNet classification with base model.
+
+| Learnable Weight ( $\gamma$ ) | Learnable Bias ( $\beta$ ) | Top-1 acc |
+|-|-|-|
+| ✓ | ✓ | 82.6 |
+| - | ✓ | 82.5 |
+| - | - | 82.5 |
+
+Table 5: Ablation of non-parametric layer normalization on ImageNet classification with base model.
+
+**Optimized Softmax Function in Attention Layer.** Within the token-parameter attention layer, we address training instabilities arising from the diminished gradients associated with the traditional softmax function. The conventional softmax operation comprises two primary steps: computing the exponential of attention scores followed by  $L_1$  normalization. As shown in Table 4, to mitigate the issue of small gradients, we substitute the exponential non-linearity with the GeLU function, resulting in a performance enhancement of +2.1 points on the ImageNet classification benchmark. Subsequently, we replace the  $L_1$  normalization with an  $L_2$  normalization, yielding an additional improvement of +0.8 points, allowing our model to achieve performance parity with the standard ViT.
+
+**Non-Parametric Layer Normalization.** In pursuit of enabling model expansion and the merging of two separately trained parameter token sets for subsequent studies, we modified the Transformer’s layer normalization to a non-parametric variant by removing its trainable weights and biases. This adjustment guarantees that only the key-value parameters are subject to learning within the model. Empirical results presented in Table 5 demonstrate that the model maintains comparable performance after discarding the learnable weights and biases.
+
+## 5 FUTURE WORK
+
+**Extending the Mixture-of-Experts Paradigm.** We interpret Tokenformer as an extreme instantiation of the Mixture of Experts (MoE) framework (Fedus et al., 2022; Zhu et al., 2024), where each key-value parameter pair functions as an individual expert. This innovative MoE-like architecture has the potential to significantly reduce the computational costs associated with token-parameter interactions.
+
+**Advancing Parameter-Efficient Tuning.** The scaling approach of Tokenformer, which involves integrating additional key-value parameter pairs, exemplifies a strategy for parameter-efficient tuning. When confronted with new tasks or datasets, the model can augment its pre-trained parameters by incorporating these new parameter tokens, thereby adapting to specific task requirements quickly.
+
+**Integrating Vision and Language Models.** Leveraging the parameter-efficient tuning capabilities of Tokenformer, we can achieve seamless integration of visual and linguistic modalities. This can be accomplished by unifying the key-value parameter tokens derived from pre-trained visual Tokenformer and language Tokenformer into a single parameter set. Then, the new learnable tokens are introduced to perform vision-language alignment and instruction tuning.
+
+**Enhancing Model Interpretability.** As Tokenformer is entirely based on attention mechanisms, it inherently benefits from the interpretability associated with attention in token-parameter interactions (Geva et al., 2021). This characteristic enhances the model’s explainability, contributing to the AI community’s efforts to develop more transparent and understandable models. Please see G.2 for more discussions.
+
+## 6 CONCLUSION
+
+This paper introduces Tokenformer, a naturally scalable architecture that leverages the attention mechanism to facilitate not only inter-token computations but also interactions between tokens and model parameters, thereby enhancing architectural flexibility. By representing model parameters as tokens, we replace all linear projections in Transformer with our Attention, allowing for seamless incremental scaling without retraining from scratch. We believe that this architecture, offering greater flexibility than Transformers, will further contribute to the development of foundation models.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,299 @@
+
+
+{0}------------------------------------------------
+
+# DATA DISTILLATION FOR EXTRAPOLATIVE PROTEIN DESIGN THROUGH EXACT PREFERENCE OPTIMIZATION
+
+**Mostafa Karimi, Sharmi Banerjee**
+
+Amazon
+
+{mkarimii,sharmiba}@amazon.com
+
+**Tommi Jaakkola**
+
+Massachusetts Institute of Technology
+
+tommi@csail.mit.edu
+
+**Bella Dubrov, Shang Shang, Ron Benson**
+
+Amazon
+
+{belladub,shashang,ronben}@amazon.com
+
+## ABSTRACT
+
+The goal of protein design typically involves increasing fitness (extrapolating) beyond what is seen during training (e.g., towards higher stability, stronger binding affinity, etc.). State-of-the-art methods assume that one can safely steer proteins towards such extrapolated regions by learning from pairs alone. We hypothesize that noisy training pairs are not sufficiently informative to capture the fitness gradient and that models learned from pairs specifically may fail to capture three-way relations important for search, e.g., how two alternatives fair relative to a seed. Building on the success of preference alignment models in large language models, we introduce a progressive search method for extrapolative protein design by directly distilling into the model relevant triplet relations. We evaluated our model’s performance in designing AAV and GFP proteins and demonstrated that the proposed framework significantly improves effectiveness in extrapolation tasks.
+
+## 1 INTRODUCTION
+
+We focus on the challenging task of extrapolative protein design (Chan et al., 2021; Padmakumar et al., 2023; Lee et al., 2023). The problem involves creating novel protein sequences with fitness values above and beyond those seen during training. Extrapolation is challenging for machine learning methods as methods are primarily trained to recognize patterns within the range of the training data (Xu et al., 2020). Existing extrapolative protein design methods can be roughly categorized into two groups. Scorer-based approaches optimize sequences by following a learned score model with the help of reinforcement learning (Lee et al., 2024) or Gibbs sampling (Kirjner et al., 2024), progressively modifying sequences towards higher predicted fitness values. Since the score model in these methods has been trained primarily on sequences belonging to the training region of fitness values, its ability to generalize to sequences further away may be limited. Edit-based methods, on the other hand, effectively learn gradient directions from pairs of examples derived from data or from an estimated score model, and learn to propose sequence improvements. If the learned patterns of improvement generalize, then the methods are able to continue to improve the sequences beyond those in the original training region. Current generative models for sequence improvement approximate the gradient direction through differences between protein pairs, e.g., learning the ranking through contrastive discriminatory objective (Chan et al., 2021), token-level machine translation (Padmakumar et al., 2023) and Bradley-Terry (BT) model (Bradley & Terry, 1952) with maximum likelihood objective (Lee et al., 2023). The primary limitation is that noisy pairs alone may not provide sufficient gradient information to effectively guide protein generation.
+
+In this paper, we build on edit-based methods to address these limitations and further enhance the methods with *data distillation*. We draw inspiration from recent successes of preference learning (Christiano et al., 2017; Rafailov et al., 2023) in text generation. In order to improve the extrapolation power of the generative models, we distill carefully selected higher order (triplet) relationships into the models. These triplet relations are meant to better approximate the gradient direction in sequence space and therefore aid in progressive search for better sequences. We focus on improvements
+
+{1}------------------------------------------------
+
+relative to a seed with the help of offline preference learning approaches such as direct preference optimization (DPO) (Rafailov et al., 2023) and efficient exact optimization (EXO) (Ji et al., 2024). We introduce hard triplet relations as additional guidance to the generative model pre-trained from pairs alone. Specifically, given a conditional generative model  $P(\cdot | \mathbf{x})$ , we identify examples  $\mathbf{x}_1 < \mathbf{x}_2 < \mathbf{x}_3$  (based on their fitness) where the current model fails, i.e.,  $P(\mathbf{x}_1 | \mathbf{x}_2) > P(\mathbf{x}_3 | \mathbf{x}_2)$ . We consider these mistakes similar to harmful text generation in LMs. The proposed *data distillation* approach guides language models towards higher fitness in the extrapolation region while preventing the generation of lower fitness sequences.
+
+We evaluate our method on the well studied Green Fluorescent Proteins (GFP) by Sarkisyan et al. (2016) and Adeno-Associated Virus (AAV) by Bryant et al. (2021). We utilize the carefully created *medium* and *hard* difficulty splits provided by Kirjner et al. (2024). Our contributions are summarized as follows:
+
+- We develop a novel data distillation approach for extrapolative protein design through preference learning. Our approach distills model-dependent hard triplewise ranking into generative model through reverse KL offline preference learning (Section 3.4 for preference data creation and Section 3.5 for general model alignment).
+- Our benchmark shows that our approach can drastically improve the performance upon prior methods (Section 5).
+- Through ablation studies, we show the importance of training on hard triplewise rankings in comparison to other methods for preference dataset creation (Section 6.1).
+- We benchmark our proposed approach against state-of-the-art scorer-based approaches and our approach becomes state-of-the-art in 3 out of 4 datasets (Section 6.2).
+- We benchmark the reverse KL preference learning approach against other state-of-the-art preference learning approaches such as DPO (Rafailov et al., 2023), IPO (Azar et al., 2023), IRPO (Pang et al., 2024), NCA (Chen et al., 2024), SPPO (Wu et al., 2024), AOT (Melnik et al., 2024) (Section 6.3).
+
+## 2 RELATED WORK
+
+**Controllable Biological Sequence Design** The approaches for controlled biological sequence design can be categorized into (i) conditional protein design with control codes such as protein families (Karimi et al., 2020; Madani et al., 2023) (ii) controllable generation via scorer functions such as Gibbs sampling on smoothed fitness landscape (Kirjner et al., 2024) (iii) protein optimization in latent space such as reinforcement learning in latent space of large language models (Lee et al., 2024), property-guided variational auto-encoder based models (Gómez-Bombarelli et al., 2018; Ghaffari et al., 2024) (iv) extrapolative protein design: extrapolating to fitness beyond training data (Chan et al., 2021; Padmakumar et al., 2023; Lee et al., 2023) All extrapolative protein design models have the inherent assumption that extrapolation can be learned sufficiently well through pairwise ranking of protein fitnesses. Chan et al. (2021) developed a contrastive learning approach of ranking pairs through a discriminator of the latent space and extrapolating biological sequences through traversing it. Padmakumar et al. (2023) proposed to learn local editor for translating sequences with low fitness to sequences with slightly higher fitness through machine translation. Recently, Lee et al. (2023) modeled the ranked pairs through Bradley-Terry (BT) model via a maximum likelihood objective, named align-plm. The align-plm model is an unconditional auto-regressive generative model, so it does not have any notion of seed (starting sequence). Therefore, the align-plm model has been used as an oracle rather than a generative model to rank the fitness of heuristically generated sequences. Particularly, starting from seed sequences, they will exhaustively search all single site mutations and rank them based on align-plm model to choose the top ranking sequences and iteratively continue this process.
+
+**Preference Learning** Aligning language models toward human feedback has improved their capabilities in following instruction (Ouyang et al., 2022) and translation (Kreutzer et al., 2018). LLM alignment originated from the seminal work of Christiano et al. (2017) on reinforcement learning with human feedback (RLHF). However, training RLHF was shown to be challenging due to training instabilities, reward hacking and catastrophic forgetting (Peng et al., 2023). Recently, there has been
+
+{2}------------------------------------------------
+
+a momentum for closed-form and direct optimization of offline preferences. Direct optimization of human feedback can be categorized into sequence likelihood calibration (Zhao et al., 2023), direct preference optimization (DPO) through Bradley-Terry (BT) model (Rafailov et al., 2023; Mitchell, 2023), a more generalized version of DPO named  $\Psi$  preference optimization (Azar et al., 2023). It has recently been shown that, under *probability matching* perspective, DPO is optimizing the forward KL divergence  $\text{KL}(\pi_\beta^\pi || \pi_\theta)$  where  $\pi_\beta^\pi$  is the optimal target distribution and  $\pi_\theta$  the parameterized model distribution. However, the RLHF objective function is equivalent of minimizing the reverse KL divergence  $\text{KL}(\pi_\theta || \pi_\beta^\pi)$ . Recently, efficient exact optimization (EXO) has been proposed to minimize the reverse KL divergence of the general alignment objective (Ji et al., 2024). It has been shown that DPO only covers the support of  $\pi_\beta^\pi$  (mean seeking) and EXO is capturing its modes (mode seeking). Direct preference models not only perform on par with RLHF but are also simpler to implement, single-stage training and computationally efficient in practice.
+
+## 3 METHODS
+
+### 3.1 PROBLEM DEFINITION
+
+Let's assume there is a supervised dataset  $D = \{(x^n, y^n)\}_{n=1}^N$  with  $N$  samples where  $x^n = (x_1^n, \dots, x_L^n)$  is  $n$ th protein sequence with length  $L$  and  $y^n$  is its corresponding fitness value (i.e. stability, binding affinity). Let's assume the fitness value  $y$  in dataset  $D$  is bounded  $y \in [y_{\min}, y_{\max}]$ . We define this region as *training region* and try to generate sequences with fitness value  $y_{\text{gen}} > y_{\max}$  or  $y_{\text{gen}} < y_{\min}$  which is defined as the *extrapolation region*.
+
+### 3.2 OVERVIEW
+
+The core concept behind the proposed method is to gradually learn the higher order relationships among ranked proteins. We start with an auto-regressive unconditional pLM such as Prot-T5-XL (Elnaggar et al., 2021) that is trained on unsupervised data to model  $x \sim P_\theta(\cdot)$  where  $x$  is a generated protein sequence. Inspired by the ICE model (Padmakumar et al., 2023), we trained a local editor with the desired direction (e.g. increasing the binding affinity) to learn the first order relationship among ranked proteins (approximating desired gradient direction through pairs). The model learns to generate  $x_2 \sim P_\theta(\cdot | x_1)$  where the fitness of  $x_2$  (designed sequence) is expected to be better than  $x_1$  (starting sequence). Inspired by direct preference optimization (DPO) (Rafailov et al., 2023) and EXO (Ji et al., 2024), we aligned the pairwise model based on hard triplets by directly optimizing on newly created preferences where the pairwise model makes the worst mistakes. With this alignment, the model updates its belief of gradient direction from triplewise relationships where the pairwise model is going in the wrong direction. The overall schematic of the proposed method is illustrated in Figure 1.
+
+### 3.3 LOCAL EDITING THROUGH PAIRS
+
+Given a supervised dataset  $D$ , we trained a scorer function  $f_s$  to predict the fitness of a query sequence. We expect  $f_s$  to perform well on the training region and perform poorly on the extrapolation region, since it has not seen these fitness values during its training. Then, following Padmakumar et al. (2023) we generated perturbed sequences by masking-infilling starting from the training sequences (seeds). Scorer function  $f_s$  is utilized to assess whether the newly generated pair (seed, sequence) has a small but meaningful improvement in the desired direction. We created the dataset  $D_{\text{pair}} = \{(x^m, z^m)\}_{m=1}^M$  with  $M$  samples where  $f_s(x^m) < f_s(z^m)$  if increasing fitness is desired and vice versa. Finally, we fine-tuned the Prot-T5-XL model (Elnaggar et al., 2021) through MLE in an auto-regressive manner to predict the next amino acid:  $P_{\text{pair}}(z | x) = \prod_{i=1}^L P(z_i | z_{<i}, x)$ .
+
+### 3.4 PREFERENCE DATASET CREATION
+
+To better approximate the gradient direction toward improved fitness in the extrapolation region and directly model higher order relationship among proteins, we created a preference dataset of size  $K$  based on triplets  $D_{\text{triplet}} = \{(x_{\text{prompt}}^k, x_w^k, x_l^k)\}_{k=1}^K$  where  $x_{\text{prompt}}$  is the seed sequence,  $x_w$  is the *desired* response and  $x_l$  is the *undesired* response. We are interested in increasing fitness by moving
+
+{3}------------------------------------------------
+
+![Figure 1: Schematic overview of extrapolative protein design through triplet preference learning. The diagram shows a workflow starting from a Biological Assay Dataset. One path goes through a 'Score s' block to a 'Pairwise Dataset' and then to 'Model training' for a 'Pairwise Model'. Another path from the dataset goes through 'Mask + filling' to a 'Triplet Dataset'. The Triplet Dataset is processed into a 'Preference Dataset' containing triplets of (Prompt, Preferred Design, Dispreferred Design). The Pairwise Model is used to 'Find hardest triplets based on pairwise model'. These triplets, along with a 'Reference Model', are used for 'Exact preference optimization (EXO)' and 'Model training' to produce the 'Final Model'.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 1: Schematic overview of extrapolative protein design through triplet preference learning. The diagram shows a workflow starting from a Biological Assay Dataset. One path goes through a 'Score s' block to a 'Pairwise Dataset' and then to 'Model training' for a 'Pairwise Model'. Another path from the dataset goes through 'Mask + filling' to a 'Triplet Dataset'. The Triplet Dataset is processed into a 'Preference Dataset' containing triplets of (Prompt, Preferred Design, Dispreferred Design). The Pairwise Model is used to 'Find hardest triplets based on pairwise model'. These triplets, along with a 'Reference Model', are used for 'Exact preference optimization (EXO)' and 'Model training' to produce the 'Final Model'.
+
+Figure 1: Schematic overview of extrapolative protein design through triplet preference learning.
+
+from  $\mathbf{x}_{\text{prompt}}$  toward  $\mathbf{x}_w$  where  $f_s(\mathbf{x}_{\text{prompt}}) < f_s(\mathbf{x}_w)$  while guarding it against sequences with same or worse fitnesses (undesired ones). Therefore, we create the following preference datasets (i) *Don't go backward*: triplets should satisfy the following order  $f_s(\mathbf{x}_l) < f_s(\mathbf{x}_{\text{prompt}}) < f_s(\mathbf{x}_w)$  (ii) *Don't get stuck at the same fitness*: triplets should satisfy the following order  $f_s(\mathbf{x}_l) \approx f_s(\mathbf{x}_{\text{prompt}}) < f_s(\mathbf{x}_w)$ . In addition for better approximation of gradient direction and higher order modeling, we would like to focus more on the triplets which are the most confusing for the pairwise model. We mathematically define *hardness* for a given triplet  $(\mathbf{x}_{\text{prompt}}, \mathbf{x}_w, \mathbf{x}_l)$  with respect to the pairwise model:
+
+$$S_{\text{hardness}} = \log P_{\text{pair}}(\mathbf{x}_l | \mathbf{x}_{\text{prompt}}) - \log P_{\text{pair}}(\mathbf{x}_w | \mathbf{x}_{\text{prompt}}) \quad (1)$$
+
+By definition, triplets with  $S_{\text{hardness}} > 0$  are considered to be hard examples, since the pairwise model prefers the undesired sequences to the desired sequences given the prompts, and  $S_{\text{hardness}} \leq 0$  are easy examples similarly. In our internal experiments, we found out that 65%-70% of the proposed triplets are already easy. We have hypothesized that one should focus on the **hard triplet examples** in the **entire training** fitness range. We have performed ablation studies to investigate the impact of these components. The details of preference creation has been explained in section 4.3.
+
+### 3.5 PREFERENCE LEARNING THROUGH TRIPLETS
+
+We model the triplewise relationship through offline preference optimization recently developed for model alignment. Ji et al. (2024) proposed a general model alignment which is explained in details in supplementary section A. We will utilize their approximate formulation for offline preference setting. Firstly, one can define the empirical distribution  $f_\phi$  for a given prompt  $\mathbf{x}_{\text{prompt}}$  and a response  $\mathbf{x}_j$  where  $j \in \{w, l\}$  as follow:
+
+$$P_{f_\phi}(j | \mathbf{x}_w, \mathbf{x}_l, \mathbf{x}_{\text{prompt}}) = \frac{e^{\beta_\phi \log \frac{P_\phi(\mathbf{x}_j | \mathbf{x}_{\text{prompt}})}{P_{\text{pair}}(\mathbf{x}_j | \mathbf{x}_{\text{prompt}})}}}{e^{\beta_\phi \log \frac{P_\phi(\mathbf{x}_w | \mathbf{x}_{\text{prompt}})}{P_{\text{pair}}(\mathbf{x}_w | \mathbf{x}_{\text{prompt}})}} + e^{\beta_\phi \log \frac{P_\phi(\mathbf{x}_l | \mathbf{x}_{\text{prompt}})}{P_{\text{pair}}(\mathbf{x}_l | \mathbf{x}_{\text{prompt}})}} \quad (2)$$
+
+Secondly, one can define the empirical distribution  $P_{r_\phi}$  as follow:
+
+$$P_{r_\phi}(j | \mathbf{x}_w, \mathbf{x}_l, \mathbf{x}_{\text{prompt}}) = \begin{cases} 1 - \epsilon : & j = w \\ \epsilon : & j = l \end{cases}$$
+
+{4}------------------------------------------------
+
+Where  $\epsilon$  is a small number (e.g.  $10^{-5}$ ). Finally, the offline alignment objective is the reverse KL between  $P_{f_\theta}$  and  $P_{r_\phi}$ :
+
+$$\mathcal{L}_{\text{exo}} = \mathbb{E}_{(\mathbf{x}_w, \mathbf{x}_t, \mathbf{x}_{\text{prompt}}) \sim D_{\text{triplet}}} \left[ \text{KL}(P_{f_\theta}(\cdot | \mathbf{x}_w, \mathbf{x}_t, \mathbf{x}_{\text{prompt}}) || P_{r_\phi}(\cdot | \mathbf{x}_w, \mathbf{x}_t, \mathbf{x}_{\text{prompt}})) \right] \quad (3)$$
+
+### 3.6 INFERENCE AND EVALUATION
+
+During inference, the model starts with an initial seed sequence, iteratively edits it and is expected to improve its fitness. At iteration  $t$ , given the seed sequence  $\mathbf{x}_{t-1}$  and the trained extrapolative protein design model  $P_{\text{triplet}}(\cdot | \mathbf{x})$ , one would sample  $\mathbf{x}_t \sim P_{\text{triplet}}(\cdot | \mathbf{x}_{t-1})$  until  $t$  reaches  $T$  (i.e. 10) predefined iterations. (Fan et al., 2018) introduced "top-k" as fixed number of highest probability vocabulary tokens to keep in inference. (Holtzman et al., 2019) introduced nucleus sampling to avoid degenerate sampling by filtering the unreliable tail of the probability distribution. Particularly, for a given top-p probability, the smallest set of most probable tokens with probabilities that add up to top-p or higher are kept for generation. Temperature ( $\tau$ ) hyper-parameter is used to control the randomness in generation and as a way to balance between greedy search (token with max probability when  $\tau \rightarrow 0$ ) and uniform sampling (when  $\tau \rightarrow \infty$ ). Inspired from Padmakumar et al. (2023), for each initial seed sequence, we sample  $N$  (i.e. 10 for AAV and 2 for GFP) sequences using a combination of top-k and top-p sampling with  $k = 10$ ,  $p = 0.95$  and a temperature of 0.7 (1.0) without (with) scorer in inference. At the end of each iteration, we randomly select  $M$  (i.e. 10,000 for AAV and 2,000 for GFP) samples from all generated sequences and use them as seeds for next iteration when scorer is not used in the inference. We have only chosen the best sequence out of  $N$  generated ones for each seed based on scorer model when used in inference. At the last  $T$ th iteration, we evaluate the final  $M$  samples. For *in-silico* evaluation of GFP and AAV datasets, we used the evaluators trained by Kirjner et al. (2024).
+
+## 4 EXPERIMENTS
+
+### 4.1 DATASETS
+
+In order to assess the extrapolation ability of models on both sequence and fitness landscape, we have utilized the Adeno-associated virus (AAV) and Aequorea victoria GFP (avGFP) datasets processed by Kirjner et al. (2024). They proposed to use *mutational gap*, defined as the minimum number of mutations required from the training set to achieve the optimal fitness, in order to measure the extrapolation ability of protein design models. We used the *medium* and *hard* difficulty split of datasets where mutational gap are 6 and 7 mutations respectively. The characteristics of the datasets are explained in Table 1.
+
+Table 1: Characteristics of datasets for benchmarking
+
+|  | GFP |  | AAV |  |
+|-|-|-|-|-|
+|  | Medium | Hard | Medium | Hard |
+| Training region | [1.31, 3.02] | [1.30, 1.56] | [5.64, 7.48] | [4.76, 4.32] |
+| Extrapolation region | $>3.02$ | $>1.56$ | $>7.48$ | $>6.42$ |
+| Mutational gap (99th) | 6 | 7 | 6 | 7 |
+| Number of seeds | 100 | 100 | 100 | 100 |
+| Avg. fitness of seeds | 2.28 | 2.28 | 1.49 | 1.49 |
+| Avg. fitness of top100 extrapolation sequences | 4.02 | 4.02 | 16.62 | 16.62 |
+
+### 4.2 BENCHMARKED MODELS
+
+When scorer has not been utilized in inference, we compared our proposed method to (i) *Sampling*: unconditional protein design through Prot-T5-XL (Elnaggar et al., 2021) (ii) *Iterative Controlled Extrapolation (ICE)*: extrapolation through learning a local editor by translating proteins with lower fitness to slightly better fitness (Padmakumar et al., 2023) (iii) *Align-plm*: extrapolation via Bradley-Terry (BT) model of ranked proteins with big enough distances (Lee et al., 2023). We could not compare our method against Genhance (Chan et al., 2021) as we couldn't run their code. When scorer has been utilized in inference, we compared with (i) *Iterative sampling*: unconditional protein design through Prot-T5-XL (Elnaggar et al., 2021) with scorer ranking, (ii) *ICE + scorer*: ICE with
+
+{5}------------------------------------------------
+
+scorer ranking, (iii) BiGGS: Gibbs sampling with Graph-based Smoothing in the smoothed fitness landscape (Kirjner et al., 2024), (iv) *LatProRL*: The recent state-of-the-art model for protein fitness optimization through reinforcement learning in latent space of large language models (Lee et al., 2024).
+
+### 4.3 IMPLEMENTATION DETAILS
+
+We used the CNN models trained by Kirjner et al. (2024) and Dallago et al. (2021) on smoothed fitness landscape of the *training regions* of GFP and AAV datasets respectively and utilized them as scorer functions  $f_s$ . Following Padmakumar et al. (2023), we created the pairs dataset  $D_{\text{pairs}} = \{(x_1^i, x_2^i)\}_{i=1}^M$  with  $M = 900K$  (100K) training (validation) samples where they follow  $|f_s(x_1) - f_s(x_2)| < 0.5$  and  $\{x_1, x_2\}$  can either be from original dataset or masking-infilling (e.g. 5% masking). We trained the local editor model on  $D_{\text{pairs}}$  for 10 epochs with the AdamW optimizer (Loshchilov & Hutter, 2017), a learning rate of 1e-4 and batch size of 384.
+
+Next, we created the preference dataset for both proteins following the principles of (i) *Don't go backward* and (ii) *Don't get stuck at the same fitness*. For GFP, we binned sequences based on their smoothed fitness into buckets of [0, 0.25, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25] and [0, 0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6] for medium and hard difficulty datasets. For AAV, we binned sequences based on their smoothed fitness into buckets of [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7] and [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5] for medium and hard difficulty datasets. In total, we created 500K (50K) training (validation) samples in which half of them based on *Don't go backward* and the other half based on *Don't get stuck at the same fitness*. For *Don't go backward*, we sampled triplets from every three consecutive buckets where  $x_{\text{prompts}}$ ,  $x_l$  and  $x_u$  are from buckets with middle, lowest and highest fitness respectively. For *Don't get stuck at the same fitness*, we sampled triplets from every two consecutive buckets where  $x_{\text{prompts}}$  and  $x_l$  are from the bucket with lower fitness and  $x_u$  is from the bucket with higher fitness. As shown by Padmakumar et al. (2023) in pair creation, utilizing masking-infilling sequences might further improve the triplets as well. Instead of investigating masking-infilling from unconditional generative model for triplets, we have created two preference datasets utilizing paired conditional extrapolative seq2seq model in combination with scorers. These datasets are named *scorer distillation* and *combined distillation* which are explained in details in section 6.1.
+
+Then, we assessed the hardness of triples defined in equation 1. We chose the top 100K (10K) hardest triplets as training (validation) samples for offline preference learning. We further fine-tuned the local editor model based on triplet-based preference learning through EXO loss function defined in equation 3 for 1 epoch with batch size of 32, learning rate of 5e-7,  $\beta = 0.1$  and the AdamW optimizer (Loshchilov & Hutter, 2017).
+
+### 4.4 EVALUATION METRICS
+
+We use four evaluation metrics: (i) **Extrapolation percentage**: Our primary goal is to generate sequences in the extrapolation region. We use evaluator models to assess the percentage of generated sequences that have fitness in the extrapolation region. (ii) **Fitness<sub>100</sub>**: Our secondary metric is the average fitness of the top 100 generated sequences that measures how far away generated sequences are from the training region in the fitness landscape. (iii) **Distance<sub>100</sub>**: the third metric measures the edit distance of the top 100 generated sequences from the top 100 ground truth sequences in the actual assay that have not been seen by any model (extrapolation sequences). We measure the average of the closest distance between these two sets of sequences. (iv) **Diversity<sub>100</sub>**: Our final metric measures the diversity of the top 100 candidates of each model. Diversity is measured as median of the distances between every pair of top 100 candidates. We should emphasize that higher diversity does not correlate with better performance since a random algorithm can achieve maximum diversity. However, it may provide insights on the exploitation-exploration trade-off.
+
+## 5 RESULTS
+
+Figure 2 shows that for 3 out of 4 datasets, the proposed method (EXO) significantly outperforms baseline methods while being slightly better on the hard difficulty split of the GFP dataset. Table 2 shows that (i) extrapolation percentage has substantially increased by 1.54 (20.76% to 52.75%),
+
+{6}------------------------------------------------
+
+17.53 (4.59% to 85.07%), 4.07 (18.52% to 92.92%) times on hard difficulty AAV, medium difficulty AAV and medium difficulty GFP datasets respectively in comparison to the best baseline method. It has decreased from 54.45% to 24.27% on the hard difficulty GFP dataset. (ii) The average fitness of the top 100 candidates has increased drastically by 21.53% (9.01 to 10.95), 39.76% (9.43 to 13.18), 10.19% (2.55 to 2.81), 69.03% (2.39 to 4.04) on the hard/medium difficulty splits of the AAV and GFP datasets respectively, in comparison to the best baseline method. (iii) The top 100 generated candidates from EXO are closer to the top 100 unseen ground truth extrapolation sequences in all datasets except being second best on the hard difficulty split of AAV dataset. (iv) The diversity of the sequences generated on the hard splits of AAV and GFP datasets is on-par with prior methods (balance exploitation vs exploration), while having lower diversity on the medium splits of AAV and GFP datasets (more exploitation vs exploration). First, we performed hyper-parameter tuning for  $\beta$  since it is used in the preference learning stage. Based on the results shown in Figure 15 and Table 16,  $\beta = 0.1$  is outperforming other values on medium splits while performing decent and robust on hard splits. We also performed hyper-parameter tuning for sampling temperature ( $\tau$ ) which is important at inference stage. Similarly, based on Figure 16 and Table 17,  $\tau = 0.7$  is outperforming other values on medium splits while performing decent and robust on hard splits. In addition, Figure 13 and Table 14 shows that our results are reproducible by running with five different random seeds for both the hard and the medium splits of AAV and GFP datasets.
+
+Table 2: Comparison of in-silico fitness evaluation for baselines and proposed method on medium/hard difficulty splits of GFP and AAV datasets. We report average (standard deviation) of 5 different runs.
+
+| Method | AAV (hard) |  |  |  | AAV (medium) |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | Extrapolation $\uparrow$ | Fitness $_{100} \uparrow$ | Distance $_{100} \downarrow$ | Diversity $_{100}$ | Extrapolation $\uparrow$ | Fitness $_{100} \uparrow$ | Distance $_{100} \downarrow$ | Diversity $_{100}$ |
+| Top 100 ground truth | - | 16.62 | 5.01 | 4.64 | - | 16.62 | 5.01 | 4.64 |
+| Sampling | 1.64%(0.31) | 7.42(0.30) | <b>4.49(0.35)</b> | 7.18(0.61) | 1.64%(0.31) | 7.42(0.30) | <b>4.49(0.35)</b> | 7.18(0.61) |
+| ICE | 5.58%(0.04) | 8.18(0.01) | 9.98(0.14) | 13.56(0.18) | 4.59%(0.15) | 9.43(0.04) | 7.72(0.08) | 11.49(0.24) |
+| Align-pm | 20.76%(0.00) | 9.01(0.00) | 7.68(0.00) | 8.16(0.00) | 3.49%(0.00) | 8.66(0.00) | 7.29(0.00) | 6.22(0.00) |
+| EXO | <b>52.75%(1.74)</b> | <b>10.95(0.17)</b> | 5.30(0.39) | 8.46(0.27) | <b>85.07%(1.72)</b> | <b>13.18(0.33)</b> | <b>1.64(0.41)</b> | 1.08(0.46) |
+| Method | GFP (hard) |  |  |  | GFP (medium) |  |  |  |
+|  | Extrapolation $\uparrow$ | Fitness $_{100} \uparrow$ | Distance $_{100} \downarrow$ | Diversity $_{100}$ | Extrapolation $\uparrow$ | Fitness $_{100} \uparrow$ | Distance $_{100} \downarrow$ | Diversity $_{100}$ |
+| Top 100 ground truth | - | 4.02 | 4.64 | 4.64 | - | 4.02 | 4.64 | 4.64 |
+| Sampling | 18.52%(0.80) | 1.94(0.09) | 10.21(0.50) | 20.10(1.01) | 18.52%(0.80) | 1.94(0.09) | 10.21(0.50) | 20.10(1.01) |
+| ICE | 27.16%(0.80) | 2.07(0.01) | 10.93(0.18) | 15.76(0.64) | 0.16%(0.19) | 2.39(0.03) | 8.47(0.21) | 14.41(0.87) |
+| Align-pm | <b>54.45%(0.00)</b> | 2.55(0.00) | 9.64(0.00) | 4.17(0.00) | 0.00%(0.00) | 2.12(0.00) | 6.13(0.00) | 5.41(0.00) |
+| EXO | 24.27%(1.70) | <b>2.81(0.07)</b> | <b>9.08(4.04)</b> | 14.96(7.44) | <b>92.92%(0.30)</b> | <b>4.04(0.01)</b> | <b>2.18(0.14)</b> | 2.57(0.14) |
+
+![Figure 2: Comparison of in-silico fitness evaluation on GFP and AAV datasets. The figure contains four histograms showing the distribution of fitness values for different datasets and splits. Top-left: Distribution of Fitness values - AAV medium difficulty split. Top-right: Distribution of Fitness values - AAV hard difficulty split. Bottom-left: Distribution of Fitness values - GFP medium difficulty split. Bottom-right: Distribution of Fitness values - GFP hard difficulty split. Each histogram compares Sampling (blue), ICE (orange), Alignpm (green), and EXO (red) methods. A vertical dashed line indicates the Extrapolation Region. The EXO method consistently shows higher fitness values across all datasets and splits compared to the baselines.](c64e9e9f3b0b828a5f6ac70441877764_img.jpg)
+
+Figure 2: Comparison of in-silico fitness evaluation on GFP and AAV datasets. The figure contains four histograms showing the distribution of fitness values for different datasets and splits. Top-left: Distribution of Fitness values - AAV medium difficulty split. Top-right: Distribution of Fitness values - AAV hard difficulty split. Bottom-left: Distribution of Fitness values - GFP medium difficulty split. Bottom-right: Distribution of Fitness values - GFP hard difficulty split. Each histogram compares Sampling (blue), ICE (orange), Alignpm (green), and EXO (red) methods. A vertical dashed line indicates the Extrapolation Region. The EXO method consistently shows higher fitness values across all datasets and splits compared to the baselines.
+
+Figure 2: Comparison of in-silico fitness evaluation on GFP and AAV datasets.
+
+{7}------------------------------------------------
+
+## 6 ABLATION STUDIES
+
+### 6.1 EFFECT OF PREFERENCE DATA
+
+To evaluate the effect of preference data on the proposed method, we have created five types of preference datasets (1) *All*: **random** triplet creation through *Don't go backward* and *Don't get stuck at the same fitness* principles that includes a **mix** of easy and hard examples. (2) *Mistakes*: focusing on the **hardest triplets** created from similar principles (this is the default preference of data creation in the proposed method). (3) *Mistakes in extrapolation*: focusing only on the **hardest triplets close to the extrapolation region** but in the training region. The main question behind it: Are the hard examples close to the extrapolation region sufficient for good extrapolative generative model in extrapolation region? (4) *Scorer distillation*: In the previous three preference datasets, we perform *data distillation* by ranking triplewise sequences based on hardness for local editor. Another alternative approach is to utilize the local editor to propose sequences and rank them based on the scorer in order to create a preference dataset. Particularly, for a given  $\mathbf{x}_{\text{prompt}}$ , one can sample  $K$  sequences  $\mathbf{y}_{1:K} = \{\mathbf{y}_1, \mathbf{y}_2, \dots, \mathbf{y}_K\}$  from  $P_{\text{pair}}(\cdot | \mathbf{x}_{\text{prompt}})$ . Then, choose the triplewise rankings for all pairs based on  $s_{i,j} = f(\mathbf{y}_j) - f(\mathbf{y}_i)$  where  $f(\mathbf{y}_j) < f(\mathbf{x}_{\text{prompt}}) < f(\mathbf{y}_i)$ . By definition,  $s_{i,j} > 0$  can be considered as hard example since the pairwise model has wrongly generated  $\mathbf{y}_j$  with lower predicted fitness than prompt. We would like to encourage the pairwise model to generate more sequences similar to  $\mathbf{y}_i$  since its predicted fitness is higher than seed. This approach can be considered as *scorer distillation* since we are attempting to distill the scorers knowledge in training and extrapolation region into the generative model. (5) *Combined distillation*: Finally, we combine the hardest triplets from *Mistakes* with *scorer distillation* to utilize the best of both worlds.
+
+Table 3 shows that (1) training on hard examples is drastically beneficial in enhancing the performance of EXO. We observe that in medium difficulty splits of AAV/GFP datasets *Mistakes* significantly outperforms *All* version and perform worse (34.55% to 24.27%) and (54.78% to 52.75%) on hard split of GFP and AAV datasets. In addition, average fitness of top 100 candidates have increased drastically for all datasets except hard split of GFP where it slightly performs worse (2.88 vs 2.81) on hard split of GFP dataset. (2) learning from hard examples close to extrapolation region is not sufficient for EXO. Similarly, we observe that in 3 out of 4 datasets *Mistakes* outperforms *Mistakes in extrapolation* version and perform worse (56.65% to 24.27%) on hard split of GFP, (3) training on *data distillation* outperform *scorer distillation* one for EXO. We observe that in 3 out 4 datasets *Mistakes* outperforms *scorer distillation* version and perform worse (76.89% to 52.75%) on hard split of AAV, and (4) training on *Combined distillation* perform well on hard split of AAV and GFP datasets in comparison to the default one but perform worse on medium split. It shows that in hard difficulty split where there is much less data to learn from it is beneficial to augment data through scorer distillation. However, it is computationally expensive to create triplets through scorer distillation since we need to run local editor in inference for many samples. Table 7 indicates that scorer distillation is more than 200 times more expensive to run on GPU machines in comparison to the default. In general, we can conclude that based on Table 3 and Figure 7, *Mistakes* perform better in comparison to other preference datasets with almost no computational overhead.
+
+Table 3: Comparison of in-silico fitness evaluation for various preference data on medium/hard difficulty splits of GFP/AAV datasets. We report average (standard deviation) of 5 different runs.
+
+| Triplet creation | AAV (hard) |  |  |  | AAV (medium) |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | Extrapolation $\uparrow$ | Fitness <sub>top</sub> $\uparrow$ | Distance <sub>top</sub> $\downarrow$ | Diversity <sub>top</sub> $\uparrow$ | Extrapolation $\uparrow$ | Fitness <sub>top</sub> $\uparrow$ | Distance <sub>top</sub> $\downarrow$ | Diversity <sub>top</sub> $\uparrow$ |
+| All | 54.78%(3.86) | 7.86(0.00) | 9.99(0.00) | 0.00(0.00) | 31.19%(0.89) | 11.06(0.18) | 6.37(0.16) | 6.08(0.72) |
+| Mistakes in extrapolation | 6.72%(0.19) | 8.28(0.11) | 8.66(0.20) | 12.83(0.30) | 8.88%(0.51) | 10.80(0.04) | 5.61(0.27) | 8.75(0.29) |
+| Scorer distillation | 76.89%(3.48) | 10.15(0.18) | 7.00(0.00) | 0.00(0.00) | 15.52%(1.47) | 9.83(0.00) | 5.99(0.00) | 0.00(0.00) |
+| Combined distillation | <b>78.19%(2.66)</b> | <b>13.97(0.11)</b> | <b>1.74(0.25)</b> | 1.70(0.45) | 70.85%(0.72) | <b>13.24(0.11)</b> | 2.85(0.19) | 2.91(0.41) |
+| <b>Mistakes (default)</b> | 52.75%(1.74) | 10.95(0.17) | 5.30(0.39) | 8.46(0.27) | <b>85.07%(1.72)</b> | 13.18(0.33) | <b>1.64(0.41)</b> | 1.08(0.46) |
+| Triplet creation | GFP (hard) |  |  |  | GFP (medium) |  |  |  |
+|  | Extrapolation $\uparrow$ | Fitness <sub>top</sub> $\uparrow$ | Distance <sub>top</sub> $\downarrow$ | Diversity <sub>top</sub> $\uparrow$ | Extrapolation $\uparrow$ | Fitness <sub>top</sub> $\uparrow$ | Distance <sub>top</sub> $\downarrow$ | Diversity <sub>top</sub> $\uparrow$ |
+| All | 34.55%(2.22) | 2.88(0.26) | 4.50(1.80) | 6.05(2.99) | 17.65%(2.80) | 3.89(0.01) | 2.03(0.15) | 2.47(0.10) |
+| Mistakes in extrapolation | 56.65%(1.18) | 3.49(0.02) | <b>2.13(0.06)</b> | 3.16(0.06) | 0.00%(0.00) | 1.99(0.02) | 13.44(2.58) | 17.79(4.28) |
+| Scorer distillation | 0.00%(0.00) | 1.35(0.01) | 9.78(0.05) | 0.33(0.06) | 9.85%(5.01) | 3.35(0.28) | 3.70(0.88) | 3.02(0.89) |
+| Combined distillation | <b>65.86%(1.07)</b> | <b>3.65(0.02)</b> | 2.42(0.10) | 4.07(0.08) | 28.84%(2.77) | 3.82(0.02) | 2.24(0.19) | 3.14(0.19) |
+| <b>Mistakes (default)</b> | 24.27%(1.70) | 2.81(0.07) | 9.08(4.04) | 14.96(7.44) | <b>92.92%(0.30)</b> | <b>4.04(0.01)</b> | <b>2.13(0.14)</b> | 2.57(0.14) |
+
+We have further assessed the impact of 1) creating triplets from consecutive vs non-consecutive bins; 2) sequence similarity cutoff between prompt vs desired/undesired responses. Table 4 highlights that naively creating preference data from non-consecutive pairs would confuse the model's learning
+
+{8}------------------------------------------------
+
+and worsen the performance on 3 out of 4 splits. We hypothesize that, in order to properly learn from non-consecutive bins, one needs to develop a more sophisticated prompt to incorporate the distance between bins as well. In addition, Table 4 suggests that max mutation 15 between seed and desired/undesired sequences would slightly improve the performance on hard splits of AAV and GFP datasets while worsen it for medium splits. However, calculating sequence similarity for large dataset is computationally expensive therefore we would not suggest it as our default.
+
+Table 4: Comparison of in-silico fitness evaluation for ablation studies on triplet creation.
+
+| Triplet creation | bins | Max mutations | AAV (hard) |  |  |  | AAV (medium) |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  |  |  | Extrapolation <sup>↑</sup> | Fitness <sub>gen</sub> <sup>↑</sup> | Distance <sub>gen</sub> <sup>↓</sup> | Diversity <sub>gen</sub> <sup>↑</sup> | Extrapolation <sup>↑</sup> | Fitness <sub>gen</sub> <sup>↑</sup> | Distance <sub>gen</sub> <sup>↓</sup> | Diversity <sub>gen</sub> <sup>↑</sup> |
+| Mistakes | Consecutive | None | 52.75%(1.74) | 10.95(0.17) | 5.30(0.39) | 8.46(0.27) | <b>85.07%(1.72)</b> | <b>13.18(0.33)</b> | <b>1.64(0.41)</b> | 1.08(0.46) |
+| Mistakes | Non-Consecutive | None | 32.86%(0.84) | 9.46(0.09) | 7.49(0.36) | 9.02(0.75) | 30.41%(0.35) | 11.06(0.03) | 6.77(0.20) | 7.83(0.30) |
+| Mistakes | Consecutive | 10 | 72.86%(0.28) | 8.25(0.04) | 9.00(0.12) | 11.18(0.34) | 10.84%(0.68) | 10.34(0.18) | 7.22(0.10) | 9.06(0.40) |
+| Mistakes | Consecutive | 10 | 53.33%(12.83) | 9.58(0.47) | 8.05(0.87) | 2.56(4.32) | 57.47%(0.30) | 10.03(0.01) | 5.99(0.20) | 4.25(0.45) |
+| Mistakes | Consecutive | 15 | <b>55.62%(1.38)</b> | <b>11.20(0.29)</b> | <b>5.11(0.19)</b> | 7.37(0.19) | 81.38%(1.86) | 11.72(0.12) | 3.19(0.40) | 2.63(0.27) |
+| Triplet creation | bins | Max mutations | GFP (hard) |  |  |  | GFP (medium) |  |  |  |
+|  |  |  | Extrapolation <sup>↑</sup> | Fitness <sub>gen</sub> <sup>↑</sup> | Distance <sub>gen</sub> <sup>↓</sup> | Diversity <sub>gen</sub> <sup>↑</sup> | Extrapolation <sup>↑</sup> | Fitness <sub>gen</sub> <sup>↑</sup> | Distance <sub>gen</sub> <sup>↓</sup> | Diversity <sub>gen</sub> <sup>↑</sup> |
+| Mistakes | Consecutive | None | 24.27%(1.70) | <b>2.81(0.07)</b> | 9.08(0.04) | 14.96(1.44) | <b>92.92%(0.30)</b> | <b>4.40(0.01)</b> | 2.10(0.14) | 2.57(0.14) |
+| Mistakes | Non-Consecutive | None | 11.61%(4.16) | 2.50(0.09) | 7.08(1.04) | 7.77(1.82) | 82.82%(1.56) | 4.40(0.05) | 0.80(0.40) | 0.09(0.20) |
+| Mistakes | Consecutive | None | 27.57%(1.42) | 2.05(0.01) | 10.83(0.16) | 14.72(0.65) | 0.05%(0.10) | 2.35(0.05) | 8.68(0.15) | 14.43(0.26) |
+| Mistakes | Consecutive | 10 | 11.16%(0.58) | 2.78(0.04) | <b>3.52(0.30)</b> | 4.59(0.71) | 3.98%(0.84) | 3.48(0.11) | 3.43(0.32) | 4.50(0.82) |
+| Mistakes | Consecutive | 15 | <b>42.01%(0.84)</b> | <b>2.34(0.07)</b> | 6.32(0.21) | 7.51(0.59) | 83.10%(0.36) | 3.95(0.08) | <b>0.30(0.05)</b> | 0.00(0.00) |
+
+### 6.2 EFFECT OF SCORER
+
+Prior to our work, scorer-based generative models such as LatproRL (through reinforcement learning (Lee et al., 2024)) or BiGGs (through Gibbs sampling (Kirjner et al., 2024)) were the state-of-the-art and outperformed non-scorer generative models by large margins. Tables 5 shows that our method can fill the gap, compete favorably with the scorer-based generative model and outperform them in various tasks. Particularly, *EXO* outperform scorer-based generative model on medium difficulty split of AAV (85.07% vs 38.63%) and GFP (92.92% vs 55.50%) datasets. In addition combination of *EXO* + scorer ranking can furthermore outperform LatproRL/BiGGs in 3 out of 4 datasets. In addition we can observe that, on the hard split of GFP dataset even though extrapolation percentage of *EXO* + scorer is 50.91% vs BiGGs 99.53%. However, its average top 100 generated sequences are almost on-par with them (3.79 vs 3.83). In addition its top 100 generated sequences are closer to the unseen extrapolation sequences (1.73 vs 3.48 mutations). Figure 14 and Table 15 indicates that our results are reproducible by running with five different random seed generator for both hard and medium splits of AAV and GFP datasets.
+
+Table 5: Comparison of in-silico fitness evaluation for *scorer-based* methods.
+
+| Method | AAV (hard) |  |  |  | AAV (medium) |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | Extrapolation <sup>↑</sup> | Fitness <sub>gen</sub> <sup>↑</sup> | Distance <sub>gen</sub> <sup>↓</sup> | Diversity <sub>gen</sub> <sup>↑</sup> | Extrapolation <sup>↑</sup> | Fitness <sub>gen</sub> <sup>↑</sup> | Distance <sub>gen</sub> <sup>↓</sup> | Diversity <sub>gen</sub> <sup>↑</sup> |
+| Iterative sampling | 1.27%(0.12) | 7.67(0.25) | 6.54(0.44) | 11.28(0.70) | 0.40%(0.10) | 7.67(0.14) | 6.59(0.65) | 11.43(0.97) |
+| ICE + scorer | 37.01%(0.36) | 10.26(0.12) | 6.50(0.30) | 9.90(0.47) | 33.17%(0.59) | 10.80(0.10) | 6.52(0.49) | 9.89(0.55) |
+| BiGGs | 16.80%(5.37) | 10.85(0.31) | 5.70(1.06) | 6.38(1.44) | 4.88%(0.84) | 10.21(0.88) | 8.05(0.84) | 8.34(0.93) |
+| LatproRL | 64.82%(1.02) | 12.20(0.06) | 2.45(0.16) | 4.67(0.23) | 38.63%(0.86) | 12.53(0.05) | 2.83(0.15) | 5.21(0.07) |
+| <i>EXO</i> | 52.75%(1.74) | 10.95(0.17) | 5.30(0.39) | 8.46(0.27) | 85.07%(1.72) | 13.18(0.33) | <b>1.64(0.41)</b> | 1.08(0.46) |
+| <i>EXO</i> + scorer | 84.04%(1.15) | <b>14.25(0.11)</b> | <b>1.52(0.21)</b> | 2.53(0.31) | <b>94.23%(0.60)</b> | <b>13.90(0.05)</b> | 2.00(0.06) | 3.05(0.29) |
+| <i>EXO</i> (Combined distillation) | 78.79%(0.45) | 7.74(0.25) | 7.70(0.45) | 7.70(0.45) | 70.85%(0.72) | 13.24(0.11) | 2.85(0.19) | 2.91(0.14) |
+| <i>EXO</i> (Combined distillation) + scorer | <b>98.96%(0.21)</b> | <b>14.21(0.02)</b> | <b>1.51(0.23)</b> | 1.08(0.19) | 94.71%(0.39) | 13.19(0.03) | 3.14(0.16) | 3.34(0.28) |
+| Method | GFP (hard) |  |  |  | GFP (medium) |  |  |  |
+|  | Extrapolation <sup>↑</sup> | Fitness <sub>gen</sub> <sup>↑</sup> | Distance <sub>gen</sub> <sup>↓</sup> | Diversity <sub>gen</sub> <sup>↑</sup> | Extrapolation <sup>↑</sup> | Fitness <sub>gen</sub> <sup>↑</sup> | Distance <sub>gen</sub> <sup>↓</sup> | Diversity <sub>gen</sub> <sup>↑</sup> |
+| Iterative sampling | 0.01%(0.02) | 1.18(0.03) | 184.71(10.78) | 207.45(3.02) | 0.00%(0.00) | 1.22(0.04) | 174.52(17.62) | 207.22(6.04) |
+| ICE + scorer | 14.87%(0.75) | 1.96(0.04) | 9.52(0.25) | 18.19(0.46) | 0.02%(0.02) | 2.53(0.04) | 8.22(0.14) | 15.68(0.28) |
+| BiGGs | <b>99.53%(0.21)</b> | 3.83(0.02) | 3.48(0.36) | 6.01(0.51) | 55.50%(0.75) | 3.89(0.03) | 4.13(0.38) | 5.74(0.71) |
+| LatproRL | 88.28%(1.16) | <b>3.80(0.01)</b> | <b>1.40(0.04)</b> | 2.86(0.07) | 38.22%(1.99) | 3.92(0.01) | <b>1.60(0.05)</b> | 3.04(0.05) |
+| <i>EXO</i> | 24.27%(1.70) | 2.81(0.07) | 9.08(0.04) | 14.96(1.44) | <b>92.92%(0.30)</b> | <b>4.04(0.01)</b> | 2.13(0.14) | 2.57(0.14) |
+| <i>EXO</i> + scorer | 50.91%(3.16) | 3.79(0.01) | 1.73(0.12) | 3.08(0.22) | 58.09%(6.35) | 3.96(0.03) | 2.75(0.16) | 4.04(0.10) |
+| <i>EXO</i> (Combined distillation) | 65.86%(0.37) | 3.65(0.02) | 2.42(0.10) | 4.07(0.08) | 38.84%(2.77) | 3.82(0.02) | 2.24(0.19) | 3.14(0.19) |
+| <i>EXO</i> (Combined distillation) + scorer | 71.15%(2.34) | 3.75(0.03) | 2.10(0.07) | 3.46(0.09) | 32.41%(1.34) | 3.86(0.02) | 2.16(0.11) | 3.19(0.16) |
+
+### 6.3 EFFECT OF PREFERENCE LEARNING ALGORITHM
+
+We benchmark against the the state-of-the-art offline preference learning algorithms such as direct preference optimization (DPO) (Rafailov et al., 2023), its generalized version of identity-mapping preference optimization (IPO) (Azar et al., 2023), addition of NLL loss function on favorable direction to DPO (IRPO) (Pang et al., 2024), noise contrastive alignment (NCA) (Chen et al., 2024), Nash equilibrium based self-play preference optimization (SPPO) (Wu et al., 2024), alignment through optimal transport (AOT) (Melnyk et al., 2024) and our default model *EXO* through reverse KL distribution matching (Ji et al., 2024). Tables 6 shows that *EXO* outperforms other preference learning algorithms on 3 out of 4 tasks. Particularly, *EXO* outperform the best alternative preference
+
+{9}------------------------------------------------
+
+learning algorithm by (52.75% vs 50.78% attained by AOT), (85.07% vs 74.39% attained by DPO) and (92.92% vs 47.26% attained by IRPO) on hard split of AAV, medium split of AAV and medium split of GFP, respectively. IRPO through addition of NLL loss function to DPO loss has shown to outperforms others on hard split of GFP by 55.15% vs 42.80% attained by IPO. In addition, training curves for preference learning based on these preference learning methods have been shown on Figures 17, 18, 20, 19. In general, we can observe that *EXO* is robustly performing well.
+
+Table 6: Comparison of in-silico fitness evaluation for various preference learning algorithms.
+
+| Method | AAV (hard) |  |  |  | AAV (medium) |  |  |  |
+|-|-|-|-|-|-|-|-|-|
+|  | Extrapolation $\uparrow$ | Fitness $_{100} \uparrow$ | Distance $_{100} \downarrow$ | Diversity $_{100} \uparrow$ | Extrapolation $\uparrow$ | Fitness $_{100} \uparrow$ | Distance $_{100} \downarrow$ | Diversity $_{100} \uparrow$ |
+| DPO | 46.53%(0.53) | <b>11.17(0.12)</b> | 5.68(0.17) | 9.15(0.34) | 74.39%(2.41) | 12.96(0.09) | 2.77(0.45) | 4.15(0.33) |
+| IPO | 33.74%(0.81) | 9.97(0.15) | 7.20(0.19) | 11.15(0.13) | 30.83%(0.34) | 11.47(0.08) | 3.41(0.10) | 7.30(0.14) |
+| IRPO | 37.67%(0.76) | 10.62(0.29) | 5.36(0.31) | 8.35(0.29) | 35.13%(0.65) | 11.37(0.10) | 3.39(0.22) | 7.86(0.45) |
+| NCA | 39.10%(1.89) | 10.07(0.23) | 6.90(0.56) | 10.38(0.43) | 39.75%(1.10) | 11.95(0.29) | 4.19(0.55) | 5.92(0.81) |
+| SPPO | 21.31%(0.56) | 9.18(0.07) | 8.22(0.08) | 11.30(0.40) | 17.54%(2.25) | 10.88(0.10) | 6.57(0.09) | 7.97(0.11) |
+| AOT | 50.78%(1.55) | 10.97(0.08) | 5.79(0.62) | 9.31(0.58) | 59.35%(1.91) | 12.83(0.09) | 2.68(0.45) | 3.61(0.94) |
+| <b>EXO</b> | <b>52.75%(1.74)</b> | <b>10.95(0.17)</b> | <b>5.30(0.39)</b> | <b>8.46(0.27)</b> | <b>85.07%(1.72)</b> | <b>13.18(0.33)</b> | <b>1.64(0.41)</b> | <b>1.08(0.46)</b> |
+| Method | GFP (hard) |  |  |  | GFP (medium) |  |  |  |
+|  | Extrapolation $\uparrow$ | Fitness $_{100} \uparrow$ | Distance $_{100} \downarrow$ | Diversity $_{100} \uparrow$ | Extrapolation $\uparrow$ | Fitness $_{100} \uparrow$ | Distance $_{100} \downarrow$ | Diversity $_{100} \uparrow$ |
+| DPO | 38.96%(0.99) | 3.73(0.29) | 1.92(0.19) | 3.26(0.28) | 13.76%(4.64) | 3.53(0.12) | 3.77(0.60) | 5.05(0.51) |
+| IPO | 42.80%(9.05) | 3.47(0.08) | 2.05(0.11) | 3.10(0.24) | 10.55%(0.33) | 3.69(0.03) | 2.45(0.09) | 4.00(0.19) |
+| IRPO | <b>55.15%(1.94)</b> | <b>3.68(0.06)</b> | <b>1.85(0.44)</b> | <b>2.94(0.54)</b> | 47.26%(1.14) | 3.85(0.01) | <b>2.10(0.03)</b> | 3.68(0.08) |
+| NCA | 30.75%(1.01) | 2.55(0.09) | 5.65(0.97) | 9.08(1.57) | 24.67%(1.75) | 3.92(0.02) | 2.32(0.05) | 2.98(0.14) |
+| SPPO | 30.70%(1.60) | 2.32(0.07) | 9.07(0.37) | 12.03(1.05) | 0.58%(0.12) | 2.51(0.07) | 7.29(0.19) | 11.63(0.68) |
+| AOT | 35.51%(5.60) | 3.38(0.09) | 9.90(4.50) | 18.15(8.12) | 29.54%(5.40) | 3.65(0.03) | 3.95(0.12) | 4.84(0.22) |
+| <b>EXO</b> | <b>24.27%(1.70)</b> | <b>2.81(0.07)</b> | <b>9.08(4.04)</b> | <b>14.96(7.44)</b> | <b>92.92%(0.30)</b> | <b>4.04(0.01)</b> | <b>2.13(0.14)</b> | <b>2.57(0.14)</b> |
+
+## 7 DISCUSSIONS
+
+We utilized the ProstT5 model (Heinzinger et al., 2023) trained in multi-modal fashion (sequence and structure) to embed the unique sequences generated by each method. ProstT5 would enable us to better assess the closeness of the top generated candidates to the top unseen extrapolation sequences in sequence-structure latent space rather than defining closeness based on edit distance in purely sequence space, which does not consider the characteristics of mutations. Two dimensional visualization of embeddings through t-SNE (Van der Maaten & Hinton, 2008) in Figure 3 highlights that top candidates generated by EXO and EXO+scorer have supports by unseen ground truth extrapolation sequences in the latent space of ProstT5 on the hard split of AAV dataset.
+
+As mentioned, we used the in-silico evaluator trained on GFP and AAV datasets by Kirjner et al. (2024) and utilized by the state-of-the-art methods (Lee et al., 2024; 2023). We calculated the mean-squared error and Spearman’s rank correlation coefficient between a scorer trained on a specific split of the dataset and the evaluator trained on the entire dataset. Figures 4 and 5 highlights that (1) the mean square error of scorer deteriorates significantly in the extrapolation region, (2) on the AAV dataset the correlation deteriorates as we move further away from the training region, as expected. However, on the GFP dataset, the scorer and evaluator have a very non-smooth rank correlation relationship. An experimental pipeline with wet-lab validation in the loop is the ultimate evaluation pipeline which is, unfortunately, very costly and time-intensive.
+
+## 8 CONCLUSION
+
+We present a novel *data distillation* approach to enhance extrapolative protein design models. Our main contribution is to create model-aware hard preference datasets in order to better approximate the direction of the gradient and learn higher order relationships such as triplewise rankings. In order to evaluate our contribution, we have utilized the carefully curated medium/hard difficulty splits of AAV and GFP datasets where the model needed to extrapolate both on sequence and fitness spaces. Our framework outperforms both extrapolative non-scorer and scorer-based generative models baselines. Through ablation studies, we have investigated (1) the effects of various approaches of creating preference datasets and (2) effects of state-of-the-art preference learning algorithms. Potential future directions include (1) assessing the effect of higher order relationship (quadruples etc.) through Plackett-Luce ranking models (Plackett, 1975; Luce, 2005) on extrapolation, and (2) utilizing reasoning approaches such as tree of thoughts (Yao et al., 2024) to boost performance of the proposed extrapolative protein design model.
+
+ Rest of paper (reference and Appendix) is removed.

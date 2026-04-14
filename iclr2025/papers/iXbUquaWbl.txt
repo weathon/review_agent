@@ -1,0 +1,341 @@
+
+
+{0}------------------------------------------------
+
+# END-TO-END LEARNING OF GAUSSIAN MIXTURE PRIORS FOR DIFFUSION SAMPLER
+
+Denis Blessing<sup>\*1</sup>, Xiaogang Jia<sup>1</sup>, Gerhard Neumann<sup>1,2</sup>
+
+<sup>1</sup>Autonomous Learning Robots, Karlsruhe Institute of Technology
+
+<sup>2</sup>FZI Research Center for Information Technology
+
+## ABSTRACT
+
+Diffusion models optimized via variational inference (VI) have emerged as a promising tool for generating samples from unnormalized target densities. These models create samples by simulating a stochastic differential equation, starting from a simple, tractable prior, typically a Gaussian distribution. However, when the support of this prior differs greatly from that of the target distribution, diffusion models often struggle to explore effectively or suffer from large discretization errors. Moreover, learning the prior distribution can lead to mode-collapse, exacerbated by the mode-seeking nature of reverse Kullback-Leibler divergence commonly used in VI. To address these challenges, we propose end-to-end learnable Gaussian mixture priors (GMPs). GMPs offer improved control over exploration, adaptability to target support, and increased expressiveness to counteract mode collapse. We further leverage the structure of mixture models by proposing a strategy to iteratively refine the model by adding mixture components during training. Our experimental results demonstrate significant performance improvements across a diverse range of real-world and synthetic benchmark problems when using GMPs without requiring additional target evaluations.
+
+## 1 INTRODUCTION
+
+Sampling methods are designed to address the challenge of generating approximate samples or estimating the intractable normalization constant  $\mathcal{Z}$  for a probability density  $\pi$  on  $\mathbb{R}^d$  of the form
+
+$$\pi(x) = \frac{\rho(x)}{\mathcal{Z}}, \quad \mathcal{Z} = \int_{\mathbb{R}^d} \rho(x) dx, \quad (1)$$
+
+where  $\rho : \mathbb{R}^d \rightarrow (0, \infty)$  can be evaluated. This formulation has broad applications in fields such as Bayesian statistics, the natural sciences (Liu & Liu, 2001; Stoltz et al., 2010; Frenkel & Smit, 2023; Schopmans & Friederich, 2024), or robotics (Zhou et al., 2024; Celik et al., 2025).
+
+Monte Carlo (MC) methods (Hammersley, 2013), Annealed Importance Sampling (AIS) (Neal, 2001), and their Sequential Monte Carlo (SMC) extensions (Del Moral et al., 2006; Arbel et al., 2021; Matthews et al., 2022; Midgley et al., 2022) have long been regarded as the gold standard for tackling complex sampling problems. An alternative approach is variational inference (VI) (Blei et al., 2017), which approximates an intractable target distribution by parameterizing a family of tractable distributions. Recently, there has been growing interest in diffusion models (Zhang & Chen, 2021; Berner et al., 2022; Richter et al., 2023; Vargas et al., 2023a;b; Grenieux et al., 2024), which employ stochastic processes to transport samples from a simple, tractable prior distribution to the target distribution. While diffusion models have shown great success in generative modeling (Ho et al., 2020; Song et al., 2020), their application to sampling tasks introduces unique challenges.
+
+We identify these challenges as follows (**C1–C3**): Unlike generative modeling, where the support of the target distribution is often known, in sampling tasks, the target’s support is usually unknown. This makes it difficult to set the prior appropriately and requires the model to explore the relevant regions of the space—an exploration that becomes exponentially harder as dimensionality increases (**C1**). Additionally, large discrepancies between the support of the prior and the target distribution
+
+<sup>\*</sup>Correspondence to denis.blessing@kit.edu
+
+{1}------------------------------------------------
+
+![Figure 1: Illustration of challenges (C1-C3) associated with diffusion-based sampling methods and how learned Gaussian mixture priors address them. The figure consists of four subplots arranged in a 2x2 grid. Each subplot shows a target distribution π (blue curve) and a learned prior (green curve). The top-left plot (C1) shows a lack of exploration capabilities where the prior is a single Gaussian. The top-right plot (C2) shows complex dynamics requiring many diffusion steps. The bottom-left plot (C3) shows mode collapse due to reverse KL minimization. The bottom-right plot shows the learned Gaussian mixture priors addressing C1-C3.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+C1: Lack of exploration capabilities.
+
+C2: Complex dynamics require many diffusion steps.
+
+C3: Mode collapse due to reverse KL minimization.
+
+Learned Gaussian mixture priors to address C1-C3.
+
+Figure 1: Illustration of challenges (C1-C3) associated with diffusion-based sampling methods and how learned Gaussian mixture priors address them. The figure consists of four subplots arranged in a 2x2 grid. Each subplot shows a target distribution π (blue curve) and a learned prior (green curve). The top-left plot (C1) shows a lack of exploration capabilities where the prior is a single Gaussian. The top-right plot (C2) shows complex dynamics requiring many diffusion steps. The bottom-left plot (C3) shows mode collapse due to reverse KL minimization. The bottom-right plot shows the learned Gaussian mixture priors addressing C1-C3.
+
+Figure 1: Illustration of challenges (C1-C3) associated with diffusion-based sampling methods and how learned Gaussian mixture priors address them (bottom right). Here,  $\pi$  denotes the target distribution.
+
+can lead to highly non-linear dynamics, necessitating many diffusion steps to mitigate discretization errors (C2). Finally, while joint optimization of the prior and diffusion process is possible, using simple priors like Gaussians can result in mode collapse due to the mode-seeking behavior of the reverse Kullback-Leibler (KL) divergence commonly used in VI (C3). These challenges are illustrated in Figure 1.
+
+**Outline.** In Section 3, we present an overview of diffusion-based sampling methods within the framework of variational inference. Next, we discuss the necessary adaptations for supporting the learning of arbitrary prior distributions, illustrated through specific examples of diffusion models (Section 4). We then provide a rationale for our choice of Gaussian Mixture Priors (GMPs) and introduce a novel training scheme designed to iteratively refine diffusion models during training (Section 5). Finally, in Section 6, we assess our method through experiments on a range of real-world and synthetic benchmark problems, demonstrating consistent improvements in performance.
+
+## 2 RELATED WORK
+
+**Sampling and Variational Inference.** Numerous works have studied the problem of sampling from unnormalized densities to estimate the partition function  $Z$ , including Monte Carlo (MC) methods such as Markov Chain Monte Carlo (MCMC) (Kass et al., 1998) and Sequential Importance Sampling (Liu et al., 2001). Seminal works include Annealed Importance Sampling (Neal, 2001; Guo et al., 2025) and its Sequential Monte Carlo extensions (Del Moral et al., 2006; Arbel et al., 2021; Wu et al., 2020; Matthews et al., 2022; Midgley et al., 2022). Another line of work approaches the sampling problem by utilizing tools from optimization to fit a parametric family of distributions to the target density  $\pi$ , known as Variational Inference (VI) (Blei et al., 2017). To that end, one typically uses the reverse Kullback-Leibler divergence, although other discrepancies have been studied (Li & Turner, 2016; Midgley et al., 2022; Dieng et al., 2017; Richter et al., 2020; Wan et al., 2020; Naesseth et al., 2020).
+
+**Diffusion-based Sampling Methods.** Recently, there has been growing interest in combining Monte Carlo methods with variational techniques by constructing a sequence of variational distributions through the parameterization of Markov chains (Naesseth et al., 2018; Geffner & Domke, 2021; Thin et al., 2021; Zhang et al., 2021; Chen et al., 2024b). In the limit of infinitely many steps, these Markov chains converge to stochastic differential equations (SDEs) (Särkkä & Solin, 2019), which has led to further research on diffusion-based models for sampling, particularly in light of advances in generative modeling (Ho et al., 2020; Song et al., 2020). One line of work considered parameterized drift functions to improve annealed Langevin diffusions in the overdamped (Doucet et al., 2022a) or underdamped (Geffner & Domke, 2022) regime. Another line of work casts diffusion-based sampling as a stochastic optimal control problem (Dai Pra, 1991) including denoising diffusion models (Berner et al., 2022; Vargas et al., 2023a), and Föllmer sampling (Föllmer, 2005; Zhang & Chen, 2021; Vargas et al., 2023b). A unifying view was later provided by Vargas et al. (2024); Richter et al. (2023); Blessing et al. (2025). Further extensions to diffusion-based sampling methods have been proposed such as improved learning objectives (Zhang et al., 2023;
+
+{2}------------------------------------------------
+
+Akhound-Sadegh et al., 2024; Noble et al., 2024) or combinations with sequential importance sampling (Phillips et al., 2024; Chen et al., 2024a). Another study leverages physics-informed neural networks (PINNs, (Raissi et al., 2019)) to learn the Fokker-Planck equation governing the density evolution of the diffusion process (Sun et al., 2024; Shi et al., 2024).
+
+## 3 PRELIMINARIES
+
+In this section, we offer a concise overview of diffusion models within the context of variational inference. Our discussion draws primarily from the works of Richter et al. (2023); Vargas et al. (2024). While these studies emphasize the continuous-time perspective, we adopt an approach that largely emphasizes discrete time, aiming to make this work more accessible to readers without a background in stochastic calculus.
+
+### 3.1 CONTROLLED DIFFUSIONS, DISCRETIZATION, AND COUPLINGS
+
+We consider two  $\mathbb{R}^d$ -valued stochastic processes  $(X_t)_{t \in [0, T]}$  on the time-interval  $[0, T]$ : One starts from a prior distribution  $p_0$  and runs forward in time whereas the other starts from the target distribution  $p_T = \pi$  and runs backward in time. These processes are governed by the stochastic differential equations (SDEs) given by controlled diffusions, that is,
+
+$$dX_t = [f(X_t, t) + \sigma u^\theta(X_t, t)] dt + \sqrt{2}\sigma dB_t, \quad X_0 \sim p_0, \quad (2a)$$
+
+$$dX_t = [f(X_t, t) - \sigma v^\gamma(X_t, t)] dt + \sqrt{2}\sigma dB_t, \quad X_T \sim p_T = \pi, \quad (2b)$$
+
+with drift, and parameterized control functions  $f, u^\theta, v^\gamma : \mathbb{R}^d \times [0, T] \rightarrow \mathbb{R}^d$ , respectively. Further,  $(B_t)_{t \in [0, T]}$  is a  $d$ -dimensional Brownian motion and  $\sigma \in \mathbb{R}^+$  a diffusion coefficient. For integration, we consider the Euler-Maruyama (EM) method with constant discretization step size  $\delta t \geq 0$  such that  $N = T/\delta t$  is an integer. To simplify notation, we write  $x_n$ , instead of  $x_{n\delta t}$ . Integrating (2a) yields
+
+$$x_{n+1} = x_n + [f(x_n, n) + \sigma u^\theta(x_n, n)] \delta t + \sigma \sqrt{2\delta t} \epsilon_n, \quad x_0 \sim p_0, \quad (3)$$
+
+where  $\epsilon_n \sim \mathcal{N}(0, I)$ . The EM discretizations of (2a) and (2b) admit the following Markov Processes
+
+$$\tilde{p}^\theta(x_{0:N}) = p_0(x_0) \prod_{n=1}^N \tilde{p}_{n|n-1}^\theta(x_n|x_{n-1}), \quad \text{and} \quad (4)$$
+
+$$\tilde{p}^\gamma(x_{0:N}) = p_T(x_N) \prod_{n=1}^N \tilde{p}_{n-1|n}^\gamma(x_{n-1}|x_n), \quad (5)$$
+
+in a sense that  $\tilde{p}^\theta$  and  $\tilde{p}^\gamma$  converge to their law, respectively, as  $\delta t \rightarrow 0$ . Here,
+
+$$\tilde{p}_{n+1|n}^\theta(x_{n+1}|x_n) = \mathcal{N}(x_{n+1}|x_n + [f(x_n, n) + \sigma u^\theta(x_n, n)] \delta t, 2\sigma^2 \delta t I), \quad \text{and} \quad (6)$$
+
+$$\tilde{p}_{n-1|n}^\gamma(x_{n-1}|x_n) = \mathcal{N}(x_{n-1}|x_n - [f(x_n, n) - \sigma v^\gamma(x_n, n)] \delta t, 2\sigma^2 \delta t I). \quad (7)$$
+
+The goal of diffusion-based sampling methods is to align these processes by learning control functions  $u^\theta$  and  $v^\gamma$  such that
+
+$$\tilde{p}^\theta(x_{0:N}) = \tilde{p}^\gamma(x_{0:N}). \quad (8)$$
+
+Assuming (8) holds, we have  $\int \tilde{p}^\theta(x_{0:N}) dx_{0:N-1} = \int \tilde{p}^\gamma(x_{0:N}) dx_{0:N-1} = \pi(x_N)$ , meaning that we can sample  $x_0 \sim p_0$  and integrate the ‘forward’ diffusion process (2a) to obtain samples from  $\pi$ . In contrast, the ‘backward’ process (2b) is not needed for generating samples from  $\pi$ , but is required for estimating the normalization constant  $\mathcal{Z}$ , and obtaining a tractable optimization objective which is discussed in the next section. Lastly, we want to highlight that this formulation of diffusion-based sampling is very generic and that most instances of samplers, such as denoising diffusion samplers (Berner et al., 2022; Vargas et al., 2023a), can be recovered by choosing the drift and control functions in (2) appropriately. We refer the interested reader to Richter et al. (2023) for further details.
+
+{3}------------------------------------------------
+
+![Figure 2: Diffusion-Based Sampling diagram. The diagram shows two panels. The left panel shows a prior distribution p_0 on the left and a target distribution pi on the right. Red trajectories represent the forward process p^theta starting from p_0, and blue trajectories represent the backward process p^gamma starting from pi. An arrow labeled 'min_{theta, gamma} D_KL(p^theta || p^gamma)' points to the right panel. The right panel shows the same prior p_0 and target pi, but the red and blue trajectories are now aligned, indicating that the parameters theta and gamma have been optimized to minimize the KL divergence between the two processes.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+$\tilde{p}^\theta(x_{0:N}) = p_0(x_0) \prod_{n=1}^N \tilde{p}_{n|n-1}^\theta(x_n|x_{n-1})$
+
+$\tilde{p}^\gamma(x_{0:N}) = \pi(x_N) \prod_{n=1}^N \tilde{p}_{n-1|n}^\gamma(x_{n-1}|x_n)$
+
+Figure 2: Diffusion-Based Sampling diagram. The diagram shows two panels. The left panel shows a prior distribution p\_0 on the left and a target distribution pi on the right. Red trajectories represent the forward process p^theta starting from p\_0, and blue trajectories represent the backward process p^gamma starting from pi. An arrow labeled 'min\_{theta, gamma} D\_KL(p^theta || p^gamma)' points to the right panel. The right panel shows the same prior p\_0 and target pi, but the red and blue trajectories are now aligned, indicating that the parameters theta and gamma have been optimized to minimize the KL divergence between the two processes.
+
+Figure 2: Diffusion-Based Sampling: The goal is to align two parameterized Markov Processes  $\tilde{p}^\theta$  and  $\tilde{p}^\gamma$ . The former starts at the prior  $p_0$  and runs forward in time while the latter starts at the target  $\pi$  and runs backward.
+
+### 3.2 VARIATIONAL INFERENCE FOR DIFFUSION MODELS
+
+Variational Inference (Blei et al., 2017) uses a parameterized tractable distribution  $p^\theta$  and minimizes a divergence to the target distribution  $\pi$  with respect to its parameters  $\theta$ , typically the Kullback-Leibler divergence, i.e.,
+
+$$D_{\text{KL}}(p^\theta(x)||\pi(x)) = \mathbb{E}_{x \sim p^\theta} \left[ \log \frac{p^\theta(x)}{\rho(x)} \right] + \log \mathcal{Z} = -\text{ELBO}(\theta) + \log \mathcal{Z}, \quad (9)$$
+
+It directly follows that minimizing  $D_{\text{KL}}$ , or equivalently, maximizing the ELBO<sup>1</sup> does not require access to the true normalization constant  $\mathcal{Z}$  as it is independent of  $\theta$ . Moreover, using the fact that  $D_{\text{KL}} \geq 0$ , it is straightforward to see that  $\text{ELBO}(\theta) \leq \log \mathcal{Z}$ .
+
+In the case of diffusion models, we are interested in learning the parameters  $\theta, \gamma$  of the control functions  $u^\theta, v^\gamma$ . Directly minimizing  $D_{\text{KL}}$  between  $p_\theta^\theta(x_N) = \int \tilde{p}^\theta(x_{0:N}) dx_{0:N-1}$  and  $\pi$  is challenging. However, the data-processing inequality (Cover, 1999)
+
+$$D_{\text{KL}}(p_\theta^\theta(x_T)||\pi(x_T)) \leq D_{\text{KL}}(\tilde{p}^\theta(x_{0:N})||\tilde{p}^\gamma(x_{0:N})), \quad (10)$$
+
+provides an auxiliary, tractable, objective for optimizing  $(\theta, \gamma)$ , that is,
+
+$$D_{\text{KL}}(\tilde{p}^\theta(x_{0:N})||\tilde{p}^\gamma(x_{0:N})) = \underbrace{\mathbb{E}_{x_{0:N} \sim \tilde{p}^\theta} \left[ \log \frac{p_0(x_0)}{\rho(x_N)} + \sum_{n=1}^N \log \frac{\tilde{p}_{n|n-1}^\theta(x_n|x_{n-1})}{\tilde{p}_{n-1|n}^\gamma(x_{n-1}|x_n)} \right]}_{-\mathcal{L}(\theta, \gamma)} + \log \mathcal{Z}, \quad (11)$$
+
+where  $\mathcal{L}(\theta, \gamma)$  is often referred to as augmented or extended evidence lower bound, as it has additional looseness due to the latent variables  $x_{0:N-1}$  (Geffner & Domke, 2021). Note that the VI setting for optimizing diffusion models is different from techniques used when samples from the target, i.e.,  $x_N \sim \pi$  are available. The former requires simulations  $x_{0:N} \sim \tilde{p}^\theta$  for optimization, while the latter minimizes the forward KL  $D_{\text{KL}}(\tilde{p}^\gamma||\tilde{p}^\theta)$ , allowing for simulation-free optimization techniques such as denoising score-matching (Vincent, 2011; Song & Ermon, 2019) or bridge matching (Liu et al., 2022; Shi et al., 2024). Moreover, recent works consider minimizing other loss functions that the KL divergence in (11). A recent overview of possible alternatives can be found in Domingo-Enrich (2024). For further details, the interested reader is referred to Berner et al. (2022); Vargas et al. (2024).
+
+## 4 END-TO-END LEARNING OF PRIOR DISTRIBUTIONS
+
+We aim to learn a parametric prior  $p_0^\phi$  with parameters  $\phi$  end-to-end when maximizing the extended ELBO  $\mathcal{L}$  ((11)). To that end, we consider two requirements:
+
+1. We can compute gradients of  $\mathcal{L}$  with respect to  $\phi$ .
+
+<sup>1</sup>Evidence Lower Bound. The terminology stems from Bayesian inference, where  $\log \mathcal{Z}$  is equivalent to the evidence of the data.
+
+{4}------------------------------------------------
+
+2. There exists a  $\phi$  and  $\gamma$  such that  $p_0^\phi(x_0) = \int \bar{p}^\gamma(x_{0:N}) dx_{1:N}$ .
+
+For the former, we assume that  $p_0^\phi(x_0)$  is amenable to the reparameterization trick<sup>2</sup>, i.e., we can express a sample  $x_0$  from  $p_0^\phi$  as a deterministic function of a random variable  $\xi$  with some fixed distribution and the parameters  $\phi$ , i.e.,  $x_0 = g(\xi, \phi)$ . We can then obtain gradients of
+
+$$\mathcal{L}(\theta, \gamma, \phi) = \mathbb{E}_{x_{0:N} \sim \bar{p}^{\theta, \phi}} \left[ \log \frac{\rho(x_N)}{p_0^\phi(x_0)} + \sum_{n=1}^N \log \frac{\bar{p}_{n-1|n}^\gamma(x_{n-1}|x_n)}{\bar{p}_{n|n-1}^\theta(x_n|x_{n-1})} \right], \quad (12)$$
+
+with  $\bar{p}^{\theta, \phi}(x_{0:N}) = p_0^\phi(x_0) \prod_{n=1}^N \bar{p}_{n|n-1}^\theta(x_n|x_{n-1})$ , with respect to  $\phi$ , by differentiating through the stochastic process
+
+$$x_{n+1} = x_n + [f(x_n, n) + \sigma u^\theta(x_n, n)] \delta t + \sigma \sqrt{2\delta t} \epsilon_n, \quad x_0 = g(\xi, \phi). \quad (13)$$
+
+The second requirement is necessary to obtain a coupling between  $p_0^\phi$  and  $\pi$ , i.e., to satisfy (8). This requirement is trivially fulfilled for a controlled backward process (2b), where we can learn a  $v^\gamma$  such that  $\bar{p}^\gamma$  transports  $\pi$  back to  $p_0^\phi$ . However, this requirement can be more intricate for other processes and will be discussed in the next sections. In particular, we look at two instances of (2), namely denoising diffusion models (Berner et al., 2022; Vargas et al., 2023a) and annealed Langevin diffusions (Doucet et al., 2022a; Vargas et al., 2024).
+
+### 4.1 DENOISING DIFFUSION MODELS
+
+Denoising diffusion models use an Ornstein Uhlenbeck (OU) process for (2b), that is <sup>3</sup>,
+
+$$dX_t = \sigma^2 X_t dt + \sqrt{2}\sigma d B_t, \quad X_T \sim p_T = \pi, \quad (14)$$
+
+and, hence, a special case of (2) with  $f(X_t, t) = \sigma^2 X_t$  and  $v^\gamma = 0$ . Assuming a sufficiently large  $\sigma$  (or  $T$ ), it holds that  $p_0(x_0) = \int \bar{p}(x_{0:N}) dx_{1:N} \approx \mathcal{N}(0, I)$ . In other words, the OU process transports the target  $\pi$  to a Gaussian distribution. We extend denoising diffusion models to support learning arbitrary priors based on Proposition 1, whose proof can be found in Appendix A.1.
+
+**Proposition 1.** *Let (2b) be a (uncontrolled) stochastic process as defined in (2) with  $v^\gamma = 0$ , starting from  $p_T = \pi$ . For a time-independent drift, i.e.,  $f(x, t) = f(x)$ , the stationary distribution  $p^{\text{st}}(x)$  for which  $\frac{\partial p(x)}{\partial t} = 0$  holds, is given by*
+
+$$p^{\text{st}}(x) = \frac{1}{Z^{\text{st}}} \exp \left( -\frac{1}{\sigma^2} \int f(x) dx \right), \quad (15)$$
+
+with normalization constant  $Z^{\text{st}}$ .
+
+Rewriting (15), yields  $f = -\sigma^2 \nabla_x \log p^{\text{st}}$ , resulting in the SDE
+
+$$dX_t = -\sigma^2 \nabla_x \log p^{\text{st}}(X_t) dt + \sqrt{2}\sigma d B_t, \quad X_T \sim p_T = \pi, \quad (16)$$
+
+with stationary distribution  $p^{\text{st}}(x)$ . Note that denoising diffusion models leverage this result by setting  $p^{\text{st}} = \mathcal{N}(0, I)$ , resulting in the OU process ((14)) since  $\nabla_x \log p^{\text{st}}(x) = -x$ . Hence, we can adapt existing denoising diffusion sampling methods (Vargas et al., 2023a; Berner et al., 2022) to arbitrary priors  $p^\phi$  using
+
+$$dX_t = -\sigma^2 \nabla_x \log p^\phi(X_t) dt + \sqrt{2}\sigma d B_t, \quad X_T \sim p_T = \pi. \quad (17)$$
+
+However, contrary to the OU process, where the relaxation time, i.e., the time scale over which the system loses memory of its initial conditions and approaches its stationary distribution, can be estimated analytically, it is unknown for general  $p^\phi$  and is only guaranteed as  $T \rightarrow \infty$  (Roberts & Tweedie, 1996). We address this by additionally learning the time horizon  $T = N\delta t$  by treating the discretization step size  $\delta t$  as a learnable parameter. As such, the parameters  $\phi$  of the stationary
+
+<sup>2</sup>Note that this requirement is not necessary when minimizing loss function where the expectation is not computed with respect to samples from  $\bar{p}^\theta$ . For further details see e.g. (Richter et al., 2023).
+
+<sup>3</sup>The sign differs here compared to most works as the SDE is integrated backward in time.
+
+{5}------------------------------------------------
+
+distribution, i.e., the prior distribution and the discretization step size  $\delta t$  are optimized jointly by maximizing the extended ELBO
+
+$$\mathcal{L}(\theta, \phi) = \mathbb{E}_{x_{0:N} \sim \tilde{p}^{\theta, \phi}} \left[ \log \frac{\rho(x_N)}{p_0^\phi(x_0)} + \sum_{n=1}^N \log \frac{\tilde{p}_{n-1|n}^\phi(x_{n-1}|x_n)}{p_{n|n-1}^{\theta, \phi}(x_n|x_{n-1})} \right], \quad (18)$$
+
+with additional parameters  $\phi, \delta t$ . Please note that we omit dependence on  $\delta t$  in Equation (18) to keep the notation uncluttered. Proposition 1 thus suggests, that for any  $\phi$ , there exists a  $\delta t$  such that  $p_0^\phi(x_0) = \int \tilde{p}^\phi(x_{0:N}) dx_{1:N}$  as  $N \rightarrow \infty$ . Empirically, we observe substantial improvements for finite values of  $N$ , as demonstrated in Section 6
+
+### 4.2 ANNEALED LANGEVIN DIFFUSIONS
+
+Annealed Langevin Diffusions use an annealed version of the (overdamped) Langevin diffusion equation by constructing a sequence of distributions  $(\pi_t)_{t \in [0, T]}$  that anneal smoothly from the prior distribution  $\pi_0 = p_0$  to the target distribution  $\pi_T = \pi$ . One typically uses the geometric average, that is,  $\pi_t(x) = p_0(x)^{\beta_t} \pi(x)^{1-\beta_t}$ , for  $\beta_t$  monotonically increasing in  $t$  with  $\beta_0 = 0$  and  $\beta_T = 1$ . When learning the prior, we can use a parametric annealing, i.e.,  $\pi_t^\phi(x) = p_0^\phi(x)^{\beta_t} \pi(x)^{1-\beta_t}$ . The corresponding stochastic processes can be described as an instance of (2) given by
+
+$$dX_t = \left[ \sigma^2 \nabla_x \log \pi_t^\phi(X_t) + \sigma u^\phi(X_t, t) \right] dt + \sqrt{2} \sigma dB_t, \quad X_0 \sim p_0 = p^\phi, \quad (19)$$
+
+$$dX_t = \left[ \sigma^2 \nabla_x \log \pi_t^\phi(X_t) - \sigma v^\gamma(X_t, t) \right] dt + \sqrt{2} \sigma dB_t, \quad X_T \sim p_T = \pi, \quad (20)$$
+
+when setting  $f = \nabla_x \log \pi_t^\phi$ . Note that  $\nabla_x \log \pi_t^\phi$  can be computed without knowing the normalization constant  $\mathcal{Z}$  of  $\pi$ . Different variants can be derived from using either controlled or uncontrolled processes: Monte Carlo Diffusions (MCD) (Doucet et al., 2022b) uses a controlled process (2b) but uncontrolled (2a) and Controlled Monte Carlo Diffusions (CMCD) (Vargas et al., 2024) control both processes. Since both methods use controlled backward processes (2b), the second requirement is satisfied. Finally, while this work focuses on overdamped approaches, we want to highlight that there exist methods that are based on the underdamped Langevin equation (Geffner & Domke, 2021; Geffner & Domke, 2022), however, the idea of learning a prior end-to-end straightforwardly transfers to these approaches.
+
+## 5 GAUSSIAN MIXTURE PRIORS AND ITERATIVE MODEL REFINEMENT
+
+In this work, we focus on end-to-end learned Gaussian mixture priors (GMPs), that is,
+
+$$p_0^\phi(x_0) = \sum_{k=1}^K \alpha_k p_0^{\phi_k}(x_0) = \sum_{k=1}^K \alpha_k \mathcal{N}(x_0 | \mu_k, \Sigma_k), \quad \alpha_k \geq 0, \quad \sum_{k=1}^K \alpha_k = 1, \quad (21)$$
+
+with mixture weights  $\alpha_k$ , Gaussian components  $p_0^{\phi_k}(x_0) = \mathcal{N}(x_0 | \mu_k, \Sigma_k)$  and parameters  $\phi = \bigcup_{k=1}^K \{\alpha_k, \phi_k\}$  with  $\phi_k = \{\mu_k, \Sigma_k\}$ . Having established how the prior is learned in Section 4, we discuss desirable properties to address the challenges outlined in Section 1 and how GMPs address them.
+
+A key objective is to improve the exploration capabilities of diffusion-based sampling methods to address **C1**. GMPs allow control over exploration by adjusting the initial variance of each Gaussian component. Additionally, the means of the Gaussian components can be initialized to incorporate prior knowledge of the target density, even if this knowledge is limited to a rough estimate of the target’s support. This aspect will be elaborated on later in this section.
+
+Another important consideration is to adjust the support of the prior such that it matches the target density, which reduces the complexity of the dynamics and, in turn, minimizes the number of diffusion steps required. GMPs demonstrate rapid adaptation capabilities, partially through their small parameter count, making them particularly suitable for addressing **C2**.
+
+To prevent the model from focusing only on a subset of the target support (**C3**), which may occur due to the optimization of the mode-seeking reverse KL divergence, we require a more expressive
+
+{6}------------------------------------------------
+
+distribution than a single Gaussian prior. GMPs provide a solution by combining multiple Gaussian components, each of which can focus on different subsets of the target support.
+
+Finally, efficient evaluation of  $p_0^\phi$  is crucial, as it must be performed at each discretization step of the stochastic differential equation (SDE) that governs the diffusion process. This requirement is satisfied by GMPs, particularly when using diagonal covariance matrices.
+
+**Iterative Model Refinement.** Gradually increasing the model complexity during the optimization process has demonstrated promising results in previous studies (Guo et al., 2016; Miller et al., 2017; Arenz et al., 2018; Cranko & Nock, 2019), and is directly applicable to our approach. We begin with an initial prior distribution  $p_0^\phi = p_0^{\phi_1}$  with parameters  $\phi_1$ . These parameters are optimized using (18). After a predefined criterion is met, such as a fixed number of iterations, a second distribution  $p_0^{\phi_2}$  is added, forming a new prior:  $p_0^\phi = \alpha_1 p_0^{\phi_1} + \alpha_2 p_0^{\phi_2}$ , with  $\alpha \in \mathbb{R}^+$  and  $\alpha_1 + \alpha_2 = 1$ . This process is repeated, resulting in a mixture model  $p_0^\phi(x) = \sum_{k=1}^K \alpha_k p_0^{\phi_k}(x)$ .
+
+We identify the benefits of this iterative scheme as twofold: First, it can simplify optimization by focusing on learning a subset of parameters  $\phi_k$  at a time, rather than jointly optimizing all  $\phi_k$  (Bengio et al., 2009). Second, it enables the initialization of newly added components based on a partially trained model, potentially preventing mixture components to focus on similar parts of the target support. For GMPs, for instance, the mean of a new component  $\mu_{\text{new}}$  can be placed in a promising region, potentially informed by prior knowledge of the task or by running a  $\pi$ -invariant Markov chain to obtain a set of promising samples. More generally, consider a set of candidate samples  $\mathcal{C} = \{x_i\}_{i=1}^C$ . We propose initializing the mean of a new component  $\mu_{\text{new}}$  as follows:
+
+$$\mu_{\text{new}} = \arg \max_{x_N \in \mathcal{C}} \mathbb{E}_{x_{0:N-1} \sim \tilde{p}^{\gamma,\phi}} \left[ \log \frac{\rho(x_N)}{p_0^\phi(x_0)} + \sum_{n=1}^N \log \frac{\tilde{p}_{n-1|n}^{\gamma,\phi}(x_{n-1}|x_n)}{\tilde{p}_{n|n-1}^{\theta,\phi}(x_n|x_{n-1})} \right], \quad (22)$$
+
+where  $p_0^\phi$  is the current model. This heuristic balances exploration and exploitation by favoring samples with high target likelihood and low prior likelihood, while also accounting for the diffusion process. See Appendix B for further details.
+
+## 6 NUMERICAL EVALUATION
+
+In this section, we test the impact of our proposed end-to-end learning scheme for prior distributions. Specifically, we consider three distinct settings: First, we evaluate these methods with a Gaussian prior that is fixed during training. Second and third, we consider learned Gaussian (GP) and Gaussian mixture priors (GMP). We indicate these different settings as X, X-GP, and X-GMP, respectively, where X is the corresponding acronym of the diffusion-based sampling methods. We consider four different methods: Time-Reversed Diffusion Sampler (DIS) (Berner et al., 2022), Monte Carlo Diffusions (MCD) (Doucet et al., 2022b), Controlled Monte Carlo Diffusions (CMCD) (Vargas et al., 2024) and Diffusion Bridge Sampler (DBS) (Richter et al., 2023). A summary is shown in Table 1. It is worth noting that we do not separately consider the Denoising Diffusion Sampler (DDS) (Vargas et al., 2023a), as it can be viewed as a special case of DIS. For reference, we consider Gaussian (GVI) and Gaussian mixture (GMVI) mean-field approximations (Wainwright & Jordan, 2008), both of which are special cases of the aforementioned methods for  $N = 0$  diffusion steps with  $K = 1$ ,  $K \geq 1$ , respectively (cf. Appendix B). Lastly, we consider three competing state-of-the-art methods, namely, Sequential Monte Carlo (SMC) (Del Moral et al., 2006), Continual Repeated Annealed Flow Transport (CRAFT) (Matthews et al., 2022), and Flow Annealed Importance Sampling Bootstrap (FAB) (Midgley et al., 2022).
+
+For evaluation, we consider the effective sample size (ESS) and the marginal or extended evidence lower bound as performance criteria. Both are denoted as ‘ELBO’ for convenience. Next, if the ground truth normalization constant  $\mathcal{Z}$  is available, we use an importance-weighted estimate  $\hat{\mathcal{Z}}$  to
+
+| METHOD (X) | $f$ | $u^\theta$ | $u^\gamma$ |
+|-|-|-|-|
+| MCD | $\nabla \log \pi^\phi$ | ✗ | ✓ |
+| CMCD <sup>3</sup> | $\nabla \log \pi^\phi$ | ✓ | ✓ |
+| DIS | $\nabla \log p^\phi$ | ✓ | ✗ |
+| DBS | ANY | ✓ | ✓ |
+
+Table 1: Diffusion-based sampling methods considered in this work based on (2). Crosses indicate that the control is set to zero.
+
+<sup>3</sup>Vargas et al. (2024) use the same in control in (2a) and (2b) by leveraging Nelson’s relation (Nelson, 2020).
+
+{7}------------------------------------------------
+
+compute the estimation error  $\Delta \log \mathcal{Z} = |\log \mathcal{Z} - \log \hat{\mathcal{Z}}|$ . Additionally, if samples from the target  $\pi$  are available, we compute the Sinkhorn distance  $\mathcal{W}_2^2$  (Cuturi, 2013).
+
+To ensure a fair comparison, all experiments are conducted under identical settings. Our evaluation methodology adheres to the protocol by Blessing et al. (2024). For a comprehensive overview of the experimental setup see Appendix C. Moreover, a comprehensive set of ablation studies and additional experiments, are provided in Appendix D.
+
+| Method | Funnel ( $d = 10$ ) |  |  |  | GVE: $K = 1, N = 0$ |  | GMVE: $K = 10, N = 0$ |  |
+|-|-|-|-|-|-|-|-|-|
+|  | ELBO $\uparrow$ | $\Delta \log \mathcal{Z} \downarrow$ | ESS $\uparrow$ | $\mathcal{W}_2^2 \downarrow$ |  |  |  |  |
+| GVI | $-1.841 \pm 0.003$ | $0.691 \pm 0.070$ | $0.092 \pm 0.006$ | $178.007 \pm 0.164$ | <p>Image: Visualization of GVE: K=1, N=0 showing a single Gaussian component.</p> |  | <p>Image: Visualization of GMVE: K=10, N=0 showing multiple Gaussian components.</p> |  |
+| GMVI | $-0.212 \pm 0.001$ | <u><math>0.056 \pm 0.004</math></u> | <u><math>0.744 \pm 0.018</math></u> | <u><math>102.826 \pm 0.109</math></u> |  |  |  |  |
+| MCD | $-0.721 \pm 0.003$ | $0.201 \pm 0.017$ | $0.307 \pm 0.012$ | $164.882 \pm 0.363$ | <p>Image: Visualization of DIS-GP: K=1, N=128 showing a single Gaussian component.</p> |  | <p>Image: Visualization of DIS-GMP: K=10, N=128 showing multiple Gaussian components.</p> |  |
+| MCD-GP | $-0.724 \pm 0.003$ | $0.173 \pm 0.046$ | $0.206 \pm 0.028$ | $164.907 \pm 0.354$ |  |  |  |  |
+| MCD-GMP | <u><math>-0.059 \pm 0.002</math></u> | <u><math>0.014 \pm 0.001</math></u> | <u><math>0.922 \pm 0.012</math></u> | <u><math>100.174 \pm 0.174</math></u> | <p>Image: Visualization of DIS-GP: K=1, N=128 showing a single Gaussian component.</p> |  | <p>Image: Visualization of DIS-GMP: K=10, N=128 showing multiple Gaussian components.</p> |  |
+| CMCD | $-0.210 \pm 0.002$ | $0.020 \pm 0.006$ | $0.588 \pm 0.013$ | $104.652 \pm 0.503$ |  |  |  |  |
+| CMCD-GP | $-0.211 \pm 0.002$ | $0.023 \pm 0.003$ | $0.567 \pm 0.023$ | $104.644 \pm 0.710$ | <p>Image: Visualization of DIS-GP: K=1, N=128 showing a single Gaussian component.</p> |  | <p>Image: Visualization of DIS-GMP: K=10, N=128 showing multiple Gaussian components.</p> |  |
+| CMCD-GMP | <u><math>-0.027 \pm 0.002</math></u> | <u><math>0.005 \pm 0.000</math></u> | <u><math>0.950 \pm 0.004</math></u> | <u><math>102.027 \pm 0.200</math></u> |  |  |  |  |
+| DIS | $-0.286 \pm 0.002$ | $0.041 \pm 0.008$ | $0.483 \pm 0.025$ | $107.458 \pm 0.070$ | <p>Image: Visualization of DIS-GP: K=1, N=128 showing a single Gaussian component.</p> |  | <p>Image: Visualization of DIS-GMP: K=10, N=128 showing multiple Gaussian components.</p> |  |
+| DIS-GP | $-0.296 \pm 0.002$ | $0.047 \pm 0.003$ | $0.498 \pm 0.021$ | $107.458 \pm 0.826$ |  |  |  |  |
+| DIS-GMP | <u><math>-0.058 \pm 0.002</math></u> | <u><math>0.019 \pm 0.002</math></u> | <u><math>0.929 \pm 0.017</math></u> | <u><math>100.093 \pm 0.028</math></u> | <p>Image: Visualization of DIS-GP: K=1, N=128 showing a single Gaussian component.</p> |  | <p>Image: Visualization of DIS-GMP: K=10, N=128 showing multiple Gaussian components.</p> |  |
+| DBS | $-0.180 \pm 0.002$ | $0.019 \pm 0.005$ | $0.600 \pm 0.014$ | $102.964 \pm 0.442$ |  |  |  |  |
+| DBS-GP | $-0.187 \pm 0.003$ | $0.021 \pm 0.003$ | $0.603 \pm 0.014$ | $102.653 \pm 0.586$ | <p>Image: Visualization of DIS-GP: K=1, N=128 showing a single Gaussian component.</p> |  | <p>Image: Visualization of DIS-GMP: K=10, N=128 showing multiple Gaussian components.</p> |  |
+| DBS-GMP | <u><math>-0.047 \pm 0.002</math></u> | <u><math>0.012 \pm 0.002</math></u> | <u><math>0.949 \pm 0.008</math></u> | <u><math>100.230 \pm 0.088</math></u> |  |  |  |  |
+| SMC | $-0.242 \pm 0.047$ | $0.187 \pm 0.054$ | - | $140.353 \pm 2.973$ | <p>Image: Visualization of DIS-GP: K=1, N=128 showing a single Gaussian component.</p> |  | <p>Image: Visualization of DIS-GMP: K=10, N=128 showing multiple Gaussian components.</p> |  |
+| CRAFT | $-0.027 \pm 0.060$ | $0.091 \pm 0.018$ | - | $134.335 \pm 0.660$ |  |  |  |  |
+| FAB | $-0.014 \pm 0.003$ | <u><math>0.001 \pm 0.000</math></u> | - | $153.894 \pm 3.916$ | K: Num. mixture components |  | N: Num. diffusion steps |  |
+
+Figure 3: **Left side:** Results for Funnel target, averaged across four seeds. Evaluation criteria include evidence lower bound ELBO, importance-weighted errors for estimating the log-normalizing constant  $\Delta \log \mathcal{Z}$ , effective sample size ESS, Sinkhorn distance  $\mathcal{W}_2^2$ . The best overall results are highlighted in bold, with category-specific best results underlined. Arrows ( $\uparrow, \downarrow$ ) indicate whether higher or lower values are preferable, respectively. Blue and green shading indicate that the method uses learned Gaussian (GP) and Gaussian mixture priors (GMP), respectively. Red shading indicate competing state-of-the-art methods. Note that ESS cannot be computed due to the use of resampling schemes. **Right side:** Visualization of the first two dimensions of the Funnel target. Colored ellipses and circles denote standard deviations and means of the Gaussian components, respectively. Red dots illustrate samples of the model.
+
+### 6.1 BENCHMARK PROBLEMS
+
+We evaluate the different methods on various real-world and synthetic target densities.
+
+**Real-World Densities.** We consider six real-world target densities: Four Bayesian inference tasks, where inference is performed over the parameters of a logistic regression model, namely *Credit* ( $d = 25$ ), *Cancer* ( $d = 31$ ), *Ionosphere* ( $d = 35$ ), and *Sonar* ( $d = 61$ ). Moreover, *Seeds* ( $d = 26$ ) and *Brownian* ( $d = 32$ ), where the goal is to perform inference over the parameters of a random effect regression model, and the time discretization of a Brownian motion, respectively. For these densities, we do not have access to the ground truth normalizer  $Z$  or samples from  $\pi$  preventing us from computing errors for log normalization estimation  $\Delta \log \mathcal{Z}$  and Sinkhorn distances  $\mathcal{W}_2^2$ . The resulting ELBO values are presented in Table 2.
+
+**Synthetic Densities.** The *Funnel* density was introduced by Neal (2003) as has a shape that resembles a funnel, where one part is tight and highly concentrated, while the other is spread out over a wide region, making it challenging for sampling algorithms to explore the distribution effectively. Next, we consider the *Fashion* target which uses NICE (Dinh et al., 2014) to train a normalizing flow on the high-dimensional  $d = 28 \times 28 = 784$  MNIST Fashion dataset. A recent study by Blessing et al. (2024) showed that current state-of-the-art methods were not able to generate samples with high quality from multiple modes.
+
+### 6.2 RESULTS
+
+**Impact of Learned Gaussian (GP) and Gaussian Mixture (GMP) Priors.** We evaluated the performance of our proposed methods on both real-world tasks and the *Funnel* density, employing  $N = 128$  diffusion steps across all methods and  $K = 10$  mixture components for X-GMP. To ensure a fair comparison, we initialized the priors of all diffusion-based methods with zero mean
+
+{8}------------------------------------------------
+
+| METHOD | CREDIT | SEEDS | CANCER | BROWNLIAN | IONOSPHERE | SONAR |
+|-|-|-|-|-|-|-|
+| GVI | -605.561 $\pm$ 0.166 | -76.741 $\pm$ 0.007 | -147.453 $\pm$ 0.144 | -3.885 $\pm$ 0.005 | -123.391 $\pm$ 0.013 | -137.696 $\pm$ 0.043 |
+| GMVI | -603.424 $\pm$ 0.154 | -75.221 $\pm$ 0.011 | -145.456 $\pm$ 0.254 | -2.250 $\pm$ 0.011 | -122.919 $\pm$ 0.019 | -135.959 $\pm$ 0.031 |
+| MCD | -1399.241 $\pm$ 0.114 | -75.699 $\pm$ 0.015 | -148.471 $\pm$ 8.565 | -15.498 $\pm$ 0.118 | -114.320 $\pm$ 0.007 | -112.639 $\pm$ 0.025 |
+| MCD-GP | -585.350 $\pm$ 0.015 | -73.542 $\pm$ 0.003 | -89.676 $\pm$ 0.189 | 0.771 $\pm$ 0.008 | -111.897 $\pm$ 0.004 | -109.338 $\pm$ 0.004 |
+| MCD-GMP | -585.276 $\pm$ 0.013 | -73.461 $\pm$ 0.004 | -88.562 $\pm$ 0.243 | 0.993 $\pm$ 0.003 | -111.827 $\pm$ 0.007 | -109.197 $\pm$ 0.004 |
+| CMCD | -586.956 $\pm$ 0.018 | -74.033 $\pm$ 0.010 | -80.076 $\pm$ 0.118 | -1.346 $\pm$ 0.013 | -112.183 $\pm$ 0.006 | -109.332 $\pm$ 0.006 |
+| CMCD-GP | -585.178 $\pm$ 0.013 | -73.456 $\pm$ 0.003 | -78.576 $\pm$ 0.068 | 1.043 $\pm$ 0.005 | -111.687 $\pm$ 0.003 | -108.669 $\pm$ 0.007 |
+| CMCD-GMP | -585.162 $\pm$ 0.002 | -73.429 $\pm$ 0.002 | -78.402 $\pm$ 0.037 | 1.087 $\pm$ 0.001 | -111.682 $\pm$ 0.009 | -108.634 $\pm$ 0.000 |
+| DIS | -589.636 $\pm$ 0.707 | -74.400 $\pm$ 0.007 | -86.592 $\pm$ 2.107 | -3.503 $\pm$ 0.019 | -112.525 $\pm$ 0.008 | -110.158 $\pm$ 0.022 |
+| DIS-GP | -585.247 $\pm$ 0.009 | -73.540 $\pm$ 0.005 | -85.005 $\pm$ 1.286 | 0.588 $\pm$ 0.013 | -111.847 $\pm$ 0.006 | -109.287 $\pm$ 0.024 |
+| DIS-GMP | -585.223 $\pm$ 0.006 | -73.492 $\pm$ 0.003 | -84.061 $\pm$ 2.117 | 0.885 $\pm$ 0.005 | -111.811 $\pm$ 0.002 | -109.157 $\pm$ 0.000 |
+| DBS | -587.366 $\pm$ 0.683 | -73.918 $\pm$ 0.008 | -82.466 $\pm$ 4.090 | -0.773 $\pm$ 0.010 | -112.070 $\pm$ 0.005 | -109.188 $\pm$ 0.005 |
+| DBS-GP | -585.524 $\pm$ 0.414 | -73.437 $\pm$ 0.001 | -83.395 $\pm$ 4.184 | 1.081 $\pm$ 0.004 | -111.673 $\pm$ 0.002 | -108.595 $\pm$ 0.006 |
+| DBS-GMP | -585.145 $\pm$ 0.002 | <b>-73.418<math>\pm</math>0.001</b> | <b>-78.160<math>\pm</math>0.068</b> | <b>1.118<math>\pm</math>0.002</b> | <b>-111.657<math>\pm</math>0.002</b> | <b>-108.548<math>\pm</math>0.000</b> |
+| SMC | -698.403 $\pm$ 4.146 | -74.699 $\pm$ 0.100 | -194.059 $\pm$ 0.613 | -1.874 $\pm$ 0.622 | -114.751 $\pm$ 0.238 | -111.355 $\pm$ 1.177 |
+| CRAFT | -594.795 $\pm$ 0.411 | -73.793 $\pm$ 0.015 | -95.737 $\pm$ 1.067 | 0.886 $\pm$ 0.053 | -112.386 $\pm$ 0.182 | -115.618 $\pm$ 1.316 |
+| FAB | <b>-585.102<math>\pm</math>0.001</b> | <b>-73.418<math>\pm</math>0.002</b> | <b>-78.287<math>\pm</math>0.835</b> | <b>1.031<math>\pm</math>0.010</b> | <b>-111.678<math>\pm</math>0.003</b> | <b>-108.593<math>\pm</math>0.008</b> |
+
+Table 2: Evidence lower bound (ELBO) values for various real-world benchmark problems, averaged across four seeds. The best overall results are highlighted in bold, with category-specific best results underlined. Blue and green shading indicate that the method uses learned Gaussian (GP) and Gaussian mixture priors (GMP), respectively. Red shading indicate competing state-of-the-art methods.
+
+and unit variance. Table 2 and Figure 3 present our findings. The analysis demonstrates that GP consistently achieves tighter ELBO values compared to fixed priors, with GMP yielding further improvements over GP. Furthermore, Figure 3 illustrates both qualitatively and quantitatively that GMP effectively combines the strengths of Gaussian mixture and diffusion models, resulting in significant improvements. Specifically, we observed that the Gaussian components adapt well to the target’s support, covering both the neck and opening of the funnel shape. This results in less complex dynamics and better target coverage for DIS-GMP compared to using a single Gaussian (DIS-GP). Notably, the combination of DBS and GMP outperforms state-of-the-art methods across the majority of tasks and evaluation metrics.
+
+| Method | Fashion ( $d = 784$ ) |  |  |  | $x \sim \pi$ |  |  |  | DIS-GMP |  |  |  | DIS-GMP + IMR |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | ELBO $\uparrow$ | $\Delta \log Z \downarrow$ | $\mathcal{W}_2^2 \downarrow$ | EMC $\uparrow$ |  |  |  |  |  |  |  |  |  |  |  |  |
+| GVI | -73.793 $\pm$ 0.032 | 47.868 $\pm$ 0.767 | 1590.212 $\pm$ 0.818 | 0.000 $\pm$ 0.000 |  |  |  |  |  |  |  |  |  |  |  |  |
+| GMVI | -72.654 $\pm$ 0.176 | 45.927 $\pm$ 0.380 | 1505.656 $\pm$ 1.644 | 0.034 $\pm$ 0.011 |  |  |  |  |  |  |  |  |  |  |  |  |
+| GMVI + IMR | <b>-57.021<math>\pm</math>0.003</b> | <b>30.445<math>\pm</math>0.051</b> | <b>589.881<math>\pm</math>1.373</b> | <b>0.761<math>\pm</math>0.039</b> |  |  |  |  |  |  |  |  |  |  |  |  |
+| DIS | -41.638 $\pm$ 3.37 | 32.658 $\pm$ 3.906 | 17.728 $\pm$ 34.21 | 0.213 $\pm$ 0.026 |  |  |  |  |  |  |  |  |  |  |  |  |
+| DIS-GP | <b>-24.712<math>\pm</math>0.202</b> | <b>10.581<math>\pm</math>0.406</b> | 1671.411 $\pm$ 2.394 | 0.007 $\pm$ 0.004 |  |  |  |  |  |  |  |  |  |  |  |  |
+| DIS-GMP | -38.873 $\pm$ 0.175 | 18.056 $\pm$ 0.508 | 1703.023 $\pm$ 3.060 | 0.012 $\pm$ 0.021 |  |  |  |  |  |  |  |  |  |  |  |  |
+| DIS-GMP + IMR | -62.482 $\pm$ 2.792 | 27.645 $\pm$ 3.118 | <b>213.776<math>\pm</math>13.896</b> | <b>0.780<math>\pm</math>0.086</b> |  |  |  |  |  |  |  |  |  |  |  |  |
+| SMC | -12.188 $\pm$ 13.64 | 11.744 $\pm$ 1.192 | 6696.287 $\pm$ 290.4 | 0.026 $\pm$ 0.027 |  |  |  |  |  |  |  |  |  |  |  |  |
+| CRAFT | <b>-520.474<math>\pm</math>0.531</b> | 445.104 $\pm$ 273 | 1413.303 $\pm$ 11.20 | 0.016 $\pm$ 0.027 |  |  |  |  |  |  |  |  |  |  |  |  |
+| FAB | -892.974 $\pm$ 133.8 | <b>350.554<math>\pm</math>399.2</b> | <b>1186.907<math>\pm</math>283.4</b> | <b>0.349<math>\pm</math>0.137</b> |  |  |  |  |  |  |  |  |  |  |  |  |
+
+Figure 4: **Left side:** Results for Fashion target, averaged across four seeds. Evaluation criteria include evidence lower bound ELBO, importance-weighted errors for estimating the log-normalizing constant  $\Delta \log Z$ , and Sinkhorn distance  $\mathcal{W}_2^2$ . The best overall results are highlighted in bold, with category-specific best results underlined. Arrows ( $\uparrow, \downarrow$ ) indicate whether higher or lower values are preferable, respectively. Blue and green shading indicate that the method uses learned Gaussian (GP) and Gaussian mixture priors (GMP), respectively. Orange shading indicates that the method uses iterative model refinement (IMR). Red shading indicate competing state-of-the-art methods. **Right side:** Visualization of the  $d = 28 \times 28 = 784$  dimensional Fashion samples. Top left corner visualizes samples from the target distribution. Colored frames indicate samples from different components of the Gaussian mixture.
+
+**Ablation Study: Number of Mixture Components  $K$  and Diffusion Steps  $N$ .** We further investigated the effect of varying the number of diffusion steps  $N$  and mixture components  $K$  on a subset of tasks for DIS. The results, shown in Figure 5, demonstrate consistent improvements in effective sample size (ESS) with increases in both  $K$  and  $N$ . Additionally, we consistently observed that the combination of a higher number of components and diffusion steps yields the best overall performance. These trends hold across other metrics, as further detailed in Appendix D.
+
+{9}------------------------------------------------
+
+**Iterative Model Refinement (IMR).** Lastly, we investigated the impact of IMR, as detailed in Section 5, using DIS. For this analysis, we focused on the multi-modal Fashion target, which necessitates exploration in a high-dimensional space ( $d = 784$ ). In addition to the performance criteria outlined in Section 6, we quantify how many of the modes the model discovered via the *entropic mode coverage (EMC)* introduced by [Blessing et al. \(2024\)](#). EMC evaluates the mode coverage of a sampler by leveraging prior knowledge of the target density. It holds that  $\text{EMC} \in [0, 1]$  where  $\text{EMC} = 1$  indicates that the model achieves uniform coverage over all modes whereas  $\text{EMC} = 0$  indicates that the model only produces samples from a single mode. We employed the Metropolis-adjusted Langevin algorithm (MALA) ([Cheng et al., 2018](#)) to generate a set of candidate samples, noting that the computational cost of this process is comparable to a single gradient step in most diffusion-based sampling methods. The initial candidate samples as well as the support of DIS without learned prior are initialized such that they roughly cover the target support. Additional details are provided in Appendix C.2. We iteratively increased the number of components to  $K = 10$ , utilizing  $N = 128$  diffusion steps throughout. Figure 4 presents our findings, demonstrating that the absence of IMR leads to mode collapse across all methods, as evidenced by high Sinkhorn distance values. The qualitative results highlight the role of candidate samples in facilitating mode discovery. Notably, the color-coding of DIS-GMP + IMR illustrates that each mixture component concentrates on a distinct mode, validating the effectiveness of the initialization heuristic proposed in (22) in balancing exploration and exploitation. This finding is also quantitatively reflected by the high EMC and low Sinkhorn distance values. In contrast, the ELBO and  $\Delta \log \mathcal{Z}$  values are slightly worse when using GMPs and IMR. This is attributed to the fact that these performance criteria are not well-suited for quantifying the model performance for multi-modal targets and tend to favor models that fit a single mode perfectly ([Blessing et al., 2024](#)). Moreover, with higher  $K$ , the diffusion model has to learn more complex control functions, as it needs to operate over the support of the entire Gaussian Mixture Model (GMM) rather than a single Gaussian. This added complexity can introduce more opportunities for approximation errors, which may negatively impact ELBO and  $\Delta \log \mathcal{Z}$  values compared to using a single learnable Gaussian. Nevertheless, the resulting samples from DIS-GMP are closer to the target distribution in terms of Sinkhorn distance. Importantly, these errors remain significantly smaller than those observed with non-learnable priors.
+
+![Figure 5: Five heatmaps showing the Effective Sample Size (ESS) of DIS-GMP for four real-world benchmark problems (Fashion, Iris, MNIST, Credit) across different values of N (discretization steps) and K (number of components). The color scale ranges from 0.00 (dark) to 0.78 (light).](7801d00a216dc4dc8a7d210dcb5fe3c5_img.jpg)
+
+The figure displays five heatmaps, each representing the Effective Sample Size (ESS) for a specific benchmark problem: Fashion, Iris, MNIST, Seeds, and Credit. Each heatmap is a grid where the x-axis represents the number of discretization steps  $N$  (values: 8, 16, 32, 64, 128) and the y-axis represents the number of components  $K$  (values: 8, 16, 32, 64, 128). The color of each cell indicates the ESS value, with a scale from 0.00 (dark purple/black) to 0.78 (light yellow/white). In general, the ESS increases as  $N$  increases and is higher for smaller values of  $K$ . The 'Credit' dataset shows the highest overall ESS values, while 'Fashion' and 'MNIST' show lower ESS values.
+
+Figure 5: Five heatmaps showing the Effective Sample Size (ESS) of DIS-GMP for four real-world benchmark problems (Fashion, Iris, MNIST, Credit) across different values of N (discretization steps) and K (number of components). The color scale ranges from 0.00 (dark) to 0.78 (light).
+
+Figure 5: Effective sample size (ESS) of DIS-GMP for various real-world benchmark problems, averaged across four seeds. Here,  $N$  denotes the number of discretization steps and  $K$  the number of components in den Gaussian mixture.
+
+## 7 CONCLUSION AND FUTURE WORK
+
+In this paper, we propose a novel approach for improving diffusion-based sampling techniques by introducing end-to-end learnable Gaussian Mixture Priors (GMPs). Our method addresses key challenges in diffusion models—namely, large discretization errors, mode collapse, and poor exploration—by providing more expressive and adaptable priors compared to the conventional Gaussian priors. We conducted comprehensive experiments on both synthetic and real-world datasets, which consistently demonstrated the superior performance of our proposed method. The results underscore the effectiveness of GMPs in overcoming the limitations of traditional diffusion models while requiring little to no hyperparameter tuning. Furthermore, we developed a novel strategy for iterative model refinement, which involves progressively adding components to the mixture during training, and demonstrated its effectiveness on a challenging high-dimensional problem.
+
+A promising direction for future research is the improvement of the iterative model refinement strategy. While we showed that progressively increasing the number of components in the Gaussian mixture improves performance, optimizing the selection criteria for adding new components, generating better candidate samples, or dynamically adjusting the number of components during training, could lead to further gains in efficiency and accuracy.
+
+ Rest of paper (reference and Appendix) is removed.

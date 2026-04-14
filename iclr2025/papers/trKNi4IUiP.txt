@@ -1,0 +1,279 @@
+
+
+{0}------------------------------------------------
+
+# ROBUSTNESS INSPIRED GRAPH BACKDOOR DEFENSE
+
+Zhiwei Zhang   Minhua Lin   Junjie Xu   Zongyu Wu   Enyan Dai   Suhang Wang
+
+The Pennsylvania State University
+
+{zbz5349, mfl5681, junjiexu, zongyuwu, emd5759, szw494}@psu.edu
+
+## ABSTRACT
+
+Graph Neural Networks (GNNs) have achieved promising results in tasks such as node classification and graph classification. However, recent studies reveal that GNNs are vulnerable to backdoor attacks, posing a significant threat to their real-world adoption. Despite initial efforts to defend against specific graph backdoor attacks, there is no work on defending against various types of backdoor attacks where generated triggers have different properties. Hence, we first empirically verify that prediction variance under edge dropping is a crucial indicator for identifying poisoned nodes. With this observation, we propose using random edge dropping to detect backdoors and theoretically show that it can efficiently distinguish poisoned nodes from clean ones. Furthermore, we introduce a novel robust training strategy to efficiently counteract the impact of the triggers. Extensive experiments on real-world datasets show that our framework can effectively identify poisoned nodes, significantly degrade the attack success rate, and maintain clean accuracy when defending against various types of graph backdoor attacks with different properties. Our code is available at: [github.com/zzwjames/RIGBD](https://github.com/zzwjames/RIGBD).
+
+## 1 INTRODUCTION
+
+Graphs are pervasive in real world such as social networks (Fan et al., 2019), molecular graphs (Mansimov et al., 2019), and knowledge graphs (Liu et al., 2022). Graph Neural Networks (GNNs) have shown great ability in node representation learning on graphs. Generally, GNNs adopt a message-passing mechanism that updates a node’s representation by iteratively aggregating information from its neighbors. The resulting node representations retain both node attributes and local graph structure information, benefiting various downstream tasks such as node classification (Hamilton et al., 2017; Kipf & Welling, 2016; Velickovic et al., 2017) and graph classification (Xu et al., 2018).
+
+Despite their great performance, recent studies (Dai et al., 2023; Xi et al., 2021; Zhang et al., 2021; 2024) show that GNNs are susceptible to backdoor attacks. Generally, backdoor attacks involve generating and attaching backdoor triggers to a small set of target nodes, which are then assigned a target class. These triggers can be predefined or created by a trigger generator and usually take the form of a node or subgraph. When a GNN model is trained on a backdoored dataset, it learns to associate the presence of the trigger with the target class. Consequently, during inference, the backdoored model will misclassify test nodes with the trigger attached as belonging to the target class, while still maintaining high accuracy on clean nodes without a trigger attached. Backdoor attacks on GNNs are particularly concerning due to their potential impact on critical real-world applications such as healthcare and financial services. For instance, in medical diagnosis networks, an attacker could embed backdoor triggers into the training data, leading the GNN model to misclassify certain medical conditions when the trigger is present.
+
+Thus, graph backdoor attack and defense are attracting increasing attention and several initial efforts have been taken (Xi et al., 2021; Zhang et al., 2021; 2024; Dai et al., 2023). For example, the seminal work SBA (Zhang et al., 2021) adopts randomly generated graphs as triggers for graph backdoor attack. To improve the attack success rate, GTA (Xi et al., 2021) adopts a backdoor trigger generator to generate more powerful sample-specific triggers. Observing that the backdoor trigger and target nodes tend to have low feature similarity, Dai et al. (2023) propose a defense method called Prune, which removes edges that connect nodes with low cosine similarity. It significantly reduces the attack success rate (ASR) of previous works. To improve the stealthiness of backdoor attacks, they proposed unnoticeable backdoor attack method UGBA by maximizing the cosine similarity between backdoor
+
+{1}------------------------------------------------
+
+triggers and target nodes. Zhang et al. (2024) show that backdoor triggers tend to be outliers which can be removed with graph outlier detection (OD). To address this, they further proposed DPGBA which can generate in-distribution triggers. Despite initial efforts on backdoor defense, they generally utilize backdoor specific properties to defend against specific backdoor and are ineffective across various types of backdoor triggers and attack methods.
+
+Therefore, in this paper, we study an important problem of developing an effective graph backdoor defense method against various types of backdoor triggers and attack methods. In essence, we are faced with two challenges: **(i)** How to efficiently and precisely identify poisoned nodes and backdoor triggers, even when those triggers are indistinguishable from clean nodes? **(ii)** How to minimize the impact of backdoor triggers when some of the triggers are not identified? In an attempt to address these challenges, we propose a novel framework Robustness Inspired Graph Backdoor Defense (RIGBD). To efficiently and precisely identify poisoned nodes, we empirically show in Section 3.2 that removing edges linking backdoor triggers typically leads to large prediction variance for poisoned target nodes. Based on this observation, we propose training a backdoored model with specially designed graph convolution operations on a poisoned graph, performing random edge dropping, and identifying nodes with high prediction variance as poisoned nodes. With candidate poisoned nodes and identified target class, we propose a novel robust GNN training loss, which minimizes model’s prediction confidence on the target class for poisoned nodes to efficiently counteract the impact of the triggers. Such strategy is effective even if part of poisoned nodes are not identified in the training set.
+
+Our **main contributions** are: **(i)** We empirically verify that poisoned nodes typically exhibit large prediction variance under edge dropping. **(ii)** Theoretical analysis guarantees that our specially designed graph convolution operations can precisely distinguish poisoned nodes from clean nodes through random edge dropping. **(iii)** We propose a novel training strategy to train a backdoor robust GNN model even though some poisoned nodes are not identified. **(iv)** Extensive experiments show the effectiveness of RIGBD in defending against backdoor attacks and maintaining clean accuracy.
+
+## 2 RELATED WORK
+
+**Graph Backdoor Attacks.** SBA (Zhang et al., 2021) is a seminal work on graph backdoor attacks, which adopts randomly generated graphs as triggers. GTA (Xi et al., 2021) adopts a backdoor trigger generator to generate more powerful sample-specific triggers to improve the attack success rate. UGBA (Dai et al., 2023) introduces an unnoticeable loss function aimed at maximizing the cosine similarity between backdoor triggers and target nodes to improve the stealthiness of their attack. DPGBA (Zhang et al., 2024) introduces an outlier detector and uses adversarial learning to generate in-distribution triggers, addressing low ASR or outlier issues in existing graph backdoor attacks. More about graph backdoor attacks are in Appendix A.
+
+**Graph Backdoor Defense.** UGBA (Dai et al., 2023) denotes that the attributes of triggers differ significantly from the attached poisoned nodes in GTA (Xi et al., 2021), thereby violating the homophily property typically observed in real-world graphs. Thus they propose a defense method called Prune, which removes edges that connect nodes with low similarity. DPGBA (Zhang et al., 2024) further indicates that although the triggers in UGBA (Dai et al., 2023) may demonstrate high similarity to target nodes, the triggers in both UGBA (Dai et al., 2023) and GTA (Xi et al., 2021) are still outliers. Thus they propose a defense method called OD, which involves training a graph auto-encoder and filtering out nodes with high reconstruction loss. More details about backdoor defense in non-structure data (Li et al., 2021a) and robust GNNs (Zhang & Zitnik, 2020; Zhu et al., 2019; Wang et al., 2021) are shown in Appendix A. Our work is inherently different from theirs: **(i)** We aim to defend against graph backdoor attacks regardless of the trigger attributes; **(ii)** we design a novel and theoretically guaranteed method to precisely identify poison nodes, aiming to degrade the attack success rate (ASR) without compromising clean accuracy.
+
+## 3 PRELIMINARY
+
+### 3.1 BACKGROUND AND PROBLEM DEFINITION
+
+We use  $\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathbf{X})$  to denote an attributed graph, where  $\mathcal{V} = \{v_1, \dots, v_N\}$  is the set of  $N$  nodes,  $\mathcal{E} \subseteq \mathcal{V} \times \mathcal{V}$  is the set of edges, and  $\mathbf{X} = \{\mathbf{x}_1, \dots, \mathbf{x}_N\}$  is the set of attributes of  $\mathcal{V}$ .  $\mathbf{A} \in \mathbb{R}^{N \times N}$  is
+
+{2}------------------------------------------------
+
+the adjacency matrix of  $\mathcal{G}$ , where  $\mathbf{A}_{ij} = 1$  if nodes  $v_i$  and  $v_j$  are connected; otherwise  $\mathbf{A}_{ij} = 0$ . In this paper, we focus on the inductive setting. Specifically, during the training stage, we are provided with a graph  $\mathcal{G}_T = (\mathcal{V}_T, \mathcal{E}_T, \mathbf{X}_T)$ . We use  $\mathcal{V}_C \subseteq \mathcal{V}_T$  and  $\mathcal{V}_B \subseteq \mathcal{V}_T$  to denote the clean node set and backdoored node set, respectively. A node  $v_i \in \mathcal{V}_C$  is clean and labeled with the clean label  $y_i$ , whereas a node  $v_j \in \mathcal{V}_B$  is backdoored and labeled with the target label  $y_t$ . The set  $\mathcal{V}_T \setminus (\mathcal{V}_C \cup \mathcal{V}_B)$  denote the unlabeled nodes. The set of edges linking  $v_i \in \mathcal{V}_B$  and the trigger  $g_i$  is denoted as  $\mathcal{E}_B \in \mathcal{E}_T$ . During the inference stage, we are given an unseen graph  $\mathcal{G}_U = (\mathcal{V}_U, \mathcal{E}_U, \mathbf{X}_U)$  where  $\mathcal{V}_U = \mathcal{V}_{UC} \cup \mathcal{V}_{UB}$ . A node  $v_i \in \mathcal{V}_{UC}$  is clean, while a node  $v_j \in \mathcal{V}_{UB}$  is backdoored. Notably,  $\mathcal{G}_U$  is disjoint from the training graph  $\mathcal{G}_T$ , meaning  $\mathcal{V}_U \cap \mathcal{V}_T = \emptyset$ . The set of edges linking  $v_j \in \mathcal{V}_{UB}$  and the trigger  $g_j$  is denoted by  $\mathcal{E}_{UB} \in \mathcal{E}_U$ . The neighbors of node  $v_i$  are denoted as  $\mathcal{N}(i)$ .
+
+**Threat Model.** The attacker aims to add backdoor triggers, i.e., nodes or subgraphs, to a small set of target nodes  $\mathcal{V}_B$  in the training graph and label them as a target class  $y_t$ , so that a GNN trained on the poisoned graph will (i) memorize backdoor triggers and be misguided to classify nodes attached with triggers as  $y_t$ ; and (ii) behave normally for clean nodes without triggers attached. Specifically, given  $\mathcal{V}_B \in \mathcal{V}$  as a set of target nodes, the attacker attaches the crafted triggers  $g_i = (\mathbf{X}_i^g, \mathbf{A}_i^g)$  to the node  $v_i \in \mathcal{V}_B$  and get poisoned node  $\tilde{v}_i = a(v_i, g_i)$ , where  $a(\cdot)$  is the attachment operation. Then, the attacker assigns  $\mathcal{V}_B$  with target class  $y_t$  to form backdoored graph  $\mathcal{G}_T$ .
+
+**Defender’s Knowledge and Capability.** During the training phase, the defender has access to the backdoored graph  $\mathcal{G}_T$  to train a classifier for node classification. However, the defender lacks information about which nodes belong to the backdoor node set  $\mathcal{V}_B$  and the target class  $y_t$ . During the inference phase, the defender is presented with an unseen backdoored graph  $\mathcal{G}_U$  for node classification.
+
+**Graph Backdoor Defense.** With the above description, our defense problem is formally defined as: *Given a backdoored graph  $\mathcal{G}_T$ , we aim to train a backdoor-free GNN model  $f$  on  $\mathcal{G}_T$  so that it can defend against backdoor triggers during inference on an unseen backdoored graph  $\mathcal{G}_U$ , while maintaining accuracy on clean data. This is formally defined as  $\min_f \sum_{v_i \in \mathcal{V}_{UC}} l(f(v_i), y_i) - \sum_{v_j \in \mathcal{V}_{UB}} l(f(\tilde{v}_j), y_t)$ , where  $l$  is the classification loss.*
+
+### 3.2 PREDICTION VARIANCE CAUSED BY TRIGGER EDGE DROPPING
+
+Generally, graph backdoor attacks establish an edge between a trigger and a target node (Xi et al., 2021; Dai et al., 2023; Zhang et al., 2021), which means the backdoor attack will fail if the edge linking the trigger and the target node is dropped. Furthermore, an explicit requirement for backdoor attacks is that the backdoored GNN model  $f_b$  behaves normally for clean nodes without triggers attached. Based on the analysis above, we make an *assumption*: given a backdoored graph  $\mathcal{G}_T$ , if the trigger edge  $e_i \in \mathcal{E}_B$  linking the target node  $v_i \in \mathcal{V}_B$  and trigger  $g_i$  is dropped, the prediction logits of the backdoored model for the poisoned target node  $v_i$  will typically change significantly, compared to the prediction change on the nodes connected by clean edges  $e_j \in \mathcal{E}_T \setminus \mathcal{E}_B$  when these edges  $e_j$  are dropped.
+
+To empirically verify our assumption, we conduct the following experiments: Given a backdoored graph, we first pretrain a backdoored model on this graph. For each node, we then iteratively drop each of its neighbors one by one and measure the prediction variance caused by dropping trigger edges  $\mathcal{E}_B$  and clean edges  $\mathcal{E}_T \setminus \mathcal{E}_B$ , respectively. We perform experiments on OGB-arxiv (Hu et al., 2020) with 565 triggers. The attack method is DPGBA (Zhang et al., 2024). The model architecture is a 2-layer GCN (Kipf & Welling, 2016). From the results shown in Fig. 1 (a), it is evident that dropping adversarial edge connecting backdoor trigger will result in a much larger prediction variance than dropping clean edges. More results on other datasets can be found in Appendix B.
+
+Thus, an intuitive method for identifying a backdoor trigger or poisoned target node is to examine each edge individually. For instance, in a 2-layer GCN (Kipf & Welling, 2016), we remove one of its neighbors at a time for each node and conduct inference based on the remaining 2-hop neighbors. By observing prediction changes with each neighbor removal, we estimate the likelihood of an edge being linked to the backdoor trigger: greater prediction change indicates a higher probability.
+
+![Figure 1: Prediction variance caused by dropping trigger edges and clean edges. The figure contains two histograms. (a) Single Edge: The x-axis is 'Prediction Variance' from 0.0 to 0.4, and the y-axis is 'Percentage (%)' from 0 to 80. The 'Clean Edges' (blue) distribution is concentrated near 0.0, while the 'Trigger Edges' (orange) distribution is spread out, peaking around 0.1. (b) Two Edges: The x-axis is 'Prediction Variance' from 0.00 to 0.10, and the y-axis is 'Percentage (%)' from 0 to 100. The 'Clean Edges' (blue) distribution is concentrated near 0.00, while the 'Trigger Edges' (orange) distribution is spread out, peaking around 0.01.](9ccd03fe518c562a3fe2d3119f50935e_img.jpg)
+
+Figure 1: Prediction variance caused by dropping trigger edges and clean edges. The figure contains two histograms. (a) Single Edge: The x-axis is 'Prediction Variance' from 0.0 to 0.4, and the y-axis is 'Percentage (%)' from 0 to 80. The 'Clean Edges' (blue) distribution is concentrated near 0.0, while the 'Trigger Edges' (orange) distribution is spread out, peaking around 0.1. (b) Two Edges: The x-axis is 'Prediction Variance' from 0.00 to 0.10, and the y-axis is 'Percentage (%)' from 0 to 100. The 'Clean Edges' (blue) distribution is concentrated near 0.00, while the 'Trigger Edges' (orange) distribution is spread out, peaking around 0.01.
+
+Figure 1: Prediction variance caused by dropping trigger edges and clean edges.
+
+{3}------------------------------------------------
+
+However, this method has several issues: (i) *Scalability*: For graphs with high average degree, this method is computationally expensive. Specifically, for an  $L$ -layer GCN, the time complexity is  $\mathcal{O}(LNd^L M(d + M))$ , where  $d$  is the average degree,  $N$  is the number of nodes, and  $M$  denotes the feature dimension. The analysis is in Appendix C. As  $d$  grows, the time complexity grows exponentially with the power  $L$ , making it impractical for dense graphs. (ii) *Utility*: When the backdoor trigger is a subgraph with multiple edges linking it to a target node, examining each edge individually becomes ineffective. As shown in Fig. 1 (b), when two edges linking a trigger and a target node, on the OGB-arxiv dataset, most of the prediction variance caused by dropping trigger edges shows similar values to those caused by dropping clean edges, rendering the intuitive method ineffective.
+
+Therefore, while prediction variance caused by edge dropping is a crucial indicator for identifying poisoned nodes or backdoor triggers, it is essential to develop a method that can (i) accurately identify poisoned nodes, even when multiple edges connect a trigger to a target node; and (ii) reduce the time complexity to scale linearly with the average degree, thereby improving scalability.
+
+**Vulnerability of Clean Model to Backdoor Triggers.** Even if we can remove backdoor triggers from the training dataset, a graph backdoor trigger can still potentially lead to a successful attack as the attacker can craft a backdoor trigger that mimics the neighbor of nodes (Zhang et al., 2024) from the target class. To verify this, we adopt the DPGBA (Zhang et al., 2024) attack method and conduct experiments by removing the backdoor triggers from the training dataset. We then train a 2-layer GCN on this clean dataset and report the attack success rate (ASR) on the test dataset, as shown in Table 1. The Random ASR is calculated by  $\frac{1}{C}$  as a reference, where  $C$  is the number of classes for each dataset. As shown in the table, even when the model is trained on a clean dataset, it can still react to a backdoor trigger that mimics the neighbor of nodes from the target class. Thus, simply removing the backdoor triggers from the training dataset is insufficient to defend against graph backdoor attacks.
+
+|  | Cora | OGB-arxiv |
+|-|-|-|
+| Rand. ASR | 14.29 | 2.5 |
+| ASR | <b>34.72</b> | <b>5.4</b> |
+
+## 4 METHODOLOGY
+
+Our preliminary analysis shows that (1) removing adversarial edges linking triggers and poisoned target nodes typically results in higher prediction variance for poisoned target nodes; (2) simply removing backdoor triggers from the training dataset is insufficient to protect against backdoor triggers that mimic the distribution of neighboring nodes from the target class. To utilize the above information and solve our problem, we face two challenges: (1) How to devise an efficient method to find poisoned target nodes? (2) How to minimize the impact of backdoor triggers without degrading the clean accuracy? To address the above challenges, a novel framework RIGBD is proposed. Specifically, to address the first challenge, we theoretically and empirically verify that random edge dropping is an efficient way to distinguish the poisoned target nodes from clean nodes. To address the second challenge, we propose to minimize the prediction confidence of poisoned target nodes on the target class. This encourages the model to counteract the impact of the trigger. Next, we give the details of each component.
+
+![Figure 2: Framework of RIGBD. The diagram illustrates three stages: Stage 1: Pre-train, Stage 2: Identify Poisoned Target Nodes, and Stage 3: Robust GNN Training. Stage 1 shows a backdoored graph G_T being processed by a backdoored model f_theta to produce a loss L_theta. Stage 2 involves random edge dropping on the graph, leading to a backdoored model f_theta that identifies poisoned target nodes. Stage 3 shows the robust GNN training process, where the model f is trained on the identified poisoned target nodes. A legend indicates: blue circle for Unlabeled/Labeled Nodes, orange circle for Trainable, blue star for Frozen, red circle for Candidate Poisoned Nodes, and a dashed box for Trigger Graph.](0c9723d1620cf51bc2b7a380ce7e23c0_img.jpg)
+
+Figure 2: Framework of RIGBD. The diagram illustrates three stages: Stage 1: Pre-train, Stage 2: Identify Poisoned Target Nodes, and Stage 3: Robust GNN Training. Stage 1 shows a backdoored graph G\_T being processed by a backdoored model f\_theta to produce a loss L\_theta. Stage 2 involves random edge dropping on the graph, leading to a backdoored model f\_theta that identifies poisoned target nodes. Stage 3 shows the robust GNN training process, where the model f is trained on the identified poisoned target nodes. A legend indicates: blue circle for Unlabeled/Labeled Nodes, orange circle for Trainable, blue star for Frozen, red circle for Candidate Poisoned Nodes, and a dashed box for Trigger Graph.
+
+Figure 2: Framework of RIGBD
+
+### 4.1 IDENTIFYING POISONED TARGET NODES BY RANDOM EDGE DROPPING
+
+To overcome the scalability and utility issues of the intuitive method of dropping each edge individually, we propose a novel random edge dropping framework. Specifically, we define a randomized edge drop noise  $\epsilon$  for adjacency matrix  $\mathbf{A}$  that removes each existing edge with the probability  $\beta$  as
+
+$$P(\epsilon_{ij} = 0 | \mathbf{A}_{ij} = 0) = 1, P(\epsilon_{ij} = 1 | \mathbf{A}_{ij} = 1) = \beta, P(\epsilon_{ij} = 0 | \mathbf{A}_{ij} = 1) = 1 - \beta, \quad (1)$$
+
+where  $\epsilon_{ij} = 1$  means dropping edge  $e_{ij}$ . We denote  $\mathbf{A} \oplus \epsilon$  as the perturbed graph, with  $\oplus$  the element-wise XOR operator. Given a backdoored graph  $\mathcal{G}_T$  and corresponding adjacency matrix
+
+{4}------------------------------------------------
+
+**A.** we first train the backdoored node classifier  $f_b$  on this poisoned graph  $\mathcal{G}_T$  and get the prediction logits  $\mathbf{p}_i$  for each node  $v_i \in \mathcal{V}_L$ , i.e.,  $\mathbf{p}_i = f_b(\mathbf{A}; v_i)$ . Then, we independently add random noise  $\epsilon$  to the original adjacency matrix  $\mathbf{A}$  for  $K$  times using the operation  $\mathbf{A} \oplus \epsilon$ , resulting in the noisy matrices  $\mathbf{A}_1, \dots, \mathbf{A}_K$ . Similarly, we obtain the prediction logits  $\mathbf{p}_i^k = f_b(\mathbf{A}_k; v_i)$  for node  $v_i$  on each perturbed graph. Then, the prediction variance of node  $v_i$  against random edge dropping is:
+
+$$s(i) = \sum_{k=1}^K \text{KL}(\mathbf{p}_i, \mathbf{p}_i^k), \quad (2)$$
+
+where  $\text{KL}(\mathbf{p}_i, \mathbf{p}_i^k)$  denotes Kullback-Leibler divergence between  $\mathbf{p}_i$  and  $\mathbf{p}_i^k$ . With an appropriate  $K$  and  $\beta$ , it is highly likely that an edge connecting the backdoor trigger will be removed in one or more of the perturbed adjacency matrices, causing significant prediction variance for poisoned nodes.
+
+However, it is unclear whether this method can also lead to large prediction variance for clean nodes, potentially compromising our ability to differentiate between poisoned target nodes and clean ones. To address this concern, we propose to obtain each node representation only based on its neighbors. Specifically, when performing inference to obtain the prediction logits  $\mathbf{p}_i$  and  $\mathbf{p}_i^k$  (before and after random edge dropping), the operation in each layer can be written as:
+
+$$\mathbf{H}^{(l+1)} = \sigma \left( \tilde{\mathbf{D}}^{-\frac{1}{2}} \tilde{\mathbf{A}} \tilde{\mathbf{D}}^{-\frac{1}{2}} \mathbf{H}^{(l)} \mathbf{W}^{(l)} \right), \quad (3)$$
+
+where  $\mathbf{A}$  is the adjacency matrix without self-connections. In contrast, GCN (Kipf & Welling, 2016) obtain node representations by  $\mathbf{H}^{(l+1)} = \sigma(\tilde{\mathbf{D}}^{-\frac{1}{2}}(\mathbf{A} + \mathbf{I})\tilde{\mathbf{D}}^{-\frac{1}{2}}\mathbf{H}^{(l)}\mathbf{W}^{(l)})$  where  $\mathbf{I}$  is the identity matrix.
+
+We adopt the graph convolution strategy in Eq. 3 to get node representations for the following reasons: (1) For clean nodes, as each neighbor has the same drop ratio  $\beta$ , in expectation, the node representation is unchanged because the proportion of the expected contribution of each neighbor's features to the node representation is maintained. Thus, the expectation of prediction variance for clean nodes tends to be small. In contrast, if we include the attributes of the central node, the expectation of the node representation will focus more on the central node after random edge dropping, making the prediction variance unpredictable. We will analyze further in Theorem 1. (2) For poisoned target node, as backdoor triggers are designed to attack various types of targets, once the trigger exists after random edge dropping, it will still lead to a successful attack, regardless of whether the node representations are obtained only based on neighbors or also consider the node itself. However, if the trigger is dropped, the model will exhibit a large prediction variance. In cases where all the neighbors of a central node are dropped, we cancel the edge drop operation for that node and retain its original neighbors. Notably, while the attributes of the central node are important for accurate classification, our focus here is on testing the prediction variance and identifying poisoned nodes. Once target nodes are identified, various GNNs can be used to train a classifier with our robust loss in Eq. 6.
+
+To prove that our method of randomized edge dropping can effectively distinguish poisoned target nodes from clean nodes, we make the following assumptions on graph and propose theorems.
+
+**Assumptions on Graphs.** Following (Dai et al., 2022b; Ma et al., 2021a), we consider a graph  $\mathcal{G}$ , where each node  $v_i$  has features  $\mathbf{x}_i \in \mathbb{R}^m$ , a label  $y_i$  and  $\text{deg}(i)$  denotes the number of its neighbors. We assume that: (1) The feature of node  $v_i$  is sampled from the feature distribution  $F_{y_i}$  that depends on the label  $y_i$  of the node, i.e.,  $\mathbf{x}_i \sim F_{y_i}$ . (2) Feature dimensions of  $\mathbf{x}_i$  are independent to each other; (3) The features in  $\mathbf{X}$  are bounded by a positive scalar  $B$ , i.e.,  $\max_{i,j} |\mathbf{X}[i,j]| \leq B$ .
+
+**Theorem 1.** Consider a graph  $\mathcal{G} = \{\mathcal{V}, \mathcal{E}, \mathbf{X}\}$  following Assumptions (1)-(3). For clean node  $v_i \in \mathcal{V}$  and its neighbors  $\mathcal{N}(i)$ , the expectation of the pre-activation output of a single operation defined in Eq. 3 is given by  $\mathbb{E}[\mathbf{h}_i]$ . Then the expectation of the pre-activation output of a single operation defined in Eq. 3 after random edge dropping is given by  $\mathbb{E}[\mathbf{h}_i^k] = \mathbb{E}[\mathbf{h}_i]$ .
+
+The proof is in Appendix D.1. Theorem 1 shows that, in expectation, the output embedding of a node remains unchanged before and after random edge dropping when applying the layer operation defined in Eq. 3, regardless of the drop ratio. However, in practice, conducting numerous experiments is not feasible. Thus, we analyze the distance between the observed node embeddings after random edge dropping and the expectation of node embeddings without perturbation.
+
+**Theorem 2.** Consider a graph  $\mathcal{G} = \{\mathcal{V}, \mathcal{E}, \mathbf{X}\}$  following Assumptions (1)-(3). Let  $\mathbf{h}_i$  and  $\mathbf{h}_i^k$  denote the clean node embedding before and after the  $k$ -th random edge dropping, respectively, and
+
+{5}------------------------------------------------
+
+$\deg(i)_k$  represent the corresponding degree of node  $v_i$ . The probability that the distance between the observation  $\mathbf{h}_i^k$  and the expectation of  $\mathbf{h}_i$  is larger than  $t$  is bounded by:
+
+$$\mathbb{P} \left( \left\| \mathbf{h}_i^k - \mathbb{E}[\mathbf{h}_i] \right\|_2 \geq t \right) \leq 2 \cdot M \cdot \exp \left( - \frac{\deg(i)_k t^2}{2\rho^2(\mathbf{W})B^2M} \right), \quad (4)$$
+
+where  $M$  denotes the feature dimension and  $\rho^2(\mathbf{W})$  denotes the largest singular value of  $\mathbf{W}$ .
+
+The proof is in Appendix D.2. Theorem 2 shows that the distance between the observed node embeddings after random edge dropping and the expectation of node embeddings without perturbation is small with a high probability. Furthermore, nodes with higher degrees are more likely to exhibit less variation in their embeddings. This highlights the effectiveness of our method of random edge dropping, particularly in dense graphs, compared to the method that drops each edge individually.
+
+Based on the above analysis, we theoretically demonstrate that our method, which involves random edge dropping and obtaining node representations through graph convolution as defined in Eq. 3, results in small changes to node representations. Thus, for **clean nodes**, this stability ensures that the prediction output is consistent as the backdoored model does not exhibit sensitivity towards any particular clean neighbors. However, for **poisoned target nodes**, the scenario differs. Despite the stability in their node representations after random edge dropping, the last-layer classifier's sensitivity (Chen et al., 2018) to the presence or absence of the backdoor trigger leads to a significant variance in prediction outcomes compared to clean nodes. This is verified in Sec. 3.2.
+
+Next, we analyze the expected number of times the backdoor trigger  $g_i$  can be removed from the neighbor of a poisoned node  $v_i$  after  $K$  iterations of random edge dropping. This also indicates the expected number of times the poisoned node  $v_i$  demonstrates a larger prediction variance.
+
+**Theorem 3.** *Without loss of generality, we consider the case where there is only one edge connecting a backdoor trigger to a target node. Let  $\beta$  denote the random edge dropping ratio, and  $K$  be the total number of iterations for random edge dropping and conducting inference on the perturbed graph. For a poisoned node  $v_i$  and a trigger  $g_i$ , the expected number of times the poisoned node  $v_i$  demonstrates large prediction variance is given as  $\mathbb{E}(g_i)_d = K \cdot \beta$ .*
+
+Theorem 3 demonstrates that this expected number grows fast with a certain drop ratio. Since Theorem 1 indicates that, in expectation, the output embedding of a clean node remains unchanged before and after perturbation, regardless of the drop ratio, we can use a high drop ratio, e.g.  $\beta = 0.5$ , to achieve a fast increase in the expected number of times the poisoned node  $v_i$  demonstrates large prediction variance. Our experimental results in Section 5.4 show that with  $\beta = 0.5$ , even a small value of  $K$ , e.g.  $K = 5$ , can already identify most of the poisoned target nodes from the clean ones.
+
+To empirically verify that our method of random edge dropping can efficiently distinguish poisoned nodes from clean nodes, we adopt the attack method DPGBA and conduct experiments on Cora and OGB-arxiv to show the prediction variance of poisoned nodes and clean nodes after random edge dropping. The details of the experiment settings and the results are in Appendix E. From the results, we observe that: **(i)** Our method consistently results in higher prediction variance for poisoned nodes, enabling the distinction between poisoned and clean nodes. **(ii)** Even when two edges link a backdoor trigger to a poisoned node, our method maintains high prediction variance for most poisoned nodes. This showcases the superior performance of our method compared to the intuitive approach of dropping each edge individually. Furthermore, the time complexity of our method scales linearly with  $K$ , which is typically small, whereas the intuitive method scales exponentially with  $d^L$ , leading to significantly higher computational costs as  $d$  increases. We also compare the prediction variance of low-degree nodes from both homophilic and heterophilic graphs against poisoned nodes in Appendix F.
+
+**Identify Target Nodes and Target Class.** Next, we give details of how we determine the target class  $y_t$  and identify the candidate poisoned target node set  $\mathcal{V}_s$ . Given  $s(i)$  as the prediction variance for each node  $v_i \in \mathcal{V}_T$  with label  $y_i$ , we sort nodes by  $s(i)$  in descending order and form the set  $\mathcal{D}' = \{(s_{\sigma(1)}, y_{\sigma(1)}), (s_{\sigma(2)}, y_{\sigma(2)}), \dots, (s_{\sigma(n)}, y_{\sigma(n)})\}$ , where  $\sigma$  is a permutation of  $\{1, 2, \dots, n\}$  such that the sorted values satisfy  $s_{\sigma}(1) > s_{\sigma}(2) > \dots > s_{\sigma}(n)$ . Then we determine the target class as the label of the node with the largest prediction variance, i.e.,  $y_t = y_{\sigma(1)}$ . Let  $j$  be the index of the first entry in  $\mathcal{D}'$  such that  $y_{\sigma(j)} \neq y_t$  and  $y_{\sigma(j+1)} \neq y_t$ . The threshold of prediction variance to select candidate poisoned target nodes is defined as:
+
+$$\tau = s_{\sigma(j)} \quad \text{where} \quad j = \min \{k \mid y_{\sigma(k)} \neq y_t \text{ and } y_{\sigma(k+1)} \neq y_t, k = 1, 2, 3, \dots, n\}. \quad (5)$$
+
+{6}------------------------------------------------
+
+Then, we select nodes with prediction variance larger than the threshold  $\tau$  as candidates for poisoned target nodes, denoted as  $\mathcal{V}_s$ .
+
+### 4.2 BACKDOOR ROBUST GNN MODEL TRAINING
+
+Though random edge dropping can help identify the most poisoned target nodes, there are still some concerns. *First*, a small amount of poisoned target nodes might exhibit prediction variances similar to those of clean nodes, inevitably remaining within the graph. *Second*, as discussed in Section 3.2, merely eliminating backdoor triggers from the training set is insufficient to defend against backdoor triggers that mimic the neighbor distribution of nodes from the target class.
+
+An intuitive solution is to train a trigger detector capable of distinguishing clean nodes and backdoor triggers. Then, during inference on an unseen graph  $\mathcal{G}_U$ , the trigger detector is adopted to remove potential triggers. However, when the trigger is a subgraph, multiple nodes, and their interactions need to be considered simultaneously during training, complicating the process of training the trigger detector. Additionally, each time we are given an unseen graph, we need to run the trigger generator to perform inference on the entire graph first, increasing the computational cost.
+
+Thus, in our RIGBD, we propose directly training a backdoor robust GNN node classifier  $f$  on the training dataset  $\mathcal{V}_L$  by minimizing its prediction confidence on the target class  $y_t$  for poisoned nodes, thereby encouraging the model to counteract the impact of the backdoor triggers and be robust against backdoor attack. Specifically, given the selected poisoned target nodes  $\mathcal{V}_s \in \mathcal{V}_T$ , the objective function to train a backdoor robust GNN node classifier  $f$  is:
+
+$$\min_f \mathcal{L}_f = \sum_{v_i \in \mathcal{V}_s} \log f(v_i)_{y_t} + \sum_{v_j \in \mathcal{V}_L \setminus \mathcal{V}_s} \mathcal{L}(f(v_j), y_j), \quad (6)$$
+
+where  $f(v_i)_{y_t}$  denotes the prediction confidence of  $f$  for  $v_i$  on target class  $y_t$  and  $\mathcal{L}(f(v_j), y_j)$  is the cross entropy loss. The resulting classifier is robust against triggers as (i) We explicitly countermeasure the detected backdoors, making our model robust to backdoor. Though there might be target nodes not detected, they generally have smaller prediction variance, meaning that they have less impact on the training of  $f$ . As these triggers more or less have patterns similar to the detected ones, our training strategy implicitly mitigates their effects. (ii) For triggers that mimic the neighbor distribution of nodes from the target class, our model  $f$  is encouraged to explore the subtle differences between clean nodes from the target class and poisoned target nodes, thereby ensuring its clean accuracy. The training algorithm is in Appendix G.
+
+## 5 EXPERIMENTS
+
+In this section, we conduct experiments to answer the following research questions: **(Q1)** How effective is RIGBD in defending against graph backdoor attacks? **(Q2)** How is the performance of RIGBD in detecting poisoned nodes? **(Q3)** How do different drop ratios and different numbers of iterations of random edge dropping impact the performance of RIGBD?
+
+### 5.1 EXPERIMENTAL SETUP
+
+**Datasets.** We conduct experiments on three benchmark datasets widely used for node classification, i.e., Cora, Citeseer, Pubmed (Sen et al., 2008), Physics (Sinha et al., 2015), Flickr (Zeng et al., 2019) and OGB-arxiv (Hu et al., 2020). More details of the datasets are summarized in Appendix H.1.
+
+**Attack Methods.** To demonstrate the defense ability of our RIGBD, we evaluate RIGBD on 3 state-of-the-art graph backdoor attack methods, i.e., GTA (Xi et al., 2021), UGBA (Dai et al., 2023) and DPGBA (Zhang et al., 2024). The details of these attacks are given in Appendix H.2.
+
+**Compared Methods.** We implement the backdoor defense strategies Prune (Dai et al., 2023) and OD (Zhang et al., 2024). Additionally, three representative robust GNNs, i.e. RobustGCN (Zhu et al., 2019), GNNGuard (Zhang & Zitnik, 2020) and randomized smoothing (RS) (Wang et al., 2021) with various drop ratios are also selected. We also include ABL (Li et al., 2021a), which is a popular backdoor defense method in the image domain and aims to train clean models given backdoor-poisoned data. More details of these defense methods are given in Appendix H.3.
+
+**Evaluation Protocol.** Following existing representative graph backdoor attacks (Dai et al., 2023; Zhang et al., 2024), we split the graph into two disjoint subgraphs,  $\mathcal{G}_T$  and  $\mathcal{G}_U$ , with an 80 : 20 ratio.
+
+{7}------------------------------------------------
+
+Table 2: Results of backdoor defense.
+
+| Attacks | Defense | Cora |  | Citeseer |  | PubMed |  | Physics |  | Flickr |  | OGB-arxiv |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | ASR(%)↓ | ACC(%)↑ | ASR(%)↓ | ACC(%)↑ | ASR(%)↓ | ACC(%)↑ | ASR(%)↓ | ACC(%)↑ | ASR(%)↓ | ACC(%)↑ | ASR(%)↓ | ACC(%)↑ |
+| GTA | GCN | 98.98 | 82.58 | 100.00 | 73.70 | 93.09 | 85.18 | 96.42 | 89.30 | 88.45 | 41.23 | 75.34 | 65.76 |
+|  | GCNGuard | 40.22 | 78.52 | 55.23 | 63.55 | 26.93 | 81.68 | 43.87 | 78.72 | 0.00 | 40.40 | 0.04 | 62.58 |
+|  | RobustGCN | 90.46 | 80.37 | 95.31 | 73.79 | 93.12 | 81.68 | 95.47 | 94.84 | 85.42 | 42.26 | 70.95 | 56.08 |
+|  | Prune | 17.63 | 83.06 | 12.24 | 72.46 | 28.10 | 85.05 | 8.34 | 88.45 | 12.56 | 41.27 | 0.01 | 63.97 |
+|  | OD | 0.04 | 83.47 | 0.04 | 72.84 | 0.03 | 85.27 | 0.12 | 90.24 | 2.12 | 41.42 | 0.01 | 65.23 |
+|  | RS | 53.14 | 73.33 | 52.86 | 65.66 | 42.28 | 84.58 | 57.70 | 92.52 | 52.85 | 42.31 | 42.72 | 58.48 |
+|  | ABL | 19.93 | 81.85 | 13.09 | 73.19 | 16.18 | 83.92 | 16.82 | 92.06 | 17.54 | 41.46 | 11.28 | 64.24 |
+|  | RIGBD | 0.00 | 83.70 | 0.34 | 74.10 | 0.01 | 84.32 | 0.32 | 95.10 | 0.00 | 44.21 | 0.01 | 66.51 |
+| UGBA | GCN | 98.76 | 83.42 | 100.00 | 74.70 | 96.42 | 84.64 | 100.00 | 95.94 | 93.14 | 44.71 | 98.82 | 63.95 |
+|  | GCNGuard | 43.17 | 78.15 | 94.53 | 64.76 | 98.97 | 81.48 | 95.26 | 87.54 | 96.93 | 42.15 | 95.21 | 56.61 |
+|  | RobustGCN | 97.67 | 80.00 | 71.69 | 69.90 | 92.85 | 82.85 | 99.04 | 92.17 | 90.35 | 56.18 | 90.35 | 56.18 |
+|  | Prune | 98.89 | 82.66 | 97.68 | 74.35 | 92.87 | 85.09 | 94.67 | 93.87 | 91.43 | 43.65 | 93.07 | 62.58 |
+|  | OD | 0.03 | 83.65 | 0.06 | 73.80 | 0.01 | 85.19 | 0.02 | 95.36 | 0.15 | 43.57 | 0.01 | 65.35 |
+|  | RS | 54.24 | 70.37 | 50.34 | 69.88 | 44.41 | 84.68 | 47.77 | 94.29 | 20.69 | 42.18 | 40.30 | 58.76 |
+|  | ABL | 15.13 | 81.48 | 12.08 | 73.19 | 28.60 | 84.37 | 14.87 | 94.69 | 15.32 | 41.66 | 34.26 | 64.93 |
+|  | RIGBD | 0.01 | 84.81 | 0.00 | 73.80 | 0.01 | 85.13 | 0.12 | 95.71 | 0.00 | 43.66 | 0.01 | 65.21 |
+| DPGBA | GCN | 97.72 | 83.34 | 100.00 | 74.09 | 98.63 | 85.22 | 100.00 | 95.59 | 90.79 | 44.87 | 95.63 | 65.72 |
+|  | GCNGuard | 85.61 | 78.52 | 46.98 | 60.84 | 44.12 | 80.82 | 88.72 | 88.76 | 95.85 | 43.52 | 94.66 | 62.29 |
+|  | RobustGCN | 96.68 | 81.11 | 91.64 | 71.08 | 94.88 | 82.54 | 91.25 | 94.87 | 24.60 | 41.69 | 90.09 | 60.38 |
+|  | Prune | 91.82 | 85.28 | 94.80 | 73.21 | 88.64 | 85.13 | 94.27 | 94.73 | 88.96 | 44.75 | 90.47 | 65.53 |
+|  | OD | 94.33 | 83.58 | 98.42 | 73.66 | 91.32 | 85.12 | 98.72 | 95.48 | 90.42 | 43.63 | 93.30 | 65.47 |
+|  | RS | 51.29 | 69.63 | 50.34 | 71.08 | 45.43 | 85.40 | 48.19 | 95.30 | 27.94 | 42.21 | 41.18 | 58.44 |
+|  | ABL | 86.72 | 79.26 | 11.41 | 73.49 | 48.58 | 79.45 | 11.74 | 95.30 | 30.42 | 41.71 | 52.56 | 63.88 |
+|  | RIGBD | 0.01 | 85.19 | 0.33 | 73.79 | 0.03 | 84.56 | 0.21 | 95.79 | 0.00 | 43.78 | 0.00 | 65.24 |
+
+The graph  $\mathcal{G}_T$  is used to train the attacker. Then, the attacker selects target nodes  $\mathcal{V}_B$  and attaches triggers to these target nodes to form the backdoored graph  $\mathcal{G}_T$ . The number of triggers  $|\mathcal{V}_B|$  is set as 40, 80, 160, 160, 160 and 565 for Cora, Citeseer, PubMed, Physics, Flickr, and OGB-arxiv, respectively. The trigger size is limited to three nodes in all experiments. The defender trains a model on poisoned graph  $\mathcal{G}_T$ . Next, half of the nodes in  $\mathcal{G}_U$  are selected as poisoned nodes and are attached with backdoor triggers to test the attack success rate (ASR). The remaining nodes in  $\mathcal{G}_U$  are kept clean and used to test the clean accuracy (ACC). We also report the Recall and Precision of our method in identifying poisoned nodes. Recall is defined as the percentage of poisoned nodes among the candidate nodes identified, relative to all poisoned nodes. Precision is defined as the percentage of poisoned nodes among the candidate nodes identified. Our RIGBD deploys a 2-layer GCN as the model architecture. Each experiment is conducted 5 times and the average results are reported.
+
+### 5.2 PERFORMANCE OF DEFENSE
+
+To answer **Q1**, we compare RIGBD with the baseline defense methods across three datasets. The number of iterations for random edge dropping is set to  $K = 20$ , with a drop ratio of  $\beta = 0.5$ . We report ASR and ACC in Table 2. From the table, we observe: **(i)** Across all datasets and attack methods, RIGBD consistently achieves the lowest ASR score, typically close to 0%. Although defense methods such as Prune and OD perform well against GTA and UGBA attacks, they fail to defend against DPGBA, which generates in-distribution triggers. This indicates that RIGBD is highly effective in defending against various types of backdoor triggers and backdoor attacks. **(ii)** Our RIGBD achieves comparable or slightly better clean accuracy compared to the vanilla GCN. This indicates that our approach of random edge dropping typically leads to higher prediction variance for poisoned nodes, effectively identifying backdoor triggers. In cooperation with this precise identification of poisoned nodes, our strategy to train a backdoor robust model using Eq. 6 can significantly reduce the ASR while maintaining clean accuracy. Additional results on RS with varying drop ratios and RIGBD using different GNN architectures can be found in Appendix J.
+
+### 5.3 ABILITY TO DETECT POISONED NODES
+
+To answer **Q2**, we present the recall and precision of RIGBD in identifying poisoned nodes. Using the same setting as in Sec. 5.2, the results on OGB-arxiv are shown in Table 3. We also include
+
+Table 3: Results for the ability to detect poisoned nodes.
+
+| Attacks | Clean ACC | ASR | ACC | Recall | Precision |
+|-|-|-|-|-|-|
+| GTA | 65.8 | 0.01 | 66.51 | 84.9 | 90.3 |
+| UGBA | 65.8 | 0.01 | 65.21 | 95.6 | 96.3 |
+| DPGBA | 65.8 | 0.00 | 65.24 | 90.5 | 93.9 |
+
+the corresponding ASR and ACC to illustrate the correlation between detection ability and defense performance. Clean accuracy (Clean ACC), obtained from a model trained on the clean graph, is provided as a reference to evaluate the model’s performance on clean nodes. From the table, we observe the following: **(i)** Our RIGBD demonstrates consistently high precision, always over 90%, in detecting poisoned nodes across three attack methods, with detection recall always exceeding 80%. This indicates that our strategy of random edge dropping typically leads to higher prediction variance
+
+{8}------------------------------------------------
+
+![Figure 3: Hyperparameter Sensitivity Analysis and Ablation Study. (a) Heatmap of ASR, (b) Heatmap of Recall, (c) Heatmap of Precision, (d) Bar chart comparing ASR and ACC for RIGBD, RIGBDRE, and RIGBDAR.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 3 consists of four subplots. Subplots (a), (b), and (c) are heatmaps showing ASR, Recall, and Precision respectively, for different values of  $K$  (2, 5, 25, 50, 100) on the x-axis and  $\beta$  (0.1, 0.3, 0.5, 0.7, 0.9) on the y-axis. Subplot (d) is a bar chart comparing ASR and ACC for three methods: RIGBD (blue), RIGBDRE (orange), and RIGBDAR (green) for ASR, and RIGBD (blue), RIGBDRE (orange), and RIGBD (red) for ACC.
+
+Figure 3: Hyperparameter Sensitivity Analysis and Ablation Study. (a) Heatmap of ASR, (b) Heatmap of Recall, (c) Heatmap of Precision, (d) Bar chart comparing ASR and ACC for RIGBD, RIGBDRE, and RIGBDAR.
+
+Figure 3: Hyperparameter Sensitivity Analysis and Ablation Study.
+
+for poisoned nodes. **(ii)** Although the recall for the GTA attack method is 84.9%, we still achieve an ASR close to 0% while maintaining ACC. This verifies the stability of our strategy to train a robust node classifier using Eq. 6. Even when some poisoned nodes are not identified, it still efficiently helps the model unlearn the triggers. More results on other datasets are in Appendix L.
+
+### 5.4 HYPERPARAMETER ANALYSIS AND ABLATION STUDY
+
+**Hyperparameter Analysis.** To answer Q3, we conduct experiments to show how different drop ratios  $\beta$  and different numbers of iterations of random edge dropping  $K$  impact the performance of RIGBD. Specifically, we vary the value of  $K$  as  $\{2, 5, 25, 50, 100\}$ , and the values of  $\beta$  as  $\{0.1, 0.3, 0.5, 0.7, 0.9\}$ . The attack method used is DPGBA. The other settings are the same as the evaluation protocol in Sec. 5.1. The results on OGB-arxiv are shown in Fig. 3. From the figure, we observe: **(i)** Our RIGBD is stable in terms of ASR and Precision. Notably, when the drop ratio  $\beta = 0.1$  and  $K = 2$ , the recall of poisoned node detection is around 17.4%. However, we still achieve robust defense performance with 1.86% ASR. This is because our framework identifies the most efficient triggers that lead to large prediction variance and focuses on minimizing their impact. By doing so, the influence of less efficient triggers is inherently counteracted. In contrast, when we simply remove those 17.4% triggers from the dataset and train a normal GNN on the remaining dataset, the ASR is around 80%. **(ii)** As  $K$  increases, the recall also increases, empirically verifying our theorems that the clean nodes will have stable node embeddings and predictions. As  $\beta$  increases from 0.1 to 0.7, the recall also increases without a decrease in precision. When  $\beta = 0.9$ , only about 10% of edges remain in each iteration. Although the recall decreases slightly, we still achieve consistently high precision. This further shows the robustness of RIGBD against various chosen hyperparameters. More results on the hyperparameter analysis for ACC are in Appendix M.
+
+**Ablation Study.** To evaluate the effectiveness of random edge dropping, we replace it with the intuitive method of dropping edges individually, as described in Section 3.2, and obtain a variant named as RIGBDRE. We then conduct experiments focusing on scenarios where a backdoor trigger (subgraph) is linked to a poisoned node by two edges. To demonstrate the effectiveness of our robust training strategy, we implement a variant of our model, named RIGBDAR, which simply removes identified candidate poisoned nodes from the dataset and trains a GNN classifier with cross-entropy. We also implement a variant called RIGBDARE, which involves individually dropping each edge and eliminating candidate poisoned nodes. The number of iterations for random edge dropping is set to  $K = 20$ , with a drop ratio of  $\beta = 0.5$ . The attack method used is DPGBA. The dataset is OGB-arxiv. We report the ASR and ACC in Fig. 3. From the figure, we observe: **(i)** When two edges link a backdoor trigger to a target node, the intuitive method of dropping each edge individually fails to defend against this attack. Notably, RIGBDAR achieves an ASR almost 40% lower than RIGBDARE, highlighting that our random edge dropping is more efficient than dropping edges individually in identifying poisoned nodes. **(ii)** In cooperation with a robust training strategy, our RIGBD further achieves an ASR close to 0%. This underscores the superiority of our method in defending against various types of backdoor attacks. Additional results on the ablation study for the case where one edge links a trigger and a target node can be found in Appendix N.
+
+**Impact of Various Numbers of Triggers and Trigger Sizes.** The performance and analysis of RIGBD against various attack budgets and trigger sizes are provided in Appendix O and P.
+
+## 6 CONCLUSION
+
+In this paper, we first empirically show that poisoned nodes exhibit high prediction variance with edge dropping. We then propose random edge dropping, supported by theoretical analysis, to efficiently
+
+{9}------------------------------------------------
+
+and precisely identify poisoned nodes. Additionally, we introduce a robust training strategy to develop a backdoor-robust GNN model, even if some poisoned nodes remain unidentified. Extensive experiments demonstrate that our method accurately detects poisoned nodes, significantly reduces the attack success rate, and maintains clean accuracy against various graph backdoor attacks.
+
+## ACKNOWLEDGMENT
+
+This material is based upon work supported by, or in part by the Army Research Office (ARO) under grant number W911NF-21-10198, the Department of Homeland Security (DHS) under grant number 17STCIN00001-05-00, and Cisco Faculty Research Award. The views and conclusions contained in this material are those of the authors and should not be interpreted as necessarily representing the official policies, either expressed or implied, of the funding agencies.
+
+## REFERENCES
+
+- Derrick Blakely, Jack Lanchantin, and Yanjun Qi. Time and space complexity of graph convolutional networks. *Accessed on: Dec, 31:2021*, 2021.
+- Bryant Chen, Wilka Carvalho, Nathalie Baracaldo, Heiko Ludwig, Benjamin Edwards, Taesung Lee, Ian Molloy, and Biplav Srivastava. Detecting backdoor attacks on deep neural networks by activation clustering. *arXiv preprint arXiv:1811.03728*, 2018.
+- Huili Chen, Cheng Fu, Jishen Zhao, and Farinaz Koushanfar. Profip: Targeted trojan attack with progressive bit flips. In *Proceedings of the IEEE/CVF International Conference on Computer Vision*, pp. 7718–7727, 2021.
+- Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep learning systems using data poisoning. *arXiv preprint arXiv:1712.05526*, 2017.
+- Enyan Dai, Wei Jin, Hui Liu, and Suhang Wang. Towards robust graph neural networks for noisy graphs with sparse labels. In *Proceedings of the fifteenth ACM international conference on web search and data mining*, pp. 181–191, 2022a.
+- Enyan Dai, Shijie Zhou, Zhimeng Guo, and Suhang Wang. Label-wise graph convolutional network for heterophilic graphs. In *Learning on Graphs Conference*, pp. 26–1. PMLR, 2022b.
+- Enyan Dai, Minhua Lin, Xiang Zhang, and Suhang Wang. Unnoticeable backdoor attacks on graph neural networks. In *Proceedings of the ACM Web Conference 2023, WWW '23*. ACM, April 2023. doi: 10.1145/3543507.3583392. URL <http://dx.doi.org/10.1145/3543507.3583392>.
+- Enyan Dai, Tianxiang Zhao, Huais heng Zhu, Junjie Xu, Zhimeng Guo, Hui Liu, Jiliang Tang, and Suhang Wang. A comprehensive survey on trustworthy graph neural networks: Privacy, robustness, fairness, and explainability. *Machine Intelligence Research*, 21(6):1011–1061, 2024.
+- Khoa Doan, Yingjie Lao, and Ping Li. Backdoor attack with imperceptible input and latent modification. In M. Ranzato, A. Beygelzimer, Y. Dauphin, P.S. Liang, and J. Wortman Vaughan (eds.), *Advances in Neural Information Processing Systems*, volume 34, pp. 18944–18957. Curran Associates, Inc., 2021. URL [https://proceedings.neurips.cc/paper\\_files/paper/2021/file/9d99197e2ebf03fc388d09f1e94af89b-Paper.pdf](https://proceedings.neurips.cc/paper_files/paper/2021/file/9d99197e2ebf03fc388d09f1e94af89b-Paper.pdf).
+- Wenqi Fan, Yao Ma, Qing Li, Yuan He, Eric Zhao, Jiliang Tang, and Dawei Yin. Graph neural networks for social recommendation. In *The world wide web conference*, pp. 417–426, 2019.
+- Tianyu Gu, Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Evaluating backdooring attacks on deep neural networks. *IEEE Access*, 7:47230–47244, 2019.
+- Will Hamilton, Zhitao Ying, and Jure Leskovec. Inductive representation learning on large graphs. *Advances in neural information processing systems*, 30, 2017.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,324 @@
+
+
+{0}------------------------------------------------
+
+# PERTURBOLLAVA: REDUCING MULTIMODAL HALLUCINATIONS WITH PERTURBATIVE VISUAL TRAINING
+
+Cong Chen<sup>1,\*</sup>, Mingyu Liu<sup>1,\*</sup>, Chencheng Jing<sup>3</sup>, Yizhou Zhou<sup>2</sup>,  
+Fengyun Rao<sup>2</sup>, Hao Chen<sup>1</sup>, Bo Zhang<sup>1</sup>, Chunhua Shen<sup>3,1</sup>
+
+<sup>1</sup> Zhejiang University <sup>2</sup> WeChat Group <sup>3</sup> Zhejiang University of Technology
+
+## ABSTRACT
+
+This paper aims to address the challenge of hallucinations in Multimodal Large Language Models (MLLMs) particularly for dense image captioning tasks. To address the challenge, we identify the current lack of a metric that finely measures the quality of the caption at the concept level. We hereby introduce *HalfScore*, a novel metric built upon the language graph that is designed to evaluate both the accuracy and completeness of dense captions at a granular level. Additionally, we identify the root cause of hallucination as the model’s over-reliance on its language prior. To address this, we propose *PerturboLLaVA*, which reduces the model’s reliance on the language prior by incorporating adversarially perturbed text during training. This method enhances the model’s focus on visual inputs, effectively reducing hallucinations and producing accurate, image-grounded descriptions without incurring additional computational overhead. *PerturboLLaVA* significantly improves the fidelity of generated captions, outperforming existing approaches in handling multimodal hallucinations and achieving improved performance across general multimodal benchmarks.
+
+## 1 INTRODUCTION
+
+Multimodal large language models (MLLMs) (Liu et al., 2024b; Zhu et al., 2023; Dai et al., 2023; Bai et al., 2023; Zhang et al., 2023; Lu et al., 2024a; Zhou et al., 2024) have achieved significant strides in complex visual tasks by integrating the world knowledge and reasoning capabilities of large language models (LLMs). Nonetheless, hallucination (Liu et al., 2023a; Zhou et al., 2023; Yin et al., 2023; Wang et al., 2023a) issue persists in these models, and even the most capable multimodal models often respond with texts that do not accurately reflect the provided visual content. Notably, scaling up model parameters and training data has not proven effective in mitigating this issue for MLLMs, unlike for their unimodal language counterparts.
+
+In this paper, we focus on addressing the problem of hallucination in the context of dense image captioning (Liu et al., 2024b; Chen et al., 2023; 2024), which requires a comprehensive and detailed description of every aspect of an image. Dense image captioning exposes hallucinations more acutely, as models must generate rich and detailed captions for complex scenes while ensuring fidelity to the visual content. Hallucinations undermine the reliability of MLLMs in applications that require precise and faithful visual descriptions. To tackle the hallucination challenge in MLLMs, we recognize the need for a robust quantitative metric that accurately reflects caption quality regarding hallucination. Hence, we introduce *HalfScore*, a novel metric providing a more granular and comprehensive evaluation of hallucinations specific to dense captioning. *HalfScore* measures both the accuracy and completeness of dense captions by identifying the incorrect elements and assessing the missing details, offering a balanced view of the model’s performance. To achieve this, we propose to build the language graph that captures the main concepts along with their relationships, and compute its discrepancy against the ground truth. *HalfScore* aggregates the precision and recall to model the accuracy and completeness of dense captioning results. Compared to previous hallucination scores (Li et al., 2023b; Guan et al., 2024), the proposed *HalfScore* offers a more fine-grained and holistic evaluation, serving as a valuable guide when developing the hallucination suppression method. We further analyze the common cases plagued with hallucinations, and conjecture that the issue in MLLMs comes from the over-reliance on the model’s pretrained linguistic knowledge. As shown
+
+{1}------------------------------------------------
+
+![Figure 1: Four image-text pairs showing multimodal model hallucinations. Top-left: A black and white cat lying on a black backpack on a couch. Top-right: A desk with a computer setup, keyboard, mouse, and books. Bottom-left: A close-up of a pizza on a dining table. Bottom-right: A busy city street at night with traffic lights and a train.](c803f6f6e2c49429d2951832bd0f208d_img.jpg)
+
+The image features a black and white cat lying on a black backpack, comfortably resting on top of a couch. In addition to the cat and the backpack, there is a couch located in the background, and a couple of books can be seen placed nearby. A person is also present in the scene, standing close to the cat and the backpack, possibly observing or interacting with the feline.
+
+The image features a desk with a computer setup, including a monitor, a keyboard, and a mouse. On the desk, there is also a pair of scissors lying next to the keyboard. In addition to the computer setup, there are several books positioned around the desk. The presence of these books suggests that the person using the desk might be engaged in various activities, such as work, study, or leisure reading.
+
+The image features a close-up view of a partially eaten pizza on a dining table. The pizza is topped with various ingredients, including mushrooms, ham, and cheese. A fork can be seen resting on the pizza, indicating that someone has been enjoying the meal. In addition to the pizza, there is a knife placed on the table, likely used for cutting and serving the pizza.
+
+The image depicts a busy city at night, with multiple traffic lights and street lights illuminating the area. The traffic lights are positioned at various heights and locations around the intersection, ensuring clear visibility for drivers and pedestrians. There is a train passing through the intersection, adding to the bustling atmosphere of the scene. Several cars and a bus are also present in the area, contributing to the nighttime traffic.
+
+Figure 1: Four image-text pairs showing multimodal model hallucinations. Top-left: A black and white cat lying on a black backpack on a couch. Top-right: A desk with a computer setup, keyboard, mouse, and books. Bottom-left: A close-up of a pizza on a dining table. Bottom-right: A busy city street at night with traffic lights and a train.
+
+Figure 1: The multimodal model is prone to hallucinate text due to the inherit language bias. Here, the **hallucinated** text is induced by the **preceding concepts** generated by the language model.
+
+in Figure 1, as more texts are produced, the multimodal model gradually deviates from multimodal generation to unimodal mode, which favors text generation based on the preceding language patterns while overlooking the actual visual information. For example, when presented with an image of a green banana, a model has the tendency to describe it as yellow because of the common knowledge that ripe bananas are typically yellow. In fact, concurrent MLLMs are obtained by continuous training from a pre-trained LLM and are generally equipped with a strong language bias.
+
+Inspired by this, we propose a simple and effective training strategy that reduces the model’s heavy dependence on the language prior by incorporating adversarially perturbed text during training. Specifically, we introduce carefully designed perturbations that aligns with the general knowledge but conflict with the visual content, intentionally misleading the model based on its language prior. For example, we might introduce the perturbation “As bananas ripen, their color gradually turns yellow” before asking about the color of a green banana in the image. This perturbative training enforces the model to scrutinize the image content when predicting every token, rather than hallucinating contents from the text hints. Essentially, our method adjusts the model’s conditional distribution to depend more heavily on the image and less on the perturbation text, which leads to more robust multimodal capability.
+
+As opposed to state-of-the-art methods that resort to more advanced decoding strategies (Leng et al., 2024; Huang et al., 2024), the proposed method, *PertuboLLaVA*, effectively suppresses the hallucinations in MLLMs without incurring additional training or inference costs, making it more suitable for real-world applications. Figure 17 shows our method can describe rich image details with less hallucinations. On the other hand, our method is much more efficient, scalable, and easier to adopt compared to RLHF-based methods which require additional human preference data and incur substantial training overhead and complexity. Additionally, we find the proposed method beneficial to general multimodal abilities, bringing boosted performance across all the multimodal benchmarks.
+
+To summarize, our contributions are two-fold. First, we introduce a more principled metric computed on the language graph, serving as a comprehensive hallucination measure. Second, we identify the root cause of hallucinations in MLLMs as its inherent language bias, and propose perturbative visual training, enhancing the model’s focus on visual content during training. The proposed method integrates seamlessly into existing training pipelines, introducing minimal additional cost. It provides a scalable, efficient solution to enhance multimodal models’ visual understanding capabilities, excelling over prior compared to state-of-the-art methods across multiple dimensions.
+
+## 2 RELATED WORK
+
+### 2.1 MULTIMODAL FOUNDATIONAL MODEL
+
+With the rapid advancement of large language models (Touvron et al., 2023a;b; Chiang et al., 2023; Bi et al., 2024), researchers are leveraging their knowledge and reasoning abilities to build multi-
+
+{2}------------------------------------------------
+
+![Figure 2: Comparison against the state of the art methods. The figure shows an input image of two women playing tennis on a court. Below the image, there are four text blocks: 'Instruction:', 'VCD', 'OPERA', and 'RLAIF-V'. The 'VCD' and 'OPERA' blocks contain hallucinated descriptions of the image, while the 'RLAIF-V' and 'PerturboLLaVA (Ours)' blocks contain more accurate descriptions. The 'PerturboLLaVA (Ours)' block is highlighted in red, indicating it is the proposed method.](7ee2d12e8cbaacaf65b0c332d1c76daf_img.jpg)
+
+**Input Image**
+
+**Instruction:**  
+Please describe this image in detail.
+
+**VCD**  
+In the image, two women are playing a game of tennis on a court. Both players are holding tennis rackets and are actively engaged in the game. One woman is positioned on the left side of the court, while the other woman is on the right side. There are several chairs placed around the court, likely for spectators or players to rest during breaks. A sports ball, presumably a tennis ball, can be seen near the right side of the court.
+
+**OPERA**  
+The image features two women playing a game of tennis on a court. Both women are holding tennis rackets and are actively engaged in the game. One woman appears closer towards the left side of the court, while the other woman is positioned more towards the right side. There are several chairs placed around the court, likely for spectators or players to rest during breaks. A sports ball, presumably a tennis ball, can be seen in the middle of the court, indicating that the game is in progress.
+
+**RLAIF-V**  
+In the image, two female tennis players are in the midst of a match on a tennis court. They are both reaching for a tennis ball that's present on the court, showing their active participation in the game. Each of the players has a tennis racket in hand, highlighting the ongoing match. There is a chair located at the side of the court, possibly for resting or sitting during breaks. The overall scene captures the intensity and focus of the women's tennis match.
+
+**PerturboLLaVA (Ours)**  
+The image features two women playing badminton games on a court during the Rio 2016 Olympics. One woman is on the left side of the court, while the other is on the right side. Both women are holding badminton rackets, with one racket closer to the left woman and the other racket closer to the right woman. A sports ball is visible in the air at the right side. The court appears to be green and well-maintained. The women are fully engaged in the game, showcasing their athletic abilities.
+
+Figure 2: Comparison against the state of the art methods. The figure shows an input image of two women playing tennis on a court. Below the image, there are four text blocks: 'Instruction:', 'VCD', 'OPERA', and 'RLAIF-V'. The 'VCD' and 'OPERA' blocks contain hallucinated descriptions of the image, while the 'RLAIF-V' and 'PerturboLLaVA (Ours)' blocks contain more accurate descriptions. The 'PerturboLLaVA (Ours)' block is highlighted in red, indicating it is the proposed method.
+
+Figure 2: Comparison against the state of the art methods. Hallucinations are highlighted in red, whereas the image detailed descriptions are shown in blue. The proposed PerturboLLaVA describes rich image details more accurately.
+
+modal systems for complex tasks. These models are typically constructed with a pretrained vision encoder to process visual information, a language model backbone responsible for reasoning, and a projector to map the visual data into textual space. The training process of multimodal model is generally divided into two stages: pretraining, using image captioning data for modality alignment, and instruction fine-tuning, using question-answer data to enable task handling. Several leading open-source projects (Bai et al., 2023; Lu et al., 2024b; OpenGVLab, 2024) have amassed large multimodal datasets and developed high-performing models using advanced language model backbones and vision encoders. However, hallucinations remain a persistent challenge in models’ outputs.
+
+### 2.2 EVALUATION OF HALLUCINATION
+
+Various benchmarks assess hallucination in MLLMs, divided into, categorized into close-ended (Li et al., 2023b; Wang et al., 2023b) and open-ended tasks (Sun et al., 2023; Liu et al., 2023b). Close-ended tasks use yes-or-no or multiple-choice questions to test for hallucinations, focusing on accuracy. The POPE(Li et al., 2023b) benchmark detects non-existent entities, while AMBER Wang et al. (2023b) also considers attributes and relationships. In open-ended tasks, such as image captioning or free-form Visual Question Answering (VQA) (Wu et al., 2017; Jing et al., 2020), LLM-free metrics like CHAIR (Rohrbach et al., 2018) measure the ratio of hallucinated to actual objects in responses. On the other hand, LLM-based metrics, such as MMHalBench (Sun et al., 2023) and GAVIE (Liu et al., 2023b), utilize external LLMs like GPT (Achiam et al., 2023) to assign scores to generated responses and are used in benchmarks. Hallucination evaluation in multi-modal models is more evident in open-ended tasks, as these tasks require a detailed understanding of the image and dense outputs. However, current metrics like object-level CHAIR and caption-level MMHalBench lack fine-grained hallucination analysis.
+
+### 2.3 MITIGATION OF HALLUCINATION
+
+Current efforts to mitigate hallucinations are mainly divided into training-based and decoding-based strategies (Leng et al., 2024; Huang et al., 2024). Mainstream training-related approaches (Yu et al., 2024; Sun et al., 2023) introduce algorithms like RLHF (Ouyang et al., 2022) and DPO (Rafailov et al., 2024) from the LLM area into multimodal models. By constructing hallucination preference data, they train a reward model to provide reward supervision or use DPO to reduce multimodal hallucinations. However, the primary challenge with training-based approaches lies in the substantial computational overhead, as they necessitate training additional reward models or incorporating extra training phases. Decoding strategies include approaches like OPERA (Huang et al., 2024),
+
+{3}------------------------------------------------
+
+![Diagram of computing HalfScore. It shows an input image of a table with a vase and a book. Two paths lead from the image: 'VLM Caption' to a 'VLM Graph' (blue nodes and edges) and 'GT Caption' to a 'GT Graph' (orange nodes and edges). These two graphs are compared using a Venn diagram. The VLM Caption set (blue circle) contains 'Hallucinations' (H) and 'Matchings' (M). The GT Caption set (orange circle) contains 'Omissions' (O) and 'Matchings' (M). The intersection is 'Matchings' (M).](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Diagram of computing HalfScore. It shows an input image of a table with a vase and a book. Two paths lead from the image: 'VLM Caption' to a 'VLM Graph' (blue nodes and edges) and 'GT Caption' to a 'GT Graph' (orange nodes and edges). These two graphs are compared using a Venn diagram. The VLM Caption set (blue circle) contains 'Hallucinations' (H) and 'Matchings' (M). The GT Caption set (orange circle) contains 'Omissions' (O) and 'Matchings' (M). The intersection is 'Matchings' (M).
+
+Figure 3: The diagram of computing HalfScore. We construct the language graph to model both the concepts and their relationships for captions. We can then compare the graphs and identify the hallucinations, omissions and matchings between the two sets of concepts respectively.
+
+which corrects abnormal attention map, and methods like VCD (Leng et al., 2024) that decouple language priors causing hallucinations, subtracting them from prediction probabilities. Although decoding strategies have the advantage of being training-free, they do not address the root cause of hallucinations in multimodal models, as these issues originate during training. Moreover, from a practical standpoint, the inference cost for large models often exceeds the training cost, since models are trained once but deployed countless times. In the work, we propose a novel, simple yet effective training strategy that avoids the additional training overhead of previous training-based approaches while offering a more comprehensive solution.
+
+## 3 HUALLUCINATION F-SCORE
+
+An effective hallucination metric should be both fine-grained and comprehensive. Current metrics fall short of these criteria. For example, CHAIR focuses on matching objects while failing to measure hallucinations about attributes and relationships. MMHalbench uses GPT-4 to produce a single holistic score but lacks detailed analysis. Moreover, prior metrics only measure the degree of hallucination without assessing the comprehensiveness of the image captioning, typically favoring a short but confident answer, which is inconsistent with users’ subjective experience.
+
+**A Fine-Grained & Comprehensive Hallucination-Metric** We introduce HalfScore which measures both hallucination and completeness of dense captions with fine granularity. As illustrated in Figure 3, we construct graphs for both the MLLM’s output and the ground truth. Here, we leverage dense annotations as ground truth, which provides sufficient detailed descriptions that reflect all the aspects of the input images. Specifically, we selected 1,000 images from the Densely Captioned Images (DCI) dataset (Urbanek et al., 2023), in which images are manually annotated and densely captioned. By comparing the graphs, we can identify hallucinations—concepts generated by the model that contradict the ground truth, and omissions—concepts present in the ground truth but absent in the model’s captions. We denote the concepts denoted in the generation as  $\mathcal{C}_{\text{gen}}$ , the concepts corresponding to ground truths as  $\mathcal{C}_{\text{gt}}$ , and compute the precision and recall as
+
+$$\text{Precision} = \frac{|\mathcal{C}_{\text{gen}} \cap \mathcal{C}_{\text{gt}}|}{|\mathcal{C}_{\text{gen}}|} = 1 - \frac{|\mathcal{C}_{\text{hallucinated}}|}{|\mathcal{C}_{\text{gen}}|}, \quad (1)$$
+
+$$\text{Recall} = \frac{|\mathcal{C}_{\text{gen}} \cap \mathcal{C}_{\text{gt}}|}{|\mathcal{C}_{\text{gt}}|} = 1 - \frac{|\mathcal{C}_{\text{omitted}}|}{|\mathcal{C}_{\text{gt}}|}. \quad (2)$$
+
+Here, the precision reflects the hallucination degree, whereas the recall assesses how well the captions cover image details. Then we compute HalfScore by aggregating these two scores, serving as a single metric that reflects the overall captioning quality:
+
+$$\text{HalfScore} = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}. \quad (3)$$
+
+{4}------------------------------------------------
+
+**Graph Computation** To derive the above HalfScore, graph construction and matching are pivotal. We propose a novel triplet data structure to represent the information for captions. Specifically, we prompt the GPT-4o model to parse the concepts along with their relative relationships, and represent them by the triplet representation, *i.e.*,  $\langle e_1, e_2, r_{12} \rangle$ . As shown in Figure 4, the triplet representation can well model general and rich information instances, *e.g.*,  $\langle \text{clock}, \text{on}, \text{wall} \rangle$ , or the attribute description for a single instance, *e.g.*,  $\langle \text{mirror}, \text{is}, \text{pink} \rangle$ . In this way, the caption is transformed to a set of triplets, serving as a structured representation.
+
+Meanwhile, the triplet can be viewed as two nodes representing entities,  $e_1$  and  $e_2$ , with a relation edge  $r$ . We then organize the extracted triplets into a concept graph  $\mathcal{G}$  by matching entity nodes. In this graph, nodes represent entity concepts  $e_i$ , and edges represent relational concepts  $r_{ij}$  between entities  $e_i$  and  $e_j$ . This graph allows us to represent all the information in the caption comprehensively and accurately. Formally, we obtain the graph  $\mathcal{G}$  with nodes  $\mathcal{V}$  and edges  $\mathcal{E}$  as follows:
+
+$$\mathcal{G} = (\mathcal{V}, \mathcal{E}), \quad \mathcal{V} = \{e_1, e_2, \dots, e_n\}, \quad \mathcal{E} = \{r_{12}, r_{23}, \dots, r_{mn}\}. \quad (4)$$
+
+By matching the constructed graphs, we can identify the hallucinated concepts ( $\mathcal{C}_{\text{hallucinated}}$ ) and omitted concepts ( $\mathcal{C}_{\text{omitted}}$ ) using GPT-4o. Based on these identified concepts, we proceed to calculate precision and recall according to the equations aforementioned, and then derive the Fscore. Please see the Appendix A.8 for detailed GPT-4o prompts used for triplet extraction and graph matching.
+
+## 4 MITIGATION OF HALLUCINATION VIA PERTURBATIVE VISUAL TRAINING
+
+### 4.1 PERTURBATIVE VISUAL TRAINING
+
+To mitigate the over-reliance on language priors in multimodal models, we introduce a novel training framework that introduces adaptive, context-specific perturbations in the textual inputs during training. This approach simulates the effect of language priors and forces the model to adjust its responses based on visual data rather than textual biases.
+
+Specifically, during the instruction tuning training, the multimodal model is tasked with predicting the text according to the input image-question tokens  $(I, x_q)$ . We introduce a contextually adaptive perturbation text  $x_p$ , crafted to mimic misleading language priors. Thus, we obtain the perturbed input tokens as  $(I, x_p, x_q)$ , as depicted in Figure 5. This perturbation is integrated seamlessly as part of the input, without any direct loss computation on  $x_p$  itself, thus maintaining the integrity of the model’s original training regime. The purpose of introducing the perturbation text  $x_p$  is to induce errors by tempting the model to rely on the perturbative text. This compels the model to focus more on the image content to generate correct responses, thereby reducing its dependency on linguistic cues that are not supported by visual evidence.
+
+**Perturbation Text Design** To ensure effectiveness and naturalness of the perturbations, we adhere to the following principles. 1) *Contextual relevance*. the perturbation is expected to be contextually relevant to the image content such that it appears to be plausible but misleading. 2) *Alignment with pretrained knowledge*. The perturbations are designed to resonate with common language priors, ensuring that they are realistic and reflect potential model biases. 3) *Semantic variation*. We ensure a diverse range of perturbations by varying the structure and thematic elements of  $x_p$ , aligning them with common misconceptions or biases. In practice, we use GPT-4o to generate the perturbation text. The GPT-4o model views the image, question and answer, and is instructed to construct strong and diverse perturbations based on the world knowledge as well as certain image details, without disclosing the answer. The GPT-4 instruction prompt is detailed in the appendix.
+
+![Figure 4: Graph construction process. It shows a caption about a woman at a phone, which is processed through 'Triplets Extraction' to produce triplets like <Woman, Steal at, Phone>, <Mirror, is, Pink>, <Clock, on, Wall>, and <Woman, In front of, Table>. These triplets are then used to 'Construct Graph', resulting in a network of nodes (Woman, Phone, Mirror, Pink, Clock, Wall, Table) connected by edges representing the relationships.](01141eb99b707de5aead56f84afe3b1f_img.jpg)
+
+The diagram illustrates the graph construction process. It starts with a **Caption**: "The image portrays a woman stealing at her phone as she sits in front of a white table. On the table, there is a pink mirror to the right and a bubble tea to the left. Behind the table, there is two pink armchair. There is also a clock on the wall." This caption is processed through **Triplets Extraction** to generate several triplets:  $\langle \text{Woman}, \text{Steal at}, \text{Phone} \rangle$ ,  $\langle \text{Mirror}, \text{is}, \text{Pink} \rangle$ ,  $\langle \text{Clock}, \text{on}, \text{Wall} \rangle$ , and  $\langle \text{Woman}, \text{In front of}, \text{Table} \rangle$ . These triplets are then used to **Construct Graph**, resulting in a graph where nodes represent entities (Woman, Phone, Mirror, Pink, Clock, Wall, Table) and edges represent relationships between them.
+
+Figure 4: Graph construction process. It shows a caption about a woman at a phone, which is processed through 'Triplets Extraction' to produce triplets like , , , and . These triplets are then used to 'Construct Graph', resulting in a network of nodes (Woman, Phone, Mirror, Pink, Clock, Wall, Table) connected by edges representing the relationships.
+
+Figure 4: Graph construction. We extract triplets from the caption and build the graph accordingly.
+
+{5}------------------------------------------------
+
+![A man riding a motorcycle](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+**Perturbation Text Generation**
+
+<input image>: **<Question>**: Who is sitting on the motorcycle?
+
+**Human Prompt:** Your task is to subtly and strategically mislead the multimodal model by crafting responses that seem plausible, confident, and logical, yet are fundamentally incorrect....According to <input image> and <Origin Question>.
+
+**Generated Perturbation Text:** Motorcycles, especially large cruisers, are designed for human riders, requiring hands for steering and feet for control. Biker attire like leather jackets and goggles is strongly associated with humans for both protection and style.
+
+---
+
+**Before Perturbative Training**
+
+<input image> <Generated Perturbation Text> <Question> → **Model** → <Answer>(A man)
+
+Simulated Language Prior (Strong)
+
+Image Ability(Weak)
+
+Loss Feedback
+
+<Answer>(A dog)
+
+**After Perturbative Training**
+
+<input image> <Generated Perturbation Text> <Question> → **Model** → <Answer>(A dog)
+
+Simulated Language Prior (Weak)
+
+Image Ability (Strong)
+
+**Inference**
+
+<input image> <Question> → **Model** → <Right Answer>
+
+Inherent Language Prior (Weak)
+
+Image Ability (Strong)
+
+A man riding a motorcycle
+
+Figure 5: The generation of perturbation text and perturbative visual training of PerturboLLaVA.
+
+| Model | No extra data generation | No extra training stage | Inference cost | Data scalability |
+|-|-|-|-|-|
+| Ours | ✗ | ✓ | 1× | ✓ |
+| RLAIF-V | ✗ | ✓ | 1× | ✓ |
+| OPERA | ✓ | ✓ | 2~5× | ✗ |
+| VCD | ✓ | ✓ | 2× | ✗ |
+
+Table 1: Comparison of method features with other representative works.
+
+Our approach offers significant benefits over prior approaches as summarized in Table 1. Compared to the training method like RLAIF-V, we avoid the need to collect costly preference data or train an additional reward model. Our method is easy to implement and incurs minimal additional training cost to the multimodal model, making it a nearly “free lunch” solution. The quantification of the additional training overhead is provided in the Appendix A.3. Compared to contrastive decoding strategies, our approach more fundamentally mitigates the multimodal model’s excessive reliance on language priors, without introducing any additional inference overhead. Moreover, the effectiveness of our method scales with the quality and diversity of the perturbation texts.
+
+### 4.2 MATHEMATICAL EXPLANATION
+
+Our method can be further understood and explained from a mathematical perspective. In a more general sense, it can be interpreted as introducing additional noise or perturbation during the training phase to develop a more robust model. This approach aligns with the ideas proposed in the seminal work (Clark et al., 2019). Thus, we leverage the mathematical reasoning from that work to explain our approach. Similarly, in multimodal tasks, we define the following:  $x_k$  is the  $k$ -th token predicted by the model,  $x_{<k}$  denotes the preceding tokens in the output,  $I$  refers to the corresponding image,  $x_{<k}^p$  indicates the prediction based solely on language priors, while  $x_{<k}^I$  is the prediction made by
+
+{6}------------------------------------------------
+
+the multimodal model without the influence of language prior. Thus we have
+
+$$p(x_k|x_{<k}, I) = p(x_k|x_{<k}^p, x_{<k}^{-p}, I) \quad (5)$$
+
+$$= \frac{p(x_k|x_{<k}^{-p}, I)p(x_{<k}^p|x_k, x_{<k}^{-p}, I)}{p(x_{<k}^p|x_{<k}^{-p}, I)} \quad (6)$$
+
+$$\propto p(x_k|x_{<k}^{-p}, I)p(x_{<k}^p|x_k, x_{<k}^{-p}, I) \quad (7)$$
+
+$$= p(x_k|x_{<k}^{-p}, I)p(x_{<k}^p|x_k, I) \quad (8)$$
+
+$$= p(x_k|x_{<k}^{-p}, I) \frac{p(x_k|x_{<k}^p, I)p(x_{<k}^{-p})}{p(x_k)} \quad (9)$$
+
+$$\propto p(x_k|x_{<k}^{-p}, I) \frac{p(x_k|x_{<k}^p, I)}{p(x_k)}. \quad (10)$$
+
+Equations (6) and (9) are applications of Bayes' theorem.  $x_{<k}^p$  and  $x_{<k}^{-p}$  are mutually independent and Equation (8) follows from the conditional independence assumption.
+
+Now take a look at the Equations (10).  $p(x_k)$  models the probability of the next token. In a sufficiently uniform dataset,  $p(x_k)$  can be ignored.  $p(x_k|x_{<k}^{-p}, I)$  represents the behavior we expect from the multimodal model when it predicts the next token based on the image without interference from language priors. However, this probability is difficult to model directly. Instead, we designed a perturbative training that adds perturbed text before the instruction to enhance  $p(x_k|x_{<k}^p, I)$ , encouraging the model to learn  $p(x_k|x_{<k}^p, I)$ . Here,  $p(x_k|x_{<k}^p, I)$  represents the bias introduced by the perturbation text. Since  $x_{<k}^p$  as we define it represents predictions based solely on language priors, the term  $p(x_k|x_{<k}^p, I)$  can exclude the image and become  $p(x_k|x_{<k}^p)$ , which represents the language model's prediction tendency when presented with the perturbed text. During the training of multimodal models, we can assume that the world knowledge embedded in the language model remains unchanged, so  $p(x_k|x_{<k}^p)$  is a perturbation term that cannot be optimized. Therefore, in the training process of multimodal models, our perturbation training method guides the model to optimize towards  $p(x_k|x_{<k}^{-p}, I)$ , transforming it into a fully multimodal model that is unaffected by language priors and relies entirely on image information to answer questions.
+
+## 5 EXPERIMENTS
+
+### 5.1 EXPERIMENTS SETTINGS
+
+**Implementation Details** To ensure the reliability and credibility of the results, we conducted experiments on the open-source and widely-used LLaVA1.5 dataset. By utilizing the LLaVA1.5 dataset, we fully replicated LLaVA1.5 training process and results, and use it as the baseline for our experiments. To ensure fairness, we apply perturbations directly to the LLaVA1.5 dataset rather than incorporating additional data. We conduct experiments by generating perturbed text using GPT-4o on the 160k data related to the VQA task in the dataset.
+
+**Comparative Methods** We selected three representative methods, each addressing hallucination from different perspectives and demonstrating strong performance: the training-based RLAIF-V (Yu et al., 2024), the decoding strategy OPERA (Huang et al., 2024) and VCD (Leng et al., 2024). For RLAIF-V, we use the open-source model weights of RLAIF-7B, which were fine-tuned on LLaVA1.5 (Liu et al., 2024b). Notably, the reward model used in this setup is LLaVA-Next 34B (Liu et al., 2024a), which may transfer some of LLaVA-Next 34B's capabilities into RLAIF-7B, potentially making the comparison with other experimental setups less fair. The hyperparameters for OPERA and VCD are provided in Section A.5 to support the reproducibility of our results. We use beam search as the default decoding strategy, with  $N_{\text{beams}}$  set to 5.
+
+We additionally evaluate six best multimodal models available today, Ovis1.6 (Lu et al., 2024b), Qwen2-VL (Wang et al., 2024), LLaVA-OneVision (Li et al., 2024), InternVL2 (OpenGVLab, 2024), Idefics3 (Laurençon et al., 2024), and MiniCPM-2.6 (Hu et al., 2024), to further verify the effectiveness of our proposed metric. These models have been trained on vast datasets, compris-
+
+{7}------------------------------------------------
+
+| Model | Size | Precision $\uparrow$ | Recall $\uparrow$ | Fscore $\uparrow$ | Object $\downarrow$ | Attribute $\downarrow$ | Relation $\downarrow$ |
+|-|-|-|-|-|-|-|-|
+| Ovis1.6-Gemma2 | 9B | 61.5 | 50.3 | 55.4 | 22.1 | 4.9 | 11.7 |
+| Qwen2-VL | 7B | 60.8 | 50.0 | 54.9 | 24.2 | 5.1 | 9.9 |
+| LLaVa-onevision | 7B | 61.3 | 48.3 | 54.1 | 22.1 | 4.9 | 11.7 |
+| InternVL2 | 8B | 60.6 | 48.6 | 53.9 | 24.1 | 5.2 | 10.1 |
+| Idefics3 | 8B | 59.7 | 48.2 | 53.3 | 25.1 | 6.1 | 9.1 |
+| MiniCPM-2.6 | 8B | 57.3 | 47.8 | 52.1 | 26.3 | 6.7 | 9.7 |
+| LLaVA1.5 | 7B | 53.3 | 45.8 | 49.2 | 28.1 | 8.1 | 10.5 |
+| RLAIF-V* | 7B | 57.7 | 47.2 | 51.9 | 25.9 | 7.0 | 9.4 |
+| OPERA* | 7B | 58.6 | 46.7 | 51.9 | 25.3 | 6.9 | 9.2 |
+| VCD* | 7B | 58.8 | 46.7 | 52.0 | 25.6 | 7.2 | 8.4 |
+| Ours* | 7B | 59.5 | 46.5 | 52.2 | 25.3 | 6.4 | 8.8 |
+
+Table 2: Results of our method and comparison methods using our proposed hallucination measure. It should be emphasized that the models in the first part use advanced language models like Qwen2(Yang et al., 2024) and LLama3(Dubey et al., 2024), trained on extensive high-quality datasets. Later experiments marked are conducted using the LLaVA1.5 Baseline.
+
+| Model | Size | Reward | HalfScore |  |  | Object HalBench |  | HalBench $\uparrow$ | MMB $\uparrow$ | SEED $\uparrow$ | CCBench $\uparrow$ |
+|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  |  | Prec $\uparrow$ | Recall $\uparrow$ | Fscore $\uparrow$ | CHAIR $\downarrow$ | CHAIR $\downarrow$ |  |  |  |  |
+| LLaVA1.5 | 7B | $\times$ | 53.3 | 45.8 | 49.2 | 54.2 | 15.0 | 46.9 | 67.3 | 65.3 | 29.4 |
+| VCD | 7B | $\times$ | 58.8 | 46.7 | 52.0 | 51.2 | 14.3 | 46.9 | 66.2 | 64.7 | 29.4 |
+| OPERA | 7B | $\times$ | 58.6 | 46.7 | 51.9 | 50.8 | 14.2 | 47.1 | 67.4 | 65.3 | 29.4 |
+| RLAIF-F | 7B | LLaVA-Next | 57.7 | <b>47.2</b> | 51.9 | <b>18.1</b> | <b>4.7</b> | <b>51.3</b> | 63.7 | 65.4 | 27.8 |
+| Ours | 7B | $\times$ | <u>59.5</u> | 46.5 | <u>52.2</u> | 36.1 | 10.4 | 47.5 | <u>68.9</u> | <u>65.6</u> | <u>30.6</u> |
+| OPERA+Ours | 7B | $\times$ | <b>60.2</b> | <u>47.0</u> | <b>52.8</b> | <u>33.1</u> | <u>10.1</u> | <u>47.6</u> | <b>68.9</b> | <b>65.6</b> | <b>31.0</b> |
+
+Table 3: Results of our method and comparative methods on different benchmarks. The best result is marked in bold, and the second-best result is underlined, respectively.
+
+ing hundreds of millions of samples, and required significant computational resources, including extensive GPU hours. Their general performance substantially surpasses that of LLaVA1.5.
+
+### 5.2 MAIN RESULTS
+
+**HalfScore Evaluation** Table 2 shows the our final HalfScore includes precision, recall, and fscore, and further classifies hallucinations into object, attribute, and relation types for more detailed evaluation. From this metric, we observe that compared to the LLaVA1.5 baseline, the leading methods have achieved substantial and comprehensive improvements in both precision and recall. Notably, there is a significant reduction in hallucinations when describing objects and attributes, although there remains room for improvement in relation hallucinations. Our method also demonstrates marked improvement over LLaVA1.5, with a +6.2 increase in precision, +0.7 in recall, and +2.4 in Fscore. In comparisons with OPERA, VCD, and RLAIF-V, our approach achieved the best results in precision and fscore, though the improvement in recall is less pronounced. Overall, by leveraging these hallucination mitigation techniques, OPERA, VCD, and RLAIF-V have achieved recall scores comparable to MiniCPM-2.6, while our method has even surpassed MiniCPM, further underscoring the effectiveness of our approach.
+
+**CHAIR Evaluation** To evaluate caption-based object hallucination, we use the CHAIR metric (Rohrbach et al., 2018), which measures the percentage of generated words that correspond to actual objects in the image. The results in Table 3 show that, on this metric, our method significantly reduces hallucinations compared to the LLaVA1.5 baseline and outperforms both OPERA and VCD by a large margin. However, RLAIF-V performs better on this metric, showing fewer object hallucinations. A possible reason is that it uses additional feedback model. Moving forward, we plan to design targeted perturbation texts for objects to further enhance performance.
+
+{8}------------------------------------------------
+
+| Type | Example |
+|-|-|
+| Version1 | <image> What follows presents incorrect guidance based on the image. <perturbation text> Please ignore any false guidance and focus on the image to answer the question below. <Question> |
+| Version2 | <image> <perturbation text> Please examine the image and respond to the question below. <Question> |
+| Version3 | <image> <perturbation text> <Question> |
+| Random | <image> Coming up is a portion of non-visual text. <random perturbation text> Ignore the previous perturbation text and focus on the image to complete the task. <Question> |
+
+Table 4: Different variants of perturbative visual training.
+
+| Type | HalfScore <sup>†</sup> |  |  | Object HalBench <sub>↓</sub> |  |  | HalBench <sup>†</sup> | MMB <sup>†</sup> | SEED <sup>†</sup> | CCBench <sup>†</sup> |
+|-|-|-|-|-|-|-|-|-|-|-|
+|  | Precision | Recall | Fscore | CHAIR <sub>↓</sub> | CHAIR <sub>↓</sub> | length |  |  |  |  |
+| LLaVA1.5 | 53.3 | 45.8 | 49.2 | 54.2 | 15.0 | 100 | 46.9 | 67.3 | 65.3 | 29.4 |
+| Version1 | 59.5 | <u>46.5</u> | <u>52.2</u> | 36.1 | 10.4 | 89 | 47.5 | <u>68.9</u> | <u>65.6</u> | <u>30.6</u> |
+| Version2 | 59.6 | 46.0 | 52.0 | 33.6 | <u>10.2</u> | 82 | 49.2 | 67.8 | 65 | 29.2 |
+| Version3 | <u>59.7</u> | 46.1 | 52.0 | <u>32.3</u> | 10.6 | 78 | <u>49.6</u> | 66.5 | 64.7 | 28.8 |
+| Random | 57.1 | 45.6 | 50.7 | 52.4 | 15.0 | 99 | 49.0 | 67.4 | 65.1 | 29.4 |
+
+Table 5: Effect of varying perturbation levels during training. The best results are underlined.
+
+**HallusionBench Evaluation** HallusionBench (Guan et al., 2024) evaluates how well multi-modal models handle language hallucinations and visual illusions. Previous hallucination assessment mainly focused on dense caption tasks, and by incorporating HallusionBench, we aim to enhance our hallucination evaluation through the addition of multiple-choice and vision reasoning tasks. The results in Table 3 demonstrate a substantial improvement (+0.6) of our method on the HallusionBench metric, whereas the VCD decoding strategy merely maintained the baseline, OPERA led to a modest increase of 0.2. This outcome further confirms that our method is not only effective in dense captioning tasks but also excels in vision reasoning tasks.
+
+**General Multimodal Ability** We assess the models’ general ability on three widely used benchmarks: MMBench (Liu et al., 2023c), CCBench (Liu et al., 2023c), and SEEDImage (Li et al., 2023a), to verify that our model’s general capabilities. From the Table 3, we observe that both VCD and RLAIF-V result in some degradation in general performance, while OPERA remains stable. In contrast, our method not only avoids degradation in general metrics but also shows improvements across multiple areas, with gains of +1.6 in MMB, +0.3 in SEEDImage, and +1.2 in CCBench. We attribute this improvement in generalization to perturbation training, which compels the multimodal model to more effectively leverage image information.
+
+### 5.3 ANALYSES
+
+**Impact of the Perturbation Strengths** To assess the effect of perturbation levels on training, we devised three methods of inserting perturbation text, detailed in Table 4. The first method alerts the model to upcoming text perturbations, instructing it to ignore them. The second focuses the model on image regions without referencing perturbations. The third offers no guidance. These methods progressively increase the level of perturbation and the difficulty of training the multimodal model. As Table 5 shows, increasing perturbation levels enhances training difficulty and reduces hallucinations, as indicated by HalfScore and CHAIR metrics. However, this also leads to shorter captions and lower recall, suggesting a more cautious model behavior. General performance metrics decline consistently, implying that while perturbations decrease hallucinations, excessive perturbation use may impair overall performance.
+
+**Impact of the Perturbation Relevance** To investigate the impact of relevance of perturbation text, we conducted experiments using randomly sampled texts from a text dataset instead of the
+
+{9}------------------------------------------------
+
+| Auto Evaluation | Human Evaluation | Pearson Correlation |
+|-|-|-|
+| Recall | Recall.h | 78.1 |
+| Precision | Precision.h | 80.7 |
+| MMHalBench | Precision.h | 71.7 |
+
+Table 6: Correlations between automatically computed metrics and human subjective opinions.
+
+carefully designed perturbations used earlier. The results in Table 5 show that introducing random text perturbations, compared to the LLaVA1.5 baseline, still mitigates hallucinations in multimodal models, as evidenced by improvements in HalFscore and HalBench. However, the effectiveness of random perturbations is inferior to that of targeted text-based experiments. We suggest that even random perturbations influence the training of multimodal models, as the training is disrupted by the random text interference. However, more relevant perturbations exert a stronger disruptive effect, prompting the model to focus more on the image to overcome these challenges.
+
+**Human Analysis of HalFscore** We perform the user study to explore whether the proposed HalFscore correlates well with human evaluation. We show an image and ask human raters to compare two paragraphs generated and determine which generated text describes the main subject and detailed information of the input image more comprehensively (recall.h), and which text contains less information that is not present in the input image (precision.h). Four methods, LLaVA 1.5, MiniCPM-2.6, InternV12, and our method are selected for human evaluation. Each method is compared with other methods for 12 times. We compute the human evaluated scores for the recall and precision and drive the Pearson correlations coefficients between the scores of human evaluation and that of HalFscore. The results are shown in the Table 6. We observe that our precision score and recall score align with human evaluations. Specifically, we compare our method with another metric, MMHalbench. The correlation coefficient between the metric and the human evaluations of precision scores is relatively smaller than HalFscore. The comparison demonstrates our metric aligns with human evaluations more than directly asking large language models to rate the level of hallucination. Further details about the user study can be found in Section A.7 of the Appendix.
+
+**Complementary Effect to Decoding Strategies.** PerturboLLaVA is a novel training strategy that enhances model performance in the SFT phase. It can be integrated seamlessly with post-SFT optimization RLAI-V and OPERA during inference. In our tests, using OPERA as a plugin with PerturboLLaVA during inference led to performance boosts, as detailed in Table 3. PerturboLLaVA with OPERA achieved further gains, improving HalFscore by 0.6, with a 3-point improvement in the CHAIRs. Hallucination reasoning in Hallusionbench also improved by +0.1, while general capability increased by 0.4 in CCBench. Compared to applying OPERA on LLaVA1.5, replacing the baseline model with PerturboLLaVA resulted in improved performance in both hallucination reduction and general capability. Thus, PerturboLLaVA introduces a new optimization direction that complements existing strategies, offering an additional benefit.
+
+## 6 CONCLUSION
+
+In our work, we introduce a concept-level HalFscore that enables fine-grained analysis of various hallucinations involving objects, attributes, and relations in dense captions. This metric also reflects the overall captioning capability of multi-modal models. To mitigate hallucinations, we propose a simple yet effective training strategy that guides multi-modal models to reduce reliance on linguistic priors and prioritize image information. Our method outperforms leading state-of-the-art approaches without incurring additional training or inference overhead. Overall, we believe that our proposed metric enhances the evaluation of hallucinations in multi-modal models and that our method effectively mitigates hallucination issues. The proposed method shows great promise of becoming a standard strategy for training robust multimodal models.
+
+## ACKNOWLEDGMENTS
+
+This work was supported by the National Key R&D Program of China (No. 2022ZD0160101), the Ningbo Science and Technology Bureau (Grant Number 2024Z291), and the National Natural
+
+ Rest of paper (reference and Appendix) is removed.

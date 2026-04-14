@@ -72,6 +72,8 @@ The scorer also includes leakage detection — it checks for suspicious phrases 
 
 我们的方法回避了上述问题。在审稿生成阶段，我们采用多智能体协作架构，由不同视角的子审稿人独立生成意见，再由合并模块进行质量过滤，主动移除无依据或过度挑剔的批评，而非强制为每个分数档位生成意见。在评分阶段，我们不使用情感分析或子维度回归，而是通过检索增强的方式找到相似论文的真实审稿分数作为锚点，让评分建立在横向比较的基础上。
 
+DeepReviewer v2的导出门控机制同样会导致堆砌。
+
 **评估盲区。** OpenReviewer在不平衡的数据集上报告了看似合理的误差指标，但一个总是预测固定分数的简单基线也能达到类似水平，这说明其评估协议可能高估了模型能力。DeepReviewer v2提出了严格问题覆盖率作为核心指标，衡量AI审稿覆盖了多少人类审稿人提出的问题，但这一指标存在结构性缺陷。首先，它只衡量召回率而完全忽略精确率，不对过度生成施加任何惩罚——系统可以通过大量输出来提高覆盖率，无论其中多少批评实际上毫无价值。其次，更根本的问题在于，它将人类审稿意见作为唯一的正确答案。AI系统发现了人类遗漏的真实问题不会获得任何奖励，而AI重复了人类提出的无效批评反而会被计为成功覆盖。此外，该工作使用ICLR 2025的审稿数据进行评估，而该轮审稿中已有相当比例的审稿意见由AI生成，将AI生成的审稿作为参考标准来衡量另一个AI系统的覆盖率，本身就消解了这一评估的意义。这种评估逻辑将目标限定为"与人类对齐"，但自动化审稿的价值不应止步于模仿人类审稿人，而应追求超越人类审稿人的局限性。人类审稿本身就存在遗漏、误读和主观偏差，一个真正有用的系统应当被评估的是它能否准确识别论文中的真实问题并提供有效的改进方向，而非它在多大程度上复制了人类的判断。
 
 ScholarPeer采用LLM-as-judge进行side-by-side评估，在Technical Accuracy、Constructive Value、Analytical Depth、Significance Assessment等维度上比较两份审稿的优劣。这一方案的核心问题在于LLM judge本身对伪形式化内容存在系统性偏好：提出问题数量更多、引用文献更丰富、结构看起来更完整的审稿更容易获得高分，而judge并不会逐条验证这些批评是否真正relevant。换言之，该评估测量的是"看起来像好审稿"而非"是好审稿"。ScholarPeer同时提出了H-Max score，以人类最佳审稿为锚点（5分），评估AI审稿是否提供了超越人类的增量价值。这一思路具有参考价值（比DeepReview v2的recall要好），但缺少有效性过滤：当AI提出了人类未提及的观点时，judge直接给予高分，却未验证该观点本身是否正确且与论文相关。我们在此基础上引入有效性过滤，将评估标准从"AI是否说了人类没说的话"收紧为"AI是否提出了人类遗漏的、且确实存在于论文中的真实问题"。
@@ -417,3 +419,13 @@ Uses Claude Agent SDK as the judge.
 ## Cost
 
 The harsh critic and scorer use `claude-sonnet-4-6` via the Claude Agent SDK (cost not exposed by SDK). Neutral, spark, related work, and merger use Qwen and GLM-5 models via OpenRouter. Score parsing uses `gpt-5.4-nano` via OpenRouter. Exact cost depends on current pricing, paper length, output length, and how many calibration files the scorer reads.
+
+
+
+## TODO:
+Mapping review -> score, use human as cal set, this way easiler to do, combined with find human (paper id could this be noise) 
+This cal do not need paper, we just need topic (abstract), similar reviews, and we can decide based on the review. Same for human finder? we just need similar paper + review, no need to have full paper. 
+Good, change this tomorrow!
+Easiler to debug as well
+
+Pred raw score directly, do not round then use emotion 

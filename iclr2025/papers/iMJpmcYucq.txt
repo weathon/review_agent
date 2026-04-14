@@ -1,0 +1,301 @@
+
+
+{0}------------------------------------------------
+
+# STOCHASTIC VARIANCE-REDUCED GAUSSIAN VARIATIONAL INFERENCE ON THE BURES–WASSERSTEIN MANIFOLD
+
+Hoang Phuc Hau Luu, Hanlin Yu, Bernardo Williams, Marcelo Hartmann, Arto Klami
+
+Department of Computer Science
+
+University of Helsinki, Helsinki, Finland
+
+{hoang-phuc-hau.luu, hanlin.yu, bernardo.williamsmoreno, marcelo.hartmann, arto.klami}@helsinki.fi
+
+## ABSTRACT
+
+Optimization in the Bures–Wasserstein space has been gaining popularity in the machine learning community since it draws connections between variational inference and Wasserstein gradient flows. The variational inference objective function of Kullback–Leibler divergence can be written as the sum of the negative entropy and the potential energy, making forward-backward Euler the method of choice. Notably, the backward step admits a closed-form solution in this case, facilitating the practicality of the scheme. However, the forward step is not exact since the Bures–Wasserstein gradient of the potential energy involves “intractable” expectations. Recent approaches propose using the Monte Carlo method – in practice a single-sample estimator – to approximate these terms, resulting in high variance and poor performance. We propose a novel variance-reduced estimator based on the principle of control variates. We theoretically show that this estimator has a smaller variance than the Monte-Carlo estimator in scenarios of interest. We also prove that variance reduction helps improve the optimization bounds of the current analysis. We empirically demonstrate that the proposed estimator gains order-of-magnitude improvements over previous Bures–Wasserstein methods.
+
+## 1 INTRODUCTION
+
+Variational inference (VI) (Wainwright et al., 2008; Blei et al., 2017) provides a fast and scalable alternative to Markov chain Monte Carlo (MCMC), especially for inference tasks in high dimensions. The main principle of VI is to approximate a complicated distribution  $\pi$ , e.g., posterior distribution in Bayesian inference, by a simpler tractable family of distributions. The approximation  $\mu$  within the family is obtained by solving an optimization problem, providing a closed-form representation and e.g. efficient sampling by construction. The choice of the optimization method is heavily influenced by the assumptions made on the approximation family and the information about  $\pi$  that can be obtained, ranging from classical coordinate ascent algorithms for mean-field approximations for targets with conditional conjugacy structure (Blei et al., 2017) to gradient methods using score-function approximations to avoid assumptions on the target density (Ranganath et al., 2014) or flexible approximations parameterized with neural networks (Rezende & Mohamed, 2015).
+
+We focus on Gaussian approximations (Honkela & Valpola, 2004; Opper & Archambeau, 2009; Xu & Campbell, 2022; Quiroz et al., 2023) but with a particular emphasis on the recent research line in the Wasserstein geometric viewpoint of this family (Lambert et al., 2022; Diao et al., 2023). Regarding the target  $\pi$ , we assume access to second order gradients, typically computed by automatic differentiation, similar to the above works. Gaussian VI offers strong statistical guarantees at the optimal solution (Katsevich & Rigollet, 2024), offers an easy way of modelling dependencies between the variables and, thanks to the Bernstein-von Mises theorem (Van der Vaart, 2000), becomes asymptotically exact for Bayesian inference at the limit of infinite observations.
+
+Recently, there has been emerging interest in Gaussian VI with a new geometric Riemannian optimization perspective (Lambert et al., 2022; Diao et al., 2023). The family of non-degenerate Gaus-
+
+{1}------------------------------------------------
+
+![Figure 1: Optimization trajectories and KL divergence plot. Left: Three scatter plots showing trajectories for SVRGVI (ours), SGVI, and BWGD. Right: A log-linear plot of D_KL(mu_t || pi) vs time elapsed.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+The figure consists of four subplots. The left side contains three scatter plots labeled 'SVRGVI (ours)', 'SGVI', and 'BWGD'. Each plot shows optimization trajectories in a 2D space (x1, x2) with axes ranging from -20 to 10. A red ellipse represents the target distribution, a black ellipse represents the initial distribution, and grey ellipses represent intermediate steps. SVRGVI (ours) shows a stable trajectory that quickly converges to the target. SGVI and BWGD show more erratic, less stable trajectories. The right subplot is a line graph titled  $D_{KL}(\mu_t || \pi)$  vs 'time elapsed (η × #iters)'. The y-axis is logarithmic, ranging from  $10^{-3}$  to  $10^7$ . The x-axis ranges from 0 to 600. Three lines are shown: SGVI (red), BWGD (blue), and SVRGVI (ours) (black). SVRGVI (ours) shows a rapid decrease in KL divergence, reaching a minimum around  $10^{-3}$  by time 200, while SGVI and BWGD remain at a higher level around  $10^1$ .
+
+Figure 1: Optimization trajectories and KL divergence plot. Left: Three scatter plots showing trajectories for SVRGVI (ours), SGVI, and BWGD. Right: A log-linear plot of D\_KL(mu\_t || pi) vs time elapsed.
+
+Figure 1: **Left:** Optimization trajectories of our method compared to SGVI (Diao et al., 2023) and BWGD (Lambert et al., 2022). The target is a 50-dimensional Gaussian distribution, visualized here via the marginal distributions of the first two coordinates. Each ellipse represents a contour of a Gaussian: the black is the initial distribution, the red is the target, and the greys are intermediate steps. Our method is dramatically more stable and finds a more accurate final approximation. **Right:** the corresponding KL divergence, confirming our method is orders of magnitude more accurate.
+
+sian distributions can be parameterized by its mean and covariance matrix,  $\mu_\theta$  with  $\theta = (m, \Sigma)$ , henceforth denoted as  $\Theta = \mathbb{R}^d \times \mathcal{S}_{++}^d$  where  $\mathcal{S}_{++}^d$  is the set of  $d \times d$  symmetric, positive definite matrices. Classical VI employs conventional optimization algorithms (Paisley et al., 2012; Titsias & Lázaro-Gredilla, 2014; Kucukelbir et al., 2017) to minimize the Kullback-Leibler (KL) divergence  $D_{KL}(\mu_\theta || \pi)$  over the parameter space  $\Theta$  equipped with the Euclidean geometry. Lambert et al. (2022) argue that because the optimization problem is over the space distributions, it is more natural to use the geometry of this space rather than the geometry of the parameter space. The space of Gaussian distributions has a rich, meaningful and tractable geometry known as Bures–Wasserstein (BW) geometry that benefits optimization. Lambert et al. (2022) subsequently established a theoretical framework for performing VI using the BW geometry, which we adopt in this paper.
+
+Let  $\pi(x) \propto \exp(-V(x))$  be the target distribution and consider the VI problem
+
+$$\hat{\pi} \in \arg \min_{\mu \in \text{BW}(\mathbb{R}^d)} D_{KL}(\mu || \pi), \quad (1)$$
+
+where  $\text{BW}(\mathbb{R}^d)$  is the Bures–Wasserstein space of Gaussian distributions with non-degenerate covariance matrix. The BW space is a Riemannian manifold whose geodesic distance is the Bures–Wasserstein distance. This setting nicely interplays the theory of optimal transport, Wasserstein gradient flows, and variational inference. The optimization problem (1) can be reformulated as
+
+$$\hat{\pi} \in \arg \min_{\mu \in \text{BW}(\mathbb{R}^d)} \mathcal{F}(\mu), \quad \text{where } \mathcal{F}(\mu) := \mathcal{E}_V(\mu) + \mathcal{H}(\mu). \quad (2)$$
+
+Here,  $\mathcal{E}_V(\mu) = \int V(x)d\mu(x)$  is the potential energy and  $\mathcal{H}(\mu) = \int \log(\mu(x))d\mu(x)$  is the negative entropy. A conceptual and established idea to minimize a functional  $\mathcal{F}$  is to perform gradient flow on  $\mathcal{F}$  with respect to the geometry of  $\text{BW}(\mathbb{R}^d)$ . To be implementable, the flow must be discretized. Lambert et al. (2022) use forward Euler discretization, resulting in a scheme named Bures–Wasserstein stochastic gradient descent (BWGD).
+
+Diao et al. (2023) remark that forward-backward (FB) Euler (Bauschke & Combettes, 2011) should be used instead due to the objective’s composite nature and the entropy’s non-smoothness. This method iteratively applies a forward step to the potential energy  $\mathcal{E}_V$  and a backward step (proximal operator) to the negative entropy  $\mathcal{H}$ . They also observe that the backward step in the BW space has a closed-form solution (Wibisono, 2018). This is crucial because this step is known to be intractable (or computationally expensive) in the full Wasserstein space (Wibisono, 2018; Salim et al., 2020; Mokrov et al., 2021; Luu et al., 2024). Although the bottleneck of the FB Euler, which is the backward step, has been resolved in this case, the forward step becomes problematic where one has to compute the Bures–Wasserstein gradient of  $\mathcal{E}_V$  instead of the “friendly” Wasserstein gradient that is just  $\nabla V$ . The Bures–Wasserstein gradient is not always available in closed form, i.e., at  $\mu \in \text{BW}(\mathbb{R}^d)$ , it is given only implicitly by the map  $x \mapsto \mathbb{E}_\mu \nabla V + (\mathbb{E}_\mu \nabla^2 V)(x - m_\mu)$  where  $m_\mu$
+
+{2}------------------------------------------------
+
+is the mean of  $\mu$  (Lambert et al., 2022). This is the orthogonal projection of the Wasserstein gradient onto a tangent space of the Bures–Wasserstein manifold (Chewi et al., 2024). For general  $V$ , these expectations are intractable even though the underlying distribution is a Gaussian. Diao et al. (2023) proposed using the Monte Carlo (MC) method with one sample to estimate these expectations at each iteration: sample  $X \sim \mu$  and use  $\nabla V(X)$  and  $\nabla^2 V(X)$  as unbiased estimators for  $\mathbb{E}_\mu \nabla V$  and  $\mathbb{E}_\mu \nabla^2 V$ , respectively. This scheme is called Stochastic Gaussian VI (SGVI).
+
+The problem with SGVI building on this principle is that the Monte Carlo estimates needed for the BW gradient are typically too noisy, particularly in high dimensions, as shown in our experiments (Sect. 5). In practice, high-variance estimators require small step sizes, leading to slow and inefficient convergence. We resolve this fundamental limitation by proposing a variance-reduced estimator with minimal computational overhead while providing robust theoretical guarantees. Fig. 1 shows the improvement over SGVI and BWGD in practice. Bures–Wasserstein geometry offers a meaningful transition from the initial distribution to the target distribution, and our method follows the path smoothly and is particularly stable around the optimum.
+
+**Contributions.** We propose a novel variance-reduced estimator for  $\mathbb{E}_\mu \nabla V$  that does not use any extra samples, with minimal per-iteration computational overhead, using the control variates approach (Owen, 2013). Our idea is that the variational distribution  $\mu$  should be similar to the target distribution  $\pi(x) \propto \exp(-V(x))$  as  $\mu$  gets closer and closer to  $\pi$ , so the density of  $\mu$  can be used to construct a correlated control variate for the Monte-Carlo estimator  $\nabla V(X)$ . Sect. 3 presents the detailed construction and its rationale.
+
+On the theoretical side, we derive the following insights:
+
+- Thm. 1 Under a mild smoothness assumption, we prove that there is a region around the optimal solution  $\hat{\pi}$  where our estimator has guaranteed smaller variance than the MC estimator.
+- Thm. 2 If  $V$  is strongly convex, we prove that the proposed estimator has a smaller variance than the MC estimator at every  $\mu \in \text{BW}(\mathbb{R}^d)$  whenever  $\mu$  has sufficiently large (greater than a controllable threshold) variance.
+
+We further show in Thm. 3 and Thm. 4 that whenever variance reduction happens along the algorithm’s iterates, the effect will enter the convergence analysis and improve the optimization bounds derived in Diao et al. (2023). These theorems solidly back our proposed method.
+
+On the practical side, we show that reusing the Cholesky decomposition of the covariance matrix (needed to sample from a multivariate Gaussian) keeps the computational overhead of the control variable negligible. Despite being only a minimal modification to the Monte Carlo estimator, the proposed estimator achieves significant improvements in our experiments.
+
+## 2 BACKGROUND
+
+A function  $f : \mathbb{R}^d \rightarrow \mathbb{R}$  is called L-smooth (or Lipschitz smooth) if  $\|\nabla f(x) - \nabla f(y)\| \leq L\|x - y\|$  for all  $x, y \in \mathbb{R}^d$ . If  $f$  is twice continuously differentiable, we define the Laplacian operator of  $f$  as  $\Delta f = \sum_{i=1}^d (\partial^2 / \partial x_i^2) f$ . For a random variable  $\tau$ ,  $\|\tau\|_\infty := \inf\{C : |\tau| \leq C \text{ almost surely}\}$ .
+
+### 2.1 BURES–WASSERSTEIN GEOMETRY
+
+We denote by  $\mathcal{P}_2(\mathbb{R}^d)$  the space of probability measures  $\mu$  over  $\mathbb{R}^d$  with finite second-moment, i.e.,  $\int \|x\|^2 d\mu(x) < +\infty$ . Equipped with the Wasserstein distance
+
+$$W_2^2(\mu, \nu) = \inf_{\gamma \in \Gamma(\mu, \nu)} \int_{X \times X} \|x - y\|^2 d\gamma(x, y) \quad (3)$$
+
+where  $\Gamma(\mu, \nu)$  is the set of probability measures over  $X \times X$  whose marginals are  $\mu$  and  $\nu$ , the space  $\mathcal{P}_2(\mathbb{R}^d)$  becomes the metric space called the Wasserstein space (Ambrosio et al., 2005). We call  $\gamma \in \Gamma(\mu, \nu)$  a (transport) plan and any  $\gamma$  that achieves the optimal value in (3) an optimal plan. A pair of random variables whose joint distribution is an optimal plan is called an optimal coupling (between  $\mu$  and  $\nu$ ). When  $\mu$  is absolutely continuous with respect to the Lebesgue measure, Brenier theorem (Brenier, 1991) asserts that the optimal plan is unique and is given by  $(I, T_\mu^\nu)_\# \mu$  where
+
+{3}------------------------------------------------
+
+$T_\mu^\nu = \nabla g$  for some convex function  $g$ . We call  $T_\mu^\nu$  the optimal transport map from  $\mu$  to  $\nu$ . Apart from being a metric space, the Wasserstein space also enjoys some nice properties of Riemannian geometry. Otto's calculus (Otto, 2001) endows the Wasserstein space with a formal Riemannian structure, facilitating gradient flows and optimization.
+
+We denote by  $\text{BW}(\mathbb{R}^d)$  the space of Gaussian distributions with non-degenerate covariance matrices. The Wasserstein distance between two Gaussian distributions  $p_0 = \mathcal{N}(m_0, \Sigma_0)$  and  $p_1 = \mathcal{N}(m_1, \Sigma_1)$  is given in the closed-form formula  $\mathcal{W}_2^2(p_0, p_1) = \|m_0 - m_1\|^2 + \mathcal{B}^2(\Sigma_0, \Sigma_1)$  where  $\mathcal{B}^2(\Sigma_0, \Sigma_1) = \text{Tr}(\Sigma_0 + \Sigma_1 - 2(\Sigma_0^{\frac{1}{2}}\Sigma_1\Sigma_0^{\frac{1}{2}})^{\frac{1}{2}})$  is the Bures metric. The optimal transport map is also given in a closed form in this case:  $T_{p_0}^{p_1}(x) = m_1 + \Sigma_0^{-\frac{1}{2}} \left( \Sigma_0^{\frac{1}{2}} \Sigma_1 \Sigma_0^{\frac{1}{2}} \right)^{\frac{1}{2}} \Sigma_0^{-\frac{1}{2}} (x - m_0)$ .
+
+The BW space is a geodesically convex subset of the Wasserstein space, meaning that a geodesic curve joining two Gaussians lies entirely inside the BW space. The BW space is a Riemannian manifold in its own right. Let  $\mu = \mathcal{N}(m, \Sigma) \in \text{BW}(\mathbb{R}^d)$ , the tangent space of  $\text{BW}(\mathbb{R}^d)$  at  $\mu$  is the space of symmetric affine maps denoted as  $T_\mu \text{BW}(\mathbb{R}^d) = \{x \mapsto S(x - m) + a \mid a \in \mathbb{R}^d, S \in \mathcal{S}^d\}$  where  $\mathcal{S}^d$  is the space of symmetric  $d \times d$  matrices. The Riemannian metric defined using the inner product of elements in this tangent space is identified as the  $L^2(\mu)$  inner product restricted to this space. Given  $U, V \in T_\mu \text{BW}(\mathbb{R}^d)$ , the metric is  $\langle U, V \rangle_\mu := \int \langle U(x), V(x) \rangle d\mu(x)$ . This Riemannian metric induces the geodesic distance in  $\text{BW}(\mathbb{R}^d)$  that is given by the Wasserstein distance. We refer to Altschuler et al. (2021) for further discussions on BW geometry.
+
+### 2.2 STOCHASTIC GAUSSIAN VI
+
+We refer to Diao et al. (2023) for a detailed discussion and relevant terminologies. We briefly explain stochastic Gaussian VI to motivate our proposed variance reduction. Recall from (2) that we aim to minimize  $\mathcal{F}(\mu) = \mathcal{H}(\mu) + \mathcal{E}_V(\mu)$  over  $\text{BW}(\mathbb{R}^d)$ . At the optimum of  $\mathcal{F}$ ,  $\hat{\pi} = \mathcal{N}(\hat{m}, \hat{\Sigma})$ , first-order optimality reads (Opper & Archambeau, 2009; Lambert et al., 2022; Diao et al., 2023)
+
+$$\mathbb{E}_\pi \nabla V = 0 \quad \text{and} \quad \mathbb{E}_\pi \nabla^2 V = \hat{\Sigma}^{-1} \quad (4)$$
+
+which is derived by zeroing the Bures–Wasserstein gradient of the objective function.
+
+A natural idea to minimize  $\mathcal{F}$  over  $\text{BW}(\mathbb{R}^d)$  is to perform gradient flow on  $\mathcal{F}$  using the BW geometry of  $\text{BW}(\mathbb{R}^d)$ . When the gradient flow is applied over the entire Wasserstein space  $\mathcal{P}_2(\mathbb{R}^d)$ , it corresponds to the Langevin diffusion (Jordan et al., 1998), with one of its discretizations being an MCMC method called the unadjusted Langevin algorithm (Roberts & Tweedie, 1996). When restricted to  $\text{BW}(\mathbb{R}^d)$ , the gradient flow can be formulated using Riemannian geometry (Do Carmo, 1992), as  $\text{BW}(\mathbb{R}^d)$  forms a true Riemannian manifold. This flow is a curve of Gaussian distributions, characterized by the time-dependent evolution of their mean and covariance matrix. Recently, Lambert et al. (2022) showed that this evolution is governed by Särkkä's ODEs developed in the context of variational Kalman filtering (Särkkä, 2007).
+
+The negative entropy  $\mathcal{H}$  is convex along generalized geodesics but it is a nonsmooth functional. If  $V$  is smooth, it induces the smoothness of  $\mathcal{E}_V$ . Therefore, it is natural to apply forward-backward Euler that alternates between two steps: at iteration  $k$ ,
+
+$$\begin{aligned} \mu_{k+\frac{1}{2}} &= (I - \eta \nabla_{\text{BW}} \mathcal{E}_V(\mu_k))_\# \mu_k && \triangleleft \text{forward step} \\ \mu_{k+1} &= \arg \min_{\mu \in \text{BW}(\mathbb{R}^d)} \left\{ \mathcal{H}(\mu) + \frac{1}{2\eta} W_2^2 \left( \mu, \mu_{k+\frac{1}{2}} \right) \right\} && \triangleleft \text{backward step} \end{aligned}$$
+
+where  $\nabla_{\text{BW}}$  denotes the Bures–Wasserstein gradient. The backward step is also known as the proximal step in the optimization literature or the JKO (Jordan, Kinderlehrer, and Otto) step (with restriction in  $\text{BW}(\mathbb{R}^d)$ ) in the context of Wasserstein gradient flow (Jordan et al., 1998). The backward step is intractable in the full Wasserstein space and hence requires (oftentimes expensive) numerical approximations (Mokrov et al., 2021; Luu et al., 2024). On the other hand, if restricted to  $\text{BW}(\mathbb{R}^d)$ , this step admits a closed-form solution (Wibisono, 2018): let  $\mu_{k+\frac{1}{2}} = \mathcal{N}(m_{k+\frac{1}{2}}, \Sigma_{k+\frac{1}{2}})$ , then  $\mu_{k+1}$  is a Gaussian distribution with mean  $m_{k+1} = m_{k+\frac{1}{2}}$  and variance matrix  $\Sigma_{k+1} = \frac{1}{2} \left( \Sigma_{k+\frac{1}{2}} + 2\eta I + [\Sigma_{k+\frac{1}{2}}(\Sigma_{k+\frac{1}{2}} + 4\eta I)^{\frac{1}{2}}] \right)$ . This tractability of the backward is the main motivation for Diao et al. (2023) to study and develop FB Euler in this scenario. The forward step, however,
+
+{4}------------------------------------------------
+
+is not always analytically available since the BW gradient of  $\mathcal{E}_V$ , at iterate  $k$ ,
+
+$$\nabla_{\text{BW}} \mathcal{E}_V(\mu_k) : x \mapsto \mathbb{E}_{\mu_k} \nabla V + (\mathbb{E}_{\mu_k} \nabla^2 V)(x - m_k),$$
+
+involves intractable expectations. Diao et al. (2023) propose using Monte Carlo approximation for these expectations: sample  $X_k \sim \mu_k$  and use  $b_k := \nabla V(X_k)$  and  $S_k := \nabla^2 V(X_k)$  as unbiased estimators for  $\mathbb{E}_{\mu_k} \nabla V$  and  $\mathbb{E}_{\mu_k} \nabla^2 V$ , respectively.
+
+## 3 STOCHASTIC VARIANCE-REDUCED GAUSSIAN VI
+
+We present our ideas on constructing stochastic variance-reduced estimators from first principles. We recall from Sect. 2.2 that stochastic Gaussian VI approximates, at iteration  $k$ ,
+
+$$\mathbb{E}_{\mu_k} \nabla V \approx b_k := \nabla V(X_k) \quad \text{and} \quad \mathbb{E}_{\mu_k} \nabla^2 V \approx S_k := \nabla^2 V(X_k) \quad \text{where } X_k \sim \mu_k. \quad (5)$$
+
+These estimators are typically noisy. Any number of MC samples can be used, but already one is unbiased and proposed by earlier works; we also focus on the single-sample case for computational efficiency. We aim to design better unbiased estimators for either  $\mathbb{E}_{\mu_k} \nabla V$  or  $\mathbb{E}_{\mu_k} \nabla^2 V$  in the sense that their variances are smaller than those of  $b_k$  and  $S_k$ , building on the control variates approach (Owen, 2013); Also see the discussions in Defazio et al. (2014); Luu (2022).
+
+Let us first describe briefly the core idea of control variates in helping reduce the variance. Let  $\theta$  be the quantity of interest and  $X$  be an unbiased estimator for  $\theta$ , i.e.,  $\mathbb{E}X = \theta$ . A *control variate* is a random variable  $Y$  with a known mean so that  $Y$  is correlated with  $X$ . The random variable  $Z = X + c(\mathbb{E}Y - Y)$ , where  $c \in \mathbb{R}$ , is then an *unbiased estimator* for  $\theta$ . The variance of  $Z$  is
+
+$$\text{Var}Z = \text{Var}X + c^2 \text{Var}Y - 2c \text{Cov}(X, Y). \quad (6)$$
+
+If  $X, Y$  are highly correlated in the sense that  $2\text{Cov}(X, Y) > \text{Var}Y$ , we immediately get  $\text{Var}Z < \text{Var}X$  for any  $c \in (0, 1]$ . So, we achieve a reduction in variance by using  $Z$ . On the other hand, if  $X, Y$  are correlated ( $\text{Cov}(X, Y) > 0$ ) but not highly correlated, we can also obtain variance reduction effects whenever  $c$  is positive and small enough. Furthermore, given the parabolic form with respect to  $c$  in (6), one can pinpoint the optimal value of  $c$  is  $c^* := \text{Cov}(X, Y)/\text{Var}(Y)$ , resulting in the maximal variance reduction  $\text{Var}Z = (1 - \text{Corr}(X, Y)^2)\text{Var}X < \text{Var}X$  where  $\text{Corr}(X, Y)$  denotes correlation between  $X$  and  $Y$ .
+
+We now return to our problem and seek variance-reduced estimators of the forms
+
+$$\tilde{b}_k := \nabla V(X_k) + c(\mathbb{E}(Z_k) - Z_k) \quad \text{and} \quad \tilde{S}_k := \nabla^2 V(X_k) + d(\mathbb{E}(W_k) - W_k)$$
+
+where  $c, d > 0$  and  $Z_k, W_k$  are a random vector and a random matrix, respectively. Let us first focus on  $\tilde{b}_k$ . As discussed,  $Z_k$  should be (element-wise) highly correlated with  $\nabla V(X_k)$  while  $\mathbb{E}(Z_k)$  remains efficiently computable. We look for  $Z_k = \nabla U(X_k)$  so that  $\nabla U$  is as close to  $\nabla V$  as possible. We are in the context of approximating  $\pi(x)$  by the VI distribution  $\mu_k = \mathcal{N}(m_k, \Sigma_k)$ , so it is natural to expect that
+
+$$-\nabla V(x) = \nabla \log \pi(x) \approx \nabla \log f(x; m_k, \Sigma_k) = -\Sigma_k^{-1}(x - m_k),$$
+
+where  $f(x; m_k, \Sigma_k) \propto \exp(-\frac{1}{2}(x - m_k)^\top \Sigma_k^{-1}(x - m_k))$  is the PDF of  $\mu_k$ . Therefore, we propose using  $Z_k = \Sigma_k^{-1}(X_k - m_k)$  as a control variate. We have  $\mathbb{E}(Z_k) = 0$  since  $\mathbb{E}(X_k) = m_k$ . It is worth noting that  $Z_k$  is known as the Stein/Hyvärinen score (Hyvärinen, 2005) of  $\mu_k$ . The estimator  $\tilde{b}_k$  then becomes  $\tilde{b}_k := \nabla V(X_k) - c\Sigma_k^{-1}(X_k - m_k)$ . By applying the same reasoning to  $\tilde{S}_k$ , we can immediately conclude that  $W_k$  is deterministic and equals  $\Sigma_k^{-1}$ . Consequently, the control variate does not affect  $\tilde{S}_k$ ; we keep the standard estimator. We derive Stochastic Variance-Reduced Gaussian VI (SVRGVI) as in Alg. 1 (we will discuss more about the choice of  $c_k$  in Sect. 4). Note that the only difference between Alg. 1 and the SGVI in Diao et al. (2023) is the estimator  $\tilde{b}_k$ , where the difference is highlighted in [blue](#).
+
+Fig. 2 (left) demonstrates that our proposed estimator (with  $c = 0.9$ ) achieves lower variance compared to the standard MC estimator, while both remain unbiased estimators of  $\mathbb{E}_{\mu_k} \nabla V$ . In Fig. 2 (right), we vary  $c$  from 0 to 2 and calculate the empirical variance of our estimator, revealing a parabolic pattern. Note that when  $c = 0$ , the estimator reduces to the standard estimator, and for all values of  $c \in (0, 2)$ , our proposed estimator consistently exhibits lower variance, with an optimal value of  $c$  around 1. At this optimal  $c$ , the variance is reduced roughly by a factor of 10. We provide theoretical justification for these empirical observations in Sect. 4.
+
+{5}------------------------------------------------
+
+![Figure 2: Two plots illustrating the performance of the proposed estimator. The left plot is a scatter plot of gradients for Monte Carlo (grey), Variance reduction (light blue), and True gradient (navy blue). The right plot shows the empirical variance of the proposed estimator as a function of c, which is U-shaped, with a minimum at c ≈ 1.25.](c54b3ca7603d65d4589151bc3a49d054_img.jpg)
+
+Figure 2: Two plots illustrating the performance of the proposed estimator. The left plot is a scatter plot of gradients for Monte Carlo (grey), Variance reduction (light blue), and True gradient (navy blue). The right plot shows the empirical variance of the proposed estimator as a function of c, which is U-shaped, with a minimum at c ≈ 1.25.
+
+Figure 2: **Left:**  $\pi$  is a Gaussian, VI distribution  $\mu$  is in the neighborhood of  $\pi$ . In this case, the true gradient, i.e., the expectation  $\mathbb{E}_\mu \nabla V$ , can be computed exactly (in navy blue). Our proposed estimator with  $c = 0.9$  (light blue) has a smaller variance than the Monte Carlo estimator (grey). These are 1,000 samples for each estimator, generated by drawing from  $\mu$  and substituting the values into the respective estimator formulas. **Right:** The empirical variance of our proposed estimator when  $c$  varies from 0 to 2. Note that  $c = 0$  corresponds to the Monte Carlo estimator.
+
+**Minimal extra computational cost** Despite involving calculating the inverse of the covariance matrix, the computational overhead is small. Sampling from multivariate normal in step 1 in Alg. 1 typically requires obtaining the Cholesky factor of the covariance matrix, which is  $O(d^3)$  (Rasmussen & Williams, 2006). With the Cholesky factor, obtaining the solution of the inverse of the matrix times a vector is  $O(d^2)$  (Rasmussen & Williams, 2006). As such, we can reuse this obtained Cholesky factor in step 1 to compute the inverse in step 2, which implies that the estimator adds an overhead of  $O(d^2)$ , which is naturally dominated by the  $O(d^3)$  complexity of the original algorithm.
+
+#### --- Algorithm 1 Stochastic variance-reduced Gaussian Variational Inference (SVRGVI) ---
+
+**Input:** Target distribution  $\pi(x) \propto \exp(-V(x))$ , initial distribution  $\mu_0 = \mathcal{N}(m_0, \Sigma_0)$ , step size  $\eta > 0$ , number of steps  $N$ , sequence of control variate parameters  $\{c_k\}_{k=0}^{N-1}$  where  $c_k \in (0, 1], \forall k \in \{0, 1, \dots, N-1\}$
+
+**for**  $k = 0$  to  $N - 1$  **do**
+
+1. Draw one sample  $X_k \sim \mathcal{N}(m_k, \Sigma_k)$
+
+2. Compute estimators:  $\tilde{b}_k \leftarrow \nabla V(X_k) - c_k \Sigma_k^{-1}(X_k - m_k)$  and  $S_k \leftarrow \nabla^2 V(X_k)$
+
+3. Update mean and covariance matrix:
+
+$$m_{k+1} \leftarrow m_k - \eta \tilde{b}_k$$
+
+$$M_{k+1} \leftarrow I - \eta S_k$$
+
+$$\Sigma_{k+\frac{1}{2}} \leftarrow M_{k+1} \Sigma_k M_{k+1}$$
+
+$$\Sigma_{k+1} = \frac{1}{2} \left( \Sigma_{k+\frac{1}{2}} + 2\eta I + \left[ \Sigma_{k+\frac{1}{2}} (\Sigma_{k+\frac{1}{2}} + 4\eta I) \right]^{\frac{1}{2}} \right)$$
+
+**end for**
+
+**Output:**  $\mu_N = \mathcal{N}(m_N, \Sigma_N)$
+
+---
+
+## 4 THEORY
+
+In Sect. 3, we argued that, in the context of variational inference, as  $\mu_k$  iteratively gets closer to  $\pi$ ,  $\nabla V(X_k)$  is then (highly) correlated to  $\Sigma_k^{-1}(X_k - m_k)$ , and hence we obtain a variance reduction effect. This argument leads to the construction of the control variate in Alg. 1. One might question whether this approach remains effective when the target distribution  $\pi$  is significantly distant from the BW space. Because we are constrained to the BW space, the best we can do is to get closer to  $\tilde{\pi}$  which is the optimal solution to the problem (1). However,  $\tilde{\pi}$  might still look very different from  $\pi$ . Notably, in Thm. 1, we rigorously show that within a certain neighbourhood of  $\tilde{\pi}$  (to be defined later), our proposed estimator consistently reduces variance, regardless of how different  $\pi$  is to a Gaussian distribution. Let us first introduce Lem. 1 to pave the way for Thm. 1 and also to discuss
+
+{6}------------------------------------------------
+
+the optimal  $c$  in the control variate. In Lem. 1, we compute the variance of the proposed estimator by leveraging multidimensional Stein’s lemma (Lin et al., 2019).
+
+**Lemma 1** Assume that  $V$  is continuously differentiable. Let  $\mu = \mathcal{N}(m, \Sigma) \in \text{BW}(\mathbb{R}^d)$ . Then,
+
+$$\underbrace{\mathbb{E} \|\nabla V(X) - c\Sigma^{-1}(X - m) - \mathbb{E} \nabla V(X)\|^2}_{\text{variance of our estimator}} = \underbrace{\mathbb{E} \|\nabla V(X) - \mathbb{E} \nabla V(X)\|^2}_{\text{variance of the Monte-Carlo estimator}} + \underbrace{c^2 \text{Tr}(\Sigma^{-1}) - 2c \text{Tr}(\mathbb{E} \nabla^2 V(X))}_{\text{extra term}}, \text{ where } X \sim \mu.$$
+
+Proof of Lem. 1 is given in Appendix A.1. Lem. 1 compares the variance of the proposed estimator and the Monte Carlo estimator at a given  $\mu \in \text{BW}(\mathbb{R}^d)$ . Recall that the first-order optimality condition (4) of  $\hat{\pi}$  reads  $\mathbb{E}_{\hat{\pi}} \nabla^2 V = \hat{\Sigma}^{-1}$ . Consequently, at  $\hat{\pi}$ , the extra term in Lem. 1 is simplified as  $c(c-2) \text{Tr}(\hat{\Sigma}^{-1})$  which is negative whenever  $c \in (0, 2)$  and minimized for  $c = 1$ . Therefore, at  $\hat{\pi}$ , our estimator is always better than the Monte Carlo estimator for  $c \in (0, 2)$ .
+
+**Remark 1** A practical merit of Lem. 1 is that it implies the optimal value for  $c$  to get maximum variance reduction at  $\mu$  is  $c^* = \text{Tr}(\mathbb{E}_{\mu} \nabla^2 V) / \text{Tr}(\Sigma^{-1})$ . Applying this to Alg. 1, we can pick the adaptive sequence  $\{c_k\}$  as  $c_k^* = \frac{\text{Tr}(\mathbb{E}_{\mu_k} \nabla^2 V)}{\text{Tr}(\Sigma_k^{-1})} \approx \frac{\text{Tr}(\hat{\Sigma}_k)}{\text{Tr}(\Sigma_k^{-1})} := c_k$ . Again, this computation of  $c_k$  incurs a negligible extra cost to Alg. 1. We also remark that around  $\hat{\pi}$ , optimality condition (4) implies the optimal value  $c^*$  indeed is around 1.
+
+In Thm. 1, we further show that when the Laplacian  $\Delta V$  is smooth, the proposed estimator has a smaller variance than the Monte Carlo estimator in a region around  $\hat{\pi}$ .
+
+**Theorem 1 (Variance reduction around the optimal solution)** Assume that the Laplacian  $\Delta V$  is  $\ell$ -smooth. For any control variate coefficient  $c \in (0, 2)$ , define the region around  $\hat{\pi} = \mathcal{N}(\hat{m}, \hat{\Sigma})$ :
+
+$$\mathcal{V}(\hat{\pi}, r) = \{\mu = \mathcal{N}(m, \Sigma) : 2\ell W_2(\mu, \hat{\pi}) + c |\text{Tr}(\Sigma^{-1}) - \text{Tr}(\hat{\Sigma}^{-1})| < r\}$$
+
+where  $r = (2 - c) \text{Tr}(\hat{\Sigma}^{-1}) > 0$  is the region’s radius. For any  $\mu \in \mathcal{V}(\hat{\pi}, r)$ , the proposed estimator has a smaller variance than the Monte Carlo estimator.
+
+Proof of Thm. 1 is given in Appendix A.2 with the main idea being that the smoothness of the Laplacian  $\Delta V$  propagates the improvement of the proposed estimator at  $\hat{\pi}$  to its neighbourhood. We additionally observe that, for small  $c > 0$ , the region  $\mathcal{V}(\hat{\pi}, r)$  effectively reduces to the Wasserstein ball  $\mathcal{B}(\hat{\pi}, \ell^{-1} \text{Tr}(\hat{\Sigma}^{-1}))$ .
+
+Thm. 1 applies to arbitrary  $\pi$ , only requiring a mild smoothness condition of its second derivative. In the next theorem, we show that when  $\pi$  is strongly log-concave ( $\pi$  is now more similar to a Gaussian), variance reduction happens not only around  $\hat{\pi}$  but also in many regions of interest.
+
+**Theorem 2 (Variance reduction at large-variance distributions)** If  $V$  is  $\alpha$ -strongly convex for some  $\alpha > 0$ , for any control variate  $c > 0$ , the proposed estimator has a smaller variance than the Monte Carlo estimator at every  $\mu = \mathcal{N}(m, \Sigma)$  whenever  $\text{Tr}(\Sigma^{-1}) < \frac{2\alpha d}{c}$ .
+
+Proof of Thm. 2 is given in Appendix A.3.
+
+**Remark 2** A consequence of Thm. 2 is that for strongly convex  $V$  we can obtain variance reduction at each iteration in Alg. 1 by setting  $c_k \in (0, 2\alpha d / \text{Tr}(\Sigma_k^{-1}))$ . We can extend this result to the case of convex but non-strongly-convex  $V$ , i.e.,  $\alpha = 0$ . We first show that: for any Gaussian  $\mathcal{N}(m, \Sigma)$ ,  $\text{Tr}(\mathbb{E}_{\mathcal{N}(m, \Sigma)} \nabla^2 V) > 0$ . We can then obtain variance reduction at each iteration by setting  $c_k \in (0, 2 \text{Tr}(\mathbb{E}_{\mathcal{N}(m_k, \Sigma_k)} \nabla^2 V) / \text{Tr}(\Sigma_k^{-1}))$ . Note that this upper bound of  $c_k$  is less explicit as the strongly convex case. However, the point is that variance reduction still happens in this case given that  $c_k$  is small enough. See Appendix A.3 for the proof.
+
+We further show in Thm. 3 and Thm. 4 that whenever variance reduction happens along the algorithm’s iterates, the effect will propagate to the convergence analyses of Diao et al. (2023) and
+
+{7}------------------------------------------------
+
+improve their theoretical bounds. Therefore, combining with Thm. 1 and Thm. 2, the overall theory strongly favours SVRGVI over SGVI.
+
+Let  $\mathcal{P}_k$  denote the information up to the beginning of iteration  $k$ , i.e., it is the  $\sigma$ -algebra given by  $\mathcal{P}_k = \sigma(X_0, X_1, \dots, X_{k-1})$  for  $k \in \{1, 2, \dots, N-1\}$  and  $\mathcal{P}_0$  is, by convention, the trivial  $\sigma$ -algebra with no information. Assuming variance reduction occurs along the algorithm's iterates, i.e., for  $k = 0, 1, \dots, N-1$ , it holds
+
+$$\mathbb{E}(\|\nabla V(X_k) - c_k \Sigma_k^{-1}(X_k - m_k) - \mathbb{E}_{\mu_k} \nabla V\|^2 | \mathcal{P}_k) \leq \tau_k \mathbb{E}(\|\nabla V(X_k) - \mathbb{E}_{\mu_k} \nabla V\|^2 | \mathcal{P}_k) \quad (7)$$
+
+where  $\tau_k < 1$  almost surely. We recall from Remark 2 that for convex  $V$ , (7) holds such that  $\tau_k < 1$  almost surely for all  $k$  if  $c_k$  is well-chosen, and it follows that  $\mathbb{E}\tau_k < 1$  and  $\|\tau_k\|_\infty \leq 1$  for all  $k$ . We can further guarantee  $\|\tau_k\|_\infty < 1$  for all  $k$  under mild boundedness assumptions (Appendix A.4).
+
+Under condition 7, we now show the improved bounds. Similar to Diao et al. (2023), we consider log-concave and strongly-log-concave sampling, meaning that  $V$  is assumed to be convex and strongly convex, respectively.
+
+**Theorem 3 (Convex case)** Suppose that  $V$  is convex and  $\beta$ -smooth and the step size  $0 < \eta \leq \frac{1}{2\beta}$ . If variance reduction happens for  $k = 0, 1, \dots, N-1$ , then,
+
+$$\mathbb{E} \min_{k=1,2,\dots,N} \mathcal{F}(\mu_k) - \mathcal{F}(\hat{\pi}) \lesssim \frac{e}{1 + \frac{C\eta^2(1-\tau_{\max,\infty})}{2}} \left( \frac{1}{2\eta N} + \frac{C\eta}{2} \right) W_2^2(\mu_0, \hat{\pi}) + 3\eta\beta d(1 + \tau_{\max,E})$$
+
+where  $\tau_{\max,\infty} := \max_{i=0,N-1} \|\tau_i\|_\infty$ ,  $\tau_{\max,E} = \max_{i=0,N-1} \mathbb{E}\tau_i$ ,  $e \approx 2.718$  is the Euler's number,  $C = 24\beta^3 \lambda_{\max}(\tilde{\Sigma})$ , and  $\lesssim$  is asymptotically at the limit of small  $\eta$ .
+
+Proof of Thm. 3 is given in Appendix A.5.
+
+**Theorem 4 (Strongly convex case)** Suppose that  $V$  is  $\alpha$ -strongly-convex with  $\alpha > 0$ , and  $0 < \eta \leq \frac{\alpha^2}{48\beta^3}$ . If variance reduction happens for  $k = 0, 1, \dots, N-1$ , then
+
+$$\mathbb{E} W_2^2(\mu_N, \hat{\pi}) \lesssim \exp\left(-\frac{N(3-\tau_{\max,\infty})\eta\alpha}{4}\right) W_2^2(\mu_0, \hat{\pi}) + \frac{24(1+\tau_{\max,E})\beta\eta d}{(3-\tau_{\max,\infty})\alpha} \quad (8)$$
+
+where  $\tau_{\max,\infty}$  and  $\tau_{\max,E}$  are defined in Theorem 3, and  $\lesssim$  is asymptotically at the limit of small  $\eta$ .
+
+Proof of Thm. 4 is given in Appendix A.6.
+
+**Remark 3** We recall the corresponding bounds for SGVI in Diao et al. (2023, Thm 5.7, Thm. 5.8)
+
+- **Convex.**  $\mathbb{E}(\min_{k=1,2,\dots,N} \mathcal{F}(\mu_k)) - \mathcal{F}(\hat{\pi}) \lesssim \frac{eW_2^2(\mu_0, \hat{\pi})}{2N\eta} + \frac{eC\eta}{2} W_2^2(\mu_0, \hat{\pi}) + 6\beta\eta d$ .<sup>1</sup>
+- **Strongly convex.**  $\mathbb{E} W_2^2(\mu_N, \hat{\pi}) \lesssim \exp\left(-\frac{\alpha N \eta}{2}\right) W_2^2(\mu_0, \hat{\pi}) + \frac{24\beta\eta d}{\alpha}$ .
+
+Putting side-by-side, we see that Thm. 3 and Thm. 4 improve all coefficients of these bounds. In particular, the scale-down involving  $d$  is expected to help in high dimensions. It is also worth noting that even when we set  $\tau_{\max,\infty} = 0$ , the noise terms in the bounds of Thm. 3 and Thm. 4 would not disappear because of another source of randomness coming from  $S_k$ .
+
+## 5 EXPERIMENTS
+
+We demonstrate the method in a collection of controlled problems, comparing it against the recent methods for VI in the BW manifold, namely BWGD (Lambert et al., 2022) and SGVI (Diao et al., 2023)<sup>2</sup>. We set the step size to 1 for all algorithms (for an experiment on varying step size, see
+
+<sup>1</sup>With a minor correction to the coefficients in SGVI's bound.
+
+<sup>2</sup>Our code is available at <https://github.com/MCS-hub/vr25>
+
+{8}------------------------------------------------
+
+![Figure 3: KL divergence for Gaussian targets of varying dimensionality. The figure consists of three subplots (a, b, c) showing the KL divergence D_KL(mu_theta || mu^*) on a logarithmic y-axis (from 10^-4 to 10^1) against time elapsed (n x #iters) on the x-axis (from 0 to 300). Subplot (a) is for d = 10, (b) for d = 50, and (c) for d = 200. Each subplot compares four methods: BWGD (blue line), SGVI (red line), SVRGVI (ours) (black line), and EVI (yellow dashed line). In all cases, SVRGVI (ours) shows the lowest KL divergence, indicating the best performance. The performance gap between SVRGVI and the other methods increases as the dimensionality d increases.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 3: KL divergence for Gaussian targets of varying dimensionality. The figure consists of three subplots (a, b, c) showing the KL divergence D\_KL(mu\_theta || mu^\*) on a logarithmic y-axis (from 10^-4 to 10^1) against time elapsed (n x #iters) on the x-axis (from 0 to 300). Subplot (a) is for d = 10, (b) for d = 50, and (c) for d = 200. Each subplot compares four methods: BWGD (blue line), SGVI (red line), SVRGVI (ours) (black line), and EVI (yellow dashed line). In all cases, SVRGVI (ours) shows the lowest KL divergence, indicating the best performance. The performance gap between SVRGVI and the other methods increases as the dimensionality d increases.
+
+Figure 3: KL divergence for Gaussian targets of varying dimensionality.
+
+Appendix B.7), fix the covariate coefficient  $c = 0.9$  (for an experiment on the effect of  $c$ , see Appendix B.6), and show results for 10 runs, with bold line showing the average performance. The comparisons are shown as convergence curves, as the per-iteration cost of all methods is almost identical. We also compare against a full-rank Gaussian approximation optimised in the Euclidean geometry (denoted as EVI), using low-variance reparameterization gradients of Roeder et al. (2017) with ADAM optimizer, and Laplace approximation that does not optimize the KL divergence but fits a Gaussian distribution at the target mode; see Appendix B for details. As the per-iteration cost of these methods is different from the BW methods, we only report the final accuracy for carefully optimized approximations to show how the BW methods compare against commonly used algorithm. The Laplace approximation is omitted for Gaussian targets as it is optimal by definition.
+
+**Gaussian targets** We randomly generate the means and covariances for a multivariate Gaussian target distribution  $\pi$ , considering dimensions of  $\{10, 50, 200\}$ . Fig. 3 demonstrates consistent significant improvement over SGVI and BWGD. For example, for  $d = 200$ , the the difference between SVRGVI and SGVI/BWGD is 5 orders of magnitude,  $10^{-2}$  versus  $10^3$ . Fig. 1 shows visually the marginals for  $d = 50$ , providing an interpretation of the improvement seen in KL-divergence. We also clearly outperform EVI in higher dimensions, unlike previous BW methods.
+
+**Student’s t targets** We consider a multivariate Student’s t target with a degree of freedom of 4 in 200 dimensions. Fig. 4 (a) shows that our algorithm is again clearly the best. BWGD is not stable and, on average, performs worse than even the Laplace approximation.
+
+**Bayesian logistic regression** We consider a Bayesian logistic regression with a flat prior as in Diao et al. (2023): given a set of covariates  $X_i \sim \mathcal{N}(0, I_d)$  for  $i = 1, 2, \dots, n$ , consider
+
+$$Y_i | X_i, \theta \sim \text{Bernoulli}(\sigma(\langle \theta, X_i \rangle)), \text{ where } \sigma \text{ is the sigmoid function.}$$
+
+The negative log posterior is  $V(\theta) = \sum_{i=1}^n [\ln(1 + e^{\langle \theta, X_i \rangle}) - Y_i \langle \theta, X_i \rangle]$ . The model consists of  $n = 1000$  data points  $(X_i, Y_i)$  with dimension  $d = 200$ . The optimal solution is unknown in this case, so we cannot plot the KL divergence along the iterations. Instead, we estimate the objective function of the problem (2),  $\mathcal{F}(\mu_k)$ , by drawing samples from  $\mu_k$ . We denote by  $\mu_{\text{best}}$  the distribution that obtains the smallest  $\mathcal{F}$  among all iterations of all algorithms, comparing against that. Fig. 4 (b) shows the proposed method is again the most accurate.
+
+We also measured the variance along iterations in Appendix B.4, showing that we achieved variance reduction empirically. We showed in Appendix B.5 that the proposed method is more efficient than minibatching (whether using i.i.d. or quasi Monte-Carlo samples).
+
+## 6 DISCUSSION
+
+Various variance reduction techniques have been broadly studied in the VI literature, but mainly for methods operating in the Euclidean parameter space. Our work resembles in nature the seminal work of Roeder et al. (2017) that demonstrated how the variance of gradient estimators for VI can be dramatically reduced by a single-line change in the algorithm: We also propose a minor
+
+{9}------------------------------------------------
+
+![Figure 4: Performance of algorithms for Student's t target and Bayesian logistic regression. The figure contains two line plots. Plot (a) is titled 'D_{KL}(p_t || \hat{p}) (empirical)' and plot (b) is titled 'F(p_t) - F(p_{BWGD}) (empirical)'. Both plots show the performance of five algorithms: BWGD (blue solid line), SGVI (red solid line), SVRGVI (ours) (black solid line), Laplace (green dashed line), and EVI (yellow dashed line) over 300 time elapsed units (n x #iters). In both plots, SVRGVI (ours) shows the lowest loss, indicating the best performance, while the other algorithms show higher and more stable losses.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+Figure 4: Performance of algorithms for Student's t target and Bayesian logistic regression. The figure contains two line plots. Plot (a) is titled 'D\_{KL}(p\_t || \hat{p}) (empirical)' and plot (b) is titled 'F(p\_t) - F(p\_{BWGD}) (empirical)'. Both plots show the performance of five algorithms: BWGD (blue solid line), SGVI (red solid line), SVRGVI (ours) (black solid line), Laplace (green dashed line), and EVI (yellow dashed line) over 300 time elapsed units (n x #iters). In both plots, SVRGVI (ours) shows the lowest loss, indicating the best performance, while the other algorithms show higher and more stable losses.
+
+Figure 4: Performance of algorithms for Student’s t target and Bayesian logistic regression.
+
+modification that dramatically improves the accuracy, and should always be used. A high-level similarity lies in the heuristic that the VI distribution resembles the target distribution, allowing it to be used to construct control variates. Perhaps surprisingly, Yi & Liu (2023) recently showed that the continuous-time flow of Roeder et al. (2017) for Gaussian VI in the Euclidean geometry (by reparameterizing the covariance matrix as  $\Sigma = SS^\top$ ) also follows Särkkä’s ODEs. In other words, those BW methods and Roeder et al. (2017) are different discretizations of the same dynamics. Recent works (Kim et al., 2023; Domke et al., 2024) have advanced our understanding of variance reduction in Euclidean VI, demonstrating strong convergence and extending beyond traditional control variate approaches. Adopting these new techniques in the BW setting is a promising research direction.
+
+In the BW space, Diao (2023) considers variance reduction for large-sum structures based on the nested-loop idea by Johnson & Zhang (2013) to reduce the stochasticity of the minibatch sampling. In contrast, our method addresses the stochasticity arising from Gaussian sampling from the VI.
+
+Even though our experiments focused on synthetic targets, they expanded on the previous experimentation of VI optimized in the BW space. We confirm the finding of Diao et al. (2023) that BWGD and SGVI are effectively identical except for the instability of the former, but now show how their performance degrades in higher dimensions while our algorithm remains effective.
+
+With the exception of the vastly improved accuracy due to the significantly lower variance of the gradient estimators, our method retains all qualitative characteristics of the previous BW methods, both positive and negative. That is, we retain the theoretical convergence guarantees and asymptotic optimality for posterior inference, but also the cubic computational cost due to requiring the Hessian of the log-target and the limitation to Gaussian approximations by construction. As highlighted by Xu & Campbell (2022) and Quiroz et al. (2023), there are tasks for which Gaussian approximations are highly relevant due to efficiently capturing the correlations.
+
+## 7 CONCLUSION
+
+Our main result is showing that the methods learning a variational approximation by direct optimization of the approximating distribution in the Bures–Wasserstein space of Gaussians can be made practical. The previous works by Lambert et al. (2022) and Diao et al. (2023) introduced the key idea and the algorithms with strong theoretical guarantees. However, they are prone to high variance from Monte Carlo approximations, limiting the impact. Our variance reduction technique that requires only a minor modification for the SVGI algorithm completely resolves this issue, resulting in extremely stable learning.
+
+We demonstrated substantial variance reduction and showed that this reduction results in orders of magnitude improvement in final approximation accuracy, over both the previous BW methods and examples of parameter-space algorithms. This improvement comes with provable variance reduction in the neighborhood of the optimal solution and for all distributions with sufficiently large variance in the case of strong log-concave targets, and hence the proposed variance reduction technique should always be used.
+
+ Rest of paper (reference and Appendix) is removed.

@@ -1,0 +1,268 @@
+
+
+{0}------------------------------------------------
+
+# JUMPING AHEAD: IMPROVING RECONSTRUCTION FIDELITY WITH JUMPRELU SPARSE AUTOENCODERS
+
+Anonymous authors  
+Paper under double-blind review
+
+## ABSTRACT
+
+Sparse autoencoders (SAEs) are a promising unsupervised approach for identifying causally relevant and interpretable linear features in a language model’s (LM) activations. To be useful for downstream tasks, SAEs need to decompose LM activations faithfully; yet to be interpretable the decomposition must be sparse – two objectives that are in tension. In this paper, we introduce JumpReLU SAEs, which achieve state-of-the-art reconstruction fidelity at a given sparsity level on Gemma 2 9B activations, compared to other recent advances such as Gated and TopK SAEs. We also show that this improvement does not come at the cost of interpretability through manual and automated interpretability studies. JumpReLU SAEs are a simple modification of vanilla (ReLU) SAEs – where we replace the ReLU with a discontinuous JumpReLU activation function – and are similarly efficient to train and run. By utilizing straight-through-estimators (STEs) in a principled manner, we show how it is possible to train JumpReLU SAEs effectively despite the discontinuous JumpReLU function introduced in the SAE’s forward pass. Similarly, we use STEs to directly train L0 to be sparse, instead of training on proxies such as L1, avoiding problems like shrinkage.
+
+## 1 INTRODUCTION
+
+Sparse autoencoders (SAEs) allow us to find causally relevant and seemingly interpretable directions in the activation space of a language model (Bricken et al., 2023; Cunningham et al., 2023; Templeton et al., 2024). There is interest within the field of mechanistic interpretability in using sparse decompositions produced by SAEs for tasks such as circuit analysis (Marks et al., 2024) and model steering (Conmy & Nanda, 2024).
+
+SAEs work by finding approximate, sparse, linear decompositions of language model (LM) activations in terms of a large dictionary of basic “feature” directions. Two key objectives for a good decomposition (Bricken et al., 2023) are that it is sparse – i.e. that only a few elements of the dictionary are needed to reconstruct any given activation – and that it is faithful – i.e. the approximation error between the original activation and recombining its SAE decomposition is “small” in some suitable sense. These two objectives are naturally in tension: for any given SAE training method and fixed dictionary size, increasing sparsity typically results in reduced reconstruction fidelity.
+
+One strand of recent research in training SAEs on LM activations (Rajamanoharan et al., 2024; Gao et al., 2024; Taggart, 2024) has been on finding improved SAE architectures and training methods that push out the Pareto frontier balancing these two objectives, while preserving other less quantifiable measures of SAE quality such as the interpretability or functional relevance of dictionary directions. A common thread connecting these recent improvements is the introduction of a thresholding or gating operation to determine which SAE features to use in the decomposition. The motivation for introducing such a thresholding operation is illustrated and explained in Fig. 1.
+
+In this paper, we introduce **JumpReLU SAEs** – a small modification of the original, ReLU-based SAE architecture (Ng, 2011) where the SAE encoder’s ReLU activation function is replaced by a JumpReLU activation function (Erichson et al., 2019), which zeroes out pre-activations below a positive threshold (see Fig. 1). Moreover, we train JumpReLU SAEs using a loss function that is simply the weighted sum of a L2 reconstruction error term and a L0 sparsity penalty, eschewing
+
+{1}------------------------------------------------
+
+![Figure 1: Four bar charts showing encoder activations for different activation functions. The y-axis is labeled 'Encoder activations' and ranges from 054 to 062. The x-axis represents different features. The four charts are: 1. 'Raw pre-activations': shows a mix of positive (red) and negative (blue) bars. 2. 'ReLU(pre-activations)': shows only positive bars, but some are false positives (marked with a red X). 3. 'ReLU(pre-activations) - offset': shows fewer positive bars, indicating shrinkage (marked with a red X). 4. 'JumpReLU(pre-activations)': shows only positive bars, with a green checkmark indicating no false positives or shrinkage.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1: Four bar charts showing encoder activations for different activation functions. The y-axis is labeled 'Encoder activations' and ranges from 054 to 062. The x-axis represents different features. The four charts are: 1. 'Raw pre-activations': shows a mix of positive (red) and negative (blue) bars. 2. 'ReLU(pre-activations)': shows only positive bars, but some are false positives (marked with a red X). 3. 'ReLU(pre-activations) - offset': shows fewer positive bars, indicating shrinkage (marked with a red X). 4. 'JumpReLU(pre-activations)': shows only positive bars, with a green checkmark indicating no false positives or shrinkage.
+
+Figure 1: A toy model illustrating why JumpReLU (or similar activation functions, such as TopK) are an improvement over ReLU for training sparse yet faithful SAEs. Consider a direction in which the encoder pre-activation is high when the corresponding feature is *active* and low, but not always negative, when the feature is *inactive* (far-left). Applying a ReLU activation function fails to remove all false positives (centre-left), harming sparsity. We can get rid of false positives while maintaining the ReLU, e.g. by decreasing the encoder bias (centre-right), but this leads to feature magnitudes being systematically underestimated, harming fidelity. The JumpReLU activation function (far-right) provides an independent threshold below which pre-activations are screened out, minimizing false positives, while leaving pre-activations above the threshold unaffected, improving fidelity.
+
+easier-to-train proxies to L0, such as L1, and without needing auxiliary tasks to train the threshold (which Gated SAEs require).
+
+Our key insight is to notice that although such a loss function is piecewise-constant with respect to the threshold – and therefore provides zero gradient to train this parameter – the derivative of the *expected loss* can be analytically derived, and is generally non-zero, albeit it is expressed in terms of probability densities of the feature activation distribution that need to be estimated. We show how to use straight-through-estimators (STEs; Bengio et al. (2013)) to estimate the gradient of the expected loss in an efficient manner, thus allowing JumpReLU SAEs to be trained using standard gradient-based methods.
+
+We evaluate JumpReLU, Gated and TopK (Gao et al., 2024) SAEs on Gemma 2 9B (Gemma Team, 2024) residual stream, MLP output and attention output activations at several layers (Fig. 2). At any given level of sparsity, we find JumpReLU SAEs consistently provide more faithful reconstructions than Gated SAEs. JumpReLU SAEs also provide reconstructions that are at least as good as, and often slightly better than, TopK SAEs. Similar to simple ReLU SAEs, JumpReLU SAEs only require a single forward and backward pass during a training step and have an elementwise activation function (unlike TopK, which requires a partial sort), making them more efficient to train than either Gated or TopK SAEs.
+
+Compared to Gated SAEs, we find both TopK and JumpReLU tend to have more features that activate very frequently – i.e. on more than 10% of tokens (Fig. 4). Consistent with prior work evaluating TopK SAEs (Cunningham & Conerly, 2024) we find these high frequency JumpReLU features tend to be less interpretable, although interpretability does improve as SAE sparsity increases. Furthermore, only a small proportion of SAE features have very high frequencies: fewer than 0.06% in a 131k-width SAE. We also present the results of manual and automated interpretability studies indicating that randomly chosen JumpReLU, TopK and Gated SAE features are similarly interpretable.
+
+## 2 PRELIMINARIES
+
+**SAE architectures** SAEs sparsely decompose language model activations  $\mathbf{x} \in \mathbb{R}^n$  as a linear combination of a *dictionary* of  $M \gg n$  *learned feature directions* and then reconstruct the original activations using a pair of encoder and decoder functions  $(\mathbf{f}, \tilde{\mathbf{x}})$  defined by:
+
+$$\mathbf{f}(\mathbf{x}) := \sigma(\mathbf{W}_{\text{enc}}\mathbf{x} + \mathbf{b}_{\text{enc}}); \quad \tilde{\mathbf{x}}(\mathbf{f}) := \mathbf{W}_{\text{dec}}\mathbf{f} + \mathbf{b}_{\text{dec}}. \quad (1)$$
+
+In these expressions,  $\mathbf{f}(\mathbf{x}) \in \mathbb{R}^M$  is a sparse, non-negative vector of feature magnitudes present in the input activation  $\mathbf{x}$ , whereas  $\tilde{\mathbf{x}}(\mathbf{f}) \in \mathbb{R}^n$  is a reconstruction of the original activation from a feature representation  $\mathbf{f} \in \mathbb{R}^M$ . The columns of  $\mathbf{W}_{\text{dec}}$ , which we denote by  $\mathbf{d}_i$  for  $i = 1 \dots, M$ ,
+
+{2}------------------------------------------------
+
+![Figure 2: Three log-log plots showing Delta LM Loss vs L0 for layers 9, 20, and 31. The plots compare four SAE types: Gated (Original) (blue), Gated (RI-L1) (orange), JumpReLU (green), and TopK (AuxK) (purple). In all cases, the loss decreases as L0 increases, with JumpReLU and TopK generally achieving lower losses than Gated variants.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 2: Three log-log plots showing Delta LM Loss vs L0 for layers 9, 20, and 31. The plots compare four SAE types: Gated (Original) (blue), Gated (RI-L1) (orange), JumpReLU (green), and TopK (AuxK) (purple). In all cases, the loss decreases as L0 increases, with JumpReLU and TopK generally achieving lower losses than Gated variants.
+
+Figure 2: JumpReLU SAEs offer reconstruction fidelity, as measured by delta LM loss, that equals or exceeds Gated and TopK SAEs at a fixed level of sparsity, as measured by  $L_0$ . These results are for SAEs trained on the residual stream after layers 9, 20 and 31 of Gemma 2 9B. See Fig. 14 and Fig. 15 for analogous plots for SAEs trained on MLP and attention output activations at these layers. Delta LM loss is the increase in cross-entropy loss incurred when the SAE is spliced into the LM, whereas  $L_0$  is the average number of SAE features that are active. Log scales are used on both axes.
+
+represent the dictionary of directions into which the SAE decomposes  $\mathbf{x}$ . We also use  $\pi(\mathbf{x})$  in this text to denote the encoder’s pre-activations,  $\pi(\mathbf{x}) := \mathbf{W}_{\text{enc}}\mathbf{x} + \mathbf{b}_{\text{enc}}$ .
+
+**Activation functions** The activation function  $\sigma$  varies between architectures: Bricken et al. (2023) and Templeton et al. (2024) use the ReLU activation function, whereas TopK SAEs (Gao et al., 2024) use a TopK activation function (which zeroes out all but the top  $K$  pre-activations). Gated SAEs (Rajamanoharan et al., 2024) in their general form do not fit the specification of Eq. (1); however with weight sharing between the two encoder kernels, they can be shown (Rajamanoharan et al., 2024, Appendix E) to be equivalent to using a JumpReLU activation function, defined as
+
+$$\text{JumpReLU}_\theta(z) := z H(z - \theta) \quad (2)$$
+
+where  $H$  is the Heaviside step function<sup>1</sup> when  $\theta > 0$  is the JumpReLU’s threshold, below which pre-activations are set to zero, as shown on the lefthand side of Fig. 3.
+
+**Loss functions** Language model SAEs are trained to reconstruct samples from a large dataset of language model activations  $\mathbf{x} \sim \mathcal{D}$  typically using a loss function of the form
+
+$$\mathcal{L}(\mathbf{x}) := \underbrace{\|\mathbf{x} - \hat{\mathbf{x}}(\mathbf{f}(\mathbf{x}))\|_2^2}_{\mathcal{L}_{\text{reconstruct}}} + \underbrace{\lambda S(\mathbf{f}(\mathbf{x}))}_{\mathcal{L}_{\text{sparsity}}} + \mathcal{L}_{\text{aux}}, \quad (3)$$
+
+where  $S$  is a function of the feature coefficients that penalizes non-sparse decompositions and the *sparsity coefficient*  $\lambda$  sets the trade-off between sparsity and reconstruction fidelity. Optionally, auxiliary terms in the loss function,  $\mathcal{L}_{\text{aux}}$  may be included for a variety of reasons, e.g. to help train parameters that would otherwise not receive suitable gradients (used for Gated SAEs) or to resurrect unproductive (“dead”) feature directions (used for TopK). Note that TopK SAEs are trained without a sparsity penalty, since the TopK activation function directly enforces sparsity.
+
+**Sparsity penalties** Both the ReLU SAEs of Bricken et al. (2023) and Gated SAEs use the L1-norm  $S(\mathbf{f}) := \|\mathbf{f}\|_1$  as a sparsity penalty. While this has the advantage of providing a useful gradient for training (unlike the  $L_0$ -norm), it has the disadvantage of penalizing feature magnitudes in addition to sparsity, which harms reconstruction fidelity (Rajamanoharan et al., 2024; Wright & Sharkey, 2024).
+
+The L1 penalty also fails to be invariant under reparameterizations of a SAE; by scaling down encoder parameters and scaling up decoder parameters accordingly, it is possible to arbitrarily shrink feature magnitudes, and thus the L1 penalty, without changing either the number of active features or the SAE’s output reconstructions. As a result, it is necessary to impose a further constraint
+
+<sup>1</sup> $H(z)$  is one when  $z > 0$  and zero when  $z < 0$ . Its value when  $z = 0$  is a matter of convention – unimportant when  $H$  appears within integrals or integral estimators, as is the case in this paper.
+
+{3}------------------------------------------------
+
+![Figure 3: Two plots showing the JumpReLU activation function and its pseudo-derivative, and the Heaviside step function and its pseudo-derivative. The left plot shows the JumpReLU function (blue line) which is zero for z < theta and jumps to a value for z > theta. The pseudo-derivative (orange line) is a negative spike at z = theta. The right plot shows the Heaviside step function (blue line) which is zero for z < theta and jumps to a value for z > theta. The pseudo-derivative (orange line) is a negative spike at z = theta. Both plots have a vertical dashed line at z = theta and a horizontal dashed line at the value of the function for z > theta.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 3: Two plots showing the JumpReLU activation function and its pseudo-derivative, and the Heaviside step function and its pseudo-derivative. The left plot shows the JumpReLU function (blue line) which is zero for z < theta and jumps to a value for z > theta. The pseudo-derivative (orange line) is a negative spike at z = theta. The right plot shows the Heaviside step function (blue line) which is zero for z < theta and jumps to a value for z > theta. The pseudo-derivative (orange line) is a negative spike at z = theta. Both plots have a vertical dashed line at z = theta and a horizontal dashed line at the value of the function for z > theta.
+
+Figure 3: The JumpReLU activation function (left) and the Heaviside step function (right) used to calculate the sparsity penalty are piecewise constant with respect to the JumpReLU threshold. Therefore, in order to be able to train a JumpReLU SAE, we define the pseudo-derivatives illustrated in these plots and defined in Eq. (8) and Eq. (9), which approximate the Dirac delta functions present in the actual (weak) derivatives of the JumpReLU and Heaviside functions. These pseudo-derivatives provide a gradient signal to the threshold whenever pre-activations are within a small window of width  $\varepsilon$  around the threshold. Note these plots show the profile of these pseudo-derivatives in the  $z$ , not  $\theta$  direction, as  $z$  is the stochastic input that is averaged over when computing the mean gradient.
+
+on SAE parameters during training to enforce sparsity: typically this is achieved by constraining columns of the decoder weight matrix  $\mathbf{d}_i$  to have unit norm (Bricken et al., 2023). Conerly et al. (2024) introduce a modification of the L1 penalty, where feature coefficients are weighted by the norms of the corresponding dictionary directions, i.e.  $S_{\text{RI-L1}}(\mathbf{f}) := \sum_{i=1}^M f_i \|\mathbf{d}_i\|_2$ . We call this the *reparameterization-invariant L1* (RI-L1) sparsity penalty, since this penalty is invariant to SAE reparameterization, making it unnecessary to impose constraints on  $\|\mathbf{d}_i\|_2$ .
+
+**Kernel density estimation** Kernel density estimation (KDE; Parzen (1962); Wasserman (2010)) is a technique for empirically estimating probability densities from a finite sample of observations. Given  $N$  samples  $x_{1\dots N}$  of a random variable  $X$ , one can form a kernel density estimate of the probability density  $p_X(x)$  using an estimator of the form  $\hat{p}_X(x) := \frac{1}{N\varepsilon} \sum_{\alpha=1}^N K\left(\frac{x-x_\alpha}{\varepsilon}\right)$ , where  $K$  is a non-negative function that satisfies the properties of a centred, positive-variance probability density function and  $\varepsilon$  is the kernel *bandwidth* parameter.<sup>2</sup> In this paper we will actually be interested in estimating quantities like  $v(y) := \mathbb{E}[f(X, Y)|Y = y]p_Y(y)$  for jointly distributed random variables  $X$  and  $Y$  and arbitrary (but well-behaved) functions  $f$ . Following a similar derivation as in Wasserman (2010, Chapter 20), it is straightforward to generalize KDE to estimate  $v(y)$  using the estimator
+
+$$\hat{v}(y) := \frac{1}{N\varepsilon} \sum_{\alpha=1}^N f(x_\alpha, y_\alpha) K\left(\frac{y - y_\alpha}{\varepsilon}\right). \quad (4)$$
+
+## 3 JUMPRELU SAEs
+
+A JumpReLU SAE is a SAE of the standard form Eq. (1) with a JumpReLU activation function:
+
+$$\mathbf{f}(\mathbf{x}) := \text{JumpReLU}_\theta(\mathbf{W}_{\text{enc}}\mathbf{x} + \mathbf{b}_{\text{enc}}). \quad (5)$$
+
+Compared to a ReLU SAE, it has an extra positive vector-valued parameter  $\theta \in \mathbb{R}_+^M$  that specifies, for each feature  $i$ , the threshold that encoder pre-activations need to exceed in order for the feature to be deemed active.
+
+Similar to the gating mechanism in Gated SAEs and the TopK activation function in TopK SAEs, the threshold  $\theta$  gives JumpReLU SAEs the means to separate out deciding which features are active from estimating active features' magnitudes, as illustrated in Fig. 1.
+
+We train JumpReLU SAEs using the loss function
+
+$$\mathcal{L}(\mathbf{x}) := \underbrace{\|\mathbf{x} - \hat{\mathbf{x}}(\mathbf{f}(\mathbf{x}))\|_2^2}_{\mathcal{L}_{\text{reconstruct}}} + \lambda \underbrace{\|\mathbf{f}(\mathbf{x})\|_0}_{\mathcal{L}_{\text{sparsity}}}. \quad (6)$$
+
+<sup>2</sup>I.e.  $K(x) \geq 0$ ,  $\int_{-\infty}^{\infty} K(x)dx = 1$ ,  $\int_{-\infty}^{\infty} x K(x)dx = 0$  and  $\int_{-\infty}^{\infty} x^2 K(x)dx > 0$ .
+
+{4}------------------------------------------------
+
+This is a loss function of the standard form Eq. (3) where crucially we are using a L0 sparsity penalty to avoid the limitations of training with a L1 sparsity penalty (Wright & Sharkey, 2024; Rajamanoharan et al., 2024). Note that we can also express the L0 sparsity penalty in terms of a Heaviside step function on the encoder’s pre-activations  $\pi(\mathbf{x})$ :
+
+$$\mathcal{L}_{\text{sparsity}} := \lambda \|\mathbf{f}(\mathbf{x})\|_0 = \lambda \sum_{i=1}^M H(\pi_i(\mathbf{x}) - \theta_i). \quad (7)$$
+
+The difficulty with training using this loss function is that it provides no gradient signal for training the threshold:  $\theta$  appears only within the arguments of Heaviside step functions in both  $\mathcal{L}_{\text{construct}}$  and  $\mathcal{L}_{\text{sparsity}}$  (as expressed in Eq. (7)).<sup>3</sup> Our solution is to use straight-through-estimators (STEs; Bengio et al. (2013)), as illustrated in Fig. 3. Specifically, we define the following pseudo-derivative for JumpReLU $_\theta(z)$ :<sup>4</sup>
+
+$$\frac{\delta}{\delta \theta} \text{JumpReLU}_\theta(z) := -\frac{\theta}{\varepsilon} K\left(\frac{z - \theta}{\varepsilon}\right) \quad (8)$$
+
+and the following pseudo-derivative for the Heaviside step function appearing in the L0 penalty:
+
+$$\frac{\delta}{\delta \theta} H(z - \theta) := -\frac{1}{\varepsilon} K\left(\frac{z - \theta}{\varepsilon}\right). \quad (9)$$
+
+In these expressions,  $K$  can be any valid kernel function (see Section 2) – i.e. it needs to satisfy the properties of a centered, finite-variance probability density function. In our experiments, we use the rectangle function,  $\text{rect}(z) := H(z + \frac{1}{2}) - H(z - \frac{1}{2})$  as our kernel; however similar results can be obtained with other common kernels, such as the triangular, Gaussian or Epanechnikov kernel (see Appendix H.3). As we show in Section 4, the hyperparameter  $\varepsilon$  plays the role of a KDE bandwidth, and needs to be selected accordingly: too low and gradient estimates become too noisy, too high and estimates become too biased.<sup>5</sup>
+
+Having defined these pseudo-derivatives, we train JumpReLU SAEs as we would any differentiable model, by computing the gradient of the loss function in Eq. (6) over batches of data (remembering to apply these pseudo-derivatives in the backward pass), and sending the batch-wise mean of these gradients to the optimizer in order to compute parameter updates.
+
+In Appendix K we provide pseudocode for the JumpReLU SAE’s forward pass, loss function and for implementing the straight-through-estimators defined in Eq. (8) and Eq. (9) in an autograd framework like Jax (Bradbury et al., 2018) or PyTorch (Paszke et al., 2019).
+
+## 4 HOW STEs ENABLE TRAINING THROUGH THE JUMP
+
+Why does this work? The key is to notice that during SGD, we actually want to estimate the gradient of the *expected* loss,  $\mathbb{E}_x[\mathcal{L}_\theta(\mathbf{x})]$ , in order to calculate parameter updates.<sup>6</sup> Although the loss itself is piecewise constant with respect to the threshold parameters – and therefore has zero gradient – the expected loss is not.
+
+As shown in Appendix B, we can differentiate expected loss with respect to  $\theta$  analytically to obtain
+
+$$\frac{\partial \mathbb{E}_x[\mathcal{L}_\theta(\mathbf{x})]}{\partial \theta_i} = (\mathbb{E}_x[I_i(\mathbf{x})|\pi_i(\mathbf{x}) = \theta_i] - \lambda) p_i(\theta_i), \quad (10)$$
+
+<sup>3</sup>The L0 sparsity penalty also provides no gradient signal for the remaining SAE parameters, but this is not necessarily a problem. It just means that the remaining SAE parameters are encouraged purely to reconstruct input activations faithfully, not worrying about sparsity, while sparsity is taken care of by the threshold parameter  $\theta$ . This is analogous to TopK SAEs, where similarly the main SAE parameters are trained solely to reconstruct faithfully, while sparsity is enforced by the TopK activation function.
+
+<sup>4</sup>We use the notation  $\delta/\delta\theta$  to denote pseudo-derivatives, to avoid conflating them with actual partial derivatives for these functions. In principle, we could also define pseudo-derivatives of with respect to  $z$ , i.e. to provide gradient signals from the JumpReLU threshold and L0 sparsity penalty to the encoder parameters in addition to the gradients to the threshold provided by Eqs. (8) and (9). However, as explored in Appendix H.1, we find this leads to SAEs plagued by dead features and with poor reconstruction fidelity.
+
+<sup>5</sup>For the experiments in this paper, we swept this parameter and found  $\varepsilon = 0.001$  (assuming a dataset normalized such that  $\mathbb{E}_x[\mathbf{x}^2] = 1$ ) works well across different models, layers and sites. However, we suspect there are more principled ways to determine this parameter.
+
+<sup>6</sup>In this section, we write the JumpReLU loss as  $\mathcal{L}_\theta(\mathbf{x})$  to show explicitly its dependence on  $\theta$ .
+
+{5}------------------------------------------------
+
+where  $p_i$  is the probability density function for the distribution of feature pre-activations  $\pi_i(\mathbf{x})$  and
+
+$$I_i(\mathbf{x}) := 2\theta_i \mathbf{d}_i \cdot (\mathbf{x} - \hat{\mathbf{x}}(\mathbf{f}(\mathbf{x}))), \quad (11)$$
+
+recalling that  $\mathbf{d}_i$  is the column of  $\mathbf{W}_{\text{dec}}$  corresponding to feature  $i$ .<sup>7</sup>
+
+In order to train JumpReLU SAEs, we need to estimate the gradient as expressed in Eq. (10) from batches of input activations,  $\mathbf{x}_1, \mathbf{x}_2, \dots, \mathbf{x}_N$ . To do this, we can use a generalized KDE estimator of the form Eq. (4). This gives us the following estimator of the expected loss's gradient with respect to  $\theta$ :
+
+$$\frac{1}{N\varepsilon} \sum_{\alpha=1}^N \{I_i(\mathbf{x}_\alpha) - \lambda\} K\left(\frac{\pi_i(\mathbf{x}_\alpha) - \theta_i}{\varepsilon}\right). \quad (12)$$
+
+As we show in Appendix C, when we instruct autograd to use the pseudo-derivatives defined in Eqs. (8) and (9) in the backward pass, this is precisely the batch-wise mean gradient that gets calculated – and used by the optimizer to update  $\theta$  – in the training loop.
+
+In other words, training with straight-through-estimators as described in Section 3 is equivalent to estimating the true gradient of the expected loss, as given in Eq. (10), using the kernel density estimator defined in Eq. (12).
+
+## 5 EVALUATION
+
+In this section, we compare JumpReLU SAEs to Gated and TopK SAEs across a range of metrics.<sup>8</sup> To make these comparisons, we trained multiple 131k-width SAEs (with a range of sparsity levels) of each type (JumpReLU, Gated and TopK) on activations from Gemma 2 9B (base). Specifically, we trained SAEs on residual stream, attention output and MLP output sites after layers 9, 20 and 31 of the model (zero-indexed), i.e. approximately  $1/4$ ,  $1/2$  and  $3/4$ -way through this 42-layer model.
+
+We trained Gated SAEs using two different loss functions. Firstly, we used the original Gated SAE loss in Rajamanoharan et al. (2024), which uses a L1 sparsity penalty and requires resampling (Bricken et al., 2023) – periodic re-initialization of dead features – in order to train effectively. Secondly, we used a modified Gated SAE loss function that replaces the L1 sparsity penalty with the RI-L1 sparsity penalty described in Section 2; see Appendix D for details. With this modified loss function, we no longer need to use resampling to avoid dead features. We trained TopK SAEs using the AuxK auxiliary loss described in Gao et al. (2024) with  $K_{\text{aux}} = 512$ , which helps reduce the number of dead features. We also used an approximate algorithm for computing the top  $K$  activations (Chern et al., 2022) after finding it produces similar results to exact TopK while being much faster (Appendix E). See Appendix I for further details of our training methodology and Appendix J for further details on the experiments described below.
+
+### 5.1 EVALUATING THE SPARSITY-FIDELITY TRADE-OFF
+
+**Methodology** For a fixed SAE architecture and dictionary size, we trained SAEs of varying levels of sparsity by sweeping either the sparsity coefficient  $\lambda$  (for JumpReLU or Gated SAEs) or  $K$  (for TopK SAEs). We then plot curves showing, for each SAE architecture, the level of reconstruction fidelity attainable at a given level of sparsity.
+
+**Metrics** We use the mean L0-norm of feature activations,  $\mathbb{E}_{\mathbf{x}} \|\mathbf{f}(\mathbf{x})\|_0$ , as a measure of sparsity. To measure reconstruction fidelity, we use two metrics. Our primary metric is delta LM loss, the
+
+<sup>7</sup>Intuitively, the first term in Eq. (10) measures the rate at which the expected reconstruction loss would increase if we increase  $\theta_i$  – thereby pushing a small number of features that are currently used for reconstruction below the updated threshold. Similarly, the second term is  $-\lambda$  multiplied by the rate at which the mean number of features used for reconstruction (i.e. mean L0) would *decrease* if we increase the threshold  $\theta_i$ . The density  $p_i(\theta_i)$  comes into play because impact of a small change in  $\theta_i$  on either the reconstruction loss or sparsity depends on how often feature activations occur very close to the current threshold.
+
+<sup>8</sup>We did not include ProLU SAEs (Taggart, 2024) in our comparisons, despite their similarities to JumpReLU SAEs, because prior work has established that ProLU SAEs do not produce as faithful reconstructions as Gated or TopK SAEs at a given sparsity level (Gao et al., 2024).
+
+{6}------------------------------------------------
+
+![Figure 4: Three line plots showing the proportion of features active on over 10% of tokens versus Delta LM loss for Gemma 2 9B residual stream SAEs at layers 9, 20, and 31. The x-axis is Delta LM loss on a log scale (0.01 to 10). The y-axis is the proportion of features active on over 10% of tokens (0.00% to 0.04%). Four SAE types are compared: Gated (Original) in blue, Gated (RI-L1) in orange, JumpReLU in green, and TopK (AuxK) in purple. In all layers, TopK and JumpReLU show higher proportions of high-frequency features than Gated SAEs, especially in the low loss regime.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 4: Three line plots showing the proportion of features active on over 10% of tokens versus Delta LM loss for Gemma 2 9B residual stream SAEs at layers 9, 20, and 31. The x-axis is Delta LM loss on a log scale (0.01 to 10). The y-axis is the proportion of features active on over 10% of tokens (0.00% to 0.04%). Four SAE types are compared: Gated (Original) in blue, Gated (RI-L1) in orange, JumpReLU in green, and TopK (AuxK) in purple. In all layers, TopK and JumpReLU show higher proportions of high-frequency features than Gated SAEs, especially in the low loss regime.
+
+Figure 4: The proportion of features that activate very frequently versus delta LM loss by SAE type for Gemma 2 9B residual stream SAEs. TopK and JumpReLU SAEs tend to have relatively more very high frequency features – those active on over 10% of tokens – than Gated SAEs. If we instead count features that are active on over 1% of tokens (Fig. 17), the picture is more mixed: Gated SAEs can have more of these high (but not necessarily very high) features than JumpReLU SAEs, particularly in the low loss (and therefore lower sparsity) regime. A log scale is used on the  $x$ -axis.
+
+increase in the cross-entropy loss experienced by the LM when we splice the SAE into the LM’s forward pass. As a secondary metric, we also present in Fig. 16 curves that use fraction of variance unexplained (FVU) – also called the normalized loss (Gao et al., 2024) as a measure of reconstruction fidelity. This is the mean reconstruction loss  $\mathcal{L}_{\text{reconstruct}}$  of a SAE normalized by the reconstruction loss obtained by always predicting the dataset mean.
+
+**Results** Fig. 2 compares the sparsity-fidelity trade-off for JumpReLU, Gated and TopK SAEs trained on Gemma 2 9B residual stream activations. JumpReLU SAEs consistently offer similar or better fidelity at a given level of sparsity than TopK or Gated SAEs. Similar results are obtained for SAEs of each type trained on MLP or attention output activations, as shown in Fig. 14 and Fig. 15.
+
+**Ablation study** In Appendix H.2 we present the results of an ablation study showing that *both* the JumpReLU activation function and the L0 sparsity penalty are necessary for obtaining this improvement in fidelity at fixed sparsity.
+
+### 5.2 FEATURE ACTIVATION FREQUENCIES
+
+For a given SAE, we are interested in both the proportion of learned features that are active very frequently and the proportion of features that are almost never active (“dead” features). Prior work has found that TopK SAEs tend to have more high frequency features than Gated SAEs (Cunningham & Conerly, 2024), and that these features tend to be less interpretable when sparsity is also low.
+
+Fig. 4 shows, for JumpReLU, Gated and TopK SAEs, how the fraction of high frequency features varies with SAE fidelity (as measured by delta LM loss). TopK and JumpReLU SAEs consistently have more high frequency features – features that activate on over 10% of tokens – than Gated SAEs, although the fraction drops close to zero for SAEs in the low fidelity / high sparsity regime. Across all layers and frequency thresholds, JumpReLU SAEs have either similar or fewer high frequency features than TopK SAEs. Finally, it is worth noting that in all cases the number of high frequency features remains low in proportion to the widths of these SAEs, with fewer than 0.06% of features activating more than 10% of the time even for the highest L0 SAEs. Fig. 18 compares the proportion of “dead” features – which we defined to be features that activate on fewer than one in  $10^7$  tokens – between JumpReLU, Gated and TopK SAEs. Both JumpReLU SAEs and TopK SAEs (with the AuxK loss) consistently have few dead features, without needing resampling.
+
+### 5.3 INTERPRETABLE OF SAE FEATURES
+
+Although the results above suggest that JumpReLU SAEs provide more faithful reconstructions at a given level of sparsity than Gated or TopK SAEs, we would like to confirm that this improvement does not come at the cost of JumpReLU features being less interpretable. In the following two sections we evaluate the interpretability of JumpReLU, Gated and TopK SAE features using both a blinded human rating study, and by obtaining automated ratings using a language model.
+
+{7}------------------------------------------------
+
+#### 5.3.1 MANUAL INTERPRETABILITY
+
+**Methodology** Our experimental setup resembles the manual interpretability study methodology described in Rajamanoharan et al. (2024). Five human raters<sup>9</sup> were asked to rate features from 81 SAEs, 27 of each type (Gated, TopK and JumpReLU) trained across multiple sites, layers and levels of sparsity. Each rater was presented with a feature dashboard (see Fig. 12), providing summary information and activating examples from the full activation spectrum of a feature, and asked whether the feature was mostly monosemantic, with allowed answers being ‘Yes’, ‘Maybe’ and ‘No’.
+
+**Results** As shown in Fig. 5a, all three SAE varieties exhibit similar rating distributions, consistent with prior results comparing TopK and Gated SAEs (Cunningham & Conerly, 2024; Gao et al., 2024) and furthermore showing that JumpReLU SAEs are similarly interpretable, i.e. that JumpReLU SAEs do not sacrifice feature interpretability to obtain more faithful reconstructions.
+
+#### 5.3.2 AUTOMATED INTERPRETABILITY
+
+To complement the manual interpretability study, we also evaluate SAE features using a language model rater. This allows us to collect many more samples than in a manual study, although LM ratings may be of more variable quality. To automatically rate features, we follow the two-step approach introduced in Bills et al. (2023) for neurons, and later used for SAE features (Bricken et al., 2023; Lieberum, 2024; Cunningham et al., 2023), of first using the LM to generate an explanation for a given feature and then asking the LM to predict feature activations based on that explanation.
+
+**Methodology** We used Gemini 1.5 Flash (Gemini Team, 2024) for explanation generation and activation simulation. In the first step, Flash was given a list of sequences that activate a given feature to different degrees, together with discretized activation values, and asked for a natural language explanation of the feature consistent with these activation values. In the second step, we presented Flash the same token sequences in a fresh context and asked it to predict activation values using the explanation it gave in the first step. We then computed the Pearson correlation between the simulated and ground truth activation values for each sequence. We evaluated 1,000 randomly sampled features from 154 SAEs taken from all three types (Gated, JumpReLU and TopK).
+
+**Results** We fit a logistic regression model to measure the effect of SAE type and L0 on the ability of the Gemini Flash to accurately simulate activations based on its explanations.<sup>10</sup> We also include terms in the model to account for each SAE’s site and layer, after finding simulation quality varies widely between sites and layers (Fig. 13). Upon fitting the model, we find that JumpReLU SAE features have 27% greater odds of being well-simulated by Gemini Flash than Gated SAE features (OR=1.27, 95% CI: 1.23–1.31,  $p < 0.001$ ) and that JumpReLU SAE features have similar odds of being well-simulated as TopK SAE features (OR=0.98, 95% CI: 0.95–1.01). We also find that doubling L0 lowers the odds of simulatability by 7% (OR=0.93, 95% CI: 0.92–0.94,  $p < 0.001$ ). See Appendix J.1.2 for more on the interpretation and limitations of these results.
+
+### 5.4 DISENTANGLEMENT
+
+In this section we evaluate how well the sparse decomposition provided by a SAE allows us to *disentangle* two concepts, i.e. vary one in isolation from the other (Schölkopf et al., 2021; Huang et al., 2024). Specifically, we work in a factual recall setting similar to Nanda et al. (2023), where we aim to use the SAE decomposition to change Gemma 2 9B’s representation of the sport played by 50 baseball players to basketball, without disrupting its knowledge of these players’ years of birth.
+
+**Methodology** Full details can be found in Appendix J.2.1. In summary, we selected 50 athletes whom Gemma 2 9B correctly identifies as baseball players and can confidently state their year of birth. For each SAE, we then searched for (i) a basketball feature and (ii) a baseball feature, such
+
+<sup>9</sup>All human raters in this study are either authors of this paper or members of the same research group.
+
+<sup>10</sup>For this analysis, we set a threshold of 0.9 on the Pearson correlations  $\rho$  between simulated and actual activation sequences to determine whether activations were well-simulated or not. A threshold of  $\rho > 0.9$  corresponds to  $R^2 \geq 81\%$  in a regression setting, indicating a good fit. We found that changing this threshold does not significantly affect the conclusions of this analysis (see Appendix J.1).
+
+{8}------------------------------------------------
+
+![Figure 5: (a) Manual interpretability results showing frequency of YES, MAYBE, and NO ratings for Gated (RI-L1), JumpReLU, and TopK (AuxK) SAE types. (b) Disentanglement results showing editing success rate vs editing localization (YoB accuracy) for the same SAE types, with a 'Perfect' baseline.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 5 consists of two plots. Plot (a) is a bar chart showing the frequency of 'YES', 'MAYBE', and 'NO' ratings for three SAE types: Gated (RI-L1) (orange), JumpReLU (green), and TopK (AuxK) (purple). The y-axis is 'Frequency' from 0 to 0.8. For 'YES', all three types have high frequencies (approx. 0.65-0.7). For 'MAYBE' and 'NO', the frequencies are lower (approx. 0.15-0.2). Plot (b) is a line graph showing 'Editing success rate' (y-axis, 0% to 100%) vs 'Editing localization (YoB accuracy)' (x-axis, 80% to 100%). It includes data points for Gated (RI-L1) (orange circles), JumpReLU (green squares), TopK (AuxK) (purple diamonds), and a 'Perfect' baseline (yellow star at 100%, 100%). TopK (AuxK) starts at a high success rate (~70% at 90% localization) and drops to near 0% at 100% localization. JumpReLU starts at ~60% at 90% localization and drops to ~10% at 100% localization. Gated (RI-L1) starts at ~10% at 90% localization and drops to ~0% at 100% localization.
+
+Figure 5: (a) Manual interpretability results showing frequency of YES, MAYBE, and NO ratings for Gated (RI-L1), JumpReLU, and TopK (AuxK) SAE types. (b) Disentanglement results showing editing success rate vs editing localization (YoB accuracy) for the same SAE types, with a 'Perfect' baseline.
+
+Figure 5: (a) Manual interpretability results (Section 5.3.1): features from all SAE architectures are rated as similarly interpretable by human raters. (b) Disentanglement results (Section 5.4): the trade-off between successfully updating baseball players’ sport representations to basketball while avoiding disrupting the model’s knowledge of their year of birth. To aid legibility, we omit points that are Pareto inferior to other points within each SAE type, i.e. only include points on each SAE type’s Pareto frontier. A perfect intervention would receive a 100% score on both axes, as shown by the gold star annotated ‘Perfect’.
+
+that when we turn on the basketball feature and ablate the baseball feature on the tokens representing each athlete’s name, the model would now report that the athlete plays basketball (not baseball), but still correctly report that athlete’s year of birth. Where there were multiple candidate basketball or baseball features, we evaluated all combinations among the top 3 candidates for each feature.
+
+**Results** Fig. 5b illustrates the trade-off between editing success – as measured by the proportion of the 50 athletes where the intervention successfully caused the model to report that they played basketball – versus editing localization – as measured by the proportion of athletes for which the model was still able to correctly report the year of birth despite the intervention. With JumpReLU and TopK SAEs, we were able to find single baseball and basketball features that successfully changed the sport representation of a majority of players, albeit with some disruption to the model’s knowledge of these players’ years of birth. Gated SAEs however performed poorly on this task, with none of the SAEs evaluated possessing features that were able to change the sport of more than 4 of the 50 athletes. See Appendix J.2.2 for further discussion of these results.
+
+## 6 RELATED WORK
+
+Recent interest in training SAEs on LM activations (Sharkey et al., 2022; Bricken et al., 2023; Cunningham et al., 2023) stems from the twin observations that many concepts appear to be linearly represented in LM activations (Elhage et al., 2021; Gurnee et al., 2023; Olah et al., 2020; Park et al., 2023) and that dictionary learning (Mallat & Zhang, 1993; Olshausen & Field, 1997) may help uncover these representations at scale. It is also hoped that the sparse representations learned by SAEs may be a better basis for identifying computational subgraphs that carry out specific tasks in LMs (Wang et al., 2023; Conmy et al., 2023; Dunefsky et al., 2024) and for finer-grained control over LMs’ outputs (Conmy & Nanda, 2024; Templeton et al., 2024).
+
+Recent improvements to SAE architectures – including TopK SAEs (Gao et al., 2024) and Gated SAEs (Rajamanoharan et al., 2024) – as well as improvements to initialization and sparsity penalties. Conerly et al. (2024) have helped ameliorate the trade-off between sparsity and fidelity and overcome the challenge of SAE features dying during training. Like JumpReLU SAEs, both Gated and TopK SAEs possess a thresholding mechanism that determines which features to include in a reconstruction; indeed, with weight sharing, Gated SAEs are mathematically equivalent to JumpReLU SAEs, although they are trained using a different loss function. JumpReLU SAEs are also closely related to ProLU SAEs (Taggart, 2024), which use a (different) STE to train an activation threshold, but do not match the performance of Gated or TopK SAEs (Gao et al., 2024).
+
+{9}------------------------------------------------
+
+The activation function defined in Eq. (2) was named JumpReLU in Erichson et al. (2019) and TRec in Konda et al. (2015). Both TopK and JumpReLU activation functions are closely related to activation pruning techniques such as ASH (Djurisic et al., 2023). The term *straight through estimator* was introduced in Bengio et al. (2013), although it is an old idea.<sup>11</sup> STEs have found applications in areas such as training quantized networks (e.g. Hubara et al. (2016)) and circumventing defenses to adversarial examples (Athalye et al., 2018). Our interpretation of STEs in terms of gradients of the expected loss is related to Yin et al. (2019), although they do not make the connection between STEs and KDE. Louizos et al. (2018) also show how it is possible to train models using a L0 sparsity penalty – on weights rather than activations in their case – by introducing stochasticity in the weights and taking the gradient of the expected loss.
+
+## 7 CONCLUSION
+
+Our evaluations show that JumpReLU SAEs produce reconstructions that consistently match or exceed the faithfulness of TopK SAEs, and exceed the faithfulness of Gated SAEs, at a given level of sparsity. They also show that the average JumpReLU SAE feature is similarly interpretable to the average Gated or TopK SAE feature, according to manual raters and automated evaluations. Although JumpReLU SAEs do have relatively more very high frequency features than Gated SAEs, they are similar to TopK SAEs in this respect.
+
+In light of these observations, and taking into account the efficiency of training with the JumpReLU loss – which requires no auxiliary terms (unlike Gated SAEs) and does not involve relatively expensive TopK operations – we consider JumpReLU SAEs to be a mild improvement over existing SAE training methodologies.
+
+**Limitations** We note two key limitations with our study. Firstly, the evaluations presented in this paper concern training SAEs on several sites and layers of a single model, Gemma 2 9B. In Appendix G we also show that JumpReLU provides a better sparsity-vs-fidelity trade off than TopK and Gated SAEs when trained on Pythia 2.8B (Biderman et al., 2023) activations. Nevertheless we would welcome attempts to replicate our results on other model families. Secondly, since the main contribution of this paper is a methodology for successfully training SAEs with discontinuous loss functions, we have focused our evaluations on a few key metrics: the sparsity-fidelity trade-off, feature interpretability, feature activation frequencies, and disentanglement in a single setting. It would be valuable to compare these SAE varieties on a broader selection of metrics, particularly on evaluations that closely correspond to downstream tasks that may benefit from SAEs.
+
+**Further work** JumpReLU SAEs do suffer from a few limitations that we hope can be improved with further work:
+
+- We suspect it may be possible to tweak the JumpReLU loss function further to tackle the appearance of high frequency features (Section 5.2).
+- JumpReLU SAEs introduce new hyperparameters – the initial value of  $\theta$  and bandwidth parameter  $\varepsilon$  – that require selecting. Although we found these to transfer reliably (with data normalization in place), there may be more principled ways to choose these hyperparameters, e.g. by adopting automatic bandwidth selection methods used for KDE.
+- STEs can be used to train SAEs with other sparsity penalties that may prove more useful than L0. For example, in Appendix F, we train JumpReLU SAEs to attain a desired target level of sparsity  $L_0^{\text{target}}$  by using the sparsity loss
+
+$$\mathcal{L}_{\text{sparsity}}(\mathbf{x}) = \lambda (\|f(\mathbf{x})\|_0 / L_0^{\text{target}} - 1)^2, \quad (13)$$
+
+instead of an L0 penalty. STEs thus open up the possibility of training SAEs with other discontinuous loss functions that may further improve SAE quality or usability.
+
+<sup>11</sup>Even the Perceptron learning algorithm (Rosenblatt, 1958) can be understood as using a STE to train through a step function discontinuity.
+
+ Rest of paper (reference and Appendix) is removed.

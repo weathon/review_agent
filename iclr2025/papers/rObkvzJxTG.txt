@@ -1,0 +1,356 @@
+
+
+{0}------------------------------------------------
+
+# SMOOTHING THE SHIFT: TOWARDS STABLE TEST-TIME ADAPTATION UNDER COMPLEX MULTIMODAL NOISES
+
+Zirun Guo   Tao Jin\*
+
+Zhejiang University
+
+zrguo.cs@gmail.com
+
+## ABSTRACT
+
+Test-Time Adaptation (TTA) aims to tackle distribution shifts using unlabeled test data without access to the source data. In the context of multimodal data, there are more complex noise patterns than unimodal data such as simultaneous corruptions for multiple modalities and missing modalities. Besides, in real-world applications, corruptions from different distribution shifts are always mixed. Existing TTA methods always fail in such multimodal scenario because the abrupt distribution shifts will destroy the prior knowledge from the source model, thus leading to performance degradation. To this end, we reveal a new challenge named *multimodal wild TTA*. To address this challenging problem, we propose two novel strategies: sample identification with interquartile range Smoothing and unimodal assistance, and Mutual information sharing (SuMi). SuMi smoothes the adaptation process by interquartile range which avoids the abrupt distribution shifts. Then, SuMi fully utilizes the unimodal features to select low-entropy samples with rich multimodal information for optimization. Furthermore, mutual information sharing is introduced to align the information, reduce the discrepancies and enhance the information utilization across different modalities. Extensive experiments on two public datasets show the effectiveness and superiority over existing methods under the complex noise patterns in multimodal data. Code is available at <https://github.com/zrguo/SuMi>.
+
+## 1 INTRODUCTION
+
+Deep learning has achieved remarkable success and has been widely adopted across a variety of applications (Touvron et al., 2023; Podell et al., 2024; Yan et al., 2024; Lin et al., 2024). However, these models often struggle when faced with data distributions that differ from their training data. For example, in real-world scenarios, unexpected environmental changes and noises always occur such as weather changes and data corruption. When encountering such domain shifts, model performance can degrade rapidly (Hendrycks & Dietterich, 2019). To address this challenge, many adaptation techniques such as domain adaptation (Zhu et al., 2023) and domain generalization (Zhou et al., 2023a) have been proposed to enhance the robustness of models. One of the most challenging settings is Test-Time Adaptation (TTA) (Wang et al., 2021; Niu et al., 2022), where the model must adapt to a target domain without access to any source domain data and labels of target data. Recently, numerous promising test-time adaptation methods (Niu et al., 2023; Yang et al., 2024; Lee et al., 2024; Chen et al., 2024; Guo et al., 2024b) have shown great results.
+
+However, the majority of existing TTA methods have focused on unimodal scenarios. In comparison to unimodal tasks, multimodal tasks often face more complex noise patterns, such as simultaneous noise corruption across multiple modalities or missing modalities. In this work, we broadly categorize multimodal noise scenarios into two types (shown in Figure 1(a)): weak Out-Of-Distribution (OOD) samples, where only one modality is corrupted by noise, and strong OOD samples, where multiple modalities are corrupted by noise or missing modality issues occur. Considering a multimodal sentiment analysis system, audio corruption can arise from factors like the speaker’s accent,
+
+---
+
+\*Corresponding author
+
+{1}------------------------------------------------
+
+![Figure 1: Illustration of our task and performance comparison. (a) Noise patterns of multimodal data: Clean Data, Weak OOD Data, and Strong OOD Data. (b) Performance under four strong OOD scenarios: Both, Vmiss, Amiss, and Mix. (c) Performance under weak OOD and strong OOD scenarios. (d) Performance under same and mixed distribution shifts.](49ad3a646d84bcfeac02bdf2b3792a3e_img.jpg)
+
+Figure 1 consists of four subplots. Subplot (a) shows examples of clean, weak OOD, and strong OOD data with noise patterns. Subplots (b), (c), and (d) are bar charts comparing the accuracy of various methods (Tent, SAR, SoTTA, DeYO, CEMA, SuMi (Ours)) across different OOD scenarios.
+
+**(b) Performance under four strong OOD scenarios**
+
+| Method | Both | Vmiss | Amiss | Mix |
+|-|-|-|-|-|
+| Tent | ~15 | ~10 | ~20 | ~5 |
+| SAR | ~15 | ~10 | ~20 | ~5 |
+| SoTTA | ~15 | ~10 | ~20 | ~5 |
+| DeYO | ~15 | ~10 | ~20 | ~5 |
+| CEMA | ~15 | ~10 | ~20 | ~5 |
+| SuMi (Ours) | ~45 | ~30 | ~40 | ~20 |
+
+**(c) Performance under weak OOD and strong OOD scenarios**
+
+| Method | Weak OOD | Strong OOD | Strong source |
+|-|-|-|-|
+| Tent | ~65 | ~10 | ~10 |
+| SAR | ~65 | ~10 | ~10 |
+| SoTTA | ~65 | ~10 | ~10 |
+| DeYO | ~65 | ~10 | ~10 |
+| CEMA | ~65 | ~10 | ~10 |
+| SuMi (Ours) | ~65 | ~35 | ~10 |
+
+**(d) Performance under same and mixed distribution shifts**
+
+| Method | Same distribution | Mixed distribution | Mixed source |
+|-|-|-|-|
+| Tent | ~65 | ~40 | ~40 |
+| SAR | ~65 | ~40 | ~40 |
+| SoTTA | ~65 | ~40 | ~40 |
+| DeYO | ~65 | ~40 | ~40 |
+| CEMA | ~65 | ~40 | ~40 |
+| SuMi (Ours) | ~65 | ~60 | ~40 |
+
+Figure 1: Illustration of our task and performance comparison. (a) Noise patterns of multimodal data: Clean Data, Weak OOD Data, and Strong OOD Data. (b) Performance under four strong OOD scenarios: Both, Vmiss, Amiss, and Mix. (c) Performance under weak OOD and strong OOD scenarios. (d) Performance under same and mixed distribution shifts.
+
+Figure 1: Illustration of our task where the target domain includes various domain shifts including weak OOD and strong OOD samples. The performances of existing methods degrade significantly on this challenging task, even worse than the source model. We get these results on Kinetics50-C.
+
+dialect, and background noise. Video corruption can occur due to lighting variations and diverse facial features. Furthermore, audio corruption can lead to transcription errors in text, creating text noise and leading to simultaneous domain shifts (strong OOD) across modalities. As shown in Figure 1(b) and (c), we observe the performance of existing TTA methods can degrade significantly when faced with the more complex noise patterns encountered in multimodal scenarios, especially in the case of strong OOD samples. The huge distribution gap between the source domain and the strong OOD data will damage the prior knowledge in the source model, thus leading to performance degradation. Additionally, in real-world dynamic environments where the target domain includes various types of distribution shifts (known as wild TTA), the performance of existing TTA methods always fail (Niu et al., 2023). To address the challenge in wild TTA, Niu et al. (2023) propose a sharpness-aware and reliable entropy minimization method to further stabilize TTA. However, as shown in Figure 1(d), in the context of multimodal wild TTA where the target domain includes various distribution shifts, the results are still not satisfying. A recent work READ (Yang et al., 2024) explores the reliability bias in multimodal data during test time. READ proposes that when one of the modalities is corrupted, the reliability balance across the modalities will be destroyed, which leads to a heavy performance degradation of the model. However, it only discusses the weak OOD situations and overlooks the more complex noise patterns in multimodal data. Besides, it is based on the mild TTA setting where test samples have the same distribution shift type.
+
+Based on the above observations and the limitations of existing methods, in this paper, we reveal a new challenging task named *multimodal wild TTA* where the target domain includes various types of distribution shifts including weak OOD samples and strong OOD samples. To address the challenging problem, we propose two novel strategies: sample identification with interquartile range Smoothing and unimodal assistance and Mutual information sharing (SuMi). To avoid the abrupt distribution shifts which could destroy the prior knowledge from the source model, we propose to smooth the adaptation process with interquartile range. Besides, we fully utilize the unimodal information to select low-entropy samples with rich multimodal information. Furthermore, we propose the mutual information sharing to align information between different modalities which can reduce the discrepancies across different modalities and enhance the information utilization of different modalities. Our main contributions can be summarized as follows:
+
+- We show that the complex noise patterns in multimodal data will make existing TTA methods fail. To this end, we propose a new practical and challenging task named *multimodal*
+
+{2}------------------------------------------------
+
+![Figure 2: Overview of SuMi. The diagram illustrates the architecture of the SuMi model. It starts with two input modalities: Video and Audio. The Video is processed by a Video Encoder, and the Audio by an Audio Encoder. Both encoders output features that are then processed by Fusion Layers. The Fusion Layers output entropy distributions, $Ent_u(x^{(m)}) \in S_u(x)$ for the video modality and $Ent_a(x^{(m)}) \in S_a(x)$ for the audio modality. These distributions are visualized as histograms. A central part of the diagram shows a sample identification process using the Interquartile Range (IQR) method. A dashed box contains a graph of the entropy distribution with the IQR marked. The IQR is defined as $Q_3 - Q_1$, where $Q_1 = \frac{1}{4}IQR$ and $Q_3 = \frac{3}{4}IQR$. The sample identification process is labeled with '25%', '50%', and '75%'. The identified samples are then used for 'Unimodal Assistance', which is visualized as a 2x2 grid of areas (Area1, Area2, Area3, Area4) representing the entropy distribution. The overall optimization process is shown at the bottom right, with a formula for the loss function $\mathcal{L}(x) = \alpha(x) \mathbb{I}(x \in \mathcal{S}_u(x) \cap \mathcal{S}_a(x))$ and a formula for the weight $\alpha(x) = \frac{1}{\max(\mathcal{S}_u(x), \mathcal{S}_a(x))}$.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+Figure 2: Overview of SuMi. The diagram illustrates the architecture of the SuMi model. It starts with two input modalities: Video and Audio. The Video is processed by a Video Encoder, and the Audio by an Audio Encoder. Both encoders output features that are then processed by Fusion Layers. The Fusion Layers output entropy distributions, \$Ent\_u(x^{(m)}) \in S\_u(x)\$ for the video modality and \$Ent\_a(x^{(m)}) \in S\_a(x)\$ for the audio modality. These distributions are visualized as histograms. A central part of the diagram shows a sample identification process using the Interquartile Range (IQR) method. A dashed box contains a graph of the entropy distribution with the IQR marked. The IQR is defined as \$Q\_3 - Q\_1\$, where \$Q\_1 = \frac{1}{4}IQR\$ and \$Q\_3 = \frac{3}{4}IQR\$. The sample identification process is labeled with '25%', '50%', and '75%'. The identified samples are then used for 'Unimodal Assistance', which is visualized as a 2x2 grid of areas (Area1, Area2, Area3, Area4) representing the entropy distribution. The overall optimization process is shown at the bottom right, with a formula for the loss function \$\mathcal{L}(x) = \alpha(x) \mathbb{I}(x \in \mathcal{S}\_u(x) \cap \mathcal{S}\_a(x))\$ and a formula for the weight \$\alpha(x) = \frac{1}{\max(\mathcal{S}\_u(x), \mathcal{S}\_a(x))}\$.
+
+Figure 2: The overview of SuMi.
+
+*wild TTA* where the target domain includes various types of distribution shifts including weak OOD samples and strong OOD samples.
+
+- We propose a novel method SuMi, consisting of sample identification with interquartile range smoothing and unimodal assistance, and mutual information sharing.
+- SuMi outperforms all the baselines consistently and significantly in weak, strong and mixed OOD domains. Additionally, we build two benchmarks for multimodal wild TTA.
+
+## 2 RELATED WORK
+
+Test-time adaptation aims to update the source model without source domain data and labels of the target domain data. Test-time training, such as TTT (Sun et al., 2020) and TTT+ (Liu et al., 2021) trains a source model with both supervised and self-supervised objectives in the training stage to enhance test-time adaptation. These methods depend on proxy tasks and assume that the training process is controllable, which limits the scope of applications. Therefore, fully test-time adaptation methods (Wang et al., 2021; Niu et al., 2022; Zhou et al., 2023b; Yuan et al., 2023; Gong et al., 2023a; Park et al., 2024) are proposed to adapt the model only in test-time, without intervening in the training stage. Tent (Wang et al., 2021) proposes to use entropy minimization to update the normalization layers of the model. Furthermore, EATA (Niu et al., 2022) and SAR (Niu et al., 2023) propose the sample selection criteria for entropy minimization. More recently, Lee et al. (2024) show that using entropy alone as a measure of confidence is insufficient and propose to use a combination of entropy and the proposed PLPD metric to identify samples. Chen et al. (2024) proposes a dynamic unreliable and low-informative sample exclusion method for entropy minimization.
+
+However, existing works focus on the unimodal TTA. Compared to unimodal scenarios, multimodal data face much more complex patterns of noise in real-world applications, such as simultaneous corruptions and missing modalities (Guo et al., 2024c). Shin et al. (2022) proposes a framework to generate cross-modal pseudo labels as self-training signals. Guo et al. (2024b) propose a multimodal TTA approach but focus on the multimodal regression tasks. A recent work (Yang et al., 2024) explores the multimodal TTA and proposes reliable fusion and robust adaptation to address information discrepancies in multimodal data. However, it only discusses the situations where there is only one modality corrupted. When there are multiple modalities corrupted or missing, the huge and abrupt distribution gap between the source domain and the target domain will make the method fail. Additionally, it focuses on the single domain adaptation. In contrast, we explore a more practical and challenging wild TTA where the target domain includes various types of corruption.
+
+## 3 METHODOLOGY
+
+### 3.1 PROBLEM FORMULATION
+
+Without loss of generality, we take two modalities as an example for clarity of presentation. Let  $\mathcal{M}_\theta = (\phi_{u_1}, \phi_{u_2}, \mathcal{F})$  with parameter  $\theta$  be the source model pre-trained on the source domain dataset  $\mathcal{D}_{source} = \{(\mathbf{x}_i, y_i)\}_{i=1}^{N_s}$  where  $\phi_{u_1}, \phi_{u_2}$  are the encoders of modality  $u_1$  and  $u_2$ ,  $\mathcal{F}$  is the multi-
+
+{3}------------------------------------------------
+
+modal fusion layers with prediction head,  $\mathbf{x}_i = (\mathbf{x}_i^{u_1}, \mathbf{x}_i^{u_2})$ , and  $N_s$  is the number of samples. TTA aims to fine-tune the source model  $\mathcal{M}_\theta$  on the target domain dataset  $\mathcal{D}_{target} = \{\mathbf{x}_i\}_{i=1}^{N_s}$  where the labels and the source dataset are unavailable. Existing TTA methods (Niu et al., 2023; Yang et al., 2024) update the parameter  $\theta$  by minimizing the entropy of test domain data:
+
+$$\text{Ent}_\theta(\mathbf{x}) = -\mathbf{p}_\theta(\mathbf{x}) \log \mathbf{p}_\theta(\mathbf{x}) = -\sum_{i=1}^C p_\theta(\mathbf{x})_i \log p_\theta(\mathbf{x})_i \quad (1)$$
+
+where  $\mathbf{p}_\theta = \text{softmax}(\mathcal{M}_\theta(\mathbf{x})) = (p_\theta(\mathbf{x})_1, p_\theta(\mathbf{x})_2, \dots, p_\theta(\mathbf{x})_C)$  is the probabilistic distribution outputted by the model  $\mathcal{M}_\theta$  and  $C$  is the number of classes.
+
+In this paper, we reveal a new challenging task named *multimodal wild TTA*. Specifically, we broadly categorize multimodal noise scenarios into two types: weak OOD samples, where only one modality is corrupted by noise, and strong OOD samples, where multiple modalities are corrupted by noise or missing modality issues occur. Multimodal wild TTA considers a more practical and challenging TTA setting where the target datasets contain various types of distribution shifts including both weak OOD samples and strong OOD samples. The overall architecture of SuMi is presented in Figure 2.
+
+### 3.2 SAMPLE IDENTIFICATION WITH INTERQUARTILE RANGE SMOOTHING AND UNIMODAL ASSISTANCE
+
+#### 3.2.1 INTERQUARTILE RANGE SMOOTHING
+
+Many existing TTA methods rely on selecting low-entropy samples for entropy minimization (Niu et al., 2022; Lee et al., 2024; Chen et al., 2024). However, when the target data is a mixture of various types of distribution shifts, including weak OOD samples and strong OOD samples, the performance of the model would degrade significantly. For example, in Figure 3(a), we present the performance of three different settings of the adaptation process. We can observe that directly adapting the model to the strong OOD domain will yield much poorer performance than a model adapted on weak OOD domain. The main reason is that there is a huge distribution gap between the source domain and the strong OOD domain. Therefore, a direct adaptation would destroy the prior knowledge of the source model and lead to instability. In comparison, when we first perform adaptation on the weak OOD domain before the strong OOD domain, the performance of the model will improve. This phenomenon inspires us that a smoothing adaptation process under the wild TTA and complex noise patterns of multimodal data is much better than an abrupt adaptation process.
+
+Motivated by the above observations, we propose an interquartile range smoothing method for dynamic sample identification during the adaptation process. Interquartile range (IQR) is a measure of statistical dispersion, which is the spread of the data (Dekking et al., 2006). We give a brief definition of IQR below:
+
+**Definition 1** IQR is the difference between the 75th and 25th percentiles of the data. The data is divided into four rank-ordered even parts via linear interpolation which are denoted as  $Q_1$  (lower quartile),  $Q_2$  (median) and  $Q_3$  (upper quartile). IQR is calculated as  $\text{IQR} = Q_3 - Q_1$ .
+
+IQR is often used to identify unstable samples or outliers in a dataset. Specifically, according to Tukey’s rule (Tukey et al., 1977), the stable sample set  $\mathcal{X}_s$  is selected as:
+
+$$\mathcal{X}_s = \{\mathbf{x} \mid \mathbf{x} \geq Q_1 - \frac{3}{2}\text{IQR} \text{ and } \mathbf{x} \leq Q_3 + \frac{3}{2}\text{IQR}\} \quad (2)$$
+
+To smooth the adaptation process, we modify the above equation slightly and select the samples  $\mathcal{H}_\theta^t(\mathbf{x})$  as:
+
+$$\begin{aligned} \mathcal{H}_\theta^t(\mathbf{x}) &= \{\mathbf{h} \mid \mathbf{h} \geq Q_1 - \frac{3}{2}f(t)\text{IQR} \text{ and } \mathbf{h} \leq Q_3 + \frac{3}{2}f(t)\text{IQR}\} \\ \mathbf{h} &= [\mathbf{h}^{u_1}, \mathbf{h}^{u_2}], \mathbf{h}^{u_1} = \phi_{u_1}(\mathbf{x}^{u_1}), \mathbf{h}^{u_2} = \phi_{u_2}(\mathbf{x}^{u_2}) \end{aligned} \quad (3)$$
+
+where  $t$  is the current iteration,  $\theta$  is the parameter of the model,  $f(t)$  is the smoothing function,  $[,]$  is the concatenation operation and  $\mathbf{h}$  is the representation of the sample. For simplicity, we use the linear smoothing and set  $f(t) = t/\text{iter}$  where  $\text{iter}$  is the total iteration. We use the representations instead of the raw inputs because the representations are informative dense vectors that contain less
+
+{4}------------------------------------------------
+
+![Figure 3: (a) Bar chart showing performance for Weak, Strong, and Weak to Strong settings. (b) t-SNE visualizations of features during adaptation. (c) Bar chart showing performance for different quantiles of multimodal and unimodal entropy.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 3 consists of three subplots. Subplot (a) is a bar chart with three bars labeled 'Weak', 'Strong', and 'Weak to Strong' on the x-axis. The y-axis ranges from 0 to 30. The 'Weak' bar is at approximately 23, the 'Strong' bar is at approximately 12, and the 'Weak to Strong' bar is at approximately 28. Subplot (b) shows four t-SNE visualizations of features during adaptation, labeled 'Iteration 0', 'Iteration 100', 'Iteration 200', and 'Iteration 300'. Each visualization shows a scatter plot of blue and orange points. Subplot (c) is a bar chart with five groups of bars on the x-axis labeled '[0,20]', '[20,40]', '[40,60]', '[60,80]', and '[80,100]'. The y-axis ranges from 0 to 60. Each group contains two bars: a blue bar for 'multimodal' and a green bar for 'video'. The legend indicates 'multimodal' (blue square) and 'video' (green square).
+
+Figure 3: (a) Bar chart showing performance for Weak, Strong, and Weak to Strong settings. (b) t-SNE visualizations of features during adaptation. (c) Bar chart showing performance for different quantiles of multimodal and unimodal entropy.
+
+Figure 3: (a) Performance of different adaptation settings on strong OOD samples. (b) t-SNE visualizations (Van der Maaten & Hinton, 2008) of features during adaptation. (c) Performance using different quantiles multimodal and unimodal entropy. Results are obtained on Kinetics50-C.
+
+noise and unrelated information than the raw inputs. At iteration  $t$ , we use the selected data  $\mathcal{H}_b^t(\mathbf{x})$  for adaptation. In Figure 3(b), we visualize the sample identification process using the source model. From the figure, we can observe that at first several iterations, most weak OOD samples are selected. With the increase of  $t$ , the data for adaptation is also increasing, including more and more strong OOD samples. This smoothing process enables gradual adaptation to the strong OOD samples and various types of distribution shifts, avoiding the abrupt distribution gaps which could destroy the prior knowledge of the source model. Additionally,  $\mathbf{h}$  is a vector. Therefore, in practice, we select  $\mathbf{h}$  for adaptation if  $\beta + (1 - \beta)f(t)$  percent of the values in  $\mathbf{h}$  satisfy Equation 3 for stability.
+
+#### 3.2.2 UNIMODAL ASSISTANCE
+
+IQR smoothing aims to help the model preserve the prior knowledge in the source model and gradually adapt to the strong OOD samples and various types of distribution shifts. However, this process can not distinguish the high-quality samples that benefit the entropy minimization. Therefore, we introduce a novel sample identification method for multimodal data. As suggested in previous work (Niu et al., 2022; 2023; Chen et al., 2024), low-entropy samples will benefit the entropy minimization while high-entropy samples, due to its uncertainty, will adversely affect the process. However, in the context of multimodal data, apart from multimodal entropy, there is unimodal entropy we can utilize to help the adaptation. As shown in Figure 3(c), we conduct experiments using unimodal entropy and multimodal entropy. We can easily observe that the multimodal low-entropy samples will yield much better performance than high-entropy samples. However, for audio and video modality, the samples of  $\langle 20, 40 \rangle$  interval yield better results than samples of  $\langle 0, 20 \rangle$ . This indicates that for unimodal entropy, lower entropy does not necessarily correlate with better performance. When only one modality exhibits low entropy, it indicates that the sample does not rely on multimodal data for accurate prediction, implying it has low informative value for multimodal optimization. Conversely, a unimodal sample with slightly higher entropy shows a dependence on multimodal data for accurate prediction, indicating that it contains rich multimodal information.
+
+Inspired by the above observations, we propose a sample identification method with unimodal assistance to select low-entropy samples with rich multimodal information. Specifically, our method employs the following identification criteria:
+
+$$\mathcal{S}_\theta(\mathbf{x}) = \{\mathbf{x} \mid \text{Ent}_\theta(\mathbf{x}) \leq \gamma_m \text{ and } (\text{Ent}_\theta(\mathbf{x}^{u_1}) + \mu \text{Ent}_\theta(\mathbf{x}^{u_2})) \geq \gamma_u\} \quad (4)$$
+
+where  $\gamma_m$  and  $\gamma_u$  are the pre-defined threshold for multimodal and unimodal entropy and  $\mu$  is a trade-off between modalities. By limiting the multimodal entropy, we can select low-entropy samples with high certainty and fewer noises. Meanwhile, by limiting the unimodal entropy, we can ensure the samples selected contain rich multimodal information, excluding low-informative samples.
+
+### 3.3 MUTUAL INFORMATION SHARING
+
+A recent study (Yang et al., 2024) reveals a challenge in multimodal TTA, known as reliability bias, which refers to the information discrepancies across different modalities. During the adaptation process, this discrepancy often leads to imbalanced utilization of each modality (Guo et al., 2024a). In strong OOD situations, missing modality cases could occur or multiple modalities could be corrupted. Therefore, the imbalanced phenomenon could be enlarged. How to balance the adaptation
+
+{5}------------------------------------------------
+
+#### **Algorithm 1** SuMi
+
+---
+
+```
+
+1: Input: Source model  $\mathcal{M}_\theta = (\phi_{u_1}, \phi_{u_2}, \mathcal{F})$ , target dataset  $\mathcal{D}_{target} = \{\mathbf{x}_i\}_{i=1}^{N_t}$ , adaptation iterations  $T$  and a series of hyperparameters.
+2: for  $t = 1$  to  $T$  do
+3:    $\mathbf{x} = (\mathbf{x}^{u_1}, \mathbf{x}^{u_2}) \xleftarrow{\text{Sample}} \mathcal{D}_{target}$ ;
+4:   Calculate the representations  $\mathbf{h} = [\mathbf{h}^{u_1}, \mathbf{h}^{u_2}]$ ,  $\mathbf{h}^{u_1} = \phi_{u_1}(\mathbf{x}^{u_1})$ ,  $\mathbf{h}^{u_2} = \phi_{u_2}(\mathbf{x}^{u_2})$ ;
+5:   Calculate  $Q_1$  and  $Q_3$ :  $Q_1 = \text{quantile}(\mathbf{h}, 0.25)$ ,  $Q_3 = \text{quantile}(\mathbf{h}, 0.75)$ ;
+6:   Calculate IQR:  $\text{IQR} = Q_3 - Q_1$ ;
+7:   Select samples  $\mathcal{H}_\theta^t(\mathbf{x})$  using Equation 3;
+8:   Calculate entropy of multimodal outputs and unimodal outputs;
+9:   Select samples  $\mathcal{S}_\theta^t(\mathbf{x})$  from  $\mathcal{H}_\theta^t(\mathbf{x})$  using Equation 4;
+10:  Calculate the entropy in  $\mathcal{S}_\theta(\mathbf{x})$ ;
+11:  if  $t < t_0$  then
+12:    Calculate mutual information sharing loss using Equation 6;
+13:  end if
+14:  Calculate the loss  $\mathcal{L}(\mathbf{x})$  using Equation 8;
+15:  Update the affine parameters of the model  $\mathcal{M}_\theta$ ;
+16: end for
+
+```
+
+---
+
+across different modalities under strong OOD domains (especially missing modality cases) is very important. To address this problem, we propose a simple yet effective method, mutual information sharing, to align information between different modalities. Concretely, for modality  $u_i$ , we can obtain its probabilistic distribution as  $\mathbf{p}_\theta^{u_i}(\mathbf{x}^{u_i}) = \text{softmax}(\mathcal{F}(\phi_{u_i}(\mathbf{x}^{u_i})))$ . For simplicity, we will use  $\mathbf{p}^{u_i}$  to represent  $\mathbf{p}_\theta^{u_i}(\mathbf{x}^{u_i})$  in the following context. We define the complementary probabilistic distribution of  $\mathbf{p}^{u_i}$  as
+
+$$\mathbf{p}^{u_i'} = \left( \sum_{j=1}^M \mathbf{p}^{u_j} - \mathbf{p}^{u_i} \right) / (M - 1) \quad (5)$$
+
+where  $M$  is the number of modalities. For two modalities,  $\mathbf{p}^{u_1'} = \mathbf{p}^{u_2}$  and  $\mathbf{p}^{u_2'} = \mathbf{p}^{u_1}$ . To improve the alignment between different modalities, we can minimize the *KL divergence* (Kullback & Leibler, 1951) between the probabilistic distribution  $\mathbf{p}^{u_i}$  and its complementary distribution  $\mathbf{p}^{u_i'}$ . However, if one modality is severely corrupted, minimizing the KL divergence might influence the clean modality. Therefore, we add multimodal distribution  $\mathbf{p}^m = \text{softmax}(\mathcal{M}_\theta(\mathbf{x}))$  to improve the robustness and stability. Therefore, we can represent the mutual information sharing loss as:
+
+$$\begin{aligned} \mathcal{L}_{mis}(\mathbf{x}) &= D_{KL}(\mathbf{p}^{u_1} \parallel \frac{1}{2}(\mathbf{p}^{u_1'} + \mathbf{p}^m)) + D_{KL}(\mathbf{p}^{u_2} \parallel \frac{1}{2}(\mathbf{p}^{u_2'} + \mathbf{p}^m)) \\ &= \sum_{i=1}^C p_i^{u_1} \log \frac{2p_i^{u_1}}{p_i^{u_1'} + p_i^m} + \sum_{i=1}^C p_i^{u_2} \log \frac{2p_i^{u_2}}{p_i^{u_2'} + p_i^m} \end{aligned} \quad (6)$$
+
+where  $C$  is the number of classes and  $p_i$  is the  $i$ -th value of  $\mathbf{p}$ . Mutual information sharing can help the model connect and align the information between different modalities. Through mutual information sharing, when there are corrupted modalities including missing modalities, information from other modalities could be utilized to enhance the predictions.
+
+### 3.4 OVERALL OPTIMIZATION
+
+Following previous TTA methods (Niu et al., 2022; Lee et al., 2024), we add a weighting term to emphasize the contributions of samples during adaptation. Specifically, the weighting term is calculated as
+
+$$\alpha_\theta(\mathbf{x}) = \frac{1}{\exp[\text{Ent}_\theta(\mathbf{x}) - \text{Ent}_0]} \quad (7)$$
+
+where  $\text{Ent}_0$  is a pre-defined normalization factor (Niu et al., 2022). In summary, we can denote the overall loss function as:
+
+$$\mathcal{L}(\mathbf{x}) = \alpha_\theta(\mathbf{x}) \mathbb{1}_{\{\mathbf{x} \in \mathcal{H}_\theta^t(\mathbf{x}), \mathbf{x} \in \mathcal{S}_\theta(\mathbf{x})\}} (\text{Ent}_\theta(\mathbf{x}) + \lambda \mathcal{L}_{mis}(\mathbf{x})) \quad (8)$$
+
+{6}------------------------------------------------
+
+Table 1: Accuracy comparison with SOTA methods on Kinetics50-C with corrupted video modality (severity level 5). We report  $\text{avg}_{\pm \text{std}}$  over five random seeds. **Bold**: best results. Underline: second best results.
+
+| Source | Noise |  |  | Blur |  |  | Weather |  |  |  | Digital |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | Gauss. | Shot | Impul. | Defoc. | Glass | Motion | Zoom | Snow | Frost | Fog | Brit. | Contr. | Elastic | Pixel | JPEG | Avg. |
+| • Tent | 47.7 | 48.8 | 47.4 | 67.4 | 61.0 | 71.1 | 66.1 | 60.7 | 62.1 | 45.5 | 75.9 | 51.9 | 65.1 | 67.8 | 63.7 | 60.2 |
+| • EATA | 48.3 <sub>0.02</sub> | 49.3 <sub>0.03</sub> | 48.4 <sub>0.03</sub> | 67.8 <sub>0.03</sub> | 62.2 <sub>0.05</sub> | <u>71.2</u> <sub>0.03</sub> | 67.8 <sub>0.05</sub> | 63.1 <sub>0.05</sub> | 63.5 <sub>0.05</sub> | 23.0 <sub>1.03</sub> | 75.9 <sub>0.04</sub> | 50.1 <sub>1.03</sub> | 67.8 <sub>0.03</sub> | 70.5 <sub>0.01</sub> | 67.1 <sub>0.03</sub> | 59.8 |
+| • EATA | 49.0 <sub>0.02</sub> | 50.3 <sub>0.03</sub> | 49.2 <sub>0.01</sub> | 67.9 <sub>0.02</sub> | 63.9 <sub>0.05</sub> | 71.6 <sub>0.03</sub> | 67.9 <sub>0.02</sub> | 63.4 <sub>0.02</sub> | 64.4 <sub>0.01</sub> | 47.0 <sub>0.04</sub> | 76.1 <sub>0.01</sub> | 52.2 <sub>0.02</sub> | 67.6 <sub>0.02</sub> | 70.3 <sub>0.02</sub> | 62.9 <sub>0.02</sub> | 61.9 |
+| • SAR | 48.6 <sub>0.03</sub> | 49.8 <sub>0.06</sub> | 48.7 <sub>0.06</sub> | 67.9 <sub>0.02</sub> | 62.7 <sub>0.05</sub> | 71.8 <sub>0.03</sub> | 67.9 <sub>0.02</sub> | 63.4 <sub>0.04</sub> | 64.2 <sub>0.03</sub> | 24.0 <sub>0.05</sub> | 75.9 <sub>0.04</sub> | 51.1 <sub>0.03</sub> | 68.0 <sub>0.04</sub> | 70.6 <sub>0.02</sub> | 67.2 <sub>0.02</sub> | 60.1 |
+| • SoTTA | 48.3 <sub>0.03</sub> | 49.8 <sub>0.02</sub> | 48.5 <sub>0.04</sub> | 67.9 <sub>0.02</sub> | 62.5 <sub>0.03</sub> | <u>71.9</u> <sub>0.03</sub> | 67.8 <sub>0.06</sub> | 63.2 <sub>0.05</sub> | 64.0 <sub>0.02</sub> | 27.0 <sub>1.11</sub> | 75.7 <sub>0.03</sub> | 51.3 <sub>0.04</sub> | 67.8 <sub>0.03</sub> | 70.4 <sub>0.02</sub> | 67.5 <sub>0.01</sub> | 60.3 |
+| • DeYO | 48.6 <sub>0.03</sub> | 49.8 <sub>0.06</sub> | 48.7 <sub>0.06</sub> | <u>68.0</u> <sub>0.03</sub> | 63.0 <sub>0.03</sub> | <u>71.9</u> <sub>0.03</sub> | 68.1 <sub>0.05</sub> | 63.5 <sub>0.04</sub> | 64.4 <sub>0.04</sub> | 21.4 <sub>1.10</sub> | 75.9 <sub>0.04</sub> | 50.6 <sub>0.03</sub> | 68.6 <sub>0.04</sub> | <u>70.8</u> <sub>0.02</sub> | 67.5 <sub>0.03</sub> | 60.0 |
+| • CEMA | 48.4 <sub>0.03</sub> | 49.4 <sub>0.05</sub> | 48.6 <sub>0.06</sub> | 67.8 <sub>0.02</sub> | 62.7 <sub>0.03</sub> | 71.7 <sub>0.03</sub> | 67.8 <sub>0.02</sub> | 63.4 <sub>0.04</sub> | 64.2 <sub>0.03</sub> | 23.8 <sub>0.05</sub> | 75.7 <sub>0.04</sub> | 50.7 <sub>0.04</sub> | 67.9 <sub>0.05</sub> | 70.5 <sub>0.02</sub> | 67.3 <sub>0.03</sub> | 59.9 |
+| • READ | 49.9 <sub>0.03</sub> | 50.8 <sub>0.05</sub> | 49.9 <sub>0.05</sub> | 67.9 <sub>0.02</sub> | 65.1 <sub>0.03</sub> | <u>72.2</u> | 69.2 <sub>0.09</sub> | 64.8 <sub>0.05</sub> | <u>66.7</u> <sub>0.03</sub> | <u>56.8</u> <sub>0.05</sub> | <u>76.2</u> | 54.4 <sub>0.05</sub> | 68.9 <sub>0.05</sub> | 70.7 <sub>0.02</sub> | 68.9 <sub>0.02</sub> | 63.5 |
+| • SuMi | <u>50.1</u> <sub>0.04</sub> | <u>50.7</u> <sub>0.03</sub> | <u>50.4</u> <sub>0.03</sub> | <b>68.2</b> <sub>0.03</sub> | <b>65.6</b> <sub>0.03</sub> | <b>72.2</b> <sub>0.02</sub> | <b>69.7</b> <sub>0.04</sub> | <b>65.7</b> <sub>0.03</sub> | <b>67.0</b> <sub>0.02</sub> | <u>56.5</u> <sub>0.05</sub> | <b>77.1</b> <sub>0.02</sub> | <b>55.2</b> <sub>0.04</sub> | <b>69.3</b> <sub>0.02</sub> | <b>71.2</b> <sub>0.02</sub> | <b>68.9</b> <sub>0.02</sub> | <b>63.9</b> |
+
+Table 2: Accuracy comparison with SOTA methods on Kinetics50-C with corrupted audio modality and strong OOD scenarios (severity level 5).
+
+| Source | Noise |  |  | Weather |  |  |  | Strong OOD |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | Gauss. | Traff. | Crowd | Rain | Thund. | Wind | Avg. | Both | Vmiss | Amiss | Mix | Avg. |
+| • Tent | <u>74.9</u> | 65.4 | 67.9 | 70.0 | 68.5 | 70.7 | 69.6 | 30.8 | 27.9 | 44.5 | <u>16.9</u> | 30.0 |
+| • EATA | <u>74.8</u> <sub>0.05</sub> | 68.2 <sub>0.05</sub> | <u>70.3</u> <sub>1.03</sub> | 71.1 <sub>0.04</sub> | 66.7 <sub>0.05</sub> | 71.7 <sub>0.01</sub> | 70.5 | 13.1 <sub>1.04</sub> | 9.2 <sub>0.05</sub> | 21.3 <sub>1.04</sub> | 1.2 <sub>0.05</sub> | 11.2 |
+| • SAR | <u>74.8</u> <sub>0.05</sub> | 68.4 <sub>0.04</sub> | <u>70.2</u> <sub>0.03</sub> | 71.2 <sub>0.03</sub> | 68.9 <sub>0.04</sub> | 71.9 <sub>0.01</sub> | 70.9 | 13.6 <sub>1.04</sub> | 10.3 <sub>0.04</sub> | 23.5 <sub>0.04</sub> | 3.8 <sub>0.05</sub> | 12.8 |
+| • SoTTA | <u>74.8</u> <sub>0.05</sub> | 68.4 <sub>0.04</sub> | <u>70.1</u> <sub>0.02</sub> | 71.1 <sub>0.03</sub> | 69.2 <sub>0.02</sub> | 71.8 <sub>0.02</sub> | 70.9 | 14.1 <sub>1.04</sub> | 9.8 <sub>0.05</sub> | 24.1 <sub>1.03</sub> | 1.9 <sub>0.05</sub> | 12.5 |
+| • DeYO | <u>74.8</u> <sub>0.05</sub> | 68.6 <sub>0.04</sub> | <u>70.3</u> <sub>0.04</sub> | 71.3 <sub>0.05</sub> | 70.4 <sub>0.03</sub> | <u>72.0</u> <sub>0.01</sub> | 71.2 | 14.9 <sub>1.04</sub> | 12.1 <sub>1.03</sub> | 27.6 <sub>0.04</sub> | 2.1 <sub>1.05</sub> | 14.2 |
+| • CEMA | <u>74.8</u> <sub>0.04</sub> | 67.8 <sub>0.04</sub> | 69.5 <sub>1.04</sub> | 71.1 <sub>0.04</sub> | 70.5 <sub>0.03</sub> | 71.6 <sub>0.03</sub> | 70.9 | 16.9 <sub>0.04</sub> | 13.4 <sub>1.04</sub> | 30.3 <sub>0.03</sub> | 1.8 <sub>1.06</sub> | 15.6 |
+| • READ | <u>73.9</u> <sub>0.05</sub> | <u>69.1</u> <sub>1.04</sub> | <u>70.3</u> <sub>0.02</sub> | <u>71.4</u> <sub>0.04</sub> | <u>72.8</u> <sub>0.05</sub> | 71.3 <sub>0.03</sub> | <u>71.6</u> | 31.1 <sub>1.03</sub> | 27.5 <sub>1.05</sub> | 44.3 <sub>0.03</sub> | 13.7 <sub>1.03</sub> | 29.1 |
+| • SuMi | <b>75.1</b> <sub>0.03</sub> | <b>68.9</b> <sub>0.03</sub> | <b>70.6</b> <sub>0.03</sub> | <b>71.6</b> <sub>0.03</sub> | <b>72.8</b> <sub>0.04</sub> | <b>72.1</b> <sub>1.02</sub> | <b>71.9</b> | <b>34.8</b> <sub>0.03</sub> | <b>31.8</b> <sub>0.03</sub> | <b>48.6</b> <sub>0.02</sub> | <b>18.4</b> <sub>0.04</sub> | <b>33.4</b> |
+
+Table 3: Accuracy comparison with SOTA methods on VGGSound-C with corrupted video modality (severity level 5).
+
+| Source | Noise |  |  | Blur |  |  | Weather |  |  |  | Digital |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | Gauss. | Shot | Impul. | Defoc. | Glass | Motion | Zoom | Snow | Frost | Fog | Brit. | Contr. | Elastic | Pixel | JPEG | Avg. |
+| • Tent | 53.0 | 52.9 | 53.0 | 57.2 | 57.3 | 58.6 | 57.5 | 56.3 | 56.5 | 55.4 | 59.2 | 53.7 | 57.2 | 56.4 | 57.3 | 56.1 |
+| • EATA | <u>53.0</u> <sub>0.01</sub> | <u>52.9</u> <sub>0.01</sub> | <u>52.9</u> <sub>0.01</sub> | <u>57.3</u> <sub>0.01</sub> | <u>56.3</u> <sub>0.01</sub> | <u>57.6</u> <sub>0.01</sub> | <u>56.8</u> <sub>0.01</sub> | <u>55.4</u> <sub>0.01</sub> | <u>56.0</u> <sub>0.01</sub> | <u>56.2</u> <sub>0.01</sub> | <u>59.3</u> <sub>0.01</sub> | <u>53.5</u> <sub>0.01</sub> | <u>57.3</u> <sub>0.01</sub> | <u>56.7</u> <sub>0.01</sub> | <u>56.8</u> <sub>0.01</sub> | 55.8 |
+| • SAR | <u>52.9</u> <sub>0.01</sub> | <u>53.1</u> <sub>0.01</sub> | <u>52.9</u> <sub>0.01</sub> | <u>56.3</u> <sub>0.01</sub> | <u>56.2</u> <sub>0.02</sub> | <u>57.4</u> <sub>0.01</sub> | <u>56.7</u> <sub>0.01</sub> | <u>55.4</u> <sub>0.01</sub> | <u>56.0</u> <sub>0.01</sub> | <u>56.2</u> <sub>0.02</sub> | <u>58.2</u> <sub>0.01</sub> | <u>53.5</u> <sub>0.01</sub> | <u>57.4</u> <sub>0.01</sub> | <u>56.7</u> <sub>0.01</sub> | <u>56.8</u> <sub>0.01</sub> | 55.7 |
+| • SoTTA | <u>52.9</u> <sub>0.01</sub> | <u>53.2</u> <sub>0.01</sub> | <u>52.9</u> <sub>0.01</sub> | <u>56.6</u> <sub>0.02</sub> | <u>56.8</u> <sub>0.02</sub> | <u>57.9</u> <sub>0.02</sub> | <u>57.1</u> <sub>0.01</sub> | <u>55.7</u> <sub>0.01</sub> | <u>56.1</u> <sub>0.01</sub> | <u>56.3</u> <sub>0.01</sub> | <u>59.4</u> | <u>53.8</u> <sub>0.02</sub> | <u>57.6</u> <sub>0.01</sub> | <u>56.2</u> <sub>0.01</sub> | <u>56.7</u> <sub>0.01</sub> | 55.9 |
+| • DeYO | <u>53.0</u> <sub>0.01</sub> | <u>53.1</u> <sub>0.01</sub> | <u>53.0</u> <sub>0.01</sub> | <u>56.5</u> <sub>0.01</sub> | <u>56.5</u> <sub>0.01</sub> | <u>57.7</u> <sub>0.01</sub> | <u>56.9</u> <sub>0.01</sub> | <u>55.4</u> <sub>0.01</sub> | <u>56.0</u> <sub>0.01</sub> | <u>56.3</u> <sub>0.02</sub> | <u>58.5</u> <sub>0.01</sub> | <u>53.6</u> <sub>0.01</sub> | <u>57.6</u> <sub>0.01</sub> | <u>57.0</u> <sub>0.01</sub> | <u>57.0</u> <sub>0.01</sub> | 55.9 |
+| • CEMA | <u>52.8</u> <sub>0.01</sub> | <u>52.9</u> <sub>0.02</sub> | <u>52.9</u> <sub>0.01</sub> | <u>56.5</u> <sub>0.01</sub> | <u>56.4</u> <sub>0.01</sub> | <u>57.6</u> <sub>0.01</sub> | <u>56.8</u> <sub>0.02</sub> | <u>55.4</u> <sub>0.01</sub> | <u>56.2</u> <sub>0.01</sub> | <u>56.2</u> <sub>0.01</sub> | <u>58.4</u> <sub>0.01</sub> | <u>53.5</u> <sub>0.01</sub> | <u>57.8</u> <sub>0.01</sub> | <u>56.8</u> <sub>0.01</sub> | <u>56.9</u> <sub>0.01</sub> | 55.8 |
+| • READ | <u>52.9</u> <sub>0.01</sub> | <u>52.8</u> <sub>0.02</sub> | <u>52.8</u> <sub>0.02</sub> | <u>57.2</u> <sub>0.02</sub> | <u>57.3</u> <sub>0.03</sub> | <u>58.8</u> <sub>0.02</sub> | <u>58.1</u> <sub>0.02</sub> | <u>56.4</u> <sub>0.01</sub> | <u>57.5</u> <sub>0.02</sub> | <u>57.0<sub>0.01</sub></u> | <u>59.3</u> <sub>0.01</sub> | <u>54.4</u> <sub>0.02</sub> | <u>57.8</u> <sub>0.01</sub> | <u>56.6</u> <sub>0.01</sub> | <u>57.2</u> <sub>0.02</sub> | 56.4 |
+| • SuMi | <b>54.0</b> <sub>0.01</sub> | <b>54.0</b> <sub>0.01</sub> | <b>53.8</b> <sub>0.01</sub> | <b>58.2</b> <sub>0.02</sub> | <b>58.4</b> <sub>0.01</sub> | <b>59.4</b> <sub>0.02</sub> | <b>58.7</b> <sub>0.02</sub> | <b>57.5</b> <sub>0.01</sub> | <b>58.2</b> <sub>0.02</sub> | <b>57.6</b> <sub>0.01</sub> | <b>59.4</b> <sub>0.01</sub> | <b>54.8</b> <sub>0.02</sub> | <b>59.0</b> <sub>0.01</sub> | <b>57.5</b> <sub>0.01</sub> | <b>58.2</b> <sub>0.01</sub> | <b>57.3</b> |
+
+where  $\mathbb{I}_{\lambda}(\cdot)$  is an indicator function and  $\lambda$  is a trade-off between the two losses. One point worth emphasizing is that for strong OOD adaptation, we only add the mutual information sharing loss  $\mathcal{L}_{mis}$  in the first  $t_0$  iterations during the adaptation process. The reason is that with the increase of iteration, the IQR smoothing will include more and more strong OOD samples where multiple modalities are corrupted which could damage the information sharing and the performance of the model. For weak OOD adaptation, we add mutual information sharing loss for all the iterations. Overall, Algorithm 1 presents the outline of our method.
+
+## 4 EXPERIMENTS
+
+### 4.1 EXPERIMENTAL SETTINGS
+
+**Datasets.** We use two widely used multimodal datasets, Kinetics50 (Kay et al., 2017) and VGGSound (Chen et al., 2020) for evaluation. Following previous work (Hendrycks & Dietterich, 2019; Yang et al., 2024), we introduce 15 different types of corruptions and 6 types for audio to simulate the distribution shifts in real-world applications. Each type of corruption has five levels of severity. For strong OOD samples, we introduce four different types: Both (both modalities are corrupted), Vmiss (video modality is missing), Amiss (audio modality is missing), and Mix (one modality is missing and the other is corrupted). Details of datasets and the corruptions are presented in Appendix A. As a result, we can obtain the corrupted datasets Kinetics50-C and VGGSound-C.
+
+**Implementation Details.** For the source model, we use the pre-trained CAV-MAE (Gong et al., 2023b) following Yang et al. (2024). We use Adam optimizer with a learning rate of 1e-4/1e-5 and
+
+{7}------------------------------------------------
+
+Table 4: Accuracy comparison with SOTA methods on VGGSound-C with corrupted audio modality and strong OOD scenarios (severity level 5). We report  $\text{avg}_{\pm \text{std}}$  over five random seeds. **Bold**: best results. Underline: second best results.
+
+| Source | Noise |  |  | Weather |  |  | Strong OOD |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  | Gauss. | Traff. | Crowd | Rain | Thund. | Wind | Avg. | Both | Vmiss | Amiss | Mix. | Avg. |
+| • Tent | 37.2 | 21.2 | 16.9 | 21.8 | 27.4 | 25.6 | 25.0 | 9.4 | 28.0 | 18.9 | 6.0 | 15.6 |
+| • EATA | <u>41.2<sub>±0.1</sub></u> | <u>25.0<sub>±0.5</sub></u> | <b>28.8<sub>±0.6</sub></b> | <b>32.3<sub>±0.1</sub></b> | <u>34.5<sub>±0.2</sub></u> | <b>33.2<sub>±0.2</sub></b> | <b>32.5</b> | <u>15.2<sub>±0.1</sub></u> | <b>29.2<sub>±0.2</sub></b> | <u>19.6<sub>±0.3</sub></u> | <u>5.8<sub>±0.1</sub></u> | <b>17.4</b> |
+| • SAR | 10.9 <sub>±0.7</sub> | 2.1 <sub>±0.2</sub> | 1.0 <sub>±0.0</sub> | 2.0 <sub>±0.0</sub> | 3.2 <sub>±0.2</sub> | 2.3 <sub>±0.1</sub> | 3.6 | 1.1 <sub>±0.0</sub> | 19.8 <sub>±0.1</sub> | 1.5 <sub>±0.0</sub> | 0.3 <sub>±0.0</sub> | 5.7 |
+| • SoTTA | 13.8 <sub>±0.5</sub> | 10.1 <sub>±0.3</sub> | 8.4 <sub>±0.2</sub> | 4.2 <sub>±0.2</sub> | 6.4 <sub>±0.2</sub> | 3.4 <sub>±0.1</sub> | 7.7 | 2.4 <sub>±0.0</sub> | 20.4 <sub>±0.1</sub> | 4.4 <sub>±0.1</sub> | 1.1 <sub>±0.0</sub> | 7.1 |
+| • DeYO | 7.0 <sub>±0.5</sub> | 1.5 <sub>±0.1</sub> | 2.2 <sub>±0.1</sub> | 3.5 <sub>±0.2</sub> | 6.8 <sub>±0.2</sub> | 4.2 <sub>±0.1</sub> | 4.2 | 0.6 <sub>±0.0</sub> | 20.8 <sub>±0.2</sub> | 2.8 <sub>±0.1</sub> | 0.4 <sub>±0.0</sub> | 6.2 |
+| • CEMA | 6.8 <sub>±0.3</sub> | 1.9 <sub>±0.1</sub> | 2.0 <sub>±0.1</sub> | 2.9 <sub>±0.2</sub> | 4.4 <sub>±0.2</sub> | 3.9 <sub>±0.1</sub> | 3.7 | 0.9 <sub>±0.0</sub> | 19.9 <sub>±0.1</sub> | 1.9 <sub>±0.1</sub> | 0.1 <sub>±0.0</sub> | 5.7 |
+| • READ | 27.1 <sub>±0.6</sub> | 22.1 <sub>±0.4</sub> | 19.0 <sub>±0.2</sub> | 21.6 <sub>±0.3</sub> | 23.6 <sub>±1.4</sub> | 21.0 <sub>±0.5</sub> | 22.4 | 10.1 <sub>±0.1</sub> | 27.9 <sub>±0.2</sub> | 15.3 <sub>±0.4</sub> | 4.5 <sub>±0.1</sub> | 14.5 |
+| • SuMi | <b>41.9<sub>±0.3</sub></b> | <b>26.3<sub>±0.2</sub></b> | <u>27.9<sub>±0.2</sub></u> | <u>31.6<sub>±0.3</sub></u> | <b>37.1<sub>±0.2</sub></b> | <b>34.1<sub>±0.1</sub></b> | <b>33.2</b> | <b>18.4<sub>±0.2</sub></b> | <b>31.8<sub>±0.2</sub></b> | <b>21.7<sub>±0.2</sub></b> | <b>6.7<sub>±0.1</sub></b> | <b>19.7</b> |
+
+![Figure 4: Comparison with SOTA methods on corrupted data of different severity levels. The figure contains four bar charts: (a) Kinetics50 (weak), (b) Kinetics50 (strong), (c) VGGSound (weak), and (d) VGGSound (strong). Each chart shows accuracy for severity levels 1, 2, 3, and 4. The methods compared are Source, DeYO, EATA, SoTTA, CEMA, READ, and SuMi. SuMi consistently shows high accuracy across all severity levels and datasets.](d864789b0d8384da1d22fd6a5d76bbdf_img.jpg)
+
+Figure 4: Comparison with SOTA methods on corrupted data of different severity levels. The figure contains four bar charts: (a) Kinetics50 (weak), (b) Kinetics50 (strong), (c) VGGSound (weak), and (d) VGGSound (strong). Each chart shows accuracy for severity levels 1, 2, 3, and 4. The methods compared are Source, DeYO, EATA, SoTTA, CEMA, READ, and SuMi. SuMi consistently shows high accuracy across all severity levels and datasets.
+
+Figure 4: Comparison with SOTA methods on corrupted data of different severity levels. weak: average accuracy of 21 different types of weak OOD distribution shifts. strong: average accuracy of 4 different types of strong OOD distribution shifts.
+
+![Figure 5: Comparison with SOTA methods on mixed corrupted data with ten different ratios of strong OOD samples. The figure contains four line charts: (a) Kinetics50 (sever. 5), (b) VGGSound (sever. 5), (c) Kinetics50 (mixed), and (d) VGGSound (mixed). Each chart shows accuracy for ratios of strong OOD samples from 0 to 100. The methods compared are Source, Tent, EATA, SoTTA, DeYO, CEMA, READ, and SuMi. SuMi maintains high accuracy even as the ratio of strong OOD samples increases.](7ff005f9556dc6518981bb92091d36ab_img.jpg)
+
+Figure 5: Comparison with SOTA methods on mixed corrupted data with ten different ratios of strong OOD samples. The figure contains four line charts: (a) Kinetics50 (sever. 5), (b) VGGSound (sever. 5), (c) Kinetics50 (mixed), and (d) VGGSound (mixed). Each chart shows accuracy for ratios of strong OOD samples from 0 to 100. The methods compared are Source, Tent, EATA, SoTTA, DeYO, CEMA, READ, and SuMi. SuMi maintains high accuracy even as the ratio of strong OOD samples increases.
+
+Figure 5: Comparison with SOTA methods on mixed corrupted data with ten different ratios of strong OOD samples. (a) and (b): severity level 5. (c) and (d): mixed severity.
+
+batch size of 16/64 for Kinetics50-C and VGGSound-C, respectively. The multimodal threshold  $\gamma_m$  in Equation 4 and the normalization factor  $\text{Ent}_0$  in Equation 7 are set to  $0.4 \times \ln C$  following Niu et al. (2022) by default where  $C$  is the number of task classes. The unimodal threshold  $\gamma_u$  in Equation 4 is set to  $e^{-1}$  by default. The smoothing coefficient  $\beta$  is set to 0.6/0.9, the weighting term  $\lambda$  is set to 5.0 and the unimodal assistance  $\mu$  is set to 1.0 by default for Kinetics50-C and VGGSound-C. For strong OOD adaptation, we set the mutual information sharing term  $t_0$  as  $\text{iter}/2$ . Following previous work (Niu et al., 2023; Gong et al., 2023a; Chen et al., 2024; Guo et al., 2024b), we update the affine parameters of normalization layers.
+
+### 4.2 COMPARISON WITH STATE-OF-THE-ARTS
+
+We compare our method with Tent (Wang et al., 2021), EATA (Niu et al., 2022), SAR (Niu et al., 2023), SoTTA (Gong et al., 2023a), CEMA (Chen et al., 2024), DeYO (Lee et al., 2024) and READ (Yang et al., 2024).
+
+**Single Domain Results.** We report the accuracy of 21 different types of weak OOD corruptions and 4 different types of strong OOD corruptions at severity level 5 on Kinetics50 and VGGSound in Table 1, 2, 3 and 4. For weak OOD samples, SuMi outperforms existing SOTA methods on most of the distribution shifts and achieves consistent good performances. For strong OOD samples, most of the existing SOTA methods perform even worse than the source model. On both datasets, only EATA performs better than the source model slightly. On the most noisy distribution “Mix” where
+
+{8}------------------------------------------------
+
+![Figure 6: Comparison with SOTA methods on mixed severity level on Kinetics50-C. The figure consists of three bar charts: (a) Video Corruptions, (b) Audio Corruptions, and (c) Strong OOD. Each chart compares five methods: Source (blue), Tent (orange), EATA (green), DeVO (red), and SuMi (purple) across various corruption types. In all cases, SuMi consistently outperforms the other methods, maintaining high performance even in strong OOD scenarios.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 6: Comparison with SOTA methods on mixed severity level on Kinetics50-C. The figure consists of three bar charts: (a) Video Corruptions, (b) Audio Corruptions, and (c) Strong OOD. Each chart compares five methods: Source (blue), Tent (orange), EATA (green), DeVO (red), and SuMi (purple) across various corruption types. In all cases, SuMi consistently outperforms the other methods, maintaining high performance even in strong OOD scenarios.
+
+Figure 6: Comparison with SOTA methods on mixed severity level on Kinetics50-C.
+
+one of the modality is missing and the other is corrupted, EATA also has a performance degradation, performing worse than the source model. In comparison, SuMi outperforms other methods consistently and significantly on all the four distribution scenarios, indicating its effectiveness and superiority in dealing with the complex noise patterns in multimodal data. Furthermore, we compare SuMi with SOTA methods at different severity levels and present the results in Figure 4. From the figure, we can observe that at different severity levels, most of the methods can work well on weak OOD samples while fail on strong OOD samples. However, SuMi can still perform well and achieve the best results on corrupted datasets at all the four severity levels, which demonstrates its generalization ability.
+
+**Mixed Domain Results.** In Figure 5, we present the results of different methods on datasets with ten different portions of strong OOD samples. Figure 5(a) and 5(b) presents the results at severity level 5. We can observe that all the methods can perform well when the ratio of strong OOD samples is low. However, with the ratio increasing, the performance of most of the methods degrade rapidly, performing worse than the source model. The reason is that the huge distribution gap between the source domain and strong OOD domain destroy the prior knowledge of the source model, thus leading to a degradation of the model. In comparison, SuMi smoothes the process by interquartile range smoothing and outperforms the SOTA methods consistently. From Figure 5(c) and 5(d) where mixed severity level cases are added, we can reach the same conclusion. Moreover, in Figure 6 and 10, we present the results on corrupted data with mixed severity level samples on both datasets. From the table, we can observe that on mixed severity level, SuMi can still achieve consistent improvements, outperforming other SOTA methods in most of the distribution shifts. Additionally, on strong OOD distribution shifts, other methods always fail while SuMi can still perform well. These results indicate the effectiveness of SuMi.
+
+### 4.3 ABLATION STUDY
+
+**Contributions of different components.** In Table 5, we present the results of our ablation experiments. We can observe that IQR smoothing brings the most improvements to the model. This is because IQR smoothing can bridge the gap between the source domain and strong domain, avoiding the abrupt distribution shifts which could destroy the prior knowledge from the source model. Unimodal assistance aims to select low-entropy samples with rich multimodal information for optimization and can also enhance the performance of the model. With these strategies combined, the performance of the model is further enhanced.
+
+**Exploration of unimodal assistance.** In Equation 4 and Figure 2, we divide the samples into four areas. We can consider the four areas as Area 1 (low-entropy samples with rich multimodal information), Area 2 (high-entropy samples with rich multimodal information), Area 3 (low-entropy samples with little multimodal information) and Area 4 (high-entropy samples with little multimodal information). We present the performance of these four areas on Kinetics50-C in Table 6. From the table, we can observe that selecting low-entropy samples for optimization will yield better results. Based on low-entropy samples, rich multimodal information will further help to optimize the multimodal models and achieve better results.
+
+{9}------------------------------------------------
+
+Table 5: Ablation study of different components in SuMi on corrupted data with 50% of strong OOD samples at different severity levels. IQR, UA and MIS represents IQR smoothing, unimodal assistance and mutual information sharing, respectively.
+
+|  |  |  | Kinetics50-C |  |  | VGGSound-C |  |  |
+|-|-|-|-|-|-|-|-|-|
+| IQR | UA | MIS | severity 3 | severity 5 | mixed severity | severity 3 | severity 5 | mixed severity |
+| ✓ |  |  | 37.1 | 31.7 | 36.4 | 25.7 | 23.5 | 25.3 |
+|  | ✓ |  | 52.1 | 45.1 | 51.9 | 33.8 | 30.4 | 33.1 |
+|  |  | ✓ | 49.4 | 39.4 | 46.2 | 31.1 | 27.4 | 31.2 |
+| ✓ | ✓ |  | 47.4 | 38.1 | 45.6 | 29.8 | 26.1 | 28.4 |
+| ✓ |  | ✓ | 58.0 | 51.2 | 57.4 | 36.9 | 34.3 | 36.5 |
+|  | ✓ | ✓ | 56.0 | 49.7 | 56.7 | 34.2 | 32.1 | 34.0 |
+| ✓ | ✓ | ✓ | 54.3 | 44.6 | 51.3 | 33.4 | 29.8 | 32.1 |
+| ✓ | ✓ | ✓ | 59.3 | 52.0 | 59.1 | 38.4 | 35.1 | 38.3 |
+
+![Figure 7: Bar charts showing the impact of hyperparameters mu and lambda on Kinetics50-C and VGGSound-C datasets. (a) Impact of mu: Performance on Kinetics50-C increases with mu, while performance on VGGSound-C decreases. (b) Impact of lambda: Performance on both datasets increases with lambda.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 7 consists of two bar charts. Chart (a) shows the impact of the trade-off coefficient  $\mu$  on the performance of the model on two datasets: Kinetics50-C (blue bars) and VGGSound-C (green bars). The x-axis represents  $\mu$  values from 0.8 to 1.2. For Kinetics50-C, the performance is relatively stable around 50% across all  $\mu$  values. For VGGSound-C, the performance decreases as  $\mu$  increases, starting around 35% at  $\mu=0.8$  and dropping to around 32% at  $\mu=1.2$ . Chart (b) shows the impact of the weight term  $\lambda$  on the performance of the model on the same two datasets. The x-axis represents  $\lambda$  values from 3 to 7. For both datasets, the performance increases as  $\lambda$  increases, starting around 50% at  $\lambda=3$  and reaching around 55% at  $\lambda=7$  for Kinetics50-C and around 35% at  $\lambda=7$  for VGGSound-C.
+
+Figure 7: Bar charts showing the impact of hyperparameters mu and lambda on Kinetics50-C and VGGSound-C datasets. (a) Impact of mu: Performance on Kinetics50-C increases with mu, while performance on VGGSound-C decreases. (b) Impact of lambda: Performance on both datasets increases with lambda.
+
+Figure 7: Ablation experiments of hyperparameters on the two datasets.
+
+Additionally, we explore the trade-off coefficient  $\mu$  in Equation 4 and present the results on both datasets in Figure 7(a). From the figure, we can observe that with the increase of  $\mu$ , the performance improves on Kinetics50-C and drops on VGGSound-C. This is because Kinetics50 is a video modality dominant dataset and VGGSound is an audio modality dominant dataset. From the results, we know that adding more weight to the dominant modality will yield poorer performance because unimodal assistance aims to select samples with rich multimodal information. Therefore, adding weight to the weak modality will help to utilize the multimodal features. Besides, the performances with different  $\mu$  are stable, indicating the stability of the strategy.
+
+**Exploration of  $\lambda$ .** To explore the mutual information sharing, we select several  $\lambda$  in Equation 8 and present the results on both datasets in Figure 7(b). We can observe that increasing the weight term  $\lambda$  will improve the performance slightly. Besides, the results in the table demonstrate the stability of mutual information sharing across varying values of  $\lambda$ .
+
+Table 6: Performance of samples in different areas on Kinetics50-C.
+
+|  | Ratios | Acc |
+|-|-|-|
+| Area 1 | 13.1% | 39.4 |
+| Area 2 | 78.5% | 27.6 |
+| Area 3 | 5.3% | 32.1 |
+| Area 4 | 3.1% | 24.3 |
+
+## 5 CONCLUSION
+
+In this paper, we propose a new practical and challenging task named multimodal wild TTA. To address this problem, we propose sample identification with interquartile range smoothing and unimodal assistance, and mutual information sharing (SuMi). SuMi bridges the gap between the source domain and strong OOD domain by smoothing the adaptation using interquartile range. Besides, SuMi leverages unimodal features to select low-entropy samples with rich multimodal information for optimization. Finally, mutual information sharing is proposed to further align the information and reduce the discrepancies across different modalities. We conduct extensive experiments on two widely used multimodal datasets where SuMi outperforms existing TTA methods significantly and consistently, indicating its effectiveness. Ablation experiments are then conducted to validate the contributions of each component.
+
+ Rest of paper (reference and Appendix) is removed.

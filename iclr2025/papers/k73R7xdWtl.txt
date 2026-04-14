@@ -1,0 +1,445 @@
+
+
+{0}------------------------------------------------
+
+# AN ONLINE LEARNING APPROACH TO PROMPT-BASED SELECTION OF GENERATIVE MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Selecting a sample generation scheme from multiple text-based generative models is typically addressed by choosing the model that maximizes an averaged evaluation score. However, this score-based selection overlooks the possibility that different models achieve the best generation performance for different types of text prompts. An online identification of the best generation model for various input prompts can reduce the costs associated with querying sub-optimal models. In this work, we explore the possibility of varying rankings of text-based generative models for different text prompts and propose an online learning framework to predict the best data generation model for a given input prompt. The proposed framework adapts the kernelized contextual bandit (CB) methodology to a CB setting with shared context variables across arms, utilizing the generated data to update a kernel-based function that predicts which model will achieve the highest score for unseen text prompts. Additionally, we apply random Fourier features (RFF) to the kernelized CB algorithm to accelerate the online learning process and establish a  $\tilde{O}(\sqrt{T})$  regret bound for the proposed RFF-based CB algorithm over  $T$  iterations. Our numerical experiments on real and simulated text-to-image and image-to-text generative models show RFF-UCB performs successfully in identifying the best generation model across different sample types.
+
+## 1 INTRODUCTION
+
+Text-based generative artificial intelligence (AI) has found numerous applications in various engineering tasks. A prompt-based generative AI represents a conditional generative model that produces samples given an input text prompt. Over the past few years, several frameworks using diffusion models and generative adversarial networks have been proposed to perform text-guided sample generation tasks for various data domains including image, audio, and video (Reed et al., 2016; Pan et al., 2018; Xu et al., 2018; Ding et al., 2021; Singer et al., 2022; Huang et al., 2023; Podell et al., 2024). The multiplicity of developed prompt-based models has led to significant interest in developing evaluation mechanisms to rank the existing models and find the best generation scheme. To address this task, several evaluation metrics have been proposed to quantify the fidelity and relevance of samples created by prompt-based generative models, such as CLIPScore (Hessel et al., 2021) and PickScore (Kirstain et al., 2023).
+
+The existing model selection methodologies commonly aim to identify the generative model with the highest relevance score, producing samples that correlate the most with input text prompts. A well-known example is the CLIPScore for image generation models, measuring the expected alignment between the input text and output image of the model using the CLIP embedding (Radford et al., 2021b). While the best-model identification strategy has been frequently utilized in generative AI applications, this approach does not consider the possibility that the involved models can perform differently across text prompts. However, it is possible that one model outperforms another model in responding to text prompts from certain categories, while that model performs worse in generating samples for other text categories. Figure 1 shows one such example where two standard text-to-image models exhibit different rankings on text prompts with the terms "dog" and "car". In general, the different training sets and model architectures utilized to train text-based models can result in the models' varying performance in response to different text prompts, which is an important consideration in the selection of text-based generative models for various text prompts. We provide more examples in Figures 17 and 18 in the Appendix.
+
+{1}------------------------------------------------
+
+|  |  | Stable Diffusion | PixArt- $\alpha$ | Examples (clockwise) |
+|-|-|-|-|-|
+| 054<br>055<br>056<br>057<br>058<br>059<br>060<br>061<br>062<br>063<br>064<br>065 | Prompts of Type “dog” | <img alt="Four generated images of dogs from Stable Diffusion for type-1 prompts." data-bbox="270 175 449 361" src="2f7832303e981a371352298931979d24_img.jpg"/><br>36.37 ( $\pm 0.13$ ) | <img alt="Four generated images of dogs from PixArt-alpha for type-1 prompts, with a green border." data-bbox="471 175 661 361" src="ea423270729408ba130896d304661d56_img.jpg"/><br>37.24 ( $\pm 0.09$ ) | 1. “a woman sitting with her dog and a toy”<br>2. “the little dog stands near the toilet in a small bathroom”<br>3. “a dog on a leash drinking water from a water bottle”<br>4. “a dog laying on the floor next to a door” |
+| 066<br>067<br>068<br>069<br>070<br>071<br>072<br>073<br>074<br>075<br>076 | Prompts of Type “car” | <img alt="Four generated images of cars from Stable Diffusion for type-2 prompts, with a green border." data-bbox="264 394 456 581" src="7f8b3956f853221e585486a115b68804_img.jpg"/><br>36.10 ( $\pm 0.06$ ) | <img alt="Four generated images of cars from PixArt-alpha for type-2 prompts." data-bbox="478 394 657 581" src="bf62c8fad8b636850266421172aab35e_img.jpg"/><br>35.68 ( $\pm 0.15$ ) | 1. “a motorcycle is on the road behind a car”<br>2. “two cars and a motorcycle on a road being crossed by a herd of elephants”<br>3. “a car that had run over a red fire hydrant”<br>4. “a taxi driving down a city street below tall white buildings” |
+
+Figure 1: Prompt-based generated images from Stable Diffusion and PixArt- $\alpha$ . Stable Diffusion attains a higher CLIPScore in generating type-2 prompts (36.10 versus 35.68) while underperforms for type-1 prompts (36.37 versus 37.24).
+
+080  
+081  
+082  
+083  
+084  
+085  
+086  
+087  
+088  
+089  
+090  
+091
+
+In this work, we aim to develop a learning algorithm to identify the best generative model for a given input prompt, using observed prompt/generated samples collected from the models in the previous sample generation iterations. Since the goal of such text-based model selection is to minimize the data queries from suboptimal generative models for an input text prompt, we view the model selection task as an online learning problem, where after each data generation the learner updates a function predicting which generative model performs the best in response to different text prompts. Here, the goal of the online learner is to utilize the previously generated samples to accurately guess the generation model with the best performance for the incoming text prompt. An optimal online model selection method will result in a bounded regret value, measured in comparison to the sample generation from the groundtruth-best model for the text prompts.
+
+092  
+093  
+094  
+095  
+096  
+097  
+098  
+099  
+100
+
+The described online learning task can be viewed as a *contextual bandit (CB)* problem studied in the multi-armed bandit literature (Langford & Zhang, 2007; Li et al., 2010). In a CB task, the online learner observes the context variable (the text prompt in our setting) and guesses the best arm for the current input context. Specifically, we focus on the kernelised upper confidence bound (kernel-UCB) approach and adapt this methodology to propose the *Shared-Context Kernel UCB (SCK-UCB)* for an online prompt-based selection of generative models. According to the SCK-UCB approach, the learner utilizes a UCB-score from a kernel-based prediction function to choose the generative model for the incoming text prompt and subsequently update the kernel-based prediction rule based on the generated data for the upcoming iterations. We prove that the proposed SCK-UCB achieves an  $\tilde{O}(\sqrt{T})$  regret bound over a horizon of  $T$  iterations.
+
+101  
+102  
+103  
+104  
+105  
+106  
+107
+
+Since the user applying the CB-based model selection approach may have limited compute power and not be able to afford growing computational costs in the online learning process, we propose to utilize the random Fourier features (RFF) framework (Rahimi & Recht, 2007b) to balance the computational load between the iterations of SCK-UCB. We discuss that in the kernel-UCB methods, including our proposed SCK-UCB, the computational cost per iteration will grow cubically as  $O(t^3)$  with iteration  $t$ . To address the growing cost per iteration of kernel-UCB, we leverage the RFF approach and develop the proxy RFF-UCB algorithm which approximates the solution to SCK-UCB, while the computational costs grow only linearly  $O(t)$ . We show that the regret bound for SCK-
+
+{2}------------------------------------------------
+
+UCB will approximately hold for RFF-UCB, and therefore, RFF-UCB provides an efficient proxy to the SCK-UCB algorithm, which can be run in devices with lower computation budget.
+
+Finally, we present the results of several numerical experiments to show the efficacy of our proposed SCK-UCB and RFF-UCB in the online selection of conditional generative models. In our experiments, we simulate several text-to-image and image-captioning (image-to-text) models, where different models lead to different rankings of CLIPScore values across sample types. Our numerical results suggest a fast convergence of the proposed online learning algorithms to the best model available for different prompt types. Moreover, we apply the RFF-UCB method to several standard text-to-image models, and show how the algorithm can infer the model with higher CLIPScore with a growing accuracy as the iteration grows. In our experiments, the proposed SCK-UCB and RFF-UCB outperform the greedy baselines without any bonus term to encourage exploration in the learning process. The main contributions of our work can be summarized as:
+
+- Studying the prompt-based selection of conditional generative models to improve the performance scores over every individual model
+- Developing the contextual bandit-based SCK-UCB and RFF-UCB algorithms for the online selection of prompt-based generative models
+- Providing the theoretical analysis of the regret and computational costs of SCK-UCB and RFF-UCB online learning methods
+- Presenting numerical results on the online selection of generative models based on the incoming prompt using SCK-UCB and RFF-UCB
+
+## 2 RELATED WORK
+
+**(Automatic) Evaluation of conditional generative models.** Evaluating the conditional generative models has been studied extensively in the literature. For text-to-image (T2I) generation, earlier methods primarily rely on the Inception score (Salimans et al., 2016) and Fréchet inception distance (Heusel et al., 2017). More recent works propose reference-free metrics for robust automatic evaluation of T2I and image captioning, with notable examples being CLIPScore (Hessel et al., 2021) and PickScore (Kirstain et al., 2023). Kim et al. (2022) propose a mutual-information-based metric, which attains consistency across benchmarks, sample parsimony, and robustness. To provide a holistic evaluation of T2I models, several works focus on multi-objective evaluation. Astolfi et al. (2024) propose to evaluate conditional image generation in terms of *prompt-sample consistency*, *sample diversity*, and *fidelity*. Kannan et al. (2024) introduce a framework to evaluate T2I models regarding *cultural awareness* and *cultural diversity*. Masrouisaadat et al. (2024) examine the performance of several T2I models in generating images such as human faces and groups and present a social bias analysis. Another line of study explores evaluation approaches using large language models (LLMs). Tan et al. (2024) develop LLM-based evaluation protocols that focus on the *faithfulness* and *text-image alignment*. Peng et al. (2024) introduce a GPT-based benchmark for evaluating personalized image generation. For evaluation of text-to-video (T2V) generation, Huang et al. (2024) introduce VBench as a comprehensive evaluation of T2V models in terms of *quality* and *consistency*.
+
+**(Kernelized) Contextual bandits.** The contextual bandits (CB) is an efficient framework for online decision-making with context information (Langford & Zhang, 2007; Foster et al., 2018), which is widely adopted in domains such as recommendation system and online advertisement (Li et al., 2010). A key to its formulation is the relationship between the context (vector) and the expected reward. In linear CB, the reward is assumed to be linear to the context vector (Li et al., 2010; Chu et al., 2011). To incorporate non-linearity, Valko et al. (2013) propose kernelized CB, which assumes the rewards are linear-realizable in a reproducing kernel Hilbert space (RKHS). However, the proposed algorithm requires solving a kernel ridge regression per iteration, whose computation and required space have polynomial dependence on the number of iterations. To address this problem, a line of study leverages the assumption that the kernel matrix is often approximately low-rank and uses Nystrom approximations (Calandriello et al., 2019; 2020; Zenati et al., 2022). [Recently, a line of study utilizes (contextual) bandit algorithms to improve the performance of generative models (Chen et al., 2024; Lin et al., 2024).]
+
+{3}------------------------------------------------
+
+## 3 PRELIMINARIES
+
+### 3.1 CLIPSCORE
+
+CLIPScore (Hessel et al., 2021) is a widely used automatic metric to evaluate the alignment of text-to-image/video (T2I/V) and image captioning models. Let  $(y, x) \in \mathcal{Y} \times \mathcal{X}$  be any text-image pair. We denote by  $\mathbf{c}_y \in \mathbb{S}^{d-1} := \{z \in \mathbb{R}^d : \|z\|_2 = 1\}$  and  $\mathbf{v}_x \in \mathbb{S}^{d-1}$  the (normalized) embeddings of text  $y \in \mathcal{Y}$  and image  $x \in \mathcal{X}$ , respectively, both extracted by CLIP (Radford et al., 2021a). The CLIPScore (Hessel et al., 2021) is given by
+
+$$\text{CLIPScore}^{\text{T2I}}(y, x) := \max\{0, 100 \cdot \cos(\mathbf{v}_x, \mathbf{c}_y)\}, \quad (1)$$
+
+and note that  $\cos(\mathbf{v}_x, \mathbf{c}_y) = \langle \mathbf{v}_x, \mathbf{c}_y \rangle$  as we operate under the normalized embeddings. Further, for a video  $X := \{x^{(l)}\}_{l=1}^L$  consisting of  $L$  frames, where  $x^{(l)}$  is the  $l$ -th frame, the score is the averaged frame CLIPScore, that is,
+
+$$\text{CLIPScore}^{\text{T2V}}(y, X) := \frac{1}{L} \sum_{l=1}^L \text{CLIPScore}^{\text{T2I}}(y, x^{(l)}). \quad (2)$$
+
+### 3.2 KERNEL METHODS AND RANDOM FOURIER FEATURES
+
+Let  $\phi : \mathbb{R}^d \rightarrow \mathcal{H}$  denote a mapping from the primal space  $\mathbb{R}^d$  to the (possibly infinite-dimensional) associated reproducing kernel Hilbert space (RKHS)  $\mathcal{H}$ . The corresponding kernel function is defined by  $k(y, y') := (\phi(y))^\top \phi(y')$  for any  $y, y' \in \mathbb{R}^d$ , where we use matrix notation  $h_1^\top h_2 := \langle h_1, h_2 \rangle_{\mathcal{H}}$  to denote the inner product of two elements  $h_1, h_2 \in \mathcal{H}$ . The kernel function  $k$  is positive definite if  $\sum_{i=1}^n \sum_{j=1}^n c_i c_j k(y_i, y_j) \geq 0$  for any  $n \in \mathbb{N}_+$ ,  $y_1, \dots, y_n \in \mathbb{R}^d$ , and  $c_1, \dots, c_n \in \mathbb{R}$ . In other words, the kernel matrix  $K := [k(y_i, y_j)]_{i,j=1}^n \in \mathbb{R}^{n \times n}$  is always positive semi-definite (PSD). Further, a positive definite kernel function is shift invariant if  $k(y, y') := k(y - y')$  for any  $y, y' \in \mathbb{R}^d$ . An example is the radial basis function (RBF) kernel, i.e.,  $k_{\text{RBF}}(y, y') = \exp(-\|y - y'\|_2^2 / (2\sigma^2))$  with  $\sigma > 0$ .
+
+**Kernel ridge regression (KRR).** [Given empirical data  $(y_1, s_1), \dots, (y_n, s_n)$ , where  $\{y_i \in \mathbb{R}^d\}_{i=1}^n$  are dependent variables and  $\{s_i \in \mathbb{R}\}_{i=1}^n$  are target variables, respectively], the kernel method assumes the existence of  $w^* \in \mathcal{H}$  such that  $\mathbb{E}[s_i | y_i] = (\phi(y_i))^\top w^*$  for any  $i = 1, \dots, n$ . Let  $\alpha \geq 0$  denote a regularization parameter. KRR constructs the estimator  $\hat{s}_{\text{KRR}}(y) := k_y^\top (K + \alpha I_n)^{-1} v$  for any  $y \in \mathbb{R}^d$ , where  $K = [k(y_i, y_j)]_{i,j=1}^n \in \mathbb{R}^{n \times n}$  is the kernel matrix,  $v := [s_1, \dots, s_n]^\top \in \mathbb{R}^n$ , and  $k_y = [k(y_1, y), \dots, k(y_n, y)]^\top \in \mathbb{R}^n$ . The estimator can be interpreted as first estimating  $w^*$  by ridge regression  $\hat{w} := \arg \min_{w \in \mathcal{H}} \sum_{i=1}^n ((\phi(y_i))^\top w - s_i)^2 + \alpha \|w\|$ , where  $\|w\| := \sqrt{w^\top w}$  for any  $w \in \mathcal{H}$ , and then making the prediction  $\hat{s}_{\text{KRR}}(y) = (\phi(y))^\top \hat{w}$ .
+
+**Random Fourier features (RFF).** One problem of KRR is that it scales poorly with the size  $n$  of the empirical data, i.e., computing the KRR estimator generally requires  $\Omega(n^3)$  time and  $\Omega(n^2)$  memory. To address this problem, Rahimi & Recht (2007a) propose to scale up kernel methods by RFF sampling. Specifically, the Bochner’s Theorem (Rudin, 2017) implies that for any (properly scaled) shift-invariant kernel  $k(y, y') = k(y - y')$ , there exists a distribution  $p \in \Delta(\mathbb{R}^d)$  such that  $k(y, y') = \mathbb{E}_{w \sim p}[e^{i w^\top (y - y')}]$ , where  $e^{i\theta} := \cos \theta + i \cdot \sin \theta$  for any  $\theta \in \mathbb{R}$  and  $i$  is the imaginary unit. Therefore, the idea of RFF is to sample  $w_1, \dots, w_s \sim p$  and approximate  $k(y, y')$  by the empirical mean  $s^{-1} \sum_{i=1}^s e^{i w_i^\top (y - y')}$  to within  $\epsilon$  with only  $s = O(d\epsilon^{-2} \log(1/\epsilon^2))$ . Since the kernel  $k(\cdot)$  is real, we can replace the complex exponentials with cosines and define
+
+$$\varphi(y) := \sqrt{\frac{2}{s}} \cdot [\cos(w_1^\top y + b_1), \dots, \cos(w_s^\top y + b_s)]^\top, \text{ where } w_j \stackrel{i.i.d.}{\sim} p, b_j \stackrel{i.i.d.}{\sim} \text{Unif}([0, 2\pi]) \quad (3)$$
+
+and  $k(y, y')$  is approximated by  $(\varphi(y))^\top \varphi(y')$ . The resulting approximate KRR estimator  $\hat{s}_{\text{KRR}}(y) := (\hat{\Phi}^\top \hat{\Phi} + \alpha I_s)^{-1} \hat{\Phi}^\top v$ , where  $\hat{\Phi} := [\varphi(y_i)]_{i=1}^n \in \mathbb{C}^{n \times s}$ , can be computed in  $O(ns^2)$  time and  $O(ns)$  memory, giving substantial computational savings if  $s \ll n$  (Avron et al., 2017). For the RBF kernel, the distribution  $p_{\text{RBF}}$  is the multivariate Gaussian  $\mathcal{N}(0, \sigma^{-2} \cdot I_d)$ .
+
+{4}------------------------------------------------
+
+## 4 PROMPT-BASED SELECTION AS CONTEXTUAL BANDITS
+
+In this section, we introduce the framework of online prompt-based selection of generative models, which is given in Protocol 6. Let  $[N] := \{1, \dots, N\}$  for any positive integer  $N \in \mathbb{N}_+$ . We denote by  $\mathcal{G} := [G]$  the set of (prompt-based) generative models. The evaluation proceeds in  $T \in \mathbb{N}_+$  iterations. At any iteration  $t \in [T]$ , a prompt  $y_t \in \mathcal{Y}$  is drawn from a fixed distribution  $\rho \in \Delta(\mathcal{Y})$  on the prompt space  $\mathcal{Y} \subseteq \mathbb{S}^{d-1}$ , e.g., (the normalized embedding of) a picture in image captioning or a paragraph in text-to-image/video generation. Based on prompt  $y_t$  (and previous observation sequence), an algorithm  $\mathcal{A}$  picks model  $g_t \in \mathcal{G}$  and samples an answer  $x_t \sim P_{g_t}(\cdot | y_t)$ , where  $P_g(\cdot | y) \in \Delta(\mathcal{X})$  is the conditional distribution of answers generated from any model  $g \in \mathcal{G}$ . The quality of answer  $x_t$  is given by  $s(y_t, x_t)$ , where  $s : \mathcal{Y} \times \mathcal{X} \rightarrow [-1, 1]$  is the *score function*. The algorithm  $\mathcal{A}$  aims to minimize the *regret*
+
+$$\text{Regret}(T) := \sum_{t=1}^T (s_*(y_t) - s_{g_t}(y_t)), \quad (4)$$
+
+where we denote by  $s_g(y) := \mathbb{E}_{x_g \sim P_g(\cdot | y)}[s(y, x_g)]$  the expected score of any model  $g \in \mathcal{G}$  and  $s_*(y) := \max_{g \in \mathcal{G}} s_g(y)$  the optimal expected score, both conditioned to prompt  $y$ .
+
+###### Protocol 1 Online Prompt-based Selection of Generative Models
+
+**Require:** total iterations  $T \in \mathbb{N}_+$ , set of generators  $\mathcal{G} = [G]$ , prompt distribution  $\rho \in \Delta(\mathcal{Y})$ , score function  $s : \mathcal{Y} \times \mathcal{X} \rightarrow [-1, 1]$ , algorithm  $\mathcal{A} : (\mathcal{Y} \times \mathcal{G} \times \mathbb{R})^* \times \mathcal{Y} \rightarrow \Delta(\mathcal{G})$
+
+**Initialize:** observation sequence  $\mathcal{D} \leftarrow \emptyset$
+
+- 1: **for** iteration  $t = 1, 2, \dots, T$  **do**
+- 2:   Prompt  $y_t \sim \rho$  is revealed.
+- 3:   Algorithm  $\mathcal{A}$  picks model  $g_t \sim \mathcal{A}(\cdot | \mathcal{D}, y_t)$  and samples an answer  $x_t \sim P_{g_t}(\cdot | y_t)$ .
+- 4:   Score  $s_t \leftarrow s(y_t, x_t)$  is assigned.
+- 5:   Update observation sequence  $\mathcal{D} \leftarrow \mathcal{D} \cup \{(y_t, g_t, s_t)\}$ .
+- 6: **end for**
+
+## 5 AN OPTIMISM-BASED APPROACH FOR PROMPT-BASED SELECTION
+
+Under the setting of online prompt-based selection, a key challenge is to learn the relationship between the prompt and the expected score for each model. In this paper, we assume the scores are linear to the prompt vector in the reproducing kernel Hilbert space (RKHS) with model-dependent weights.
+
+**Assumption 1 (Realizability).** *There exists a mapping  $\phi : \mathbb{R}^d \rightarrow \mathcal{H}$  and weight  $w_g^* \in \mathcal{H}$  such that score  $s_g(y) = \langle y, w_g^* \rangle_{\mathcal{H}}$  for any prompt vector  $y \in \mathbb{R}^d$  and model  $g \in \mathcal{G}$ . Further, it holds that  $\|w_g^*\| \leq 1$ , and  $k(y, y) \leq \kappa^2$  and  $\|\phi(y)\| \leq 1$  for any  $y \in \mathcal{Y}$ , where  $k : \mathbb{R}^d \times \mathbb{R}^d \rightarrow \mathbb{R}$  is the kernel function of the mapping  $\phi$ .*
+
+**Remark 1** (Shared context with kernelized rewards). *We note that Assumption 1 is slightly different from the one made in kernelized bandits (Valko et al., 2013; Zenati et al., 2022), where a context is observed per each arm and assumes the existence of a shared weight. [However, in the prompt-based generation setting, there is a single prompt at each iteration and responses can vary across the models, which leads to our formulation of shared context and model-dependent weights.]*
+
+**Remark 2.** *Our assumption of linear-realizable scores in RKHS is motivated by the following observations. First, the relationship between the prompt vector and score is often highly non-linear and generator-dependent. For instance, the generated images often vary across the prompts and different T2I models, which can have substantial effect on the resulting CLIPScore (1). Second, the kernel methods can approximate any function arbitrarily well with enough training data and enjoy nice statistical properties.*
+
+### 5.1 THE SCK-UCB ALGORITHM
+
+In this section, we present SCK-UCB in Algorithm 2, an optimism-based approach to the online evaluation of prompt-base generation. At each iteration, SCK-UCB first estimates the scores via
+
+{5}------------------------------------------------
+
+kernel ridge regression (KRR) and then picks the model with the highest estimated score. To construct the KRR dataset, the algorithm maintains index sets  $\{\Psi_g\}_{g \in \mathcal{G}}$ , where each set  $\Phi_g \subseteq [T]$  stores the iterations such that model  $g$  is chosen (line 6).
+
+#### --- **Algorithm 2** Shared-Context Kernel UCB (SCK-UCB) ---
+
+**Require:** total iterations  $T \in \mathbb{N}_+$ , set of generators  $\mathcal{G} = [G]$ , prompt distribution  $\rho \in \Delta(\mathcal{Y})$ , score function  $s : \mathcal{Y} \times \mathcal{X} \rightarrow [-1, 1]$ , positive definite kernel  $k : \mathcal{Y} \times \mathcal{Y} \rightarrow \mathbb{R}$ , regularization and exploration parameters  $\alpha, \eta \geq 0$
+
+**Initialize:** observation sequence  $\mathcal{D} \leftarrow \emptyset$  and index set  $\Psi_g \leftarrow \emptyset$  for all  $g \in \mathcal{G}$
+
+```
+
+1: for iteration  $t = 1, 2, \dots, T$  do
+2:   Prompt  $y_t \sim \rho$  is revealed.
+3:   Compute  $\{(\hat{\mu}_g, \hat{\sigma}_g) \leftarrow \text{COMPUTE\_UCB}(\mathcal{D}, y_t, \Psi_g)\}_{g \in \mathcal{G}}$ .
+4:   Pick model  $g_t \leftarrow \arg \max_{g \in \mathcal{G}} \{\hat{s}_g\}$ , where  $\hat{s}_g \leftarrow \hat{\mu}_g + (2\eta + \sqrt{\alpha}) \cdot \hat{\sigma}_g$ .
+5:   Sample an answer  $x_t \sim P_{g_t}(\cdot | y_t)$  and compute the score  $s_t \leftarrow s(y_t, x_t)$ .
+6:   Update  $\mathcal{D} \leftarrow \mathcal{D} \cup \{(y_t, s_t)\}$  and  $\Psi_{g_t} \leftarrow \Psi_{g_t} \cup \{t\}$ .
+7: end for
+
+8: function COMPUTE_UCB( $\mathcal{D}, y, \Psi_g$ )
+9:   if  $\Psi_g$  is empty then
+10:     $\hat{\mu}_g \leftarrow +\infty, \hat{\sigma}_g \leftarrow +\infty$ .
+11:   else
+12:    Set  $K \leftarrow [k(y_i, y_j)]_{i,j \in \Psi_g}, v \leftarrow [s_i]_{i \in \Psi_g}^\top$ , and  $k_y \leftarrow [k(y, y_i)]_{i \in \Psi_g}^\top$ .
+13:     $\hat{\mu}_g \leftarrow k_y^\top (K + \alpha I)^{-1} v$ .
+14:     $\hat{\sigma}_g \leftarrow \alpha^{-\frac{1}{2}} \sqrt{k(y, y) - k_y^\top (K + \alpha I)^{-1} k_y}$ .
+15:   end if
+16:   return  $(\hat{\mu}_g, \hat{\sigma}_g)$ .
+17: end function
+
+```
+
+---
+
+The key design in SCK-UCB is the function COMPUTE\_UCB (lines 8-17), which outputs both the KRR estimator  $\hat{\mu}_g$  and an uncertainty quantifier  $\hat{\sigma}_g$ . The estimated score is then computed by  $\hat{s}_g = \hat{\mu}_g + (2\eta + \sqrt{\alpha})\hat{\sigma}_g$  (line 4), which is initially set to  $+\infty$  to ensure each model is picked at least once (lines 9-10). Particularly, the following lemma shows that under some conditions,  $\hat{s}_g$  is an optimistic estimation of  $s_g(y_t)$  with high probability. The detailed proof can be found in Appendix C.1.
+
+**Lemma 1 (Optimism).** *Let  $\Psi_g \subseteq [T]$  be an index set such that the set of scores  $\{s_t : t \in \Psi_g\}$  are independent random variables. Then, under Assumption 1, with probability at least  $1 - \delta$ , the quantity  $\hat{\mu}_g$  computed in function COMPUTE\_UCB( $\mathcal{D}, y, \Psi_g$ ) satisfies that*
+
+$$|\hat{\mu}_g - s_g(y)| \leq (2\eta + \sqrt{\alpha})\hat{\sigma}_g, \quad (5)$$
+
+where  $\eta = \sqrt{2 \log(2/\delta)}$ . Hence, it holds that  $\hat{s}_g = \hat{\mu}_g + (2\eta + \sqrt{\alpha})\hat{\sigma}_g \geq s_g(y)$ .
+
+We show that a variant of SCK-UCB attains a regret of  $\tilde{O}(\sqrt{GT})$ . The formal statement and the proof can be found in Appendix A.
+
+**Theorem 1 (Regret, informal).** *Under the same conditions in Lemma 1, with probability of at least  $1 - \delta$ , a variant of Algorithm 2 attains a regret of  $\tilde{O}(\sqrt{GT})$ .*
+
+### 5.2 SCK-UCB WITH RANDOM FOURIER FEATURES
+
+The SCK-UCB solves a KRR for each model at an iteration to estimate the scores, which can be expensive in both computation and memory for a large number of iterations. To address this problem, we leverage the random Fourier features (RFF) sampling (Rahimi & Recht, 2007a) for positive definite shift-invariant kernels. At a high level, RFF maps the input data, e.g., the prompt (vector) in our setting, to a randomized low-dimensional feature space and then applies fast linear methods to solve the regression problem. Particularly, the inner product between these projected randomized features is an *unbiased* estimation of the kernel value.
+
+{6}------------------------------------------------
+
+We present the RFF-UCB algorithm, which is a variant of SCK-UCB with random features. RFF-UCB leverages a RFF-based approach to compute the mean and uncertainty quantifier in line 3 of Algorithm 2, which we present in Algorithm 3. Upon receiving the regression dataset consisting of prompt-score pairs, COMPUTE\_UCB\_RFF first projects each  $d$ -dimensional prompt vector to a randomized  $s$ -dimensional feature space according to Equation (3) (lines 5-6) and then solves a linear ridge regression to estimate the mean and uncertainty (lines 8-9). To derive statistical guarantees, the number of features varies according to both the input data and error thresholds, which we will specify in Appendix B.1. In practice, we find that a size around 50 can attain satisfactory empirical performance. To see why RFF can reduce the computation, note that the size of the (regularized) Gram matrix  $(\tilde{\Phi}_g^\top \tilde{\Phi}_g + \alpha I)$  in line 8 is fixed to be  $s$  in the whole process, while the size of  $(K + \alpha I)$  in line 13 of Algorithm 2 scales with  $|\Psi_g|$  and can grow linearly over iterations. Particularly, the following lemma shows that COMPUTE\_UCB\_RFF can reduce the time and space by an order of  $O(t^2)$  and  $O(t)$ , respectively.
+
+#### --- **Algorithm 3** Compute UCB with Random Fourier Features ---
+
+**Require:** the Fourier transform  $p$  of a positive definite shift-invariant kernel  $k(y, y') = k(y - y')$ , error thresholds  $\epsilon_{\text{RFF}}, \Delta_{\text{RFF}} > 0$ , regularization and exploration parameters  $\alpha, \eta \geq 0$
+
+**Initialize:** number of features  $s$ , bonus terms  $\mathcal{B}_{g,1}$  and  $\mathcal{B}_{g,2}$
+
+```
+
+1: function COMPUTE_UCB_RFF( $\mathcal{D}, y, \Psi_g$ )
+2:   if  $\Psi_g$  is empty then
+3:      $\tilde{\mu}_g \leftarrow +\infty, \tilde{\sigma}_g \leftarrow +\infty$ .
+4:   else
+4:     Draw  $\omega_1, \dots, \omega_s \stackrel{i.i.d.}{\sim} p$  and  $b_1, \dots, b_s \stackrel{i.i.d.}{\sim} \text{Unif}([0, 2\pi])$ .
+5:     Define mapping  $\varphi(y') \leftarrow \sqrt{\frac{2}{s}} \cdot [\cos(w_1^\top y + b_1), \dots, \cos(w_s^\top y + b_s)]^\top$  for any  $y' \in \mathbb{R}^d$ .
+6:     Set  $\tilde{\Phi}_g \leftarrow [\varphi(y_i)]_{i \in \Psi_g}$  and  $v \leftarrow [s_i]_{i \in \Psi_g}^\top$ .
+7:      $\tilde{\mu}_g \leftarrow (\varphi(y))^\top (\tilde{\Phi}_g^\top \tilde{\Phi}_g + \alpha I)^{-1} \tilde{\Phi}_g^\top v + \mathcal{B}_{g,1}$ .
+8:      $\tilde{\sigma}_g \leftarrow \alpha^{-\frac{1}{2}} \sqrt{1 - (\varphi(y))^\top (\tilde{\Phi}_g^\top \tilde{\Phi}_g + \alpha I)^{-1} \tilde{\Phi}_g^\top \tilde{\Phi}_g (\varphi(y))} + \mathcal{B}_{g,2}$ .
+9:   end if
+10:  return  $(\tilde{\mu}_g, \tilde{\sigma}_g)$ .
+11: end function
+
+```
+
+---
+
+**Lemma 2** (Time and space complexity). *At any iteration  $t \in [T]$ , COMPUTE\_UCB (lines 8-17 of Algorithm 2) requires  $O(t^3/G^2)$  time and  $O(t^2/G)$  space, while COMPUTE\_UCB\_RFF with random features of size  $s \in \mathbb{N}_+$  (Algorithm 3) requires  $O(ts^2)$  time and  $O(ts)$  space, where  $G$  is the number of generators. See Appendix B.5 for details.*
+
+It can be shown that the implementation of SCK-UCB with RFF attains the exact same regret guarantees for adaptively selected feature sizes. The formal statement and the proof can be found in Appendix B.2.
+
+**Theorem 2** (Regret when using RFF, informal). *Under the same conditions in Theorem 4, a variant of RFF-UCB attains a regret of  $\tilde{O}(\sqrt{GT})$ .*
+
+## 6 NUMERICAL RESULTS
+
+In this section, we provide numerical results for the proposed [SCK-UCB-poly3](#) algorithm (SCK-UCB using polynomial kernel with degree 3, i.e.,  $k_{\text{poly3}}(x_1, x_2) = (1 + x_1^\top x_2)^3$ ) and the [RFF-UCB](#) algorithm using RBF kernel on various prompt-based generation tasks, including text-to-image (T2I) generation, image captioning (image-to-text), and text-to-video (T2V) generation.
+
+**[Baselines.** We compare the proposed methods with five baselines, including 1) [Lin-UCB](#): SCK-UCB with linear kernel, i.e.,  $k_{\text{lin}}(x_1, x_2) = x_1^\top x_2$ , which does not incorporate non-linearity in score estimation, 2) One-arm Oracle: always picking the model with the maximum averaged CLIPScore, 3) [Naive-KRR](#): SCK-UCB-poly3 without exploration, which selects the model with the highest estimated mean conditioned to the prompt, 4) Greedy: always generating samples from the model with the highest empirical CLIPScore, and 5) Random: uniformly selecting a generator at each step. The results for baselines are presented by dot lines with different colors.]
+
+{7}------------------------------------------------
+
+**Performance metrics.** For each experiment, we report three performance metrics: (i) *outscore-the-best* (O2B): the difference between the CLIPScore attained by the algorithm and the highest average CLIPScore attained by any single model], (ii) *optimal-pick-ratio* (OPR): the overall ratio that the algorithm picks the best generator conditioned to the prompt type, (iii) *moving-average OPR*: OPR over the last 100 iterations.
+
+**[Summary of results.** The main finding of our numerical experiments is the improvement of the proposed contextual bandit SCK-UCB algorithm over the one-arm oracle baseline. This result means that the online learning algorithm can outperform a user with side-knowledge of the single best-performing model, which is made possible by a *prompt-based selection* of the model. This finding supports the application of contextual bandit algorithms in the selection of text-based generative models. Moreover, our numerical results indicate that the proposed SCK-UCB algorithm can perform better with a non-linear kernel function. Finally, in our experiments, the proposed RFF-UCB variant could reduce the computational costs of the general SCK-UCB algorithm.]
+
+### 6.1 TEXT-TO-IMAGE GENERATION
+
+**Setup 1: Prompt-based selection between real generative models.** The first set of experiments are on the setup illustrated in Figure 1, where we generate images from two T2I generators, including Stable Diffusion v1-5<sup>1</sup> and PixArt- $\alpha$ -XL-2-512x512<sup>2</sup> (see Figure 2). The results show that SCK-UCB-poly3 outperforms the baseline algorithm and attains a high optimal-pick-ratio, which shows that it can identify the optimal model conditioned to the prompt. Additionally, we provide numerical results on various T2I generative models, including uni-Diffuser<sup>3</sup> and DeepFloyd IF-I-M-v1.0,<sup>4</sup> (see Figures 14, 15, and 16 in the Appendix).
+
+![Figure 2: Prompt-based selection between Stable Diffusion and PixArt-alpha (Setup 1). The figure contains two line graphs. Graph (a) shows 'Outscore-the-best (O2B)' on the y-axis (ranging from -1.5 to 0.5) against 'Iteration' on the x-axis (0 to 5000). SCK-UCB-poly3 (blue circles) starts at 0 and increases to approximately 0.5. RFF-UCB (orange stars) stays near 0. Lin-UCB (green dashed), One-arm Oracle (grey dashed), Naive-KRR (red dashed), Greedy (pink dashed), and Random (purple dashed) all remain near 0 or slightly below. Graph (b) shows 'Optimal-pick-ratio (OPR)' on the y-axis (ranging from 0.50 to 0.70) against 'Iteration' on the x-axis (0 to 5000). SCK-UCB-poly3 (blue circles) starts at 0.50 and increases to approximately 0.68. RFF-UCB (orange stars) stays near 0.55. Lin-UCB (green dashed), One-arm Oracle (grey dashed), Naive-KRR (red dashed), Greedy (pink dashed), and Random (purple dashed) all remain near 0.50.](7ff005f9556dc6518981bb92091d36ab_img.jpg)
+
+Figure 2: Prompt-based selection between Stable Diffusion and PixArt-alpha (Setup 1). The figure contains two line graphs. Graph (a) shows 'Outscore-the-best (O2B)' on the y-axis (ranging from -1.5 to 0.5) against 'Iteration' on the x-axis (0 to 5000). SCK-UCB-poly3 (blue circles) starts at 0 and increases to approximately 0.5. RFF-UCB (orange stars) stays near 0. Lin-UCB (green dashed), One-arm Oracle (grey dashed), Naive-KRR (red dashed), Greedy (pink dashed), and Random (purple dashed) all remain near 0 or slightly below. Graph (b) shows 'Optimal-pick-ratio (OPR)' on the y-axis (ranging from 0.50 to 0.70) against 'Iteration' on the x-axis (0 to 5000). SCK-UCB-poly3 (blue circles) starts at 0.50 and increases to approximately 0.68. RFF-UCB (orange stars) stays near 0.55. Lin-UCB (green dashed), One-arm Oracle (grey dashed), Naive-KRR (red dashed), Greedy (pink dashed), and Random (purple dashed) all remain near 0.50.
+
+Figure 2: Prompt-based selection between Stable Diffusion and PixArt- $\alpha$  (Setup 1): Results are averaged over 20 trials.
+
+**[Setup 2: Adapt to newly-introduced prompts and generators.** We consider scenarios where new generative models or prompt types are introduced after the initial deployment. In the first experiment, there are two available generators initially, including Stable Diffusion and PixArt- $\alpha$ . After 2,500 iterations, uniDiffuser is also available (see Figure 3). In the second experiment, we generate samples from both PixArt- $\alpha$  and uniDiffuser, and a new prompt type is introduced after each 1,000 iterations (see Figure 13 in the Appendix). The results show that SCK-UCB-poly3 can well adapt to new prompt types and generators.]
+
+**Setup 3: Synthetic expert T2I models.** In this setup, we synthesize five T2I generators based on Stable Diffusion 2, where each generator is an “expert” in generating images corresponding to a prompt type. The prompts are captions in the MS-COCO dataset from five categories: dog, car, carrot, cake, and bowl. At each iteration, a caption is drawn from a (random) category, and an image
+
+<sup>1</sup>[https://huggingface.com/docs/diffusers/en/api/pipelines/stable\\_diffusion/text2img](https://huggingface.com/docs/diffusers/en/api/pipelines/stable_diffusion/text2img)
+
+<sup>2</sup><https://huggingface.com/PixArt-alpha/PixArt-XL-2-512x512>
+
+<sup>3</sup><https://github.com/thu-ml/unidiffuser>
+
+<sup>4</sup><https://github.com/deep-floyd/IF>
+
+{8}------------------------------------------------
+
+![Figure 3: Adapt to newly-introduced generators (Setup 2). (a) Outscore-the-best (O2B) plot showing performance over 5000 iterations. (b) Optimal-pick-ratio (OPR) plot showing performance over 5000 iterations. Both plots compare SCK-UCB-poly3, RFF-UCB, Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, and Random algorithms.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+432
+
+433
+
+434
+
+435
+
+436
+
+437
+
+438
+
+439
+
+440
+
+441
+
+442
+
+443
+
+444
+
+445
+
+(a) Outscore-the-best (O2B)
+
+(b) Optimal-pick-ratio (OPR)
+
+Figure 3: Adapt to newly-introduced generators (Setup 2). (a) Outscore-the-best (O2B) plot showing performance over 5000 iterations. (b) Optimal-pick-ratio (OPR) plot showing performance over 5000 iterations. Both plots compare SCK-UCB-poly3, RFF-UCB, Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, and Random algorithms.
+
+Figure 3: Adapt to newly-introduced generators (Setup 2): Results are averaged over 20 trials.
+
+446
+
+447
+
+448
+
+449
+
+450
+
+451
+
+is generated from Stable Diffusion 2. If the learner does not select the expert generator, then we add
+
+Gaussian noise to the generated image. Examples are visualized in Figure 4.
+
+452
+
+453
+
+454
+
+455
+
+456
+
+457
+
+458
+
+459
+
+460
+
+461
+
+462
+
+463
+
+464
+
+465
+
+466
+
+| Generator | 1 | 2 | 3 | 4 | 5 |
+|-|-|-|-|-|-|
+| Type 1 | <p>Image: Expert image of a dog</p> | <p>Image: Noise image</p> | <p>Image: Noise image</p> | <p>Image: Noise image</p> | <p>Image: Noise image</p> |
+| Type 2 | <p>Image: Noise image</p> | <p>Image: Expert image of a person on a motorcycle</p> | <p>Image: Noise image</p> | <p>Image: Noise image</p> | <p>Image: Noise image</p> |
+| Type 3 | <p>Image: Noise image</p> | <p>Image: Noise image</p> | <p>Image: Expert image of a person on a motorcycle</p> | <p>Image: Noise image</p> | <p>Image: Noise image</p> |
+| Type 4 | <p>Image: Noise image</p> | <p>Image: Noise image</p> | <p>Image: Noise image</p> | <p>Image: Expert image of a cup of coffee</p> | <p>Image: Noise image</p> |
+| Type 5 | <p>Image: Noise image</p> | <p>Image: Noise image</p> | <p>Image: Noise image</p> | <p>Image: Noise image</p> | <p>Image: Expert image of a group of people</p> |
+
+467
+
+468
+
+469
+
+Figure 4: Generated images with noise perturbations: Each row and column display the generated
+
+images from a synthetic generator according to one single type of prompts. Images generated by the
+
+expert models are framed by green boxes. Gaussian noises are applied to non-expert models.
+
+![Figure 5: Synthetic expert T2I models (Setup 3). (a) Outscore-the-best (O2B) plot showing performance over 2000 iterations. (b) Optimal-pick-ratio (OPR) plot showing performance over 2000 iterations. Both plots compare SCK-UCB-poly3, RFF-UCB, Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, and Random algorithms.](0f3e3ea50bcceb86f6c524ab2b6f3e7a_img.jpg)
+
+470
+
+471
+
+472
+
+473
+
+474
+
+475
+
+476
+
+477
+
+478
+
+479
+
+480
+
+481
+
+482
+
+483
+
+484
+
+485
+
+(a) Outscore-the-best (O2B)
+
+(b) Optimal-pick-ratio (OPR)
+
+Figure 5: Synthetic expert T2I models (Setup 3). (a) Outscore-the-best (O2B) plot showing performance over 2000 iterations. (b) Optimal-pick-ratio (OPR) plot showing performance over 2000 iterations. Both plots compare SCK-UCB-poly3, RFF-UCB, Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, and Random algorithms.
+
+Figure 5: Synthetic expert T2I models (Setup 3): Results are averaged over 20 trials.
+
+{9}------------------------------------------------
+
+### 6.2 RESULTS ON OTHER PROMPT-BASED GENERATION TASKS
+
+**Setup 4: Image Captioning.** In this setup, the images are chosen from the MS-COCO dataset from five categories: dog, car, carrot, cake, and bowl. Similar to Section 6.1, we synthesize five expert generators based on vit-gpt2 model in the Transformers repository.<sup>5</sup> If a non-expert generator is chosen, then the caption is generated from the noisy image perturbed by Gaussian noises. Examples are visualized in Figure 19. The numerical results are summarized in Figure 6.
+
+![Figure 6: Image captioning (Setup 4) results. (a) Outscore-the-best (O2B) plot showing scores from -2 to 2 over 2000 iterations. (b) Optimal-pick-ratio (OPR) plot showing ratios from 0.15 to 0.35 over 2000 iterations. Both plots compare SCK-UCB-poly3, RFF-UCB, Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, and Random algorithms.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+Figure 6 consists of two line plots. Plot (a) shows 'Outscore-the-best (O2B)' on the y-axis (ranging from -2 to 2) against 'Iteration' on the x-axis (ranging from 0 to 2000). Plot (b) shows 'Optimal-pick-ratio (OPR)' on the y-axis (ranging from 0.15 to 0.35) against 'Iteration' on the x-axis (ranging from 0 to 2000). Both plots compare seven algorithms: SCK-UCB-poly3 (blue circles), RFF-UCB (orange stars), Lin-UCB (green dashed line), One-arm Oracle (grey dashed line), Naive-KRR (red dashed line), Greedy (pink dashed line), and Random (purple dashed line). In both plots, RFF-UCB and SCK-UCB-poly3 show the highest performance, with RFF-UCB slightly outperforming SCK-UCB-poly3 in O2B and OPR. The other algorithms (Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, Random) show significantly lower performance, with their lines clustered near the bottom of the plots.
+
+Figure 6: Image captioning (Setup 4) results. (a) Outscore-the-best (O2B) plot showing scores from -2 to 2 over 2000 iterations. (b) Optimal-pick-ratio (OPR) plot showing ratios from 0.15 to 0.35 over 2000 iterations. Both plots compare SCK-UCB-poly3, RFF-UCB, Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, and Random algorithms.
+
+Figure 6: Image captioning (Setup 4): Results are averaged over 20 trials.
+
+**Setup 5: Synthetic Text-to-Video (T2V) task.** We provide numerical results on a synthetic T2V setting. Specifically, both the captions and videos are randomly selected from the following five categories of the MSR-VTT dataset (Xu et al., 2016): sports/action, movie/comedy, vehicles/autos, music, and food/drink. Each of the five synthetic arms corresponds to an expert in “generating” videos from a single category. Gaussian noises are applied to the video for non-experts. The results are summarized in Figure 7.
+
+![Figure 7: Synthetic T2V task (Setup 5) results. (a) Outscore-the-best (O2B) plot showing scores from -2 to 4 over 2000 iterations. (b) Optimal-pick-ratio (OPR) plot showing ratios from 0.2 to 0.6 over 2000 iterations. Both plots compare SCK-UCB-poly3, RFF-UCB, Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, and Random algorithms.](33228b4227fa57e1477b27b9e07483e6_img.jpg)
+
+Figure 7 consists of two line plots. Plot (a) shows 'Outscore-the-best (O2B)' on the y-axis (ranging from -2 to 4) against 'Iteration' on the x-axis (ranging from 0 to 2000). Plot (b) shows 'Optimal-pick-ratio (OPR)' on the y-axis (ranging from 0.2 to 0.6) against 'Iteration' on the x-axis (ranging from 0 to 2000). Both plots compare the same seven algorithms as in Figure 6. In both plots, SCK-UCB-poly3 (blue circles) shows the highest performance, followed by RFF-UCB (orange stars). The other algorithms (Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, Random) show significantly lower performance, with their lines clustered near the bottom of the plots. SCK-UCB-poly3's performance increases rapidly and then plateaus, while RFF-UCB's performance increases more slowly but continues to rise.
+
+Figure 7: Synthetic T2V task (Setup 5) results. (a) Outscore-the-best (O2B) plot showing scores from -2 to 4 over 2000 iterations. (b) Optimal-pick-ratio (OPR) plot showing ratios from 0.2 to 0.6 over 2000 iterations. Both plots compare SCK-UCB-poly3, RFF-UCB, Lin-UCB, One-arm Oracle, Naive-KRR, Greedy, and Random algorithms.
+
+Figure 7: Synthetic T2V task (Setup 5): Results are averaged over 20 trials.
+
+## 7 CONCLUSION
+
+In this work, we investigated prompt-based selection of generative models using a contextual bandit algorithm, which can identify the best available generative model for a given text prompt. We adapted the Kernel-UCB algorithm to perform this selection task and proposed two new algorithms: SCK-UCB and RFF-UCB. Our numerical results on text-to-image, text-to-video, and image-captioning tasks demonstrate the effectiveness of the proposed framework in scenarios where the available generative models have varying performance rankings depending on the type of prompt.
+
+<sup>5</sup><https://huggingface.co/nlqconnect/vit-gpt2-image-captioning>
+
+ Rest of paper (reference and Appendix) is removed.

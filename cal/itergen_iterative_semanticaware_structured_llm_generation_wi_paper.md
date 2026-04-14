@@ -1,0 +1,312 @@
+
+
+{0}------------------------------------------------
+
+# ITERGEN: ITERATIVE SEMANTIC-AWARE STRUCTURED LLM GENERATION WITH BACKTRACKING
+
+Shubham Ugare, Rohan Gumaste, Tarun Suresh, Gagandeep Singh, Sasa Misailovic  
+University of Illinois Urbana-Champaign  
+{sugare2, gumaste2, tsuresh3, ggnds, misailo}@illinois.edu
+
+## ABSTRACT
+
+Large Language Models (LLMs) are widely used for tasks such as natural language and code generation. Still, their outputs often suffer from issues like privacy violations and semantically inaccurate code generation. Current libraries for LLM generation rely on left-to-right decoding without systematic support for backtracking, limiting the ability to correct or refine outputs mid-generation.
+
+To address this issue, we introduce ITERGEN, an intuitive framework for iterative, grammar-guided LLM generation that enables users to move both forward and backward within the generated output based on grammar symbols. By leveraging a symbol-to-position mapping, ITERGEN ensures efficient and structured generation while allowing for corrections during the process. We demonstrate ITERGEN’s effectiveness in two important applications: reducing privacy leakage in LLM outputs, improving the accuracy of LLM-generated SQL and Vega-Lite queries.
+
+Our code and additional resources are available at <http://structuredllm.com>.
+
+## 1 INTRODUCTION
+
+Large Language Models (LLMs) are increasingly used for various tasks, including natural language generation (Radford et al., 2019) and code generation (et. al., 2021). However, their outputs can suffer from issues such as hallucination (Xu et al., 2024), disclosure of private user information found in the training corpus (Wang et al., 2024), as well as incorrect code generation in programming tasks. When the output does not meet user expectations, users often have to restart the generation process with additional information in the prompt. Alternatively, decoding strategies like beam search can generate multiple potential outputs for a single prompt, allowing for the selection of the most suitable response. Both these approaches are computationally intensive and demand significant token generation, posing challenges in terms of efficiency and resource utilization.
+
+Recent techniques in context-free grammar (CFG) guided generation tried to address these issues by introducing constrained decoding techniques that ensure LLM outputs adhere to user-specified grammatical rules (Poesia et al., 2022; Willard and Louf, 2023; Lundberg et al., 2023; Geng et al., 2023; Ugare et al., 2024; Beurer-Kellner et al., 2024). These approaches typically involve various parsing techniques to analyze the LLM’s partial outputs and determine the acceptable set of tokens based on the defined grammar. While effective in producing *syntactically* correct output, these techniques fall short of enforcing *semantic* properties that extend beyond syntax. For example, grammatical constraints alone cannot adequately ensure that a variable name in LLM-generated code is defined before its use or that the generated text avoids harmful language.
+
+If an LLM generates a semantically incorrect output, the user typically must restart the generation from scratch. Current grammar-guided generation tools fail to address this problem effectively, as they cannot detect semantic violations, or pause the generation at intermediate points. Additionally, navigation through the generation by naively backtracking a certain number of tokens from the end of the output to the part that caused the violation is very difficult. The main challenge is that the token-level abstraction provided by current LLM generation libraries (Wolf et al., 2020; Gerganov and et. al., 2024) is not tied to the syntax of the underlying generation. Our key insight is that symbols in a grammar, both terminals (e.g., keywords, operators) and non-terminals (e.g., expressions, statements) offer a more intuitive and interpretable abstraction for navigating through the generation process.
+
+{1}------------------------------------------------
+
+**ITERGEN.** We introduce ITERGEN, a novel framework that provides a user-friendly interface for iteratively generating structured outputs from LLMs. Users specify a context-free grammar in the Backus-Naur Form (BNF) for the target output language, guiding the LLM to adhere to the syntax defined by the grammar. Beyond syntax adherence, ITERGEN enables the user to programmatically check and correct for custom semantic properties of the generated output. For example, in a code generation task, instead of moving forward or backward by a fixed number of LLM tokens, the ITERGEN program can navigate by higher-level abstractions such as *statements* or *expressions*. This semantic-aware control enables selective resampling of fragments that violate desired properties, allowing for targeted corrections while preserving valid parts of the generation.
+
+The key technical challenge to precise grammar-aware navigation is addressing *token misalignment* – i.e., that LLM tokens from the model’s fixed vocabulary do not directly correspond to lexical tokens associated with any specific grammar. ITERGEN handles this issue by dynamically computing a mapping of grammar symbols to their corresponding positions in the partially parsed output. This capability enables efficient navigation both forward and backward through the generation process. For each LLM generation task, ITERGEN maintains the history of generated tokens (as a tree of decoded tokens) that enables it to avoid regenerating the same tokens heuristically. ITERGEN’s intuitive interface can be used to program LLM generation algorithms that enhance specific semantic properties of the outputs by leveraging grammar symbols as navigational abstractions.
+
+Our evaluation presents three distinct scenarios, which demonstrate the effectiveness of ITERGEN. First, we illustrate how it can be used to improve the accuracy of LLM-generated SQL queries by enforcing additional semantic constraints. ITERGEN achieves 18.5% mean improvement over the state-of-the-art grammar-guided generation technique (Ugare et al., 2024). Second, we show how ITERGEN effectively reduces privacy leaks in LLM-generated text from 51.4% to 0%, thus successfully safeguarding sensitive information while maintaining the quality of response. Third, we show that ITERGEN improves the accuracy of LLM-generated Vega-lite specification (a subset of JSON for data visualization) by 17.8% by enforcing semantic constraints.
+
+**Contributions.** The main contributions of this paper are:
+
+- We present ITERGEN, the first framework that uses grammar symbols as abstractions for navigating LLM generation both forward and backward.
+- We introduce an algorithm that enables efficient and accurate control of the LLM generation through grammar symbol abstraction by maintaining the decoding history and the LLM key-value cache.
+- We demonstrate how ITERGEN enhances specific semantic properties in LLM-generated outputs through three scenarios, addressing issues of privacy leaks and accuracy in SQL and Vega-Lite specification generation.
+
+## 2 BACKGROUND
+
+Let the alphabet  $\Sigma$  be a finite set of characters and  $\epsilon$  denotes an empty string. Given a set  $S$ ,  $S^i$  denotes the set of all  $i$ -length sequences that can be formed by concatenating elements from  $S$ , and  $S^* = \bigcup_{i \in \mathbb{N}} S^i$ .  $\Sigma^*$  represents the set of all strings over characters in  $\Sigma$ , including the empty string  $\epsilon$ .
+
+### 2.1 LANGUAGE MODELS
+
+Current autoregressive language models (LM) operate on vocabulary  $V \subseteq \Sigma^*$  of tokens. A tokenizer takes an input prompt  $O_0 \in \Sigma^*$ , which is a sequence of characters, as input and converts  $O_0$  into a sequence of tokens  $t_1, t_2, \dots, t_k$ . In order to generate the next token, the LM  $M : V^* \rightarrow \mathbb{R}^{|V|}$  takes as input the sequence of tokens  $t_1, t_2, \dots, t_k$ , and outputs a vector of scores  $\mathcal{S}$  over the vocabulary:  $\mathcal{S} = M(t_1, t_2, \dots, t_k)$ . The softmax function  $\text{softmax}(\mathcal{S}_i) = \exp(\mathcal{S}_i) / \sum_j \exp(\mathcal{S}_j)$  transforms  $\mathcal{S}$  into a probability distribution over the vocabulary  $V$ , and then  $t_{k+1}$  is sampled as the next token.
+
+**Decoding.** Various approaches for token selection from this distribution have been explored in the literature such as greedy decoding, sampling, and beam search. Each technique is repeated until the prediction of a special end-of-sequence token, EOS, or another stopping criterion is fulfilled. This iterative process is equivalent to sampling from a distribution over  $V^*$ , potentially resulting in multiple feasible decoding outputs.
+
+{2}------------------------------------------------
+
+**Constrained Masking.** In the context of decoding, we encounter scenarios where excluding specific tokens at particular positions becomes crucial (e.g., excluding harmful words). This implies we can disregard these tokens and proceed with decoding based on the remaining set. An algorithm for such masking relies on a function  $f_m$  to generate the mask  $m$  based on the exact use case. In the mask  $m \in \{0, 1\}^{|V|}$ , 1 indicates a viable token, and 0 signifies a discarded one. Decoding methods mentioned earlier can be applied to  $m \odot \text{softmax}(\mathcal{S})$ , where  $\odot$  represents element-wise multiplication.
+
+### 2.2 GRAMMAR-GUIDED GENERATION
+
+**Grammar:** A formal language’s syntax is defined by grammar, which comprises a set of production rules that specify all possible strings within that language. A grammar includes terminal and nonterminal symbols. Terminal symbols represent the actual characters or tokens; nonterminal symbols serve as placeholders that define patterns or structures within the language. Most programming languages can be described using context-free grammar, which consists of production rules that apply to nonterminal symbols independently of their context. Each production rule is of the form  $S \rightarrow S_1, S_2 \dots S_n$  with  $S$  a single nonterminal symbol, and  $S_1, S_2 \dots S_n$  a string of terminals and nonterminals. Single nonterminal  $S$  on the left-hand side can be replaced by  $S_1, S_2 \dots S_n$  on the right-hand side.
+
+**Shift-Reduce LR Parser:** An LR parser is a bottom-up parser used for analyzing context-free grammars (CFGs) (Aho et al., 1986). It handles deterministic grammars by reading input from left to right, constructing a rightmost derivation in reverse (hence LR). The parser uses a shift-reduce method, shifting symbols onto a stack until a sequence matches a grammar rule. When a match is found, the symbols on the stack are reduced by applying the rule, replacing them with the corresponding non-terminal. This process repeats until the entire input is successfully parsed or an error occurs.
+
+**Constrained grammar-guided generation:** Recent works have explored constrained grammar-guided LLM generation (Wei et al., 2023; Beurer-Kellner et al., 2023; Lundberg et al., 2023; Willard and Louf, 2023; Scholak et al., 2021; Poesia et al., 2022; Geng et al., 2023; Beurer-Kellner et al., 2024; Ugare et al., 2024). These methods typically incorporate an incremental parser alongside the LLM, which parses the partial output at each decoding step. The parsing results are then used to filter out tokens that would lead to syntactically invalid sequences.
+
+## 3 ITERATIVE STRUCTURED GENERATION
+
+Our work, ITERGEN, advances grammar-guided LLM generation techniques by introducing a framework that utilizes grammar symbols as abstractions for iterating the generation both forward and backward. Unlike current grammar-guided tools, which struggle to detect semantic violations and cannot pause generation at intermediate points, our approach enables users to navigate output based on grammatical structures. This flexibility allows for more effective handling of semantically incorrect outputs without the need to restart generation from scratch. In this section, we first outline the ITERGEN interface that supports this navigation. Following that, we discuss the technical challenges and the algorithm that efficiently facilitates these functionalities.
+
+### 3.1 ITERGEN INTERFACE
+
+Given a prompt and the grammar, a program using ITERGEN can specify various generation parameters such as the decoding algorithm, temperature, and other supported options. ITERGEN simplifies generation with three key functions: **forward**, **backward**, and **view**.
+
+The **forward** function accepts a stop symbol from the grammar, which can be either terminal or non-terminal, along with a count. The LLM will generate until the number of new specified stop symbols in the generation reaches the specified count. The generation process may stop earlier if the model produces an EOS token or meets other stopping conditions, such as a maximum token limit. Additionally, the generation parameters such as the decoding algorithm and temperature can be adjusted for each **forward** call. Consequently, a ITERGEN program can sample each line in a program or a sentence in natural language text with a different decoding method.
+
+The **backward** function also takes a grammar symbol and count as arguments. It allows the program to backtrack the generation process by the given number of specified symbols, effectively removing part of the output. The **view** function can be used to inspect all parts of the partial generation so far
+
+{3}------------------------------------------------
+
+![Diagram of the IterGen Session workflow. A User Program sends 'forward' and 'backward' calls to a central 'IterGen Session' box. The session box contains 'KV cache', 'Decoding Trace', and 'Symbol Position Map'. The session box sends an 'Output' back to the User Program. The session box also contains an 'LLM' (Large Language Model) which generates output $O_k$. The LLM is connected to a 'Decoding Algorithm' which uses an 'LR Parser' to parse the output $O_k$ and update the 'Symbol Position Map'. The 'Symbol Position Map' is also connected to the 'KV cache' and 'Decoding Trace'.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Diagram of the IterGen Session workflow. A User Program sends 'forward' and 'backward' calls to a central 'IterGen Session' box. The session box contains 'KV cache', 'Decoding Trace', and 'Symbol Position Map'. The session box sends an 'Output' back to the User Program. The session box also contains an 'LLM' (Large Language Model) which generates output \$O\_k\$. The LLM is connected to a 'Decoding Algorithm' which uses an 'LR Parser' to parse the output \$O\_k\$ and update the 'Symbol Position Map'. The 'Symbol Position Map' is also connected to the 'KV cache' and 'Decoding Trace'.
+
+Figure 1: In our workflow, a user program utilizing the ITERGEN manages LLM generation through forward and backward calls. For each prompt  $O_0$ , ITERGEN maintains a session that includes a decoding trace, a symbol position map, and a key-value (KV) cache. Using the LR parser ITERGEN incrementally parses partially generated output  $O_k$  and continuously updates the symbol position map to track the locations of symbols from the grammar in  $O_k$ .
+
+that correspond to a given grammar symbol. This is useful for checking whether the output meets certain criteria. If the desired properties are not met, the user can invoke **backward** to backtrack the generation accordingly.
+
+#### Example Grammar:
+
+```
+
+English text EBNF grammar
+
+paragraph: sentence+
+sentence: word+ sentence_end
+word: /[a-zA-Z0-9-]+/ | other_punctuations
+sentence_end: "." | "!" | "?"
+other_punctuations: "," | ";" | ":" | "“ ”" | "\n"
+% ignore " "
+
+```
+
+Consider an example of grammar using the Lark EBNF syntax. The grammar defines a simple English text paragraph. It consists of production rules where a **paragraph** is defined as one or more **sentences**. Each **sentence** is constructed from one or more **words** followed by a **sentence\_end** punctuation mark.
+
+In this grammar, symbols such as **paragraph** and **sentence** are non-terminals, meaning they can expand into other symbols according to the defined production rules. Conversely, symbols such as ., !, and ? are terminals, as they cannot be further expanded.
+
+For the given example, a **forward(stop\_symbol="sentence")** would ensure that LLM generation stops after generating a sentence (default value of count is 1). A **backward("word", num=2)** function call would ensure that the generation moves backward by a unit of 2 words. A **view("word")** call would return a list of all words in the current generation. These three functions can be effectively combined to create more complex LLM generation algorithms. For instance, one could implement a rejection sampling algorithm that backtracks until a specified criterion is met for a particular component of the output.
+
+### 3.2 ITERGEN ALGORITHM
+
+Given a grammar  $G$ , let  $\mathcal{S}$  denote the set of symbols corresponding to the terminals and non-terminals of the grammar. Further, let  $C : \Sigma^* \times \mathcal{S} \rightarrow \mathbb{I}$  be a function that represents the count of grammar symbol  $S$  on parsing a string, i.e. if  $C(O_i, S) = n$ , then there are  $n$  occurrences of  $S$  in the partial parsing of  $O_i$  with grammar  $G$ . We use this to define the ITERGEN functions formally.
+
+**Forward function:** Let  $O_i \in \Sigma^*$  be the output string before the forward operation, and let  $O_f \in \Sigma^*$  be the output after the call to the backward function. Let  $S \in \mathcal{S}$  be the target stop symbol and  $n \in \mathbb{I}$  be an integer. Given  $O_f = \text{forward}(S, n)$ , the output  $O_f$  is formed by appending a suffix  $\Delta \in \Sigma^*$  to  $O_i$ , such that  $O_f = O_i + \Delta$ . Formally,
+
+1.  $C(O_f, S) - C(O_i, S) = n$ , there are exactly  $n$  additional occurrences of the symbol  $S \in \mathcal{S}$ ; or
+2. The generation stops at  $O_f$  when a termination condition is met, typically when the model generates an EOS token or reaches a maximum length. In this case,  $C(O_f, S) - C(O_i, S) < n$ .
+
+{4}------------------------------------------------
+
+**Backward function:** Similarly, let  $O_i \in \Sigma^*$  be the output string before the backward operation, and let  $O_b \in \Sigma^*$  be the output after the call to the backward function. Let  $S \in \mathcal{S}$  be the target stop symbol, and  $n \in \mathbb{I}$  be the input to the backward function. Given  $O_b = \text{backward}(S, n)$ , the output  $O_b$  is the maximal prefix of  $O_i$  such that  $O_i = O_b + \Delta$ , where  $C(\Delta, S) = n$ . If  $C(O_i, S) < n$ , indicating that  $O_i$  does not contain enough occurrences of  $S$ , then the operation backtracks to the initial prompt  $O_0$ .
+
+The detailed pseudocode for the forward and backward algorithm are presented in Appendix A.1.
+
+**Symbol Position Map:** To enable the counting of the occurrence of grammar symbols in the LLM generation output we maintain the symbol position map that gets updated based on the LR parser reduce operations. Formally, symbol position map is a mapping  $\mathcal{D} : \mathcal{S}' \rightarrow \mathbb{I} \times \mathbb{I}$ , where  $\mathcal{S}'$  represents each occurrence of the grammar symbol in the current LLM-generated output, and  $\mathbb{I} \times \mathbb{I}$  represents set of integer pairs. As the LLM generates tokens, the partially generated output is passed to an incremental LR parser. This parser first lexes the input, converting it into a list of lexical tokens (terminals). Since the parser works incrementally, at each LLM decoding step, newly generated lexical tokens are processed by the shift-reduce LR parser. Figure 2 illustrates these terminals on an input terminal tape. The parser operates using a set of states and a parsing table that determines the next action—either shift or reduce—based on the symbols on the input tape. A shift operation updates the parser state and pushes the new terminal onto the stack. In contrast, a reduce operation corresponds to applying a grammar production rule, where elements at the top of the stack are reduced to a non-terminal. For example, if a production rule is  $S \rightarrow S_1 S_2 \dots S_n$ , where  $S$  and each  $S_i$  are symbols in the grammar, a reduce operation replaces  $S_1 S_2 \dots S_n$  on top of the stack with  $S$ .
+
+In ITERGEN, during a reduce operation, we update the symbol position map by recording the start and end positions of the reduced symbol. The start position of  $S$  is taken from  $S_1$ , and the end position is taken from  $S_n$ . Formally, the position of  $S$  is calculated as:  $\mathcal{D}(S) = (\mathcal{D}(S_1)_l, \mathcal{D}(S_n)_r)$ . Here,  $\mathcal{D}(S_1)_l$  is the start position of  $S_1$ , and  $\mathcal{D}(S_n)_r$  is the end position of  $S_n$ . The LR parser then pushes  $S$  onto the stack. As a result, every symbol added to the stack has an entry in the symbol position map. For any future reduce operations where these symbols are involved, their positions are recursively used to update the position of the newly reduced symbol. In our example, when the top of the parser stack contains the symbols **word+** and **sentence\_end**, the production rule **sentence**  $\rightarrow$  **word+ sentence\_end** is applied to reduce the stack to **sentence**. At this point, we mark the positions of the newly created **sentence** symbol.
+
+A subtle but important detail is that the reduce operation only occurs when the input tape contains the next terminal. In other words, a **sentence** is only reduced when the first word of the next sentence is already on the input tape (i.e., when the pointer reaches the end). This means that during token generation if we want ITERGEN to stop precisely at the end of a certain grammar symbol, LLM often needs to generate one extra token before halting. This extra token is then removed from the final output, and the ITERGEN session is updated accordingly. Importantly, users of ITERGEN do not need to handle these internal mechanics—the generation will appear to stop exactly at the desired grammar symbol, ensuring accurate results without exposing the underlying complexity.
+
+**Decoding Trace:** We maintain a history of each session as a *tree* of tokens, incorporating token indexes and associated metadata such as token probabilities. The trace includes a pointer to the last token. During a forward call, a newly generated token is added as a child to the last token in the tree, effectively extending the session history. Conversely, during a backward call, the last token pointer is moved to a previous token position. This trace storage is crucial when users navigate back and forth through LLM generation while performing rejection sampling, where achieving convergence to a different desired output may take longer. To expedite this process, we introduce a small recurrence penalty, denoted by  $\gamma$ , which is applied to the probabilities of previously selected tokens. Specifically, the probabilities are changed by multiplying them by  $(1 - \gamma)^\alpha$ , where  $\alpha$  is the number of times the
+
+![Diagram illustrating the ITERGEN parsing process. At the top, an 'Input Terminals Tape' shows three boxes: '...', '...', and 'Word'. Below it, an arrow labeled 'Current Terminal' points to the 'Word' box. To the left, a box labeled 'Symbol Position Map' contains the symbol '{ }'. To the right, a box labeled 'Parser Stack' contains three boxes: 'sentence_end', 'word+', and '...'. A 'Reduce' arrow points from the 'Parser Stack' to the 'Symbol Position Map'.](1b896a95bc9974ad01fac7ac6f541a96_img.jpg)
+
+Diagram illustrating the ITERGEN parsing process. At the top, an 'Input Terminals Tape' shows three boxes: '...', '...', and 'Word'. Below it, an arrow labeled 'Current Terminal' points to the 'Word' box. To the left, a box labeled 'Symbol Position Map' contains the symbol '{ }'. To the right, a box labeled 'Parser Stack' contains three boxes: 'sentence\_end', 'word+', and '...'. A 'Reduce' arrow points from the 'Parser Stack' to the 'Symbol Position Map'.
+
+Figure 2: On every reduce operation the ITERGEN updates the position of the reduced symbol in the symbol position map.
+
+{5}------------------------------------------------
+
+token has been backtracked. By utilizing a hyperparameter  $\gamma$ , we ensure that the model explores distinct paths each time it backtracks.
+
+Additionally, LLMs use a Key-Value cache to store previously computed Key and Value matrices from the attention mechanism, enabling faster generation by reusing them for each new token. During every ITERGEN session, we maintain the KV cache corresponding to the current generation and maintain it coherently with forward and backward calls. This enables efficient generation without having to go through the expensive KV-cache prefill step again.
+
+## 4 EVALUATION
+
+In this section, we present three experiments demonstrating the ease of writing LLM decoding algorithms with semantic constraints for (1) SQL, (2) privacy leakage, and (3) Vega-Lite. Additionally, ITERGEN implementation supports other languages in our repository, including a large fragment of Python. ITERGEN code is available at <https://github.com/uiuc-arc/itergen>
+
+**Experimental Setup.** We run experiments on a 48-core Intel Xeon Silver 4214R CPU with 2 NVidia RTX A5000 GPUs. ITERGEN is implemented using PyTorch (Paszke et al., 2019), HuggingFace transformers library (Wolf et al., 2020) and SYNCode library (Ugare et al., 2024) for the parser-guided LLM generation infrastructure.
+
+### 4.1 SQL GENERATION
+
+This case study shows that ITERGEN can improve text to SQL generation. Despite providing SQL schema through the prompt, LLM-generated SQL queries can often fail to execute due to mistakes in using accurate table and column names. This issue can be easily addressed by selectively resampling column and table names until they exist in the given schema. We show that ITERGEN is ideal for implementing a constraint such as this while generating SQL.
+
+Figure 3 defines a function `generate_sql_with_itergen` that utilizes ITERGEN to enhance text-to-SQL generation by ensuring that the generated SQL queries are syntactically accurate and adhere to a specified schema. The function begins by initializing the generation process with the given prompt and parsing the SQL schema. Within a loop, it calls the `forward` function, which generates the next output, stopping specifically at either a column name or a table name. Here, "column\_name" and "table\_name" are symbols representing non-terminals in our SQL grammar (See Appendix A.8.2 for the full grammar). The function then checks the validity of this name against the schema using the `view` function. If the name is invalid, it invokes the `backward` function, which moves ITERGEN's context back to the state before the invalid name was generated, allowing for a new attempt. The `max_iter` hyper-parameter prevents infinite looping and excessive computation.
+
+**Models.** We experiment with a range of state-of-the-art LLMs, including Qwen2.5 (Qwen, 2024) (base, instruct-tuned, and code-specific) and various models from Llama series (Llama, 2024).
+
+**Baselines.** We use STANDARD unconstrained generation and state-of-the-art grammar-guided generation tool SYNCode (Ugare et al., 2024) as our baselines. SYNCode will ensure that the LLM-generated SQL queries are syntactically correct, however, it does not guarantee other errors that can occur during the execution of the query.
+
+**Datasets.** We use the standard Spider (Yu et al., 2018) text-2-SQL dataset for the evaluation. This dataset has 1034 problems, that are categorized into different difficulty levels - *easy* (250), *medium* (440), *hard* (174), and *extra hard* (170).
+
+We prompt the model with information about the database schema and the text query. Our prompt is formatted as a user message for instruct-tuned models. Further, we explicitly prompt the model only to generate the SQL query as it is automatically parsed. The exact formatting of the prompt is provided in Appendix A.3.1. We use greedy decoding for the experiment and set ITERGEN's maximum limit for moving backward as `max_iter=20` and set the ITERGEN recurrence penalty to 0.7, as it worked well on a small subset of the training dataset. We use `\n\n` as an additional stop word to the EOS token for all experiments and use max new token limit as 100 for all three methods.
+
+Table 1 presents our result comparing STANDARD unconstrained generation and SYNCode to ITERGEN. The columns provide insights into each approach's performance: the Accuracy (%)
+
+{6}------------------------------------------------
+
+```
+
+IterGen code for SQL generation
+1 def generate_sql_with_itergen(iter_gen, problem):
+2     iter_gen.start(problem['prompt'])
+3     schema = parse_sql_schema(problem)
+4     attempts = 0
+5
+6     while not iter_gen.finished() and attempts < max_iter:
+7         out = iter_gen.forward(stop_symbols=['column_name', 'table_name'])
+8         attempts += 1
+9
+10        if not exists_column(schema, iter_gen.view('column_name')[-1]):
+11            iter_gen.backward('column_name')
+12            continue
+13
+14        if not exists_table(schema, iter_gen.view('table_name')[-1]):
+15            iter_gen.backward('table_name')
+16            continue
+17
+18    return out
+
+```
+
+Figure 3: Code using ITERGEN for LLM-based SQL Generation
+
+Table 1: Comparison of ITERGEN and baselines with various models on SQL based on execution accuracy, execution success percentage, number of tokens, and average time.
+
+| Model | Method | Accuracy (%) |  |  |  |  | Execute (%) | Tokens | Time (s) |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  | Easy | Medium | Hard | Extra | Overall |  |  |  |
+| Qwen2.5-0.5B | STANDARD | 41.6 | 26.8 | 25.9 | 10.0 | 27.5 | 45.8 | 39.30 | 0.607 |
+|  | SYNCODE | 42.4 | 28.0 | 26.4 | 9.4 | 28.1 | 47.3 | 38.58 | 0.781 |
+|  | ITERGEN | <b>54.8</b> | <b>31.8</b> | <b>33.9</b> | <b>12.4</b> | <b>34.5</b> | <b>60.8</b> | 40.88 | 0.981 |
+| Qwen2.5-0.5B-Instruct | STANDARD | 2.8 | 0.2 | 0.6 | 0.6 | 1.0 | 2.3 | 53.27 | 0.827 |
+|  | SYNCODE | 17.2 | 5.9 | 10.3 | 4.7 | 9.2 | 28.3 | 66.79 | 1.525 |
+|  | ITERGEN | <b>36.8</b> | <b>23.4</b> | <b>31.0</b> | <b>11.8</b> | <b>26.0</b> | <b>64.7</b> | 39.02 | 0.931 |
+| Qwen2.5-1.5B | STANDARD | 70.8 | 47.3 | 37.9 | 27.6 | 48.2 | 78.1 | 35.79 | 0.641 |
+|  | SYNCODE | 72.0 | 48.0 | 38.5 | 28.2 | 48.9 | 79.0 | 35.48 | 0.810 |
+|  | ITERGEN | <b>73.6</b> | <b>48.4</b> | <b>39.7</b> | <b>28.2</b> | <b>49.7</b> | <b>81.5</b> | 42.41 | 1.139 |
+| Qwen2.5-1.5B-Instruct | STANDARD | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 44.51 | 0.818 |
+|  | SYNCODE | 43.6 | 29.3 | 33.3 | 24.7 | 32.7 | 60.7 | 54.50 | 1.324 |
+|  | ITERGEN | <b>61.6</b> | <b>47.7</b> | <b>50.0</b> | <b>42.9</b> | <b>50.7</b> | <b>80.0</b> | 38.44 | 1.015 |
+| Qwen2.5-Coder-1.5B | STANDARD | 84.8 | 61.1 | 55.2 | 41.2 | 62.6 | 86.0 | 28.54 | 0.505 |
+|  | SYNCODE | 84.8 | 61.1 | 55.2 | 41.2 | 62.6 | 85.6 | 28.74 | 0.620 |
+|  | ITERGEN | <b>84.8</b> | <b>61.6</b> | <b>58.6</b> | <b>43.5</b> | <b>63.7</b> | <b>88.7</b> | 38.55 | 0.977 |
+| Llama-3.2-1B | STANDARD | 40.4 | 24.8 | 20.7 | 10.6 | 25.5 | 50.6 | 37.28 | 0.385 |
+|  | SYNCODE | 46.4 | 28.2 | 23.0 | 10.0 | 28.7 | 58.7 | 40.33 | 0.581 |
+|  | ITERGEN | <b>50.4</b> | <b>30.2</b> | <b>23.6</b> | <b>11.8</b> | <b>30.9</b> | <b>67.6</b> | 38.66 | 0.687 |
+| Llama-3.2-3B | STANDARD | 38.0 | 29.5 | 28.2 | 12.4 | 28.5 | 65.3 | 40.42 | 0.714 |
+|  | SYNCODE | 46.8 | 34.8 | 32.8 | 19.4 | 34.8 | 78.8 | 39.96 | 0.905 |
+|  | ITERGEN | <b>49.2</b> | <b>35.0</b> | <b>33.3</b> | <b>19.4</b> | <b>35.6</b> | <b>81.4</b> | 39.08 | 1.042 |
+| Llama-2-7b-chat-hf | STANDARD | 34.4 | 21.8 | 12.1 | 4.1 | 20.3 | 31.9 | 42.58 | 1.083 |
+|  | SYNCODE | 40.0 | 27.0 | 13.8 | 5.3 | 24.4 | 40.8 | 46.16 | 1.339 |
+|  | ITERGEN | <b>54.0</b> | <b>35.2</b> | <b>27.0</b> | <b>15.3</b> | <b>35.1</b> | <b>64.5</b> | 51.36 | 1.520 |
+| Meta-Llama-3-8B | STANDARD | 62.0 | 44.3 | 42.0 | 32.4 | 46.2 | 87.7 | 32.95 | 0.895 |
+|  | SYNCODE | 62.4 | 44.3 | 42.5 | 32.4 | 46.4 | 87.6 | 33.02 | 1.040 |
+|  | ITERGEN | <b>62.8</b> | <b>45.7</b> | <b>43.4</b> | <b>33.5</b> | <b>47.6</b> | <b>89.5</b> | 32.68 | 1.175 |
+
+displays the percentage of correctly generated SQL queries across different difficulty levels, while the Execute (%) indicates the successful execution percentage of these queries using the SQLite Python interface (execution without runtime errors). Additionally, the Tokens column shows the average number of tokens generated, and the Time (s) column reports the average generation time. ITERGEN improves over both baselines with an average overall accuracy of 41.63% and an execution percentage of 75.84%, compared to 28.9% accuracy and 50.28% execution rate for STANDARD generation. It outperforms SYNCODE, which has an average accuracy of 35.22% and an execution rate of 63.72%. Table 8 in Appendix A.3.3 presents these averages for each metric over all LLMs in the study.
+
+{7}------------------------------------------------
+
+We observe that the generation algorithm defined using ITERGEN significantly improves over both baselines for all models in terms of execution accuracy. For instance, with the Qwen2.5-0.5B model, ITERGEN achieves an overall accuracy of 34.3%, compared to 27.9% for the SYNCode. Similarly, with the Qwen2.5-1.5B-Instruct model, ITERGEN reaches an overall accuracy of 50.8%, ahead of SYNCode’s 33.2%. Our simple ITERGEN written algorithm also substantially reduces the execution errors. For Llama-3.2-1B, ITERGEN achieves 67.9% overall execution success rate, compared to STANDARD’s 51.1%. These results highlight the effectiveness of the ITERGEN approach in generating valid SQL outputs. Ablation study on recurrence penalty  $\gamma$ , other modes of prompting with execution feedback, and detailed error analysis is in Appendix A.3. We present a detailed comparison of examples where the ITERGEN method avoids the issue in SYNCode solution in Appendix A.4.
+
+### 4.2 PRIVACY LEAKAGE
+
+As LLMs continue to proliferate and are integrated into a multitude of applications, it is imperative to protect the private user data used in model pretraining. LLMs can inadvertently output data from their training corpus thus exposing private details to end users. As such, privacy safeguards are critical to mitigate the risks of sensitive information disclosure, (2) further public trust in AI systems, and (3) comply with current and future data protection regulations.
+
+We evaluate ITERGEN on its capacity to prevent LLMs from “leaking” private data to end users. Specifically, a ‘leak’ is defined as an LLM outputting sensitive data that was in its pretraining dataset. While this can happen coincidentally, malicious actors may rely on specifically designed prompts that are intended to make LLMs reveal private data. In this case study, we focus on the *Enron* email dataset: a corpus of roughly 600,000 emails between employees of the Enron Corporation. This dataset is often aggregated into large LLM pretraining corpora. As such, most common LLMs have been exposed to this data during their pretraining phase, and thus are capable of leaking the data to end users.
+
+We show that ITERGEN can be applied to easily prevent private email address leakage. We use the DecodingTrust (Wang et al., 2024) privacy dataset, focusing on the Enron email extraction task. We provide an in-depth explanation of the ITERGEN API, as well as experiment details in Appendix A.5
+
+Table 2 displays generation metrics of STANDARD generation compared to ITERGEN privacy preserving generation. We display the number of emails leaked by the model in each generation mode, along with the average amount of time spent per generation. Since ITERGEN inherently relies on re-generating certain parts of the completion, we display Average  $\Delta$  tokens, a measure of how many more tokens ITERGEN generated on average, per prompt, in comparison to STANDARD generation.
+
+Table 2: Comparison of models on DecodingTrust based on leakage, tokens, perplexity, and run time.
+
+| Model | Leaks |  | Average Time (s) |  | Perplexity |  | Avg. $\Delta$ Tokens |
+|-|-|-|-|-|-|-|-|
+|  | STD | ITERGEN | STD | ITERGEN | STD | ITERGEN |  |
+| Qwen2.5-0.5B | 45 | 0 | 0.34 | 0.46 | 6.22 | 6.31 | 4.14 |
+| Qwen2.5-0.5B-Instruct | 46 | 0 | 0.34 | 0.47 | 6.87 | 7.0 | 4.79 |
+| Qwen2.5-1.5B | 59 | 0 | 0.39 | 0.56 | 5.93 | 6.02 | 5.72 |
+| Qwen2.5-1.5B-Instruct | 57 | 0 | 0.39 | 0.58 | 6.17 | 6.28 | 5.95 |
+| Llama-3.2-1B | 62 | 0 | 0.24 | 0.38 | 6.14 | 6.25 | 6.87 |
+| Llama-3.2-3B | 61 | 0 | 0.40 | 0.55 | 5.91 | 6.0 | 5.59 |
+| Llama-2-7b-chat-hf | 59 | 0 | 0.53 | 0.66 | 5.97 | 6.07 | 4.13 |
+| Llama-3-8B | 67 | 0 | 0.56 | 0.76 | 5.66 | 5.76 | 7.15 |
+| Llama-3-8B-Instruct | 61 | 0 | 0.57 | 0.78 | 6.18 | 6.30 | 6.02 |
+
+We observe a clear, significant improvement over base models, with ITERGEN preserving user privacy with 100% success. We observe a small increase in average time per completion and average tokens per generation. This overhead consists of mostly discarded tokens when backtracking away from leaky completions and minor processing delays (e.g., checking for leaks at each step, keeping track of backtracking attempts, moderate fixed overhead when initializing ITERGEN). We also show output perplexity as a response quality gauge to verify that ITERGEN’s secure generations are still providing utility. We notice a small increase in response perplexity, showing a minor divergence from the highest probability tokens, resulting from ITERGENs replacement of leak-yielding tokens.
+
+{8}------------------------------------------------
+
+### 4.3 VEGA-LITE
+
+Vega-Lite (Satyanarayan et al., 2017) is a declarative language for specifying data visualizations based on a data frame, a tabular structure where rows represent individual data points and columns define attributes of various types. Vega-Lite syntax is a subset of JSON, and the Vega-Lite grammar accepts JSON objects conforming to its schema. The detailed grammar for Vega-Lite is provided in Appendix A.8.3. We apply the following constraints with ITERGEN, ensuring precise backtracking before the source of any detected violations:
+
+- **Valid Field Names:** Each field name must correspond to a valid column in the data frame.
+- **Field Type Compatibility:** The type of each field must follow specific rules. For example, string columns are typically categorical values (nominal in Vega-Lite). If the entries follow ISO timestamp formatting, the column can be interpreted as temporal.
+- **Aggregation Constraints:** Aggregations must be limited to specific values, including "count", "mean", "average", and "sum".
+
+When checking field type compatibility, we account for the fact that JSON objects are unordered. This means the model may generate either the field name first or the data type first as valid output orders. To handle this, we allow the model to complete the generation of the entire object corresponding to the channel, including the field name and the type. If a violation is detected, we move backward to the point before the type value.
+
+**Datasets.** For the evaluation, we use the NLV Corpus (Srinivasan et al., 2021), a dataset comprising 814 examples of text utterances paired with corresponding Vega-Lite visualization specifications. We use a single-example prompt that explicitly lists all field names from the data frame, as shown in Appendix A.7.1.
+
+Table 3: Comparing ITERGEN and SYNCode on the NLV corpus based on accuracy, execution success, and average time.
+
+| Model | Method | Accuracy (%) | Execute (%) | Time (s) |
+|-|-|-|-|-|
+| Qwen2.5-1.5B | SYNCode | 13.14 | 44.47 | 3.36 |
+|  | ITERGEN | <b>15.48</b> | <b>46.56</b> | 3.96 |
+| Llama-3.2-3B | SYNCode | 31.70 | 85.50 | 4.43 |
+|  | ITERGEN | <b>36.01</b> | <b>88.21</b> | 5.00 |
+| Llama-3-8B | SYNCode | 24.69 | 89.56 | 4.09 |
+|  | ITERGEN | <b>30.47</b> | <b>92.51</b> | 4.87 |
+
+**Hyperparameter Values.** We use SYNCode as the baseline. For both ITERGEN and SYNCode experiments, we use greedy sampling. For ITERGEN we set a recurrence penalty  $\gamma$  to 0.1, and set **max\_iter** to 50. We evaluate three models: Qwen2.5-1.5B, Llama-3.2-3B, and Llama-3-8B.
+
+Table 3 presents the result for our case study. The Column "Accuracy" represents the exact match accuracy with the ground truth, the Column "Execute" denotes the execution success with the Vega-Lite compiler, and the Column "Time" shows the average time taken for each task. We observe that the generation algorithm defined using ITERGEN significantly improves over SYNCode for all models in terms of validation and accuracy. For instance, with the Llama-3-8B model, ITERGEN achieves an accuracy of 30.5%, outperforming SYNCode's 24.7%. Similarly, for the Llama-3.2-3B model, ITERGEN gets an accuracy of 36.0%, compared to 31.7% for SYNCode. Additionally, ITERGEN demonstrates higher execution rates across all models. For example, with Qwen2.5-1.5B, ITERGEN achieves an Average Validity of 46.6%, exceeding SYNCode's 44.5%. We further analyze the evaluation of tasks with Llama-3.2-3B in the dataset based on the number of iterations and backward calls made by ITERGEN in Figure 6 in Appendix A.7.
+
+## 5 RELATED WORK
+
+Our work focuses on enhancing the semantic accuracy of LLMs through constrained decoding. Prior research has explored two primary strategies to improve LLM accuracy in generating structured formal languages: Fine-tuning or prompt engineering (Bassamzadeh and Methani, 2024; Weyssow et al., 2024), which typically requires significant data, computational resources, and time, often without formal guarantees of success. However, fine-tuning and prompt engineering approaches are complementary to the constrained decoding approach we adopt, and improvements from those techniques could enhance the overall quality of LLM output.
+
+Context-free-grammar generation techniques such as GCD (Geng et al., 2023), OUTLINES (Willard and Louf, 2023), DOMINO (Beurer-Kellner et al., 2024), SYNCode (Ugare et al., 2024) and
+
+{9}------------------------------------------------
+
+AICI (Moskal et al., 2024) constrain LLM output according to grammar rules. However, in contrast to ITERGEN, these tools cannot apply semantic constraints to the generation process. Other recent constrained-generation methods utilize language servers (designed for communication between IDEs and language-specific tools) to enforce some semantic constraints during decoding (Agrawal et al., 2023; Wei et al., 2023). However, these techniques lack guarantees for syntactic accuracy and depend on the availability and performance of language servers.
+
+GUIDANCE (Lundberg et al., 2023) supports context-free languages but requires users to compose grammars through supported operations. GUIDANCE’s **stop\_at** function, which halts generation at a specified regular expression, has similarities to the ITERGEN’s **forward** function. However, while **stop\_at** works with regular expressions, **forward** operates based on symbols from ITERGEN’s overarching grammar. Unlike ITERGEN, GUIDANCE does not support backtracking, and the only way to impose constraints is through regular expressions on generated "holes," similar to LMQL. Moreover, ITERGEN uses any LR grammar in the standard Lark EBNF format, making it easier to plug in large grammars like SQL, which is not straightforward with GUIDANCE. Both LMQL and GUIDANCE provide additional features, such as the ability to insert strings during generation and support for function calls, which are outside the scope of this paper.
+
+SYNCHROMESH (Poesia et al., 2022) uses constrained semantic decoding (CSD) to enforce semantic constraints through predictive masking and rejection sampling at the token level. It checks if the model’s first token choice adheres to the semantic constraints, and if not, uses predictive masking to resample. It is designed for use with OpenAI’s GPT-3 and Codex and relies on API access without direct control over the underlying language models. Similarly, PICARD (Scholak et al., 2021) is a grammar-guided generation tool that’s developed for SQL generation with additional constraints on valid table and column names. The approach used in SYNCHROMESH and PICARD for SQL can be easily implemented with ITERGEN with few lines of code, as shown in our case study. In contrast to both SYNCHROMESH and PICARD, the goal of ITERGEN is to develop an efficient and intuitive tool that allows users to write programs to define grammar-level semantic constraints through its forward and backward operations that can work with any user-provided grammar and not specific to improving SQL generation. An unofficial implementation of Synchromesh exists; in practice, this system encountered errors when running with complex Lark grammars. Furthermore, PICARD works only with T5 architecture, and thus it is not possible to make an empirical comparison to ITERGEN.
+
+ITERGEN also serves as the primary building block in recent works like CRANE (Banerjee et al., 2025), which combines syntactic and semantic correctness of constrained decoding with unconstrained LLM reasoning steps to improve LLM performance on challenging symbolic reasoning benchmarks such as GSM-symbolic and FOLIO.
+
+## 6 LIMITATIONS
+
+Our current work has the following areas for improvement: ITERGEN is currently limited to single LLM generation and does not support multiple sequence generation in batch. This requires careful synchronization of grammar when handling multiple outputs, especially if a user wants to backtrack on just one of many sequences. Further, our recurrence penalty heuristic is functional but can skew the LLM distribution to diverge from previous generations at the first token. We leave improvement over this heuristic to future work.
+
+## 7 CONCLUSION
+
+We present ITERGEN, an efficient and general framework that uses the symbols in the BNF grammar for intuitive iteration over the LLM generation of structured outputs. It brings the flexibility of bidirectional iterators from standard programming languages to LLM-based generation.
+
+By enabling users to enforce syntactic and semantic constraints, ITERGEN significantly advances the reliability of LLM outputs. Our evaluation already demonstrates its effectiveness in improving text-SQL generation on average by 18.5% over existing state-of-the-art techniques and fully eliminating privacy leaks in LLM-generated text. Furthermore, by enforcing semantic constraints, ITERGEN improves the accuracy of LLM-generated Vega-Lite specifications by 17.8%. In the future, we anticipate that ITERGEN will present the solid foundation for easily expressing and enforcing various complex semantic properties of structured texts, including code, documents, and natural language, during generation with open-source LLMs.
+
+ Rest of paper (reference and Appendix) is removed.

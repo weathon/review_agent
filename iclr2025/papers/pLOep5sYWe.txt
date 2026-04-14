@@ -1,0 +1,299 @@
+
+
+{0}------------------------------------------------
+
+# SASSHA: SHARPNESS-AWARE ADAPTIVE SECOND-ORDER OPTIMIZATION WITH STABLE HESSIAN APPROXIMATION
+
+###### Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Approximate second-order optimization methods have gained attention due to their low computational and memory overhead. While these methods have the potential to accelerate neural network training, they often exhibit poorer generalization compared to first-order approaches. To address this limitation, we first analyze existing second-order methods through the lens of the loss landscape, demonstrating that their reduced generalization performance is somewhat attributed to the sharpness of the solutions they converge to. In response, we introduce SASSHA, a novel approach designed to enhance generalization by explicitly reducing sharpness. In fact, this sharpness minimization scheme is designed to accommodate lazy and stable Hessian updates, so as to secure efficiency and robustness besides flatness. To validate its effectiveness, we conduct a wide range of deep learning experiments including standard vision and language tasks, where SASSHA achieves competitive performance. Notably, SASSHA demonstrates strong generalization in noisy data settings and significantly outperforms other methods in these scenarios. Additionally, we verify the robustness of SASSHA through various ablation studies.
+
+## 1 INTRODUCTION
+
+Recently, second-order methods have been gaining interest due to their potential to accelerate the training process (Yao et al., 2021; Liu et al., 2024; Gupta et al., 2018). Through various techniques for efficient estimation of the second-order derivatives, these approximate second-order methods have achieved faster training with minimal computation and memory overhead compared to their first-order counterparts.
+
+However, contrary to their convergence benefits, recent studies hint at a potentially harmful effect of second-order optimization on generalization. Wadia et al. (2021) argues that second-order optimization impairs generalization by whitening the data. Amari et al. (2021) suggests a more nuanced view; while second-order methods generalize worse under typical conditions, they generalize more robustly in the presence of label noise. Similar observations on deteriorated generalization have also been widely reported for adaptive methods, a closely related class of optimizers that employ preconditioners (Wilson et al., 2017; Zhou et al., 2020; Zou et al., 2022). Despite these observations, there has not been much effort to recover the generalization performance of these optimizers.
+
+Improving generalization remains a central challenge in machine learning, prompting extensive research to better understand underlying factors (Zhang et al., 2017; Neyshabur et al., 2017a). Recent studies have revealed a strong correlation between the flatness of minima and their generalization capabilities (Keskar et al., 2017), spurring the development of optimization techniques aimed at inducing flat minima (Chaudhari et al., 2017; Izmailov et al., 2018; Foret et al., 2021; Orvieto et al., 2022). This line of inquiry has also inspired analyses that attribute the poor generalization of adaptive methods to their tendency to converge to sharp minima (Zhou et al., 2020). Consequently, this raises
+
+![Figure 1: Motivating toy example. A 3D surface plot showing a loss landscape with a sharp, narrow minimum and a flatter, wider minimum. Four optimization paths are shown: SGD (blue line) converges to the sharp minimum; SASSHA (red line) converges to the flatter minimum; AdaHessian (green line) converges to the sharp minimum; and Sophia-H (orange line) converges to the sharp minimum. The legend indicates: SGD (blue line), SASSHA (red line), AdaHessian (green line), and Sophia-H (orange line).](59c76d920f3faf3933d80a47647d42a9_img.jpg)
+
+Figure 1: Motivating toy example. A 3D surface plot showing a loss landscape with a sharp, narrow minimum and a flatter, wider minimum. Four optimization paths are shown: SGD (blue line) converges to the sharp minimum; SASSHA (red line) converges to the flatter minimum; AdaHessian (green line) converges to the sharp minimum; and Sophia-H (orange line) converges to the sharp minimum. The legend indicates: SGD (blue line), SASSHA (red line), AdaHessian (green line), and Sophia-H (orange line).
+
+Figure 1: Motivating toy example. SASSHA converges to flatter minima compared to other approximate second-order optimizers.
+
+{1}------------------------------------------------
+
+an important question: to what type of minima do approximate second-order optimizers converge, and is there potential for improving their generalization performance?
+
+To answer these questions, we first measure the sharpness of different second-order optimizers under various definitions of sharpness, finding that these methods converge to significantly sharper minima compared to stochastic gradient descent (SGD). To improve this, we propose **SASSHA—Sharpness-aware Adaptive Second-order optimization with Stable Hessian Approximation**—designed to enhance the generalization of approximate second-order methods efficiently (See Figure 1). Our approach incorporates techniques to stabilize the training dynamics while reducing the computational cost of Hessian approximations. We evaluate SASSHA across diverse vision and natural language tasks, demonstrating that it achieves strong performance relative to existing approximate second-order methods. Moreover, SASSHA shows superior robustness to label noise compared to other practical second-order optimizers and sharpness-aware minimization techniques (Foret et al., 2021). Finally, we conduct a series of ablation studies to provide a comprehensive analysis of our method.
+
+## 2 RELATED WORKS
+
+**Second order optimization for deep learning** First-order methods such as Stochastic Gradient Descent (SGD) are popular optimization methods for deep learning due to their low per-iteration cost and good generalization (Hardt et al., 2016). However, these methods have two major drawbacks: slow convergence under ill-conditioned landscapes and high sensitivity to hyper-parameter choices such as learning rate (Demecononi & Chawla, 2020). Adaptive methods (Duchi et al., 2011; Hinton et al., 2012; Kingma & Ba, 2015) propose using empirical Fisher-type preconditioning to alleviate these issues, though recent studies suggest their insufficiency to do so (Kunstner et al., 2019). This has led to recent interest in developing efficient second-order methods tailored for large-scale problems such as Hessian-Free Inexact Newton methods (Martens et al., 2010; Kiros, 2013), stochastic quasi-Newton methods (Byrd et al., 2016; Gower et al., 2016), Gauss-Newton methods (Schraudolph, 2002; Botev et al., 2017), natural gradient methods (Amari et al., 2000), and Kronecker-factored approximations (Martens & Grosse, 2015; Goldfarb et al., 2020). However, a further need for a much scalable second-order optimizer for various large-scale deep learning scenarios has led to much recent focus on using diagonal scaling methods (Bottou et al., 2018; Yao et al., 2021; Liu et al., 2024).
+
+**Sharpness minimization for generalization** The relationship between the geometry of the loss landscape and the generalization ability of neural networks was first discussed in the work of Hochreiter & Schmidhuber (1994), and the interest in this subject has persisted over time. Expanding on this foundation, subsequent studies have explored the impact of flat regions on generalization both empirically and theoretically (Hochreiter & Schmidhuber, 1997; Keskar et al., 2017; Dziugaite & Roy, 2017; Neyshabur et al., 2017b; Dinh et al., 2017; Jiang et al., 2020). Motivated by this, various approaches have been proposed to achieve flat minima such as regularizing local entropy (Chaudhari et al., 2017), averaging model weights (Izmailov et al., 2018), explicitly regularizing sharpness by solving a min-max problem (Foret et al., 2021), and injecting anti-correlated noise (Orvieto et al., 2022), to name a few. In particular, the sharpness-aware minimization (SAM) (Foret et al., 2021) has attracted significant attention for its strong generalization performance across various domains (Chen et al., 2022; Bahri et al., 2022; Qu et al., 2022) and its robustness to label noise (Baek et al., 2024). Nevertheless, to our knowledge, the sharpness minimization scheme has not been studied to enable second-order methods to find flat minima as of yet.
+
+## 3 PRACTICAL SECOND-ORDER OPTIMIZERS CONVERGE TO SHARP MINIMA
+
+Second-order optimizers have seen rising interest in the deep learning community, and yet, crucial properties of their optimization process remain largely underexplored compared to their first-order counterparts. In particular, SGD and its bias towards the minima of low sharpness have been studied extensively in recent years, which has revealed a strong correlation with its remarkable generalization performance (Keskar et al., 2017; Ghorbani et al., 2019; Wu et al., 2022; Xie et al., 2020). This raises the following question: what minima do second-order optimizers prefer, and how do they correlate with their generalization capability? In this section, we examine through various sharpness metrics employed in recent studies and analyze their correlation with generalization performance.
+
+To measure sharpness, we introduce four metrics frequently used in the literature: maximum eigenvalue of the Hessian, the trace of Hessian, worst-case sharpness, and average sharpness (Hochreiter & Schmidhuber, 1997; Jastrzębski et al., 2018; Xie et al., 2020; Du et al., 2022b; Chen et al.,
+
+{2}------------------------------------------------
+
+Table 1: Sharpness measurements in terms of the maximum eigenvalue  $\lambda_{\max}(H)$  and the trace  $\text{tr}(H)$  of Hessian, worst-case sharpness  $\delta L_{\text{worst}}$ , and average sharpness  $\delta L_{\text{avg}}$  alongside with the generalization error  $L_{\text{val}} - L_{\text{train}}$  and the validation accuracy  $\text{Acc}_{\text{val}}$  of the solution found by six different optimizers on ResNet-32 trained on CIFAR-100. Approximate second-order optimizers tend to yield minima of high sharpness and worse generalization compared to SGD; SASSHA and M-SASSHA effectively recover this. We provide more results for other workloads from Table 2 in Appendix A where we find the same trends.
+
+|  | Sharpness |  |  |  | Generalization |  |
+|-|-|-|-|-|-|-|
+|  | $\lambda_{\max}(H)$ | $\text{tr}(H) \times 10^3$ | $\delta L_{\text{worst}}$ | $\delta L_{\text{avg}} \times 10^{-3}$ | $L_{\text{val}} - L_{\text{train}}$ | $\text{Acc}_{\text{val}}$ (%) |
+| SGD | $265_{\pm 25}$ | $7.29_{\pm 0.30}$ | $0.703_{\pm 0.132}$ | $1.31_{\pm 0.03}$ | $1.027_{\pm 0.013}$ | $69.320_{\pm 0.19}$ |
+| Sophia-H | $22797_{\pm 110857}$ | $68.15_{\pm 20.19}$ | $8.13_{\pm 3.082}$ | $19.19_{\pm 6.38}$ | $1.251_{\pm 0.020}$ | $67.760_{\pm 0.37}$ |
+| AdaHessian | $11992_{\pm 5779}$ | $46.94_{\pm 17.60}$ | $4.119_{\pm 1.136}$ | $12.50_{\pm 6.08}$ | $0.982_{\pm 0.026}$ | $68.060_{\pm 0.22}$ |
+| Shampoo | $436374_{\pm 9017}$ | $6823.34_{\pm 664.65}$ | $73.27_{\pm 12.506}$ | $49307489_{\pm 5609794}$ | $0.508_{\pm 0.007}$ | $64.077_{\pm 0.46}$ |
+| M-SASSHA | $382_{\pm 65}$ | $8.75_{\pm 0.31}$ | $2.391_{\pm 0.425}$ | $2.26_{\pm 1.66}$ | $0.628_{\pm 0.010}$ | $70.93_{\pm 0.21}$ |
+| SASSHA | $107_{\pm 40}$ | $1.87_{\pm 0.65}$ | $0.238_{\pm 0.088}$ | $0.65_{\pm 0.86}$ | $0.425_{\pm 0.001}$ | $72.143_{\pm 0.16}$ |
+
+![Figure 2: Loss landscape of minima found by each optimizer on ResNet-32/CIFAR-100 in the direction of dominant eigenvalues. The figure consists of six 3D surface plots arranged in a 2x3 grid. (a) SGD shows a relatively flat, broad minimum. (b) AdaHessian shows a sharp, narrow minimum. (c) Sophia-H shows a sharp, narrow minimum. (d) Shampoo shows a very sharp, narrow minimum. (e) SASSHA shows a relatively flat, broad minimum. (f) M-SASSHA shows a relatively flat, broad minimum. Each plot has axes representing the loss landscape in the direction of dominant eigenvalues, with a color bar indicating the loss value.](e863446d7d263c68be9402afd63668ac_img.jpg)
+
+Figure 2: Loss landscape of minima found by each optimizer on ResNet-32/CIFAR-100 in the direction of dominant eigenvalues. The figure consists of six 3D surface plots arranged in a 2x3 grid. (a) SGD shows a relatively flat, broad minimum. (b) AdaHessian shows a sharp, narrow minimum. (c) Sophia-H shows a sharp, narrow minimum. (d) Shampoo shows a very sharp, narrow minimum. (e) SASSHA shows a relatively flat, broad minimum. (f) M-SASSHA shows a relatively flat, broad minimum. Each plot has axes representing the loss landscape in the direction of dominant eigenvalues, with a color bar indicating the loss value.
+
+Figure 2: Loss landscape of minima found by each optimizer on ResNet-32/CIFAR-100 in the direction of dominant eigenvalues. Second-order optimizers can yield minima of extreme sharpness compared to SGD, while SASSHA and M-SASSHA reaches much flatter solution.
+
+2022). The maximum eigenvalue  $\lambda_{\max}(H)$  and the trace  $\text{tr}(H)$  of the Hessian are often used as standard mathematical measures for the worst-case and the average curvature computed using the power iteration method and the Hutchinson trace estimation, respectively. The other two measures of sharpness are based on the perturbation sensitivity of the loss  $(L(x^* + \epsilon) - L(x^*))$ , where the worst-case sharpness ( $\delta L_{\text{worst}}$ ) is computed with the perturbation maximizing the first-order approximation of the loss function as  $\arg \max_{\|\epsilon\| \leq \rho} L(x^* + \epsilon) = \rho \nabla L(x^*) / \|\nabla L(x^*)\|$ , whereas the average sharpness ( $\delta L_{\text{avg}}$ ) averages the loss difference over Gaussian random perturbation as  $\mathbb{E}_{z \sim \mathcal{N}(0,1)} [L(x^* + \rho z / \|z\|) - L(x^*)]$ . Here we choose  $\rho = 0.1$  for the scale of the perturbation.
+
+With these, we measure the sharpness of minima found by three approximate second-order optimizers designed for deep learning: Sophia-H (Liu et al., 2024), AdaHessian (Yao et al., 2021), and Shampoo (Gupta et al., 2018), which we compare to SGD along with our methods, SASSHA and M-SASSHA, on ResNet-32 trained on CIFAR-100. To assess the degree of generalization of these solutions, we also compute the generalization error in terms of loss (i.e.,  $\Delta L = L_{\text{val}} - L_{\text{train}}$ ) and the validation accuracy. All experiments are run over three different seeds. We report the results in Table 1.
+
+We observe that existing second-order optimizers can produce solutions with significantly higher sharpness compared to SGD, SASSHA, and M-SASSHA across all definitions of sharpness, which also correlates well with their generalization error. We also visualize the loss landscape of ResNet-32 trained with each optimizer using in the direction of dominant eigenvectors, where we observe sharp minima for second-order optimizers (see Figure 2).
+
+{3}------------------------------------------------
+
+## 4 SASSHA: SHARPNESS-AWARE ADAPTIVE SECOND-ORDER OPTIMIZATION WITH STABLE HESSIAN APPROXIMATION
+
+In the previous section, we observe that the generalization error of approximate second-order methods correlates with the sharpness of the solution. Based on this observation, we propose to incorporate sharpness minimization to improve the generalization of these approximate second-order methods. In the upcoming sections, we present a detailed explanation of various techniques used in SASSHA.
+
+### 4.1 SHARPNESS-AWARE SECOND-ORDER OPTIMIZATION
+
+Many studies have pursued to minimize sharpness during the training process (Chaudhari et al., 2017; Izmailov et al., 2018; Foret et al., 2021; Orvieto et al., 2022). Among them, Foret et al. (2021) propose taking an explicit formulation, which consists of minimizing the objective  $f$  within the whole neighborhood of  $\rho$ -ball through the following min-max problem:
+
+$$\min_{x \in \mathbb{R}^d} \max_{\|\epsilon\|_2 \leq \rho} f(x + \epsilon), \quad (1)$$
+
+where we essentially minimize a slightly perturbed objective within each point in the parameter space to reflect the sharpness of the objective on each position.
+
+Based on this, we construct our sharpness minimization technique for second-order optimization as follows. We first follow a similar procedure as Foret et al. (2021) by solving for  $\epsilon$  on the first-order approximation of the objective, which exactly solves the dual norm problem as follows:
+
+$$\epsilon_t^* = \arg \max_{\|\epsilon\|_2 \leq \rho} f(x_t) + \epsilon^\top \nabla f(x_t) = \arg \max_{\|\epsilon\|_2 \leq \rho} \epsilon^\top \nabla f(x_t) = \rho \frac{\nabla f(x_t)}{\|\nabla f(x_t)\|_2}. \quad (2)$$
+
+We plug this back to yield the following perturbed objective function:
+
+$$\tilde{f}_t(x) := f\left(x + \rho \frac{\nabla f(x_t)}{\|\nabla f(x_t)\|_2}\right),$$
+
+which shifts the point of the approximately highest function value within the neighborhood to the current iterate. This essentially penalizes the objective by sharpness; *i.e.* the more drastic the function changes within the neighborhood of the current iterate, the stronger the penalization becomes.
+
+With this sharpness-penalized objective, we proceed to make a second-order Taylor approximation:
+
+$$x_{t+1} = \arg \min_x \tilde{f}_t(x_t) + \nabla \tilde{f}_t(x_t)^\top (x - x_t) + (x - x_t)^\top \tilde{H}_t(x_t) (x - x_t), \quad (3)$$
+
+where  $\tilde{H}_t$  denotes the Hessian of  $\tilde{f}_t$ . Using the first-order optimality condition, we derive the basis update rule for our sharpness-aware second-order optimizer:
+
+$$\begin{aligned} x_{t+1} &= x_t - \tilde{H}_t(x_t)^{-1} \nabla \tilde{f}_t(x_t) \\ &= x_t - H\left(x_t + \rho \frac{\nabla f(x_t)}{\|\nabla f(x_t)\|_2}\right)^{-1} \nabla f\left(x_t + \rho \frac{\nabla f(x_t)}{\|\nabla f(x_t)\|_2}\right), \end{aligned} \quad (4)$$
+
+where  $H$  denotes the Hessian of the original objective function  $f$ . Here, instead of directly computing the exact Hessian which is prohibitively expensive, we employ the diagonal approximation of the Hessian estimated via Hutchinson’s method (denoted as  $\tilde{H}$ ) with the exponential moving average, which is a standard practice in deep learning since it only requires one additional backpropagation (Yao et al., 2021; Liu et al., 2024).
+
+### 4.2 IMPROVING STABILITY
+
+**Avoiding critical points** The objective of training deep neural networks is known to be highly non-convex with saddle points and local maxima (Dauphin et al., 2014; Choromanska et al., 2015). One problem that arises from naively applying the approach of Section 4.1 to a non-convex objective is that it can ascend in the directions of negative Hessian eigenvalues towards saddle points or local maxima, due to the first-order optimality condition being valid only when all stationary points are minima. While this classical issue of naive second-order optimizers has led to the introduction of
+
+{4}------------------------------------------------
+
+various techniques such as damping (Levenberg, 1944; Marquardt, 1963), positive semi-definite approximations (Amari et al., 2000), clipping (Nocedal & Wright, 1999; Liu et al., 2024), cubic regularization (Nesterov & Polyak, 2006), etc., we follow prior works of Becker et al. (1988); Yao et al. (2021) to apply the absolute function to adjust the negative entries of the diagonal Hessian to be positive, *i.e.*
+
+$$|\hat{H}| := \sum_{i=1}^d |\hat{H}_{ii}| \mathbf{e}_i \mathbf{e}_i^\top \quad (5)$$
+
+where  $\hat{H}_{ii}$  and  $\mathbf{e}_i$  are the  $i^{\text{th}}$  diagonal entry of the approximate diagonal Hessian and the  $i^{\text{th}}$  standard basis vector, respectively. Here the basic idea is that inverting the sign of the negative eigenvalues will turn saddle points into repellers while achieving the same optimal rescaling as Newton’s method (Nocedal & Wright, 1999; Murray, 2010; Dauphin et al., 2014; Wang et al., 2013), which we directly apply to our diagonal Hessian approximation. We empirically validate the effectiveness of this approach via ablation studies in Appendix G.1.
+
+**Alleviating divergence** Diagonal Hessian estimations are known to sometimes yield overly large steps when they underestimate the curvature (Dauphin et al., 2015). While this generally applies to all approximate second-order optimizers, this instability seems to be more present under sharpness minimization. We believe this is due to smaller top Hessian eigenvalue  $\lambda_1$  from sharpness minimization (Agarwala & Dauphin, 2023; Shin et al., 2024) yielding smaller estimated diagonal entries on average:
+
+$$\mathbb{E} \left[ \frac{1}{d} \sum_{i=1}^d \hat{H}_{ii} \right] = \frac{1}{d} \sum_{i=1}^d \mathbb{E}[\hat{H}]_{ii} = \frac{\text{tr}(H)}{d} = \frac{1}{d} \sum_{i=1}^d \lambda_i \leq \lambda_1,$$
+
+which pushes them closer to zero yielding numerical instabilities during inversion in tandem with curvature underestimations, causing increased training failures. To address this issue, we propose square rooting the Hessian preconditioner, *i.e.*,  $|\hat{H}|^{1/2}$ . Its benefit can be understood from two perspectives. First, the square root can alleviate instability from near-zero diagonal Hessian entries by selectively increasing the magnitude of the near-zero diagonal Hessian entries in the denominator (*i.e.*,  $h < \sqrt{h}$  if  $0 < h < 1$ ). Also, it can be interpreted as geometrically interpolating the preconditioning matrix toward the identity matrix ( $\lim_{\alpha \rightarrow 0} H^\alpha = I$ ), making the optimizer more akin to unpreconditioned first-order methods (Amari et al., 2021). This adjustment weakens the dependency of the optimizer on the preconditioner and helps suppress the influence of any pathological estimations that may occur. We present an empirical analysis of our square-rooted preconditioning in Section 6.1.
+
+### 4.3 IMPROVING EFFICIENCY VIA LAZY HESSIAN UPDATE
+
+While the diagonal Hessian estimator introduced in Section 4.1 significantly reduces the Hessian computations, it still requires at least twice as much backpropagation compared to gradient-based methods. Here we attempt to further alleviate this by lazily computing the Hessian every  $k$  steps:
+
+$$D_t = \begin{cases} \beta_2 D_{t-1} + (1 - \beta_2) |\hat{H}(x_t + \epsilon_t^*)| & \text{if } t \bmod k = 1 \\ D_{t-1} & \text{otherwise} \end{cases}, \quad (6)$$
+
+where  $D_t$  and  $\beta_2$  are the moving average of the Hessian and its hyperparameter. This reduces the overhead from additional Hessian computation by  $1/k$  (see Appendix G.3 for detailed cost analysis). Across all evaluations in Section 5 except for language finetuning, we reuse the Hessian estimate for  $k = 10$  iterations.
+
+However, extensive Hessian reusing will lead to significant performance degradation since it would no longer accurately reflect the current curvature (Doikov et al., 2023). Interestingly, SASSHA is quite resilient against prolonged reusing, keeping its performance relatively high over longer Hessian reusing compared to other approximate second-order methods. Our investigation reveals that along the trajectory of SASSHA, the Hessian tends to change less frequently over a given number of iterations compared to existing alternatives. We hypothesize that the introduction of sharpness minimization plays an integral role in this phenomenon by biasing the optimization path toward regions with lower curvature change, allowing the prior Hessian to remain relevant over more extended steps. We provide a detailed empirical analysis of the lazy Hessian updating in Section 6.2.
+
+{5}------------------------------------------------
+
+Table 2: Image classification results of various optimization methods in terms of final validation accuracy (mean $\pm$ std) across different models on the CIFAR-10, CIFAR-100, and ImageNet. SASSHA consistently outperforms others in all settings.
+
+|  | CIFAR10 |  | CIFAR100 |  | ImageNet |  |
+|-|-|-|-|-|-|-|
+|  | ResNet-20 | ResNet-32 | ResNet-32 | WRN-28-10 | ResNet-50 | ViT-s-32 |
+| SGD | 92.027 $\pm$ 0.32 | 92.693 $\pm$ 0.06 | 69.320 $\pm$ 0.19 | 80.063 $\pm$ 0.15 | 75.581 $\pm$ 0.05 | 62.904 $\pm$ 0.36 |
+| AdamW | 92.040 $\pm$ 0.11 | 92.420 $\pm$ 0.13 | 68.783 $\pm$ 0.22 | 79.090 $\pm$ 0.35 | 75.375 $\pm$ 0.08 | 66.459 $\pm$ 0.15 |
+| AdaHessian | 92.003 $\pm$ 0.17 | 92.483 $\pm$ 0.15 | 68.060 $\pm$ 0.22 | 76.917 $\pm$ 0.24 | 73.640 $\pm$ 0.16 | 66.417 $\pm$ 0.23 |
+| Sophia-H | 91.814 $\pm$ 0.27 | 91.985 $\pm$ 0.08 | 67.760 $\pm$ 0.37 | 79.359 $\pm$ 0.23 | 72.064 $\pm$ 0.49 | 62.436 $\pm$ 0.36 |
+| Shampoo | 88.547 $\pm$ 0.83 | 90.227 $\pm$ 0.24 | 64.077 $\pm$ 0.46 | 74.063 $\pm$ 1.28 | * | * |
+| <b>SASSHA</b> | <b>92.983<math>\pm</math>0.05</b> | <b>94.093<math>\pm</math>0.24</b> | <b>72.143<math>\pm</math>0.16</b> | <b>83.543<math>\pm</math>0.08</b> | <b>76.429<math>\pm</math>0.18</b> | <b>69.195<math>\pm</math>0.30</b> |
+| <b>M-SASSHA</b> | <b>92.363<math>\pm</math>0.23</b> | <b>93.177<math>\pm</math>0.30</b> | <b>70.930<math>\pm</math>0.21</b> | <b>81.533<math>\pm</math>0.27</b> | <b>76.004<math>\pm</math>0.04</b> | <b>68.038<math>\pm</math>0.14</b> |
+
+\*Omitted due to computation/memory requirements exceeding available resources.
+
+![Figure 3: Image classification results for various optimization methods in terms of validation accuracy curve across different models on the CIFAR-10, CIFAR-100, and ImageNet. The figure contains six subplots showing accuracy (%) vs. Epoch for different model-dataset combinations: CIFAR-10 / ResNet-20, CIFAR-10 / ResNet-32, CIFAR-100 / ResNet-32, CIFAR-100 / WRN-28-10, ImageNet / ResNet-50, and ImageNet / ViT-s-32. Each plot compares SASSHA (red line) against other methods: M-SASSHA (magenta), SGD (blue), AdaHessian (green), AdamW (orange), Sophia-H (yellow), and Shampoo (purple). In all cases, SASSHA achieves the highest accuracy, often reaching over 90% on CIFAR-10 and over 70% on ImageNet, while other methods lag behind.](ac99eff233b8fe51d30f499e7413c345_img.jpg)
+
+Figure 3: Image classification results for various optimization methods in terms of validation accuracy curve across different models on the CIFAR-10, CIFAR-100, and ImageNet. The figure contains six subplots showing accuracy (%) vs. Epoch for different model-dataset combinations: CIFAR-10 / ResNet-20, CIFAR-10 / ResNet-32, CIFAR-100 / ResNet-32, CIFAR-100 / WRN-28-10, ImageNet / ResNet-50, and ImageNet / ViT-s-32. Each plot compares SASSHA (red line) against other methods: M-SASSHA (magenta), SGD (blue), AdaHessian (green), AdamW (orange), Sophia-H (yellow), and Shampoo (purple). In all cases, SASSHA achieves the highest accuracy, often reaching over 90% on CIFAR-10 and over 70% on ImageNet, while other methods lag behind.
+
+Figure 3: Image classification results for various optimization methods in terms of validation accuracy curve across different models on the CIFAR-10, CIFAR-100, and ImageNet. SASSHA consistently outperforms others in all settings.
+
+### 4.4 FURTHER EXTENSION AND ANALYSES
+
+We further provide simple extensions and supplementary analyses:
+
+1. M-SASSHA, a simple extension to SASSHA that removes additional gradient computation in sharpness minimization and achieves computational costs comparable to first-order methods, is provided in Appendix B.
+2. An algorithm table for SASSHA, along with comparisons to other approximate second-order methods, is provided in Appendix C.
+3. A preliminary convergence analysis of SASSHA is provided in Appendix D.
+
+## 5 EVALUATIONS
+
+In this section, we compare SASSHA against existing approximate second-order optimizers and demonstrate its superior generalization capabilities. To achieve this, we conduct extensive evaluations across multiple domains, including vision and natural language tasks, as well as under challenging conditions such as label noise for image classification. Specifically, we first compare SASSHA to the following baselines: AdaHessian (Yao et al., 2021), Sophia-H (Liu et al., 2024), AdamW (Loshchilov & Hutter, 2018), Shampoo Gupta et al. (2018), and SGD. We describe experiment settings in detail in Appendix E.
+
+{6}------------------------------------------------
+
+Table 4: Language finetuning results for various optimizers on SqueezeBERT evaluate on the GLUE benchmark. SASSHA achieves better results than AdamW and AdaHessian and compares competitively with Sophia-H.
+
+|  | CoLA | SST-2 | MRPC | STS-B | QQP | MNLI | QNLI | RTE |
+|-|-|-|-|-|-|-|-|-|
+|  | M corr. | Acc | Acc / F1 | S/P corr. | F1 / Acc | mat/m.mat | Acc | Acc |
+| AdamW | 48.63 | 90.25 | 86.27 / 90.21 | 88.36 / 88.40 | 86.63 / 89.96 | 81.20 / 82.20 | 90.13 | 70.04 |
+| AdaHessian | 48.36 | 90.60 | 86.52 / 90.43 | 88.72 / 89.01 | 87.41 / 90.65 | 81.15 / 82.10 | 90.02 | 71.12 |
+| Sophia-H | <b>49.12</b> | <b>92.32</b> | 86.03 / 90.19 | 88.87 / 89.13 | 87.70 / 90.84 | 81.68 / <b>82.54</b> | <b>90.26</b> | 72.56 |
+| SASSHA | 47.19 | 91.51 | <b>87.75 / 91.23</b> | <b>89.29 / 89.66</b> | <b>87.93 / 91.00</b> | <b>81.74</b> / 82.12 | 89.86 | <b>73.29</b> |
+| M-SASSHA | <b>48.84</b> | <b>91.28</b> | <b>89.23 / 92.22</b> | 88.29 / 88.39 | <b>87.91 / 90.97</b> | 81.64 / 82.09 | 89.84 | <b>72.92</b> |
+
+### 5.1 IMAGE CLASSIFICATION
+
+We evaluate SASSHA in comparison to other optimizers on image classification tasks on CIFAR-10, CIFAR-100, and ImageNet datasets (Deng et al., 2009). We train various models including ResNet-20, ResNet-32, ResNet-50 (He et al., 2016), WideResNet-28-10 (WRN-28-10) (Zagoruyko & Komodakis, 2016) and ViT-s-32 (Beyer et al., 2022). We use standard inception-style data augmentations during training without the use of advanced data augmentation techniques (DeVries & Taylor, 2017) or regularization methods (Gastaldi, 2017; Yamada et al., 2019) to focus exclusively on the effect of sharpness minimization. Results are presented in Table 2 and Figure 3. Additionally, we provide the validation loss curves in Appendix F for further insight.
+
+We find that our method achieves the best validation performance across all settings. Particularly, SASSHA achieves a 1% to 4% increase in performance compared to best-performing adaptive or second-order optimizers. Also, M-SASSHA outperforms approximate second-order optimizers by 0.3% to 2% with twice as less computational overheads.
+
+### 5.2 LANGUAGE PRETRAINING
+
+A recent study has demonstrated the potential of approximate second-order methods on pretraining language models (Liu et al., 2024), a core task in modern machine learning for constructing large-scale foundational models. Motivated by this, here we examine how SASSHA compares with existing optimizers on language model pretraining. Specifically, we train GPT1-mini, a scaled-down variant of GPT1 (Radford et al., 2019) with four attention layers instead of the original twelve, with SASSHA and various baseline optimizers on the next word prediction task of Wikitext-2 dataset (Merity et al., 2022) and compare the final test perplexity (refer to Appendix E for detailed experimental settings). The results are presented in Table 3. Our results show that SASSHA achieves the lowest perplexity among all methods, with M-SASSHA following closely, highlighting improved language modeling capabilities. In addition, unlike Sophia-H, the leading baseline, whose performance is largely restricted to its intended language domains (Liu et al., 2024), SASSHA also proves highly effective in image classification (see Table 2).
+
+Table 3: Language pretraining results. SASSHA achieves lower perplexity compared to other second-order methods.
+
+| Optimizer | Perplexity ↓ |
+|-|-|
+| AdamW | 175.06 |
+| AdaHessian | 407.69 |
+| Shampoo | 1727.75 |
+| Sophia-H | 125.60 |
+| <b>SASSHA</b> | <b>122.40</b> |
+| <b>M-SASSHA</b> | <b>125.01</b> |
+
+### 5.3 LANGUAGE FINETUNING
+
+To comprehensively evaluate SASSHA, we extend our experiments to include eight diverse tasks from the GLUE benchmark (Wang et al., 2018). We finetune SqueezeBERT (Iandola et al., 2020) on these tasks and report the final performance on the development set, as presented in Table 4. Our method achieves higher scores compared to other optimizers across nearly all tasks. Notably, M-SASSHA exhibited better performance than AdamW (Loshchilov & Hutter, 2018), the standard optimizer for finetuning language models, on several tasks—even though M-SASSHA has a computational cost similar to AdamW. Additionally, SASSHA records higher scores than Sophia-H (Liu et al., 2024), an optimizer specialized for language models, on many tasks.
+
+{7}------------------------------------------------
+
+Table 5: Robustness to label noise. Here we measure the validation accuracy under various levels of label noise using ResNet-32 trained on CIFAR-100 and CIFAR-10. SASSHA and M-SASSHA shows much robust performance under label noise.
+
+| Noise level | CIFAR-100 |  |  | CIFAR-10 |  |  |
+|-|-|-|-|-|-|-|
+|  | 20% | 40% | 60% | 20% | 40% | 60% |
+| SGD | $62.18_{\pm 0.06}$ | $55.78_{\pm 0.55}$ | $45.53_{\pm 0.78}$ | $89.91_{\pm 0.87}$ | $87.26_{\pm 0.4}$ | $82.72_{\pm 1.59}$ |
+| SAM | $65.53_{\pm 0.11}$ | $61.20_{\pm 0.17}$ | $51.93_{\pm 0.47}$ | $92.27_{\pm 0.14}$ | $90.11_{\pm 0.25}$ | $85.79_{\pm 0.30}$ |
+| Sophia-H | $62.34_{\pm 0.47}$ | $56.54_{\pm 0.28}$ | $45.37_{\pm 0.27}$ | $89.93_{\pm 0.001}$ | $87.30_{\pm 0.51}$ | $82.78_{\pm 1.43}$ |
+| AdaHessian | $63.06_{\pm 0.25}$ | $58.37_{\pm 0.13}$ | $46.02_{\pm 1.96}$ | $90.11_{\pm 0.001}$ | $86.88_{\pm 0.004}$ | $83.25_{\pm 0.004}$ |
+| Shampoo | $58.85_{\pm 0.66}$ | $53.82_{\pm 0.71}$ | $42.91_{\pm 0.99}$ | $88.14_{\pm 0.29}$ | $85.15_{\pm 0.61}$ | $81.16_{\pm 0.30}$ |
+| <b>SASSHA</b> | <b><math>66.78_{\pm 0.47}</math></b> | <b><math>61.97_{\pm 0.27}</math></b> | <b><math>53.98_{\pm 0.57}</math></b> | <b><math>92.49_{\pm 0.11}</math></b> | <b><math>90.29_{\pm 0.11}</math></b> | <b><math>86.50_{\pm 0.08}</math></b> |
+| M-SASSHA | $66.10_{\pm 0.26}$ | $61.13_{\pm 0.28}$ | $52.45_{\pm 0.34}$ | $91.27_{\pm 0.31}$ | $88.85_{\pm 0.31}$ | $85.17_{\pm 0.24}$ |
+
+### 5.4 ROBUSTNESS TO LABEL NOISE
+
+We evaluate the robustness of our method against label noise (Natarajan et al., 2013), a common issue in real-world scenarios where the training data is incorrectly labeled. To this end, we compare the validation performance of different optimizers on ResNet-32 trained with the CIFAR datasets under various noise levels. The results, summarized in Table 5, show that SASSHA outperforms other optimizers across all noise levels with minimal accuracy degradation; at most outperform by 8% in 60% noise ratio compared to SGD.
+
+Interestingly, our method surpasses SAM (Foret et al., 2021), which is known to be one of the most robust techniques against label noise (Baek et al., 2024). We hypothesize that SASSHA’s superior robustness stems from the combined benefits of SAM and second-order methods. Specifically, SAM enhances robustness by applying adversarial perturbations to the weights and giving more importance to clean data during optimization, making the model more resistant to label noise (Foret et al., 2021; Baek et al., 2024). Also, recent research indicates that second-order optimizers are robust to label noise (Amari et al., 2021) due to appropriate preconditioning that reduces the variance caused by label noise in the population risk. We believe these two complementary mechanisms work synergistically within SASSHA to enhance its robustness.
+
+## 6 ABLATIONS
+
+### 6.1 STABILIZING EFFECT OF SQUARE-ROOT
+
+In this study, we examine the stabilizing effect of the square-root function on SASSHA. Precisely, we conduct multiple runs of SASSHA without the square-root (No-Sqrt) over different random seeds for training ResNet-32 on CIFAR-100, which reveals instances where the training loss diverges. To gain further insight into this phenomenon, we measure the update size and the preconditioned step size (i.e.,  $\|\eta D^{-1}\|_F$ , where  $D$  is either  $|\hat{H}|^{1/2}$  or  $|\hat{H}|$  and  $\|\cdot\|_F$  denotes the Frobenius norm) of each iteration, along with the density of the diagonal precondition entry values  $D_{ii}$  at step 100 to 250. Results are presented in Figure 4. We first observe that the training loss diverges precisely when the update size (Figure 4b), particularly the preconditioned step size (Figure 4c), starts to spike around step 200, suggesting that the preconditioner reaches some critical condition at this point. Further investigation into individual preconditioner entries (Figure 4d) reveals that this is likely due to a progressive increase in near-zero diagonal Hessian entries from the sharpness minimization penalizing the Hessian eigenvalues, which could have caused instability when the preconditioner is inverted. With the inclusion of the square-root, we can see that the values within the preconditioner are less situated near zero, effectively suppressing the risk of large updates thereby stabilizing the training process.
+
+### 6.2 ANALYZING LAZY HESSIAN UPDATING
+
+**Effect of Hessian update interval  $k$**  Here we compare how different approximate second-order optimizers, specifically SASSHA, AdaHessian, and Sophia-H, perform under different levels of lazy updating on ResNet-32 trained on CIFAR-100. We vary the update interval  $k$  from 1 to 100 and see how each optimizer performs. As shown in Figure 5a, SASSHA consistently outperforms across all
+
+{8}------------------------------------------------
+
+![Figure 4: Effect of square root on training dynamics. (a) Train loss: SASSHA (red) decreases steadily, while No-Sqrt (purple) spikes to 10^15 at step 200. (b) Update size: SASSHA (red) stays around 10^0, while No-Sqrt (purple) spikes to 10^15. (c) Preconditioned step size: SASSHA (red) stays around 10^0, while No-Sqrt (purple) spikes to 10^14. (d) Precond. distribution: SASSHA (red) has a sharp peak at 0.05, while No-Sqrt (purple) is a broad distribution centered around 0.05.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4: Effect of square root on training dynamics. (a) Train loss: SASSHA (red) decreases steadily, while No-Sqrt (purple) spikes to 10^15 at step 200. (b) Update size: SASSHA (red) stays around 10^0, while No-Sqrt (purple) spikes to 10^15. (c) Preconditioned step size: SASSHA (red) stays around 10^0, while No-Sqrt (purple) spikes to 10^14. (d) Precond. distribution: SASSHA (red) has a sharp peak at 0.05, while No-Sqrt (purple) is a broad distribution centered around 0.05.
+
+Figure 4: Effect of square root on (a) the train loss, (b) the update size, (c) the preconditioned step size, and (d) the distribution of preconditioner values of SASSHA without the square-root (No-Sqrt) and the original SASSHA on ResNet-32/CIFAR-100. The sharpness-minimization alone in No-Sqrt drives diagonal Hessian values towards zero, leading to divergent behaviors. The square-root helps counteract this effect, thereby stabilizing the training of SASSHA.
+
+![Figure 5: Effect of sharpness minimization on lazy Hessian training. (a) Lazy Hessian update: Accuracy (%) vs H update interval. SASSHA (red) stays around 70%, while Baseline (blue) drops to 20% at interval 100. (b) Local H sensitivity: Max ||H(x + rho*delta/||delta||_2) - H(x)||_F vs Epoch. SASSHA (red) stays around 10^1, while Baseline (blue) increases to 10^4. (c) H change between updates: ||H(x_t) - H(x_{t-10})||_F vs Step (x10^4). SASSHA (red) stays around 10^-1, while Baseline (blue) increases to 10^1.](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 5: Effect of sharpness minimization on lazy Hessian training. (a) Lazy Hessian update: Accuracy (%) vs H update interval. SASSHA (red) stays around 70%, while Baseline (blue) drops to 20% at interval 100. (b) Local H sensitivity: Max ||H(x + rho\*delta/||delta||\_2) - H(x)||\_F vs Epoch. SASSHA (red) stays around 10^1, while Baseline (blue) increases to 10^4. (c) H change between updates: ||H(x\_t) - H(x\_{t-10})||\_F vs Step (x10^4). SASSHA (red) stays around 10^-1, while Baseline (blue) increases to 10^1.
+
+Figure 5: Effect of sharpness minimization on lazy Hessian training for ResNet-32 trained on CIFAR-100. (a) Ablation of Hessian update interval for SASSHA, SASSHA without sharpness minimization and square-root (Baseline), AdaHessian, and Sophia-H. SASSHA remains effective even with a Hessian update interval of 100. (b) the local Hessian sensitivity from Equation (7) and (c) The norm of the difference of Hessian between every 10 iterations. SASSHA mostly stays within the region where the Hessian is less sensitive.
+
+update intervals, followed by Sophia-H by a margin of almost 5% accuracy difference. AdaHessian is the most vulnerable under lazy Hessian update, showing a rapid decline in performance even with small intervals.
+
+**Sharpness minimization can improve lazy Hessian training** Why would SASSHA be so robust under a lazy Hessian update? We first reasonably assume that this is due to the presence of sharpness-minimization, as it is the primary component differentiating SASSHA from other approximate second-order optimizers. To verify our hypothesis, we perform the same ablation on the Hessian update interval on the SASSHA without sharpness minimization (Baseline<sup>1</sup>), which we report in Figure 5a. We indeed observe that Baseline doesn’t perform as well as SASSHA under lazy Hessian training, showing similar performance to AdaHessian.
+
+Furthermore, we hypothesize that sharpness minimization aids the lazy Hessian update by biasing the optimization path toward the region of low curvature sensitivity. To quantify this, we define local Hessian sensitivity as the maximum change in Hessian induced from normalized random perturbations:
+
+$$\max_{\delta \sim \mathcal{N}(0,1)} \left\| \hat{H} \left( x + \rho \frac{\delta}{\|\delta\|_2} \right) - \hat{H}(x) \right\|_F \quad (7)$$
+
+where  $x$ ,  $\delta$ ,  $\rho$ , and  $\|\cdot\|_F$  each denotes a point on the optimization path, the Gaussian random perturbation, the length of the normalized perturbation, and the Frobenius norm, respectively. A smaller Hessian sensitivity would suggest reduced variability in the loss curvature, leading to greater relevance of the current Hessian for subsequent optimization steps.
+
+<sup>1</sup>We also remove the square root, as its purpose of stabilization is relevant only in the context of employing sharpness minimization.
+
+{9}------------------------------------------------
+
+To check the sanity of Equation (7), we see if this aligns with a more direct measure of lazy updatability: the Hessian difference between current Hessian and previous Hessian computed  $k$  iteration earlier:
+
+$$\|\hat{H}(x_t) - \hat{H}(x_{t-k})\|_F. \quad (8)$$
+
+An optimizer with a higher Hessian difference would mean that prior Hessian would easily be outdated, making lazy updating harder to execute. We measure these two metrics with  $\rho = 0.1$  and  $k = 10$  and report the results in Figure 5b and 5c.
+
+Our results show that SASSHA keeps both of these metrics relatively low throughout most of the training process, while Baseline yields higher Hessian differences. This low Hessian sensitivity significantly improves the reusability of Hessian information compared to AdaHessian, which supports our assumption. However, Sophia, despite its relatively robust lazy Hessian performance, shows a high value of Hessian differences indicative of lower reusability. Interestingly, this difference becomes much smaller when Sophia’s per-coordinate Hessian clipping technique is applied to it. This supports the claim by Liu et al. (2024) that clipping, like SASSHA, is also a powerful technique that helps with lazy Hessian updates.
+
+### 6.3 COMPARISON WITH SAM
+
+Thus far, our primary focus has centered on validating the effectiveness of SASSHA in the context of approximate second-order optimization. While this remains the principal objective of our study, here we additionally compare SASSHA with SAM to highlight its potential benefits. Specifically, we evaluate two versions of SAM with SGD and AdamW respectively as its base optimizers, and compare them with SASSHA for training ViT-s-32 on ImageNet. The results are provided in Table 6. First, we find that SASSHA performs on par with or better than SAM, even when SAM is given more data budgets or wall-clock training time. This is potentially due to the benefit of the second-order scheme in SASSHA that accelerates the optimization process. Also, we observe that SAM shows a performance discrepancy between different base optimizers. Notably, one needs to select which base optimizer to use when employing SAM unlike SASSHA. Additional comparisons on other models and datasets are presented in Appendix G.2.
+
+Table 6: SASSHA vs. SAM. SASSHA achieves better performance than SAM even when SAM is allocated more data budgets or longer training time.
+
+|  | Epoch | Time (s) | Accuracy (%) |
+|-|-|-|-|
+| SAM <sub>SGD</sub> | 180 | 220,852 | $65.403_{\pm 0.03}$ |
+| SAM <sub>AdamW</sub> | 180 | 234,374 | $68.706_{\pm 0.16}$ |
+| <b>SASSHA</b> | <b>90</b> | <b>123,948</b> | <b><math>69.195_{\pm 0.30}</math></b> |
+
+### 6.4 ADDITIONAL ABLATIONS
+
+We provide more ablation results including the effect of the absolute function and a comprehensive cost analysis of SASSHA and M-SASSHA in Appendix G.2.
+
+## 7 CONCLUSION
+
+In this work, we have addressed the poor generalization issue of approximate second-order methods by proposing SASSHA, which explicitly minimizes sharpness within approximate second-order optimization, achieving competitive performance for various standard deep learning tasks. Nonetheless, there are many remaining possibilities for further improvements which may include, but are not limited to, evaluating on a more extreme scale and other data distributions in different domains, and developing theoretical properties such as convergence rate and implicit bias, all to more rigorously confirm the value of SASSHA. Seeing it as an exciting opportunity, we are planning to investigate further in future work.
+
+## REPRODUCIBILITY
+
+We made extensive efforts to ensure that our experimental results are reproducible, including providing comprehensive descriptions of all experimental configurations and hyperparameters (Appendix E), details of the hardware used during training and evaluation (Appendix H), as well as the use of, and providing links to, publicly available datasets and source codes for various algorithms used in our experiments. After publication, we also plan to release our source code, which will include algorithm
+
+ Rest of paper (reference and Appendix) is removed.

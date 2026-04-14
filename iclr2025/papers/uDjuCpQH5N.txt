@@ -1,0 +1,367 @@
+
+
+{0}------------------------------------------------
+
+# DO UNLEARNING METHODS REMOVE INFORMATION FROM LANGUAGE MODEL WEIGHTS?
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Large Language Models’ knowledge of how to perform cyber-security attacks, create bioweapons, and manipulate humans poses risks of misuse. Previous work has proposed methods to *unlearn* this knowledge. Historically, it has been unclear whether *unlearning* techniques are removing information from the model weights or just making it harder to access. To disentangle these two objectives, we propose an adversarial evaluation method to test for the removal of information from model weights: we give an attacker access to some facts that were supposed to be removed, and using those, the attacker tries to recover other facts from the same distribution that cannot be guessed from the accessible facts. We show that using fine-tuning on the accessible facts can recover 88% of the pre-unlearning accuracy when applied to current unlearning methods, revealing the limitations of these methods in removing information from the model weights.
+
+## 1 INTRODUCTION
+
+During pretraining, Large Language Models (LLMs) acquire many capabilities, both intended and unintended (Wei et al., 2022). These capabilities have raised concerns about LLMs acquiring dangerous capabilities that can be exploited by malicious actors, such as assisting in cyber-attacks or creating bioweapons (Fang et al., 2024). Acknowledging these threats, the Executive Order on Artificial Intelligence (White House, 2023) has emphasized the importance of responsible development of AI models.
+
+To address these concerns, LLMs are typically trained to refuse to engage in dangerous activities. Refusal is vulnerable to jailbreak techniques (Wei et al., 2023; Zou et al., 2023; Liu et al., 2024b) and other attacks. We can address these vulnerabilities by ensuring that dangerous knowledge is not present in the weights. Filtering out dangerous knowledge from the training data of LLMs and rerunning pretraining is impractical given the size of the pretraining datasets. Machine unlearning was suggested to remove harmful knowledge from models (Si et al., 2023; Li et al., 2024b), offering a stronger safety assurance relative to refusal.
+
+![Figure 1: Our approach to evaluate unlearning. The left side shows a four-step approach: 1. Take independent facts, split them into T and V. 2. Unlearn on T and V. 3. RTT: Retrain on T. 4. Evaluate on V. The right side shows a bar chart of Accuracy on V for three conditions: Original + RTT (approx. 70), Unlearned (approx. 25), and Unlearned + RTT (approx. 65). A dashed orange line at approx. 28 represents the baseline accuracy. A dashed blue line at approx. 70 represents the original accuracy. The difference between the baseline and the Unlearned + RTT bar is labeled 'Hidden Knowledge'.](1066b22ea190b81c91c3441ea7618236_img.jpg)
+
+| Condition | Accuracy on V |
+|-|-|
+| Original + RTT | ~70 |
+| Unlearned | ~25 |
+| Unlearned + RTT | ~65 |
+
+Figure 1: Our approach to evaluate unlearning. The left side shows a four-step approach: 1. Take independent facts, split them into T and V. 2. Unlearn on T and V. 3. RTT: Retrain on T. 4. Evaluate on V. The right side shows a bar chart of Accuracy on V for three conditions: Original + RTT (approx. 70), Unlearned (approx. 25), and Unlearned + RTT (approx. 65). A dashed orange line at approx. 28 represents the baseline accuracy. A dashed blue line at approx. 70 represents the original accuracy. The difference between the baseline and the Unlearned + RTT bar is labeled 'Hidden Knowledge'.
+
+Figure 1: **Our approach to evaluate unlearning:** we try to recover potentially hidden facts by retraining on facts independent of the facts used for evaluation but coming from the same distribution (left). Using this procedure, we find that we are able to recover a large fraction of performance when using state-of-the-art unlearning methods like RMU (Li et al., 2024b) (right). We show examples of independent facts in Appendix J.
+
+{1}------------------------------------------------
+
+The evaluations of unlearning methods are mostly output-based, which fails to determine if the knowledge is removed from the model weights. Lynch et al. (2024b) showed that even after applying the unlearning method suggested by Eldan & Russinovich (2023), information could be recovered from the model using multiple methods, including simply changing the format of questions. Even when applying RMU (Li et al., 2024b) (a state-of-the-art unlearning technique that targets removing harmful knowledge), harmful information can still be recovered using jailbreaks (Li et al., 2024a). To develop reliable unlearning methods, we need to develop robust evaluations to guide the research process.
+
+Our contributions:
+
+1. **We present a framework for evaluating the extent to which unlearning methods remove knowledge from the weights.** We create new datasets and modify existing ones to fit the desired criteria of our framework. Using our framework and these datasets, we are able to quantify the amount of knowledge that was hidden but not removed from model weights.
+2. **We run evaluations on common unlearning methods.** This includes Gradient Ascent, RMU, and training on incorrect facts. We show that after performing our attack to recover hidden information, **we can recover at least 88% of the pre-unlearning accuracy** for all the unlearning methods we evaluate when the unlearning maintains good performance on non-unlearned tasks.
+3. **We stress-test our approach in situations where hidden knowledge is present but potentially harder to recover.**
+
+## 2 RELATED WORK
+
+**Refusal in LLMs** Reinforcement Learning with Human Feedback (RLHF) (Christiano et al., 2023) is used to mitigate harmful behaviors in language models, but RLHF is not able to protect against jailbreaks (Wei et al., 2023), in-context learning attacks (Anil et al., 2024), few-shot fine-tuning (Qi et al., 2023), and unforeseen misbehavior (Roose, 2023).
+
+**Unlearning in LLMs** Several unlearning methods were introduced with the hope of solving the shortcomings of RLHF. Gradient Ascent modifies the standard training procedure by negating the loss term, which increases the loss for the information that needs to be unlearned (Jang et al., 2022). Eldan & Russinovich (2023) introduced a method to unlearn information about the Harry Potter universe by estimating the output of the model if it hadn’t been trained on Harry Potter-related data and training on this estimated output. Li et al. (2024b) introduced Representation Misdirection for Unlearning (RMU) that unlearns knowledge by perturbing the activations of the model in a subset of the models’ layers for harmful prompts while preserving the activations for non-harmful prompts.
+
+**Black-box unlearning evaluations** Previous work has measured the success of unlearning using performance on a task related to the unlearned information, or output similarity to that of a model that was not trained on the information to be unlearned (Nguyen et al., 2022; Lynch et al., 2024b; Liu et al., 2024a), but these approaches measure the propensity of the LLM to use the unlearned knowledge, failing to capture hidden knowledge. Liu et al. (2024a) suggests two metrics to assess unlearning effectiveness: evaluating unlearning on harder cases (e.g., jailbreaks, queries in different languages) and Membership Inference Attacks (MIA) (Shokri et al., 2016). Since it is not possible to try all jailbreaks, evaluating jailbreak robustness is difficult: even if some attacks fail, others may succeed. For example, Li et al. (2024a) demonstrates that RMU (Li et al., 2024b) could be jailbroken using hand-crafted attacks, despite its high robustness against many automated attacks. MIA do not measure the absence of knowledge about a particular fact, but the likelihood that a particular datapoint is absent from the training corpus, which is not the relevant metric for the purpose of preventing LLM misuse.
+
+**White-box unlearning evaluations** Past work has introduced white-box unlearning evaluations like linear probes and relearning time. Some of the white-box approaches include linear probes and relearning with fine-tuning. Linear Probes may recover the information present in the activations (Lynch et al., 2024b), but are not powerful enough to detect information present in the weights.
+
+{2}------------------------------------------------
+
+| Threat model | Metric | What is being measured |  |
+|-|-|-|-|
+| Attacks that do not require knowledge of the unlearned information: jailbreaks, steering vectors, etc. | Accuracy on held-out facts after a medium-scale in-distribution fine-tuning | Is the information still present in the weights? (assessed with a medium-scale in-distribution fine-tuning attack) | Ours |
+|  | Accuracy after a small-scale fine-tuning attack | Is the information still present in the weights? (assessed with a small-scale fine-tuning attack) | Hu et al. (2024), Lucki et al. (2024), ... |
+|  | Success rate of the considered attacks | Are the considered attacks successful? | Lynch et al. (2024a), Li et al. (2024b), ... |
+| Relearning attacks (with limited resources) | Relearning time, relearning sample efficiency | Is it possible to cheaply make the model useful at the unlearned task with fine-tuning? | Tamirisa et al. (2024b), ... |
+
+Table 1: A comparison of the target threat model, the used metric, and what is being measured in different approaches for evaluating unlearning.
+
+For example, probes on top of RMU models fail to get high accuracy, but RMU models can still be jailbroken. Relearning time and limited-sample relearning is a promising approach to evaluate unlearning that was used by Golatkar et al. (2020a), Golatkar et al. (2020b), Tarun et al. (2023), and Lynch et al. (2024b). These metrics are powerful to assess the threat of white-box attacks, but they don’t provide a good way to assess the presence or absence of information hidden in model weights: if fine-tuning runs are too large, they might inject back information that was unlearned, but if fine-tuning attacks are too small (or not in-distribution enough), they might fail to recover hidden information, especially when used to evaluate techniques slowing down fine-tuning (Henderson et al., 2023; Rosati et al., 2024; Tamirisa et al., 2024a). The situation is summarized in Table 1.
+
+**Weaknesses of current unlearning techniques** Previous work has shown evidence about current unlearning techniques being weak against attacks that would fail if the information was removed (Lynch et al., 2024a; Lucki et al., 2024; Hong et al., 2024). Our results further confirm the findings of this previous work, using a more systematic approach to evaluate the presence of hidden information in model weights.
+
+## 3 PROBLEM STATEMENT
+
+### 3.1 UNLEARNING AS REMOVING INFORMATION FROM THE WEIGHTS
+
+While unlearning is used in previous work to imply both removing information and making it harder to access, removing information is a stronger guarantee, as making information harder to access is vulnerable to attacks that make the information easily accessible again like jailbreaking and fine-tuning (Li et al., 2024a). We aim to measure how much an unlearning technique removes target information from the weights.
+
+More precisely, for an unlearning technique that removes information about a certain question  $q$ , if the answer to the question was different, the weights after unlearning should not be predictably different; they can be different due to the stochasticity of the training process, but not due to the answer changing. For example, if we consider the question "was the World Health Organization (WHO) founded in 1948 or 1949?", if the correct answer to the question was the counter-factual 1949 (the correct answer is 1948), the weights should not be different. Formally, if  $Y$  is the random variable corresponding to the answer to  $q$  (a binary random variable in our WHO example), and  $\theta$  is the model weights after the initial training process ( $\theta$  is a random variable since it depends on  $Y$ ),
+
+{3}------------------------------------------------
+
+then an unlearning process  $U$  fully removes the information about  $q$  from the weights if and only if the mutual information between  $U(\theta)$  and  $Y$  is 0:  $I(U(\theta), Y) = 0$ .
+
+Facts can often be guessed based on more general information (e.g., knowing what the WHO is and having a basic intuition about historical dates rules out the WHO being created a million years ago). Our formalization only applies to questions that are practically impossible to guess (e.g., whether the WHO was founded in 1948 or 1949).
+
+### 3.2 ESTIMATING THE PRESENCE OF INFORMATION
+
+We introduce a new approach based on an adversarial setup to evaluate the presence of information in the weights. The developers of an unlearning method identify a set of independent facts the model contains that should be removed from the model weights after unlearning, and which have negligible mutual information given the rest of the training data (i.e., given all but one of these facts and the rest of the training data, it is realistically infeasible to guess the remaining one without additional information). These facts are randomly split into train and validation subsets,  $T$  and  $V$ . An attacker then tries to recover the facts  $V$  using (1) the model weights  $\theta$  and (2) the facts  $T$ . If the unlearning process is successful, neither the model weights nor the facts  $T$  alone should enable the recovery of  $V$  by the attacker. Any facts  $V$  that the attacker recovers indicate that these facts were hidden, rather than removed.
+
+Because unlearning was performed on  $T$  and  $V$ , access to  $T$  allows for the creation of attacks that can revert the hiding behavior that some unlearning methods may lead to in the model, and because the facts in  $T$  and  $V$  are independent, we do not need to worry about “reteaching” the model the facts, which is a concern if we perform attacks that use access to  $V$ , like relearning time (see Section 2).
+
+The developers of the unlearning method try to find an unlearning technique  $U^*$  that minimizes the recovered accuracy on  $V$ :
+
+$$U^* = \underset{U}{\operatorname{argmin}} \max_{\text{Attack}} \mathbb{E}_{(V,T) \sim \text{splits}} [\text{Accuracy}_V(\text{Attack}_T(U_{T \cup V}(\theta)))]$$
+
+That is, finding an unlearning technique that minimizes the maximum expectation of accuracy on  $V$  after the attack on the unlearned model.
+
+The attack we study in this work is **Retraining on  $T$  (RTT)** which is illustrated in Figure 1: the attacker trains the unlearned model on the facts they have access to,  $T$ . After performing RTT, we can use accuracy on  $V$  to approximate the mutual information introduced in section 3.1: if the accuracy on  $V$  is high, mutual information has to be high. If the accuracy is close to random chance, mutual information is probably low. Training on  $T$  might reveal information that was hidden by increasing the model’s propensity to output the unlearned facts without teaching the model the facts again. If an unlearning technique leads to information being harder to access, RTT should make the facts  $T$  easier to access. Making the facts  $T$  easier to access can transfer to making  $V$  easier to access since the unlearning technique was applied to both. We test how reliable this transfer is in section 6.
+
+As we previously mentioned, in order for the proposed metric to be a reliable measure of unlearning,  $T$  and  $V$  should have minimal shared information; training the model on  $T$  should not increase accuracy on  $V$  for a model that was not trained on either  $T$  or  $V$ .
+
+## 4 EXPERIMENTAL SETUP
+
+In order to run our evaluations, we create datasets that fit our desired properties, then use them to run unlearning and RTT. Our evaluation can also be performed on models that had already undergone unlearning.
+
+{4}------------------------------------------------
+
+### 4.1 DATASETS
+
+Our framework requires datasets for RTT and evaluation that ideally should have the following properties:
+
+1. The dataset has little shared information among facts: Learning some of the facts should not help in learning the rest if the information is not already present in the weights.
+2. Models perform well on the dataset before unlearning: This means we do not need to fine-tune the models on the information, which may result in a different response to unlearning compared to information learned in pretraining.
+3. The data resembles what unlearning is used for in practice.
+
+We create several datasets that differ in how much they fulfill each of these properties. For each of these datasets, we also have retain datasets that unlearning methods use to ensure the model does not unlearn capabilities we want it to keep:
+
+- **Years:** A dataset of major events in the 20th century and the years they happened in. The dataset is randomly split into 5 splits. We use 4 of them as T and 1 as V, testing multiple times for different choices of T and V. For the retain dataset, we use Finweb-edu (Penedo et al., 2024).
+- **MMLU** (Hendrycks et al., 2021b;a): By default, MMLU has 58 subsets. We categorize them into 10 categories such that there’s little shared information between these categories. We use 4 of these categories for T, 1 for V, and the other 5 as the retain dataset.
+- **WMDP-Deduped:** A filtered version of WMDP (Li et al., 2024b) with lower leakage among questions. The original dataset is not suitable for the purpose of our evaluations since it contains skill-based questions and questions using the same pieces of information. We compare WMDP and WMDP-Deduped in Appendix I. We split it into 5 splits, using 4 of them for T and 1 for V. For the retain dataset, we use Finweb-edu (Penedo et al., 2024).
+- **Random Birthdays:** A dataset with randomly generated names and randomly generated years of birth. As it is randomly generated, we first fine-tune the models on the dataset, unlike the other 3 datasets. We use 4 splits for T and 1 split for V. We use a subset of the MMLU categories for the retain dataset. The creation of the Random Birthdays dataset was inspired by Maini et al. (2024), and we use it to test unlearning methods when we are confident that the facts are independent. We test that the facts are indeed independent and show the results in Appendix E.
+
+For each of these datasets, we use two formats: plain-text and multiple-choice questions (MCQ). Because unlearning is supposed to unlearn facts and not just a specific format, we perform unlearning on a dataset using the plain text format, but RTT and evaluation using the MCQ format. The plain-text format is generated from the MCQ using GPT-4o (OpenAI, 2024), and we provide examples in Appendix K. Figure 4 shows how the format of the unlearning dataset affects unlearning performance.
+
+During evaluations, we measure the forget accuracy (the accuracy on the domain that should have been unlearned), and the retain accuracy (the accuracy on a domain where performance should remain high) on multiple-choice questions with 4 choices, where random guessing would yield 25% accuracy.
+
+### 4.2 UNLEARNING
+
+We mainly use Llama 3 (8b) (Llama Team, 2024) for our experiments, but we find similar results with other models. We use the plain-text data format for unlearning. The main unlearning methods we test are:
+
+1. Gradient Difference (GD) (Liu et al., 2022): Gradient Ascent on the forget dataset and Gradient Descent on the retain dataset.  $\text{Loss}_{\text{GD}} = -\text{Loss}_{\text{Forget}} + \alpha * \text{Loss}_{\text{Retain}}$  Where  $\alpha$  is the retain coefficient. Using a retain coefficient of 0 corresponds to using the Gradient Ascent unlearning method.
+
+{5}------------------------------------------------
+
+2. RMU (Li et al., 2024b): An unlearning technique that perturbs the activations of the model in a subset of the models' layers for harmful prompts while preserving the activations for non-harmful prompts.
+3. Random Incorrect Answer (RIA): For each question with multiple choice answers, we create a plain-text formatted datapoint for each incorrect choice and perform gradient descent on these texts.
+
+Unlearning is only useful when the model maintains performance on other non-unlearned tasks. We therefore configure the unlearning strength for each unlearning method to get a balance of low forget accuracy and high retain accuracy. For RMU, we configure the  $\alpha$  hyperparameter as introduced by (Li et al., 2024b), which scales the retain loss before creating the final loss. For the other unlearning methods, we use a similar hyperparameter: a coefficient we multiply the retain loss by. We consider the results for unlearning that lead to a drop in the retain accuracy less than or equal to 5% of the retain accuracy of the original model in Section 5, in addition to other retain accuracy drops in Appendix G.
+
+### 4.3 RETRAINING ON T AND EVALUATION
+
+We perform RTT using the MCQ format of the facts. We experiment with a variety of learning rates and run RTT with two random choices evaluation split ( $V$ ). In each run, we fine-tune the model on the other 4 remaining splits. We report the mean accuracy over the two runs and use the learning rate with the highest validation accuracy.
+
+Across datasets, each split across has 157 datapoints. We use 4 split for  $T$  (628 total datapoints) and 1 split for  $V$ . We use the same RTT hyperparameters for all datasets and unlearning methods. These hyperparameters and uncertainty estimations can be found in Appendix A. We also experiment with multiple options for the loss and discuss results in Appendix B.
+
+## 5 RESULTS
+
+As shown in Figure 2, we find that both RMU and GD successfully reduce the accuracy after performing unlearning. RIA leads to less significant reductions in accuracy. For all methods, RTT recovers the forget accuracy close to its original level, which suggests that most of the information was hidden, not removed from the weights.
+
+To quantify the quality of an unlearning technique in removing information, we consider Recovery Rate: the ratio of accuracy on  $V$  of the unlearned model after RTT to the accuracy on  $V$  of the original model after RTT:
+
+$$\text{Recovery Rate} = \frac{\text{Accuracy on } V \text{ of the unlearned model after RTT}}{\text{Accuracy on } V \text{ of the original model after RTT}}$$
+
+A lower recovery rate corresponds to more successful information removal. In our tests, all recovery rates were greater than 88%, implying poor performance at removing information.
+
+To test whether the retain loss is restricting unlearning methods from appropriately removing the information from the weights, we run unlearning with different unlearning strengths to achieve different values for the retain accuracy. Figure 3 shows that even with large losses in the retain accuracy, RTT is able to recover accuracy on the forget dataset. Even if we do not include a retain loss, RTT is often able to recover forget accuracy (see Appendix G, Figure 10). RTT recovering accuracy even when the model is not incentivized to retain performance on other tasks implies that the unlearning methods are not restricted by having to maintain good performance on the retain dataset.
+
+{6}------------------------------------------------
+
+![Figure 2: Four line plots showing Forget Accuracy for YEARS, MMLU, WMDP-Deduped, and RANDOM_BD datasets. Each plot compares RMU, GD, and RIA unlearning methods before and after RTT. The legend indicates: Unlearn (blue circle), Unlearn+RTT (orange circle), Original+RTT (dashed orange line), and Random Chance (dashed blue line).](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+Figure 2 displays four line plots showing Forget Accuracy (Y-axis) versus Unlearn Type (X-axis: RMU, GD, RIA) for four datasets: YEARS, MMLU, WMDP-Deduped, and RANDOM\_BD. The legend indicates four conditions: Unlearn (blue circle), Unlearn+RTT (orange circle), Original+RTT (dashed orange line), and Random Chance (dashed blue line). In all datasets, the Original+RTT condition maintains a high, constant forget accuracy (around 0.7 for YEARS, MMLU, WMDP-Deduped and 1.0 for RANDOM\_BD). The Unlearn+RTT condition shows a significant increase in forget accuracy compared to the Unlearn condition across all datasets. The Unlearn condition shows lower forget accuracy, which increases after RTT.
+
+Figure 2: Four line plots showing Forget Accuracy for YEARS, MMLU, WMDP-Deduped, and RANDOM\_BD datasets. Each plot compares RMU, GD, and RIA unlearning methods before and after RTT. The legend indicates: Unlearn (blue circle), Unlearn+RTT (orange circle), Original+RTT (dashed orange line), and Random Chance (dashed blue line).
+
+Figure 2: Forget accuracies before and after RTT for different unlearning methods and Datasets. We perform unlearning using RMU, GD, and RIA then perform RTT. The unlearning strength is chosen such that the drop in the retain accuracy is less than or equal to 5%, where the unlearning strength is controlled by adjusting the corresponding hyperparameter (see Section 4.2) in each unlearning method. The results for a retain accuracy drop of less than or equal to 10%, 30% and 100% are available in Appendix G
+
+![Figure 3: A scatter plot showing the tradeoff between forget accuracy and retain accuracy before RTT for the Years dataset. The x-axis is 'Retain Accuracy Before RTT' and the y-axis is 'Forget Accuracy'. Data points are shown for different values of alpha (0, 0.01, 0.1, 1, 10, 100, 1000). The legend indicates: Unlearn (orange circle), Unlearn+RTT (blue circle), Random Guess Retain (dashed orange line), and Random Guess Forget (dashed blue line).](a6a8016b231533e7f34b550f4676afc6_img.jpg)
+
+Figure 3 is a scatter plot showing the tradeoff between the forget accuracy (Y-axis) and the retain accuracy before RTT (X-axis) for the Years dataset. The X-axis ranges from 0.25 to 0.65, and the Y-axis ranges from 0.3 to 0.8. The legend indicates four conditions: Unlearn (orange circle), Unlearn+RTT (blue circle), Random Guess Retain (dashed orange line), and Random Guess Forget (dashed blue line). The plot shows that as the retain accuracy before RTT increases, the forget accuracy generally decreases. The Unlearn+RTT condition (blue circles) maintains a high forget accuracy (around 0.7) even as the retain accuracy before RTT increases. The Unlearn condition (orange circles) shows a lower forget accuracy that increases after RTT. The Random Guess Retain and Random Guess Forget conditions are represented by horizontal dashed lines at approximately 0.25 and 0.65 respectively.
+
+Figure 3: A scatter plot showing the tradeoff between forget accuracy and retain accuracy before RTT for the Years dataset. The x-axis is 'Retain Accuracy Before RTT' and the y-axis is 'Forget Accuracy'. Data points are shown for different values of alpha (0, 0.01, 0.1, 1, 10, 100, 1000). The legend indicates: Unlearn (orange circle), Unlearn+RTT (blue circle), Random Guess Retain (dashed orange line), and Random Guess Forget (dashed blue line).
+
+Figure 3: The tradeoff between the forget accuracy and the retain accuracy on the Years dataset when using RMU for values of retain coefficient  $\alpha$  between 0 and  $10^3$  (smaller retain coefficient leads to stronger unlearning). When increasing the unlearning strength, the forget accuracy decreases before the retain accuracy drops too much, but when choosing an unlearning strength so high that the retain accuracy drops to 25%, the forget accuracy after RTT remains high.
+
+{7}------------------------------------------------
+
+![Figure 4: Four line plots showing Forget Accuracy for different unlearning datasets and methods. The plots are: 1. WMDP Forget Corpora, 2. GPT-4o Generated Plain Text, 3. MCQ with Loss on All Tokens, 4. MCQ with Loss on Answer Only. Each plot compares RMU and GD methods for Unlearn and Unlearn+RTT. A dashed orange line represents Original+RTT and a dashed blue line represents Random Chance. In all cases, RMU+RTT maintains high accuracy while GD+RTT drops significantly. RMU alone shows a drop in accuracy for all datasets except MCQ with Loss on Answer Only where it stays high.](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+| Dataset | Method | Unlearn | Unlearn+RTT | Original+RTT | Random Chance |
+|-|-|-|-|-|-|
+| WMDP Forget Corpora | RMU | ~0.42 | ~0.68 | ~0.70 | ~0.25 |
+|  | GD | ~0.60 | ~0.65 | ~0.70 | ~0.25 |
+| GPT-4o Generated Plain Text | RMU | ~0.28 | ~0.68 | ~0.70 | ~0.25 |
+|  | GD | ~0.50 | ~0.63 | ~0.70 | ~0.25 |
+| MCQ with Loss on All Tokens | RMU | ~0.60 | ~0.68 | ~0.70 | ~0.25 |
+|  | GD | ~0.55 | ~0.60 | ~0.70 | ~0.25 |
+| MCQ with Loss on Answer Only | GD | ~0.22 | ~0.52 | ~0.70 | ~0.25 |
+
+Figure 4: Four line plots showing Forget Accuracy for different unlearning datasets and methods. The plots are: 1. WMDP Forget Corpora, 2. GPT-4o Generated Plain Text, 3. MCQ with Loss on All Tokens, 4. MCQ with Loss on Answer Only. Each plot compares RMU and GD methods for Unlearn and Unlearn+RTT. A dashed orange line represents Original+RTT and a dashed blue line represents Random Chance. In all cases, RMU+RTT maintains high accuracy while GD+RTT drops significantly. RMU alone shows a drop in accuracy for all datasets except MCQ with Loss on Answer Only where it stays high.
+
+Figure 4: Forget accuracies for different formats of the unlearning dataset. We perform unlearning and RTT for different text formats and loss types when using RMU and GD (except for “MCQ with Loss on Answer Only”, where we can’t apply RMU, as its loss is computed on activations of intermediate layers.). The unlearning strength is such that the loss in the retain accuracy is less than or equal to 5%. All of the runs were done using the WMDP-Deduped dataset.
+
+We test how the format of text used for unlearning affects performance. The results are shown in Figure 4. Using the plain-text generated by GPT-4o (examples can be found in Appendix K) provides the best balance of performance across different unlearning methods, in addition to being generalizable to all MCQ datasets. RMU performs better than GD when the unlearning dataset is related but does not necessarily contain the same facts as the ones used in RTT and evaluation. GD performs best when all of the unlearning dataset, RTT and evaluation use the MCQ format and the loss is restricted to the answer tokens. These observations may imply that RMU tends to generalize the unlearning more than GD does.
+
+## 6 STRESS-TESTING RETRAINING ON T
+
+### 6.1 HIGH GRANULARITY KNOWLEDGE HIDING
+
+When models hide facts, they can hide them at multiple levels of granularity. For example, in the case of the random birthday dataset, the model could learn to (a) hide information about all birthdays (low granularity) or (b) only hide the information about the birthdays of specific individuals but not others (high granularity). RTT is meant to remove the general propensity to hide facts, so RTT might succeed only when the information is hidden at a low level of granularity. To stress-test RTT in a high-granularity setting, we create a model that hides knowledge at a high level of granularity.
+
+We use the Random Birthdays dataset, which we generate using a random name generator and randomly generated dates of birth. To ensure that the knowledge is still in the weights and that it
+
+{8}------------------------------------------------
+
+![Figure 5: Diagram illustrating the approach to creating a model that hides knowledge. The diagram shows four stages of model training and unlearning across two layer groups: Layers 16-31 and Layers 0-15. A legend at the top defines the symbols: Trained Weights (flame), Frozen Weights (snowflake), No Knowledge (grey), Has Knowledge (green), and Hides Knowledge (red). Stage 1: Initial state where Layers 16-31 are frozen (snowflake) and Layers 0-15 are trained (flame). A question 'When was Aidin Li born?' is shown below. Stage 2: After 'Train', Layers 16-31 are trained (flame) and Layers 0-15 are frozen (snowflake). Accuracy is 1965 (green checkmark). Stage 3: After 'Unlearn', Layers 16-31 are now 'Hides Knowledge' (red) and Layers 0-15 remain frozen (snowflake). Accuracy is 1994 (red X). Stage 4: After 'Retrain on T', both layer groups are 'No Knowledge' (grey) and contain question marks. Accuracy is unknown (?).](acfc53eca625d62b38aa2563efa95c3e_img.jpg)
+
+132
+
+133
+
+134
+
+135
+
+136
+
+137
+
+138
+
+139
+
+140
+
+141
+
+142
+
+143
+
+144
+
+145
+
+146
+
+147
+
+148
+
+149
+
+150
+
+151
+
+152
+
+153
+
+154
+
+155
+
+156
+
+157
+
+158
+
+159
+
+160
+
+161
+
+162
+
+163
+
+164
+
+165
+
+166
+
+167
+
+168
+
+169
+
+170
+
+171
+
+172
+
+173
+
+174
+
+175
+
+176
+
+177
+
+178
+
+179
+
+180
+
+181
+
+182
+
+183
+
+184
+
+185
+
+Figure 5: Diagram illustrating the approach to creating a model that hides knowledge. The diagram shows four stages of model training and unlearning across two layer groups: Layers 16-31 and Layers 0-15. A legend at the top defines the symbols: Trained Weights (flame), Frozen Weights (snowflake), No Knowledge (grey), Has Knowledge (green), and Hides Knowledge (red). Stage 1: Initial state where Layers 16-31 are frozen (snowflake) and Layers 0-15 are trained (flame). A question 'When was Aidin Li born?' is shown below. Stage 2: After 'Train', Layers 16-31 are trained (flame) and Layers 0-15 are frozen (snowflake). Accuracy is 1965 (green checkmark). Stage 3: After 'Unlearn', Layers 16-31 are now 'Hides Knowledge' (red) and Layers 0-15 remain frozen (snowflake). Accuracy is 1994 (red X). Stage 4: After 'Retrain on T', both layer groups are 'No Knowledge' (grey) and contain question marks. Accuracy is unknown (?).
+
+Figure 5: Our approach to creating a model that hides knowledge: by controlling which layers are fine-tuned, we ensure that the information is still present in the model weights.
+
+is hidden, we use the approach illustrated in Figure 5: we fine-tune the model on the dataset while freezing the second half of the layers until we reach an accuracy of .98%, and then unfreeze the second half of the layers and freeze the first half of the layers and perform unlearning. To push the hiding strategy to have high granularity, we use a retain dataset from the same distribution as the forget dataset: randomly generated birth dates for randomly generated names. This means the model should learn to hide information about the birthdays in the forget dataset while keeping information about the other birthdays in the retain dataset drawn from the same distribution, which should push the model to create a high-granularity hiding strategy.
+
+We perform unlearning using GD with multiple hyperparameters and loss types. We discuss the hyperparameters in Appendix H. With the hyperparameters that obtain the best trade-off between forget accuracy and retain accuracy, we were able to obtain was 32% forget accuracy and 72% retain accuracy. We then perform RTT on the model to see if we can recover the lost accuracy. We were able to recover the forget accuracy back to 92%.
+
+Our results suggests that RTT can recover hidden knowledge even with high-granularity knowledge hiding, though it is unclear how well these results transfer to more natural examples of hidden knowledge.
+
+### 6.2 RETRAINING ON T VS TECHNIQUES TO SLOW DOWN FINE-TUNING
+
+There are techniques that directly target making fine-tuning models on specific information difficult (Rosati et al., 2024; Henderson et al., 2023). We test RTT against one of these techniques and find that it can successfully recover information. More information can be found in Appendix C.
+
+## 7 DISCUSSION
+
+### 7.1 LIMITATIONS
+
+**RTT is expensive** Relative to simple accuracy evaluation on a benchmark, our approach requires fine-tuning with hyperparameter search which is more expensive. Looking for methods other than RTT to recover unlearned information requires even more effort.
+
+**RTT does not ensure information is removed** Our evaluation does not guarantee that information is removed from the weights; rather, it sets a higher bar than previous evaluation methods for unlearning. For example, if an unlearning technique leads to hiding information such that the hiding of each fact happens in a separate part of the model (e.g., different layers), we expect that RTT may
+
+{9}------------------------------------------------
+
+not recover accuracy on  $V$  even though the information is still present in the weights. Still, it works well for current unlearning methods (as we show in Appendix C).
+
+**Low-leakage datasets are hard to build** Our evaluation only works on a set of facts that have low leakage. Such property may not be available depending on the goal of the unlearning. This also means that our evaluation does not cover evaluating unlearning capabilities. For example, if the goal is to unlearn the capability of coding, it’s hard to construct  $T$  and  $V$  with low leakage.
+
+**Removing information is a property stronger than strictly required** Ensuring safety may only require making information hard enough to access. For example, jailbreak robustness could in principle be achieved without removing information from model weights, but jailbreak robustness is hard to assess directly, resulting in overestimates of jailbreak robustness (Li et al., 2024a). The alternative we suggest likely provides better safety guarantees, but future work may find less conservative targets that provide strong enough guarantees.
+
+### 7.2 RECOMMENDATIONS
+
+In the light of our work and inspired by Carlini et al. (2019), we make the following recommendations for future research on addressing dangerous capabilities and knowledge of Artificial Intelligence models:
+
+1. Indicate whether the purpose of the proposed method is to remove information or make the information harder to access in the model.
+2. When the goal is removing capabilities and/or knowledge, evaluate the proposed method against attacks that aim to recover them, like using the RTT attack presented in this paper.
+3. Release the models the proposed method was applied to and the code base used to apply the method to facilitate evaluating the robustness of the method by other researchers.
+
+## 8 CONCLUSION
+
+In this paper, we propose focusing on developing unlearning methods that target removing information from models over making information harder to access. To help in distinguishing between the two cases, we propose RTT as a method for evaluating the effectiveness of an unlearning technique for removing information and test some notable unlearning methods against our evaluation. The tested unlearning methods remove a small ratio of information in our experiments, especially when these methods maintain good retain accuracy. We end with recommendations for future work on addressing dangerous knowledge and capabilities in models.
+
+## ACKNOWLEDGMENTS
+
+The authors would like to thank Buck Shlegeris, Lawrence Chan, Robert Kirk, and Xander Davies for help and feedback on this paper, the ML Alignment Theory Scholars (MATS) program for their support, and a lot of other people for helpful discussions of these ideas.
+
+## REPRODUCIBILITY STATEMENT
+
+We provide the code and data we use as supplementary materials that can be used to reproduce our results. The hyperparameters we use for RTT can be found in Appendix A.
+
+## REFERENCES
+
+- Cem Anil, Esin Durmus, Mrinank Sharma, Joe Benton, Sandipan Kundu, Joshua Batson, Nina Rimsky, Meg Tong, Jesse Mu, Daniel Ford, et al. Many-shot jailbreaking. *Anthropic, April*, 2024.
+- Nicholas Carlini, Anish Athalye, Nicolas Papernot, Wieland Brendel, Jonas Rauber, Dimitris Tsipras, Ian Goodfellow, Aleksander Madry, and Alexey Kurakin. On evaluating adversarial robustness, 2019. URL <https://arxiv.org/abs/1902.06705>.
+
+ Rest of paper (reference and Appendix) is removed.

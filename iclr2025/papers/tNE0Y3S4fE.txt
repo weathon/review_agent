@@ -1,0 +1,367 @@
+
+
+{0}------------------------------------------------
+
+# EXPLORING THE DESIGN SPACE OF DIFFUSION BRIDGE MODELS VIA STOCHASTICITY CONTROL
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Diffusion bridge models effectively facilitate image-to-image (I2I) translation by connecting two distributions. However, existing methods overlook the impact of noise in sampling SDEs, transition kernel, and the base distribution on sampling efficiency, image quality and diversity. To address this gap, we propose the Stochasticity-controlled Diffusion Bridge (SDB), a novel theoretical framework that extends the design space of diffusion bridges, and provides strategies to mitigate singularities during both training and sampling. By controlling stochasticity in the sampling SDEs, our sampler achieves speeds up to  $5\times$  faster than the baseline, while also producing lower FID scores. After training, SDB sets new benchmarks in image quality and sampling efficiency via managing stochasticity within the transition kernel. Furthermore, introducing stochasticity into the base distribution significantly improves image diversity, as quantified by a newly introduced metric. [Code would be available on Github repo.](#)
+
+## 1 INTRODUCTION
+
+Denoising Diffusion Models (DDMs) create a stochastic process to transition Gaussian noise into a target distribution (Song & Ermon, 2019; Ho et al., 2020; Song et al., 2020). Building upon this, diffusion bridge-based models (DBMs) have been developed to transport between two arbitrary distributions,  $\pi_T$  and  $\pi_0$ , including Bridge Matching (Peluchetti, 2023), Flow Matching (Lipman et al., 2022), and Stochastic Interpolants (Albergo et al., 2023). Compared to DDMs, DBMs offer greater versatility for tasks such as I2I translation (Linqi Zhou et al., 2023; Liu et al., 2023). This advantage arises because using a Gaussian prior often fails to incorporate sufficient knowledge about the target distribution.
+
+In general, there are two primary design philosophies for DBMs. The first involves deriving a pinned process (Yifeng Shi et al., 2023) from a given reference process (e.g., Brownian motion) via Doob’s  $h$ -transform, and then constructing a bridge to approach it (Linqi Zhou et al., 2023; Peluchetti, 2023). The second regime aims to directly design a bridge based on a specified transition kernel (Lipman et al., 2022; Albergo et al., 2023). While the former also results in a transition kernel, the mean and variance in the kernel are *coupled*, which limits the design flexibility for possible bridges. In this work, we follow the second fashion and further propose the Stochasticity Control (SC) mechanism, which facilitates easier tuning and leads to enhanced performance across a variety of tasks. Our main contributions are as follows:
+
+- We introduce the **Stochasticity-controlled Diffusion Bridge (SDB)**, a generalized framework that adopts a transition kernel-based design philosophy to elucidate the design space of DBMs, shown in Fig. 10. Notably, this framework not only encompasses other mainstream DBMs such as DDBM (Linqi Zhou et al., 2023) and I2SB (Liu et al., 2023), but also DDMs like EDM (Karras et al., 2022), as detailed in Table 1.
+- A **Stochasticity Control (SC)** mechanism is proposed by adding noise into the base distribution, designing a noise schedule for the transition kernel, and regulating the drift term in the sampling SDEs. In addition, we explore **score reparameterization** and the **discretization schemes** of sampling SDEs to mitigate singularity during training and sampling. These combined strategies lead to significant improvements in training stability, sampling efficiency, output quality, and conditional diversity.
+
+{1}------------------------------------------------
+
+![Figure 1: An illustration of the framework for constructing diffusion bridge models. The diagram is divided into three main stages: (a) Preprocessing, (c) Training, and (d) Sampling. (a) Preprocessing: Add noise to the base distribution $\pi_T = \pi_{\text{cond}} * \mathcal{N}(0, b^2 I)$. It shows four small images with noise added. (c) Training: $\hat{\mathbf{x}}_0(\mathbf{x}_t, \mathbf{x}_T, t) = \arg \min_{D(\mathbf{x}_t, \mathbf{x}_T, t)} \mathbb{E}_{\mathbf{x}_0, \mathbf{x}_T, \mathbf{x}_t} [\lambda(t) \|D(\mathbf{x}_t, \mathbf{x}_T, t) - \mathbf{x}_0\|_2^2]$. It shows a sequence of images with noise. (d) Sampling: select $\epsilon_t$ and discretization scheme. It shows a sequence of images with noise. A central oval indicates the selection of a transition kernel: $\mathbf{x}_t \sim \mathcal{N}(\alpha_t \mathbf{x}_0 + \beta_t \mathbf{x}_T, \gamma_t^2 I)$. The final output is $\hat{\mathbf{x}}_0$.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1: An illustration of the framework for constructing diffusion bridge models. The diagram is divided into three main stages: (a) Preprocessing, (c) Training, and (d) Sampling. (a) Preprocessing: Add noise to the base distribution \$\pi\_T = \pi\_{\text{cond}} \* \mathcal{N}(0, b^2 I)\$. It shows four small images with noise added. (c) Training: \$\hat{\mathbf{x}}\_0(\mathbf{x}\_t, \mathbf{x}\_T, t) = \arg \min\_{D(\mathbf{x}\_t, \mathbf{x}\_T, t)} \mathbb{E}\_{\mathbf{x}\_0, \mathbf{x}\_T, \mathbf{x}\_t} [\lambda(t) \|D(\mathbf{x}\_t, \mathbf{x}\_T, t) - \mathbf{x}\_0\|\_2^2]\$. It shows a sequence of images with noise. (d) Sampling: select \$\epsilon\_t\$ and discretization scheme. It shows a sequence of images with noise. A central oval indicates the selection of a transition kernel: \$\mathbf{x}\_t \sim \mathcal{N}(\alpha\_t \mathbf{x}\_0 + \beta\_t \mathbf{x}\_T, \gamma\_t^2 I)\$. The final output is \$\hat{\mathbf{x}}\_0\$.
+
+Figure 1: An illustration of the framework for constructing diffusion bridge models. The parameters  $b$ ,  $\gamma_t$ , and  $\epsilon_t$  govern the stochasticity introduced at three main stages: preprocessing, training, and sampling. Specifically,  $b$  determines the noise added to the base distribution during preprocessing,  $\gamma_t$  controls the noise introduced into the transition kernel, impacting both training and sampling, and  $\epsilon_t$  regulates the noise added to the sampling SDEs, affecting only the sampling stage.
+
+- Experimental results show that our sampler operates  $5\times$  faster than the DDBM sampler and achieves a lower FID score using the same pretrained models. When trained from scratch, our model sets a new benchmark for image quality, requiring only 5 function evaluations to reach an FID of 0.89 on Edges2handbags ( $64 \times 64$ ) and 4.16 on DIODE ( $256 \times 256$ ) datasets. Furthermore, by introducing noise into the base distribution, we significantly enhance the diversity of synthetic images, resulting in a greater variety of colors and textures.
+
+**Notations** Let  $\pi_T$ ,  $\pi_0$ , and  $\pi_{OT}$  represent the base distribution, the target distribution, and the joint distribution of them respectively.  $\pi_{\text{cond}}$  and  $\pi_{\text{data}}$  represent the distributions of the input and output data. Let  $p$  be the distribution of a diffusion process; we denote its marginal distribution at time  $t$  by  $p_t$ , the conditional distribution at time  $t$  given the state at time  $s$  by  $p_{t|s}$ , and the distribution at time  $t$  given the states at times 0 and  $T$  by  $p_{t|0T}$ , i.e., the transition kernel of a bridge.
+
+## 2 BACKGROUND
+
+### 2.1 DENOISING DIFFUSION MODELS
+
+Denoising diffusion models map target distribution  $\pi_0$  into a base distribution  $\pi_T$  by define a forward process on the time-interval  $[0, T]$ :
+
+$$d\mathbf{X}_t = \tilde{f}_t \mathbf{X}_t dt + \tilde{g}_t d\mathbf{W}_t, \quad \mathbf{X}_0 \sim \pi_0, \quad (1)$$
+
+where  $\tilde{f}_t, \tilde{g}_t : [0, T] \rightarrow \mathbb{R}$  is the scalar-valued drift and diffusion term,  $\mathbf{X}_0 \in \mathbb{R}^d$  is drawn from the target distribution  $\pi_0$ ,  $\mathbf{W}_t$  is a  $d$ -dimensional Wiener process. To sample from the target distribution  $\pi_0$ , the generative model is given by the reverse SDE or ODE (Song et al., 2020):
+
+$$d\mathbf{X}_t = [\tilde{f}_t \mathbf{X}_t - \tilde{g}_t^2 \nabla_{\mathbf{X}_t} \log q_t(\mathbf{X}_t)] dt + \tilde{g}_t d\mathbf{W}_t, \quad \mathbf{X}_T \sim \pi_T, \quad (2)$$
+
+$$d\mathbf{X}_t = \left[ \tilde{f}_t \mathbf{X}_t - \frac{1}{2} \tilde{g}_t^2 \nabla_{\mathbf{X}_t} \log q_t(\mathbf{X}_t) \right] dt, \quad \mathbf{X}_T \sim \pi_T, \quad (3)$$
+
+where  $q_t$  denotes the marginal distribution of this process. The score function  $\nabla_{\mathbf{X}_t} \log q_t(\mathbf{x}_t)$  is approximated using a neural network  $s_\theta(\mathbf{x}_t, t)$ , which can be learned by the score-matching loss:
+
+$$\mathcal{L}(\theta) = \mathbb{E}_{\mathbf{x}_t \sim p_{t|0}(\mathbf{x}_t|\mathbf{x}_0), \mathbf{x}_0 \sim \pi_0, t \sim \mathcal{U}(0, T)} \left[ \omega(t) \left\| s_\theta(\mathbf{x}_t, t) - \nabla_{\mathbf{x}_t} \log q_{t|0}(\mathbf{x}_t|\mathbf{x}_0) \right\|^2 \right], \quad (4)$$
+
+where  $q_{t|0}$  is the analytic forward transition kernel and  $\omega(t)$  is a positive weighting function.
+
+{2}------------------------------------------------
+
+### 2.2 DENOISING DIFFUSION BRIDGE MODELS
+
+DBBMs (Linqi Zhou et al., 2023) extend diffusion models to translate between two arbitrary distributions  $\pi_0$  and  $\pi_T$  given samples from them. Consider a reference process in Eq. (1) with transition kernel  $q_{t|0}(\mathbf{x}_t|\mathbf{x}_0) = \mathcal{N}(\mathbf{x}_t; \alpha_t \mathbf{x}_0, \sigma_t^2 \mathbf{I})$ , this process can be pinned down at an initial and terminal point  $\mathbf{x}_0, \mathbf{x}_T$ . Under mild assumptions, the pinned process is given by Doob's  $h$ -transform (Rogers & Williams, 2000):
+
+$$d\mathbf{X}_t = \{\bar{f}_t \mathbf{X}_t + \bar{g}_t^2 \nabla_{\mathbf{x}_t} \log p_{T|t}(\mathbf{x}_T|\mathbf{X}_t)\} dt + \bar{g}_t d\mathbf{W}_t, \quad \mathbf{X}_0 = \mathbf{x}_0, \quad (5)$$
+
+where  $\nabla_{\mathbf{x}_t} \log p_{T|t}(\mathbf{x}_T|\mathbf{X}_t) = \frac{(\alpha_t/\sigma_T)(\mathbf{x}_T - \mathbf{X}_t)}{\sigma_T^2(\text{SNR}_t/\text{SNR}_T - 1)}$  and  $\text{SNR}_t := \alpha_t^2/\sigma_t^2$  (Linqi Zhou et al., 2023). The marginal density of process (5) serves as transition kernel and is given by  $p(\mathbf{x}_t|\mathbf{x}_0, \mathbf{x}_T) = \mathcal{N}(\mathbf{x}_t; \alpha_t \mathbf{x}_0 + \beta_t \mathbf{x}_T, \gamma_t^2 \mathbf{I})$ , where  $\alpha_t = \alpha_t(1 - \frac{\text{SNR}_T}{\text{SNR}_t})$ ,  $\beta_t = \frac{\alpha_t}{\alpha_T} \frac{\text{SNR}_T}{\text{SNR}_t}$ ,  $\gamma_t^2 = \sigma_t^2(1 - \frac{\text{SNR}_T}{\text{SNR}_t})$ .
+
+To sample from the conditional distribution  $p(\mathbf{x}_0|\mathbf{x}_T)$ , we can solve the reverse SDE or probability flow ODE from  $t = T$  to  $t = 0$ :
+
+$$d\mathbf{X}_t = \{\bar{f}_t \mathbf{X}_t + \bar{g}_t^2 (\nabla_{\mathbf{x}_t} \log p_{T|t}(\mathbf{x}_T|\mathbf{X}_t) - \nabla_{\mathbf{x}_t} \log p_{t|T}(\mathbf{X}_t|\mathbf{x}_T))\} dt + \bar{g}_t d\mathbf{W}_t, \quad \mathbf{X}_T = \mathbf{x}_T \quad (6)$$
+
+$$d\mathbf{X}_t = \{\bar{f}_t \mathbf{X}_t + \bar{g}_t^2 (\nabla_{\mathbf{x}_t} \log p_{T|t}(\mathbf{x}_T|\mathbf{X}_t) - \frac{1}{2} \nabla_{\mathbf{x}_t} \log p_{t|T}(\mathbf{X}_t|\mathbf{x}_T))\} dt, \quad \mathbf{X}_T = \mathbf{x}_T. \quad (7)$$
+
+Generally, the score  $\nabla_{\mathbf{x}_t} \log p_{t|T}(\mathbf{x}_t|\mathbf{x}_T)$  in Eqs. (6) and (7) is intractable. However, it can be effectively estimated by denoising bridge score matching. Let  $(\mathbf{x}_0, \mathbf{x}_T) \sim \pi_{0,T}(\mathbf{x}_0, \mathbf{x}_T)$ ,  $\mathbf{x}_t \sim p_{t|0,T}(\mathbf{x}_t|\mathbf{x}_0, \mathbf{x}_T)$ ,  $t \sim \mathcal{U}(0, T)$ , and  $\omega(t)$  be non-zero loss weighting term of any choice, then the score  $\nabla_{\mathbf{x}_t} \log p_{T|t}(\mathbf{x}_T|\mathbf{x}_t)$  can be approximated by a neural network  $\mathbf{s}_\theta(\mathbf{x}_t, \mathbf{x}_T, t)$  with denoising bridge score matching objective:
+
+$$\mathcal{L}(\theta) = \mathbb{E}_{\mathbf{x}_t, \mathbf{x}_0, \mathbf{x}_T, t} [w(t) \|\mathbf{s}_\theta(\mathbf{X}_t, \mathbf{x}_T, t) - \nabla_{\mathbf{x}_t} \log p_{t|0,T}(\mathbf{X}_t|\mathbf{x}_0, \mathbf{x}_T)\|^2]. \quad (8)$$
+
+To sum up, DBBM starts with the forward SDE outlined in Eq. (1) with a marginal distribution of  $q_{t|0}(\mathbf{x}_t|\mathbf{x}_0) = \mathcal{N}(\mathbf{x}_t; \alpha_t \mathbf{x}_0, \sigma_t^2 \mathbf{I})$ . The pinned process is then built by applying Doob's  $h$ -transform as specified in Eq. (5), which is unnecessarily complicated and constraining. Additionally, the transition kernel of the pinned process becomes complex and coupled, as  $\alpha_t$ ,  $\beta_t$ , and  $\gamma_t$  are all inter-related through  $\alpha_t$  and  $\sigma_t$ , increasing the design difficulty. In the next section, we will demonstrate how  $\alpha_t$  and  $\beta_t$  can be used to control interpolation, while  $\gamma_t$  is designed to regulate the stochasticity introduced into the path.
+
+## 3 STOCHASTICITY CONTROL
+
+### 3.1 STOCHASTICITY CONTROL IN TRANSITION KERNEL
+
+We are interested in building a diffusion process to transport from two arbitrary distributions  $\pi_T$  and  $\pi_0$ . Suppose the transition kernel of this process is  $p_{t|0,T}(\mathbf{x}_t|\mathbf{x}_0, \mathbf{x}_T) = \mathcal{N}(\mathbf{x}_t; \alpha_t \mathbf{x}_0 + \beta_t \mathbf{x}_T, \gamma_t^2 \mathbf{I})$ . For diffusion models, we can simply let  $\beta_t = 0$  and  $\alpha_0 = 1$  and  $\gamma_0 = 0$ . For bridge models, to ensure that the process originates from  $\mathbf{x}_0$  and concludes at  $\mathbf{x}_T$ , we set  $\alpha_0 = \beta_T = 1$  and  $\alpha_T = \beta_0 = 0$ . Additionally, we require  $\alpha_t, \beta_t, \gamma_t > 0$  for  $t \in (0, T)$ . Let  $T = 1$ , one simple design example involves defining  $\alpha_t$  and  $\beta_t$  linearly, such that  $\alpha_t = 1 - t$  and  $\beta_t = t$ , with  $\gamma_t = 2\gamma_{\max}\sqrt{t(1-t)}$ , where  $\gamma_{\max}$  is a constant representing the maximum noise level. This configuration is referred to as the *linear* path for transition kernel. Other designs such as  $\alpha_t = \cos(\pi t/2)$ ,  $\beta_t = \sin(\pi t/2)$ , and  $\gamma_t = \sin(\pi t)$  can also be employed. Notably, the DDBM-VP and DDBM-VE models presented in (Linqi Zhou et al., 2023) can be considered as special cases within our framework, contingent upon the specific choices of  $\alpha_t$ ,  $\beta_t$ , and  $\gamma_t$ , see Table 1 and Appendix C for more details. In this paper, we limit our scope on Linear transition kernel, i.e.,  $p_{t|0,T}(\mathbf{x}_t|\mathbf{x}_0, \mathbf{x}_T) = \mathcal{N}(\mathbf{x}_t; (1-t)\mathbf{x}_0 + t\mathbf{x}_T, 4\gamma_{\max}^2 t(1-t)\mathbf{I})$ . A detailed discussion on the rationale behind the choices of  $\alpha_t, \beta_t$ , and an ablation study on the shape of  $\gamma_t$  is provided in D.
+
+{3}------------------------------------------------
+
+Table 1: Specify design choices for different model families. In the implementation,  $\sigma_t = t$  for EDM,  $\sigma_t = t$ ,  $a_t = 1$  for DDBM-VE,  $\sigma_t = \sqrt{e^{\frac{1}{2}\beta_d t^2 + \beta_{\min} t} - 1}$  and  $a_t = 1/\sqrt{e^{\frac{1}{2}\beta_d t^2 + \beta_{\min} t}}$  for DDBM-VP, where  $\beta_d$  and  $\beta_{\min}$  are parameters. We include details and proofs in Appendix C.
+
+|  |  | I2SB | DDBM | EDM | Ours |
+|-|-|-|-|-|-|
+| SC-transition kernel<br>Sec. 3.1 | $\alpha_t$ | $1 - \sigma_t^2/\sigma_T^2$ | $a_t(1 - a_T^2\sigma_t^2/(\sigma_t^2 a_t^2))$ | 1 | $1 - t$ |
+|  | $\beta_t$ | $\sigma_t^2/\sigma_T^2$ | $a_T\sigma_t^2/(\sigma_t^2 a_t)$ | 0 | $t$ |
+|  | $\gamma_t^2$ | $\sigma_t^2(1 - \sigma_t^2/\sigma_T^2)$ | $\sigma_t^2(1 - a_T^2\sigma_t^2/(\sigma_t^2 a_t^2))$ | $\sigma_t^2$ | $\frac{\gamma_{\max}^2}{4}t(1 - t)$ |
+| SC-sampling SDEs<br>Sec. 3.2 | $\epsilon_t$ | $\frac{\gamma_t^2 - \Delta_t \beta_t^2 - \beta_t^2 - \Delta_t \gamma_t^2}{2\beta_t^2 \Delta_t}$ | $\eta(\gamma_t \dot{\gamma}_t - \frac{\dot{\alpha}_t}{\alpha_t} \gamma_t^2)$<br>$\eta = 0$ or $\eta = 1$ | $\beta_t \sigma_t^2$ | $\eta(\gamma_t \dot{\gamma}_t - \frac{\dot{\alpha}_t}{\alpha_t} \gamma_t^2)$<br>$\eta \in [0, 1]$ |
+| SC-base distribution<br>Sec. 3.3 | $\pi_T$ | $\pi_{\text{cond}}$ | $\pi_{\text{cond}}$ | $\pi_{\text{cond}}$ | $\pi_{\text{cond}} * \mathcal{N}(0, b^2 \mathbf{I})$ |
+| Score reparameterization<br>Sec. 4.1 | $\mathbf{s}_0$ | $\frac{\alpha_t(\mathbf{x}_t - \tilde{\epsilon}_t \mathbf{x}_T) + \beta_t \mathbf{x}_T - \mathbf{x}_t}{\gamma_t^2}$ | $\frac{\alpha_t \tilde{\mathbf{x}}_0 + \beta_t \mathbf{x}_T - \mathbf{x}_t}{\gamma_t^2}$ | $\frac{\alpha_t \tilde{\mathbf{x}}_0 + \beta_t \mathbf{x}_T - \mathbf{x}_t}{\gamma_t^2}$ | $\frac{\alpha_t \tilde{\mathbf{x}}_0 + \beta_t \mathbf{x}_T - \mathbf{x}_t}{\gamma_t^2}$ |
+| Discretization<br>Sec. 4.2 | - | Euler<br>Eq. (17) | Euler<br>Eq. (14) | Heun<br>- | Euler<br>Eqs. (14) and (16) |
+
+### 3.2 STOCHASTICITY CONTROL IN SAMPLING SDEs
+
+Stochasticity control (SC) during the sampling phase has been explored for diffusion models by Karras et al. (2022), yet comprehensive studies on its application to diffusion bridge models remain limited. Eqs. (19) and (20) offer sampling schemes that align with Eqs. (6) and (7) in the DDBM framework. However, these methods do not guarantee optimal performance in terms of sampling speed and image quality. To address this issue, Linqi Zhou et al. (2023) introduced a hybrid sampler alternating between reversed ODE and SDE, and Zheng et al. (2024) accelerated sampling with an improved algorithm using discretized timesteps. This section aims to explore how SC can be further optimized in the sampling for DBMs, thereby addressing the current research gap. Given transition kernel, we can identify the reverse sampling SDEs, as demonstrated in Theorem 1.
+
+**Theorem 1.** Suppose the transition kernel of a diffusion process is given by  $p_{t|0,T}(\mathbf{x}_t | \mathbf{x}_0, \mathbf{x}_T) = \mathcal{N}(\mathbf{x}_t; \alpha_t \mathbf{x}_0 + \beta_t \mathbf{x}_T, \gamma_t^2 \mathbf{I})$ , then the evolution of conditional probability  $q(\mathbf{X}_t | \mathbf{x}_T)$  has a class of time reverse sampling SDEs of the form:
+
+$$d\mathbf{X}_t = \left[ \dot{\alpha}_t \tilde{\mathbf{x}}_0 + \dot{\beta}_t \mathbf{x}_T - (\dot{\gamma}_t \gamma_t + \epsilon_t) \nabla_{\mathbf{x}_t} \log p_t(\mathbf{X}_t | \mathbf{x}_T) \right] dt + \sqrt{2\epsilon_t} d\mathbf{W}_t \quad \mathbf{X}_T = \mathbf{x}_T. \quad (9)$$
+
+**Remark 3.1.** As  $\epsilon_t = 0$ , Eq. (9) recovers the sampling ODE specified in Eq. (7). As  $\epsilon_t = \gamma_t \dot{\gamma}_t - \frac{\dot{\alpha}_t}{\alpha_t} \gamma_t^2$ , Eq. (9) recovers the sampling SDE specified in Eq. (6). As  $\epsilon_t = \eta(\gamma_t \dot{\gamma}_t - \frac{\dot{\alpha}_t}{\alpha_t} \gamma_t^2)$ ,  $\eta \in (0, 1)$ , the stochasticity is between the original sampling ODE in Eq. (7) and SDE in Eq. (6).
+
+There is no definitive principle for designing  $\epsilon_t$ . For DDMs, Karras et al. (2022) suggest that the optimal level of stochasticity should be determined empirically. In the case of DBMs, however, certain design guidelines can be followed to potentially enhance performance. Unlike DDMs, which typically start sampling from Gaussian noise, DBMs begin with a deterministic condition  $\mathbf{x}_T$ . Therefore, setting  $\epsilon_t = 0$  results in no stochasticity for the sampling process and final sample  $\mathbf{x}_0$ , which may partly explain the poor performance of ODE samplers in this context. However, it is advantageous to set  $\epsilon_t = 0$  during the final steps of sampling. The rationale behind this approach is discussed in detail in Section 4.2.
+
+### 3.3 STOCHASTICITY CONTROL IN BASE DISTRIBUTION
+
+Conditional diversity refers to the range of outputs that can be generated from specific conditions. This is valuable in scenarios like image generation from edges, where one edge image may lead to multiple valid images differing in color, texture, or detail. Conversely, in super-resolution, where
+
+{4}------------------------------------------------
+
+![Figure 2: The effect of stochasticity control on density and state spaces. (a) Density space: A plot showing the relationship between the conditional distribution pi_cond * N(0, b^2 I) and the data distribution pi_data. The OT path is a direct line, while the diffusion path is a curved line. The legend indicates different levels of stochasticity: gamma_t > 0 (dash lines) and b > 0 (green lines). (b) State space: A plot showing the relationship between input (blue dots) and output (red dots) data. The OT path is a direct line, while the diffusion path is a curved line. The legend indicates different levels of stochasticity: gamma_t > 0, epsilon_t > 0, and b > 0.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 2: The effect of stochasticity control on density and state spaces. (a) Density space: A plot showing the relationship between the conditional distribution pi\_cond \* N(0, b^2 I) and the data distribution pi\_data. The OT path is a direct line, while the diffusion path is a curved line. The legend indicates different levels of stochasticity: gamma\_t > 0 (dash lines) and b > 0 (green lines). (b) State space: A plot showing the relationship between input (blue dots) and output (red dots) data. The OT path is a direct line, while the diffusion path is a curved line. The legend indicates different levels of stochasticity: gamma\_t > 0, epsilon\_t > 0, and b > 0.
+
+Figure 2: The effect of stochasticity control on density and state spaces. Adding no stochasticity ( $\gamma_t = 0, \epsilon_t = 0, b = 0$ ) leads to the optimal transport (OT) path. (a). In the density space, OT path directly links  $\pi_{\text{cond}}$  and  $\pi_{\text{data}}$ , while diffusion path transports from  $\mathcal{N}(0, b^2 \mathbf{I})$  to  $\pi_{\text{data}}$ . When  $\gamma_t > 0$  (dash lines), it increases stochasticity in the middle of the transition, whereas  $b > 0$  (green lines), it directly adds stochasticity to the base distribution, leading to trade off between DDMs and DBMs when  $b = 0$ . (b). In the state space, we use blue dots and red dots to represent input and output data respectively. The OT path directly links two samples, it shows a detoured path when  $\gamma_t > 0$ , introduces a zigzag pattern while  $\epsilon_t > 0$ , and smooths the base distribution as  $b > 0$ .
+
+a high-resolution image is created from a low-resolution one, output variability is limited by the input’s structure, demanding consistency and fidelity to the original rather than diversity.
+
+To control the conditional diversity of diffusion bridge models, we can trade off between DBMs and DDMs by controlling the stochasticity in the base distribution. Bridge models transport the base distribution  $\pi_T$  to target distribution  $\pi_0$ . Typically, most previous bridge models, such as those discussed in (Linqi Zhou et al., 2023; Albergo et al., 2023), treat  $\pi_T$  as the input data distribution,  $\pi_{\text{cond}}$ . However, it is flexible to design  $\pi_T$ ; for instance, by choosing  $\pi_T$  as a Gaussian distribution, we recover DDMs. An intermediate approach involves the convolution of  $\pi_{\text{cond}}$  with a Gaussian distribution,  $\pi_T = \pi_{\text{cond}} * \mathcal{N}(0, b^2 \mathbf{I})$ , where  $b$  is a constant that controls the strength of booting noise we added to the input data distribution. We provide an illustration of the effect of SC in transition kernel, sampling SDEs and distribution in Fig. 2.
+
+We developed the Average Feature Distance (AFD) metric to quantify the conditional diversity among generated images. Initially, we select a group of source images  $\{\mathbf{x}_r^{(i)}\}_{i=1}^M$ . For each  $\mathbf{x}_r^{(i)}$ , we then generate  $L$  distinct target samples. The  $j$ -th generated sample corresponding to the  $i$ -th source image is denoted by  $\mathbf{y}_{ij}$ . Then the AFD is calculated as follows:
+
+$$\text{AFD} = \frac{1}{M} \sum_{i=1}^M \frac{1}{L^2 - L} \sum_{k, l=1, k \neq l}^L \|F(\mathbf{y}_{ik}) - F(\mathbf{y}_{il})\| \quad (10)$$
+
+where  $F(\cdot)$  is a function that extracts the features of images, and  $\|\cdot\|$  represents Euclidean norm. Intuitively, a larger AFD indicates the better conditional diversity. Here,  $F(\mathbf{x})$  can be  $\mathbf{x}$  to evaluate the diversity directly in the pixel space. Alternatively,  $F(\cdot)$  can be defined using the Inception-V3 model to assess the diversity in the latent space. In our experiments, we use AFD in latent space.
+
+## 4 SCORE REPARAMETERIZATION AND ALGORITHM DESIGN
+
+### 4.1 SCORE REPARAMETERIZATION
+
+The log gradient of Gaussian transition kernel  $p_{t|0,T}(\mathbf{x}_t | \mathbf{x}_0, \mathbf{x}_T) = \mathcal{N}(\mathbf{x}_t; \alpha_t \mathbf{x}_0 + \beta_t \mathbf{x}_T, \gamma_t^2 \mathbf{I})$  has an analytical form:  $\nabla_{\mathbf{x}_t} \log p_{t|0,T}(\mathbf{x}_t | \mathbf{x}_0, \mathbf{x}_T) = (\alpha_t \mathbf{x}_0 + \beta_t \mathbf{x}_T - \mathbf{x}_t) / \gamma_t^2$ . Therefore, the denoising bridge score matching objective in Eq. (8) is tractable. However, the singular term  $1/\gamma_t^2$  at endpoints  $t = 0$  and  $t = T$  can lead to highly unstable training, see Appendix D for more details. Consequently, instead of directly parameterizing the score function  $\nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}_t | \mathbf{x}_T)$  with a neural network, we opt to reparameterize the score as a function of  $\tilde{\mathbf{x}}_0(\mathbf{x}_t, \mathbf{x}_T, t)$ , as demonstrated in Theorem 2. This reparameterization strategy, initially introduced in EDM (Karras et al., 2022), is particularly significant for enhancing the stability and performance of our bridge models.
+
+{5}------------------------------------------------
+
+**Theorem 2.** Let  $(\mathbf{x}_0, \mathbf{x}_T) \sim \pi_0(\mathbf{x}_0, \mathbf{x}_T)$ ,  $\mathbf{x}_t \sim p_{t|0,T}(\mathbf{x}_t|\mathbf{x}_0, \mathbf{x}_T)$ ,  $t \sim \mathcal{U}(0, T)$ . Given the transition kernel:  $p_{t|0,T}(\mathbf{x}_t|\mathbf{x}_0, \mathbf{x}_T) = \mathcal{N}(\mathbf{x}_t; \alpha_t \mathbf{x}_0 + \beta_t \mathbf{x}_T, \gamma_t^2 \mathbf{I})$ , if  $\hat{\mathbf{x}}_0(\mathbf{x}_t, \mathbf{x}_T, t)$  is a denoiser function that minimizes the expected  $L_2$  denoising error for samples drawn from  $\pi_0(\mathbf{x}_0, \mathbf{x}_T)$ :
+
+$$\hat{\mathbf{x}}_0(\mathbf{x}_t, \mathbf{x}_T, t) = \arg \min_{D(\mathbf{x}_t, \mathbf{x}_T, t)} \mathbb{E}_{\mathbf{x}_0, \mathbf{x}_T, \mathbf{x}_t} [\lambda(t) \|D(\mathbf{x}_t, \mathbf{x}_T, t) - \mathbf{x}_0\|_2^2], \quad (11)$$
+
+then the score has the following relationship with  $\hat{\mathbf{x}}_0(\mathbf{x}_t, \mathbf{x}_T, t)$ :
+
+$$\nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}|\mathbf{x}_T) = \frac{\alpha_t \hat{\mathbf{x}}_0(\mathbf{x}, \mathbf{x}_T, t) + \beta_t \mathbf{x}_T - \mathbf{x}_t}{\gamma_t^2}. \quad (12)$$
+
+The key observation is that  $\hat{\mathbf{x}}_0(\mathbf{x}_t, \mathbf{x}_T, t)$  can be estimated by a neural network  $D_\theta(\mathbf{x}_t, \mathbf{x}_T, t)$  trained according to Eq. (11). In the implementation, we include additional pre- and post-processing steps: scaling functions and loss weighting, see Appendix E for details.
+
+### 4.2 ALGORITHM DESIGN
+
+Let  $\hat{\mathbf{z}}_t = (\mathbf{x}_t - \alpha_t \hat{\mathbf{x}}_0 - \beta_t \mathbf{x}_T)/\gamma_t$ , then the score  $\nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}|\mathbf{x}_T)$  and  $\hat{\mathbf{z}}_t$  has a linear relationship:  $\tilde{\mathbf{z}}_t = -\gamma_t \nabla_{\mathbf{x}_t} \log p_t(\mathbf{x}|\mathbf{x}_T)$ . An alternative formulation of the sampling SDEs (9) is presented as:
+
+$$d\mathbf{X}_t = \left[ \hat{\alpha}_t \hat{\mathbf{x}}_0 + \hat{\beta}_t \mathbf{x}_T + (\hat{\gamma}_t + \frac{\epsilon_t}{\gamma_t}) \hat{\mathbf{z}}_t \right] dt + \sqrt{2\epsilon_t} d\mathbf{W}_t. \quad (13)$$
+
+Instead of using the score directly, we apply Eq. (13) to reduce truncation error. Additionally,  $\hat{\mathbf{z}}$  can be seen as the estimated noise added to the interpolation (Albergo et al., 2023), the introduction of  $\tilde{\mathbf{z}}$  brings more interpretability. One discretization scheme of sampling SDEs Eq. (13) is based on Euler's method:
+
+$$\mathbf{x}_{t-\Delta t} \approx \mathbf{x}_t - \left[ \hat{\alpha}_t \hat{\mathbf{x}}_0 + \hat{\beta}_t \mathbf{x}_T + (\hat{\gamma}_t + \frac{\epsilon_t}{\gamma_t}) \hat{\mathbf{z}}_t \right] \Delta t + \sqrt{2\epsilon_t \Delta t} \tilde{\mathbf{z}}_t, \quad \tilde{\mathbf{z}}_t \sim \mathcal{N}(0, \mathbf{I}). \quad (14)$$
+
+Furthermore, for small enough  $\Delta t$  the derivative term can be approximated by:  $\hat{\alpha}_t \approx (\alpha_t - \alpha_{t-\Delta t})/\Delta t$ ,  $\hat{\beta}_t \approx (\beta_t - \beta_{t-\Delta t})/\Delta t$ ,  $\hat{\gamma}_t \approx (\gamma_t - \gamma_{t-\Delta t})/\Delta t$ . Using the fact that  $\mathbf{x}_t = \alpha_t \hat{\mathbf{x}}_0 + \beta_t \mathbf{x}_T + \gamma_t \hat{\mathbf{z}}_t$ , we can further simplify the iteration:
+
+$$\mathbf{x}_{t-\Delta t} \approx \alpha_{t-\Delta t} \hat{\mathbf{x}}_0 + \beta_{t-\Delta t} \mathbf{x}_T + (\gamma_{t-\Delta t} - \frac{\epsilon_t \Delta t}{\gamma_t}) \hat{\mathbf{z}}_t + \sqrt{2\epsilon_t \Delta t} \tilde{\mathbf{z}}_t. \quad (15)$$
+
+As  $\gamma_{t-\Delta t}^2 - 2\epsilon_t \Delta t > 0$ ,  $\gamma_{t-\Delta t} - \frac{\epsilon_t \Delta t}{\gamma_t} \approx \sqrt{\gamma_{t-\Delta t}^2 - 2\epsilon_t \Delta t}$ , which leads to another discretization and recovers the sampler of DBIM (Zheng et al., 2024):
+
+$$\mathbf{x}_{t-\Delta t} = \alpha_{t-\Delta t} \hat{\mathbf{x}}_0 + \beta_{t-\Delta t} \mathbf{x}_T + \sqrt{\gamma_{t-\Delta t}^2 - 2\epsilon_t \Delta t} \tilde{\mathbf{z}}_t + \sqrt{2\epsilon_t \Delta t} \tilde{\mathbf{z}}_t. \quad (16)$$
+
+**Remark 4.1.** Eq. (16) provides more insight about the noise and the design of  $\epsilon_t$ . Here  $\tilde{\mathbf{z}}_t$  and  $\bar{\mathbf{z}}_t$  serve as predicted noise and added noise respectively. Generally, we assume the error  $\|\mathbf{x}_0 - \hat{\mathbf{x}}_0(\mathbf{x}_t, \mathbf{x}_T, t)\|$  decreases as we move  $\mathbf{x}_t$  from  $\mathbf{x}_T$  to  $\mathbf{x}_0$ . Therefore, a small  $\epsilon_t$  was suggested as  $t$  close to 0. Further, due to the singular term  $\epsilon_t \Delta t / \gamma_t$  at  $t = 0$ , it's better to set  $\epsilon_t$  small enough to avoid singularity.
+
+**Remark 4.2.** Eq. (16) requires a constraint  $\gamma_{t-\Delta t}^2 - 2\epsilon_t \Delta t > 0$ . Note that this limitation is unnecessary and will limit the design of  $\epsilon_t$ .
+
+{6}------------------------------------------------
+
+As  $2\epsilon_t\Delta t = \gamma_{t-\Delta t}^2 - \beta_{t-\Delta t}^2\gamma_t^2/\beta_t^2$ , the coefficient of  $\mathbf{x}_t$  in Eq. 16 is 0, thus Eq. 16 can be simplified as:
+
+$$\mathbf{x}_{t-\Delta t} = (\alpha_{t-\Delta t} - \alpha_t \frac{\beta_{t-\Delta t}}{\beta_t})\tilde{\mathbf{x}}_0 + \frac{\beta_{t-\Delta t}}{\beta_t}\mathbf{x}_t + \sqrt{\gamma_{t-\Delta t}^2 - \frac{\beta_{t-\Delta t}^2\gamma_t^2}{\beta_t^2}}\tilde{\mathbf{z}}_t \quad (17)$$
+
+**Remark 4.3.** Eq. 17 is referred as Markovian bridge in Zheng et al. (2024), and this setting can be used to reproduce the sampler in I2SB Liu et al. (2023), see Appendix C for more details.
+
+In our implementation, when we make  $\epsilon_t = 0$  for the last two steps, Eq. (16) gets reduced to:  $\mathbf{x}_{t-\Delta t} \approx \alpha_{t-\Delta t}\tilde{\mathbf{x}}_0 + \beta_{t-\Delta t}\mathbf{x}_T + \gamma_{t-\Delta t}\tilde{\mathbf{z}}_t$ . For other steps, we apply Eq. (14) and let  $\epsilon_t = \eta(\gamma_t\hat{\gamma}_t - \frac{\hat{\alpha}_t}{\alpha_t}\gamma_t^2)$ , where  $\eta$  is a constant. Putting all ingredients together leads to our sampler outlined in Algorithm 1.
+
+#### --- Algorithm 1 Denoising Diffusion Bridge Stochastic Sampler ---
+
+**Require:** model  $D_\theta(\mathbf{x}_t, \mathbf{x}_T, t)$ , time steps  $\{t_j\}_{j=0}^N$ , input data distribution  $\pi_{\text{cond}}$ , scheduler  $\alpha_t, \beta_t, \gamma_t, \epsilon_t, b$ .
+
+- 1: Sample  $\mathbf{x}_T \sim \pi_{\text{cond}}, \mathbf{n}_0 \sim \mathcal{N}(0, b^2\mathbf{I})$
+- 2:  $\mathbf{x}_N = \mathbf{x}_T + \mathbf{n}_0$
+- 3: **for**  $i = N, \dots, 1$  **do**
+- 4:    $\tilde{\mathbf{x}}_0 \leftarrow D_\theta(\mathbf{x}_i, \mathbf{x}_T, t_i)$
+- 5:    $\tilde{\mathbf{z}}_i \leftarrow (\mathbf{x}_i - \alpha_t\tilde{\mathbf{x}}_0 - \beta_t\mathbf{x}_N)/\gamma_t$
+- 6:   **if**  $N \geq 2$  **then**
+- 7:     Sample  $\tilde{\mathbf{z}}_i \sim \mathcal{N}(0, \mathbf{I})$
+- 8:      $d_i \leftarrow \hat{\alpha}_t\tilde{\mathbf{x}}_0 + \hat{\beta}_t\mathbf{x}_N + (\hat{\gamma}_t + \epsilon_t/\gamma_t)\tilde{\mathbf{z}}_i$
+- 9:      $\mathbf{x}_{i-1} \leftarrow \mathbf{x}_i + d_i(t_i - t_{i-1}) + \sqrt{2\epsilon_t}(t_i - t_{i-1})\tilde{\mathbf{z}}_i$
+- 10:   **else**
+- 11:      $\mathbf{x}_{i-1} \leftarrow \alpha_{t_{i-1}}\tilde{\mathbf{x}}_0 + \beta_{t_{i-1}}\mathbf{x}_N + \gamma_{t_{i-1}}\tilde{\mathbf{z}}_i$
+- 12:   **end if**
+- 13: **end for**
+
+---
+
+## 5 EXPERIMENTS
+
+In this section, we demonstrate that SDBs achieve much better performance for I2I transition tasks, in terms of sample efficiency, image quality and conditional diversity. We evaluate on I2I translation tasks on Edges→Handbags (Isola et al., 2017) scaled to  $64 \times 64$  pixels and DIODE-Outdoor scaled to  $256 \times 256$  (Vasiljevic et al., 2019). For evaluation metrics, we use Fréchet Inception Distance (FID) (Heusel et al., 2017) for all experiments, and additionally measure Inception Scores (IS) (Barratt & Sharma, 2018), Learned Perceptual Image Patch Similarity (LPIPS) (Zhang et al., 2018), Mean Square Error (MSE), following previous works (Zheng et al., 2024; Linqi Zhou et al., 2023). In addition, we use AFD, Eq. 10, to measure conditional diversity, as further validated in Appendix A. Further details of the experiments and design guidelines are provided in Appendix E and D.
+
+**Stochasticity control in sampling SDEs.** We evaluate different sampling algorithms in Fig. 3 (a), the results demonstrate that setting  $\epsilon_t = 0$  and using Eq. (17) for the last 2 steps can significantly improve sampled image quality compared with simple Euler discretization and DDBM sampler. Furthermore, By specifically designing stochasticity control during sampling, our sampler surpasses the sampling results by DDBM and DBIM with the same pretrained model. The results are demonstrated in Table 2. We set the number of function evaluations (NFEs) from the set  $[5, 10, 20]$  and select  $\eta$  from the set  $[0.0, 0.3, 0.5, 0.8, 1.0]$ . We observed that our sampler achieves much lower FID compared to both DDBM sampler and DBIM sampler across all datasets and NFEs. Besides, the best performance achieved around  $\eta = 0.3$ , which is align with the total stochasticity added to the sampling process by original DDBM sampler (Linqi Zhou et al., 2023). The above results demonstrate the significance of designing the stochasticity added to the sampling process.
+
+**Stochasticity control in transition kernel.** Despite the extensive design space available for the transition kernel, this paper focuses on Linear transition path with different strength of maximum
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+![Figure 3: Ablation studies on discretization, gamma_max and epsilon_t. (a) FID vs NFE for different discretization schemes. (b) FID vs Iterations for different gamma_max values. (c) FID vs eta for different epsilon_t values.](a71911ad87414271aeb190e0eebcb989_img.jpg)
+
+Figure 3 consists of three line plots. Plot (a) shows FID vs NFE for DDBM sampler, A, A+B, A+C, and A+B+C. Plot (b) shows FID vs Iterations for gamma\_max values 0.025, 0.125, 0.25, 0.5, and 1. Plot (c) shows FID vs eta for epsilon\_t values 0.125, 0.25, 1.0, and 0.125 with b=0.5.
+
+Figure 3: Ablation studies on discretization, gamma\_max and epsilon\_t. (a) FID vs NFE for different discretization schemes. (b) FID vs Iterations for different gamma\_max values. (c) FID vs eta for different epsilon\_t values.
+
+Figure 3: Ablation studies on discretization,  $\gamma_{\max}$  and  $\epsilon_t$ . (a). We evaluate different discretization schemes on Edges2handbags ( $64 \times 64$ ) dataset using DDBM-VP pretrained model, A represents simple Euler discretization in Eq. (14), B represents setting  $\epsilon_t = 0$  for the last 2 steps, C represents using Eq. (17) for  $\epsilon_t = 0$ . (b). Ablation study on  $\gamma_{\max}$  evaluated by DIODE ( $64 \times 64$ ) dataset. (c). Ablation study on  $\epsilon_t$  through our SDB model with Linear path on Edges2handbags ( $64 \times 64$ ) dataset, where  $\epsilon_t = \eta(\gamma_t \hat{c}_t - \frac{\alpha_t}{\alpha_{t-1}} \gamma_t^2)$ .
+
+Table 2: Ablation Study of  $\epsilon_t$  for DDBM-VP path via DDBM pretrained VP model (Evaluated by FID), where  $\epsilon_t = \eta(\gamma_t \hat{c}_t - \frac{\alpha_t}{\alpha_{t-1}} \gamma_t^2)$ .
+
+| Sampler | $\eta$ | NFE |  |  |  |  |  |
+|-|-|-|-|-|-|-|-|
+|  |  | Edges→Handbags ( $64 \times 64$ ) |  |  | DIODE-Outdoor ( $256 \times 256$ ) |  |  |
+|  |  | 5 | 10 | 20 | 5 | 10 | 20 |
+| DDBM (Linqi Zhou et al., 2023) | - | 317.22 | 137.15 | 46.74 | 328.33 | 151.93 | 41.03 |
+| DBM (Zheng et al., 2024) | - | 3.60 | 2.46 | 1.74 | 14.25 | 7.98 | 4.99 |
+| SDB (Ours) | 0 | 10.89 | 11.45 | 11.69 | 77.31 | 84.68 | 87.34 |
+|  | 0.3 | <b>2.36</b> | <b>2.25</b> | <b>1.53</b> | <b>10.87</b> | <b>6.83</b> | <b>4.12</b> |
+|  | 0.5 | 10.21 | 7.17 | 4.18 | 18.94 | 12.91 | 8.07 |
+|  | 0.8 | 16.33 | 14.29 | 9.33 | 25.90 | 18.25 | 11.74 |
+|  | 1.0 | 18.78 | 17.61 | 13.59 | 30.62 | 21.64 | 14.08 |
+
+stochasticity, i.e.,  $p_{t|0,T}(\mathbf{x}_t|\mathbf{x}_0, \mathbf{x}_T) = \mathcal{N}(\mathbf{x}_t; (1-t)\mathbf{x}_0 + t\mathbf{x}_T, \frac{1}{4}\gamma_{\max}^2 t(1-t)\mathbf{I})$ . We conducted detailed ablation studies on  $\gamma_{\max}$  and  $\eta$  for the Linear path on DIODE ( $64 \times 64$ ) dataset, as shown in Fig. 3 (b) and (c). The optimal values for  $\gamma_{\max}$  were found to be 0.125 and 0.25, while the best performance for  $\eta$  was achieved with  $\eta = 0.8$  and  $\eta = 1.0$ . Performance deteriorates when either parameter is too small or too large. Based on the results of these ablation studies, we further trained SDB models on the Edges2handbags ( $64 \times 64$ ) and DIODE ( $256 \times 256$ ) datasets by taking  $\gamma_{\max} \in \{0.125, 0.5\}$  and setting  $\eta = 1.0$ . The results are presented in Table 3. Our models establish a new benchmark for image quality, as evaluated by FID, IS and LPIPS. Despite our models having slightly higher MSEs compared to the baseline DDBM and DBM, we believe that a larger MSE indicates that the generated images are distinct from their references, suggesting a richer diversity. We also provide the visualization of sampling process in Fig. 4.
+
+**Stochasticity control in base distribution.** Through controlling stochasticity in the base distribution, we achieved a more diverse set of sample images, while this diversity comes at the cost of slightly higher FID scores and slower sampling speed. We show generated images in Fig. 5. More visualization can be found in Appendix F, which shows that by introducing booting noise to the input data distribution, the model can generate samples with more diverse colors and textures. Further quantitative results are presented in Table 4, confirming that our model surpasses the vanilla DDBM in terms of image quality, sample efficiency, and conditional diversity.
+
+## 6 RELATED WORK
+
+**Diffusion Bridge Models.** Diffusion bridges are faster diffusion processes that could learn the mapping between two random target distributions (Yifeng Shi et al., 2023; Stefano Peluchetti, 2023), demonstrating significant potential in various areas, such as protein docking (Somnath et al., 2023),
+
+{8}------------------------------------------------
+
+Table 3: Quantitative results in the I2I translation task edges2handbags ( $64 \times 64$ ) and DIODE (256  $\times$  256) datasets. Our results were achieved by Linear transition kernel and setting  $\eta = 1$ .
+
+| Model | NFE | Edges $\rightarrow$ handbags ( $64 \times 64$ ) |  |  |  | DIODE-Outdoor ( $256 \times 256$ ) |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  |  | FID $\downarrow$ | IS $\uparrow$ | LPIPS $\downarrow$ | MSE | FID $\downarrow$ | IS $\uparrow$ | LPIPS $\downarrow$ | MSE |
+| Pix2Pix (Isola et al., 2017) | 1 | 74.8 | 3.24 | 0.356 | 0.209 | 82.4 | 4.22 | 0.556 | 0.133 |
+| DDIB (Su et al., 2022) | $\geq 40^\dagger$ | 186.84 | 2.04 | 0.869 | 1.05 | 242.3 | 4.22 | 0.798 | 0.794 |
+| SDEdit (Meng et al., 2021) | $\geq 40$ | 26.5 | 3.58 | 0.271 | 0.510 | 31.14 | 5.70 | 0.714 | 0.534 |
+| Rectified Flow (Liu et al., 2022b) | $\geq 40$ | 25.3 | 2.80 | 0.241 | 0.088 | 77.18 | 5.87 | 0.534 | 0.157 |
+| $I^2SB$ (Liu et al., 2023) | $\geq 40$ | 7.43 | 3.40 | 0.244 | 0.191 | 9.34 | 5.77 | 0.373 | 0.145 |
+| DDIM (Linqi Zhou et al., 2023) | 118 | 1.83 | 3.73 | 0.142 | 0.040 | 4.43 | 6.21 | 0.244 | 0.084 |
+| DBIM (Zheng et al., 2024) | 20 | 1.74 | 3.64 | 0.095 | 0.005 | 4.99 | 6.10 | 0.201 | 0.017 |
+| SDB ( $\gamma_{\max} = 0.125$ ) | 5 | <b>0.89</b> | 4.10 | 0.049 | 0.024 | <b>12.97</b> | <b>5.49</b> | <b>0.269</b> | <b>0.074</b> |
+|  | 10 | <b>0.67</b> | 4.11 | 0.045 | 0.024 | <b>10.12</b> | <b>5.56</b> | <b>0.255</b> | <b>0.076</b> |
+|  | 20 | <b>0.56</b> | 4.11 | 0.044 | 0.024 | <b>8.62</b> | <b>5.62</b> | <b>0.248</b> | <b>0.078</b> |
+| SDB ( $\gamma_{\max} = 0.25$ ) | 5 | 1.46 | <b>4.21</b> | <b>0.040</b> | 0.016 | <b>4.16</b> | <b>5.83</b> | <b>0.104</b> | <b>0.029</b> |
+|  | 10 | 1.38 | <b>4.22</b> | <b>0.038</b> | 0.017 | <b>3.44</b> | <b>5.86</b> | <b>0.098</b> | <b>0.029</b> |
+|  | 20 | 1.40 | <b>4.20</b> | <b>0.038</b> | 0.017 | <b>3.27</b> | <b>5.85</b> | <b>0.094</b> | <b>0.029</b> |
+
+![Figure 4: Visualization of the sampling process. The figure shows two rows of images. The top row, labeled x_0, shows the initial stage of the diffusion model, where the images are blurry and lack fine details. The bottom row, labeled x_t, shows the process evolving, with images becoming progressively sharper and more detailed, capturing high-frequency elements like texture.](c37fe03d7cad74ad675a0eb16aa43821_img.jpg)
+
+Figure 4: Visualization of the sampling process. The figure shows two rows of images. The top row, labeled x\_0, shows the initial stage of the diffusion model, where the images are blurry and lack fine details. The bottom row, labeled x\_t, shows the process evolving, with images becoming progressively sharper and more detailed, capturing high-frequency elements like texture.
+
+Figure 4: Visualization of the sampling process. The trajectories of  $\hat{x}_0$  suggest that in the initial stage of the diffusion model, more general features such as shape and color are constructed. As the process evolves, it progressively generates finer details and high-frequency elements like texture.
+
+mean-field game (Liu et al., 2022a), I2I translation (Liu et al., 2023; Linqi Zhou et al., 2023). According to different design philosophies, DBMs can be divided into two groups: bridge matching and stochastic interpolants. The idea of bridge matching was first proposed by Peluchetti (2023), and can be viewed as a generalization of score matching (Song et al., 2020). Based on this, diffusion Schrödinger bridge matching (DSBM) has been developed for solving Schrödinger bridge problems Stefano Peluchetti (2023); Yifeng Shi et al. (2023). In addition, Liu et al. (2023) utilize bridge matching to perform image restoration tasks and noted benefits of stochasticity empirically, the experiments shows the new model is more efficient and interpretable than score-based generative models (Liu et al., 2023). Furthermore, our benchmark DDIM (Linqi Zhou et al., 2023) achieve significant improvement for various I2I translation tasks, DBIM (Zheng et al., 2024) improved the sampling algorithm for DDBM, significantly reducing sampling time while maintaining the same image quality. Flow Matching and Rectified Flow learn ODE models to facilitate transport between two empirically observed distributions (Lipman et al., 2022; Liu et al., 2022b). Stochastic interpolants further couple the base and target densities through SDEs (Albergo et al., 2023). Although our approach aligns with these methods, it diverges in various aspects. Unlike stochastic interpolation which models the data distribution  $p_0$ , our framework specifically targets sampling from the conditional distribution  $p_{0|T}$ , significantly simplifying both training and inference.
+
+**Image-to-Image Translations.** Diffusion models have shown extraordinary performance in image synthesis. However, enhancing their capability in I2I translation presents several challenges, primarily the reduction of artifacts in translated images. To address this, DiffI2I mitigates misalignment and reduces artifacts in I2I translation tasks with fewer diffusion steps (Bin Xia et al., 2023). In the latent space, I2I translation is also achieved more quickly by S2ST (Or Greenberg et al., 2023), which consumes less memory. Various methods leverage different forms of guidance (Narek Tumanyan et al., 2023; Hyunsoo Lee et al., 2023), such as frequency control (Xiang Gao et al., 2024), to tackle these challenges. Another significant challenge is that I2I translation methods typically require joint training on both source and target domains, posing privacy concerns. Injecting-diffusion addresses this issue in unpaired I2I translation by extracting domain-independent content from the source image and fusing it into the target domain (Luying Li & Lizhuang Ma, 2023). To improve interpretability in unpaired translation, SDDM separates intermediate tangled generative distributions by decom-
+
+{9}------------------------------------------------
+
+Table 4: Quantitative results for sample efficiency, image quality, and conditional diversity. By adding stochasticity to the base distribution ( $b > 0$ ), we achieved much better conditional diversity, evaluated by AFD. While the introduction of  $b > 0$  results in a slight increase in FID and NFE, we believe this trade-off is advantageous in certain scenarios.
+
+(a). DDBM-VP model + different samplers.
+
+| Sampler | NFEs ↓ | FID ↓ | AFD ↑ |
+|-|-|-|-|
+| DDBM | 118 | 1.83 | 6.99 |
+| DBIM | 5 | 3.60 | 5.63 |
+| DBIM | 10 | 2.46 | 5.20 |
+| DBIM | 20 | 1.74 | 5.84 |
+| SDB | 5 | 2.36 | 5.11 |
+| SDB | 10 | 2.25 | 5.70 |
+| SDB | 20 | 1.53 | 6.04 |
+
+(b). Our SDB models and samplers with different choices of  $b$ .
+
+| $b$ | NFEs ↓ | FID ↓ | AFD ↑ |
+|-|-|-|-|
+| 0 | 5 | <b>0.89</b> | 6.00 |
+| 0 | 10 | <b>0.67</b> | 6.05 |
+| 0 | 20 | <b>0.56</b> | 6.25 |
+| 0.5 | 5 | 3.31 | <b>8.53</b> |
+| 0.5 | 10 | 2.07 | <b>9.35</b> |
+| 0.5 | 20 | 1.74 | <b>9.65</b> |
+
+![Figure 5: Visualization of conditional diversity via sampled images. The figure shows three sets of sampled images. The first set is labeled 'DDBM' with NFE=10, FID=2.46, AFD=5.20. The second set is labeled 'DDBM' with NFE=118, FID=1.83, AFD=6.99. The third set is labeled 'Linear (b = 0.5)' with NFE=10, FID=2.07, AFD=9.35. Above the third set, 'AFD' is labeled with an arrow pointing to the columns and 'FID' is labeled with an arrow pointing to the rows. The images show various objects like cars, dogs, and birds, illustrating the diversity of the generated samples.](d3f6de4fe9f9138fc6afc584b5104433_img.jpg)
+
+Figure 5: Visualization of conditional diversity via sampled images. The figure shows three sets of sampled images. The first set is labeled 'DDBM' with NFE=10, FID=2.46, AFD=5.20. The second set is labeled 'DDBM' with NFE=118, FID=1.83, AFD=6.99. The third set is labeled 'Linear (b = 0.5)' with NFE=10, FID=2.07, AFD=9.35. Above the third set, 'AFD' is labeled with an arrow pointing to the columns and 'FID' is labeled with an arrow pointing to the rows. The images show various objects like cars, dogs, and birds, illustrating the diversity of the generated samples.
+
+Figure 5: Visualization of conditional diversity via sampled images. While FID measures diversity within columns, AFD evaluates diversity across rows. The visualization further proved the effectiveness of AFD. More sampled images can be found in Appendix F.
+
+posing the score function (Shurong Sun et al., 2023). Diffusion bridges are also popular due to their interpretability and ability to map between arbitrary distributions. DDIB employs an encoder trained on the source domain and a decoder trained on the target domain to establish Schrödinger Bridges (SBs) (Xu Su et al., 2022). Beomsu Kim et al. (2023) incorporates discriminators and regularization to learn an SB between unpaired data.
+
+## 7 CONCLUSION
+
+In this study, we introduced the Stochasticity-controlled Diffusion Bridge (SDB), a framework designed to facilitate translation between two arbitrary distributions. By strategically managing stochasticity in the base distribution, transition kernel, and sampling SDEs, our approach improves image quality, sampling efficiency, and conditional diversity, allowing for the tailored design of diffusion bridge models across a range of tasks. This work is the first to derive sampling SDEs of  $q(\mathbf{X}_t | \mathbf{x}_T)$  for arbitrary Gaussian transition kernels of the form  $\mathcal{N}(\alpha_t \mathbf{x}_t + \beta_t \mathbf{x}_T; \gamma_t^2 \mathbf{I})$ . Additionally, our approach is the first to highlight the issue of lacking conditional diversity in diffusion bridge models and to resolve it by introducing stochasticity into the base distribution. We highlighted the importance of stochasticity control (SC) and addressed challenges associated with singularity through score reparameterization and specially designed discretization. Our results demonstrate that a simple linear bridge configuration can set new benchmarks in image quality, sampling efficiency and conditional diversity, as evidenced by our experiments with  $64 \times 64$  edges2handbags and  $256 \times 256$  DIODE-outdoor I2I translation tasks. Despite these advancements, we acknowledge that the optimal stochasticity may vary from one scenario to another, indicating a rich avenue for further exploration and refinement in future work.
+
+ Rest of paper (reference and Appendix) is removed.

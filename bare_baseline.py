@@ -22,26 +22,33 @@ papers_to_review = direct_scores_df["paper_id"].tolist()
 
 
 def _make_sandboxed_tools(paper_path):
+    allowed_paper_path = os.path.abspath(paper_path)
+
     @tool(
         "read_file",
-        "Read a file",
-        {"abs_path": str},
+        "Read a file. Returns the full content with line numbers. Restricted to allowed directories only.",
+        {"abs_path": str, "start_line": int, "end_line": int},
     )
     async def _read_file(args: dict) -> dict:
-        print(f"  [read_file] requested: {args['abs_path']}")
+        print(f"  [read_file] requested: {args['abs_path']} (lines {args.get('start_line', 1)}-{args.get('end_line', 'end')})")
         abs_path = args["abs_path"]
-        if not (paper_path == abs_path):
-            err = f"Access denied: {abs_path} is not the paper under review."
+        start_line = args.get("start_line", 1) or 1
+        end_line = args.get("end_line", 0) or 0
+        if allowed_paper_path != os.path.abspath(abs_path):
+            err = f"Access denied: {abs_path} is not the paper path."
             print(f"  [read_file] ERROR: {err}")
             return {"content": [{"type": "text", "text": err}], "is_error": True}
         try:
             with open(abs_path, "r", errors="replace") as file_handle:
-                lines = file_handle.read()
-            return {"content": [{"type": "text", "text": lines}]}
-        except FileNotFoundError:
-            print(f"  [read_file] ERROR: File not found: {abs_path}")
-            return {"content": [{"type": "text", "text": f"ERROR: File not found: {abs_path}"}], "is_error": True}
+                lines = file_handle.readlines()
+            selected = lines[max(0, start_line - 1):end_line if end_line > 0 else len(lines)]
+            text = "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
+            return {"content": [{"type": "text", "text": text}]}
+        except:
+            print(f"  [read_file] ERROR: {abs_path}")
+            return {"content": [{"type": "text", "text": f"ERROR: {abs_path}"}], "is_error": True}
     return [_read_file]
+
 
 with open(save_path, "w", newline="") as f:
     w = csv.writer(f)
@@ -64,28 +71,29 @@ async def review_paper(paper_id):
             "mcp__reviewer_fs__read_file",
         ],
         permission_mode="bypassPermissions",
-        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
+        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent", "WebFetch"],
         mcp_servers={"reviewer_fs": server},
         effort="medium",
         max_turns=15,
     )
 
-    formatted_prompt = prompt.format(paper_path=paper_path)
+    formatted_prompt = prompt.format(paper_path=os.path.abspath(paper_path))
 
     review_text = ""
     cost = 0
     async with ClaudeSDKClient(options=options) as sdk_client:
         await sdk_client.query(f"{formatted_prompt}")
         async for message in sdk_client.receive_response():
+            if isinstance(message, AssistantMessage):
+                print(message.content)
             if isinstance(message, ResultMessage):
-                cost += message.cost.total_cost
+                cost += message.total_cost_usd
                 review_text = message.result
 
 
-    
     review = review_text.strip()
     score = float(review.split("<pineapple>")[1].split("</pineapple>")[0].strip())
-    gt_scores = gt[gt["paper_id"] == paper_id][["score_0","score_1","score_2","score_3","score_4","score_5","score_6"]].values.flatten().tolist()
+    gt_scores = gt[gt["paper_id"] == paper_id][["score_0","score_1","score_2","score_3","score_4","score_5"]].values.flatten().tolist()
     gt_avg_score = gt[gt["paper_id"] == paper_id]["avg_score"].values[0]
 
     with open(save_path, "a", newline="") as f:
@@ -107,7 +115,11 @@ async def review_paper(paper_id):
     with open(save_path.replace(".csv", f"/{paper_id}.txt"), "w") as f:
         f.write(review_text)
 
+import tqdm
 if __name__ == "__main__":
-    asyncio.run(review_paper(papers_to_review[0]))
+    os.makedirs(save_path.replace(".csv", ""), exist_ok=True)
+
+    for paper in tqdm.tqdm(papers_to_review):
+        asyncio.run(review_paper(paper))
 
     

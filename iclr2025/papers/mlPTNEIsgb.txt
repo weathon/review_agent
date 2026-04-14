@@ -1,0 +1,395 @@
+
+
+{0}------------------------------------------------
+
+# SOLVING BLIND NON-LINEAR FORWARD AND INVERSE PROBLEM FOR AUDIO APPLICATIONS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+We propose a unified framework to address the *blind forward and inverse problems* in audio domain, where the objective is to estimate either the function or the input signal solely from the observed output, without access to the other. We formally define *forward operators* — mapping input to output signals — and formulate both problems within a probabilistic framework. For the blind forward problem, we design an architecture that utilizes a reference encoder to extract features from the reference signal, enabling the main operator to approximate arbitrary forward operators systematically composed via algebraic representations. For the blind inverse problem, we employ a conditional diffusion model conditioned on features from the pretrained reference encoder and augment the generation process using *twisted particle filtering* technique leveraging the approximated operator in the forward problem. We validate our framework on *zero-shot audio effect modeling and speech enhancement*. The experiments show that our approach replicates both simple and complex audio effects, generalizes under distribution mismatches, and effectively enhances noisy full-band audio across diverse effects and real-world scenarios. Codes are available at <https://t.ly/n1luk>, with audio samples at <https://t.ly/dBUhF>
+
+## 1 INTRODUCTION
+
+In both classical digital signal processing (DSP) and modern deep learning-based approaches, a central assumption is the existence of a ‘function’ that maps input signals to their corresponding outputs. While the classical DSP decomposes the speech into filters and sound source according to the source-filter theory (McAulay & Quatieri, 1986; Oppenheim, 1999), deep learning-based method leverages neural networks to approximate more complex mappings between *input-output pairs* with a supervised manner even without knowledge on the characteristics of the mappings.
+
+Still, recovering either the function or its input *solely from the output signal* remains challenging. Common approaches to estimate the functional form is to simplify or precondition the functional form or restrict it to specific types, collapsing the problem in parameter estimation or classifications (Engel et al., 2020; Colonel & Reiss, 2021; Lee et al., 2022b; Colonel et al., 2022; Peladeau & Peeters, 2024; Guo & McFee, 2023; Lee et al., 2023b; Rice et al., 2023; Take et al., 2024). However, these methods are only able to handle limited and simplified types, often difficult to be generalized to the wild setting. To reconstruct the input signals from the output signals, discriminative models learn to either directly predict the input signal from the given output signal or find a mask that results in a cleaned version of the output; thereby solving speech enhancement or signal restoration task. Recently, generative models are also one of the choices to recover the input signal by using the output signal as an auxiliary information in the generation process (Abdullatif et al., 2024; Serrà et al., 2022; Richter et al., 2023; Lemercier et al., 2023). These models are particularly effective in handling diverse types of degradation without relying on specific noise models. However, they ignore the connection between the clean and noisy signals, hence require large clean and noisy signal pairs to handle diverse degradation types.
+
+In this work, we introduce a unified framework to solve the *blind forward and inverse problems in the audio domain*, focusing on estimating either the function or the input signal from the observed output. After the definition of forward operators and each problems are rigorously formalized, we develop a framework to approximate arbitrary forward operators constructed by the algebraic
+
+{1}------------------------------------------------
+
+approach. For the blind inverse problem, we leverage a conditional diffusion model conditioned by the pre-trained reference encoder, and apply a *twisted particle filtering* method using the pre-trained estimated forward operator. The effectiveness of the proposed method is empirically demonstrated via zero-shot audio effect modeling and speech enhancement.
+
+## 2 RELATED WORKS
+
+**Zero-shot Audio Effect Modeling** We address zero-shot audio effect modeling as a representative example of the blind forward problem. A common approach to this task involves simplifying and preconditioning the functional form using DSP-based domain knowledge and strong inductive biases. For instance, the problem is often reduced to estimating intermediate features such as parameters (Engel et al., 2020; Colonel & Reiss, 2021; Lee et al., 2022b; Colonel et al., 2022; Peladeau & Peeters, 2024), impulse responses (Steinmetz et al., 2021; Lee et al., 2023a), or combinations of audio effects (Guo & McFee, 2023; Lee et al., 2023b; Rice et al., 2023; Take et al., 2024). Other approaches focus on specific tasks, such as acoustic scene transfer (Im & Nam, 2024), impulse response learning (Steinmetz et al., 2021), or modeling single-type effects (Chen et al., 2024).
+
+**Speech Enhancement** Speech enhancement is a quintessential example of the blind inverse problem in the audio domain. In deep learning-based approaches, the primary method involves using discriminative or GAN-based models to estimate a mask in either the time or time-frequency domain (Luo & Mesgarani, 2019; Lu et al., 2022b; Abdulatif et al., 2024; Choi et al., 2019). Recently, diffusion models have emerged as a promising alternative for speech enhancement. For example, Serrà et al. (2022) conditioned score-based models on noisy signals, while Welker et al. (2022); Richter et al. (2023); Lemercier et al. (2023) designed a forward and reverse process coherent to the enhancement process. However, these prior methods primarily treated noisy signals as auxiliary information, failing to fully exploit the functional relationship between clean and noisy signals.
+
+**Diffusion-based Inverse Problem** Recently, diffusion-based method gained prominence in solving inverse problems. Since the score function of the posterior distributions appears as a guidance term during the diffusion steps, several works approximate the terms using known measurement operators (Song et al., 2021; Chung et al., 2023b; Ho et al., 2022). Some lines of works factorize the linear operator using SVD (Kawar et al., 2022) or use pseudo inverse to approximate the operator (Song et al., 2023). In cases where the operator is unknown, referred to as a *blind* setting, prior works estimate the parametrized operators during diffusion process such as (Chung et al., 2023a; Murata et al., 2023). In audio domain, the inverse problem is solved to remove audio effects such as Moliner et al. (2024); Lemercier et al. (2024). Recently, several works integrate Sequential Monte Carlo (SMC) methods with diffusion models to enhance the conditional generation. Cardoso et al. (2023); Wu et al. (2023); Dou & Song (2024); Nazemi et al. (2024)
+
+## 3 DEFINITIONS, NOTATIONS, AND THE PROBLEM FORMULATION
+
+Let  $K \subseteq \mathbb{R}^T$  be a signal space, where  $T$  denotes the signal length. Consider a mapping  $\mathcal{A} : K \rightarrow K$  that defines the system  $y = \mathcal{A}(x)$  for  $x \in K$ . We refer to the input signal  $x$  as the *dry signal* and the output signal  $y$  as the *wet signal*. To analyze such system, we introduce the following function class of our interest.
+
+**Definition 1 (Forward Operator).** For a signal space  $K \subseteq \mathbb{R}^T$ , a *forward operator*  $\mathcal{A}$  is a continuous bounded function  $\mathcal{A} : K \rightarrow K$ . The set of all forward operators is denoted by
+
+$$C_b(K) = \{\mathcal{A} : K \rightarrow K, \mathcal{A} \text{ is continuous}, \|\mathcal{A}(x)\| \leq M\|x\|, \forall x \in K \text{ for some } M > 0 \in \mathbb{R}\} \quad (1)$$
+
+The advantage of this definition is the composition of the two forward operators, namely  $\mathcal{A} \circ \mathcal{A}'$  for any  $\mathcal{A}, \mathcal{A}' \in C_b(K)$ , is well-defined and also lies in  $C_b(K)$ . With the continuity assumption, the wet signal is assumed not to be abruptly changed by the small perturbation in the dry signal. Additionally, the boundedness condition ensures that the output signal does not become unbounded when the input is properly normalized.
+
+**Examples of the Forward Operator** An important class of forward operators is *audio effects*, which process dry speech or music to produce wet signals with modifications such as equalization, reverberation, or filtering. Another key class is *degradations*, although not mutually exclusive with
+
+{2}------------------------------------------------
+
+![Figure 1: Two diagrams illustrating the blind forward and inverse problems. The left diagram shows the forward problem where a reference signal pair (x*, y*) is generated by sampling x* ~ mu*, A ~ a, and y* = A(x*). The right diagram shows the inverse problem where the inverse mapping A_phi[y*] is approximated so that its push-forward measure is matched to mu.](1b7d539e02a202c2cf2d97698b911447_img.jpg)
+
+The figure consists of two side-by-side diagrams. Each diagram has two panels: 'Dry Signal Space' on the left and 'Wet Signal Space' on the right. In the left diagram (Forward Problem), the Dry Signal Space contains a distribution  $\mu^*$  (red) and  $\mu$  (purple). A point  $x^*$  is sampled from  $\mu^*$  and mapped via  $\mathcal{A}$  to  $y^*$  in the Wet Signal Space. The Wet Signal Space contains distributions  $\mathcal{A}(\mu^*)$  (blue) and  $\mathcal{A}(\mu)$  (light blue). A dashed arrow labeled  $\tilde{\mathcal{A}}(\cdot)$  maps  $y^*$  back to  $x^*$ . In the right diagram (Inverse Problem), the Dry Signal Space contains  $\mu$  (purple) and  $\mu_\phi$  (light purple). A point  $y^*$  is sampled from  $\mathcal{A}(\mu)$  and mapped via  $\tilde{\mathcal{A}}_\phi(\cdot)$  to  $x^*$  in the Dry Signal Space. The Wet Signal Space contains  $\mathcal{A}(\mu)$  (light blue) and  $\mathcal{A}_\phi(\mu)$  (dark blue). A dashed arrow labeled  $\mathcal{A}_\phi(\cdot)$  maps  $x^*$  to  $y^*$ .
+
+Figure 1: Two diagrams illustrating the blind forward and inverse problems. The left diagram shows the forward problem where a reference signal pair (x\*, y\*) is generated by sampling x\* ~ mu\*, A ~ a, and y\* = A(x\*). The right diagram shows the inverse problem where the inverse mapping A\_phi[y\*] is approximated so that its push-forward measure is matched to mu.
+
+Figure 1: A reference signal pair  $(x^*, y^*)$  is generated by sampling  $x^* \sim \mu^*$ ,  $\mathcal{A} \sim a$ , and  $y^* = \mathcal{A}(x^*)$ . (Left) Blind forward problem:  $\tilde{\mathcal{A}}_\phi[y^*] \approx \mathcal{A}$  is approximated so that the push-forward measure of  $\mu$  induced by  $\mathcal{A}$  and  $\tilde{\mathcal{A}}$  coincides, and (Right) Blind inverse problem : the inverse mapping  $\tilde{\mathcal{A}}_\phi[y^*]$  is approximated so that its push-forward measure is matched to  $\mu$
+
+audio effects, which commonly encountered in speech enhancement tasks, where a clean speech is corrupted by noise, distortion, audio codecs, or reverberation. In this case, the noisy speech  $y$  is a wet signal produced by an unknown degradation operator  $\mathcal{A}$ , where  $y = \mathcal{A}(x)$  and  $x$  is the clean signal. In particular, many forward operators in the audio domain are often highly *nonlinear and even non-differentiable* (e.g., audio codec). In this work, we equally treat the audio effect and degradation as forward operators without any distinction.
+
+### 3.1 PROBABILISTIC FORMULATION
+
+Although the forward operators are fully deterministic, we adopt a probabilistic formulation for the following advantages: 1) it reflects the sampling nature of the signal dataset and the randomly constructed operator; 2) it parallelizes the forward and inverse problem in a generative framework, and 3) it addresses ill-posed problems, such as irreversible operations (e.g., lowpass filtering) that lose information in reconstruction and lead to one-to-many mappings. In such cases, a deterministic inverse may not exist; however, a probabilistic approach allows for finding the most probable solution. This parallels the Kantorovich formulation, which overcomes the limitations of Monge approach in transportation theory (Villani, 2008).
+
+Let  $\mu, a$  be probabilistic measures of the dry signals and forward operators on  $K$  and  $C_b(K)$ , respectively. If we fix any forward operator  $\mathcal{A}$ , this induces a probability measure on the wet signals via the *push-forward measure* by  $y \sim \mathcal{A}_\# \mu$ . Accordingly, we propose our objective as a ‘distribution matching sense’ between this push-forward measure and the target distribution for each problem.
+
+**Definition 2** (Forward / Inverse Problem). Let  $\mu^*$  be a probability measure of the reference dry signals. For a reference pair  $(x^*, y^*)$  generated by  $y^* = \mathcal{A}(x^*)$ , The *blind forward problem* aims to approximate a neural network  $\tilde{\mathcal{A}}_\phi[y^*]$  conditioned only on  $y^*$  to  $\mathcal{A}$  so that  $\|\tilde{\mathcal{A}}_\phi[y^*] - \mathcal{A}\|_{L_2(\mu)} \rightarrow 0$ . Therefore, the objective is given as the distance between the push-forward measures of dry signals induced by  $\mathcal{A}$  and  $\tilde{\mathcal{A}}_\phi$ :
+
+$$(BFP) \quad \min_{\phi} \mathbb{E}_{\mathcal{A} \sim a, x^* \sim \mu^*} \left[ \mathcal{W}_2(\tilde{\mathcal{A}}_\phi[y^*] \# \mu, \mathcal{A}_\# \mu) \right], \quad y^* = \mathcal{A}(x^*) \quad (2)$$
+
+where  $\mathcal{W}_2$  denotes the 2-Wasserstein distance.
+
+In contrast, the *blind inverse problem* aims to approximate a neural network  $\tilde{\mathcal{A}}_\phi[y^*]$  conditioned only on  $y^*$  so that  $\|\tilde{\mathcal{A}}_\phi[y^*] \circ \mathcal{A} - id\|_{L_2(\mu)} \rightarrow 0$ , where  $id$  is the identity map. Therefore, we minimize the following loss:
+
+$$(BIP) \quad \min_{\phi} \mathbb{E}_{\mathcal{A} \sim a, x^* \sim \mu^*} \left[ \mathcal{W}_2((\tilde{\mathcal{A}}_\phi[y^*] \circ \mathcal{A}) \# \mu, \mu) \right], \quad y^* = \mathcal{A}(x^*) \quad (3)$$
+
+It is noteworthy that the approximation of the operator  $\tilde{\mathcal{A}}_\phi$  has a dependence on the dry signal space  $\mu$ . In other words, the approximation is only guaranteed on the dry signals drawn from  $\mu$ . We examine its generalization performance in the experiment.
+
+{3}------------------------------------------------
+
+![Figure 2: (Left) Diagram of the forward operator A. It shows a reference signal pair (x*, y*) and target signal pairs {(x_i, y_i)}_{i=1}^N generated by a sampled forward operator A. Below this, a Directed Acyclic Graph (DAG) represents the operator A, with nodes for IN, spl, conv, SVT, mix, and OUT, and cryptic acronyms like lp1, 1p1, and STFT. (Right) Diagram of the reference encoder and main operator. The reference encoder takes y* and produces condition vectors c_g and c_l. The main operator takes x_i and X (STFT signal) and produces the dry signal x_i and its STFT signal X-tilde_i. A discriminator takes the generated signal and produces a 'Real/Fake' output.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: (Left) Diagram of the forward operator A. It shows a reference signal pair (x\*, y\*) and target signal pairs {(x\_i, y\_i)}\_{i=1}^N generated by a sampled forward operator A. Below this, a Directed Acyclic Graph (DAG) represents the operator A, with nodes for IN, spl, conv, SVT, mix, and OUT, and cryptic acronyms like lp1, 1p1, and STFT. (Right) Diagram of the reference encoder and main operator. The reference encoder takes y\* and produces condition vectors c\_g and c\_l. The main operator takes x\_i and X (STFT signal) and produces the dry signal x\_i and its STFT signal X-tilde\_i. A discriminator takes the generated signal and produces a 'Real/Fake' output.
+
+Figure 2: (Left) The reference signal pair  $(x^*, y^*)$  and the target signal pairs  $\{(x_i, y_i)\}_{i=1}^N$  are generated by the sampled forward operator  $\mathcal{A}$  which is represented by a DAG whose structures and parameters are randomized. The cryptic acronyms (e.g., lp1) represent a type of audio effect and parameters are randomized. The reference encoder returns  $c_g, c_l$  from the reference signal  $y^*$ . Then the dry signal  $x_i$  and its STFT signal  $X$  are processed to return  $\tilde{y}_i$ .
+
+## 4 SOLVING BLIND FORWARD PROBLEM
+
+Note that we have access only to  $y^*$ , not to the reference pair  $(x^*, y^*)$ , for approximating the ground-truth operator  $\mathcal{A}$ , where  $y^* = \mathcal{A}(x^*)$ . To address this, the reference encoder extracts informative features from  $y^*$ , producing a global condition vector  $c_g$  and a sequence of local condition vectors  $c_l$ . Then the main operator network transforms  $K$  i.i.d. dry signals  $\{x_i\}_{i=1}^K$  drawn from the distribution  $\mu$  into wet signals  $\{y_i\}_{i=1}^K$  by conditioning on  $c_g, c_l$ . Finally, a discriminator is applied to eliminate artifacts and improve the quality of the generated signal.
+
+### 4.1 ARCHITECTURE CHOICES
+
+**Reference Encoder** We adopt the encoder part of MTFAA-Net from Zhang et al. (2022), which has demonstrated strong performance in speech enhancement. In speech enhancement architectures, the encoder typically extracts features related to non-speech components, allowing the decoder to separate them from speech. In our framework, we leverage the reference encoder to extract informative features from  $y^*$  that help for the main operator to approximate arbitrary forward operators. The extracted feature  $z$  is then transformed into a global condition  $c_g \in \mathbb{R}^{d_g}$  and a local condition  $c_l \in \mathbb{R}^{d_l \times N}$  by respective conditioning module, where  $d_g$  and  $d_l$  are embedding dimensions of each, and  $N$  is the number of tokens of  $c_l$ .
+
+**Main Operator Network** We employ the U-Net architecture from the Imagen text-to-image model (Saharia et al., 2022) as our main operator network. In text-to-image diffusion models, the network is conditioned on  $t$ , representing the noise variance, and  $c$ , the text embedding from a pre-trained encoder. We hypothesize that  $t$  provides *global* information on noise scale, while  $c$  adjusts *local image details* via cross attention (Hertz et al., 2022; Ramesh et al., 2022). Based on this, we replace time conditioning  $t$  with a global condition  $c_g$  and text embedding  $c$  with a local condition  $c_l$  from the reference encoder.
+
+Additionally, we process the dry signal in both waveform and spectrogram domains, following (Rouard et al., 2023; Défossez, 2021). This dual-domain approach significantly enhances model performance, as certain effects are more easily detected in one domain than the other. Finally, we concatenate the wet reference signal  $y^*$  with the dry target signal  $x$  across the channel axis. This is particularly useful for replicating additive noise components, as they align perfectly in the temporal or time-frequency domain.
+
+**Discriminator** To remove possible artifacts from the predicted signal, we apply a multi-resolution discriminator (MRD) Lee et al. (2022a). The MRD consists of multiple sub-discriminators, each processing magnitude spectrograms at different resolutions. As we found that incorporating a multi-period discriminator (MPD) deteriorates the overall performance, MRD is only employed.
+
+{4}------------------------------------------------
+
+### 4.2 TRAINING OBJECTIVE
+
+We propose the following training objectives to achieve the minimization of the Equation 2:
+
+$$L_G(G; D) = \sum_{i,j} \left[ \|\tilde{\mathcal{A}}_\theta[y_j^*](x_i) - \mathcal{A}_j(x_i)\|^2 + \lambda_m \mathcal{L}_m(\tilde{\mathcal{A}}_\theta[y_j^*](x_i), \mathcal{A}_j(x_i)) + \lambda_{adu} \mathcal{L}_{adu}(G; D) \right]$$
+
+$$L_D(D; G) = \mathcal{L}_{adu}(D; G)$$
+
+where  $\mathcal{L}_m$  is the loss function in the magnitude spectrogram domain,  $\lambda_m, \lambda_{adu}$  are some constants, and  $\mathcal{L}_{adu}(D; G)$  and  $\mathcal{L}_{adu}(G; D)$  are the adversarial loss with the freezed parameters of the model and the discriminator, respectively. Note that we approximate the 2-Wasserstein distance in Equation 2 by that of empirical distributions. In addition, we also add the loss function measured in magnitude spectrogram and adversarial loss to enhance the perceptual quality of the predicted signals. The details of each loss function are in the Appendix C.3.
+
+## 5 CONSTRUCTION OF THE FORWARD OPERATOR
+
+Since our model is desired to approximate any general forward operator  $\mathcal{A}$ , it must be constructed and be able to render the wet signal *on-the-fly* from the given dry signal while training. However, sampling from the function space we defined in Equation 1 is not only too large but also redundant as we do not want pathological operators that may completely obscure the contents information of the dry signal. Therefore, we simulate a forward operator by *composing known and closed-form operators* in the following combinatorial way.
+
+### 5.1 ALGEBRAIC COMPOSITION OF THE FORWARD OPERATOR
+
+From our definition in Equation 1, observe that the addition and multiplication between two operators  $\mathcal{A}, \mathcal{A}' \in C_b(K)$  for a signal  $x \in K$  are well-defined as :
+
+$$(\text{Addition}) : (\mathcal{A} + \mathcal{A}')(x) := \mathcal{A}(x) + \mathcal{A}'(x)$$
+
+$$(\text{Multiplication}) : (\mathcal{A} \cdot \mathcal{A}')(x) := (\mathcal{A} \circ \mathcal{A}')(x) = \mathcal{A}(\mathcal{A}'(x)) \quad (4)$$
+
+Hence we can impose a *semiring* structure on the function space  $C_b(K)$ .
+
+**Definition 3.** A semiring  $(R, +)$  is a set equipped with two binary operations  $(+, \cdot)$  which satisfy the following: 1)  $R$  is associative and commutative under addition. 2)  $R$  is associative under multiplication. 3) The multiplication is distributive with respect to the addition.
+
+We define  $R = (C_b(K), +, \cdot, \bar{0}, \bar{1})$  as a *composition semiring* equipped with the operation  $(+, \cdot)$  with the additive identity  $\bar{0} : x \mapsto 0$  and multiplicative identity  $\bar{1} : x \mapsto x$ . Then we refer to the *rendering* the forward operator  $\mathcal{A}$  to the dry signal  $x$  simply as a semiring action on the signal space  $K$  by evaluation  $R \times K \rightarrow K : (\mathcal{A}, x) \mapsto \mathcal{A}(x)$ , which is approximated by  $\tilde{\mathcal{A}}_\theta$ .
+
+**Advantages of the Semiring Construction** The introduction of a composition semiring provides several theoretical and practical benefits. First, since each element in the composition semiring uniquely characterizes the combination of basic operators, the sampling of a representation from  $R$  is equivalent to the sampling of a complex operator. Random parameters are then assigned to each basic operator to complete the construction of the forward operator. Second, by factorizing terms in  $\mathcal{A} \in R$  using distributivity, each basic operator in  $\mathcal{A}$  is processed only once to render any dry signal  $x$ , enabling a sequential rendering from the right-most element of  $\mathcal{A}$ . This results in a total rendering time of  $O(N)$  where  $N$  is the number of elements.
+
+**Degeneracy Problem** Prior approaches such as (Rice et al., 2023; Lee et al., 2023b; 2024) are equivalent to find the representation of the forward operator by classifications. However, these methods face a *degeneracy problem*, where different representations yield the same action on signals. For instance, two linear time-invariant (LTI) operators  $L, L' \in R$  are commutative under multiplication, resulting in identical actions. Similarly, complementary effects, such as two sequential low-shelf filters with opposite gains, cancel each other out. In contrast, our framework directly approximates the action of  $\mathcal{A}$  on  $x$  rather than its explicit representation, naturally avoiding degeneracy problem and diverging from prior approaches.
+
+{5}------------------------------------------------
+
+![Figure 3: Directed Acyclic Graph (DAG) representation of the Forward Operator. The diagram shows three examples: (Left) Single type: a simple sequence of nodes 'in' (blue), 'dist' (red), and 'out' (red). (Middle) Monolithic type: a sequence of nodes 'in' (blue), 'mix' (blue), 'conv' (blue), 'fla' (blue), and 'out' (red), with additional nodes 'n' (green), 'rir' (green), and 'lfo' (green) connected to 'mix', 'conv', and 'fla' respectively. (Right) General Type: a complex sequence of nodes 'in' (blue), 'conv' (blue), 'lfo' (blue), 'tre' (blue), 'del' (blue), 'mix' (blue), and 'out' (red), with additional nodes 'mcr' (green), 'crs' (green), and 'cmp' (green) connected to 'conv', 'lfo', and 'del' respectively.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Figure 3: Directed Acyclic Graph (DAG) representation of the Forward Operator. The diagram shows three examples: (Left) Single type: a simple sequence of nodes 'in' (blue), 'dist' (red), and 'out' (red). (Middle) Monolithic type: a sequence of nodes 'in' (blue), 'mix' (blue), 'conv' (blue), 'fla' (blue), and 'out' (red), with additional nodes 'n' (green), 'rir' (green), and 'lfo' (green) connected to 'mix', 'conv', and 'fla' respectively. (Right) General Type: a complex sequence of nodes 'in' (blue), 'conv' (blue), 'lfo' (blue), 'tre' (blue), 'del' (blue), 'mix' (blue), and 'out' (red), with additional nodes 'mcr' (green), 'crs' (green), and 'cmp' (green) connected to 'conv', 'lfo', and 'del' respectively.
+
+Figure 3: Directed Acyclic Graph (DAG) representation of the Forward Operator. (Left) Single type: this form represents a single element in the set of basic operators  $\mathcal{S}$ . (Middle) Monolithic type: monomials in  $R$ . i.e.  $\prod \mathcal{A}_i$  where  $\mathcal{A}_i \in \mathcal{S}$ . (Right) General Type: a general element in  $R$ .
+
+### 5.2 PROPERTIES OF THE CONSTRUCTED FORWARD OPERATORS
+
+In practice, we construct an arbitrary forward operator from the known and closed-form operators, called *basic operators*, detailed in Appendix C.2 for the comprehensive list and technical details. Let  $\mathcal{S}$  be a set of the basic operators in  $C_b(K)$ . A forward operator is formed through summations and multiplications of elements in  $\mathcal{S}$ , for example,  $\mathcal{A} = \sum_j (\prod_i \mathcal{S}_i)_j$  for  $\mathcal{S}_i \in \mathcal{S}$ .
+
+**DAG Representation** This construction can be effectively visualized as a *directed acyclic graph (DAG)*, where nodes represent basic operators, as shown in Figure 3 (Lee et al., 2023b; 2024). Summations are represented as parallel compositions, and multiplications as serial compositions. Starting from the input node [in], the DAG is constructed iteratively from the right-most element of  $\mathcal{A}$  using serial and parallel compositions, ending at the output node [out]. See Appendix A.1 for details. This DAG representation emphasizes the modularity and structure of the composition semiring, providing an intuitive framework for analysis and implementation.
+
+**Universal Approximation** A natural question arises: “Can any forward operator in  $C_b(K)$  be simulated by our construction?” If so, what necessary conditions on the collection of basic operators  $\mathcal{S}$  must be met to achieve such an approximation?” To prove the *universal approximation property*, we imitate the proof of the universal approximation theorem of the single-layer MLPs (Pinkus, 1999). The main idea is to construct  $\mathcal{S}$  by linear operators and point-wise nonlinear operators, analogous to affine transformations and activation functions in MLPs (Lin & Pinkus, 1993). The proof is presented in Appendix A.2.
+
+## 6 SOLVING BLIND INVERSE PROBLEM
+
+### 6.1 STATE SPACE MODEL (SSM) PERSPECTIVE OF THE DIFFUSION MODEL
+
+**Diffusion Model** A diffusion model (Song et al., 2021; Ho et al., 2020; Karras et al., 2022; Song et al., 2022) perturbs a data distribution by adding Gaussian noise with a scheduled variance  $\sigma_t$ , forming a stochastic process  $x_t = x_0 + \sigma_t z$  where  $x_0 \sim \mu, z \sim \mathcal{N}(0, I)$ , governed by a forward SDE. The model learns a *denoiser function*  $D_\theta(x_t, t)$  to recover  $x_0$  from  $x_t$ , which also estimates the score function of  $x_t$  via  $\nabla_{x_t} \log p(x_t) = (D_\theta(x_t, t) - x_t)/\sigma_t^2$ . The time-reversed SDE, which matches the marginal distribution of the forward SDE at each time step, is solved for data generation.
+
+This process requires the score function  $\nabla_{x_t} \log p(x_t)$ , approximated using  $D_\theta$ . Starting from Gaussian noise  $x_T$ , the reversed SDE iteratively transforms  $x_T$  into a clean signal  $x_0$ .
+
+**Numerical SDE Solvers as SSM** As analytic solutions to the time-reversed SDE are generally intractable, numerical solvers such as Euler-Maruyama (Song et al., 2021), Heun’s method (Karras et al., 2022), DPM (Lu et al., 2022a), EI solvers (Zhang & Chen, 2023) are used for generation. These solvers discretize time into finite steps  $\{t_i\}_{i=T}^0$  and recursively update  $x_t$  as  $x_{t-1} = f(x_t, t) + g(t)z_t$  where  $z_t \sim \mathcal{N}(0, I)$ . Here  $f$  and  $g$  are one-step updates derived from the forward SDE and depend on the chosen approximation method. This discretization forms a Markov chain over  $\{x_i\}_{i=T}^0$ .
+
+![Figure 4: State Space model diagram. It shows a sequence of nodes x_T, x_{t+1}, x_t, x_1, x_0 (solid circles) and y_T, y_{t+1}, y_t, y_1, y^* (dashed circles). Arrows indicate transitions: p(x_i|x_{i+1}) between x nodes and p(y_i|x_i) between x and y nodes. The sequence starts from x_T and ends at x_0, with y nodes observed at each time step.](68ca7669d38a3c31f5a2c3a06fa802e3_img.jpg)
+
+Figure 4: State Space model diagram. It shows a sequence of nodes x\_T, x\_{t+1}, x\_t, x\_1, x\_0 (solid circles) and y\_T, y\_{t+1}, y\_t, y\_1, y^\* (dashed circles). Arrows indicate transitions: p(x\_i|x\_{i+1}) between x nodes and p(y\_i|x\_i) between x and y nodes. The sequence starts from x\_T and ends at x\_0, with y nodes observed at each time step.
+
+Figure 4: State Space model. The sequence  $x_{T:t}$  and  $y_{T:t}$  with the future observation  $y_0 = y^*$  are observed at time  $t$ , while the dashed circles are not observed.  $p(x_i|x_{i+1})$  and  $p(y_i|x_i)$  are the transition density and observation density of the SSM, respectively.
+
+{6}------------------------------------------------
+
+Let  $y^*$  be the given wet signal generated by  $y^* = \mathcal{A}(x^*)$ . Let  $y_t \sim N(y_t, \bar{\sigma}_t I)$  with  $y_0 = y^*$  be a observation sequence. Then we form a *state space model (SSM)* by assigning  $y_t$  to each  $x_t$  of the Markov chain, as shown in Figure 4. Finally, our objective is to sample  $x_0 \sim p(x_0|y^*)$  to generate an enhanced speech signal for the given noisy observation  $y^*$ . To achieve this, we estimate  $p(x_0|y_{T:0})$ , called the *marginal filtering distribution*, and marginalize over  $y_{T:1}$  to compute  $p(x_0|y^*)$ .
+
+### 6.2 PARTICLE FILTERING FOR THE BLIND INVERSE PROBLEM
+
+**Particle Filtering (PF)** Particle filtering, a variant of the Sequential Monte Carlo (SMC), sequentially updates the distribution  $p(x_t|y_{T:t})$ , ultimately reaching  $p(x_0|y_{T:0})$  at the terminal time (Naeseth et al., 2022; Olsen, 2022; Guarniero et al., 2016; Heng et al., 2020). We apply it to solve the blind inverse problem by computing  $p(x_0|y^*)$  based on the previously constructed SSM. The marginal filtering distribution  $p(x_t|y_{T:t})$  is factorized into the following recursive alternating steps :
+
+$$\begin{aligned} \text{(Prediction Step)} : p(x_t|y_{T:t+1}) &= \int p(x_t|x_{t+1})p(x_{t+1}|y_{T:t+1})dx_{t+1} \\ \text{(Update Step)} : p(x_t|y_{T:t}) &= \int p(y_t|x_t)p(x_t|y_{T:t+1})/Z_t \end{aligned} \quad (5)$$
+
+where  $Z_t$  denotes the normalizing constant. While these integrations have closed-form solutions for specific cases, such as discrete-state or linear Gaussian SSM (e.g., Kalman filter), they are generally intractable for our SSM. Consequently, PF approximates the integration using Monte Carlo sampling with  $N$  number of particles  $\{x_t^i\}_{i=1}^N$  and corresponding weights  $\{w_t^i\}_{i=1}^N$  by :
+
+$$\begin{aligned} \hat{p}(x_t|y_{T:t+1}) &= \sum_{i=1}^N w_{t+1}^i p(x_t^i|x_{t+1}^i), \\ \hat{p}(x_t|y_{T:t}) &= p(y_t|x_t) \sum_{i=1}^N w_{t+1}^i p(x_t^i|x_{t+1}^i) \\ w_t^i &\propto w_{t+1}^i \frac{p(y_t|x_t^i)p(x_t^i|x_{t+1}^i)}{g(x_t^i|x_{t+1}^i, y_{T:t})} \end{aligned}$$
+
+where  $g$  is the proposal distribution. The choice of  $g = p(x_t|x_{t+1})$  simplifies the weight update to  $w_t^i = w_{t+1}^i p(y_t|x_t^i)$ .
+
+#### Algorithm 1: Twisted Particle Filter
+
+```
+
+Input:  $(p_T(x_T), g, p_\theta, y^*, T, N)$ 
+for  $t \in \{T, \dots, 0\}$  do
+  for  $i \in \{1, \dots, N\}$  do
+    /* Proposal */
+    if  $t = T$  then
+      Sample
+       $x_T^i \sim p_T(x_T)p_\theta(y^*|x_T)$ ;
+       $\tilde{w}_T^i = 1/N$ 
+    else
+      Sample  $x_t^i \sim g(x_t|x_{t+1}^i)$ ;
+       $\tilde{w}_t^i \sim \frac{p(x_t|x_{t+1}^i)}{g(x_t|x_{t+1}^i)} \frac{p_\theta(y^*|x_t^i)}{p_\theta(y^*|x_{t+1}^i)}$ 
+    Normalize weights
+     $w_t^i = \tilde{w}_t^i / \sum_{l=1}^N \tilde{w}_t^l$ ;
+    /* Resampling */
+    for  $i \in \{1, \dots, N\}$  do
+       $k \sim \text{categorical}(\{w_t^i\}_{i=1}^N)$ ;
+       $x_t^i \leftarrow x_t^k$ 
+
+```
+
+**Twisting Particle Filter** The estimation of  $p(x_t|y_{T:t})$  relies on the prediction and update steps *up to time t*. However, we incorporate the future observation the future observation  $y_0 = y^*$  at time  $t$ , using *twisted particle filtering*, where prediction and update steps are conjugated by the twisting function  $\psi_t(x_t)$ , (Olsen, 2022; Zhao et al., 2024). Following Wu et al. (2023); Zhao et al. (2024), we choose the optimal twisting function  $\psi_t(x_t) = p_\theta(y^*|x_t) \approx \mathcal{A}(\bar{x}_0)$ , where  $\bar{x}_0 \approx \mathbb{E}_{\theta_0}[x_0|x_t]$ , yielded by the Tweedie’s formula. With this choice, the proposal distribution and weight update in the algorithm algorithm 1 become:
+
+$$g(x_t|x_{t+1}) \propto p(x_t|x_{t+1})p_\theta(y^*|x_{t+1}), \quad w_t \propto p(x_t|x_{t+1})p_\theta(y^*|x_t)/g(x_t|x_{t+1})p_\theta(y^*|x_{t+1}) \quad (6)$$
+
+Here the proposal  $g(x_t|x_{t+1}) = p_\theta(x_t, y^*|x_{t+1})$  is derived by conjugating  $\psi_t(x_{t+1})$  with the transition density, introducing a “guidance term” in the particle update (Wu et al., 2023; Bansal et al., 2024; Moliner et al., 2024).
+
+### 6.3 REVISITING THE BLIND FORWARD PROBLEM : LEARNED FORWARD OPERATOR $\mathcal{A}$
+
+In the previous section 4, we have approximated  $\tilde{\mathcal{A}}[y^*]$  to  $\mathcal{A}$  by observing the wet signal  $y^*$  generated by  $y^* = \mathcal{A}(x^*)$ . Then we apply the approximated operator  $\tilde{\mathcal{A}}_\theta$  to help to solve the blind inverse problem either. Recall that  $\tilde{\mathcal{A}}_\theta$  consists of the reference encoder and the main operator. We train our conditional diffusion model with using the reference encoder as an auxiliary condition, and use the main operator in the particle filtering framework.
+
+{7}------------------------------------------------
+
+378  
+379  
+380  
+381  
+382  
+383  
+384  
+385  
+386  
+387  
+388  
+389  
+390  
+391  
+392  
+393  
+394  
+395  
+396  
+397  
+398  
+399  
+400  
+401  
+402  
+403  
+404  
+405  
+406  
+407  
+408  
+409  
+410  
+411  
+412  
+413  
+414  
+415  
+416  
+417  
+418  
+419  
+420  
+421  
+422  
+423  
+424  
+425  
+426  
+427  
+428  
+429  
+430  
+431
+
+**Observation Density for a Nonlinear Blind Inverse Problem** Recent works applying Sequential Monte Carlo (SMC) methods to solve linear inverse problems typically model the observation density  $p(y_t|x_t)$  as a Gaussian distribution (Dou & Song, 2024) or partial observation (Cardoso et al., 2023), leveraging the linearity of the operator. In contrast, our approach involves a general nonlinear forward operator  $\mathcal{A}$ , approximated by a neural network  $\tilde{\mathcal{A}}_\theta$ , a closed-form expression for  $p(y_t|x_t)$  is unavailable in general.
+
+To address this, we approximate the observation density using the Tweedie’s formula as following: (Wu et al., 2023; Chung et al., 2023b; Boys et al., 2023).
+
+$$p(y_t|x_t) = \int p(y_t|y_0)p(y_0|x_0)p(x_0|x_t)dy_0dx_0 \approx \int \mathcal{N}(y_t; \mathcal{A}(x_0), \bar{\sigma}_t) \mathcal{N}(m(x_t), C(x_t))dx_0 \quad (7)$$
+
+where we used  $y_0 = \mathcal{A}(x_0)$ , and  $m(x_t)$  and  $C(x_t)$  are the mean and covariance of  $p_{0|t}(x_0|x_t)$ , presented in Boys et al. (2023). Furthermore, we linearize the operator  $\mathcal{A}(\cdot)$  with Taylor expansion around  $x_T$ , since the integration in Equation 7 has closed-form solution only if  $\mathcal{A}$  is linear:
+
+$$\mathcal{A}(x) \approx \mathcal{A}(x_0) + \nabla_x \mathcal{A}(x - x_0) := \mathcal{A}(x_0) + J(x) \quad (8)$$
+
+We further assume that  $C(x_t)$  and  $J(x_t)$  is small enough compared to  $\bar{\sigma}_t$  so that  $\bar{\sigma}_t^2 \approx JC(x_t)J^T + \bar{\sigma}_t^2$  to avoid expensive calculation of the gradient of the score function and the operator, which requires  $O(T^2)$  complexity where  $T$  is a signal length. In conclusion,
+
+$$p(y_t|x_t) \approx \mathcal{N}(y_t; \mathcal{A}(m(x_t)), JC(x_t)J^T + \bar{\sigma}_t^2) \approx \mathcal{N}(y_t; \mathcal{A}(m(x_t)), \sigma_t^2 I) \quad (9)$$
+
+## 7 EXPERIMENTS
+
+### 7.1 EXPERIMENTAL SETUP
+
+**Dataset** In our experiments, we train on full-band audio ( $\geq 44.1\text{kHz}$ ) speech datasets, resampled to  $44.1\text{kHz}$ . To ensure the forward operator is well-defined, the recording environments of the target and reference signals, denoted as  $x, x^*$  in Figure 2, must match in terms of microphone and room characteristics. To achieve this, we organized the training data into two categories, detailed in Appendix D.1. In the *Single Environment* setup, all target and reference pairs were recorded in the same environment; specifically, we used recordings labeled “microphone 1” from the VCTK dataset (Veaux et al., 2017). In contrast, in the *Multiple Environment* setup target and reference pairs are sampled from the same dataset, but different pairs may be drawn from distinct recording environments. Wet audio samples are then generated on-the-fly during training for each dry target and reference audio pair.
+
+**Evaluation Metric** To evaluate the performance of the proposed method, we use both objective and subjective metrics as follows : 1) **SI-SDR** measures the similarity between predicted and ground-truth wet signals in the waveform domain, 2) **Spectral Convergence (SC) Loss** and **Log-STFT Magnitude (LSM) Loss** in the spectrogram domain, since phase misalignment may not significantly affect perceptual quality, and 3) **Subjective quality** is assessed using Amazon Mechanical Turk (MTurk). Details of the subjective test are in the Appendix F.
+
+### 7.2 BLIND FORWARD PROBLEM : ZERO-SHOT AUDIO EFFECT MODELING
+
+The effectiveness of our method for the blind forward problem is demonstrated via the *zero-shot audio effect learning* task. We generated 100 dry and wet signal pairs for each audio effect type with randomized parameter settings as the test set. Then we report the evaluation metrics together with the subjective test on learning 1) *single-type* audio effects and 2) *complex* audio effects where the forward operator is constructed as described in section 5.
+
+![Figure 5: Diagram illustrating the training and inference process for the approximated forward operator. The diagram is split into two main sections: Training (left, red dashed box) and Inference (right, blue dashed box). In the Training section, a 'Pre-trained Reference Encoder' (green box with a lock icon) takes y* as input and outputs c_g, c_l. A 'Diffusion Model D_theta' (purple box with a lock icon) takes x_t as input and outputs x_0. In the Inference section, the 'Pre-trained Main Operator' (green box with a lock icon) takes x_0 and the guidance from the Reference Encoder to output y-hat = A_theta(x-hat_0). The Loss is calculated between x* and x-hat_0, and Guidance is calculated between y* and y-hat.](ef7a88e04d1939ee09bafd5c3072adf8_img.jpg)
+
+Figure 5: Diagram illustrating the training and inference process for the approximated forward operator. The diagram is split into two main sections: Training (left, red dashed box) and Inference (right, blue dashed box). In the Training section, a 'Pre-trained Reference Encoder' (green box with a lock icon) takes y\* as input and outputs c\_g, c\_l. A 'Diffusion Model D\_theta' (purple box with a lock icon) takes x\_t as input and outputs x\_0. In the Inference section, the 'Pre-trained Main Operator' (green box with a lock icon) takes x\_0 and the guidance from the Reference Encoder to output y-hat = A\_theta(x-hat\_0). The Loss is calculated between x\* and x-hat\_0, and Guidance is calculated between y\* and y-hat.
+
+Figure 5: The approximated forward operator  $\tilde{\mathcal{A}}_\theta$  is utilized to solve the blind inverse problem. (Red) A conditional diffusion model is trained by  $c_g, c_l$  from the reference encoder, and (Blue)  $\nabla_{x_t} \tilde{\mathcal{A}}_\theta(\hat{x}_0)$  is calculated every diffusion step.
+
+{8}------------------------------------------------
+
+Table 1: Evaluation results for zero-shot audio effect modeling. **Dry** denotes the metric between the dry and wet signals. **Single** and **Multi** refer to the metric between the wet and the predicted signals generated by models trained on single-type and multiple audio effects, respectively. **Diff.P** denotes the subjective score shown by the correct effect but with different parameters.
+
+|  |  | SI-SDR ↑ |  |  | SC ↓ |  |  | LSM ↓ |  |  | Subjective ↑ |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | Dry | Single | Multi | Dry | Single | Multi | Dry | Single | Multi | Single | Multi | Diff.P |
+| <b>Noise</b> |  | <b>−3.16</b> | <b>12.31</b> | 10.97 | <b>1.00</b> | <b>0.24</b> | 0.27 | <b>1.50</b> | <b>0.30</b> | 0.33 | <b>61.72</b> | 61.59 | 26.97 |
+| <b>Filter</b> | Bandlimiter | <b>−7.45</b> | <b>12.26</b> | 12.17 | 0.80 | <b>0.20</b> | 0.20 | <b>1.54</b> | <b>0.24</b> | 0.24 | <b>82.71</b> | 67.22 | 53.10 |
+|  | Equalizer | <b>14.84</b> | 10.80 | 11.61 | 0.40 | 0.22 | 0.20 | 0.59 | 0.25 | 0.23 | 66.97 | 69.93 | 40.52 |
+|  | Delay | <b>14.89</b> | 10.44 | 10.42 | 0.19 | 0.21 | 0.22 | 0.48 | 0.24 | 0.41 | 66.00 | 61.00 | <b>68.00</b> |
+|  | Algo. Reverb | <b>8.82</b> | <b>15.24</b> | 10.70 | 0.24 | <b>0.16</b> | 0.22 | 0.59 | <b>0.26</b> | 0.42 | <b>70.31</b> | 53.83 | 49.93 |
+| <b>Nonlinear</b> | IR Conv | <b>−8.45</b> | <b>−0.76</b> | <b>−0.64</b> | 0.50 | <b>0.34</b> | 0.36 | <b>1.09</b> | <b>0.40</b> | 0.43 | <b>66.24</b> | 65.03 | 62.97 |
+|  | Compressor | <b>3.01</b> | <b>13.50</b> | 13.19 | 0.60 | <b>0.21</b> | 0.23 | 0.96 | <b>0.28</b> | 0.31 | 50.28 | <b>56.28</b> | 52.28 |
+|  | Clipping | <b>4.60</b> | <b>23.51</b> | 21.12 | 0.77 | <b>0.09</b> | 0.11 | 2.35 | 0.29 | <b>0.28</b> | <b>67.14</b> | 62.34 | 58.86 |
+| <b>Modulation</b> | Distortion | <b>4.14</b> | <b>21.76</b> | 20.07 | 0.75 | <b>0.12</b> | 0.12 | 2.16 | 0.33 | <b>0.28</b> | <b>64.69</b> | 62.79 | 54.83 |
+|  |  | <b>2.94</b> | <b>13.16</b> | 9.59 | 0.49 | <b>0.21</b> | 0.25 | <b>0.71</b> | <b>0.34</b> | 0.39 | <b>50.79</b> | 48.86 | 53.93 |
+| <b>Codec</b> |  | <b>9.34</b> | <b>19.27</b> | 17.46 | 0.25 | <b>0.09</b> | 0.12 | <b>1.32</b> | <b>0.44</b> | 0.47 | 56.69 | 57.90 | <b>65.76</b> |
+|  |  | <b>−9.82</b> | <b>−7.52</b> | <b>−0.60</b> | 0.88 | 0.61 | <b>0.42</b> | 1.84 | 0.92 | <b>0.55</b> | 50.59 | <b>71.89</b> | − |
+| <b>Multi</b> | Complex | <b>−10.69</b> | <b>−4.48</b> | <b>0.18</b> | 0.77 | 0.57 | <b>0.43</b> | 1.97 | 0.87 | <b>0.52</b> | 52.42 | <b>68.19</b> | − |
+
+Table 2: Dependency on the dry signal distribution  $\mu$ . **Single** and **Multi** refer to the model trained on a single and multiple recording environments, respectively.
+
+| Recording Env. | SI-SDR ↑ |  |  | SC ↓ |  |  | LSM ↓ |  |  |
+|-|-|-|-|-|-|-|-|-|-|
+|  | Dry | Single | Multi | Dry | Single | Multi | Dry | Single | Multi |
+| Mic 1 | 3.92 | <b>13.77</b> | 11.75 | 0.55 | <b>0.19</b> | 0.21 | 1.21 | <b>0.33</b> | 0.39 |
+| VCTK Mic 2 | 4.51 | <b>13.17</b> | 12.22 | 0.56 | <b>0.20</b> | 0.21 | 1.17 | <b>0.37</b> | 0.39 |
+| $\sigma^2=0.1$ | 4.35 | <b>9.97</b> | 8.84 | 0.64 | <b>0.23</b> | 0.26 | 2.61 | 1.83 | <b>1.81</b> |
+| <b>DAPS</b> | <b>4.68</b> | <b>6.25</b> | <b>11.74</b> | 0.54 | <b>0.31</b> | <b>0.24</b> | <b>1.17</b> | <b>0.79</b> | <b>0.45</b> |
+
+Two types of models are trained: one exposed only to single-type effects and the other to complex effects during training, and both were evaluated on all effect types.
+
+Results in Table 1 show that our framework successfully replicates general audio effects without prior knowledge of their type. Additional results, including mel-spectrogram comparisons between predicted and wet signals, are provided in Appendix I. Notably, while the single-type model excels in modeling single effects, exposure to complex audio effects during training significantly improves performance on general effects.
+
+### 7.3 SENSITIVITY ANALYSIS ON THE SIGNAL DISTRIBUTIONS $\mu$ AND $\mu^*$
+
+Recall that our model is trained to satisfy  $\|A_\theta[y^*] - A\|_{L_2(\mu)} \rightarrow 0$ , implying that the approximation is only guaranteed for  $x \sim \mu$ . To evaluate sensitivity under distribution mismatch, we trained two models: one trained on VCTK mic 1, and another trained on multiple recording environments. Both models are then tested across different recording environments, including VCTK mic 1 and 2, DAPS, and the VCTK mic 1 perturbed with Gaussian noise with variance 0.1. The DAPS dataset is unseen during training for both models. Results in Table 2 show that both models can approximate the forward operator under distribution mismatch. However, the model trained on multiple environments generalizes better to unseen settings (DAPS) at the cost of performance on seen datasets (VCTK).
+
+We further analyzed cases where the reference signal  $\mu^*$  and dry signal  $\mu$  are mismatched. Interestingly, a model trained on speech as target signals and piano recordings as references still approximated forward operators (see Appendix B). We attribute this to the global condition  $c_g$  encoded by the reference encoder, which appears to capture signal-invariant features. To illustrate, t-SNE visualizations in Figure 6 show that  $c_g$  from reference signals  $y^*$ , generated by the same operator  $A$  but different inputs  $x_i$ , cluster together.
+
+![Figure 6: t-SNE of the global conditions c_g from the reference encoder trained on VCTK as mu^*. The figure consists of four scatter plots arranged in a 2x2 grid. The top-left plot shows c_g before training, with points clustered together. The top-right plot shows c_g after training, with points more spread out. The bottom-left plot shows c_g from VCTK, DAPS, and MAESTRO as mu^*. The bottom-right plot shows c_g extracted from 100 wet audio samples per effect. Each color represents a different forward operator.](4495fbec19aac6861f1a0b35c4dc38bc_img.jpg)
+
+Figure 6: t-SNE of the global conditions c\_g from the reference encoder trained on VCTK as mu^\*. The figure consists of four scatter plots arranged in a 2x2 grid. The top-left plot shows c\_g before training, with points clustered together. The top-right plot shows c\_g after training, with points more spread out. The bottom-left plot shows c\_g from VCTK, DAPS, and MAESTRO as mu^\*. The bottom-right plot shows c\_g extracted from 100 wet audio samples per effect. Each color represents a different forward operator.
+
+Figure 6: t-SNE of the global conditions  $c_g$  from the reference encoder trained on VCTK as  $\mu^*$ . The top-left shows  $c_g$  before training, followed by  $c_g$  from VCTK, DAPS, and MAESTRO as  $\mu^*$ . Each color represents a different forward operator, with  $c_g$  extracted from 100 wet audio samples per effect.
+
+{9}------------------------------------------------
+
+Table 3: Evaluation results for speech enhancement. **Mix** denotes the metric between the clean and noisy signals. **Appx.** and **GT** denote the metric between the clean and predicted signals generated by models using particles filters of the particle size  $N = 4$ , with the approximated operator  $\hat{\mathcal{A}}_\theta$  and the ground-truth operator  $\mathcal{A}$ . Results for the compressor and the codec are excluded for the GT operator since the compressor returns unstable gradients and the codec is inherently non-differentiable. Audio samples are downsampled to 16 kHz when measure PESQ, eSTOI, and SQUIM.
+
+|  |  | SI-SDR $\uparrow$ |  |  |  | PESQ $\uparrow$ |  |  |  | eSTOI $\uparrow$ |  |  |  | SQUIM-MOS $\uparrow$ |  |  |  |
+|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|-|
+|  |  | Mix | Cond. | GT | Appx. | Mix | Cond. | GT | Appx. | Mix | Cond. | GT | Appx. | Mix | Cond. | GT | Appx. |
+| <b>Noise</b> |  | 3.64 | 17.52 | 17.37 | <b>17.86</b> | 1.40 | 2.54 | <b>2.55</b> | 2.55 | 0.66 | 0.77 | <b>0.78</b> | 0.78 | 3.08 | 4.25 | 4.13 | <b>4.27</b> |
+| <b>Filter</b> | Bandlimiter | -7.74 | <b>12.54</b> | -3.38 | 11.23 | <b>4.04</b> | 3.79 | 3.33 | 3.78 | <b>0.96</b> | 0.94 | 0.90 | 0.94 | 3.66 | <b>4.52</b> | 3.67 | 4.40 |
+|  | Equalizer | <b>17.06</b> | 0.57 | 11.15 | 8.79 | <b>4.50</b> | 3.98 | 4.21 | 4.22 | <b>0.99</b> | 0.86 | 0.97 | 0.93 | <b>4.50</b> | 4.61 | 4.44 | 4.65 |
+|  | Delay | 15.22 | 9.29 | <b>18.95</b> | 15.36 | 2.03 | 2.53 | <b>2.69</b> | 2.56 | 0.88 | 0.80 | <b>0.92</b> | 0.89 | 3.47 | <b>4.06</b> | <b>4.06</b> | 4.04 |
+|  | Algo. Reverb | 8.59 | 15.39 | 15.65 | <b>16.62</b> | 1.62 | 2.92 | 2.92 | <b>2.95</b> | 0.75 | 0.88 | 0.87 | <b>0.89</b> | 3.73 | <b>4.17</b> | 4.07 | 4.16 |
+| <b>Nonlinear</b> | IR Conv | -5.01 | 7.23 | -1.83 | <b>8.02</b> | 3.05 | 3.39 | 3.05 | <b>3.47</b> | 0.80 | <b>0.89</b> | 0.85 | <b>0.89</b> | 3.97 | 4.23 | 3.96 | <b>4.36</b> |
+|  | Compressor | 3.75 | <b>11.76</b> | - | 11.32 | 3.50 | <b>3.96</b> | - | <b>3.96</b> | 0.95 | 0.94 | - | <b>0.96</b> | 4.58 | 4.59 | - | <b>4.64</b> |
+|  | Clipping | 5.11 | <b>20.96</b> | 7.42 | 17.04 | 1.62 | <b>3.41</b> | 2.04 | 3.24 | 0.80 | <b>0.95</b> | 0.84 | 0.92 | 3.91 | <b>4.33</b> | 4.00 | 4.20 |
+|  | Distortion | 4.63 | <b>17.81</b> | 12.23 | 16.80 | 1.61 | <b>3.28</b> | 2.49 | 3.22 | 0.80 | <b>0.94</b> | 0.90 | <b>0.94</b> | 3.50 | <b>4.32</b> | 4.26 | 4.26 |
+| <b>Modulation</b> |  | 3.16 | 9.27 | 10.42 | <b>11.00</b> | 3.15 | 3.65 | 3.64 | <b>3.78</b> | 0.87 | 0.89 | <b>0.91</b> | 0.90 | 3.82 | 4.37 | 4.23 | <b>4.42</b> |
+| <b>Codec</b> |  | 8.17 | 16.89 | - | <b>17.20</b> | 4.10 | 3.52 | - | 3.55 | 0.82 | 0.92 | - | <b>0.93</b> | 4.49 | 3.72 | - | 3.82 |
+
+### 7.4 BLIND INVERSE PROBLEM : SPEECH ENHANCEMENT (SE)
+
+We evaluate our method on a *speech enhancement* task, training a conditional diffusion model on the VCTK dataset with a pre-trained reference encoder. During inference, we apply particle filtering with the pre-trained main operator  $\hat{\mathcal{A}}_\theta[y^*]$  and compare the results to those using the ground-truth operator  $\mathcal{A}$ . An Euler-Maruyama solver with  $T = 48$  steps is employed for generation. Notably, our approximated operator is universally applicable without specifying the type of degradation effect, enabling the *universal SE* and including non-differentiable operators such as audio codecs.
+
+Table 4: Denoising and Dereverberation results on *VoiceBank/Demand* and *Reverb-WSJ0*.
+
+| Method | SR (Hz) | VoiceBank/Demand |  |  | Reverb-WSJ0 |  |  |
+|-|-|-|-|-|-|-|-|
+|  |  | PESQ | eSTOI | SI-SDR | PESQ | eSTOI | SI-SDR |
+| <b>Mixture</b> | - | 1.97 | 0.79 | 8.4 | 1.36 | 0.46 | -7.3 |
+| <b>SGMSE</b> | 16k | 2.28 | 0.80 | 16.2 | 1.33 | 0.57 | -7.4 |
+| <b>SGMSE+</b> | 16k | 2.93 | 0.87 | 17.3 | 2.66 | 0.84 | 1.6 |
+| <b>StoRM</b> | 16k | 2.93 | 0.88 | 18.8 | 2.83 | 0.88 | 6.5 |
+| <b>Our</b> | 44.1k | 2.45 | 0.82 | 12.3 | 1.46 | 0.51 | -12.3 |
+
+Results in Table 3 demonstrate that our approach effectively enhances noisy audio signals across various degradation types. In particular, using the approximated operator during particle filtering even outperforms the ground-truth operator except for delay effect. We hypothesize that when  $\hat{x}_0 = D_\theta(x_t)$  is inaccurate due to errors from the diffusion model, the gradient from  $\nabla_{x_t} \hat{\mathcal{A}}_\theta(\hat{x}_0)$  provides the better estimation than  $\nabla_{x_t} \mathcal{A}(\hat{x}_0)$ . Moreover, twisted particle filtering outperforms the conditional diffusion model according to the Table 3 except for highly non-linear filters like clipping and distortion, due to errors from the linearized operator approximation.
+
+### 7.5 COMPARATIVE STUDIES AND REAL-WORLD SPEECH ENHANCEMENT
+
+Despite training our models only on a single full-band audio dataset (VCTK) with general degradation settings, we evaluate our model on benchmark datasets *VoiceBank/DEMAND* and *Reverb-WSJ0*. We process 1.46 seconds of audio at a time and use an overlap-add method with a 250 ms overlap to handle longer audio signal. we compare our results to baselines : SGMSE (Welker et al., 2022), SGMSE+ (Richter et al., 2023), and StoRM (Lemercier et al., 2023), as shown in Table 4. Although the objective metrics may be lower, the perceptual quality is improved as our model typically extends the audio bandwidth, resulting in perceptually much cleaner examples. We further provide enhanced samples for real-world noisy speech signals at <https://t.ly/dBUhF>.
+
+## 8 CONCLUSION
+
+We proposed an integrated framework to solve blind forward and inverse problems for zero-shot effect modeling and speech enhancement. For the blind forward problem, we developed a novel framework with a systematic method to generate general forward operators. For the blind inverse problem, we trained a conditional diffusion model and applied twisted particle filtering using the pretrained model from the forward problem. Experiments show that our methods effectively recover both the forward operator and input signal solely from the output signal across various audio effects.
+
+ Rest of paper (reference and Appendix) is removed.

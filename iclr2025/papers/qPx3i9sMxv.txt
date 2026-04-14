@@ -1,0 +1,335 @@
+
+
+{0}------------------------------------------------
+
+![A small cartoon icon of a dog's head with glasses.](935eed7aa61f7777f62cfc032e11bee9_img.jpg)
+
+A small cartoon icon of a dog's head with glasses.
+
+# Both Ears Wide Open: TOWARDS LANGUAGE-DRIVEN SPATIAL AUDIO GENERATION
+
+Peiwen Sun<sup>\*♦</sup>, Sitong Cheng<sup>\*♥</sup>, Xiangtali Li<sup>\*♦</sup>, Zhen Ye<sup>♥</sup>, Huadai Liu<sup>♦</sup>, Honggang Zhang<sup>♦</sup>,  
+Wei Xue<sup>✉</sup>, Yike Guo<sup>✉</sup>
+
+♥ Hong Kong University of Science and Technology,
+
+♦ Beijing University of Posts and Telecommunications,
+
+✉ Nanyang Technological University, ♣ Zhejiang University
+
+Website: <https://peiwensun2000.github.io/bewo/>
+
+## ABSTRACT
+
+Recently, diffusion models have achieved great success in mono-channel audio generation. However, when it comes to stereo audio generation, the soundscapes often have a complex scene of multiple objects and directions. Controlling stereo audio with spatial contexts remains challenging due to high data costs and unstable generative models. To the best of our knowledge, this work represents the **first attempt** to address these issues. We first construct a large-scale, simulation-based, and GPT-assisted dataset, **BEWO-1M**, with abundant soundscapes and descriptions even including moving and multiple sources. Beyond text modality, we have also acquired a set of images and rationally paired stereo audios through retrieval to advance multimodal generation. Existing audio generation models tend to generate rather random and indistinct spatial audio. To provide accurate guidance for Latent Diffusion Models, we introduce the **SpatialSonic** model utilizing spatial-aware encoders and azimuth state matrices to reveal reasonable spatial guidance. By leveraging spatial guidance, our model not only achieves the objective of generating immersive and controllable spatial audio from text but also extends to other modalities as the pioneer attempt. Finally, under fair settings, we conduct subjective and objective evaluations on simulated and real-world data to compare our approach with prevailing methods. The results demonstrate the effectiveness of our method, highlighting its capability to generate spatial audio that adheres to physical rules.
+
+## 1 INTRODUCTION
+
+The binaural hearing ability naturally enhances our perception of the world through the acoustic field, which became widely recognized in the 1980s with the rise of PCM (Lipshitz & Vanderkooy, 2004) and MP4 (Sikora, 1997) formats. In the current era of audio generation, creating immersive experiences requires the production of stereo audio that adheres to specific location properties, which can be effectively achieved through end-to-end generative models. This generation task boosts applications in immersive VR/AR (Fitría, 2023; Burdea & Coiffet, 2024) and embodied AI (Liu et al., 2024d). Therefore, generating stereo audio that incorporates spatial multimodal context represents a valuable task within the community.
+
+Significant progress has been made in a monaural audio generation, with models such as AudioLDM 2 (Liu et al., 2024a), Make-an-Audio 2 (Huang et al., 2023a) and Tango 2 (Majumder et al., 2024). These models leverage the diffusion architecture to efficiently generate audio from textual prompts with a T5 model. For example, AudioLDM 2 uses a latent diffusion model to generate a latent representation of mel-spectrograms, and Make-an-Audio 2 and Tango 2 further explore the presence of events and their temporal ordering.
+
+<sup>\*</sup>: Equal contribution
+
+<sup>✉</sup>: Corresponding authors
+
+{1}------------------------------------------------
+
+![Figure 1: Comparison of generation models and the objective of controllable spatial audio generation.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1 consists of two parts. Part (a) compares 'Previous Two-Stage Generation' and 'Previous One-Stage Generation' with 'Our Spatial Generation'. The two-stage process takes an image, generates latent diffusion, then I-C audio, which is then processed by a conditional filter or simulation to produce spatial audio, often resulting in low quality. The one-stage process takes text, generates latent diffusion, then I-C audio, which is then processed by a spatial audio model to produce spatial audio, but is uncontrolled. 'Our Spatial Generation' takes text, generates latent diffusion, then I-C audio, which is then processed by a spatial audio model to produce spatial audio, and is controllable. Part (b) shows the objective of controllable spatial audio generation. It includes a 'Description' (e.g., 'A engine sound occurs and moves left.'), an 'Image' of a motorcycle, a 'Bounding Box' around the motorcycle, and a 'Click' on the motorcycle. Below this, it shows 'Guided Generation' and 'Interactive Generation' with visualizations of engine sound and human talking, and spatial audio waveforms.
+
+Figure 1: Comparison of generation models and the objective of controllable spatial audio generation.
+
+Figure 1: Our SpatialSonic, as a one-stage model, alleviates the problem of error accumulation in a two-stage model and facilitates control with end-to-end finetuning in a one-stage model. Moreover, our spatially enhanced system supports spatial audio generation from text and image, as well as interactive actions.
+
+Compared to monaural audio generation, current research on spatial audio<sup>1</sup> generation is still limited. The pioneering work (Dagli et al., 2024) cascades the generation model with a simulator to generate stereo audio from the image. Another direct thought is converting generated mono audio to stereo by integrating interaural time difference (ITD) and interaural level difference (ILD) (Desai & Mehendale, 2022), which are crucial for spatial perception in human auditory processing. Typically, to convert mono audio to stereo, Zhou et al. (2020); Parida et al. (2022) use visual and positional cues as conditions to produce spatial audio through a U-net style filter. Although it seems feasible to generate spatial audio by cascading effective audio generation models with simulations or filters, the two-stage approach in Fig. 1(a) incurs high computational costs and potential error accumulation.
+
+We attribute the challenges of spatial audio generation to 3 aspects: 1) large data scale; 2) precise guidance construction; 3) proper evaluation metrics. This work presents the **first exploration** addressing these issues.
+
+Although stereo audio is common in real life, captions of such audio with spatial descriptions still require massive human resources. For example, generating spatial audio that matches the textual description “a motorcycle engine sound moving gradually from front to left” requires extensive paired data of motorcycles in various directions of movement. Due to such high labeling costs, the lack of sufficient high-quality data becomes a barrier to spatial audio generation models, compared to Mei et al. (2024); Wu et al. (2023). To better facilitate the advancement of multimodal guided spatial audio generation models, we have developed a dual-channel audio dataset named Both Ears Wide Open 1M (BEWO-1M). It contains up to **1 million audio samples** through rigorous simulations and GPT-assisted caption transformation. BEWO-1M contains an abundant soundscape, including moving-source, multi-source, and interleaved-source scenarios with the spatial description or rational image. To ensure perceptual consistency with the real world, test sets from BEWO-1M are checked by humans, and a real-world recorded subset is manually constructed and annotated.
+
+Previous one-stage stereo audio generation model (Evans et al., 2024a;b) training on real-world data is able to generate stereo audio based on the caption but fails to generate rational spatial audio, as shown in Fig. 1(a). After fine-tuning existing models with BEWO-1M, a basic capability can be obtained to understand the positional description. Since the knowledge from the text fine-tuned model is trained on our enormous data, it is important for the image to utilize this knowledge through language-driven behavior. In our diffusion-based **SpatialSonic** model, we first explore the multimodal spatial-aware guidance to encode images with regional perception way in Sec. 4.2. Then, we identify that due to the lack of explicit spatial guidance, simply fine-tuning the existing model with BEWO-1M still fails in precise T2A and I2A tasks. Therefore, we introduce azimuth guidance induced by LLM through a specific scheme to clarify and integrate complex textual and visual contexts. Finally, along with proper classifier-free guidance training on the diffusion model, we obtain a controllable generation model. During inference, a straightforward method can be easily applied to achieve user interaction. We propose using ITD-based objective metrics and opinion-based subjective **evaluations**
+
+<sup>1</sup>For clarity, we define “spatial audio” as the “stereo audio” adheres to spatial context.
+
+{2}------------------------------------------------
+
+to assess generated audio systematically. Our results show that **SpatialSonic** effectively generates realistic spatial audio, achieving a 70% reduction in ITD error and higher opinion scores than popular models with minor adaption, including **AudioLDM2**. Overall, our contributions are:
+
+- Developing a semi-automated pipeline to create an open-source, large-scale, stereo audio dataset with spatial captions, **BEWO-1M** and supporting both large-scale training and precise evaluation.
+- Introducing a one-stage, controllable, spatial audio generation framework, **SpatialSonic**, which is designed to generate dual-channel audio precisely adhering to multimodal spatial context.
+- Proposing a series of **subjective and objective metrics** based on ITD and opinion score to evaluate spatial audio generation models. Under fair experimental conditions, our framework produces audio with enhanced spatial information, obtaining more authentic soundscapes.
+
+## 2 RELATED WORKS
+
+**Spatial Audio Understanding.** Researchers including May et al. (2010) have been exploring the field of stereo audio through learnable methods since 2010. In recent years, the development of deep learning has led to more extensive exploration of stereo audio. The first area explored is binaural audio localization, where researchers are able to localize the direction of sound sources by learning ITD and ILD in the single-source scenarios (Krause et al., 2023; Yang & Zheng, 2022; Cao et al., 2021; Shimada et al., 2022; Yasuda et al., 2020; García-Barrios et al., 2022) and the multi-source scenarios (Nguyen et al., 2020). With the advancement of multimodal research, mono-to-stereo audio generation methods conditioned on visual (Garg et al., 2021; Xu et al., 2021; Liu et al., 2024c; Li et al., 2024; Zhou et al., 2020), depth (Parida et al., 2022) and location (Leng et al., 2022), have also been gradually developed. The input takes a mono audio and an image, and then spatial audio can be obtained through supervised learning. However, since a mono signal is still required, this task is not a generation task from the current view. Additionally, researchers including Gebru et al. (2021); Phokhinanan et al. (2024); Ben-Hur et al. (2021); Geronazzo et al. (2020) hope to implicitly establish head-related transfer function (HRTF) through deep learning to form a reasonable signal mapping.
+
+**Text-to-audio (T2A) Generation.** Audio generation from text is typically categorized into text-to-speech, text-to-music, and text-to-audio. In this paper, we focus on the latter category. From a methodological perspective, text-to-audio generation approaches can be broadly classified into autoregressive models and diffusion models. The pioneering works from Kreuk et al. (2022); Yang et al. (2023); Lu et al. (2024); Liu et al. (2024b) on autoregressive-based audio generation use a general audio tokenizer to convert waveforms into a sequence of tokens. Then, they apply an autoregressive network like GPT-2 (Radford et al., 2019) to predict the next token in the sequence. However, autoregressive-based models often require substantial data and computational resources (Kreuk et al., 2022). This has led to increased exploration of diffusion-based models for audio generation, with outstanding works including **AudioLDM** (Liu et al., 2023; 2024a), **Audiobox** (Vyas et al., 2023) and **Stable Audio** (Evans et al., 2024a;b).
+
+While the controllable problem in image generation (Cao et al., 2024) persists in audio, the specific challenges may differ. General controlling attempts are made by enhancing the text prompt (Copet et al., 2024; Huang et al., 2023b). To improve the precision of time and frequency control, Huang et al. (2023a); Xie et al. (2024b) explore the temporal encoding along with the fusion mechanics. As for stereo audio, **MusieGen** (Copet et al., 2024) and **Stable Audio** (Evans et al., 2024a;b) can generate stereo audio but without spatial control. In this work, we reveal and deal with this spatial-controlling problem for the first time.
+
+**Other-to-audio Generation.** With **ImageHear** (Sheffer & Adi, 2023) pioneering the use of images as guidance, **CLIP** has been extensively employed for I2A generation tasks. Subsequently, Dong et al. (2023) and Wang et al. (2024) have also leveraged **CLIP** to generate realistic spectra through diffusion guidance directly. However, the **CLIP** primarily focuses on aligning the global abstract semantics rather than the positional context. Therefore, spatial audio generation, as a position-aware task, requires further exploration of regional understanding of images.
+
+{3}------------------------------------------------
+
+![Figure 2: The pipeline of BEWO-1M data collection. The diagram illustrates a three-step process: Step 1: Image Caption Preparation, Step 2: Image Captions Transformation, and Step 3: Audio Simulation. Step 1 involves selecting single events from an image, using a sound event database, audio activity detection, and CLAP filtering. Step 2 uses Chain of Thought (CoT) prompting to transform captions into acoustically-rich descriptions, which are then manually checked. Step 3 shows a 3D simulation of sound sources and microphone positions. To the right, five pie charts (b-f) show the distribution of various parameters: (b) Subset size (50-100: 28%, 100-200: 28%, 200-500: 20%, 500-1000: 17%, RW: 7%), (c) Room size (small: 4%, moderate: 33%, large: 33%, extra-large: 30%), (d) Moving speed (slow: 28%, moderate: 28%, fast: 28%, medium: 16%), (e) Caption length (10-15: 37%, 15-20: 25%, 20-25: 19%, 25-30: 14%, 30-35: 11%, 35-40: 8%), and (f) a word cloud of sound events like 'playing', 'running', 'walking', 'barking', 'meowing', 'crying', 'singing', 'laughing', 'shouting', 'whispering', 'hissing', 'snoring', 'coughing', 'sneezing', 'yawning', 'gasping', 'sighing', 'moaning', 'groaning', 'whining', 'howling', 'barking', 'meowing', 'crying', 'singing', 'laughing', 'shouting', 'whispering', 'hissing', 'snoring', 'coughing', 'sneezing', 'yawning', 'gasping', 'sighing', 'moaning', 'groaning', 'whining', 'howling'.](2fa4a1bf91d0f34e87c689fbc1211fe3_img.jpg)
+
+Figure 2: The pipeline of BEWO-1M data collection. The diagram illustrates a three-step process: Step 1: Image Caption Preparation, Step 2: Image Captions Transformation, and Step 3: Audio Simulation. Step 1 involves selecting single events from an image, using a sound event database, audio activity detection, and CLAP filtering. Step 2 uses Chain of Thought (CoT) prompting to transform captions into acoustically-rich descriptions, which are then manually checked. Step 3 shows a 3D simulation of sound sources and microphone positions. To the right, five pie charts (b-f) show the distribution of various parameters: (b) Subset size (50-100: 28%, 100-200: 28%, 200-500: 20%, 500-1000: 17%, RW: 7%), (c) Room size (small: 4%, moderate: 33%, large: 33%, extra-large: 30%), (d) Moving speed (slow: 28%, moderate: 28%, fast: 28%, medium: 16%), (e) Caption length (10-15: 37%, 15-20: 25%, 20-25: 19%, 25-30: 14%, 30-35: 11%, 35-40: 8%), and (f) a word cloud of sound events like 'playing', 'running', 'walking', 'barking', 'meowing', 'crying', 'singing', 'laughing', 'shouting', 'whispering', 'hissing', 'snoring', 'coughing', 'sneezing', 'yawning', 'gasping', 'sighing', 'moaning', 'groaning', 'whining', 'howling', 'barking', 'meowing', 'crying', 'singing', 'laughing', 'shouting', 'whispering', 'hissing', 'snoring', 'coughing', 'sneezing', 'yawning', 'gasping', 'sighing', 'moaning', 'groaning', 'whining', 'howling'.
+
+Figure 2: The pipeline of BEWO-1M data collection. The data machine is driven by LLM induction and rigorous simulation. In particular, the data for testing are built with human checking. The diagram in Step 3 represents one of the simulation scenarios. (a) illustrates the diversity of source and microphone positions. (b-f) show the abundant soundscapes in BEWO-1M.
+
+## 3 BEWO-1M DATASET
+
+Due to high labeling costs, Tab. 1 shows that stereo audio datasets usually have a short duration. The limited spatial audio datasets and the spatial constraints in existing models (Evans et al., 2024b) necessitate the creation of a dataset with explicit spatial context. We propose BEWO-1M, a large-scale stereo audio dataset with spatial captions, as the first to the best of our knowledge. BEWO-1M consists of audio-caption pairs and audio-image pairs. The construction pipeline in Fig. 2 follows the step-by-step procedure of preparing, transforming, and simulating to obtain a balanced dataset.
+
+**Data Preparation.** Raw data collected online is noisy and requires pre-selection before simulation. Initially, we select samples with captions describing single sound sources to construct a single-source database. This makes each audio clip contain only a single sound event, thereby ensuring realism and quality in simulation. We then apply sound activity detection on each audio and randomly crop to 10s segments. Further, we remove segments with low CLAP (Wu et al., 2023) similarity with their caption. See Appendix B.1 for more details.
+
+### GPT-based Attributes Induction and
+
+**Caption Transformation.** With input as a caption or image-caption pair, we use GPT-4 and GPT-4o to induce sounding objects and their attributes for simulation, transforming raw captions into acoustically-rich captions with spatial descriptions. The audio simulator normally requires certain essential attributes to simulate realistic audio, including scene size, sound source location, moving direction, and speed. We create an audio-object pool from sound objects inducted from audio-caption pairs. The sound objects are inducted from images, and then the corresponding audio is retrieved from this pool. To obtain reasonable attributes and captions, we apply the Chain of Thought Prompting (CoT) (Wei et al., 2023) to enhance the induction
+
+Table 1: Comparison of existing audio-caption datasets.
+
+| Task | Dataset | Duration (hours) | Num. of Audio | Paired Type |
+|-|-|-|-|-|
+| Event | LAION-Audio (Wu et al., 2023) | 4.3k | 633k | Text |
+|  | WavCaps (Mei et al., 2024) | 7.5k | 403k | Text |
+|  | AudioCaps (Kim et al., 2019) | 110 | 46k | Text |
+|  | SoundDescs (Koepeke et al., 2022) | 1.1k | 33k | Text |
+|  | Clotho (Drossos et al., 2020) | 23 | 25k | Text |
+|  | Audio Caption (Wu et al., 2019) | 10.3 | 3.7k | Text |
+|  | VGG-Sound (Chen et al., 2020) | 550 | 200k | Video |
+|  | AVE (Tian et al., 2018) | 11.5 | 4k | Video |
+| Temporal | PicoAudio (Xie et al., 2024b) | 15.6 | 5.6k | Text |
+|  | AudioTime (Xie et al., 2024a) | 15.3 | 5.5k | Text |
+|  | Compa-order (Ghosh et al., 2024) | 1.5 | 851 | Text |
+|  | SimBinaural (Garg et al., 2023) | 116 | 22k | Video |
+| Spatial | FAIR-Play (Gao & Grauman, 2019) | 5.2 | 1.9k | Video |
+|  | YT-ALL (Morgado et al., 2018) | 113.1 | 1.1k | Video |
+|  | MUSIC (Zhao et al., 2018) | 23 | 0.7k | Video |
+|  | BEWO-1M (Ours) | 2.8k | 1,016k | Text |
+|  | BEWO-1M (Ours) | 54 | 2.3k | Image |
+
+{4}------------------------------------------------
+
+ability of GPT-4 and GPT-4o. We predefined several patterns to describe each attribute, with each being an attribute element, such as “far” or “near” for the distance attribute. Specifically, we require GPT to select attribute labels that match the input context and transform raw captions into acoustic-rich captions with positional and movement phrases. Fig. 2(e) presents the statistics of caption length in BEWO-1M, and the transformed captions still remain concise with additional spatial and movement descriptions. See Appendix B.2 for more details.
+
+**Audio Simulation.** We utilize the obtained attributes to simulate realistic and reasonable stereo audio. Following prior researches (Salvati et al., 2021; Chen et al., 2022b; Dagli et al., 2024), we use Pyroomacoustics (Scheibler et al., 2018) and gpurRIR (Diaz-Guerra et al., 2021) for simulation. To enhance diversity and reflect real-world distribution, we introduce a certain level of randomness into the inferred and selected attributes. To ensure scenery diversity, we also randomly set additional scene attributes like the microphone position and the room reverberation indicator, RT60. The simulation assumes a common ear distance of 16~18 cm. To make the dataset general, we do not consider the shadow effect of the head and leave the head adaptation achieved by future fine-tuning. The simulator then uses these attributes to generate the audio. Fig. 2(a) shows the diversity of source positions in simulation. In the indoor scene, the simulator also generates audio with a static simulated room impulse response (RIR). For the moving source scenarios, we build a trajectory to detail its positions. Our pipeline proficiently simulates audio across various environments, achieving both diversity and authenticity while meeting the criteria for ITD and ILD. See Appendix B.4 for details.
+
+**Post-Processing.** To ensure data quality, we perform manual checking for part of the training set and entire test set. Tab. C14 shows that our automated pipeline can generate decent captions.
+
+In summary, we constructed 2.8k hours of training audio with more than 1M audio-text pairs and approximately 17 hours of validation data with 6.2k pairs. As shown in Tab. 1, our dataset, as the first audio-caption dataset with stereo audio and spatial descriptions, is comparable to other monaural audio-caption datasets. In addition to its large scale, the BEWO-1M dataset is also notable for its high quality. As shown in Tab. 4, the simulated audio receives high subjective ratings from human annotators. Fig. 2(c, d) presents the diversity of attributes in BEWO-1M, and Fig. 2(f) shows the sound events diversity. The details and statistics of subsets are provided in Appendix C. Finally, we fine-tune the baseline (Evans et al., 2024b) with BEWO-1M, and Fig. 3(b,c) demonstrates our dataset significantly improves the spatial discrimination.
+
+![Figure 3: Polar coordinates showing normalized audio energy vs. perception angle for different datasets and methods. (a) Human Perception: Shows a relatively uniform distribution of points across all angles. (b) Baseline with all natural data: Shows a highly concentrated distribution of points, mostly along the horizontal axis (0 and 180 degrees). (c) Baseline with BEWO-1M: Shows a more spread-out distribution compared to (b), with points more evenly distributed across angles. (d) Our coarse guidance with BEWO-1M: Shows a distribution with distinct clusters of points at various angles. (e) Our fine guidance with BEWO-1M: Shows a distribution with very distinct, sharp clusters of points at the five common directions (0, 45, 90, 135, 180 degrees). A legend at the top indicates: Left (blue), Left-front (orange), Front (green), Right-front (yellow), and Right (red).](6bbc398f520a7bcc5491cab18d3e4cac_img.jpg)
+
+Figure 3: Polar coordinates showing normalized audio energy vs. perception angle for different datasets and methods. (a) Human Perception: Shows a relatively uniform distribution of points across all angles. (b) Baseline with all natural data: Shows a highly concentrated distribution of points, mostly along the horizontal axis (0 and 180 degrees). (c) Baseline with BEWO-1M: Shows a more spread-out distribution compared to (b), with points more evenly distributed across angles. (d) Our coarse guidance with BEWO-1M: Shows a distribution with distinct clusters of points at various angles. (e) Our fine guidance with BEWO-1M: Shows a distribution with very distinct, sharp clusters of points at the five common directions (0, 45, 90, 135, 180 degrees). A legend at the top indicates: Left (blue), Left-front (orange), Front (green), Right-front (yellow), and Right (red).
+
+Figure 3: In polar coordinates, the radius represents normalized audio energy, the angle denotes the perception angle ( $0^\circ$  for right,  $180^\circ$  for left), and five colors in the above legend signify the use of common directional terms to describe sound events. (a) is the human perception based on the questionnaire of volunteers. In (b), the baseline fails to generate the controllable audio. Obviously, (c) highlights the valuable knowledge from BEWO-1M. (d,e) highlights the superiority of our data and methods in controlling the generation of 5 common directions and uniform fine-controlling matrices.
+
+## 4 METHOD
+
+**Overview.** Our objective is to extract precise guidance from multimodal input and create stereo audio adhering to spatial context. The overall pipeline of our SpatialSonic network consists of multimodal extraction, azimuth guidance, and latent code generation, as illustrated in Fig. 4. On top of Evans et al. (2024b), we introduce a multimodal encoder for the image’s spatial perception in Sec. 4.2, to adapt the image to T2A
+
+{5}------------------------------------------------
+
+![Figure 4: The overall pipeline of SpatialSonic. The diagram illustrates the flow from input image and text to generated 2-C audio. It includes components for image embedding (detecting regions, matching with text), azimuth guidance (training and inference), and a latent diffusion model for audio generation.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+The diagram shows the SpatialSonic pipeline. It starts with an **Image** and **Visual Embedding** (detecting regions like 'motor', 'fast', 'moving'). An **Interactive** module matches these with a **Target Region** (e.g., 'motor'). The **Image** is processed by a **Prefix** and **Adapter** to produce  $F_{\text{ext}}$ . The **Text** is processed by a **Text Encoder** and **Adapter** to produce  $F_{\text{img}}$ . These are combined into **Azimuth Guidance**, which includes **Training** (Precise Attributes: Coarse, Fine) and **Inference** (Inductive Attributes: Start direction, End direction, Speed). The **Latent Diffusion Model** takes  $x \in \mathbb{R}^{2 \times L_s}$  and  $\mathcal{H}: (C, \epsilon) \mapsto \hat{x}$  to generate 2-C audio via a **VAE Encoder** and **VAE decoder**.
+
+Figure 4: The overall pipeline of SpatialSonic. The diagram illustrates the flow from input image and text to generated 2-C audio. It includes components for image embedding (detecting regions, matching with text), azimuth guidance (training and inference), and a latent diffusion model for audio generation.
+
+Figure 4: The overall pipeline of SpatialSonic. It is a one-stage controllable model that processes multimodal inputs to generate spatial audio, where GPT is used to inject the specific azimuth state into the guidance.
+
+model. Then, the azimuth fusion module in Sec. 4.3 provides extra clear conditions with the help of LLM and the azimuth scheme. Finally, the training and inference methodologies are presented in Sec. 4.4.
+
+### 4.1 PRELIMINARIES
+
+**Task Objective:** Let  $x \in \mathbb{R}^{2 \times L_s}$  represent a dual-channel audio signal, where  $L_s$  depends on the length of audio. As the autoencoder compresses the  $x$  into  $\hat{x}$ , the audio generation process can be denoted as  $\mathcal{H}: (C, \epsilon) \mapsto \hat{x} \mapsto x$ , where  $C$  is the multimodal condition,  $\epsilon$  is the Gaussian noise and  $\mathcal{H}$  is the conditional generation process.
+
+**Text Embedding:** The pre-trained language model T5 encoder (Raffel et al., 2023) is used as the text encoder ( $E_{\text{text}}$ ). It captures spatial context as text embedding  $F_{\text{ext}} \in \mathbb{R}^{L \times d_{\text{ext}}}$ , where  $L$  is a variable number depends on the text input. The ablation study in Tab. 7 reveals that incorporating CLAP speeds up convergence compared to T5; however, the spatial performance is inferior to T5.
+
+**Image Embedding:** Previous image encoder  $E_{\text{img}}$  used in I2A usually obtains  $F_{\text{img}} \in \mathbb{R}^{d_{\text{img}}}$  by CLIP. Considering the regional perception in Sec. 4.2, our image embedding follows  $F_{\text{img}} \in \mathbb{R}^{L \times d_{\text{img}}}$ .
+
+**Azimuth Information:** The attributes including number of sources  $K$ , start position  $\mu_{\text{start}}$ , end position  $\mu_{\text{end}}$ , moving start time  $T_0$  and moving interval  $T$  is precisely known during simulation and can be used during training. During inference, inspired by Xie et al. (2024b); Qu et al. (2023),  $K$ ,  $\mu_{\text{begin}}$ ,  $\mu_{\text{end}}$ ,  $T$  can be induced by GPT. Details are provided in Appendix H.
+
+### 4.2 IMAGE EMBEDDING WITH REGIONAL PERCEPTION
+
+Popular I2A model (Sheffer & Adi, 2023) using CLIP (Ramesh et al., 2022) focuses on aligning the global abstract semantics rather than its positional and relational context. Therefore, the objective of this module is to gain regional image perception, while re-utilizing language-driven knowledge from massive text pairs.
+
+To inject the spatial-aware semantics into the image encoder, we follow Cho et al. (2021) to carry out a detection model as a regional perception to provide the rich positional context; this pre-training network is an encoder-decoder structure, firstly trained as a vision-language task. The network generates the acoustic description of the image, supervised by image-caption pairs in Sec. 3. The pre-training follows 3 steps below. 1) Use the detection model to obtain the  $N$  regions' embedding  $\mathcal{R} \in \mathbb{R}^{N \times L_{\text{det}}}$ , corresponding coordinates  $\mathcal{C} \in \mathbb{R}^{N \times 4}$ , and detected object class embedding  $\mathcal{I} \in \mathbb{R}^{N \times L_{\text{cls}}}$ , where  $0 \leq N \leq N_{\text{max}}$ . Obtain a visual embedding  $F_{\text{reg}} \in \mathbb{R}^{N \times L_{\text{img}}}$  by linear projecting and element-wise adding  $\mathcal{R}$ ,  $\mathcal{C}$ ,  $\mathcal{I}$  separately. 2) Concatenate the visual embedding to specified text prefix embedding (i.e. "image acoustic captioning") as encoder input. 3) Update the multimodal encoder while keeping the weight of the decoder frozen. Overall, since the shared decoder is utilized during the pre-training of text and visual encoders, the latent features obtained from the
+
+{6}------------------------------------------------
+
+visual encoder  $E_{\text{img}}$  and text encoder  $E_{\text{text}}$  can be regarded in the same aligned space. The visual embedding output by  $E_{\text{img}}$  can be denoted as  $F_{\text{img}} \in \mathbb{R}^{L \times d_{\text{img}}}$ .
+
+### 4.3 CONTROLLING AZIMUTH FROM COARSE TO FINE
+
+When text and image embedding are used directly as conditions, there is still a large dispersity in Fig. 3(c). Therefore, it is crucial to design a model that effectively supports precise generation using both text and images. On the one hand, the language phrase to describe source direction is limited and rather subjective. By learning the underlying distribution of human perception in Fig. 3(a), the generated audio becomes more realistic in assessments. On the other hand, when generating stereo audio using continuous spatial information such as images, it is necessary to form a more precise guidance. Inspired by layout-controllable image generation (Inoue et al., 2023; Qu et al., 2023), we introduce simple and clear guidance, azimuth state matrix for  $K$  sources  $S \in \mathbb{R}^{K \times L_{\text{azi}} \times d_{\text{ime}}}$ , which encodes azimuth at different times slots.
+
+To fit the coarse guidance into a distribution of human perception, we developed a Gaussian-based coarse-grained guidance for controllable generation. Given a time and duration  $\{t, T\} \in d_{\text{ime}}$  based on specified speeds, the center position  $\mu(t)$  at given moment  $t$  adheres to the following physical principles:
+
+$$\mu(t) = \mu_{\text{start}} + \frac{t}{T}(\mu_{\text{end}} - \mu_{\text{start}}). \quad (1)$$
+
+where  $\mu_{\text{start}}, \mu_{\text{end}} \in L_{\text{azi}}$ . Here, for conciseness, we omit the expression before moving ( $t < T_0$ ) and after moving ( $T_0 + T < t$ ), which can be simply derived by  $\mu_{\text{end}} = \mu_{\text{start}}$ . Further, the azimuth of  $k$ -th ( $0 \leq k < K$ ) object under the normal distributions  $\mathcal{N}(\cdot)$  at different moments are illustrated by,
+
+$$S_{l,t}^{\text{coarse}}[k] = \mathcal{N}(l | \mu(t), \sigma^2) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\left(-\frac{(l - \mu(t))^2}{2\sigma^2}\right), \quad (2)$$
+
+where the variance  $\sigma$  is obtained from the statistics of real data. Each azimuth  $l$  can be modeled as  $l = 1$  for right and  $l = d_{\text{ime}}$  for left. Then  $S_{l,t}^{\text{coarse}}[k]$  is azimuth-wise normalized before the next module.
+
+For fine-grained purposes, the precise location is easily accessible to the nature of the simulation. Thus, we design the discrete state matrix of  $k$ -th object to represent the precise azimuth across time as
+
+$$S_{l,t}^{\text{fine}}[k] = \begin{cases} 1 & \text{if } l = \lfloor \mu(t) \rfloor \\ 0 & \text{otherwise} \end{cases}. \quad (3)$$
+
+This fine matrix can be regarded as the extreme situation of equation 2 without the uncertainty.
+
+Then, we enhance the condition by fusing azimuth state and text embedding by azimuth fusion module (AFM). This AFM composes of the multi-layer cross-attention as  $\text{CA}(q, k, v)$  introduced as
+
+$$\begin{aligned} S' &= \text{CA}(S, F'_m, F'_m) + S \\ &= \text{softmax}(S \cdot F'_m) F'_m + S, \quad \text{for } F'_m = \begin{cases} F'_{\text{text}} & \text{if T2A} \\ F'_{\text{image}} & \text{if I2A} \end{cases}, \end{aligned} \quad (4)$$
+
+where  $F'_{\text{text}}, F'_{\text{image}}$  are the embedding after transforming  $F_{\text{text}}, F_{\text{image}}$  by adapter and  $S'$  is the attended state matrix. To enhance conciseness, the equation 4 for attention have excluded projection and scaling factors. This state matrix and the fusion module allow us to encode complex behaviors such as the speed and direction of sound source movement, and even support future custom matrices for any speed and azimuth.
+
+### 4.4 TRAINING AND INFERENCE OF DIFFUSION MODEL
+
+We utilize a diffusion model as  $\mathcal{H}$  to model  $\hat{x}$  based on the azimuth state matrix  $S$  and modality embedding  $F_{\text{text}}$  or  $F_{\text{image}}$ . The forward process of the cosine form (Esser et al., 2024) is used to obtain the noised representation  $\mathcal{P}_\tau$  of each time step  $\tau$  by noise  $\epsilon$  injection by
+
+$$\mathcal{P}_\tau = \alpha\hat{x} + \beta\epsilon, \quad (5)$$
+
+{7}------------------------------------------------
+
+where  $\epsilon$  follows a isotropic Gaussian distribution,  $\alpha = \cos(\frac{\pi}{2}\tau)$  and  $\beta = \sin(\frac{\pi}{2}\tau)$ . Then, the v-prediction parameterization (Kingma & Gao, 2024) is implemented for training for better sampling stability with a few of the inference steps, so the overall training conditional objective is
+
+$$\mathcal{L} = \mathbb{E}_{\epsilon \sim [0,1], \sigma_\tau, \mathbf{x}_{\sigma_\tau}} w_t \|f_\theta([\mathcal{P}_\tau, \text{cat}(S', F'_m)], \sigma_\tau) - v_{\sigma_\tau}\|_2^2, \quad (6)$$
+
+$$v_{\sigma_\tau} = \frac{\partial \mathcal{P}_\tau}{\sigma_\tau} = \alpha\epsilon - \beta\mathcal{P}_0, \quad (7)$$
+
+where the velocity  $v$  is calculated from noise schedule  $\sigma_\tau \in [0, 1]$ , and  $w_\tau$  is the weight obtained from the signal-to-noise ratio of  $\mathcal{P}_\tau$ .  $\text{cat}(\cdot, \cdot)$  means concatenation.  $f_\theta$  is the estimation network to reconstruct and denoise from  $\mathcal{P}_\tau$ , to learn the conditional denoising as
+
+$$\hat{x} = \frac{1}{\alpha} [f_\theta(\text{CA}(\mathcal{P}_\tau, \text{cat}(S', F'_m))) - \beta\epsilon]. \quad (8)$$
+
+Initially, the T2A model is trained using the BEWO-1M dataset. On top of this T2A model, it is fine-tuned using the spatial-aware image encoder to develop the I2A model. Drawing inspiration from current SAM-based interaction models (Ma et al., 2024; Kirillov et al., 2023), we utilize clicks and bounding boxes (BBox) to select Region of Interest (RoI) from regions  $\mathcal{R}_n \in \mathcal{R}$  in Sec. 4.2. After generating the high-quality mask, it is then matched with region coordinates  $\mathcal{C}$  and regional feature  $\mathcal{R}$ . We enable the selection of multiple RoIs as input of  $E_{\text{image}}$ . The regions  $\mathcal{R}_n$ , coordinates  $\mathcal{C}_n$  and IDs  $\mathcal{I}_n$  are selected, where  $n \in N$ . By using the selected  $\mathcal{R}_n$ ,  $\mathcal{C}_n$  and  $\mathcal{I}_n$  as input, the image encoder  $E_{\text{img}}$  takes interactive embedding  $F_{\text{click}}$  or  $F_{\text{bbox}}$  and finally generate the spatial audio of the target object.
+
+## 5 EXPERIMENT
+
+### 5.1 TRAINING AND EVALUATION
+
+**Dataset** Our dataset is built on a diverse combination of datasets detailed in Appendix B.1. We convert the sampling rate of audios to 16kHz and pad short clips to 10 seconds long after the data construction in Sec. 3. As for images, we select the scenery with audible subjects from COCO2017 (Lin et al., 2014).
+
+**Model Configurations** We fine-tune the continuous autoencoder pre-trained by Stability AI<sup>2</sup> to compress the perceptual space with downsampling to the latent representation. For our main experiments, we train a text-conditional Diffusion-Transformer (DiT) (Levy et al., 2023; Peebles & Xie, 2023), which is optimized using 8 NVIDIA RTX 4090 GPUs for 500K steps. The base learning rate is set to  $2e-5$  with a batch size of 128 and audio length of 10s. Hyper-parameters are detailed in the Appendix E.
+
+**Evaluation Metrics:** 1) 1-C metrics: We adopt metrics from Huang et al. (2023b) and Liu et al. (2023) to calculate Fréchet Distance (FD), Inception Score (IS), Kullback-Leibler divergence (KL), Fréchet Audio Distance (FAD), CLAP score (CLAP), overall impression (OVL) and audio-text relation (REL) for T2A evaluation. Additionally, CLIP Score (Wu et al., 2022; Sheffer & Adi, 2023) evaluates the relevance for I2A model. 2) 2-C objective metric: To better examine the quality of the generated spatial audio, we propose novel evaluation methods based on TDOA<sup>3</sup>. Utilizing the non-silent segments with a threshold of -16 dBFS in the audio, we compute TDOA distributions in intervals of 0.1 seconds using both the traditional Generalized Cross-Correlation with Phase Transform (GCC-PHAT) (Knapp & Carter, 1976) and the deep learning network StereoCRW (Chen et al., 2022b). Finally, the mean absolute error is computed based on the TDOA of the ground truth and generated audio as **GCC MSE** and **CRW MSE**. A lower error indicates better alignment with ground truth, but simple MSE fails in scenarios with multiple or moving sources. Expanding on FAD (Kilgour et al., 2018), a novel evaluation metric, Fréchet Stereo
+
+<sup>2</sup><https://github.com/Stability-AI/stable-audio-tools>
+
+<sup>3</sup>This quantity is known as both difference of arrival (TDOA) and the interaural time difference (ITD).
+
+{8}------------------------------------------------
+
+Audio Distance (**FSAD**), is introduced. FSAD builds on FAD by leveraging the StereoCRW network instead of VGGish for FD computation. More methodologies and parameters are detailed in Appendix F.2. 3) 2-C subjective metric: To assess the quality of the generated audio, we employ the Mean Opinion Score (MOS) through human evaluation to evaluate the quality of source direction (MOS-Direction) and event (MOS-Event) separately. We invite 15 experts to evaluate the quality on a scale ranging from 1 to 5, with 5 for the best quality. For further information on our MOS, please refer to Appendix F.4.
+
+### 5.2 RESULTS
+
+**Comparison on 1-C T2A Base-line:** After averaging the generated stereo audio across channels, we compute metrics for mono-channel (1-C) audio. The results are presented in Tab. 2 and highlight our model’s strong performance across all metrics, particularly excelling in IS and CLAP, often matching or even surpassing best benchmarks. These results indicate that our model adeptly interprets textual cues to produce high-quality audio outputs.
+
+Table 2: 1-C audio quality comparison of popular methods in T2A on Audiocaps test set.
+
+| Model | FD↓ | IS↑ | Objective |  |  | Subjective |  |
+|-|-|-|-|-|-|-|-|
+|  |  |  | KL↓ | FAD↓ | CLAP↑ | OVL↑ | REL↑ |
+| AudioGen-L (Kreuk et al., 2022) | - | - | 1.69 | 1.82 | - | / | / |
+| Uniaudio (Yang et al., 2023) | - | - | 2.60 | 3.12 | - | 3.05 | 3.19 |
+| Make-An-Audio (Huang et al., 2023b) | 18.32 | 7.29 | 1.61 | 2.66 | 0.839 | 3.53 | 3.59 |
+| Make-An-Audio 2 (Huang et al., 2023a) | <b>11.75</b> | 11.16 | 1.32 | <b>1.80</b> | 0.645 | 3.72 | 3.57 |
+| AudioLDM (Liu et al., 2023) | 23.31 | 8.13 | 1.57 | 1.96 | 0.621 | 3.70 | 3.71 |
+| AudioLDM 2 (Liu et al., 2024a) | 19.93 | 9.39 | 1.64 | 1.86 | 0.652 | <b>3.78</b> | <b>3.76</b> |
+| Stable-audio-open (Evans et al., 2024b) | 21.21 | 10.50 | 1.86 | 2.37 | 0.594 | 3.64 | 3.60 |
+| TANGO (Ghosal et al., 2023) | 26.13 | 8.23 | 1.37 | 1.83 | 0.650 | 3.65 | 3.66 |
+| TANGO 2 (Majumder et al., 2024) | 18.85 | 10.09 | <b>1.12</b> | 1.90 | <b>0.675</b> | 3.73 | 3.69 |
+| <b>SpatialSonic (Ours)</b> | <b>14.03</b> | <b>13.79</b> | <b>1.37</b> | <b>1.93</b> | <b>0.672</b> | <b>3.75</b> | <b>3.73</b> |
+
+Table 3: 2-C audio quality comparison of popular methods in T2A on BEWO-1M test set. “†” means a minor adjustment of the original structure with a conditional mono-to-stereo filter.
+
+| Task | Method | Objective |  |  |  | Subjective |  |
+|-|-|-|-|-|-|-|-|
+|  |  | GCC MSE ↓ | CRW MSE ↓ | FSAD ↓ | MOS-Events ↑ | MOS-Direction ↑ |  |
+| Simulation | Simulation | - | - | - | 4.94 | 4.95 |  |
+| T2A (SS-set) | AudioLDM2† | 46.59 | 50.17 | 1.61 | 3.57 | 3.53 |  |
+|  | Make-An-Audio2† | 38.83 | 43.12 | 0.97 | 3.58 | 3.59 |  |
+|  | Stable-audio-open | 38.73 | 34.36 | 0.63 | 3.73 | 3.76 |  |
+|  | <b>SpatialSonic(Ours)</b> | <b>27.20</b> | <b>15.86</b> | <b>0.17</b> | <b>3.78</b> | <b>3.84</b> |  |
+| T2A (SD-set) | AudioLDM2† | 45.08 | 42.88 | 0.94 | 3.37 | 3.34 |  |
+|  | Make-An-Audio2† | 48.55 | 47.88 | 1.09 | 3.38 | 3.30 |  |
+|  | Stable-audio-open | 45.76 | 48.60 | 0.53 | 3.68 | 3.58 |  |
+|  | <b>SpatialSonic(Ours)</b> | <b>44.36</b> | <b>31.91</b> | <b>0.26</b> | <b>3.86</b> | <b>3.71</b> |  |
+| T2A (DS-set) | AudioLDM2† | 38.96 | 50.96 | 2.48 | 3.29 | 2.97 |  |
+|  | Make-An-Audio2† | 35.37 | 48.54 | 2.11 | 3.24 | 3.31 |  |
+|  | Stable-audio-open | 32.63 | 36.30 | 0.87 | 3.60 | 3.61 |  |
+|  | <b>SpatialSonic(Ours)</b> | <b>22.51</b> | <b>13.75</b> | <b>0.31</b> | <b>3.80</b> | <b>3.83</b> |  |
+| T2A (M-set) | AudioLDM2† | 36.43 | 49.87 | 1.22 | 3.38 | 3.34 |  |
+|  | Make-An-Audio2† | 36.01 | 47.31 | 1.32 | 3.29 | 3.32 |  |
+|  | Stable-audio-open | 34.20 | 48.06 | 0.53 | 3.54 | 3.58 |  |
+|  | <b>SpatialSonic(Ours)</b> | <b>33.32</b> | <b>43.24</b> | <b>0.16</b> | <b>3.75</b> | <b>3.73</b> |  |
+| T2A (RW-set) | AudioLDM2† | 46.98 | 44.66 | 1.54 | 3.28 | 3.35 |  |
+|  | Make-An-Audio2† | 46.94 | 43.47 | 1.60 | 3.23 | 3.30 |  |
+|  | Stable-audio-open | 43.18 | 47.58 | 0.60 | 3.51 | 3.49 |  |
+|  | <b>SpatialSonic(Ours)</b> | <b>30.27</b> | <b>23.19</b> | <b>0.28</b> | <b>3.79</b> | <b>3.76</b> |  |
+
+**Comparison on 2-C T2A Baseline:** Based on the proposed evaluation method, we train all the models listed on the BEWO-1M train set and conduct a series of tests on spatial audio in Tab. 3. 1) The authenticity of our ground truth simulation data is evaluated by humans, showing that our simulation received a high position and events score. 2) The evaluation metrics GCC MSE and CRW MSE, based on global averages, show limitations in representing complex subsets such as the SD-set and DS-set; thus, we primarily treat FSAD as our evaluation method. 3) Utilizing FSAD and MOS as the principal metric, our approach outperforms all baselines in objective performance and achieves higher recognition in subjective evaluations.
+
+**Comparison on 2-C I2A Baseline:** As the objects in COCO2017 often have common occlusion, our method still demonstrated advantages in objective and subjective evaluation metrics, notably achieving a 1.56 performance improvement in FSAD. Additionally, we extend our tests to earlier I2A datasets, which also show the superiority of SpatialSonic in the Appendix G.3.
+
+{9}------------------------------------------------
+
+Table 4: 2-C audio quality comparison of popular methods in I2A generation. "S&amp;H" means Seeing-and-Hearing.
+
+| Task | Method | Objective |  |  | Subjective |  |  |
+|-|-|-|-|-|-|-|-|
+|  |  | CLIP Score ↑ | GCC MSE ↓ | CRW MSE ↓ | FSAD ↓ | MOS Events ↑ | MOS Direction ↑ |
+| GT | Simulation | 6.241 | - | - | - | 4.61 | 4.68 |
+| V2A | Sec2Sound | 1.410 | 97.90 | 60.73 | 2.49 | 3.09 | 3.17 |
+|  | S&H | 4.737 | - | - | 3.53 | - | - |
+|  | S&H <sup>†</sup> | 4.591 | 96.11 | 62.55 | 2.08 | 3.39 | 3.47 |
+|  | <b>SpatialSonic</b> | <b>5.618</b> | <b>80.20</b> | <b>57.37</b> | <b>0.52</b> | <b>3.68</b> | <b>3.79</b> |
+
+Table 5: 2-C audio quality comparison in an interactive I2A generation.
+
+| Prompt | Method | Subjective |  | Clarity |  |
+|-|-|-|-|-|-|
+|  |  | MOS Events ↑ | MOS Direction ↑ | GCC MAT ↓ | CRW MAT ↓ |
+|  | Sec2Sound | 3.35 | 3.47 | 1.91 | 8.11 |
+| BBox | S&H <sup>†</sup> | 3.44 | 3.31 | 2.91 | 10.37 |
+|  | <b>SpatialSonic</b> | <b>3.68</b> | <b>3.64</b> | <b>14.60</b> | <b>17.32</b> |
+|  | Sec2Sound | 3.47 | 3.50 | 1.02 | 7.11 |
+| Point | S&H <sup>†</sup> | 3.26 | 3.43 | 2.77 | 8.91 |
+|  | <b>SpatialSonic</b> | <b>3.58</b> | <b>3.61</b> | <b>15.91</b> | <b>18.11</b> |
+
+**Comparison on 2-C Interactive I2A Baseline:** Given the absence of a ground truth audio for our interactive objective, we construct a small comprising around 150 images, 300 bounding boxes, and 300 click points derived from authentic user interactions (accessible in the Appendix C.3). We then evaluate the generation quality across two dimensions using subjective metrics. Additionally, the clarity of direction is reflected by calculating the mean absolute ILD as GCC MA and CRW MA.
+
+Table 6: Ablation study of the coarse and fine strategy on different subsets.
+
+| Training | Inference | FSAD @M-set ↓ | FSAD @RW-set ↓ | FSAD @I2A ↓ |
+|-|-|-|-|-|
+| w/o. Coarse & Fine | w/o. Matrix S | 0.53 | 0.60 | 1.41 |
+|  | w/o. Matrix S | 0.56 | 0.67 | 0.84 |
+|  | w/o. Fine S | 0.32 | 0.48 | <b>0.52</b> |
+|  | w/o. Coarse S | <b>0.16</b> | <b>0.28</b> | 0.96 |
+
+Table 7: The ablation study on the textual guidance with 20% of training data BEWO-1M.
+
+| Text Encoder | Converge Iter. | CLAP @Audicaps ↓ | FSAD @M-set ↓ |
+|-|-|-|-|
+| w/. CLAP | 80K | 2.33 | 0.56 |
+| w/. T5 | 135K | 2.35 | <b>0.24</b> |
+| w/. T5+CLAP | 105K | <b>2.31</b> | 0.40 |
+
+**Ablation on Each Component:** 1) Text encoder: Just as stated in Sec. 4.1, although T5 converges slowly, it has significant advantages in capturing spatial and temporal information, as shown in Tab. 7. 2) Coarse and fine azimuth matrix: The results in Tab. 6 indicate that coarse guidance is more suitable for the T2A task, while fine guidance is necessary for the T2A task. Quantitatively, using fine guidance in T2A causes too strict azimuth guidance, even for noise, whereas coarse guidance in I2A results in a less unstable generation for complex scenarios.
+
+**More Experiments:** Notably, extensive statistics, detailed experiments, and comprehensive user studies are presented in the appendix. More insights in Appendix G are strongly recommended to readers for a thorough understanding of the challenges, including how azimuth guidance and caption length affect audio quality.
+
+## 6 DISCUSSION AND CONCLUSION
+
+**Discussion:** It is believed that BEWO-1M is able to facilitate widespread application in various areas such as 1) spatial cross-modal retrieval, 2) contrastive language-audio pre-training, 3) spatial audio captioning, 3) large-scale audio-language pertaining model. From a methodology perspective, our SpatialSonic model represents a pioneering effort to achieve controllable spatial audio generation. However, there is still potential for improvement. For example, the current image encoder’s limited size restricts its ability to fully comprehend the dynamics and behaviors across datasets with more diverse classes or in open-world scenarios.
+
+**Conclusion:** In this work, we introduce a novel task to generate stereo audio from spatial context, which requires the machine to understand multimodal information and generate rational stereo audio. To advance this field, We develop the first open-source, large-scale spatial audio dataset, BEWO-1M, for training and evaluation. Our proposed SpatialSonic model further establishes a robust baseline with enhanced spatial perception. During experiments, we compare our SpatialSonic with several existing models training on BEWO-1M and demonstrate SpatialSonic’s promising performance in generating high-quality stereo audio adhering to spatial locations. Our task and dataset have great potential in applications such as AR/VR and embodied AI to create immersive experiences. In the future, we plan to further expand the scale of the current dataset with 5.1-channel audios, a higher sampling rate, and more visual data, including images and videos, to meet the growing data demands in the era of generation.
+
+ Rest of paper (reference and Appendix) is removed.

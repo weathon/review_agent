@@ -1,0 +1,353 @@
+
+
+{0}------------------------------------------------
+
+# DYSPEC: FASTER SPECULATIVE DECODING WITH DYNAMIC TOKEN TREE STRUCTURE
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+While speculative decoding has recently appeared as a promising direction for accelerating the inference of large language models (LLMs), the speedup and scalability are strongly bounded by the token acceptance rate. Prevalent methods usually organize predicted tokens as independent chains or fixed token trees, which fails to generalize to diverse query distributions. In this paper, we propose DYSPEC, a faster speculative decoding algorithm with a novel dynamic token tree structure. We begin by bridging the draft distribution and acceptance rate from intuitive and empirical clues, and successfully show that the two variables are strongly correlated. Based on this, we employ a greedy strategy to dynamically expand the token tree at run time. Theoretically, we show that our method can achieve optimal results under mild assumptions. Empirically, DYSPEC yields a higher acceptance rate and speedup than fixed trees. DYSPEC can drastically improve the throughput and reduce the latency of token generation across various data distribution and model sizes, which significantly outperforms strong competitors, including Specifier and Sequoia. Under low temperature setting, DYSPEC can improve the throughput up to  $9.1\times$  and reduce the latency up to  $9.4\times$  on Llama2-70B. Under high temperature setting, DYSPEC can also improve the throughput up to  $6.21\times$ , despite the increasing difficulty of speculating more than one token per step for draft model.
+
+## 1 INTRODUCTION
+
+Recent years have witnessed the prosperity of large language models (LLMs), shown by their unprecedented capabilities in understanding and generating human languages in various domains and tasks (OpenAI, 2023; Anthropic, 2024). Despite this rapid progress, the major bottleneck in the real-world deployment of LLMs stems from their inference latency, due to the nature of auto-regressive decoding. Generating  $n$  tokens requires  $n$  sequential runs, making the process time-consuming and leading to under-utilizing available computation resources.
+
+To address this challenge, recent works (Chen et al., 2023; Leviathan et al., 2023) have proposed *speculative decoding* to accelerate the inference. Speculative decoding first leverages a *draft model* to sample a bunch of tokens as candidates, which are later verified in parallel by the *target model*. If the verification of a token fails, its succeeding tokens must all be rejected to ensure output distribution is unbiased. Therefore, the performance of speculative decoding is strongly bounded by the *acceptance rate* of predicted tokens.
+
+To this end, several methods have explored tree structures to enhance the acceptance rate, as illustrated in Figure 1. For instance, Sun et al. (2024) developed **SpecTr**, introducing DraftSelection algorithm to make draft model select multiple candidates while maintaining the same output distribution as the target model. Miao et al. (2023) created **SpecInfer**, which constructs token trees using small speculative models with learnable branch numbers of each layer. Similarly, Cai et al. (2024) proposed **Medusa**, which bases token tree construction directly on draft model probabilities, optimizing efficiency when the draft model closely approximates the target model. Meanwhile, Chen et al. (2024) introduced **Sequoia**, which estimates acceptance rates for candidate tokens and uses dynamic programming to optimize the token tree based on the estimated metric. However, a common limitation of these methods is their reliance on *fixed* patterns of tree construction, which
+
+{1}------------------------------------------------
+
+![Figure 1: Different structures of predicted tokens. (a) Chain: A linear sequence of input tokens (orange) and predicted tokens (green). (b) k sequences: Multiple parallel chains of input and predicted tokens. (c) Tree: A hierarchical tree structure of predicted tokens branching from input tokens.](9ba3dc91984c80b96f217fb1bddd5c06_img.jpg)
+
+Figure 1 illustrates three different structures of predicted tokens. (a) Chain: A linear sequence of input tokens (orange) and predicted tokens (green). (b)  $k$  sequences: Multiple parallel chains of input and predicted tokens. (c) Tree: A hierarchical tree structure of predicted tokens branching from input tokens.
+
+Figure 1: Different structures of predicted tokens. (a) Chain: A linear sequence of input tokens (orange) and predicted tokens (green). (b) k sequences: Multiple parallel chains of input and predicted tokens. (c) Tree: A hierarchical tree structure of predicted tokens branching from input tokens.
+
+Figure 1: Different structures of predicted tokens. SpecTr is 1b structure, while SpecInfer, Medusa and Sequoia are 1c structure.
+
+can lead to suboptimal performance across diverse query distributions, resulting in a relatively low acceptance rate as tree size grows. This raises an important research question:
+
+**RQ 1:** How can we find a *near-optimal* token tree structure for speculative decoding? To answer the research question, we will first establish the connection between acceptance rate and draft distribution through the following hypothesis.
+
+**Hypothesis 1.** *Predicted tokens of higher draft probability statistically have a higher acceptance rate.*
+
+Fortunately, this is further validated by our preliminary studies, as demonstrated in Figure 2. With the observation, we propose DYSPEC to *dynamically* expand the token tree based on draft distribution. DYSPEC employs a greedy search strategy to maximize the expected length of the predicted sequences. Compared with its fixed counterpart, the dynamic token tree yields a higher acceptance rate and speedup. We conduct benchmarking experiments on various datasets and different model scales, the experimental results demonstrate our proposed DYSPEC can efficiently improve the inference performance. Specifically, on the Llama2-70B model, DYSPEC achieves a  $9.1\times$  throughput improvement and  $9.4\times$  reduction in latency.
+
+## 2 PRELIMINARY
+
+**Speculative Decoding.** Chen et al. (2023) and Leviathan et al. (2023) proposed speculative decoding as a means to accelerate auto-regressive decoding. This approach samples generations from an efficient draft model as speculative prefixes and verifies these tokens in parallel using a slower target model. Through rejection sampling, it ensures that the outputs have the same distribution as those from the target model alone.
+
+We denote the distribution of the draft model as  $D[\cdot]^1$ , and the target distribution as  $T[\cdot]$ . In speculative decoding, a token  $x$  sampled from  $D$  is accepted with a probability of  $\min(1, \frac{T[x]}{D[x]})$ . In case of rejection, another token  $y$  will be sampled from a residual distribution  $\text{norm}(\text{relu}(T - D))$  to adjust the output aligned with the target distribution.
+
+**Tree Attention.** Transformer (Vaswani et al., 2017) models use the attention mechanism to aggregate sequential information. In implementation, the auto-regressive model uses an upper triangle mask to preserve causality. In the context of tree-based dependency, Liu et al. (2020) first proposed tree attention to represent the hierarchy as:
+
+$$\text{mask}(A)_{i,j} = \begin{cases} 1 & , i \text{ is ancestor of } j, \\ 0 & , \text{otherwise.} \end{cases}$$
+
+In speculative decoding, tree attention has later been adopted by SpecInfer (Miao et al., 2023) and Medusa (Cai et al., 2024) for parallel verification.
+
+<sup>1</sup>We use  $D[\cdot]$  as an abbreviation of conditional probability  $D(x_t|x_{<t})$ , and similarly for  $T[\cdot]$ .
+
+{2}------------------------------------------------
+
+## 3 RELATED WORK
+
+### 3.1 TREE-STRUCTURE SPECULATIVE DECODING
+
+In this section we introduce the previous works of utilizing tree structure for speculative decoding in the LLMs' generating process.
+
+**SpecTr.** Sun et al. (2024) proposed DraftSelection algorithm to make draft model select multiple candidates and maintain the same distribution of output as the target model. With the fix number of candidates  $k$ , they modeled an optimal transportation problem to find the best division factor  $\rho$  to maximize the acceptance rate, and proposed K-SEQ algorithm that extend  $k$  candidates to  $k$  sequences.
+
+**SpecInfer.** Miao et al. (2023) proposed SpecInfer which leverages many small speculative model to construct the token tree, and make the branch number of each layer  $k_i$  learnable.
+
+**Medusa.** Cai et al. (2024) also introduce an optimized token tree construction. However, Medusa build the token tree directly based on the probability of draft model, instead of a mapping between sampling of draft model and sampling of target model. The second one make the speculative decoding maximize the efficiency if draft model are close to the target model.
+
+**Sequoia.** Chen et al. (2024) estimates an acceptance rate vector for candidates by a few examples. Under the assumption that the expected acceptance rate of each candidate token is only related to the number of guesses it has been made, Sequoia use a dynamic programming method to get the optimized token tree.
+
+**Eagle-2.** Li et al. (2024) proposed a speculative decoding method with dynamic predicted token tree. Eagle-2 is a self-speculative method that makes draft predictions based on the target model's features, rather than a much smaller draft model. Due to the strong drafting capability, self-speculative methods (Medusa, EAGLE, and EAGLE-2) can usually guess with higher accuracy under the same budget. Eagle-2 builds their draft trees with an expand-rerank procedure: first selects top- $k$  tokens at each node, and prunes the candidate tree with draft probability. The main difference between Eagle-2 and DYSPEC is that DYSPEC does sampling at each node, and dynamically allocates the budget after the result of the sampling is determined. Eagle-2 greedily chooses the top- $k$  draft token at each node and will accept the token if the target model generates the token in guessed tokens. EAGLE-2 cannot accept tokens with standard verification, i.e. only reject the draft with probability  $1 - \frac{\text{target}}{\text{draft}}$  when  $\text{draft} > \text{target}$ , since draft tokens are predicted by selection rather than sampling. The problem here is that even in the case that draft probability is identical to target probability, the latter verification may yield a low acceptance rate. This building method is difficult to directly integrate into a standard verification framework, as the pruning operation can be seen as a rejection of certain sampled tokens, potentially affecting the generation probability distribution.
+
+**ReDrafter.** Cheng et al. (2024) proposed a speculative decoding method with dynamic predicted token tree. ReDrafter uses beam-search-like method to extend the predicted token tree with maximum draft token probability. Since ReDrafter greedily choose the tokens in building stage instead of sampling, it cannot apply the standard verification.
+
+**Dynamic Depth Decoding.** Brown et al. (2024) proposed a mechanism for tree-based speculative decoding methods to dynamically select the depth of the predicted token tree. This approach can be integrated with existing methods, many of which rely on a predetermined fixed depth. Furthermore, it can be combined with DYSPEC to optimize the threshold selection rather than the depth, thereby constructing the predicted token tree more efficiently and minimizing the number of draft model calls.
+
+## 4 BRIDGING DRAFT DISTRIBUTION WITH ACCEPTANCE RATE
+
+During verification, the acceptance probability of sampled token  $x$  is given by  $\min(1, \frac{T[x]}{D[x]})$ . We now derive the connection between draft distribution and acceptance rate as follows.
+
+Since the draft distribution acts as the approximation of the target distribution, the two distributions should not be too "far" away. Without loss of generality, we assume that the KL divergence of  $D$
+
+{3}------------------------------------------------
+
+![Figure 2: Two heatmaps showing the relationship between draft probability and acceptance rate/target probability. The left heatmap shows acceptance rate (Llama2-7B) vs draft probability (JF68m). The right heatmap shows target probability (Llama2-7B) vs draft probability (JF68m). Both show a strong positive correlation.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 2 consists of two heatmaps. The left heatmap shows the acceptance rate (Llama2-7B) on the y-axis (ranging from 0.0 to 1.0) against the draft probability (JF68m) on the x-axis (ranging from 0.0 to 1.0). The right heatmap shows the target probability (Llama2-7B) on the y-axis (ranging from 0.0 to 1.0) against the draft probability (JF68m) on the x-axis (ranging from 0.0 to 1.0). Both heatmaps use a color scale from 0.2 (light yellow) to 0.8 (dark green) to represent frequency. The left heatmap shows a strong positive correlation between draft probability and acceptance rate. The right heatmap shows a strong positive correlation between draft probability and target probability.
+
+| draft probability(JF68m) \ acceptance rate(Llama2-7B) | 0.0 | 0.2 | 0.4 | 0.6 | 0.8 | 1.0 |
+|-|-|-|-|-|-|-|
+| 0.0 | 0.44 | 0.44 | 0.56 | 0.71 | 0.95 |  |
+| 0.2 | 0.03 | 0.07 | 0.06 | 0.06 | 0.02 |  |
+| 0.4 | 0.05 | 0.08 | 0.07 | 0.05 | 0.01 |  |
+| 0.6 | 0.08 | 0.11 | 0.08 | 0.05 | 0.01 |  |
+| 0.8 | 0.39 | 0.30 | 0.22 | 0.13 | 0.02 |  |
+
+| draft probability(JF68m) \ target probability(Llama2-7B) | 0.0 | 0.2 | 0.4 | 0.6 | 0.8 | 1.0 |
+|-|-|-|-|-|-|-|
+| 0.0 | 1.00 | 0.53 | 0.31 | 0.15 | 0.02 |  |
+| 0.2 | 0.00 | 0.09 | 0.24 | 0.52 | 0.93 |  |
+| 0.4 | 0.00 | 0.07 | 0.15 | 0.16 | 0.03 |  |
+| 0.6 | 0.00 | 0.12 | 0.15 | 0.10 | 0.01 |  |
+| 0.8 | 0.00 | 0.19 | 0.14 | 0.07 | 0.01 |  |
+
+Figure 2: Two heatmaps showing the relationship between draft probability and acceptance rate/target probability. The left heatmap shows acceptance rate (Llama2-7B) vs draft probability (JF68m). The right heatmap shows target probability (Llama2-7B) vs draft probability (JF68m). Both show a strong positive correlation.
+
+Figure 2: Connection between acceptance rate/target distribution and draft distribution on CNN DailyMail. The density of each block is normalized by column.
+
+from  $T$  is constrained by constant  $c$ , i.e.,
+
+$$D_{\text{KL}}(D \parallel T) = \sum D[x] \log \frac{D[x]}{T[x]} \leq c. \quad (1)$$
+
+To satisfy the constraint,  $T[\cdot]$  should not diverge much from  $D[\cdot]$ . Nevertheless, for a token  $x$  with large draft probability  $D[x]$ , the  $\frac{T[x]}{D[x]}$  cannot be too small, as it would contribute significantly to  $D_{\text{KL}}$ . On the other hand, tokens with small  $D[x]$  have less impact to  $D_{\text{KL}}$ , allowing for greater variation. The above analysis implies that **predicted tokens of higher draft probability statistically have a higher target probability and acceptance rate**.
+
+We further validate our hypothesis through preliminary experiments. As shown in Figure 2 (right), the draft distribution shows a strong correlation with the target distribution in real-world scenarios. More importantly, Figure 2 (left) demonstrates that the distributions of acceptance rate, under the same draft probability, resemble binomial distributions. As draft probability grows larger, predicted tokens are more likely to be accepted. These observations provide strong empirical support for our previous claim. It also inspires us to design a dynamic token tree construction algorithm to explore more on sub-trees of higher draft probability, since they are more likely to be accepted in later verification.
+
+## 5 METHOD
+
+Under a fixed speculative budget  $b$  (i.e. the number of tokens for each verification), the optimal token tree yields the highest acceptance rate. In practice, finding the optimal tree is unfeasible, since the target distribution is unknown before verification. Nevertheless, given Hypothesis 1, we can transform the original problem into the following problems.
+
+### 5.1 DYNAMIC TOKEN TREE CONSTRUCTION
+
+Given the speculative token tree, the way we sampling this tree, the draft model output distribution, and correspond target model output distribution, we can get the expectation of the total number of Speculative decoding verification. Considering each node  $t_i$  in speculative token tree independently, we denote its draft distribution as  $p_d[i, \cdot]$ , and the relevant target distribution as  $p_t[i, \cdot]$ .
+
+Assume that node  $t_i$  have ancestors  $a_1, \dots, a_i$ , and previous sibling node  $s_1, \dots, s_j$ , then the probability we verify the node  $t_i$  can be represent as  $\prod_i P[accept a_i] \times \prod_j P[reject s_j]$ .
+
+In Speculative Decoding, the probability we accept token  $x$  with draft probability  $p_d[x]$  and target probability  $p_t[x]$ , is  $\min(1, \frac{p_t[x]}{p_d[x]})$ , denote as  $SD[x]$ . So the probability we take verification on node  $t_i$  is  $\prod_i SD[a_i] \times \prod_j (1 - SD[s_j])$ . Then the contribution of node  $t_i$  to expectation of total accepted token number is  $\prod_i SD[a_i] \times \prod_j (1 - SD[s_j]) \times SD[t_i]$ .
+
+{4}------------------------------------------------
+
+The total expectation of accepted token number of this speculative token tree is
+
+$$\sum_u \prod_i SD[a_{i,t_u}] \times \prod_j (1 - SD[s_{j,t_u}]) \times SD[t_u] \quad (2)$$
+
+With expected acceptance rate, we can construct the optimal speculative token tree. However, there are still two problems:
+
+1. When we generate speculative token tree, we cannot know the target probability to get  $SD[\cdot]$ .
+2. The draft token  $t_i$  is sampled from draft output distribution, we could only decide how many sampling we take, instead of which token to take. Otherwise the take action we made will infect the probability we keep tokens in speculative token tree.
+
+To solve problem 1, we note that the acceptance rate is positive-related to draft output distribution. Given Hypothesis 1, we use draft model output distribution to estimate the acceptance rate  $SD[t_i] \approx p_d[t_i]$ .
+
+To solve problem 2, we only use these estimated values to decide if we will make the sampling. For given intermediate token tree status, we can detect all expandable tree nodes, and pick the expandable tree node with maximum estimated value. Repeat this action until we reach the max tree size. DYSPEC will generate the optimal speculative token tree. The proof of optimality is provided in Appendix D.
+
+Now we can get the algorithm to generate the optimal speculative token tree.
+
+### 5.2 ALGORITHM
+
+Unlike some speculative decoding methods, DYSPEC determines the number of samples to take only when a token is accepted by the target model (or the verification method). This decision is based on the verification results of the previous tokens (ancestor nodes in the predicted token tree) and the previous sampling results from the same node. There are two kinds of operation of the number of samples: 1. from 0 to 1 (expand a node with no leaf no, the first sampling). 2. from  $x$  to  $x + 1$  (failed on the  $x$ -th sampling, take the  $x + 1$  sampling).
+
+Given the prompt, DYSPEC can get the logits of the last token, which is the root of the speculative token tree. Suppose we have already constructed a partial speculative token tree as Figure 3. There are two ways to expand a node:
+
+1. Any token without a leaf node can undergo the first sampling.
+2. Nodes marked with “ $-/-$ ” indicate that we have already performed several samplings at the same position and have obtained an estimated value for the next sampling at this position (on the arrow line). The “ $-/-$ ” node corresponds to the result of the next sampling.
+
+We refer to these two types of nodes as expandable nodes in the current state.
+
+DYSPEC use a heap to maintain all the expandable tokens by their estimated values, that we can get the node with maximum estimated value in  $O(\log N)$  time. After we make the next sampling represented by the top node of the heap. Upon determining the result of the sampling, we then update the state of the current token tree using the obtained token and its corresponding estimated value. This process generates two new expandable nodes:
+
+1. When the current node is *rejected*, the next sampling at the same position, with the corresponding estimated value being the probability of this sampling failure multiplied by the expected acceptance rate of the next sampling itself.
+2. When the current node is *accepted*, proceeding with subsequent sampling, with the corresponding estimated value being the probability of this sampling success multiplied by the expected acceptance rate of the next sampling itself.
+
+Thus, we have successfully expanded the token tree by one node. This process is repeated until the predetermined budget is reached. The pseudo-code is presented in Algorithm 1.
+
+{5}------------------------------------------------
+
+![Figure 3: An example of the predicted token tree. The tree starts with 'A Wall' and branches into '##ington', 'Street', '##flow', 'of', and a placeholder. 'Street' branches into 'fund', 'Journal', and a placeholder. 'Journal' branches into 'rep', 'opinion', 'Article', 'exclusive', and a placeholder. Probabilities and sampling information are provided for each node and edge.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+The diagram illustrates a predicted token tree starting from the root node 'A Wall'. The tree branches into several potential next tokens, with associated probabilities and sampling information.
+
+- Root Node:** A Wall
+- First Level Branches:**
+ - ##ington:** Probability  $p_1 = 0.0017$ . This path is labeled 'The First Sampling after 'A Wall' with draft probability 0.0017 Rejected In Verification'.
+ - Street:** Probability  $p_2 = 0.5755$ . This path is labeled 'The Second Sampling after 'A Wall' with draft probability 0.5755 Accepted In Verification'.
+ - ##flow:** Probability  $p_3 = 0.0235$ .
+ - of:** Probability  $p_4 = 0.1212$ .
+ - Placeholder:** Probability  $p_5 = 0.2780$ . This path is labeled 'The Third Sampling after 'A Wall' Will not be verified'.
+- Second Level Branches (from 'Street'):**
+ - fund:** Probability  $p_5 = 0.0010$ . This path is labeled 'The Second Sampling after 'Street' with draft probability 0.6519 Accepted In Verification'.
+ - Journal:** Probability  $p_6 = 0.6519$ .
+ - Placeholder:** Probability  $p_7 = 0.1997$ . This path is labeled 'The Third Sampling after 'Street' if available With 0.1997 estimated accepted tokens'.
+- Third Level Branches (from 'Journal'):**
+ - rep:** Probability  $p_7 = 0.0478$ .
+ - opinion:** Probability  $p_8 = 0.0195$ .
+ - Article:** Probability  $p_9 = 0.0141$ .
+ - exclusive:** Probability  $p_{10} = 0.0031$ .
+ - Placeholder:** Probability  $p_{11} = 0.3436$ .
+
+Figure 3: An example of the predicted token tree. The tree starts with 'A Wall' and branches into '##ington', 'Street', '##flow', 'of', and a placeholder. 'Street' branches into 'fund', 'Journal', and a placeholder. 'Journal' branches into 'rep', 'opinion', 'Article', 'exclusive', and a placeholder. Probabilities and sampling information are provided for each node and edge.
+
+Figure 3: An example of the predicted token tree.
+
+**Algorithm 1:** Speculative token tree construction algorithm with fixed number
+
+**Input :** Prefix  $x_0$ , draft model  $D_\Theta(\cdot|x)$ , and an upper bound of guess tokens number  $m$ .
+
+**Output:** generated token tree  $T_r$ .
+
+```
+
+1  Initialize a heap  $H$ , Heap Element consists of tree information  $\text{TreeInfo}_i$ , residual
+   distribution  $R_i$ , estimate acceptance rate  $v$ .
+2   $R \leftarrow D_\Theta(\cdot|x_0)$ ,  $v \leftarrow 1$ ,  $\text{TreeInfo} \leftarrow \dots$ 
+3   $H.\text{push}(R, v, \text{TreeInfo})$ ;
+4  while  $\text{Tr.size} < m$  do
+5       $R, v, \text{TreeInfo} \leftarrow H.\text{pop}()$ ;
+6       $\text{NewNodeInfo} \leftarrow \text{Tr.add}(\text{TreeInfo}, y)$ ;
+7      sample  $y \sim R$ ;
+8       $v_0 = v \times R[y]$ ;
+9       $v_1 = v \times (1 - R[y])$ ;
+10      $R[y] \leftarrow 0$ ;
+11      $R \leftarrow \text{norm}(R)$ ;
+12      $H.\text{push}(R, v_1, \text{TreeInfo})$ ;           /* expand neighbor node */
+13     get  $x_i$  from  $\text{TreeInfo}$  and  $y$ ;
+14      $d_i \leftarrow D_\Theta(\cdot|x_i)$ ;
+15      $H.\text{push}(d_i, v_0, \text{NewNodeInfo})$ ;      /* expand child node */
+16 end
+
+```
+
+### 5.3 ANALYZE OVERHEAD
+
+Assume the speculative token tree size is  $N$ , depth is  $D$ . Greedy expand method will generate the optimal token tree one by one. For each token, greedy expand method choose the expandable token with maximum estimated value and then make a sampling to generate the next token, then update the token tree.
+
+To quickly choose the expandable token with maximum estimated value, we can use heap to maintain all expand-able tokens' estimated value, which introduce  $O(\log N)$  time complexity to maintain the token tree and related auxiliary structures. The total time complexity of token tree construction is  $O(N \log N)$ .
+
+Although one step inference's time consume of draft model is usually much lower than target model, it is still non negligible. Denote draft model inference time as  $T_d$ , target model inference time as  $T_t$ , the total time of one step of greedy expand method is
+
+$$O(N \log N + T_t + N T_d) \quad (3)$$
+
+{6}------------------------------------------------
+
+With accepted token number  $e$ , the latency of generate one token can be represent as  $O((N \log N + T_t + NT_d)/e)$ .
+
+In the implementation, the time complexity of constructing a token tree for a single operation is  $O(\text{vocab\_size})$ , due to the sampling and updating of the residual distribution. Typically, the inference of a draft model involves higher time complexity. However, model inference benefits from regular computational workloads and can be efficiently accelerated by GPUs, whereas the complex logical operations involved in token tree construction suffer from low efficiency when implemented in Python. To mitigate this overhead, we implemented the token tree construction in C++, making it negligible compared to the inference times of both the target and draft models.
+
+Even if we disregard the overhead associated with constructing the token tree, accelerating the target model still requires us to achieve a speedup factor of approximately  $k \approx 1/e + \frac{NT_d}{eT_t}$ , where  $1/k$  represents the acceleration rate. As the number of tokens  $N$  increases, the term  $N/e$  grows significantly. For instance, with  $N = 64$ ,  $N/e$  typically exceeds 10, and for  $N = 768$ ,  $N/e$  can surpass 70. This rapid growth severely limits the potential for acceleration by simply increasing the size of the token tree.
+
+To address this limitation, we need to develop a more efficient method for generating draft tokens. It's important to note that the token tree structure will branch out significantly after a few steps, resulting in a relatively shallow depth. If we can generate draft tokens layer by layer, the latency for generating one token can be represented as  $O((N \log N + T_t + DT_d)/e)$ , where the time cost of one step can be considered constant for an appropriate input size. For  $N = 64$ ,  $D$  is typically less than 10, and for  $N = 768$ ,  $D$  is usually less than 30.
+
+However, the greedy expansion method struggles to align with layer-by-layer generation because, without revealing the estimated values of all tokens, it is challenging to determine how many tokens should be included in the shadow layers.
+
+### 5.4 CONSTRUCT TOKEN TREE WITH THRESHOLD
+
+To accelerate inference, we must reduce the number of draft generations. In the greedy expansion method, we select the token with the highest estimated value at each step, and this value monotonically decreases with each selection. Once the token tree construction is complete, all tokens with an estimated value greater than a certain threshold  $C$  are chosen, while those with lower values are discarded. If we could determine this threshold  $c$  at the outset, it would be possible to construct the optimal speculative token tree layer-by-layer. In practice, we can choose an appropriate threshold  $C$  (typically around  $1/n$ ) and relax the constraint on  $N$ . This adjustment has a minimal impact on the number of accepted tokens but significantly improves latency. The pseudo-code is provided in Appendix A.2.
+
+## 6 EMPIRICAL RESULTS
+
+### 6.1 SETUP
+
+We implement DYSPEC using Llama models. We employ JackFram/Llama68m (JF68m) and Llama2-7B as the draft model, and Llama2-7B, Llama2-13B, Llama2-70B (Touvron et al., 2023) as the target models. We conduct evaluations on various datasets with varying sizes and characteristics, including C4(en) (Raffel et al., 2020), OpenWebText (Gokaslan & Cohen, 2019) and CNN DailyMail (Nallapati et al., 2016).
+
+For a fair comparison, we follow the setting in Sequoia (Chen et al., 2024), using the first 128 tokens as the fixed prompt and generating 128 tokens as completion. We evaluate our method with different target temperatures and set the draft temperature to 0.6. All experiments are conducted on a computation node with one NVIDIA A100 40GB GPU and 32 CPU cores.
+
+### 6.2 OVERHEAD OF TREE CONSTRUCTION
+
+As analyzed in the Section 5.3, the construction of the token tree introduces complex logic, which is inefficient in Python despite its time complexity of  $O(N \log N \text{vocab\_size})$ . To address this, we
+
+{7}------------------------------------------------
+
+![Figure 4: Three pie charts showing the execution times of different components during the inference process for different model pairs. (a) Llama2-68M/Llama-7B: Target (57.0%), Draft (17.4%), Generating Tokens (12.9%), Mask (11.9%), Verification (10.7%). (b) Llama2-68M/Llama-13B: Target (61.6%), Draft (12.1%), Generating Tokens (11.7%), Mask (10.1%), Verification (5.5%). (c) Llama2-7B/Llama-70B: Target (89.6%), Draft (13.2%), Others (1.2%).](3121afa7ca030b22ee0345864ca6f38b_img.jpg)
+
+Figure 4 consists of three pie charts labeled (a), (b), and (c), showing the distribution of execution times for different components during inference. The components are: Generating Tokens, Mask, Tree Construction, Verification, Draft, and Target. The data is as follows:
+
+| Model Pair | Generating Tokens | Mask | Tree Construction | Verification | Draft | Target |
+|-|-|-|-|-|-|-|
+| (a) Llama2-68M/Llama-7B | 12.9% | 11.9% | 1.1% | 10.7% | 17.4% | 57.0% |
+| (b) Llama2-68M/Llama-13B | 11.7% | 10.1% | 1.1% | 5.5% | 12.1% | 61.6% |
+| (c) Llama2-7B/Llama-70B | 0.0% | 0.0% | 0.0% | 0.0% | 13.2% | 89.6% |
+
+Figure 4: Three pie charts showing the execution times of different components during the inference process for different model pairs. (a) Llama2-68M/Llama-7B: Target (57.0%), Draft (17.4%), Generating Tokens (12.9%), Mask (11.9%), Verification (10.7%). (b) Llama2-68M/Llama-13B: Target (61.6%), Draft (12.1%), Generating Tokens (11.7%), Mask (10.1%), Verification (5.5%). (c) Llama2-7B/Llama-70B: Target (89.6%), Draft (13.2%), Others (1.2%).
+
+Figure 4: The execution times of different components during the inference process.
+
+implemented the construction in C++, making the construction time negligible. The profiling results are shown in Figure 4. The additional overhead introduced by DYSPEC is the *Tree Construction*, which accounts for less than two percent of the total execution time in the Llama2-68M/Llama2-7B and Llama2-68M/Llama2-13B pairs. In the Llama2-7B/Llama2-70B pair with CPU-offloading, all components except draft and target model inference cost less than two percent of the total execution time.
+
+The generation of masks, sampling tokens, and verification consume significant time under both the Llama2-68M/Llama2-7B and Llama2-68M/Llama2-13B settings. These three components represent the common overhead of all speculative decoding methods, with the primary time spent on waiting for the completion of model execution via CUDA synchronization. In the Llama2-7B/Llama2-70B setting, CPU-offloading and waiting for model execution results overlap, which is why they are not reflected in the profiling results.
+
+### 6.3 EFFECTIVENESS OF DYNAMIC TOKEN TREE
+
+Table 1 presents the experimental results, detailing the number of tokens accepted and the latency per token in seconds, when using JF68M as the draft model and Llama2-7B as the target model. Similarly, Table 2 shows the corresponding results for the scenario in which JF68M serves as the draft model and Llama2-13B as the target model. In both cases, the maximum draft token tree size is set to 64. For the draft model, DYSPEC leverages the CUDA graph to capture 129 different input lengths ranging from 128 to 258, thus accelerating inference, much like Sequoia does.
+
+The results indicate that DYSPEC consistently outperforms Sequoia and Specinfer in various data distributions and generation temperatures, leading to a higher number of accepted tokens in each decoding step. The values in the table represent the average time taken to generate a single token in seconds, with the number of tokens accepted by the target model during a single validation in parentheses.
+
+For larger target models such as Llama2-70B, we employ CPU offloading due to GPU memory constraints. We selected Llama2-7B as the draft model. Despite the time consumed for data synchronization between the CPU and GPU, the inference time for the CPU-offloaded model, with a naive implementation, is approximately 15 seconds per step. By incorporating some overlapping tricks for weight loading (adapted from Sequoia), the inference time is still around 5 seconds per step. In contrast, Llama2-7B requires only about 25 milliseconds per step, resulting in a  $T_t/T_d$  ratio of approximately  $2 \times 10^3$ . Note that DYSPEC did not employ CUDA Graph in this scenario due to the significant GPU memory overhead associated with capturing sequences of varying lengths. With 129 distinct sequence lengths and the memory-intensive nature of the draft model Llama2-7B, this approach would be prohibitively resource-demanding.
+
+In this scenario, the acceleration rate is roughly equivalent to the number of tokens accepted per target model step. Set the maximum draft token tree size to 64, DYSPEC achieves up to a 9.1x improvement in throughput and a 9.4x reduction in latency compared to auto-regressive generation, while also outperforming state-of-the-art methods in consistency, as demonstrated in Table 3.
+
+{8}------------------------------------------------
+
+Table 1: latency per token. The draft model is JF68m and the target model is Llama2-7B. Guess length is 64.
+
+| <b>Dataset</b> | <b>Temp</b> | <b>Ours</b> | <b>Sequoia</b> | <b>Specinfer</b> |
+|-|-|-|-|-|
+| C4 | 0 | 3.15×(5.25) | 2.64×(4.99) | 1.79×(3.32) |
+| C4 | 0.6 | 2.20×(3.71) | 1.85×(3.45) | 1.80×(3.44) |
+| OWT | 0 | 2.28×(3.79) | 2.19×(3.81) | 1.47×(2.54) |
+| OWT | 0.6 | 2.40×(3.07) | 2.18×(3.04) | 2.09×(2.97) |
+| CNN | 0 | 2.42×(3.97) | 2.40×(4.04) | 1.53×(2.58) |
+| CNN | 0.6 | 2.09×(3.18) | 1.99×(3.22) | 1.80×(3.06) |
+| GSM8k | 0 | 3.93×(6.86) | 2.79×(4.92) | 2.01×(3.47) |
+| GSM8k | 0.6 | 2.44×(4.31) | 2.20×(3.55) | 1.65×(3.03) |
+| MT-Bench | 0 | 2.59×(4.02) | 2.35×(3.55) | 1.68×(2.70) |
+| MT-Bench | 0.6 | 2.15×(3.62) | 2.11×(3.18) | 1.50×(2.71) |
+
+Table 2: latency per token. The draft model is JF68m and the target model is Llama2-13B. Guess length is 64.
+
+| <b>Dataset</b> | <b>Temp</b> | <b>Ours</b> | <b>Sequoia</b> | <b>Specinfer</b> |
+|-|-|-|-|-|
+| C4 | 0 | 3.13×(4.98) | 2.66×(4.35) | 1.97×(3.14) |
+| C4 | 0.6 | 2.26×(3.62) | 1.88×(3.15) | 1.85×(3.15) |
+| OWT | 0 | 2.45×(3.59) | 2.33×(3.44) | 1.67×(2.44) |
+| OWT | 0.6 | 1.96×(3.02) | 1.78×(2.80) | 1.71×(2.75) |
+| CNN | 0 | 2.56×(3.82) | 2.45×(3.67) | 1.69×(2.52) |
+| CNN | 0.6 | 2.03×(3.11) | 1.84×(2.91) | 1.78×(2.84) |
+| GSM8k | 0 | 3.17×(5.29) | 2.21×(3.92) | 1.74×(2.98) |
+| GSM8k | 0.6 | 2.49×(4.17) | 2.10×(3.39) | 1.51×(2.72) |
+| MT-Bench | 0 | 2.19×(3.72) | 2.19×(3.46) | 2.15×(2.86) |
+| MT-Bench | 0.6 | 2.25×(3.62) | 1.93×(3.11) | 1.40×(2.84) |
+
+{9}------------------------------------------------
+
+Table 3: latency per token. The draft model is Llama2-7B and the target model is Llama2-70B. Guess length is 64.
+
+| Dataset | Temp | Ours | Sequoia | Specinfer |
+|-|-|-|-|-|
+| C4 | 0 | $9.42\times(9.10)$ | $6.29\times(6.08)$ | $4.89\times(4.67)$ |
+| C4 | 0.6 | $6.77\times(6.21)$ | $5.66\times(5.72)$ | $5.76\times(5.75)$ |
+| OWT | 0 | $7.07\times(7.23)$ | $6.02\times(6.41)$ | $5.07\times(4.88)$ |
+| OWT | 0.6 | $6.05\times(6.77)$ | $5.63\times(6.07)$ | $5.42\times(5.46)$ |
+| CNN | 0 | $6.50\times(6.93)$ | $5.85\times(6.42)$ | $4.80\times(4.83)$ |
+| CNN | 0.6 | $5.94\times(6.95)$ | $5.71\times(6.07)$ | $5.70\times(5.75)$ |
+| GSM8k | 0 | $10.56\times(12.39)$ | $7.31\times(7.62)$ | $5.22\times(5.34)$ |
+| GSM8k | 0.6 | $7.57\times(8.14)$ | $6.62\times(6.89)$ | $5.75\times(5.89)$ |
+| MT-Bench | 0 | $9.95\times(11.25)$ | $6.96\times(7.46)$ | $4.75\times(4.85)$ |
+| MT-Bench | 0.6 | $8.47\times(10.11)$ | $6.96\times(7.46)$ | $5.52\times(5.67)$ |
+
+## 7 CONCLUSION
+
+We introduce DYSPEC, a faster speculative decoding algorithm that incorporates a dynamic token tree structure for sampling. Based on the connection between draft probability and acceptance rate, we apply a greedy strategy to dynamically expand the token tree to maximize the expected length of predicted generations. Empirical results reveal the efficacy and scalability of DySPEC by consistent improvements in acceptance rate across various datasets and generation temperatures. Specifically, on the Llama2-70B model with temperature=0, DySPEC achieves a  $9.1\times$  throughput improvement and  $9.4\times$  reduction in latency.
+
+## REFERENCES
+
+- Anthropic. Introducing the next generation of claude, 2024.
+- Oscar Brown, Zhengjie Wang, Andrea Do, Nikhil Mathew, and Cheng Yu. Dynamic depth decoding: Faster speculative decoding for llms. *arXiv preprint arXiv:2409.00142*, 2024.
+- Tianle Cai, Yuhong Li, Zhengyang Geng, Hongwu Peng, Jason D Lee, Deming Chen, and Tri Dao. Medusa: Simple llm inference acceleration framework with multiple decoding heads. *arXiv preprint arXiv:2401.10774*, 2024.
+- Charlie Chen, Sebastian Borgeaud, Geoffrey Irving, Jean-Baptiste Lespiau, Laurent Sifre, and John Jumper. Accelerating large language model decoding with speculative sampling. *arXiv preprint arXiv:2302.01318*, 2023.
+- Zhuoming Chen, Avner May, Ruslan Svirschevski, Yuhsun Huang, Max Ryabinin, Zhihao Jia, and Beidi Chen. Sequoia: Scalable, robust, and hardware-aware speculative decoding. *arXiv preprint arXiv:2402.12374*, 2024.
+- Yunfei Cheng, Aonan Zhang, Xuanyu Zhang, Chong Wang, and Yi Wang. Recurrent drafter for fast speculative decoding in large language models. *arXiv preprint arXiv:2403.09919*, 2024.
+- Aaron Gokaslan and Vanya Cohen. Openwebtext corpus. <http://Skylion007.github.io/OpenWebTextCorpus>, 2019.
+- Zhenyu He, Zexuan Zhong, Tianle Cai, Jason D Lee, and Di He. Rest: Retrieval-based speculative decoding. *arXiv preprint arXiv:2311.08252*, 2023.
+- Benjamin Lefaudeux, Francisco Massa, Diana Liskovich, Wenhan Xiong, Vittorio Caggiano, Sean Naren, Min Xu, Jieru Hu, Marta Tintore, Susan Zhang, Patrick Labatut, Daniel Haziza, Luca
+
+ Rest of paper (reference and Appendix) is removed.

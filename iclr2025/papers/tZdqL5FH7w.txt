@@ -1,0 +1,269 @@
+
+
+{0}------------------------------------------------
+
+# FANTASTIC TARGETS FOR CONCEPT ERASURE IN DIFFUSION MODELS AND WHERE TO FIND THEM
+
+Anh Bui<sup>1</sup>, Thuy-Trang Vu<sup>1</sup>, Long Vuong<sup>1</sup>, Trung Le<sup>1</sup>, Paul Montague<sup>2</sup>,  
+Tamas Abraham<sup>2</sup>, Junae Kim<sup>2</sup>, and Dinh Phung<sup>1</sup>
+
+<sup>1</sup>Monash University
+
+<sup>2</sup>Defence Science and Technology Group, Australia
+
+## ABSTRACT
+
+Concept erasure has emerged as a promising technique for mitigating the risk of harmful content generation in diffusion models by selectively unlearning undesirable concepts. The common principle of previous works to remove a specific concept is to map it to a fixed generic concept, such as a neutral concept or just an empty text prompt. In this paper, we demonstrate that this fixed-target strategy is suboptimal, as it fails to account for the impact of erasing one concept on the others. To address this limitation, we model the concept space as a graph and empirically analyze the effects of erasing one concept on the remaining concepts. Our analysis uncovers intriguing geometric properties of the concept space, where the influence of erasing a concept is confined to a local region. Building on this insight, we propose the Adaptive Guided Erasure (AGE) method, which *dynamically* selects optimal target concepts tailored to each undesirable concept, minimizing unintended side effects. Experimental results show that AGE significantly outperforms state-of-the-art erasure methods on preserving unrelated concepts while maintaining effective erasure performance. Our code is published at <https://github.com/tuananhbui89/Adaptive-Guided-Erasure>.
+
+## 1 INTRODUCTION
+
+The widespread accessibility of text-to-image generation models has introduced significant risks such as the generation of harmful content, copyright infringements, and biases due to the exposure of models to undesirable concepts during training. Initial attempts to address these concerns focus on dataset filtering during the training phase (StabilityAI, 2022), post-generating filtering (Rando et al., 2022) or inference guiding (Schramowski et al., 2023b). While dataset filtering often requires costly retraining, post-processing and inference-based methods can be easily bypassed (Yang et al., 2024). Recently, concept erasure (Bui et al., 2024b;a; Gandikota et al., 2023; Orgad et al., 2023; Zhang et al., 2023; Kumari et al., 2023), which aims to directly remove the concept from the model’s parameters without the need for complete retraining, has emerged as a promising alternative.
+
+Concept erasure methods can be broadly categorized into two approaches: output-based and attention-based. Output-based methods aim to neutralize the output associated with undesirable concepts (Bui et al., 2024b;a; Gandikota et al., 2023; Wu et al., 2024), while attention-based methods modify the attention scores of these concepts in the cross-attention layers of the model (Zhang et al., 2023; Orgad et al., 2023; Gandikota et al., 2024; Lu et al., 2024; Lyu et al., 2024). Despite their differences, both approaches share a common principle: mapping undesirable concepts to a fixed, generic target, such as “a photo” or an empty text prompt. Although these methods have shown success in erasing undesirable concepts, they do not consider how the choice of target concepts affects both the effectiveness of erasure and the preservation of benign concepts.
+
+To address this limitation, we first model the concept space as a graph, where each node represents a concept, and the edge weights denote the impact of erasing one concept on another. We perform an empirical analysis using a newly curated evaluation dataset, NetFive, to understand the structure of the concept space. Our findings suggest that the concept impact space has a geometric structure,
+
+{1}------------------------------------------------
+
+characterized by a key property: *locality*—the impact of erasing one concept is localized in the concept space, i.e., it affects **strongly** only those concepts that are close to the erased one.
+
+Furthermore, we explore different types of target concepts—synonyms, semantically related local concepts, and semantically distant concepts—and find that the choice of target significantly influences both erasure performance and the preservation of benign concepts. At the end, we identify the ideal target concept as the most affected by the change of the model parameters when the corresponding concept is erased, but must not be its synonym.
+
+Building on these insights, we propose the Adaptive Guided Erasure (AGE) method, which automatically selects the optimal target concept for each erasure query by solving a minimax optimization problem. To further improve the richness of the target concept, we model it as a learned mixture of multiple single concepts, allowing us to search for the optimal target in continuous rather than discrete space. We evaluate the proposed AGE method on various erasure tasks, including object removal, Not-Safe-For-Work (NSFW) attribute erasure, and artistic style removal. Experimental results show that AGE significantly outperforms state-of-the-art concept erasure methods, achieving near-perfect preservation of benign concepts while effectively erasing undesirable ones.
+
+Our main contributions can be summarized as follows. ❶ We present a novel empirical evaluation of the structure and geometric properties of the concept space, which provides new insights into concept erasure, such as the locality of the impact of erasing one concept on another. ❷ We analyze the impact of target concept selection on both erasure effectiveness and the preservation of benign concepts, identifying two key properties of desirable target concepts, i.e., closely related but not synonyms to the to-be-erased concept. ❸ Motivated by the analysis, we propose a novel adaptive method for selecting the optimal target concept for each erasure query satisfying the two key properties. ❹ Finally, we conduct extensive experiments demonstrating the effectiveness of our method and its ability to preserve benign concepts while erasing undesirable ones.
+
+## 2 BACKGROUND
+
+**Latent Diffusion Models.** Diffusion models, a recent class of generative models, have shown impressive results in generating high-resolution images (Ho et al., 2020; Rombach et al., 2022; Ramesh et al., 2021; 2022). In a nutshell, training a diffusion model involves two processes: a forward diffusion process where noise is gradually added to the input image  $x_0 \sim p_{\text{data}}$ , and a reverse denoising diffusion process where the model tries to predict a noise  $\epsilon_t$ , which is added in the forward process. The model is trained by minimizing the difference between the true noise  $\epsilon$  and the predicted noise  $\epsilon_\theta(x_t, t)$  at diffusion step  $t$  parameterized by the denoising model  $\theta$ . With an intuition that semantic information that controls the main concept of an image can be represented in a low-dimensional space, Rombach et al. (2022) proposed a diffusion process operating on the latent space of a pre-trained encoder  $\mathcal{E}$  which compresses the input data  $x_t$  into low-dimensional latent representation  $z_0 = \mathcal{E}(x)$ . The objective function of the latent diffusion model as follows:
+
+$$\mathcal{L} = \mathbb{E}_{z_0 \sim \mathcal{E}(x), x \sim p_{\text{data}}, t, \epsilon \sim \mathcal{N}(0, 1)} \|\epsilon - \epsilon_\theta(z_t, t)\|_2^2 \quad (1)$$
+
+**Concept Erasing.** Given a textual description in a set of undesirable concepts  $c_e \in \mathbf{E}$ , the concept erasing problem aims to remove this concept from a pretrained text-to-image diffusion model  $\epsilon_\theta(z_t, \tau(c), t)$ , typically via finetuning to obtain a benign output  $\epsilon_{\theta'}(z_t, \tau(c), t)$  from *sanitized* model  $\epsilon_{\theta'}$  parameterized by  $\theta'$ . For the remainder of this paper, because all outputs are from the same time step  $t$  and latent vector  $z_t$ , we omit the time step  $t$  and latent vector  $z_t$  for the sake of simplicity, i.e.,  $\epsilon_\theta(\tau(c))$  and  $\epsilon_{\theta'}(\tau(c))$ . While proposed in different forms, previous works (Gandikota et al., 2023; Orgad et al., 2023; Gandikota et al., 2024) share a common principle to map a to-be-erased concept  $c_e$  to a target neutral concept  $c_t$ . The target concept  $c_t$  can be either a generic concept, such as “a photo” or a null concept, such as an empty text prompt. It is typically predefined and fixed for all undesirable concepts  $c_e \in \mathbf{E}$ . To preserve the model’s performance on other concepts, an additional term  $L_2$  is added to ensure that the output of the neutral concept remains unchanged. More specifically, the erasing objective can be formulated as follows:
+
+$$\min_{\theta'} \underbrace{\mathbb{E}_{c_e \in \mathbf{E}} \left[ \|\epsilon_{\theta'}(\tau(c_e)) - \epsilon_\theta(\tau(c_t))\|_2^2 \right]}_{L_1} + \underbrace{\|\epsilon_{\theta'}(\tau(c_n)) - \epsilon_\theta(\tau(c_n))\|_2^2}_{L_2} \quad (2)$$
+
+{2}------------------------------------------------
+
+While this naive principle is simple and effective in erasing the specific concept, choosing a fixed neutral concept as the target concept for all concepts to be erased is obviously not optimal (i.e.,  $c_t = c_n \forall c_e \in \mathbf{E}$ ). Intuitively, remapping the visual concept “English Springer” to “Dog” will likely cause a less drastic change on the model’s parameter compared to remapping it to a neutral concept such as “A photo” or “ ”, leading to a better preservation performance on other concepts. In the following section, we will provide a series of evidence to support this intuition which leads us to a principled approach on choosing an optimal target concept for each concept to be erased.
+
+## 3 QUANTIFYING IMPACT OF ERASING CONCEPTS
+
+**Netfive Dataset.** Two main challenges in evaluating an erasing method are: (1) How to verify whether a concept is present in the generated images or not? (2) How to ensure the evaluation is diverse enough to cover the output space of the model which is of infinite possibilities? To tackle these two challenges, we propose an evaluation dataset called NetFive, which consists of 25 concepts from the ImageNet dataset, for which we can leverage the pre-trained classification model to verify the presence of the concepts in the generated images. We also ensure the diversity of the evaluation by generating 500 samples for each concept. More specifically, we choose a total of five subsets of concepts, each subset contains one anchor concept, e.g., “English Springer” and four related concepts, ranked by their closeness to the anchor concept as follows: (the details and rationale of choosing the concepts are provided in Appendix C.1)
+
+- **Dog:** English springer, Clumber spaniel, English setter, Blenheim spaniel, Border collie.
+- **Vehicle:** Garbage truck, Moving van, Fire engine, Ambulance, School bus.
+- **Instrument:** French horn, Basson, Trombone, Oboe, Saxophone.
+- **Building:** Church, Monastery, Bell cote, Dome, Library.
+- **Equipment:** Cassette Player, Polaroid camera, Loudspeaker, Typewriter keyboard, Projector.
+
+**Metric to measure the generation capability of the model.** Because of intentionally choosing all concepts from the ImageNet dataset, we can leverage the pre-trained classification model to detect the presence of the concept in the generated image. More specifically, given a model  $G_\theta$ , we generate  $k = 500$  images with the input description  $c$ , and then measure using the metrics:
+
+- **Detection Score (DS-1/DS-5):** # of samples that are classified as the concept  $c$  in top-1 or top-5 predictions /  $k$  (i.e., top-k accuracy).
+- **Confident Score (CS-1/CS-5):** Average confident score w.r.t. the concept  $c$  in top-1 or top-5 predictions, otherwise, the confident score is set to be 0. This metric indicates how good the model  $G_\theta$  is when generating the concept  $c$ . A higher score means that the concept  $c$  is more likely appeared in the generated images.
+
+For all metrics, higher values indicate better generation capability of the model on concept  $c$ . In the rest of the paper, we use the Detection Score (DS-5) as the main metric, while results for other metrics are provided in Appendix C.2.
+
+We present  $G_0(c_j)$  and  $G_{c_e}(c_j)$  as the generation capability of the original model and the sanitized model on the same query concept  $c_j$  after erasing concept  $c_e$ , respectively. With this, we can measure the impact of erasing concept  $c_e$  on the generation capability of concept  $c_j$  by computing the difference between  $G_0(c_j)$  and  $G_{c_e}(c_j)$ , i.e.,  $\Delta(c_e, c_j) = G_0(c_j) - G_{c_e}(c_j)$ .
+
+### 3.1 TARGETING TO A GENERIC CONCEPT
+
+We first analyze the impact of choosing a generic concept such as an empty “ ” as the target concept for erasure. The top subfigure in Figure 1 shows a **sample analysis** of the impact of erasing concept “English Springer” to the generation capability of all NetFive concepts. Each column corresponds to one concept  $c_j$  in the NetFive dataset. The blue bar represents the generation capability  $G_{c_e}(c_j)$  of the sanitized model on concept  $c_j$ , while the total height of the stack is the generation capability  $G_0(c_j)$  of the original model on concept  $c_j$ . The red bar, therefore, represents the gap of generation capability between the sanitized model and the original model, i.e.,  $\Delta(c_e, c_j) = G_0(c_j) - G_{c_e}(c_j)$ ,
+
+{3}------------------------------------------------
+
+![Figure 1: Analysis of the impact of choosing empty concept as the target concept for erasure. The top subfigure is a bar chart titled 'Eraser: "English Springer" - Target: *'. The x-axis lists 20 concepts. The left y-axis is 'DS-5' (0-100) and the right y-axis is 'Confident Score' (-0.1 to 0.7). Blue bars represent DS-5 scores, which are high for most concepts. A green line represents the confident score of the original model, which is high for most concepts. An orange line represents the confident score of the sanitized model, which is significantly lower for 'English Springer' and some other concepts. The bottom subfigure is a heatmap titled 'Metric: Δ DS-5'. The x-axis and y-axis both list the same 20 concepts. The color scale ranges from light orange (low drop) to dark red (high drop). The first row (English Springer) shows a high drop for many concepts, indicating that erasing 'English Springer' has a significant impact on the generation capability of other concepts.](e94f3bbb6f7501b9a1344dd0210e5dd8_img.jpg)
+
+Figure 1: Analysis of the impact of choosing empty concept as the target concept for erasure. The top subfigure is a bar chart titled 'Eraser: "English Springer" - Target: \*'. The x-axis lists 20 concepts. The left y-axis is 'DS-5' (0-100) and the right y-axis is 'Confident Score' (-0.1 to 0.7). Blue bars represent DS-5 scores, which are high for most concepts. A green line represents the confident score of the original model, which is high for most concepts. An orange line represents the confident score of the sanitized model, which is significantly lower for 'English Springer' and some other concepts. The bottom subfigure is a heatmap titled 'Metric: Δ DS-5'. The x-axis and y-axis both list the same 20 concepts. The color scale ranges from light orange (low drop) to dark red (high drop). The first row (English Springer) shows a high drop for many concepts, indicating that erasing 'English Springer' has a significant impact on the generation capability of other concepts.
+
+Figure 1: Analysis of the impact of choosing empty concept as the target concept for erasure. Complete details are provided in Figure 9.
+
+The higher the total height of the stack, the higher the generation capability of the original model on concept  $c_j$ , while the higher the red bar, the higher the difference between the generation capability of the sanitized model and the original model. We also provide the confidence score of the classifier when predicting the concept from the generated images from the original model (the green line) and the sanitized model (the orange line).
+
+**Sample Analysis.** It can be seen from the top subfigure in Figure 1 that the concept  $c_e$  “English Springer” has been successfully removed from the sanitized model as evidenced by  $G_{c_e}(\text{"English Springer"}) = 0$ . It can also be seen that all closely related concepts to concept  $c_e$  “English Springer” are affected by the erasure of this concept, evidenced by the significant drop in the generation capability  $G_{c_e}(c_j) < G_0(c_j)$ , as well as the corresponding confidence scores. In contrast, the other concepts that are not closely related to the concept  $c_e$  are less affected, evidenced by the unchanged generation capability  $G_{c_e}(c_j) \approx G_0(c_j)$ . Interestingly, the two abnormal concepts that are not related to the to-be-erased concept  $c_e$  but are also affected, “Bell Cote” and “Oboe”. These two concepts have low generation capability even before the erasure of concept  $c_e$ , i.e.,  $G_0(c_j) \approx 60\%$ , compared to other concepts which have  $G_0(c_j) \approx 100\%$ .
+
+**Systematic Analysis.** Figure 1 shows the impact of erasing one concept to all the other concepts in the NetFive dataset, where each row corresponds to erasing one concept, and the first row corresponds to erasing the concept “English Springer” as shown in the top subfigure. Each cell in the matrix represents the drop of the generation capability of concept  $c_j$  after erasing concept  $c_e$ , i.e.,  $\Delta(c_e, c_j) = G_0(c_j) - G_{c_e}(c_j)$ . A deeper red color indicates a larger drop of the generation capability of concept  $c_j$  after erasing concept  $c_e$ . The matrix can be interpreted as a concept graph, showing the impact of one concept on other concepts.
+
+There are several intriguing observations that can be made from Figure 1:
+
+{4}------------------------------------------------
+
+![Figure 2: Analysis of the impact of choosing a specific concept as the target concept for erasure. The figure is a heatmap titled 'Metric: Δ DS-5'. The y-axis lists target concepts for erasure, and the x-axis lists source concepts. The color scale ranges from -20 (blue) to 100 (red). The diagonal line of red squares indicates that erasing a concept has a high impact on itself. The heatmap shows that the impact is generally localized to nearby concepts in the hierarchy, with some exceptions for 'abnormal' concepts like 'Bell Cote' and 'Oboe'.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+The heatmap displays the impact of erasing various concepts on a set of 20 other concepts. The rows represent the target concept being erased, and the columns represent the source concept whose performance is being measured. The color intensity indicates the magnitude of the change in the DS-5 metric. Red indicates a positive change (improvement or high impact), while blue indicates a negative change (worsening or low impact). The diagonal line of red squares shows that erasing a concept has the highest impact on itself. The impact is generally localized to nearby concepts in the hierarchy, with some exceptions for 'abnormal' concepts like 'Bell Cote' and 'Oboe' which have low generation capability and are sensitive to the erasure of any concept.
+
+Figure 2: Analysis of the impact of choosing a specific concept as the target concept for erasure. The figure is a heatmap titled 'Metric: Δ DS-5'. The y-axis lists target concepts for erasure, and the x-axis lists source concepts. The color scale ranges from -20 (blue) to 100 (red). The diagonal line of red squares indicates that erasing a concept has a high impact on itself. The heatmap shows that the impact is generally localized to nearby concepts in the hierarchy, with some exceptions for 'abnormal' concepts like 'Bell Cote' and 'Oboe'.
+
+Figure 2: Analysis of the impact of choosing a specific concept as the target concept for erasure. Full details are provided in Figure 12.
+
+- **Locality:** The concept graph is sparse and localized, which means that the impact of erasing one concept does not **strongly** spread to all the other concepts but only local concepts that are semantically related to the erased concept  $c_e$ .
+- **Asymmetry:** The concept graph is asymmetric such that the impact of erasing concept  $c_e$  on concept  $c_j$  is not the same as the impact of erasing concept  $c_j$  on concept  $c_e$ .
+- **Abnormal:** The two abnormal concepts “Bell Cote” and “Oboe”, which have low generation capability to begin with, are sensitive to the erasure of any concept.
+
+In the case of erasing exclusive concepts, such as “Taylor Swift”, “Van Gogh”, “gun”, and “nudity” as shown in the last four rows of the figure, the impact of erasing these concepts to all NetFive concepts are also limited, except for the two abnormal concepts, which supports the above observations on the concept graph.
+
+**Results with Stable Diffusion version 2.1** Figure 13 shows the impact of choosing the empty concept as the target concept for erasure with Stable Diffusion v2.1. It can be seen that our earlier observations are still valid, except that the abnormal concepts which have low generation capability and are sensitive to the erasure of any concept are now “Bell Cote” and “Projector”. This consistency indicates the generalization of the observations on the concept graph of different models, trained on different datasets and settings.
+
+### 3.2 TARGETING TO A SPECIFIC CONCEPT
+
+We now compare different strategies of choosing the target concept for erasure to see how the choice of the target concept affects the preservation of other concepts. In each subset, we choose to erase a same concept  $c_e$ , but with seven different target concepts  $c_t$ , in the following order: (1<sup>st</sup>) a synonym of  $c_e$ , (2<sup>nd</sup>, 3<sup>rd</sup>) two semantically related concepts but not synonyms, (4<sup>th</sup>) a general, upper-level concept that covers the subset, (e.g. “Dog” for the concept “English Springer”), (5<sup>th</sup>, 6<sup>th</sup>) two semantically unrelated concepts, and (7<sup>th</sup>) an empty concept. The explanation of finding a synonym to an anchor concept is provided in Appendix C.3.
+
+It can be seen from Figure 2 that the preservation performance highly depends on the choice of the target concept. More specifically, there are several notable observations:
+
+- **Locality:** Regardless of the choice of the target concept, the impact of erasing one concept is still sparse and localized.
+
+{5}------------------------------------------------
+
+- **Abnormal:** The two abnormal concepts “Bell Cote” and “Oboe” are still sensitive to the erasure of any concept regardless of the choice of the target concept.
+- **Synonym  $XXX$ :** Mapping to a synonym of the anchor concept leads to a minimal change as evidenced by the lowest  $\Delta(c_e, c_j)$  for all  $c_j$ . However, it also the least effective in erasing the undesirable concept  $c_e$ .
+- **All Unrelated Concepts  $XX$ :** Mapping to semantically unrelated concepts demonstrates the similar performance as the generic concept “ ”, as evidenced by the similar  $\Delta(c_e, c_j)$  between the three last rows (5<sup>th</sup> – 7<sup>th</sup>) in each subset.
+- **General concepts  $X$ :** While choosing a general concept as the target concept is intuitive and reasonable, it does not necessarily lead to good preservation performance. For example, “English Springer” → “Dog” or “French Horn” → “Musical Instrument Horn” still cause a drop on related concepts in their respective subsets. Moreover, there are also small drops on erasing performance compared to other strategies, shown by DS-5 of 83%, 91%, and 78% when mapping “Garbage Truck” to “Truck”, “French Horn” to “Musical Instrument Horn”, and “Cassette Player” to “Audio Device”, respectively. The two observations indicate that choosing a general concept is not an optimal strategy.
+- **In-class  $\checkmark$ :** The highest preservation performance which is consistently observed in all five subsets is achieved when the target concept is a closely related concept to  $c_e$ . For example, “English Springer” → “Clumber spaniel” or “Garbage Truck” → “Moving Van” or “School Bus” in the “Dog” and “Vehicle” subsets.
+
+## 4 PROPOSED METHOD: ADAPTIVE GUIDED ERASURE
+
+Motivated by the observations in Section 3, we propose to select the target concept for erasure adaptively for each query concept to mitigate the side effects of erasing undesirable concepts in diffusion models. More specifically, the ideal target concept should satisfy the following properties:
+
+- It should not be a synonym of the query concept that resembles a similar visual appearance (e.g., “nudity” to “naked” or “nude”, or “Garbage Truck” to “Waste Collection Vehicle”). This ensures that the erasure performance on the query concept remains effective.
+- It should be closely related to the query concept but not identical (e.g., “English Springer” to “Clumber Spaniel”, or “Garbage Truck” to “Moving Van”). This helps preserve the model’s generation capabilities on other concepts. As suggested by the locality property of the concept graph, changes in the model’s output can be used to identify these locally related concepts.
+
+Although it is possible to manually select the ideal target concept for each query concept based on the above properties, this approach is not scalable for a large erasing set  $\mathbf{E}$ . Therefore, we propose an optimization-based approach to automatically and adaptively find the optimal target concept for each query concept. Specifically, we aim to solve the following optimization problem:
+
+$$\min_{\theta'} \mathbb{E}_{c_e \in \mathbf{E}} \max_{c_t \in \mathcal{C}} \left[ \underbrace{\|\epsilon_\theta(\tau(c_e)) - \epsilon_\theta(\tau(c_t))\|_2^2}_{L_1} + \lambda \underbrace{\|\epsilon_{\theta'}(\tau(c_t)) - \epsilon_\theta(\tau(c_t))\|_2^2}_{L_2} \right] \quad (3)$$
+
+where  $\lambda$  is a trade-off hyperparameter and  $\mathcal{C}$  is the search space of target concepts  $c_t$ .
+
+**Minimizing the objective  $L_1$  w.r.t.  $\theta'$**  ensures that the output of the sanitized model for the query concept  $c_e$  is close to the output of the original model but for the target concept  $c_t$ , which serves the purpose of erasing the undesirable concept  $c_e$ . Meanwhile, **minimizing the objective  $L_2$  w.r.t.  $\theta'$**  ensures that the output of the two models remain similar for the same input concept  $c_t$ , preserving the model’s capability on the remaining concepts. In summary, the **outer minimization problem** optimizes the sanitized model parameters  $\theta'$  to simultaneously erase undesirable concepts and preserve the model’s functionality for other concepts.
+
+On the other hand, **maximizing the objective  $L_1$  w.r.t.  $c_t$**  ensures that the solution  $c_t^*$  is not a synonym of the query concept  $c_e$ , while **maximizing the objective  $L_2$  w.r.t.  $c_t$**  finds a sensitive
+
+{6}------------------------------------------------
+
+concept to the change of the model’s parameter  $\theta \rightarrow \theta'$ . This helps identify the most related concept to the query concept  $c_e$ , as suggested by the locality property of the concept graph in Section 3. By maximizing both  $L_1$  and  $L_2$  w.r.t.  $c_t$ , we ensure that the solution  $c_t^*$  satisfies both key properties of the ideal target concept. We provide empirical evidence in Section 5.2 and Appendix D.6, showing that the intermediate value of the solution  $c_t^*$  from the optimization problem equation 3 aligns with the above analysis.
+
+**Optimization Details.** Since the concept space  $\mathcal{C}$  is discrete and finite, the straightforward approach is to enumerate all the concepts in  $\mathcal{C}$  and select the one that maximizes the total loss in each optimization step of the outer minimization problem. However, this approach is computationally prohibitive for large  $\mathcal{C}$ . Moreover, some concepts can be complex and may not be interpreted as a single concept in the concept space  $\mathcal{C}$ . To address this, we formulate the target concept as a combination of multiple concepts in the concept space  $\mathcal{C}$ , i.e.,  $\tau(c_t) = \mathbf{G}(\pi) \odot T_C$ , where  $\mathbf{G}$  is the Gumbel-Softmax operator,  $\pi \in \mathcal{R}^{|\mathcal{C}|}$  is a learnable variable, and  $T_C$  is the textual embedding matrix of the entire concept space  $\mathcal{C}$ . We choose the Gumbel-Softmax operator with a temperature less than 1 to ensure that the target concept is a combination of a few main concepts rather than a mixture of all concepts in  $\mathcal{C}$ . The optimization problem equation 3 can be rewritten as follows:
+
+$$\min_{\theta'} \mathbb{E}_{c_e \in \mathcal{B}} \max_{\pi} \left[ \underbrace{\|\epsilon_{\theta'}(\tau(c_e)) - \epsilon_{\theta}(\mathbf{G}(\pi) \odot T_C)\|_2^2}_{L_1} + \lambda \underbrace{\|\epsilon_{\theta'}(\mathbf{G}(\pi) \odot T_C) - \epsilon_{\theta}(\mathbf{G}(\pi) \odot T_C)\|_2^2}_{L_2} \right] \quad (4)$$
+
+in which the objective of the inner-max is transformed to find the continuous weight  $\pi$  instead of the discrete concept  $c_t$ . This trick allows us to increase the richness and expressiveness of the target concept  $c_t$  as well as the optimization efficiency. We provide further details in Appendix B.
+
+## 5 EXPERIMENTS
+
+In this section, we demonstrate the effectiveness of our method in erasing various concepts from the foundation model, including object-related concepts, artistic styles, and NSFW attributes. We compare our approach with the state-of-the-art erasure methods including AP (Bui et al., 2024b), ESD (Gandikota et al., 2023), UCE (Gandikota et al., 2024), CA (Kumari et al., 2023), and MACE (Lu et al., 2024). Our experiments follow the same setup as in Bui et al. (2024b); Gandikota et al. (2023; 2024). Specifically, we use Stable Diffusion (SD) version 1.4 as the foundation model, and fine-tune the model for 1000 steps with a batch size of 1, using the Adam optimizer with a learning rate of  $\alpha = 10^{-5}$ .
+
+Further implementation details and analyses are provided in the appendix, including qualitative results (Section D.8), an examination of the impact of vocabularies (Section D.2) and hyperparameters (Section D.3), as well as an analysis of the search for the optimal target concepts (Section D.6). We strongly recommend referring to the appendix for a deeper understanding of our method and experiments.
+
+### 5.1 ERASING OBJECT-RELATED CONCEPTS
+
+**Setting.** In this experiment, we assess our method’s ability to erase object-related concepts, such as “Dog” or “Cat”, from a foundational model. We utilize the Imagenette dataset<sup>1</sup>, a subset of ImageNet (Deng et al., 2009), which contains 10 easily recognizable classes as suggested in (Gandikota et al., 2023). We conduct four different erasing tasks, each involving the simultaneous erasing of five classes while preserving the other five, generating 500 images per class.
+
+**Metrics.** **Erasing performance** is measured using the *Erasing Success Rate (ESR-k)*, which calculates the percentage of generated images where the “to-be-erased” classes are not detected in the top-k predictions. **Preserving performance** is evaluated using the *Preserving Success Rate (PSR-k)*
+
+<sup>1</sup><https://github.com/fastai/imagenette>
+
+{7}------------------------------------------------
+
+to measure how well “to-be-preserved” classes are detected, along with *FID* and *CLIP* scores on the COCO 30K validation set to assess preservation of common concepts. For example, in Table 1, the average PSR-5 of the original SD model is 97.6%, which means that 97.6% of the generated images contain the object-related concepts in the top-5 predictions, indicating the strong ability to generate object-related concepts accurately of the foundation model.
+
+**Results.** In term of erasure, all baselines perform well, with the lowest ESR-1 and ESR-5 scores being 95.5% and 88.9% respectively, indicating that only a small proportion of the generated images retain the object-related concepts. The UCE method achieves a perfect 100% ESR-1 and ESR-5, while our method reaches 98.1% ESR-1 and 95.7% ESR-5, slightly below AP, CA, and MACE.
+
+However, when it comes to concept preservation, the baselines, particularly UCE, perform poorly, with the most recent SOTA baseline AP showing the best PSR-1 and PSR-5 scores at 55.2% and 79.9%, respectively. In contrast, our method significantly outperforms the baselines, achieving 73.6% PSR-1 and 95.6% PSR-5, far exceeding AP and approaching the original SD model’s performance. Our method also achieves the best FID score of 16.1 and CLIP score of 26.0, surpassing the second-best AP method by 0.2 and 0.1 points, respectively. These results demonstrate that our method not only effectively erases unwanted concepts but also excels in preserving other important concepts, closely matching the performance of the foundation model.
+
+Table 1: Erasing object-related concepts. The best erasing results are highlighted in **bold**, and the second-best erasing results are highlighted in underline.
+
+| Method | ESR-1↑ | ESR-5↑ | PSR-1↑ | PSR-5↑ | FID↓ | CLIP↑ |
+|-|-|-|-|-|-|-|
+| SD | 22.0 ± 11.6 | 2.4 ± 1.4 | 78.0 ± 11.6 | 97.6 ± 1.4 | 16.1 | 26.4 |
+| ESD | 95.5 ± 0.8 | 88.9 ± 1.0 | 41.2 ± 12.9 | 56.1 ± 12.4 | 17.9 | 24.5 |
+| UCE | <b>100 ± 0.0</b> | <b>100 ± 0.0</b> | 23.4 ± 3.6 | 49.5 ± 8.0 | 19.1 | 21.4 |
+| CA | 98.4 ± 0.3 | 96.8 ± 6.1 | 44.2 ± 9.7 | 66.5 ± 6.1 | 16.6 | 25.8 |
+| MACE | <u>99.3 ± 0.3</u> | <u>97.6 ± 1.2</u> | 47.4 ± 12.0 | 72.8 ± 10.5 | 16.9 | 24.9 |
+| AP | <u>98.6 ± 1.1</u> | <u>96.1 ± 2.7</u> | <u>55.2 ± 10.0</u> | <u>79.9 ± 2.8</u> | <u>16.3</u> | <u>26.1</u> |
+| Ours | 98.1 ± 1.1 | 95.7 ± 2.5 | <b>73.6 ± 9.8</b> | <b>95.6 ± 1.1</b> | <b>16.1</b> | <b>26.0</b> |
+
+### 5.2 ERASING NSFW CONCEPTS
+
+**Setting.** In this experiment, we focus on unlearning Not-Safe-For-Work (NSFW) attributes like “nudity” from the model’s capability. We follow the same setting as in (Gandikota et al., 2023), focusing exclusively on fine-tuning the non-cross-attention modules. To generate NSFW images, we employ I2P prompts (Schramowski et al., 2023b) and generate a dataset comprising 4703 images with attributes encompassing sexual, violent, and racist content.
+
+**Metrics.** We utilize the detector (Praneet, 2019) which can accurately detect several types of exposed body parts to recognize the presence of the nudity concept in the generated images. The detector (Praneet, 2019) provides multi-label predictions with associated confidence scores, allowing us to adjust the threshold and control the trade-off between the number of detected body parts and the confidence of the detection, i.e., the higher the threshold, the fewer the number of detected body parts. **Erasing performance** is measured using the *Nudity Exposure Rate (NER-k)*, which measures the ratio of images with any exposed body parts detected by the detector (Praneet, 2019) over the total number of generated images with a confidence score greater than the threshold  $k$ . For example, in Table 2, with the threshold set at 0.5, the NER score for the CA model stands at 9.27%, indicating that 9.27% of the generated images contain signs of nudity concept from the detector’s perspective. **Preserving performance** is evaluated using FID score on COCO 30K validation set.
+
+Table 2: Evaluation on the nudity erasure setting.
+
+|  | NER-0.3↓ | NER-0.5↓ | NER-0.7↓ | NER-0.8↓ | FID↓ |
+|-|-|-|-|-|-|
+| CA | 13.84 | 9.27 | 4.74 | 1.68 | 20.76 |
+| UCE | 6.87 | 3.42 | 0.68 | 0.21 | 15.98 |
+| ESD | 5.32 | 2.36 | 0.74 | 0.23 | 17.14 |
+| AP | 3.64 | 1.70 | 0.40 | 0.06 | 15.52 |
+| Ours | 5.06 | 1.53 | 0.32 | 0.04 | 14.20 |
+
+{8}------------------------------------------------
+
+![Figure 4: Top/a: Intermediate results of the search process, with images generated from the most sensitive concepts c_t found by our method and c_e at the same optimization step. Bottom/b: Similarity between nudity attributes and keywords.](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 4 consists of two parts. Part (a) shows a grid of 12 generated images, each with a label above it indicating the concept  $c_t$  and its similarity score. The concepts include 'Nude', 'Model', 'Drawing', and 'Toy'. Part (b) is a bar chart showing the similarity scores for various body parts and keywords. The x-axis lists the body parts: Feet, Body, Arms, Butts, Male Genitalia, Female Genitalia, Male Breast, Female Breast, and Nudity. The y-axis represents the Similarity Score, ranging from 0.3 to 0.7. For each body part, four bars are shown: Nudity (blue), Model (orange), Drawing (green), and Toy (red).
+
+| Body Part | Nudity | Model | Drawing | Toy |
+|-|-|-|-|-|
+| Feet | 0.58 | 0.58 | 0.58 | 0.58 |
+| Body | 0.58 | 0.58 | 0.58 | 0.58 |
+| Arms | 0.58 | 0.58 | 0.58 | 0.58 |
+| Butts | 0.58 | 0.58 | 0.58 | 0.58 |
+| Male Genitalia | 0.58 | 0.58 | 0.58 | 0.58 |
+| Female Genitalia | 0.58 | 0.58 | 0.58 | 0.58 |
+| Male Breast | 0.58 | 0.58 | 0.58 | 0.58 |
+| Female Breast | 0.58 | 0.58 | 0.58 | 0.58 |
+| Nudity | 0.58 | 0.58 | 0.58 | 0.58 |
+
+Figure 4: Top/a: Intermediate results of the search process, with images generated from the most sensitive concepts c\_t found by our method and c\_e at the same optimization step. Bottom/b: Similarity between nudity attributes and keywords.
+
+Figure 4: Top/a: Intermediate results of the search process, with images generated from the most sensitive concepts  $c_t$  found by our method and  $c_e$  at the same optimization step. Bottom/b: Similarity between nudity attributes and keywords.
+
+**Results.** Table 2 shows the NER score across thresholds ranging from 0.3 to 0.8. With  $k = 0.5$ , CA, ESD, UCE, and AP achieve 9.27%, 2.36%, 3.42%, and 1.70% NER, respectively, while our method achieves 1.53% NER, the lowest among the baselines, indicating the highest erasing performance. This result remains consistent across different thresholds, emphasizing the robustness of our method in erasing NSFW content. In term of preserving performance, our method achieves the best FID score of 14.20, a significant improvement over the second and third-best AP and UCE methods at 15.52 and 15.98, respectively, indicating that our method can simultaneously erase a concept while preserving other concepts effectively.
+
+Figure 3 provides detailed statistics of different exposed body parts in the generated images. It can be seen that in the original SD model, among all the body parts, the female breast is the most detected body part in the generated images, accounting for more than 320 images out of the total 4703 images. Both baselines, ESD and UCE, as well as our method, achieve a significant reduction in the number of detected body parts, with our method achieving the lowest number among the baselines. Our method also achieves the lowest number of detected body parts for the most sensitive body parts, only surpassing the baselines for feet which is a less sensitive body part.
+
+![Figure 3: Number of exposed body parts counted in all generated images with threshold 0.5.](925f55ce69802b9d3b00546382663ee2_img.jpg)
+
+Figure 3 is a horizontal stacked bar chart showing the number of exposed body parts for different methods. The y-axis lists the body parts: Feet, Body, Arms, Butts, Male Breast, Male Genitalia, Female Genitalia, and Female Breast. The x-axis represents the number of exposed body parts, ranging from 0 to 700. The legend indicates five methods: SD (blue), CA (orange), ESD (green), UCE (red), and Ours (purple).
+
+| Body Part | SD | CA | ESD | UCE | Ours |
+|-|-|-|-|-|-|
+| Feet | ~150 | ~150 | ~150 | ~150 | ~150 |
+| Body | ~250 | ~250 | ~250 | ~250 | ~250 |
+| Arms | ~350 | ~350 | ~350 | ~350 | ~350 |
+| Butts | ~100 | ~100 | ~100 | ~100 | ~100 |
+| Male Breast | ~150 | ~150 | ~150 | ~150 | ~150 |
+| Male Genitalia | ~50 | ~50 | ~50 | ~50 | ~50 |
+| Female Genitalia | ~50 | ~50 | ~50 | ~50 | ~50 |
+| Female Breast | ~350 | ~350 | ~350 | ~350 | ~350 |
+
+Figure 3: Number of exposed body parts counted in all generated images with threshold 0.5.
+
+Figure 3: Number of exposed body parts counted in all generated images with threshold 0.5.
+
+**Searching for the optimal target concepts.** We investigate the search for optimal target concepts  $c_t$  by visualizing the generated images from  $c_t$  found by our method and the corresponding output of  $c_e$  at the same optimization step as shown in Figure 4a. Additionally, we present the similarity scores between the nudity attributes detected by the detector and  $c_t$  as in Figure 4b. Firstly, the to-be-erased concept  $c_e$  (“nudity”) is closely related to the sensitive body parts such as “breasts” and “genitalia”, explaining why removing the “nudity” concept also eliminates these sensitive attributes. On the other hand, as discussed in Section 4, the target concept  $c_t$  is designed to be locally aligned with  $c_e$  but not exactly the same as  $c_e$ . In our results, all intermediate concepts  $c_t$  such as “Model”, “Drawing”, and “Toy” are highly correlated with the “nudity” concept satisfying the first condition. However, while being highly correlated with less sensitive parts such as “Feet”, they are less correlated with more sensitive ones like “breasts” and “genitalia”, meeting the second condition. It is a worth recall that in Equation 3,  $c_t$  serves as a retained concept to preserve the model’s capabilities. Therefore, the strong correlation between  $c_t$  and “Feet”, and its weaker connection with other sensitive parts, explains the interesting advantage of our method that it can still retain the “Feet” concept while successfully erasing others, as observed in Figure 3. We provide more results and analyses in Appendix D.6.
+
+{9}------------------------------------------------
+
+### 5.3 ERASING ARTISTIC CONCEPTS
+
+**Setting.** In this experiment, we evaluate our method’s ability to erase artistic style concepts. We focus on five well-known artists with highly recognizable styles that are commonly mimicked by text-to-image generative models, including "Kelly Mckernan", "Thomas Kinkade", "Tyler Edlin", "Kilian Eng", and "Ajin Demi Human" as in (Gandikota et al., 2023). The experiment involves five tasks, each aiming to erase one artist’s style while preserving the others.
+
+**Metrics.** A major challenge in this setting is the lack of a reliable detector for identifying the presence of artistic styles in generated images. Human-evaluation is avoided due to the high cost, time-consuming, not scalable, and more importantly, easily biased. To overcome this, we utilize the CLIP score <sup>2</sup> to measure the alignment between the generated images and the textual prompts, which has been shown to be effective in similar tasks (Gandikota et al., 2023). To enhance the correctness, we make use of a list of long textual prompts that are designed exclusively for each artist (credits to (Gandikota et al., 2023)), combined with 5 seeds per prompt to generate 200 images for each artist across all methods. This approach allows the use of the CLIP score as a more meaningful measurement to evaluate the erasing and preserving performance. We also use LPIPS (Zhang et al., 2018) to measure the distortion in generated images by the original SD model and editing methods, where a low LPIPS score indicates less distortion between two sets of images. However, as LPIPS is designed for quantitative comparison between two outputs, it might not be as good as CLIP score in order to verify the presence of a specific concept in the generated images, and should be used as a complementary metric to CLIP score.
+
+**Results.** Figure 5 presents the results of the artistic style erasure task. In term of CLIP score, it can be seen that our method along with AP and UCE lie in the Pareto frontier (with the ideal point being the top-left corner), with a clear trade-off between erasing and preserving performance. For example, AP achieves better erasing performance than our method with a CLIP score of 21.57 and 22.44, respectively, but our method outperforms AP in preserving performance with a CLIP score of 30.45 and 30.13, respectively. However, in term of LPIPS score, our method clearly achieves the best trade-off between erasing and preserving performance, with the erasing score of 0.80 and preserving score of 0.44, while AP achieves the erasing score of 0.78 and preserving score of 0.47.
+
+![Figure 5: A scatter plot showing CLIP and LPIPS scores for various artistic style erasure methods. The x-axis represents the CLIP (To-Erase) score, ranging from 20 to 29. The left y-axis represents the CLIP (To-Preserve) score, ranging from 29.0 to 32.0. The right y-axis represents the LPIPS (To-Preserve) score, ranging from 0.2 to 0.8. Methods plotted include ESD (black circle), CA (black square), UCE (black triangle), MACE (black diamond), AP (black star), and Ours (red circle). Arrows point to 'Ideal CLIP' (top-left) and 'Ideal LPIPS' (bottom-right). Ours is positioned near the top-left, indicating high CLIP (To-Preserve) and low LPIPS (To-Preserve) scores.](8ee3b76dd49f31624d287885bc2c81ee_img.jpg)
+
+Figure 5: A scatter plot showing CLIP and LPIPS scores for various artistic style erasure methods. The x-axis represents the CLIP (To-Erase) score, ranging from 20 to 29. The left y-axis represents the CLIP (To-Preserve) score, ranging from 29.0 to 32.0. The right y-axis represents the LPIPS (To-Preserve) score, ranging from 0.2 to 0.8. Methods plotted include ESD (black circle), CA (black square), UCE (black triangle), MACE (black diamond), AP (black star), and Ours (red circle). Arrows point to 'Ideal CLIP' (top-left) and 'Ideal LPIPS' (bottom-right). Ours is positioned near the top-left, indicating high CLIP (To-Preserve) and low LPIPS (To-Preserve) scores.
+
+Figure 5: CLIP and LPIPS scores of the artistic style erasure task. (\*) LPIPS at x-axis is scaled by 34 for better visualization. Full results are in Table 6.
+
+## 6 CONCLUSION
+
+In this paper, we introduced the Adaptive Guided Erasure (AGE) method, a novel approach for concept erasure that addresses the limitations of existing fixed-target methods. By modeling the concept space as a graph and analyzing its geometric properties, we demonstrated that selecting a locally related target concept can minimize unintended side effects. AGE adapts target selection through a minimax optimization, further enriched by representing targets as mixtures of single concepts. Our experiments show that AGE outperforms state-of-the-art methods, effectively erasing undesirable concepts while preserving benign ones across various tasks. Besides the method, we also provided the first comprehensive study of the concept space structure, providing new intriguing insights that shed light on the concept space geometry. We believe that these insights will inspire future research on understanding and manipulating the concept space for various applications.
+
+<sup>2</sup>[https://lightning.ai/docs/torchmetrics/stable/multimodal/clip\\_score.html](https://lightning.ai/docs/torchmetrics/stable/multimodal/clip_score.html)
+
+ Rest of paper (reference and Appendix) is removed.

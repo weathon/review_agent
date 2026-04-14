@@ -1,0 +1,177 @@
+# Leveraging Modality Tags for Enhanced Cross-Modal Video Retrieval
+
+- Decision: Reject
+- Scores: 5, 8, 3, 8
+
+## Abstract
+Video retrieval requires aligning visual content with corresponding natural language descriptions. In this paper, we introduce Modality Auxiliary Concepts for Video Retrieval (MAC-VR), a novel approach that leverages modality-specific tags---automatically extracted from foundation models---to enhance video retrieval.
+Previous works have proposed to emulate human reasoning by introducing latent concepts derived from the features of a video and its corresponding caption. Building on these efforts to align latent concepts across both modalities, we propose learning auxiliary concepts from modality-specific tags. 
+We introduce these auxiliary concepts to improve the alignment of visual and textual latent concepts, and so be able to distinguish each concept from the other.
+To strengthen the alignment between visual and textual latent concepts—where a set of visual concepts matches a corresponding set of textual concepts—we introduce an Alignment Loss. This loss aligns the proposed auxiliary concepts with the modalities' latent concepts, enhancing the model's ability to accurately match videos with their appropriate captions. 
+We conduct extensive experiments on three diverse datasets: MSR-VTT, DiDeMo, and ActivityNet Captions. The experimental results consistently demonstrate that modality-specific tags significantly improve cross-modal alignment, achieving performance comparable to current state-of-the-art methods.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+5
+
+### Rating Number
+5
+
+### Confidence
+4
+
+### Summary
+This paper utilizes auxiliary concepts to improve the alignment of visual and textual latent concepts, enabling the distinction between each concept. It also introduces an Alignment Loss to strengthen the alignment between visual and textual latent concepts. Experimental results demonstrate the effectiveness of the proposed method.
+
+### Strengths
+This paper conducted thorough experiments to demonstrate the effectiveness of the method.
+
+### Weaknesses
+1. The paper contains numerous typographical errors; please review it carefully. For example, on line 142, it reads "into a shared ddimensional latent embedding"; on line 236, it says "Alignment Loss LA and"; on line 314, it mentions "Flikr videos"; and on line 317, it states "on the vall split". Figure 3 has low resolution. There are also missing bold elements in Table 2. The authors are requested to carefully proofread their paper. The spelling in Figure 5 also contains errors, such as "enjoyoing". The capitalization of the table labels throughout the paper is not consistent.
+2.The LA loss proposed by the author is not clearly stated in the paper, and it seems to lack innovation.
+3. The method proposed by the authors leverages the capabilities of VLM and LLM to generate tags for auxiliary alignment. However, as the authors' visualization results and experimental data analysis suggest, this kind of annotation largely generates confusing information that is detrimental to semantic alignment. This does not sound reasonable. Moreover, the authors still heavily rely on the alignment capabilities of the latent space itself, and the experiments do not reflect the effect of using only tags. I speculate that the effect obtained by using only tags is not good. The authors could further demonstrate the rationality and effectiveness of the proposed method through additional experiments or other means. It is difficult to confirm the effectiveness of the method from the current experimental data because I have observed that some results on DiDeMo and ActivityNet Captions have actually declined. This may be due to overfitting to the first dataset, rather than an improvement brought about by the method itself.
+
+### Questions
+none
+
+### Soundness
+3
+
+### Presentation
+2
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+5
+
+### Summary
+This paper proposes a method called Modality Auxiliary Concepts to enhance video retrieval performance, utilizing large models to generate Visual/Textual Tags that help align visual and textual concepts. I hold a positive view of this research.
+
+### Strengths
+This paper proposes a method called Modality Auxiliary Concepts to enhance video retrieval performance, utilizing large models to generate Visual/Textual Tags that help align visual and textual concepts. The approach is also logically clear and well-structured.
+
+### Weaknesses
+1、In line 300, for the proposed alignment loss $L_{A}$, please provide the principle or the formula for further clarification.
+2、2. I suggest formatting the tables in the style of three-line tables for improved aesthetics. In line 472, $L_{L_{A}}$ should be changed to $L_{A}$.
+
+### Questions
+1、1. Please refer to Figure 3 and answer this question: During model testing, are the features $T_{i}$ generated by the Text encoder used as input to the T-CVE model?
+2、In line 362, it is mentioned that K=8. I believe that the choice of K is crucial, and I recommend an ablation study to investigate the impact of different values of K.
+
+### Soundness
+3
+
+### Presentation
+3
+
+### Contribution
+3
+
+---
+
+## Human Reviewer 3
+
+### Rating
+3
+
+### Rating Number
+3
+
+### Confidence
+5
+
+### Summary
+This paper introduces Modality Auxiliary Concepts for video retrieval, a novel approach that leverages modality-specific tags to enhance video retrieval. However, the novelty of the paper is insufficient. It only uses a large model to obtain the tag information of text and video to enhance the performance of the model. In addition, based on the introduction of additional data and large model knowledge, our model still lags far behind the state-of-the-art methods.
+
+### Strengths
+1. This paper introduces Modality Auxiliary Concepts for video retrieval, a novel approach that leverages modality-specific tags to enhance video retrieval
+2. The authors propose to extract modality-specific tags from foundational VLMs and LLMs to augment the video and text modalities.
+3. The authors propose a new Alignment Loss to better align and distinguish these learnt latent concepts.
+
+### Weaknesses
+1. The novelty of the paper is insufficient. It only uses LLMs to obtain the tag information of text and video to enhance the performance of the model. In addition, based on the introduction of additional data and large model knowledge, our model still lags far behind the state-of-the-art methods including T-MASS as shown in Table 3.
+2. The performance of the proposed method in this paper lags significantly behind the state-of-the-art (SOTA) techniques. Upon examining Table 3, it is evident that the proposed MAC-VR method falls behind T-MASS in terms of R@5 and R@10 for the MSRVTT dataset. For DiDeMo, MAC-VR also underperforms T-MASS across R@1, R@5, R@10, and MeanR metrics. The disparity in performance is notably substantial. Also, for ActivityNet, MAC-VR also falls behind T-MASS at R@1 and R@5 by a large margin.
+3. The logic in L53 is strange. The authors explain the effectiveness of different inference strategies which seems to have nothing to do with the auxiliary concept loss function described later.
+4. Some important papers need to be referenced and compared, including:
+[1] Clip-vip: Adapting pretrained image-text model to video-language representation alignment. ICLR 2023
+[2] Uatvr: Uncertainty-adaptive text-video retrieval. ICCV 2023
+5. The writing of the paper is not professional and needs further improvement. The symbols of this paper should be consistent, such as QB in L157 vs \textit{QB} in L158, maybe $\in$in L140,   et al.
+6. The second term in Eq. 5 should also be preceded by a weight parameter to control it, and the selection of its parameters should be verified through experiments.
+7. The authors do not define the K in Eq. 4. Besides, the K in Eq. 4 seems to be different from the K in L323, so I suggest the authors use different symbols to distinguish them.
+
+### Questions
+1. The novelty of the paper is insufficient. It only uses LLMs to obtain the tag information of text and video to enhance the performance of the model. In addition, based on the introduction of additional data and large model knowledge, our model still lags far behind the state-of-the-art methods including T-MASS as shown in Table 3.
+2. The performance of the proposed method in this paper lags significantly behind the state-of-the-art (SOTA) techniques. Upon examining Table 3, it is evident that the proposed MAC-VR method falls behind T-MASS in terms of R@5 and R@10 for the MSRVTT dataset. For DiDeMo, MAC-VR also underperforms T-MASS across R@1, R@5, R@10, and MeanR metrics. The disparity in performance is notably substantial. Also, for ActivityNet, MAC-VR also falls behind T-MASS at R@1 and R@5 by a large margin.
+3. The logic in L53 is strange. The authors explain the effectiveness of different inference strategies which seems to have nothing to do with the auxiliary concept loss function described later.
+4. Some important papers need to be referenced and compared, including:
+[1] Clip-vip: Adapting pretrained image-text model to video-language representation alignment. ICLR 2023
+[2] Uatvr: Uncertainty-adaptive text-video retrieval. ICCV 2023
+5. The writing of the paper is not professional and needs further improvement. The symbols of this paper should be consistent, such as QB in L157 vs \textit{QB} in L158, maybe $\in$in L140,   et al.
+6. The second term in Eq. 5 should also be preceded by a weight parameter to control it, and the selection of its parameters should be verified through experiments.
+7. The authors do not define the K in Eq. 4. Besides, the K in Eq. 4 seems to be different from the K in L323, so I suggest the authors use different symbols to distinguish them.
+
+### Soundness
+2
+
+### Presentation
+1
+
+### Contribution
+2
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8
+
+### Rating Number
+8
+
+### Confidence
+3
+
+### Summary
+1. The authors in the paper introduce Modality Auxiliary Concepts for Video Retrieval, a novel approach that aims at improving alignment between video and text for effective video retrieval.
+2. This work provides a framework for extracting and utilizing modality-specific tags using foundational models from video and text and an alignment loss is introduced to align modality-specific auxiliary concepts with visual and textual latent concepts. 
+3. In the paper they discuss how the architecture is tested with various inference strategies achieving competitive results across three benchmark datasets and ablation studies further validate the impact of each component.
+
+### Strengths
+1. The paper introduces an approach to use foundational models to extract modality-specific tags for both videos and text, this is a novel approach to enhance cross-model alignment.
+2. Extensive experiments are conducted on three diverse datasets which cover a wide range of video retrieval tasks, comparison of MAC-VR against a strong baseline with SOTA methods and different inference strategies are documented.
+3. The authors have documented extensive ablation studies for validating the contribution of each components such as the effect of different numbers of tags, foundation models and architectural choices on retrieval performance.
+
+### Weaknesses
+1. The paper does not cover the quality and the diversity of the tags extracted. An evaluation of tag relevance and coverage could enhance the contribution.
+2. The paper has limited analysis of the individual contributions of video tags and text tags within the MAC-VR framework. Understanding the contribution of modality-specific tags to overall alignment can maybe help to identify the potential areas for improvement.
+
+### Questions
+1. Have the authors thought about ways to handle observed instances of hallucinated tags? And currently, how are these affecting retrieval accuracy?
+2. Was a quantitative evaluation considered for the quality and relevance of extracted tags maybe like a comparison with human annotated tags?
+
+Please also refer to weaknesses for other questions.
+
+### Soundness
+4
+
+### Presentation
+3
+
+### Contribution
+3
