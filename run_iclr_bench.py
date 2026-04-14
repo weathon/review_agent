@@ -10,6 +10,7 @@ Usage:
 import asyncio
 import csv
 import json
+import os
 import random
 import re
 import sys
@@ -263,6 +264,8 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     available = [r for r in gt_data if (papers_dir / f"{r['paper_id']}.txt").exists()]
     if calibration_ids:
         available = [r for r in available if r["paper_id"] not in calibration_ids]
+
+
     print(f"Papers with parsed text (after exclusions): {len(available)}")
 
     if balanced:
@@ -419,6 +422,10 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
 
     # Launch all papers via worker pool with staggered start
     to_run = len(samples) - len(finished_ids & {p["paper_id"] for p in samples})
+    # print("Leaked:",leaked)
+    leaked = set([i.split(".")[0] for i in os.listdir("/home/wg25r/review_agent/human_reviews/")]).intersection(set(p["paper_id"] for p in samples))
+    assert len(leaked) == 0, f"Leaked papers in human_reviews: {leaked}"
+    
     print(f"\nRunning {to_run} papers ({len(finished_ids)} skipped) with concurrency={CONCURRENCY}...")
 
     queue: asyncio.Queue[tuple[int, dict] | None] = asyncio.Queue()
@@ -453,7 +460,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
     accuracy = matches / len(valid) if valid else 0
 
     print(f"\nPapers reviewed:  {len(results)}")
-    print(f"Successful:       {len(successful)}")
+    print(f"Successful:       {len(successful)}") 
     print(f"Decision eval:    {len(valid)}")
     if valid:
         print(f"Correct:          {matches}/{len(valid)}")
@@ -499,6 +506,7 @@ async def main(n_samples: int = 10, seed: int = 42, parallel: bool = False, skip
 
     return results
 
+import os
 
 if __name__ == "__main__":
     parallel = "--parallel" in sys.argv
@@ -507,6 +515,7 @@ if __name__ == "__main__":
     skip_neutral = "--no-neutral" in sys.argv
     balanced = "--balanced" in sys.argv
     merger_output_score = "--merger-output-score" in sys.argv
+    poweroff = "--power-off-when-done" in sys.argv
 
     data_dir = None
     calibration_path = None
@@ -531,3 +540,7 @@ if __name__ == "__main__":
     n = int(args[0]) if len(args) > 0 else 10
     seed = int(args[1]) if len(args) > 1 else 42
     asyncio.run(main(n_samples=n, seed=seed, parallel=parallel, skip_related_work=skip_related, skip_spark=skip_spark, skip_neutral=skip_neutral, balanced=balanced, data_dir=data_dir, calibration_path=calibration_path, merger_output_score=merger_output_score, csv_name=csv_name))
+    if poweroff:
+        print("\nPowering off the machine as requested ...")
+        import os
+        os.system("shutdown now")

@@ -1,100 +1,114 @@
-Now I have enough context to write the final consolidated review.
-
----
+Now I have enough information to write the consolidated review. Let me cross-check the key claims.---
 
 ## Summary
 
-SpARK introduces *Sparse Watermarking*, a category of LLM watermarking that applies watermarks only to tokens following words with specific Part-of-Speech (POS) tags (Verb, Noun, Determiner), and adjusts the z-test detection to check only those anchored positions. By leaving the majority of tokens undisturbed and focusing statistical detection on the sparse watermarked subset, SpARK substantially reduces degradation to generated text quality while maintaining TPR ≥ 99%. Experiments on Llama-2-7b and Phi-3 across four datasets (long-form QA and summarization) demonstrate consistent quality improvements over four dense-watermarking baselines at matched detectability, with meaningful but acknowledged robustness tradeoffs under heavy attacks.
+SpARK proposes *Sparse Watermarking* for LLMs: rather than watermarking every generated token, it restricts generation to a green list only at tokens that immediately follow words carrying selected Part-of-Speech (POS) tags (Verb, Noun, Determiner), then runs the z-score detection test only over those anchored positions. This decouples the quality penalty from the watermark's detection power. Evaluated on Llama2-7b and Phi-3 across four datasets (two long-form QA, two summarization), SpARK reduces ROUGE-L degradation to 10–22% compared to 22–65% for dense baselines, while maintaining ≥99% TPR. Robustness under light attacks is competitive, but degrades under heavy paraphrase and high-substitution scenarios.
 
 ---
 
 ## Strengths
 
-- **Substantially improved quality-detectability tradeoff with compelling margins.** On Llama-2-7b, SpARK-Determiner reduces ROUGE-L degradation to only 11.07% (Long-form QA) and 10.99% (Summarization) versus at least 22% for the best-performing baseline (Hard watermark) and up to 50% for Unigram. On Phi-3, SpARK-Verb degrades quality by only 5.17% vs. 13.75% for the next-best baseline. These are large, consistent gaps across two models and two tasks, not marginal improvements.
+- **Quantitatively large and consistent quality gains.** On Llama2-7b (Table 1), SpARK-Determiner reduces ROUGE-L by 11% vs. 22–47% for the baselines at matched detectability (≥99% TPR). On Phi-3 (Table 2), the gap widens further (6% vs. 14–66%). These are not marginal differences; they are large and replicate across two very different model families and two task types. Semantic similarity gains (0.836 vs. 0.652–0.765 on Llama2-7b) point in the same direction.
 
-- **Semantic similarity preservation is distinctive and well-documented.** SpARK-Verb achieves 0.836 (Llama-2) and 0.850 (Phi-3) semantic similarity between watermarked and non-watermarked text, compared to 0.765/0.567 for Hard and 0.652/0.425 for Unigram. The difference is not a statistical artifact; the qualitative example in Table 4 concretely illustrates why — dense watermarking with SelfHash forces incoherent outputs (e.g., "Not enough crowd," "Marketton"), while SpARK-Determiner produces fluent, faithful text.
+- **Elegant and well-motivated core design.** The key insight—that sparse watermarking is only useful if detection is also conditioned on the same sparse positions—directly explains why naïvely reducing watermark density in prior methods does not solve the trade-off. The paper states this clearly in Section 3.3: "Attempting to watermark sparsely without knowing the location of the watermarked elements would be akin to using the previous watermark methods with low strength." This is genuinely non-obvious and distinguishes SpARK conceptually from simply lowering δ.
 
-- **The core insight is principled and novel.** The observation that the statistical test gains nothing from including non-watermarked tokens in T, and that decoupling watermark placement from detection scope can improve quality without harming detectability, is a clean and non-obvious contribution. Unlike entropy-based skipping (Lee et al., 2023), which was domain-specific to code and required dynamic thresholding, SpARK's POS anchor provides a deterministic, language-structure-based positional scheme applicable to general text generation.
+- **Anchor-after-POS design avoids POS-consistency circularity.** The choice to watermark the token *after* a POS-tagged word, rather than the word itself, is a careful engineering decision that prevents the watermarked token from corrupting the POS tag of the anchor. The paper explicitly notes (Section 3.3): "watermarking those words directly would not guarantee it to have the same POS tag after being watermarked." This design choice ensures consistent encoding/decoding without look-ahead.
 
-- **Perplexity results corroborate quality claims with an independent metric.** Figure 3 shows SpARK-Determiner achieves consistently lower median perplexity and smaller variance than all baselines, using Llama-2-13b as the oracle. The reduced variance is a notable secondary finding, suggesting SpARK produces more predictable generation quality.
+- **Perplexity evidence provides corroborating signal.** Figure 3 shows SpARK-Determiner achieves the lowest perplexity and lowest variance under a Llama2-13b oracle across both task types. Using a stronger external model as an oracle (following Jovanović et al., 2024) is a methodologically reasonable choice, providing a metric independent of the task reference texts.
 
 ---
 
 ## Weaknesses
 
-- **Robustness drops significantly under heavy attacks, with no mechanistic explanation.** At 50% substitution on Llama-2-7b, SpARK-Verb falls to 72.4% TPR and SpARK-Determiner to 67.6%, compared to SelfHash at 92.3% and Unigram at 91.4% (Table 3). The paper acknowledges this but offers no analysis of *why*. The likely mechanism — that 50% random substitution has a meaningful probability of replacing POS anchor words themselves, which destroys anchor-next-token relationships — should be verified and discussed. This is not a fatal flaw (the paper is explicit about the tradeoff), but the absence of mechanistic understanding limits actionable guidance on when SpARK is and isn't appropriate.
+### Fatal
+None. The core claim (sparse watermarking with selective detection significantly preserves quality at matched detectability) is supported by clear empirical evidence.
 
-- **Targeted attacks against POS anchors are not evaluated or even acknowledged.** Section 3.2 states that the adversary is "aware of the presence of watermarks." If the watermarking scheme is publicly known (which is typically assumed for cryptographic security), an adversary can trivially identify which tokens are watermarked by POS-tagging the generated text and targeting only the tokens immediately following anchor-POS words. This targeted substitution would be far more efficient at defeating the watermark than the random substitution evaluated in Table 3. For a method with publicly derivable anchor positions, this is a non-trivial security gap that the paper must at least discuss and bound.
+---
 
-- **POS tagger consistency between generation and detection is never analyzed.** The method requires that the POS tagger produces the same label for a given word both during incremental autoregressive generation (where the context is a partial sentence) and during post-hoc detection (where the full text is available). POS taggers can produce different tags for the same word in different sentential contexts or when context is truncated. Any mismatch causes the detector to miscalibrate T (the denominator of the z-score), degrading TPR. Neither a theoretical bound nor an empirical ablation (e.g., how often do encoder-time and decoder-time POS labels disagree?) is provided.
+### Major
 
-- **Hard restriction with γ = 0.05 creates a forced low-quality sampling regime that is not analyzed.** SpARK uses hard restriction rather than a logit bias δ: at watermarked positions, the model must sample from only 5% of word-starting tokens. If no high-probability token falls in the green list at a given position, the model is forced to emit a low-probability token, risking quality degradation at precisely the moments that matter most (rare or syntactically constrained contexts). The paper argues that sparse watermarking preserves quality, but does not verify that the green-list tokens at watermarked positions are systematically in high-probability regions. A plot of the probability mass of the sampled green-list token (relative to the argmax token) would close this gap.
+- **Absence of random-sparse baseline makes the core attribution unverifiable.** The most critical missing experiment is a comparison against a watermark that randomly selects the same fraction of positions (matching SpARK's effective density) and uses the same γ=0.05 hard restriction, but without POS anchoring. Without this, it is impossible to determine whether the quality gains stem from POS-anchoring specifically—which is the claimed design contribution—or from *any* sparse selection scheme. If random sparse selection performs equally well, the POS contribution reduces to mere consistency in locating watermarked positions at detection time, and the paper's framing around POS as a principled anchor needs to be substantially revised.
 
-- **The fraction of watermarked tokens is not reported in the main paper.** The core reason SpARK outperforms dense baselines on quality is that it watermarks a much smaller fraction of tokens. This fraction is the key variable that explains the quality-detectability tradeoff, yet the paper defers it to Table 7 in the appendix. Without this number in the main text, readers cannot assess whether SpARK's advantage reflects a genuine algorithmic insight or simply a different operating regime (fewer watermarked tokens → less distortion → lower robustness). This should be a central result, not an appendix entry.
+- **γ mismatch undermines the fairness of quality comparisons.** SpARK uses γ=0.05 while all baselines use γ=0.25. A smaller green list (5% of vocabulary) under hard restriction is extremely constraining at each watermarked position but is applied rarely. Baselines use a larger green list (25%) applied everywhere. The quality advantage could at least partly reflect the lower density of forced deviations rather than any benefit of POS-anchoring per se. A fair analysis would either: (a) include a Pareto curve varying both sparsity and γ for SpARK and δ for baselines at matched expected perturbation budget, or (b) provide an intuitive argument for why γ=0.05 is the right operating point given the sparsity. The paper does note this choice is to "increase the strength of each watermark token," but does not analyze whether the quality improvement survives at matched γ or matched expected KL divergence.
 
-- **Algorithm 1, Line 6 contains a pseudocode inconsistency.** Line 6 reads `Sample(G)`, which implies unconditional sampling from the green list G at every step. But the described method only restricts sampling to G when the POS condition is met; at other positions, sampling should proceed from the original distribution. The `POSWatermark` subroutine (Algorithm 2) returns the original P_M unchanged when the condition is not met, so the correct instruction would be `Sample(P_M(t))`. This inconsistency between the pseudocode and prose description is confusing and should be corrected.
+- **Robustness is materially weaker under heavy attacks, yet the conclusion overstates this.** At 50% substitution on Llama2-7b, SpARK-Verb drops to 72.4% TPR vs. 92.3% for SelfHash and 91.4% for Unigram. Under DIPPER 40L-400 on Llama2-7b, SpARK-Verb falls to 43.5% vs. 69.5% for SelfHash. The conclusion states "competitive robustness against both substitution and paraphrasing attacks," which is accurate for SpARK-Determiner under DIPPER but misleading for the Verb variant under high-substitution. The paper should either honestly acknowledge the robustness–sparsity trade-off as a first-order limitation, or show how design choices (e.g., POS tag selection) affect the robustness profile.
 
-- **Figure 3 x-axis labels are garbled and internally inconsistent.** The x-axis labels include "Selfish," "Llama2," and "None," which do not correspond to any method name used elsewhere in the paper (the methods are Hard, LeftHash, SelfHash, Unigram, SpARK-Verb, SpARK-Noun, SpARK-Determiner, and No Watermark). This makes Figure 3 difficult to interpret reliably without the original figure rendering.
+- **POS tagger unspecified and word-boundary heuristic underexplained, harming reproducibility.** Algorithm 2 uses `POS(W, T)` without naming the tagger implementation. Universal POS tags (Petrov et al., 2012) define the tagset but not the tagger. More importantly, Section 3.3 states that word completion is detected by checking "if the next token with the highest probability is the start of a new word." This heuristic is problematic: during stochastic sampling, the actually generated token is often not the highest-probability token. If the sampled token does *not* start a new word while the argmax does, the encoding and detection processes may disagree about when a new word has started—producing systematic mismatches between the encoding-time anchor identification and the detection-time re-identification. The paper claims this "could consistently inform us when a full word has been generated" but provides no empirical validation of the mismatch rate.
 
-- **TNR for SpARK-Determiner is measurably lower than some baselines.** Table 1 shows SpARK-Determiner achieving TNR of 98.0–98.8%, versus 100% for Hard watermark and Unigram. While 1–2 percentage points may seem small, in deployment this means a non-trivial false-positive rate on human-written text. The paper does not discuss this or whether it can be mitigated by threshold tuning.
+---
+
+### Minor
+
+- **Effective T per document never reported.** The number of tokens actually watermarked per document (effective T) is fundamental to understanding the method, yet it is never reported for any POS tag variant or dataset. This quantity determines the z-test's reliability (especially for shorter texts), allows fair density comparisons with dense methods, and characterizes the practical operating regime. Table 7 (appendix) reports document frequency of POS tags but not the resulting token count. At minimum, the expected T and its distribution should appear in the main results.
+
+- **Insertion/deletion resilience claimed but not tested.** Section 3.3 explicitly states POS anchoring "makes the watermark more resilient to insertions/deletions of tokens in the generated text." The robustness section (4.3) tests synonym substitution and DIPPER paraphrasing, but not insertions or deletions. The claim is plausible but remains unsubstantiated in the experiments.
+
+- **No adaptive attacks targeting POS anchors.** Because SpARK's anchor structure is publicly described, an informed adversary could minimally rewrite anchor words (e.g., converting verbs to noun phrases) to shift POS tags without substantially altering meaning. This would reposition or eliminate anchor positions, degrading TPR without requiring heavy edits. The paper tests standard attacks from prior work, which is appropriate for a baseline robustness evaluation, but the absence of even a discussion of this obvious adaptive attack weakens the robustness story.
+
+- **Semantic similarity metric encoder unspecified.** Tables 1 and 2 report "Semantic similarity" (Sem.) but nowhere identify the embedding model or similarity function used. This is needed to reproduce the numbers and to interpret the metric's alignment with true semantic fidelity.
+
+- **Statistical validity of the z-test under POS conditioning not formally addressed.** The null hypothesis (no watermark applied) implies that any token's probability of falling in the green list is γ by construction of the pseudo-random hash. POS-conditioning selects *which* positions to test, but does not in principle change the null probability at those positions—so the test should be approximately valid. However, the paper does not state this argument, leaving readers uncertain. A one-paragraph argument (not a full proof) clarifying why the null remains valid under selective position testing would close this gap. The empirical TNR of 98–100% is reassuring but is not a substitute for the argument.
+
+---
+
+### Tiny
+
+- The conclusion writes "encodes watermark information into the generated text, **without degrading its quality**." Tables 1–2 clearly show ROUGE-L and semantic similarity are still reduced relative to no watermark. The accurate statement is that degradation is substantially smaller than that of prior methods.
+
+- Figure 3 showing "No Watermark" with the highest perplexity under Llama2-13b is somewhat counterintuitive and is not explained in the text. It is plausible (the 7b model may produce less "13b-preferred" text than the green-list-constrained output), but the paper should note explicitly why this result is expected rather than leaving the reader confused.
 
 ---
 
 ## Nice-to-Haves
 
-- Human evaluation of text quality (e.g., fluency ratings) would strengthen the quality claims beyond ROUGE-L and semantic similarity, which are imperfect proxies for human preference.
-- An ablation over different POS tag combinations (e.g., Adjectives, Adverbs, Prepositions) beyond the selected three, including tags with less than 100% document frequency, would clarify how sensitive performance is to the choice of anchor tags.
-- Cross-model detection experiments (watermark with Llama-2, detect assuming Phi-3's vocabulary) would test whether the scheme is robust to model version or architecture differences in the detector.
-- Measuring and reporting inference latency overhead from real-time POS tagging would be useful for practitioners, though this does not affect the paper's core claims.
-- Evaluating the False Positive Rate on human-written text (in addition to unwatermarked LLM text) would better characterize the TNR figures and their real-world implications.
+- **TPR vs. effective T curve.** A plot of detectability as a function of the number of anchored positions actually scored would reveal the minimum text length for reliable detection—practically important for short-form tasks.
+
+- **Human evaluation or stronger quality metric for a subset of outputs.** ROUGE-L measures reference overlap, not fluency or coherence. For at least one dataset, a GPT-4-based evaluation or grammar error count on a sample of outputs would provide complementary evidence for the central quality claim.
+
+- **Pareto frontier plots for SpARK and baselines.** Showing quality vs. TPR as γ varies for SpARK alongside δ-varying curves for dense methods would make the trade-off geometry visible and allow readers to compare operating points honestly.
+
+- **Discussion of multilingual and short-form generalization.** SpARK depends on English POS taggers; its applicability to other languages or informal registers (e.g., code, tweets) is an open question worth flagging.
 
 ---
 
 ## Removed Points
 
-*These points were flagged for removal; treat with caution.*
+*These points are flagged for removal; treat them with caution.*
 
-- **[REMOVED] Lee et al. (2023) as a required baseline.** Lee et al.'s entropy thresholding was specifically designed for *code generation* to preserve correctness — it is not a general-purpose text watermarking method. Criticizing SpARK for not including it as a baseline in a general-text setting is scope creep.
+- **Title/abstract language is "too strong"** (Harsh Critic): The abstract's "outperforms previous methods in quality" is supported by the evidence in Tables 1–2. This is not an exaggeration.
 
-- **[REMOVED] Distortion-free methods (Christ et al., Kuditipudi et al.) as required baselines.** The paper explicitly notes that sampling-based schemes "struggled to produce a detectable watermark for low-temperature settings" (citing Piet et al., 2023). Since the paper's operating regime (TPR > 0.99) is incompatible with these methods in practice, excluding them as baselines is reasonable and explained.
+- **Perplexity of "No Watermark" being highest is "unexplained"** (Harsh Critic): The paper explicitly states (Section 4.2) that Llama2-13b is used as the oracle model following prior work. This explains why the 7b non-watermarked output is not necessarily the lowest-perplexity text under a 13b evaluator. The explanation exists and is reasonable; the criticism that it is "not well integrated" or "counterintuitive without explanation" misreads the paper.
 
-- **[REMOVED] Demand for statistical confidence intervals across all tables.** Single-run evaluation is the norm in the LLM watermarking literature (Kirchenbauer et al., Zhao et al., and related works all report single-run figures). Demanding confidence intervals as a gating condition is above the standard of the field.
+- **Claim that SelfHash example in Table 4 uses "aggressive hyperparameters"** (Harsh Critic): δ=10 for SelfHash was selected by the paper's own hyperparameter search to achieve TPR >0.99, which is the common evaluation condition across all methods. The resulting severe quality degradation is the *consequence* of needing high TPR with a dense watermark—not a cherry-picked parameter. The comparison is valid.
 
-- **[REMOVED] Criticism of using Llama-2-13b to evaluate Llama-2-7b perplexity as fundamentally flawed.** The paper explicitly cites Jovanović et al. (2024) as precedent for this methodology. The criticism that shared architecture inflates the quality signal may have marginal merit but is not a meaningful objection given established community practice.
+- **Requesting theoretical proofs / confidence intervals for large-scale single-run benchmarks** (Harsh Critic): Single-run evaluation with a standardized benchmark (WaterBench-style) is the norm in this sub-field. Requesting confidence intervals is not a standard expectation for this type of empirical comparison paper.
 
-- **[REMOVED] "Contribution granularity" complaint about introducing a category with one instantiation.** Defining a broader class (Sparse Watermark) and demonstrating it through one instantiation (SpARK) is entirely standard in ML systems papers (cf. how "attention mechanisms," "residual connections," etc. were introduced). This is not a weakness.
+- **"Unfair comparison because SpARK's heavy local restriction at selected positions"** (Harsh Critic): This is not unfair to SpARK—it uses hard restriction at fewer positions. The density reduction is the *mechanism* of the contribution. Calls to "match the number of affected positions" would effectively prohibit evaluating the method at all.
 
-- **[REMOVED] Demand for theoretical proofs for z-test validity under POS conditioning (as a gating condition).** The z-test validity concern is real (see Weaknesses), but demanding a full statistical proof before acceptance would be above the standard for an empirical systems paper. The requirement is a clear explanation and empirical verification, not a formal theorem.
-
-- **[REMOVED] Requests for larger datasets and more models.** The paper covers two models and four datasets across two task types. This is adequate for an ICLR submission in this subfield; the current model zoo and dataset coverage are not obviously insufficient.
+- **Absence of limitations section** (Harsh Critic): The paper is evaluated on scientific content, not on the presence of a formally labeled limitations paragraph. The weaknesses described above (robustness, POS dependency, reproducibility) constitute the real substantive gaps.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel insight — validated by the empirical evidence — is that **watermark detection strength derives entirely from the tested token subset, not from the full generated text length.** This separation of the *generation regime* from the *detection scope* is non-obvious: prior work implicitly treats every token as both a watermark carrier and a detection signal. SpARK demonstrates that if anchor positions are known to the detector, restricting the z-test denominator T to only those positions preserves detection power while allowing the rest of the vocabulary to be sampled freely. The corollary — that the quality-detectability tradeoff is not fundamental but is instead an artifact of conflating generation and detection scope — has implications beyond SpARK itself, potentially motivating future work on other deterministic positional anchors (e.g., syntactic roles, semantic heads) that balance robustness and quality differently than POS tags.
+The genuinely novel conceptual contribution here is the *selective detection* pairing: sparse watermarking is not useful unless the detector *also* conditions on the sparse positions, because including non-watermarked tokens in the z-test dilutes the signal. This is a clean insight that prior entropy-thresholding or selective-embedding approaches (e.g., Lee et al., 2023 for code) did not frame as a general design principle. The corollary—that hard restriction with very small γ is sustainable precisely because the restriction occurs rarely, preventing the vocabulary collapse that would occur if applied at every position—is also interesting and is implicitly demonstrated rather than explicitly argued. Making this argument explicit would sharpen the paper's theoretical contribution considerably. Beyond these, the reviews do not surface insights beyond the paper's own contributions.
 
 ---
 
 ## Suggestions
 
-1. **Add a targeted-attack experiment.** Implement a substitution attack that specifically replaces tokens immediately following anchor-POS words, and report TPR under this attack. If TPR degrades substantially below random substitution, acknowledge this as a genuine security limitation and discuss whether a secret POS-tag selection mechanism could mitigate it.
+1. **Run the random-sparse baseline.** Select the same fraction of positions as SpARK-Verb/Noun/Determiner (estimated from Table 7's document frequencies), apply γ=0.05 hard restriction at those random positions, and run the same evaluation. This single experiment would either confirm POS anchoring as essential or reveal that the gains are primarily from sparsity itself—either outcome is informative and publishable.
 
-2. **Report the watermarked-token fraction prominently in the main body.** Move the "% of tokens watermarked" figures from Table 7 (appendix) into Table 1/2 or a dedicated main-text figure. This number is essential context for interpreting the quality-detectability tradeoff.
+2. **Report effective T statistics.** For each POS variant and each dataset, report the mean and standard deviation of the number of watermarked positions per document. This belongs in Table 1/2 or a dedicated appendix table. Include the minimum T required for reliable detection at a 1% false positive rate given γ=0.05.
 
-3. **Fix Algorithm 1, Line 6.** Change `Sample(G)` to `Sample(P_M(t))` to correctly reflect that non-watermarked positions sample from the unmodified distribution.
+3. **Acknowledge and reframe the robustness trade-off.** Rather than claiming "competitive robustness," explicitly frame the robustness–quality Pareto as the main trade-off: SpARK occupies a region of high quality and moderate robustness. Show this geometrically if possible. Robustness can be tuned upward by increasing anchor density or choosing more attack-resilient POS tags—say this explicitly.
 
-4. **Provide a POS consistency ablation.** Report the POS agreement rate between incremental (generation-time) and full-context (detection-time) tagging on a held-out text sample. Even 1-2% disagreement per anchor position could meaningfully reduce T and hurt TPR for short texts.
+4. **Specify the POS tagger and validate the word-boundary heuristic.** Name the tagger (e.g., spaCy's `en_core_web_sm`, NLTK, Stanza). Empirically measure the mismatch rate between encoding-time and detection-time anchor identification on a held-out corpus to quantify the practical reliability of the word-boundary heuristic.
 
-5. **Analyze or empirically bound the hard-restriction pathology.** For each POS-anchored watermarking event, report the average probability rank of the sampled green-list token. If the median rank is low (e.g., top-5), the concern is mitigated empirically; if it frequently falls outside the top-100, the hard restriction is potentially a quality risk for rare syntactic contexts.
+5. **Specify the semantic similarity encoder.** Identify the sentence embedding model used and report the metric (e.g., cosine similarity of sentence-BERT embeddings) to allow reproducibility.
 
-6. **Fix Figure 3 x-axis labels** to match method names used in Tables 1–2.
+6. **Add an intuitive argument for z-test validity.** In Section 3.4, add one paragraph explaining that under the null (no watermark), the probability of any selected position's token being in the green list is γ by pseudo-random construction of the hash function, so POS-conditioning on which positions to test does not change the null distribution—and is therefore valid.
 
 ---
 
-**Axis Evaluations:**
-- **Novelty:** Moderate-to-high. The POS-anchor mechanism is a clear and specific idea, and the decoupling of generation scope from detection scope is a genuine conceptual advance, not merely an engineering variation.
-- **Technical soundness:** Moderate. The core statistical framework is sound, but there are real unresolved questions around POS consistency, hard-restriction pathology, and the absence of targeted-attack analysis. The pseudocode error is a presentation gap.
-- **Empirical support:** Moderate-to-strong for quality claims; notably weaker for robustness claims, which are the method's primary limitation.
-- **Significance:** Moderate-to-high. The quality improvements over baselines at matched detectability are large and consistent, and the underlying idea generalizes beyond the specific POS instantiation.
-- **Clarity:** Adequate overall, with specific lapses in the pseudocode and Figure 3 that require correction.
+**Overall assessment:** SpARK is a solid paper with a clear, well-motivated contribution and genuinely large empirical quality improvements relative to baselines. The central ideas are sound and the execution is reasonable. However, the missing random-sparse ablation is a significant hole—it is the single experiment needed to confirm that POS anchoring is a meaningful design choice rather than a proxy for any-sparse scheme. The γ mismatch and the overstated robustness claims also need to be addressed. The paper is interesting and likely above the acceptance threshold on novelty and empirical significance, but requires these ablations and clarifications to be convincing at ICLR's standard. **Novelty: moderate-to-solid**; **Technical soundness: moderate** (good ideas, gaps in validation); **Empirical support: good for the quality claim, weak for robustness and POS-specific attribution**; **Significance: moderate-to-high for the practical deployment problem**; **Clarity: good at the concept level, incomplete at the implementation and statistical level**.

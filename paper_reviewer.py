@@ -57,13 +57,12 @@ base_model = "qwen/qwen3.5-flash-02-23"
 MODEL_HARSH = "openai/gpt-5.4"
 # MODEL_SPARK = "ollama:qwen3.5:397b-cloud"
 MODEL_NEUTRAL = "qwen/qwen3.5-plus-02-15"
-MODEL_SPARK = "ollama:glm-5.1:cloud"
+MODEL_SPARK = "z-ai/glm-5.1"
 MODEL_RELATED_WORK = f"{base_model}:online" 
 MODEL_FILTER = f"{base_model}"
 # MODEL_MERGER = f"zai:glm-5.1" #用zai coding plan白嫖
 # MODEL_MERGER = f"ollama:glm-5:cloud" 
 MODEL_HUMAN_MERGER = f"claude:claude-sonnet-4-6"
-MODEL_HUMAN_SCORER = f"claude:claude-sonnet-4-6"
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
 DEFAULT_CALIBRATION_PATH = Path(__file__).parent / "calibration.md"
@@ -81,6 +80,7 @@ class ScoreSchema(BaseModel):
 
 import numpy as np
 from openai import OpenAI
+from claude_agent_sdk import ResultMessage
 def _make_search_mcp_server(search_path: str):
     from claude_agent_sdk import create_sdk_mcp_server, tool
     with open("tools/human_reviews_embeddings.pkl", "rb") as f:
@@ -461,6 +461,7 @@ async def run_merge(
     skip_spark: bool = False,
     skip_related_work: bool = False,
     pred_score: bool = False,
+    skip_score: bool = False,
 ) -> tuple[str, float] | tuple[str, float, float]:
     """
     Merger only — synthesize sub-agent reviews into a consolidated review.
@@ -517,142 +518,76 @@ async def run_merge(
         f"picky — cross-check everything against the actual paper before including it."
     )
 
-    merger_fs = _make_sandboxed_mcp_server("merger_fs", [paper_dir])
+    merger_fs = _make_sandboxed_mcp_server("merger_fs", [paper_dir, "/home/wg25r/review_agent/human_reviews/"])
+    scorer_mcp = _make_search_mcp_server("./human_reviews")
 
     options = ClaudeAgentOptions(
         model=MODEL_HUMAN_MERGER.split(":")[1],
         allowed_tools=[
             "mcp__merger_fs__read_file",
             "mcp__merger_fs__glob_files",
-            "mcp__scorer_fs__grep_files",
+            "mcp__merger_fs__grep_files",
+            "mcp__scorer_mcp__search_file",
         ],
         permission_mode="bypassPermissions",
         disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-        mcp_servers={"merger_fs": merger_fs},
+        mcp_servers={"merger_fs": merger_fs, "scorer_mcp": scorer_mcp},
         effort="medium",
-        max_turns=15,
+        max_turns=30,
     )
 
     review_text = ""
+    cost = 0.0
     async with ClaudeSDKClient(options=options) as sdk_client:
+        # merge pass
+        print("  [merger] merging reviews ...")
         await sdk_client.query(f"{agent_prompt}\n\n{user_message}")
         async for message in sdk_client.receive_response():
             if isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         review_text += block.text
-                        print(block.text)
 
+            if isinstance(message, ResultMessage):
+                cost += message.total_cost_usd or 0
+
+        # verify pass
+        # print("  [merger] verifying review with a second pass ...")
+        # await sdk_client.query(f"Now verify your review, including re-examining each point and each point being removed. Then generate a finalized revised review included in a XML tage <cake></cake>. Only output the final review text wrapped in <cake></cake> without any additional commentary.")
+        # async for message in sdk_client.receive_response():
+        #     if isinstance(message, AssistantMessage):
+        #         for block in message.content:
+        #             if isinstance(block, TextBlock):
+        #                 review_text += block.text
+        #     if isinstance(message, ResultMessage):
+        #         cost += message.total_cost_usd or 0
+        #         final_review = block.text.split("<cake>")[-1].split("</cake>")[0].strip()
+
+        if not skip_score:
+            # score pass
+            with open("prompts/scorer_agent.txt", "r", encoding="utf-8") as f:
+                scorer_system_prompt = f.read().format(cal_dir_abs="human_reviews")
+
+            print("  [merger] scoring review with a third pass ...")
+
+            await sdk_client.query(scorer_system_prompt)
+            async for message in sdk_client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            review_text += block.text
+                if isinstance(message, ResultMessage):
+                    cost += message.total_cost_usd or 0
+            final_score = review_text.split("<pineapple>")[-1].split("</pineapple>")[0].strip()
+        else:
+            final_score = -1
     if not review_text.strip():
         raise ValueError("merger agent returned empty output")
 
     # Cost is not tracked for Claude SDK calls (subscription-based)
-    cost = 0.0
-
-    if not pred_score:
-        return review_text, cost
-    else:
-        score, parser_cost = await _parse_score(client, review_text)
-        return review_text, score, cost + parser_cost
 
 
-async def run_scorer(
-    client: AsyncOpenAI,
-    review_text: str,
-    paper_content: str,
-    calibration_context: str = "",
-    cal_dir: str = "",
-    gt_score: float | None = None,
-) -> tuple[float, float]:
-    """
-    Scorer — uses Claude Agent SDK (claude-sonnet-4-6) to search calibration
-    examples via Grep/Read, then scores the paper. Returns (score, cost).
-    """
-    import tempfile
-    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
-
-    cal_dir_abs = str(Path(cal_dir).resolve()) if cal_dir else ""
-    search_mcp = _make_search_mcp_server(cal_dir_abs) if cal_dir_abs else None
-
-    # Write review and paper to temp files so the agent can Read them
-    # (avoids CLI character limit on the prompt)
-    tmp_dir = Path(tempfile.mkdtemp(prefix="scorer_"))
-    review_path = tmp_dir / "review.txt"
-    paper_path = tmp_dir / "paper.txt"
-    review_path.write_text(review_text, encoding="utf-8")
-    paper_path.write_text(paper_content, encoding="utf-8")
-    scorer_fs = _make_sandboxed_mcp_server(
-        "scorer_fs",
-        [cal_dir_abs, str(tmp_dir)] if cal_dir_abs else [str(tmp_dir)],
-    )
-
-    scorer_agent_template = load_prompt("scorer_agent.txt")
-    prompt = scorer_agent_template.format(
-        score_prompt=SCORE_PROMPT,
-        review_path=review_path,
-        paper_path=paper_path,
-        cal_dir_abs=cal_dir_abs,
-    )
-
-    print(f"  [scorer-agent] starting RAG scorer (claude-sonnet-4-6, cal={cal_dir_abs}) ...")
-
-    result_text = ""
-    options = ClaudeAgentOptions(
-        model=MODEL_HUMAN_MERGER.split(":")[1],
-        cwd=cal_dir_abs or None,
-        allowed_tools=[
-            "mcp__scorer_fs__read_file",
-            "mcp__scorer_fs__grep_files",
-            "mcp__scorer_fs__glob_files",
-        ] + (["mcp__search__search_file"] if search_mcp else []),
-        permission_mode="bypassPermissions",
-        disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write"],
-        mcp_servers={
-            "scorer_fs": scorer_fs,
-            **({"search": search_mcp} if search_mcp else {}),
-        },
-        effort="medium",
-        max_turns=30,
-    )
-    async with ClaudeSDKClient(options=options) as sdk_client:
-        await sdk_client.query(prompt)
-        async for message in sdk_client.receive_response():
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        result_text += block.text
-
-    # Clean up temp files
-    review_path.unlink(missing_ok=True)
-    paper_path.unlink(missing_ok=True)
-    tmp_dir.rmdir()
-
-
-    # Log full scorer output to file for debugging
-    scorer_log_path = Path(__file__).parent / "scorer_debug.log"
-    with open(scorer_log_path, "a", encoding="utf-8") as f:
-        f.write(f"\n{'=' * 72}\n")
-        f.write(f"cal_dir: {cal_dir_abs}\n")
-        f.write(f"{'─' * 72}\n")
-        f.write(result_text)
-        f.write(f"\nGT Score: {gt_score}\n")
-        f.write(f"\n{'=' * 72}\n\n")
-
-    leakage_matches = detect_leakage_warning_phrases(result_text)
-    if leakage_matches:
-        matched_text = ", ".join(sorted(set(leakage_matches), key=str.lower))
-        warning_msg = (
-            f"🚨 Potential calibration leakage warning: scorer output contains "
-            f"suspicious phrase(s): {matched_text}"
-        )
-        print(f"  [scorer-agent] WARNING: {warning_msg}")
-        _error_logger.error(warning_msg)
-        raise ValueError(warning_msg)
-
-    # Use _parse_score to extract the numerical score
-    score, cost_parse = await _parse_score(client, result_text)
-    print(f"  [scorer-agent] parsed score: {score}")
-    return score, cost_parse
+    return final_review, final_score, cost
 
 
 async def run_merger(
@@ -674,21 +609,14 @@ async def run_merger(
     Merger + Scorer (two separate calls).
     Returns (review_text, score, total_cost).
     """
-    review_text, cost_merge = await run_merge(
+    review_text, score, cost_merge = await run_merge(
         client, harsh_review, neutral_review,
         spark_review, related_work, paper_path,
         skip_neutral=skip_neutral,
         skip_spark=skip_spark,
         skip_related_work=skip_related_work,
     )
-
-    score, cost_score = await run_scorer(
-        client, review_text, paper_content,
-        calibration_context=calibration_context,
-        cal_dir=cal_dir,
-        gt_score=gt_score
-    )
-    return review_text, score, cost_merge + cost_score
+    return review_text, score, cost_merge
 
 
 async def run_pipeline(
@@ -778,7 +706,7 @@ async def run_pipeline(
             related_work = "Related work search was skipped."
 
     if skip_score:
-        merged_review, merge_cost = await run_merge(
+        merged_review, _, merge_cost = await run_merge(
             client,
             harsh_review,
             neutral_review,
@@ -788,6 +716,7 @@ async def run_pipeline(
             skip_neutral=skip_neutral,
             skip_spark=skip_spark,
             skip_related_work=skip_related_work,
+            skip_score=True,
         )
         total_cost += merge_cost
         score = None

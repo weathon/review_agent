@@ -1,89 +1,96 @@
 ## Summary
-CAN (Continuously Adapting Networks) proposes to address catastrophic forgetting by combining Hebbian-learning-based importance scoring with selective neuron freezing and gradient masking. The method computes per-neuron importance scores using local Hebbian updates, selects task-relevant neurons, and freezes their gradients during subsequent task training. Experiments on MNIST and CIFAR-10 with 2-task splits report modest improvements in average accuracy over a vanilla ANN baseline.
+
+CAN (Continuously Adapting Networks) proposes to mitigate catastrophic forgetting by combining selective neuron freezing with Hebbian learning. The method maintains a separate Hebbian weight matrix updated by local co-activation signals, averages those weights per neuron to produce importance scores, and uses those scores to scale SGD gradients via PyTorch hooks — effectively constructing binary masks that prevent previously-assigned neurons from being modified when learning subsequent tasks. Experiments are conducted on 2-task splits of MNIST and CIFAR-10 under task-incremental (TIL) and domain-incremental (DIL) settings, compared only against a vanilla ANN baseline.
 
 ---
 
 ## Strengths
 
-- **Biologically-motivated, unsupervised importance scoring**: Using local Hebbian activity as an importance signal rather than gradient- or Fisher-based metrics (EWC, SI) is a conceptually distinct approach. Hebbian scoring requires no global error signal, operates on activations, and is in principle usable on unlabeled data — a concrete differentiator from the dominant regularization-based paradigm.
-- **Transparent disclosure of limitations**: The paper honestly acknowledges the absence of automatic task gating, the manual mask selection at inference, and the fixed-capacity constraint. Placing these in "Future Scope" rather than hiding them is appropriate; it allows the reader to assess the actual scope of the contribution.
+- **Using unsupervised, local Hebbian co-activation as the importance signal is a genuinely distinct mechanism for continual learning.** Most parameter-isolation methods compute importance from global, supervised signals — Fisher information (EWC), path integrals of gradient norms (SI), or loss-based saliency. Anchoring importance scoring entirely in unsupervised local activations, requiring no global error signal, is a different design point that is task-agnostic by construction and avoids the computational overhead of second-order gradient methods. This is a specific choice, not a generic observation.
+- **Evaluating both TIL and DIL with different masking protocols for each is more complete than single-setting evaluation.** The paper correctly identifies that in the DIL setup the output heads overlap and masking at inference is inapplicable, and adjusts the protocol accordingly (gradient scaling only, no forward masks). This distinction is handled consistently.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None that invalidate the core idea in principle.
+
+- **Near-random performance makes the paper's core claim unverifiable.** Table 1 reports CAN at 27.1% average accuracy on CIFAR-10 TIL, on a 5-class problem where random chance is 20%. The vanilla baseline is 22.5% — also near-random. An improvement of 4.6 percentage points over a nearly non-functional baseline does not demonstrate that catastrophic forgetting has been meaningfully reduced; it demonstrates that neither model is learning the tasks. A system cannot be said to "remember" tasks it never successfully learned. The paper provides no single-task accuracy upper bound (i.e., what accuracy is achieved if the model is trained only on one task with no CL constraint), making it impossible to determine whether the bottleneck is the continual learning mechanism, the architecture, or a fundamental implementation bug. Until single-task accuracy is established as reasonable, no claim about forgetting can be evaluated.
+
+- **Figure 3's y-axis is labeled "Acc" but displays values of 2.0–2.45, which are physically impossible for accuracy on any standard scale (0–1 or 0–100%).** These values fall in exactly the same numerical range as the loss curves in Figures 4–6, which are correctly labeled as loss. The accompanying table inside Figure 3 also lists "Task 1 (Acc)" and "Task 2 (Acc)" values such as 2.05 and 2.45. This is almost certainly a loss curve mislabeled as an accuracy curve. The consequence is that all visual evidence in the results section is either mislabeled or uninterpretable, and the only usable quantitative evidence is Table 1 — whose values are themselves near-random.
 
 ### Major
 
-- **Critical measurement error in Figure 3**: The y-axis is labeled "Accuracy (Acc)" but displays values in the range 1.9–2.45. These values are consistent with cross-entropy loss, not accuracy (which would be 0–1 or 0–100%). Figure 4 (CAN on TIL) is correctly labeled "loss" with similar value ranges (~2.05–2.23), making it nearly certain that Figure 3's axis is simply mislabeled. This corrupts the primary visualization of the task-incremental training dynamics, and it raises doubts about the integrity of the broader experimental pipeline.
+- **No comparison against any established continual learning method.** The sole comparison in the paper is against a vanilla ANN trained with standard SGD. For a continual learning submission, comparison against EWC, SI, Experience Replay, or parameter-isolation methods such as PackNet is a minimum expectation. Without such baselines, there is no way to know whether the modest improvement over vanilla SGD is competitive, redundant, or worse than trivial alternatives. The absence of these baselines, combined with near-random absolute performance, makes the empirical section essentially uninterpretable.
 
-- **Performance barely above random chance**: CAN achieves 27.1% average accuracy on a 5-class CIFAR-10 split where random chance is 20%. Even a trivially small MLP of size 256-128-64 should reach well above 50% accuracy on 5 CIFAR-10 classes without any CL mechanism. A difference of only ~7 percentage points above random is not evidence of meaningful learning. The paper provides no analysis of why accuracy is so low — whether it stems from too aggressive a masking threshold, a flawed importance estimator, an implementation bug, or the architecture being genuinely too small. Until this is explained, the results cannot be interpreted as demonstrating that the method works.
+- **Oracle task identity at inference — the system is incomplete as presented.** Section 4.3 explicitly states: *"we are manually selecting the mask and measuring the metrics but it can be done using a gating system that automatically selects the relevant gate according to the given task during inference"*, and identifies the gating mechanism as future work. Requiring a human to select the task mask at test time means the reported TIL results are not reproducible in any realistic deployment scenario. The paper's broader language about "allowing the network to learn continually" overstates the current system. This should be clearly scoped to task-ID-known TIL evaluation.
 
-- **No standard continual learning baselines**: The only comparison is against vanilla SGD. EWC, SI, PackNet, HAT, or even naive rehearsal are absent. Given that the paper explicitly cites EWC and SI in Related Work (Sections 2.1 and 2.3) and the key claim is "significantly reduces catastrophic forgetting," the absence of any comparison against these methods makes it impossible to assess whether CAN offers any improvement beyond trivial isolation effects.
+- **Core methodology is underspecified and not reproducible.** After reading the full paper, the following questions remain unanswered:
+  - Are the Hebbian weights a separate parameter matrix maintained in parallel to the ANN weights, or are they the ANN weights themselves? (Section 3.1.1 refers to "Hebbian parameter" *w* but this is never clarified structurally.)
+  - Are Hebbian updates accumulated per sample, per batch, or per epoch, and over what window?
+  - How exactly are Hebbian weights converted into gradient scaling values (normalization procedure, layerwise vs. global)?
+  - Is Oja's rule (Section 3.1.2) actually used in the experiments? The paper says it "can be used in practice" but never states which rule is used experimentally.
+  - Is lateral inhibition (Section 3.1.3) implemented in the reported experiments? No equation, no hyperparameter, and no mention in the experiment section is provided. Written in present tense as a method contribution ("we introduce competition"), yet absent from any implementation detail.
+  - What threshold defines "selected" neurons (Section 3.3 references "a pre-defined threshold" but no value is given)?
+  - What loss function is used? The paper specifies "Sigmoid activation at the end" for multi-class classification, which is non-standard (softmax + cross-entropy is the norm), and the loss is never named. This likely contributes directly to the near-random performance.
+  - What optimizer configuration, batch size, weight decay, and learning rate schedule are used?
+  - No pseudocode or formal algorithm is provided.
 
-- **Evaluation severely limited to 2 tasks**: CIFAR-10 classes 0–4 vs. 5–9 constitutes a single transition, not a continual learning sequence. With only 2 tasks, forgetting is observable only once, and the scalability claim ("can be generalized with N number of tasks") is entirely unvalidated. Section 4.1.1 further notes that the architecture explicitly cannot handle "a continuous stream of data belonging to a variable number of classes," which is the dominant formulation of the problem.
+- **MNIST results are missing.** The paper states "All our experiments were conducted on the MNIST and the CIFAR-10 Dataset" but Table 1 — the only accuracy table — explicitly says "The above values are the results by using the CIFAR-10 dataset." No MNIST accuracy results are reported anywhere.
 
-- **Method underspecified for reproducibility**: The paper lacks pseudocode and omits critical implementation details: the gradient scaling rule is never written as an explicit equation; the threshold selection procedure (global, per-layer, percentile-based?) is unspecified; whether Oja's rule (Section 3.1.2) or lateral inhibition (Section 3.1.3) are actually used in experiments is never confirmed; the Hebbian learning rate, batch size, optimizer, and weight decay are all absent. As a result, it is not possible to verify, reproduce, or build on the method.
-
-- **Oracle task identity required at inference**: The paper explicitly states that masks are "manually selecting... during inference" (Section 4.3) and defers automatic gating to future work. This restricts the method to task-incremental learning with oracle task ID — a well-known simplification. While the authors disclose this, the broader paper language ("continuously adapting," "continual learning") overstates the scope of what is demonstrated.
+- **Single seed; no variance estimates.** All results come from one fixed seed (720). For a small MLP on CIFAR-10, running 3–5 seeds is inexpensive and expected. A single run cannot distinguish true performance from noise, especially given the small margins reported.
 
 ### Minor
 
-- **Equation `L(θ) = L_n(θ_n) ∈ T_n` is not mathematically well-formed**: Equating a loss value to a set-membership relation is meaningless as written. The intended meaning (minimize `L_n(θ_n)` for task `T_n` using the subset `θ_n ⊆ θ`) should be stated precisely.
+- **Two-task evaluation only.** Both CIFAR-10 and MNIST are split into exactly two 5-class subsets. With only two tasks, long-term forgetting dynamics, capacity exhaustion, and mask accumulation behavior over many tasks cannot be assessed. Standard CL benchmarks (Split CIFAR-100, Permuted MNIST with 5–20 tasks) exist precisely for this reason.
 
-- **Inconsistency between Figure 1 caption and methodology text**: The Figure 1 caption states "red neurons only receive zero gradients *until they become relevant for the next task*," implying previous neurons can be reused. However, Section 4.2.1 says "it ensures that no neurons selected for the current training were used for prior tasks." These statements directly contradict each other. If neurons can be reused for later tasks, the guarantee of preventing forgetting is compromised.
+- **The stated constraint "we can't use a continuous stream of data belonging to a variable number of classes" (Section 4.1.1) is a significant architectural limitation** mentioned only in passing. This restricts the method to fixed-output-head, fixed-task-count settings — a narrower scope than the introduction implies. It should be stated prominently as a limitation.
 
-- **"Time to Stability" is anecdotal**: The claim that Task 2 required 20 epochs vs. 10 for Task 1 is reported without any quantitative stability threshold, no comparison to the baseline's convergence speed, and no systematic measurement. This metric adds no rigorous empirical content in its current form.
+- **Abstract claim "new tasks can be trained without changing parameter weights" is inaccurate.** The method does change parameter weights — it trains the selected subset. The correct characterization is that *previously-assigned* parameters are not changed. This should be corrected.
+
+- **"Time to Stability" (Section 5.3)** provides no quantitative table, no operational definition, no baseline comparison, and no analysis. The observation that Task 2 requires 20 epochs vs. 10 for Task 1 is presented without interpretation.
 
 ### Tiny
 
-- The abstract states "new tasks can be trained without changing parameter weights." In context, previously-trained weights are frozen, but weights for the new task are trained from scratch. The correct phrasing would be "without changing *previously learned* parameter weights."
+- Citing Zenke et al. (2017) (the Synaptic Intelligence paper) under meta-learning approaches in Section 2.5 is a citation misplacement; it belongs under regularization, where it is correctly cited in Section 2.1.
+- The loss notation `L(θ) = L_n(θ_n) ∈ T_n` is ill-formed (a loss value is not an element of a task set); the meaning is recoverable from context but should be stated precisely.
 
 ---
 
 ## Nice-to-Haves
 
-- **Ablation study**: Separate the contributions of (a) Hebbian importance scoring, (b) gradient scaling, and (c) hard neuron freezing. Without this it is impossible to know which component drives any observed reduction in forgetting.
-- **Mask visualization**: Show which neurons are selected per task, the degree of overlap between task masks, and whether high-importance neurons correspond to meaningful patterns vs. noise.
-- **Capacity analysis**: Measure how performance degrades as tasks accumulate and the neuron pool fills up. This is core to the method's practical feasibility.
-- **Per-task accuracy curves over the full training timeline**: Plot accuracy on Task 1 *while* Task 2 is being trained to directly verify that forgetting is being prevented (as opposed to both tasks learning poorly from the start).
-- **Implement and evaluate the autoencoder gating mechanism**: This would make the system self-contained and remove the oracle task ID dependency.
+- **Ablation on the Hebbian importance mechanism.** Without comparing Hebbian-based neuron selection against random selection, magnitude-based selection, or gradient/Fisher-based selection, there is no evidence that the Hebbian component specifically — rather than the freezing strategy alone — contributes to any gains.
+- **Capacity utilization analysis.** Report the fraction of neurons consumed per task, the overlap (if any) between masks, and a projection of how many tasks the 256-128-64 network supports before exhaustion.
+- **Visualization of learned masks.** Heatmaps showing which neurons are selected per task per layer would reveal whether the method is finding meaningful task-specific subnetworks or partitioning neurons near-randomly.
+- **Per-task single-task accuracy as upper bound.** Reporting the accuracy of a model trained solely on one task establishes a ceiling against which CL performance can be measured.
+- Implement and evaluate the autoencoder-based gating mechanism to remove the oracle task identity requirement.
 
 ---
 
 ## Removed Points
-*These points were flagged for removal; treat them with caution.*
 
-- **"Title overstates the contribution"** (Reviewer 1): This is a style/framing nitpick. The paper's actual scope is clear from reading Section 4.
-- **"Introduction claim that ANNs must be retrained from scratch is wrong"** (Reviewer 1): This is a standard rhetorical simplification in the CL literature, not a substantive scientific error.
-- **"Dynamic architectures section misclassifies the contribution"** (Reviewer 1): The related work section is contextualizing the broader space; this is a positional quibble, not a substantive flaw.
-- **Demand for theoretical proofs** (Reviewer 1): Demanding formal guarantees from an empirical systems-oriented paper imposes a standard not expected in this subfield.
-- **"Demand for larger/more diverse datasets if current ones are insufficient"** — kept as a Major weakness because the issue here is not scale per se but that 2-task evaluation is insufficient to demonstrate any CL claim, and the near-random accuracy suggests the method may not be functioning correctly.
+*These points were raised in sub-reviews but are flagged for removal. They are preserved here for transparency.*
+
+- **"Hou et al. (2025) is a future-dated citation"** (Review 2): The reference appears in the bibliography with a valid DOI (Information Sciences, 687:121368, July 2025). Per review policy, if the paper cites a reference, it is assumed to exist. Removed.
+- **"The paper should use CNNs for CIFAR-10"**: The paper explicitly uses and scopes itself to MLPs. Demanding CNNs imposes architectural requirements outside the stated contribution. The low accuracy is a genuine concern but should be attributed to the near-random performance issue, not to the architecture choice. Removed as a standalone criticism.
+- **Demand for theoretical convergence proofs**: This is an empirical systems paper. Theoretical guarantees on Hebbian convergence are not a standard expectation for this type of contribution. Removed.
+- **Generic strengths** ("the paper is well-written," "the topic of continual learning is important"): These apply to any paper in the field and are not evidence of specific quality. Removed.
 
 ---
 
 ## Novel Insights
 
-The juxtaposition of unsupervised/local (Hebbian) importance estimation vs. supervised/global (Fisher/gradient) importance estimation for parameter isolation in continual learning is the genuinely interesting conceptual angle in this paper. In principle, a Hebbian importance estimator that requires no labeled data and no backward pass could be advantageous in few-shot or unlabeled-data CL settings. However, this potential advantage is completely undeveloped: the paper never designs an experiment that tests it, and the near-random performance of the current implementation makes it impossible to assess whether the Hebbian estimator is identifying meaningful task structure at all. The key open question the paper leaves unaddressed — *is unsupervised local importance scoring a viable substitute for gradient-based importance when correctly implemented?* — is more interesting than what the paper actually demonstrates.
+The three reviews collectively point to a deeper diagnostic concern worth highlighting directly for the authors: the paper's experimental results likely reflect an implementation-level problem rather than a merely weak method. The combination of (1) a non-standard sigmoid output layer for multi-class classification with an unnamed loss function, (2) loss curves for all conditions hovering near or above the entropy of a random 5-class predictor, (3) accuracy figures that are visually identical to loss figures yet labeled differently, and (4) final accuracy only marginally above random chance collectively suggest the network may not be converging to a working classifier at all — independent of the continual learning mechanism. This means the paper is not yet in a position to evaluate whether Hebbian importance scoring is a good strategy for subnetwork selection: the experiment cannot distinguish "Hebbian scoring is unhelpful" from "the network isn't trained correctly." Establishing a working single-task baseline with proper loss function and evaluation protocol is the essential first step before any CL claim can be made.
 
 ---
 
 ## Suggestions
 
-1. **Fix Figure 3 immediately and audit the entire experimental pipeline**: Confirm whether the accuracy/loss mislabeling is a plot artifact or reflects a deeper implementation error. Then verify that the vanilla baseline achieves expected accuracy (>50% on 5 CIFAR-10 classes).
-2. **Diagnose the low accuracy regime**: Systematically ablate the masking threshold to determine whether it is too aggressive (too few neurons active) and report per-task accuracy before and after sequential training to separate "poor learning" from "high forgetting."
-3. **Add a pseudocode/algorithm block**: Specify the exact gradient scaling rule (e.g., `∇θ ← H ⊙ M ⊙ ∇θ`), threshold selection, mask storage format, and the status of Oja's rule and lateral inhibition in actual experiments.
-4. **Add at least EWC and SI as baselines** on the same 2-task split before expanding to more tasks; this is the minimum needed to show the method is not regressive.
-5. **Expand to 5+ task settings** on a standard benchmark (Split CIFAR-100, Permuted MNIST) once performance on 2-task splits is validated.
-6. **Resolve the Figure 1 neuron-reuse inconsistency**: Decide explicitly whether previously-used neurons can be reused for later tasks and make the method description, figure caption, and training protocol consistent.
-
----
-
-**Evaluation summary:**
-- **Novelty**: Low — the combination of parameter isolation with importance-based masking is well-trodden; the Hebbian angle is interesting but undeveloped.
-- **Technical soundness**: Weak — the method is underspecified, key components (Oja's rule, lateral inhibition) have unconfirmed experimental status, and a central equation is malformed.
-- **Empirical support**: Very weak — performance near random chance, a critical axis mislabeling, only 2 tasks, and no established baselines.
-- **Significance**: Very limited in current form — without evidence the method works at a basic level, no broader significance can be claimed.
-- **Clarity**: Adequate at a high level, but the gap between the conceptual exposition and the actual implementation is too wide for a research publication.
+1. **Establish single-task accuracy first.** Train the model on each 5-class split in isolation and confirm it achieves reasonable accuracy (>85% on MNIST, >55–60% on CIFAR-10 with an MLP). If it does not, fix the architecture and loss function before making any continual learning claims.
+2. **Use softmax + cross-entropy** as the standard for multi-class classification. The sigmoid output is almost certainly causing the near-random performance. Explicitly state the loss function in the experimental setup.
+3. **Correct Figure 3.** Replace mislabeled "Acc" curves with actual accuracy curves (0–100% scale) for both the vanilla and CAN models, measured on held-out test data after each epoch.
+4. **Add at minimum EWC and a simple replay baseline** on the same 2-task setup. This is the single most important addition for the empirical section.
+5. **Provide a complete algorithm description** specifying: (a) whether Hebbian weights are maintained as a separate matrix, (b) which Hebbian rule (basic or Oja's) is used in experiments and why, (c) whether lateral inhibition is implemented, (d) the exact normalization procedure for converting Hebbian weights to gradient scaling factors, and (e) the numerical threshold used for neuron selection.
+6. **State the evaluation protocol explicitly** as task-ID-known TIL and remove language suggesting a more general continual learning solution until a gating mechanism is implemented and evaluated.
+7. **Report MNIST results** alongside CIFAR-10 results, or remove the claim that experiments were conducted on MNIST.
+8. **Run at minimum 3 seeds** and report mean ± standard deviation for all accuracy numbers.
