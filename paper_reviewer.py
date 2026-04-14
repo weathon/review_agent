@@ -11,7 +11,6 @@ Usage:
 import json
 import logging
 import os
-import re
 import sys
 import asyncio
 from pathlib import Path
@@ -27,6 +26,22 @@ from review_agents.openrouter_utils import (
     get_client,
     ollama_client,
     resolve_openai_client_and_model,
+)
+from review_agents.paper_reviewer_helpers import (
+    HARSH_CRITIC_PROMPT,
+    MERGER_PROMPT,
+    NEUTRAL_REVIEWER_PROMPT,
+    RELATED_WORK_FILTER_PROMPT,
+    RELATED_WORK_PROMPT,
+    SCORE_PROMPT,
+    SPARK_FINDER_PROMPT,
+    build_merger_prompt,
+    decision_match,
+    detect_leakage_warning_phrases,
+    load_prompt,
+    match_label,
+    sanitize_text,
+    score_to_decision,
 )
 
 load_dotenv()  # loads .env from cwd or parent dirs
@@ -61,46 +76,8 @@ _error_handler = logging.FileHandler(_error_log_path, mode="a")
 _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
-LEAKAGE_WARNING_PATTERNS = [
-    r"\bsame paper\b",
-    r"\bexact same paper\b",
-    r"\bthis exact paper\b",
-    r"\bcontains this exact paper\b",
-    r"\bthe exact same paper\b",
-    r"\bcalibration copy\b",
-]
-
-
-
 class ScoreSchema(BaseModel):
     score: float
-
-
-def score_to_decision(score: float | None) -> str | None:
-    if score is None:
-        return None
-    return "Accept" if float(score) >= 5.0 else "Reject"
-
-
-def decision_match(predicted: str | None, gt_binary: str) -> bool | None:
-    if predicted in (None, "", "N/A"):
-        return None
-    return predicted == gt_binary
-
-
-def match_label(match: bool | None) -> str:
-    if match is None:
-        return "N/A"
-    return "YES" if match else "NO"
-
-
-def _detect_leakage_warning_phrases(text: str) -> list[str]:
-    matches: list[str] = []
-    for pattern in LEAKAGE_WARNING_PATTERNS:
-        found = re.search(pattern, text, flags=re.IGNORECASE)
-        if found:
-            matches.append(found.group(0))
-    return matches
 
 
 def _make_search_mcp_server(search_path: str):
@@ -253,62 +230,6 @@ def _make_sandboxed_mcp_server(name: str, allowed_paths: list[str]):
         version="1.0.0",
         tools=_make_sandboxed_tools(allowed_paths),
     )
-
-# ── Prompt loading ────────────────────────────────────────────────────
-_PROMPTS_DIR = Path(__file__).parent / "prompts"
-
-
-def _load_prompt(name: str) -> str:
-    """Load a prompt from the prompts/ directory."""
-    return (_PROMPTS_DIR / name).read_text(encoding="utf-8")
-
-
-# ── Agent system prompts ──────────────────────────────────────────────
-
-HARSH_CRITIC_PROMPT = _load_prompt("harsh_critic.txt")
-NEUTRAL_REVIEWER_PROMPT = _load_prompt("neutral_reviewer.txt")
-SPARK_FINDER_PROMPT = _load_prompt("spark_finder.txt")
-RELATED_WORK_PROMPT = _load_prompt("related_work.txt")
-RELATED_WORK_FILTER_PROMPT = _load_prompt("related_work_filter.txt")
-_MERGER_PROMPT_TEMPLATE = _load_prompt("merger.txt")
-
-
-def _build_merger_prompt(skip_neutral: bool = False, skip_spark: bool = False, skip_related_work: bool = False) -> str:
-    num = 1
-    neutral_line = ""
-    spark_line = ""
-    related_work_line = ""
-    if not skip_neutral:
-        num += 1
-        neutral_line = f"{num}. A **neutral/balanced** review\n"
-    if not skip_spark:
-        num += 1
-        spark_line = f"{num}. A **spark finder** report (focuses on insights, not flaws)\n"
-    if not skip_related_work:
-        num += 1
-        related_work_line = (
-            f"{num}. A **potentially missed related work** report (these are SUGGESTIONS, not "
-            f"definitive omissions — the authors may have good reasons for not citing them)\n"
-        )
-    return _MERGER_PROMPT_TEMPLATE.format(
-        input_count=num,
-        neutral_line=neutral_line,
-        spark_line=spark_line,
-        related_work_line=related_work_line,
-    )
-
-
-# Default for backward compat
-MERGER_PROMPT = _build_merger_prompt()
-
-
-SCORE_PROMPT = _load_prompt("scorer.txt")
-# ── Core logic ────────────────────────────────────────────────────────
-
-def sanitize_text(text: str) -> str:
-    """Remove null bytes and other problematic characters from text."""
-    return text.replace("\x00", "")
-
 
 print("Testing ZAI client with a simple call ...")
 
@@ -473,7 +394,7 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     resolved_client, resolved_model, provider_name = resolve_openai_client_and_model(client, MODEL_PARSER)
     if provider_name == "Ollama":
         parser_prompt = (
-            f"{_load_prompt('parse_score.txt')}\n\n"
+            f"{load_prompt('parse_score.txt')}\n\n"
             f"Return valid JSON with exactly this shape: {{\"score\": 0.0}}"
         )
         parser_text, cost = await call_openai(
@@ -490,7 +411,7 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     response = await resolved_client.beta.chat.completions.parse(
         model=resolved_model,
         messages=[
-            {"role": "system", "content": _load_prompt("parse_score.txt")},
+            {"role": "system", "content": load_prompt("parse_score.txt")},
             {"role": "user", "content": text},
         ],
         response_format=ScoreSchema,
@@ -531,7 +452,7 @@ async def run_merge(
 
     print(f"  [merger] started (claude-sonnet-4-6 agent) ...")
 
-    merger_system_prompt = _build_merger_prompt(
+    merger_system_prompt = build_merger_prompt(
         skip_neutral=skip_neutral,
         skip_spark=skip_spark,
         skip_related_work=skip_related_work,
@@ -561,7 +482,7 @@ async def run_merge(
     abs_paper_path = str(Path(paper_path).resolve())
     paper_dir = str(Path(abs_paper_path).parent)
 
-    merger_agent_template = _load_prompt("merger_agent.txt")
+    merger_agent_template = load_prompt("merger_agent.txt")
     agent_prompt = merger_agent_template.format(
         merger_system_prompt=merger_system_prompt,
         paper_path=abs_paper_path,
@@ -578,7 +499,7 @@ async def run_merge(
     merger_fs = _make_sandboxed_mcp_server("merger_fs", [paper_dir])
 
     options = ClaudeAgentOptions(
-        model=MODEL_HUMAN_MERGER.split(":")[1],
+        model=MODEL_HUMAN_MERGER,
         allowed_tools=[
             "mcp__merger_fs__read_file",
             "mcp__merger_fs__glob_files",
@@ -644,7 +565,7 @@ async def run_scorer(
         [cal_dir_abs, str(tmp_dir)] if cal_dir_abs else [str(tmp_dir)],
     )
 
-    scorer_agent_template = _load_prompt("scorer_agent.txt")
+    scorer_agent_template = load_prompt("scorer_agent.txt")
     prompt = scorer_agent_template.format(
         score_prompt=SCORE_PROMPT,
         review_path=review_path,
@@ -656,7 +577,7 @@ async def run_scorer(
 
     result_text = ""
     options = ClaudeAgentOptions(
-        model=MODEL_HUMAN_MERGER,
+        model=MODEL_HUMAN_MERGER.split(":")[1],
         cwd=cal_dir_abs or None,
         allowed_tools=[
             "mcp__scorer_fs__read_file",
@@ -697,7 +618,7 @@ async def run_scorer(
         f.write(f"\nGT Score: {gt_score}\n")
         f.write(f"\n{'=' * 72}\n\n")
 
-    leakage_matches = _detect_leakage_warning_phrases(result_text)
+    leakage_matches = detect_leakage_warning_phrases(result_text)
     if leakage_matches:
         matched_text = ", ".join(sorted(set(leakage_matches), key=str.lower))
         warning_msg = (
