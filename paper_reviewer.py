@@ -8,32 +8,32 @@ Usage:
   python paper_reviewer.py <paper.txt> --parallel      # parallel agents
 """
 
-import asyncio
 import json
 import logging
 import os
-import random as _random
 import re
 import sys
-import traceback
+import asyncio
 from pathlib import Path
 
 
 from dotenv import load_dotenv
-from openai import APITimeoutError, AsyncOpenAI
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 from rank_bm25 import BM25Okapi
+from review_agents.openrouter_utils import (
+    call_openai,
+    extract_cost,
+    get_client,
+    ollama_client,
+    resolve_openai_client_and_model,
+)
 
 load_dotenv()  # loads .env from cwd or parent dirs
 
 # ── Config ────────────────────────────────────────────────────────────
 PROVIDER = "zai" 
 
-
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-OLLAMA_CLOUD_BASE_URL = "http://localhost:11434/v1/"
-ZAI_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
 
 #base_model = "qwen/qwen3.6-plus:free" #用限时免费模型白嫖
 base_model = "qwen/qwen3.5-flash-02-23"
@@ -51,9 +51,6 @@ MODEL_HUMAN_MERGER = f"claude:claude-sonnet-4-6"
 MODEL_MERGER = f"z-ai/glm-5" 
 MODEL_PARSER = "openai/gpt-5.4-nano"
 
-MAX_RETRIES = 5
-RETRY_DELAY = 10 
-REQUEST_TIMEOUT = 120
 DEFAULT_CALIBRATION_PATH = Path(__file__).parent / "calibration.md"
 
 # ── Error logging ────────────────────────────────────────────────────
@@ -313,157 +310,9 @@ def sanitize_text(text: str) -> str:
     return text.replace("\x00", "")
 
 
-def _get_client(api_key: str | None = None) -> AsyncOpenAI:
-    """Create an AsyncOpenAI client pointed at OpenRouter."""
-    resolved_api_key = api_key or OPENROUTER_API_KEY
-    if not resolved_api_key:
-        raise ValueError(
-            "OPENROUTER_API_KEY environment variable not set.\n"
-            "Set it in .env or export it."
-        )
-    return AsyncOpenAI(api_key=resolved_api_key, base_url=OPENROUTER_BASE_URL)
-
-
-
-def _get_zai_client(api_key: str | None = None) -> AsyncOpenAI:
-    """Create an AsyncOpenAI client pointed at OpenRouter."""
-    resolved_api_key = api_key
-    if not resolved_api_key:
-        raise ValueError(
-            "ZAI_API_KEY environment variable not set.\n"
-            "Set it in .env or export it."
-        )
-    return AsyncOpenAI(api_key=resolved_api_key, base_url=ZAI_BASE_URL)
-
-zai_client = _get_zai_client(os.environ.get("ZAI_API_KEY", ""))
-
-
-def _get_ollama_client() -> AsyncOpenAI:
-    return AsyncOpenAI(api_key="ollama", base_url=OLLAMA_CLOUD_BASE_URL)
-
-
-ollama_client = _get_ollama_client()
-
-
-def _resolve_openai_client_and_model(
-    client: AsyncOpenAI,
-    model: str,
-) -> tuple[AsyncOpenAI, str, str]:
-    if model.startswith("ollama:"):
-        return ollama_client, model.split(":", 1)[1], "Ollama"
-    if model.startswith("zai:"):
-        return zai_client, model.split(":", 1)[1], "ZAI"
-    return client, model, "OpenRouter"
-
-
-
-# ── OpenRouter calls ───────────────────────────────────────────────────
-
-# Models that support OpenRouter reasoning config
-REASONING_MODELS = {"z-ai/glm-5", "minimax/minimax-m2.7", "deepseek/deepseek-v3.2", "minimax/minimax-m2.5:free", "stepfun/step-3.5-flash:free"}
-
-# Model → official provider mapping (for OpenRouter provider pinning)
-PROVIDER_MAP = {
-    "z-ai/glm-5": ["deepinfra/fp4"],
-    "z-ai/glm-5:online": ["deepinfra/fp4"],
-    "minimax/minimax-m2.7": ["minimax/fp8"],
-    "deepseek/deepseek-v3.2": ["parasail/fp8"],
-}
-
-
-def _build_extra_body(model: str, reasoning_effort: str = "high") -> dict | None:
-    """Build extra_body with reasoning and/or provider config for OpenRouter."""
-    extra = {}
-    if model in REASONING_MODELS:
-        extra["reasoning"] = {"effort": reasoning_effort}
-    if model in PROVIDER_MAP:
-        extra["provider"] = {"only": PROVIDER_MAP[model]}
-    return extra or None
-
-
-def _extract_cost(response) -> float:
-    """Extract cost from OpenRouter response usage object."""
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return 0.0
-    cost = getattr(usage, "cost", None)
-    if cost is not None:
-        return float(cost)
-    if isinstance(usage, dict):
-        return float(usage.get("cost", 0.0))
-    return 0.0
-
-
-async def _call_openai(
-    client: AsyncOpenAI,
-    name: str,
-    system_prompt: str,
-    user_prompt: str,
-    model: str,
-    tools: list[dict] | None = None,
-) -> tuple[str, float]:
-    """Call an OpenAI-compatible chat completion endpoint with retry logic."""
-    resolved_client, resolved_model, provider_name = _resolve_openai_client_and_model(client, model)
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            kwargs = dict(
-                model=resolved_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                timeout=REQUEST_TIMEOUT,
-            )
-            extra = None
-            if provider_name == "OpenRouter":
-                extra = _build_extra_body(resolved_model, reasoning_effort="medium")
-            if extra:
-                kwargs["extra_body"] = extra
-            response = await resolved_client.chat.completions.create(**kwargs)
-            result = response.choices[0].message.content or ""
-            cost = 0.0 if provider_name == "Ollama" else _extract_cost(response)
-            usage = getattr(response, "usage", None)
-            input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
-            output_tokens = getattr(usage, "completion_tokens", None) if usage else None
-            if input_tokens is not None and output_tokens is not None:
-                tokens = f"{input_tokens}in/{output_tokens}out"
-            else:
-                tokens = "n/a"
-            if not result.strip():
-                if attempt < MAX_RETRIES:
-                    _error_logger.error(f"[{name}] empty response (attempt {attempt}/{MAX_RETRIES}), model={model}")
-                    print(f"  [{name}] empty response (attempt {attempt}/{MAX_RETRIES}), retrying ...")
-                    await asyncio.sleep(RETRY_DELAY + _random.uniform(0, 5))
-                    continue
-                _error_logger.error(f"[{name}] empty response after {MAX_RETRIES} attempts, model={model}")
-                print(f"  [{name}] empty response after {MAX_RETRIES} attempts")
-            print(f"  [{name}] done — {model} ({provider_name}) — {tokens} tokens — ${cost:.4f}")
-            return result, cost
-        except APITimeoutError as e:
-            _error_logger.error(f"[{name}] timeout (attempt {attempt}/{MAX_RETRIES}), model={model}\n{traceback.format_exc()}")
-            if attempt < MAX_RETRIES:
-                wait = RETRY_DELAY * attempt
-                print(f"  [{name}] timeout (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...")
-                await asyncio.sleep(wait)
-                continue
-            raise
-        except Exception as e:
-            _error_logger.error(f"[{name}] error (attempt {attempt}/{MAX_RETRIES}), model={model}: {e}\n{traceback.format_exc()}")
-            err_str = str(e).lower()
-            is_retryable = any(
-                kw in err_str for kw in ["rate_limit", "overloaded", "429", "529", "timeout", "gateway", "502", "503", "504"]
-            )
-            if is_retryable and attempt < MAX_RETRIES:
-                wait = RETRY_DELAY * attempt
-                print(f"  [{name}] transient error (attempt {attempt}/{MAX_RETRIES}), waiting {wait}s ...", e)
-                await asyncio.sleep(wait)
-            else:
-                raise
-    return "", 0.0
-
 print("Testing ZAI client with a simple call ...")
 
-# ans = asyncio.run(_call_openai(zai_client, "test", "You are a helpful assistant.", "What is the capital of France?", "glm-5.1"))
+# ans = asyncio.run(call_openai(get_client(), "test", "You are a helpful assistant.", "What is the capital of France?", "glm-5.1", _error_logger))
 # if not "paris" in ans[0].lower():
 #     print(ans[0])
 #     print("🔥ZAI client test failed: unexpected answer")
@@ -570,7 +419,7 @@ async def run_reviewer(
         f"{paper_content}\n"
         f"--- PAPER CONTENT END ---"
     )
-    return await _call_openai(client, name, system_prompt, user_prompt, model)
+    return await call_openai(client, name, system_prompt, user_prompt, model, _error_logger)
 
 
 async def run_related_work_search(
@@ -583,7 +432,7 @@ async def run_related_work_search(
     abstract_section = paper_content[:3000]
 
     print("  [related_work_search] started (OpenRouter online) ...")
-    raw_results, cost1 = await _call_openai(
+    raw_results, cost1 = await call_openai(
         client,
         "related_work_search",
         RELATED_WORK_PROMPT,
@@ -593,10 +442,11 @@ async def run_related_work_search(
             f"Search for real, published papers that are closely related."
         ),
         MODEL_RELATED_WORK,
+        _error_logger,
     )
 
     print("  [related_work_filter] started (OpenRouter) ...")
-    filtered, cost2 = await _call_openai(
+    filtered, cost2 = await call_openai(
         client,
         "related_work_filter",
         RELATED_WORK_FILTER_PROMPT,
@@ -611,6 +461,7 @@ async def run_related_work_search(
             f"Filter out already-cited and loosely related works."
         ),
         MODEL_FILTER,
+        _error_logger,
     )
 
     return filtered, cost1 + cost2
@@ -619,18 +470,19 @@ async def run_related_work_search(
 
 async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
     """Extract a score using an OpenAI-compatible endpoint. Returns (score, cost)."""
-    resolved_client, resolved_model, provider_name = _resolve_openai_client_and_model(client, MODEL_PARSER)
+    resolved_client, resolved_model, provider_name = resolve_openai_client_and_model(client, MODEL_PARSER)
     if provider_name == "Ollama":
         parser_prompt = (
             f"{_load_prompt('parse_score.txt')}\n\n"
             f"Return valid JSON with exactly this shape: {{\"score\": 0.0}}"
         )
-        parser_text, cost = await _call_openai(
+        parser_text, cost = await call_openai(
             resolved_client,
             "score_parser",
             parser_prompt,
             text,
             MODEL_PARSER,
+            _error_logger,
         )
         parsed = ScoreSchema.model_validate(json.loads(parser_text))
         return parsed.score, cost
@@ -645,7 +497,7 @@ async def _parse_score(client: AsyncOpenAI, text: str) -> tuple[float, float]:
         timeout=30,
     )
     parsed = response.choices[0].message.parsed
-    cost = 0.0 if provider_name == "Ollama" else _extract_cost(response)
+    cost = 0.0 if provider_name == "Ollama" else extract_cost(response)
     usage = getattr(response, "usage", None)
     input_tokens = getattr(usage, "prompt_tokens", None) if usage else None
     output_tokens = getattr(usage, "completion_tokens", None) if usage else None
@@ -1135,7 +987,7 @@ async def review_paper(
     print(f"  Scorer:         claude-sonnet-4-6 (Agent SDK)\n")
     print(f"Score source: {'merger output' if merger_output_score else 'scorer'}")
 
-    client = _get_client(api_key=api_key)
+    client = get_client(api_key=api_key)
     pp = str(path)
 
     print("Phase 1 + 2: Delegating to run_pipeline ...")
