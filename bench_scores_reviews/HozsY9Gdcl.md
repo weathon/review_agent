@@ -1,103 +1,106 @@
 ## Summary
-
-This paper introduces **Set-MI**, a method that improves language model membership inference (MI) by aggregating individual document MI scores over metadata-defined sets of documents under the assumption that all documents in a set are either collectively present in or absent from training data. The authors construct five diverse benchmarks (Wikipedia, Arxiv, Languages, License, Instructions) and show that Set-MI improves four Individual-MI baselines by 0.14 AUROC on average. Additional analyses examine the effects of model size, data deduplication, document length, set size, and robustness to violations of the set assumption.
+This paper introduces **Set-MI**, a wrapper method that improves membership inference (MI) for language models by aggregating per-document MI scores over metadata-defined groups ("sets") under the assumption that all documents in a set are either entirely in or entirely out of the training corpus. The authors construct five new MI benchmarks spanning Wikipedia, Arxiv, language identity, data license, and instruction-tuning datasets, and demonstrate an average AUROC gain of 0.14 over four Individual-MI baselines. Additional ablations analyze the effects of model size, training-data deduplication, document length, and set size, plus a controlled robustness analysis under simulated membership noise.
 
 ---
 
 ## Strengths
 
-- **Consistent, large empirical gains on a realistic problem:** The AUROC improvements in Table 2 are often substantial (e.g., Loss Attack on Arxiv: 0.576 → 0.938; LiRA on Wikipedia: 0.581 → 0.859) and span multiple domains and base methods, demonstrating that signal aggregation across semantically coherent sets is a practically effective lever that prior work missed entirely.
+- **Broadly applicable wrapper design.** Set-MI is formulated as a zero-overhead wrapper over any existing Individual-MI scoring function, verified empirically across four qualitatively different base methods (Loss Attack, LiRA, Min-K%, zlib entropy). The positive correlation between Individual-MI and Set-MI performance (r = 0.824, p = 0.0002) also provides an actionable prescription: improving base MI methods will compound into larger Set-MI gains.
 
-- **Five new diverse MI benchmarks covering distinct auditing use cases:** The paper constructs the first set-level MI benchmarks, covering temporal grouping (Wikipedia, Arxiv), linguistic inclusion (Languages), license-based inclusion (License), and instruction-tuning corpora (Instructions). This fills a clear gap, as prior MI benchmarks for LMs are narrow in domain.
+- **Novel benchmark suite.** To the authors' knowledge, these five benchmarks are the first set-structured MI benchmarks for LMs, and collectively the most domain-diverse. Covering temporal cutoffs (Wikipedia/Arxiv), language identity, license category, and fine-tuning datasets addresses a real gap since prior work typically evaluates on a single domain.
 
-- **Insightful ablations on model size and deduplication:** The finding that Set-MI gains *disproportionately* more from larger models and *loses disproportionately more* from deduplication compared to Individual-MI (Figure 3) is mechanistically interesting and informs when practitioners should expect set-level aggregation to help most. This is not an obvious result.
+- **Concrete motivating examples grounded in real data-pipeline practice.** The paper provides specific, verifiable examples (DOLMA's March 2023 Reddit cutoff, SILO license categories, Tulu instruction-dataset composition) rather than toy constructions, making the set assumption credible for practitioners.
 
-- **Controlled robustness analysis with realistic provenance verification:** Section 6 goes beyond metadata-inferred labels by verifying membership via 13-gram overlap with the Pile, providing a cleaner ground truth, and then systematically simulating noise. The finding that even FULL averaging significantly outperforms Individual-MI under up to 50% noise in both sets is an actionable result.
+- **Insightful deduplication finding.** The result that deduplication widens the gap between Duplicated and Deduped models *more* for Set-MI than for Individual-MI is a genuinely novel empirical observation about memorization dynamics that is not obvious a priori and has implications for data-curation research.
 
-- **Method is fully orthogonal and modular:** Because Set-MI is a post-hoc aggregation layer, it is compatible with any future Individual-MI improvement, and the observed 0.824 Pearson correlation (p=0.0002) between Individual-MI and Set-MI performance implies a reliable multiplicative benefit as base methods improve.
+- **Scaling analysis.** The finding that Set-MI benefits disproportionately more from larger model sizes, while Individual-MI improvement is modest, adds concrete empirical content to the general understanding that memorization scales with model capacity.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None.
+None. The core contribution is sound and the empirical gains are real.
 
 ### Major
 
-- **Language and Instructions benchmarks may largely detect distributional shift rather than document-level membership.** Bloom's training languages are publicly documented, and Tulu's instruction datasets are listed in its paper. Near-perfect AUROC (Languages: LiRA 0.908→1.000; Instructions: Min-K% PROB at 1.000 Individual-MI) does not necessarily validate MI capability — it may simply confirm that a model trained on English Wikipedia performs differently on languages it was never trained on, which is a far easier signal than true membership inference. This distinction is important: if some benchmarks are measuring source/domain inclusion rather than document membership, the 0.14 average AUROC gain is inflated and the framing of the paper needs adjustment. The paper does not analyze or even acknowledge this confound.
+- **Benchmark statistics are internally inconsistent, harming reproducibility.** Table 1 states Wikipedia has 1,000 sets / 100,000 documents and Arxiv has 1,000 sets / 100,000 documents, but the construction text says "We subsample 100 sets with 100 documents per set" for each — giving 10,000 documents, not 100,000, and 100 sets, not 1,000. For the Language benchmark, the text says "resulting in 130 sets" but 20 languages × 10 subsets = 200 sets, matching Table 1 (200 sets / 20,000 docs). For License, the text again says "resulting in 130 sets" but 19 source datasets × 10 subsets = 190 sets, matching Table 1 (190 / 19,000). These appear to be systematic copy-paste errors in the text, but until resolved a reader cannot reproduce the benchmarks or interpret the scale of the evaluation. This must be corrected for the paper to be replicable.
 
-- **Table 1 statistics appear inconsistent with Section 4 text.** Table 1 reports Wikipedia: 1,000 sets / 100,000 documents and Arxiv: 1,000 sets / 100,000 documents. The benchmark construction text says "We subsample 100 sets with 100 documents per set," which gives 10,000 documents. The Language entry in Table 1 says 200 sets / 20,000 documents, yet the text says 20 languages × 10 sub-splits = 200 sets × 100 documents = 20,000 documents — this checks out. The Wikipedia/Arxiv discrepancy (100 sets described vs. 1,000 sets in Table 1) is unresolved and directly affects reproducibility. If the experiments were run on 100 sets, the table is wrong; if on 1,000, the text is wrong.
+- **No uncertainty quantification.** The entire empirical contribution rests on AUROC point estimates, but no confidence intervals, bootstrap intervals, standard deviations, or significance tests are reported anywhere. This matters because many improvements are modest in absolute terms (e.g., Loss Attack on Wikipedia: 0.524 → 0.575; zlib on License: 0.647 → 0.674), and each estimate is computed from a single random 1,024-token span per document. Without error bars it is impossible to assess whether these gains represent reliable signal or sampling noise. This is a core requirement for an empirical claim paper, not a methodological nicety.
 
-- **No evaluation on models with unknown training data, despite the core motivation.** The paper's introduction and Figure 1 motivate Set-MI as a tool for inspecting black-box LMs whose training data is unknown. Yet every target LM used (Pythia, GPT-Neo, BLOOM, SILO, Tulu) has fully documented training data used only to construct labels. The method is never demonstrated on its intended use case — recovering an unknown data cutoff or detecting undisclosed composition in a model. At minimum, one end-to-end case study (e.g., hiding the cutoff and asking whether Set-MI can recover it) would substantially validate the practical framing.
+- **Several benchmarks plausibly measure domain/distribution shift rather than true membership.** (a) *Language*: Bloom's per-language loss differences could reflect tokenizer coverage and overall language competence rather than document-level membership, because the model was trained with language selection as a first-order design choice. (b) *License*: different license categories often correspond to qualitatively different dataset topics and writing styles, so a model may separate them without memorizing any specific documents. (c) *Instructions*: the target model (Tulu-v1) is fine-tuned rather than pretrained on the instruction datasets, and the set label is the dataset identity itself — the model may recognize the format of an unseen ShareGPT conversation without that specific conversation being in training. These confounds do not invalidate the benchmarks outright, but the paper provides no control (e.g., removing the distributional cue while keeping the membership cue) to disentangle the two effects. The scientific claim — "Set-MI leverages membership signals" — requires at least acknowledging and, ideally, partially ruling out this alternative explanation.
+
+- **Robustness analysis (Section 6) is too narrow to support general claims.** The robustness experiments use a single base method (Loss Attack), a single domain (Wikipedia), and a single model (Pythia 2.8B-dedup) under synthetic noise generated by random replacement of members/non-members. This does not substantiate the claim that Set-MI is robust "under practical settings" across the paper's five benchmarks and four base methods. Different base methods have different tail shapes and calibration, and real-world violations of the set assumption (version updates, partial crawls, deduplication artifacts) do not follow a uniform random replacement model.
 
 ### Minor
 
-- **zlib entropy degradation on Instructions (0.458 → 0.429) is unexplained.** Table 2 footnote says "outperforms in most settings" but does not analyze this failure mode. Given that zlib starts below random (0.458), the aggregation of a below-chance scorer is predictably harmful — which is consistent with the authors' own discussion of Individual-MI AUROC < 0.5 leading to worse Set-MI. The paper should make explicit that Set-MI requires a base scorer better than random to be beneficial, and give practitioners guidance on how to detect this condition without ground truth.
+- **The zlib + Set-MI failure on Instructions (0.458 → 0.429, below random) is not adequately analyzed.** The paper lists this number in Table 2 and notes the general caveat that poor Individual-MI can hurt Set-MI, but provides no domain-specific explanation for why zlib specifically fails here while the other three methods improve. This is a direct counterexample to the claim that "Set-MI significantly improves Individual-MI on most settings," and understanding it would strengthen the paper.
 
-- **Single-domain ablations limit generalizability of findings.** Model size effects (Section 5.2), document length effects (Section 5.4), and set size effects (Section 5.5) are all measured only on Wikipedia. The deduplication analysis (Section 5.3) uses only Loss Attack. Since the benchmarks span five quite different domains, findings on one may not transfer. These sections should be clearly scoped as "Wikipedia case study" rather than general claims.
+- **Date-based sets create near-perfect correlation between the grouping variable and the membership label.** For Wikipedia and Arxiv, documents are labeled as members iff their creation date precedes the collection cutoff, and sets are defined by creation date. Set-MI on these benchmarks is therefore largely testing whether the model encodes the temporal training boundary, not individual document memorization. The 13-gram overlap validation in Section 6 partially addresses this for the robustness experiment, but not for the main results in Table 2. The paper should discuss whether temporal-cutoff monotonicity is the dominant driver of gains on these two benchmarks.
 
-- **Document-level AUROC slightly misrepresents set-level performance when set sizes vary.** By assigning the set score to every document, AUROC computed at the document level implicitly weights large sets more than small ones. For the Wikipedia/Arxiv benchmarks (100 documents per set), this is fine. For the Language/License/Instructions benchmarks (equal 100-document sub-splits), it is also fine. But in aggregate comparisons or ablations with varying set sizes (Figure 4 right), document-level AUROC and set-level AUROC diverge. Reporting both, or being explicit that equal-sized sets make them equivalent, would avoid ambiguity.
+- **The 30% threshold for MAX/MIN aggregation in Section 6 is unjustified.** No sensitivity analysis is provided and it is not clear whether this value was selected on the same data used for evaluation. A brief justification or sensitivity curve is needed.
 
-- **"Significantly outperforms" in Table 2 caption has no statistical support.** No confidence intervals, bootstrap resampling, or hypothesis tests are reported. Given that per-cell numbers represent averages over 2–3 models with no per-run variance shown, the word "significantly" is informal. Given ICLR standards, this should be toned down or backed with error bars.
+- **No random-set control.** Aggregating over any batch of documents reduces estimator variance. The paper does not show that aggregating over randomly assembled (non-membership-correlated) groups fails to achieve similar gains. Such a control would confirm that the set assumption — and not mere variance reduction — is what drives performance.
 
 ### Tiny
 
-- Section 3's claim that downstream applications are "not affected" by deviations from the set assumption is slightly too strong. "Still directionally informative under moderate noise" is more accurate.
-- The robustness section's MAX/MIN threshold of 30% is not validated. A brief sensitivity check would be simple to include.
+- A single random 1,024-token span is drawn per document for all experiments. The sensitivity of AUROC estimates to this random draw is not reported. Even a brief note on the variance across multiple draws (or evidence that results are stable) would strengthen confidence in the reported numbers.
+
+- The set-size ablation (Figure 4 right) keeps set count fixed while varying set size, but does not control for total tokens observed. A comparison at equal total token budget (e.g., 1 doc × 1,024 tokens vs. 4 docs × 256 tokens) would better isolate the benefit of the set assumption from the benefit of observing more tokens.
 
 ---
 
 ## Nice-to-Haves
 
-- **End-to-end case study:** Train a model, hide its data cutoff, and use Set-MI to recover it. This is the flagship application in Figure 1 but is never demonstrated empirically. Even a simple version would be persuasive.
-- **Weighted aggregation schemes:** Simple averaging is reasonable, but confidence-weighted or variance-weighted aggregation might reduce sensitivity to outliers within sets without requiring knowledge of noise structure.
-- **Evaluation on OLMo or a model with documented filtering pipelines:** OLMo's training data (DOLMA) has well-documented quality filtering and deduplication, offering a controlled setting to test real (not simulated) violations of the set assumption — a more realistic noise model than uniform random swaps.
-- **Score distribution visualizations:** Kernel density plots of Individual-MI scores vs. Set-MI scores for members and non-members would intuitively show whether improvements come from mean shifts, variance reduction, or both.
-- **Theoretical variance-reduction sketch:** A brief argument showing that averaging N independent, identically distributed noisy scorers reduces score variance by 1/N and improves expected AUROC under mild distributional assumptions would elevate the method section from heuristic to principled.
+- **Random-set baseline.** Run Set-MI by grouping documents into sets with no membership correlation (e.g., random date assignments) and compare AUROC. This would directly quantify how much of the gain is due to meaningful shared membership versus pure averaging noise reduction.
+
+- **Evaluation on a model with genuinely unknown training data.** All target LMs have published training-corpus details used to define ground truth. Applying Set-MI to a semi-unknown model (e.g., using later-revealed information about GPT-2 or an early LLaMA checkpoint) would validate the practical use case more convincingly.
+
+- **Score distribution visualization.** Plotting per-document score distributions for member vs. non-member sets before and after aggregation would make it visually clear whether aggregation genuinely separates the classes or uniformly shifts all scores.
+
+- **More sophisticated aggregation alternatives.** Median, trimmed mean, or a simple confidence-weighted average are natural competitors to the mean that might be more robust to outliers. The paper explores MAX/MIN only in the noise robustness section; briefly comparing these alternatives in the main experiment would strengthen the design choice.
+
+- **Automatic set discovery.** The current method requires a practitioner to know which metadata attribute defines membership-correlated sets. A brief discussion or preliminary experiment on clustering-based set discovery would broaden applicability.
+
+- **LiRA reference-model sensitivity.** The paper notes that finding a good reference model is difficult in practice. A brief ablation varying the reference model quality would clarify whether LiRA-based Set-MI is stable or highly sensitive to this choice.
 
 ---
 
 ## Removed Points
+*These points are flagged for removal; treat them with caution.*
 
-*These points are flagged to be removed; treat them with caution.*
+- **"The method is too simple for ICLR"** (Harsh Critic): Simplicity is not a disqualifying weakness when the empirical contribution and benchmark construction are substantive. Many impactful systems papers succeed through principled evaluation of simple methods. Removed.
 
-- **"Black-box access model inconsistency (token logprobs vs. document loss)"** (Harsh Critic §2.1): The reviewer argues that methods requiring token-level probabilities contradict a "document loss only" assumption. In practice, document loss *is* computed from token-level cross-entropy, and token-level log-probabilities are the standard output of next-token prediction APIs. This is not an inconsistency.
-- **"Method is just a heuristic mean with no theoretical treatment"** (Harsh Critic §3 major concern 1): While a theoretical treatment would be a nice-to-have, demanding formal analysis for an empirical aggregation paper imposes a standard not typical in this community for systems/empirical work.
-- **"Set-level AUROC should be the primary metric"** (Harsh Critic §3 major concern 3): When all sets have equal size (100 documents per set, as in this paper's design), document-level AUROC computed on set-assigned scores is equivalent to set-level AUROC. The concern has merit in principle but is largely a non-issue given the benchmark design.
-- **"Fairness of LiRA baseline without reference model details in main text"** (Harsh Critic §2.2): The paper appropriately refers to Appendix A for implementation details. Delegating baseline specifics to the appendix is standard practice.
-- **Demand for confidence intervals / multiple-run statistics** (Harsh Critic §5.1, Spark Finder §1): Single-run evaluation with AUROC is the norm for large-scale MI benchmarking. Requesting per-run variance for 5 domains × 4 methods × multiple models goes beyond community standards. The absence of formal tests is worth noting (and noted above as a minor point), but is not a major weakness.
-- **Correlation between Individual-MI and Set-MI on a small sample** (Harsh Critic §5.1): The correlation p=0.0002 is reported in the paper itself and is statistically sound for the claimed claim.
-- **"Overreaching in Ethical Considerations / missing misuse discussion"** (Harsh Critic §Ethics): A fuller ethics discussion would be appreciated but is not a scientific weakness and is not unusual to be brief at ICLR.
+- **"Missing stronger or more recent LM-specific baselines"** (Harsh Critic): No specific missing method is named; this is a generic criticism that applies to any paper. The four methods chosen span the main families of black-box MI scoring (loss, LiRA, n-gram, compression). Removed.
+
+- **"Loss Attack notation uses probability rather than log-probability"** (Harsh Critic): The paper consistently uses probability notation throughout Section 2.2 for all methods and Figure 2 illustrates the same. While log-probability is more common in practice, this is a presentation choice, not a technical error. Removed.
+
+- **"Demanding theoretical proofs for when averaging improves AUROC"** (Harsh Critic): This paper is an empirical systems contribution. Requesting formal proofs of AUROC improvement under averaging is not a standard expectation for this type of work. Removed.
+
+- **"Calibration/threshold discussion required"** (Harsh Critic): The paper evaluates with AUROC throughout, which is threshold-free. Requesting threshold calibration analysis is a nice-to-have at best and not a substantive weakness. Removed.
+
+- **Strength: "the paper is well-written / the topic is important"** (Generic): These are not retained as named strengths as they apply to virtually any paper in the area.
 
 ---
 
 ## Novel Insights
 
-The spark finder report raises one observation worth amplifying: the near-perfect Individual-MI AUROC on the Languages and Instructions benchmarks (0.908, 1.000) may indicate these tasks are not testing membership inference in the classical sense but rather *source/domain detection* — a much easier signal than document-level memorization. If this is correct, it would mean the paper's benchmark suite is heterogeneous in what it measures, and the headline 0.14 AUROC gain combines genuine MI improvements (e.g., Wikipedia, Arxiv) with what are effectively source-detection tasks (Languages, Instructions). Disentangling these two regimes — and identifying where set-level aggregation adds value beyond simply detecting whether a language/domain is in scope — would be a genuinely novel contribution to understanding the limits of LM MI evaluation.
+The most insightful observation that emerges from synthesizing all three reviews is that Set-MI's gains on date-based benchmarks (Wikipedia, Arxiv) may reflect the model having internalized the **temporal training boundary** — a smooth monotonic signal — rather than per-document memorization. This interpretation, if correct, changes the scientific claim: the paper would partly be showing that LMs encode coarse temporal data-selection policies, which can be recovered by aggregating loss signals over time-cohort groups. This is itself a meaningful finding, but it is distinct from (and arguably stronger and more tractable than) the document-level membership inference framing. A clean disentanglement — for example, using 13-gram overlap labels for Wikipedia/Arxiv in the main experiments rather than only in Section 6 — would clarify whether gains come from temporal policy recovery, genuine per-document memorization, or both, and would substantially sharpen the paper's narrative.
 
 ---
 
 ## Suggestions
 
-1. **Reconcile Table 1 and Section 4.** Verify whether Wikipedia/Arxiv benchmarks use 100 sets or 1,000 sets, and ensure the text, table, and appendix are consistent. This is a prerequisite for reproducibility.
+1. **Fix benchmark statistics:** Reconcile Table 1 with the construction text. For each domain, state clearly whether the reported numbers are the full collected benchmark or the experimental subsample, and ensure these are consistent throughout.
 
-2. **Analyze the Language and Instructions benchmarks separately**, explicitly asking whether results reflect document-level memorization or coarser source inclusion. One diagnostic: if Individual-MI with a model trained on *all* languages achieves near-random AUROC on the Language benchmark, then high AUROC with BLOOM is domain detection. This would change the framing of those results.
+2. **Add uncertainty quantification:** Report AUROC estimates with 95% bootstrap confidence intervals (or at minimum standard deviations across random token draws). For large-scale benchmarks where this is expensive, report at least a small-scale variance study.
 
-3. **Provide a single real-world demonstration of the core use case**: use Set-MI on a model with a withheld data cutoff (e.g., a Pythia model evaluated on a date range that is blinded to the evaluator) to show the method can actually recover the cutoff.
+3. **Add a random-set control:** Include one experiment where Set-MI is applied over randomly composed groups (size-matched to real sets). This is a cheap but decisive experiment that verifies the mechanism.
 
-4. **Add explicit practitioner guidance** for when Set-MI will hurt rather than help: the current data shows it degrades when base Individual-MI AUROC is below 0.5. Provide a simple heuristic (e.g., check that Individual-MI average score on held-out random docs is above the threshold) so practitioners can apply this before committing to aggregation.
+4. **Use 13-gram overlap labels in the main Wikipedia/Arxiv experiments:** Since this cleaner labeling is already computed for Section 6, applying it to the main results table would partially address concerns about proxy ground truth and temporal confounding.
 
-5. **Validate the 30% trimming threshold** for MAX/MIN aggregation with a brief sensitivity analysis, or justify it theoretically.
+5. **Analyze the zlib + Instructions failure case explicitly:** Identify whether this failure is due to zlib Individual-MI being below 0.5 (and thus aggregating in the wrong direction), or whether something about the Instructions domain specifically causes Set-MI to degrade. A sentence or two in the main paper would suffice.
 
----
+6. **Widen the robustness analysis to at least two base methods and two domains:** Even adding Min-K% on Arxiv alongside the existing Loss Attack on Wikipedia setup would substantially strengthen the generalizability of Section 6's claims.
 
-**Overall assessment:**
-
-Set-MI is a practically motivated, clearly presented, and empirically well-supported contribution. The core idea — leveraging metadata-based set coherence to aggregate noisy individual membership signals — is conceptually simple but demonstrably effective, and the benchmark construction covers genuinely important auditing use cases. The paper is held back primarily by (a) a genuine inconsistency in benchmark statistics, (b) the lack of clarity about whether Language/Instructions benchmarks measure MI or domain detection, and (c) the gap between the stated use case (black-box, unknown training data) and the experimental setup (fully documented training data). These are fixable issues; addressing them would make this a clear contribution to the ICLR community.
-
-- **Novelty:** Moderate — the idea of set-level aggregation is simple, but its application to LM pretraining MI and the benchmark construction are new.
-- **Technical soundness:** Adequate — the method is correct and reproducible, though the theoretical underpinning is absent.
-- **Empirical support:** Good on the core claim, with acknowledged gaps in the ablation breadth and the Language/Instructions benchmark interpretation.
-- **Significance:** Moderately high — membership inference for LLMs is an active, important problem, and a consistently effective and modular improvement is practically valuable.
-- **Clarity:** Good, with the exception of the Table 1 inconsistency and the blurred document-vs-set inference framing.
+7. **Explicitly separate the temporal-boundary effect from per-document memorization:** Use 13-gram overlap labels in the main Wikipedia/Arxiv experiments, and add a discussion of whether removing the exact temporal ordering of sets changes the AUROC, to verify whether the set assumption is doing the work rather than temporal monotonicity.

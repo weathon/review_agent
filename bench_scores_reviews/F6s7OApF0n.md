@@ -1,110 +1,98 @@
 ## Summary
 
-CMBO (Cost-sensitive Multi-fidelity Bayesian Optimization) introduces a utility function U(b, ỹ_b) that explicitly trades off BO step count (cost) against best-found validation performance, reframing multi-fidelity HPO as maximizing user-defined utility rather than asymptotic validation performance under a fixed budget. The method contributes a utility-aware acquisition function (Eq. 2), a stopping criterion that interpolates between normalized-regret and probability-of-improvement signals (Eq. 3–5), and a PFN training strategy using LC mixup for sample-efficient transfer. Experiments across LCBench, TaskSet, PD1, and a collected real-world object-detection dataset show consistent and substantial improvements over multi-fidelity and transfer-BO baselines.
+Cost-sensitive Multi-fidelity BO (CMBO) proposes a framework that reframes hyperparameter optimization from maximizing asymptotic validation performance under a fixed budget to maximizing a user-defined utility function that trades off BO performance against computational cost. The method introduces a utility-aware EI acquisition function with a dynamically chosen optimization horizon, a probabilistic stopping criterion interpolating between regret-based and probability-of-improvement signals, and a transfer learning scheme for Prior-Fitted Networks (PFNs) based on learning curve (LC) mixup across datasets and configurations. Extensive evaluation across LCBench, TaskSet, PD1, and a collected real-world object-detection dataset shows consistent and substantial improvements over multi-fidelity BO and transfer-BO baselines.
 
 ---
 
 ## Strengths
 
-- **Novel and practically grounded problem formulation.** The reframing from "maximize asymptotic performance under a target budget" to "maximize a user-defined utility over the BO trajectory" is a conceptually fresh and practically motivated contribution. The cloud-credit / Slurm motivation is concrete and resonates with real practitioner constraints, not a generic appeal to HPO importance.
+- **Genuinely novel problem framing for multi-fidelity BO.** Existing freeze-thaw methods (DyHPO, iFBO, DPL) optimize either greedy one-step EI or asymptotic performance at a fixed horizon. Reformulating the objective as maximizing a user utility U(b, ỹ_b) over the BO trajectory—and deriving both acquisition and stopping from this objective—is a conceptually clean and practically relevant departure. The dynamic horizon selection (max over Δt in Eq. 2) is a direct consequence of this framing and is not present in prior work.
 
-- **Utility-aware acquisition with dynamic horizon selection.** Unlike prior freeze-thaw methods that fix the target epoch to T (DPL) or use greedy one-step lookahead (DyHPO, Quick-Tune), Eq. (2) jointly selects which configuration to continue *and* how far to run it (Δt), explicitly guided by utility improvement. The behavioral analysis in Fig. 7b—showing that the chosen Δt starts large (non-greedy) then shrinks as cost pressure grows—provides direct empirical validation that the acquisition acts as intended.
+- **LC mixup preserving inter-configuration correlations.** The two-stage mixup—across datasets first with a shared λ₁ applied to all configurations, then across configurations—is a simple yet thoughtful technique. Using a single shared λ₁ in the first stage explicitly preserves the correlation structure encoded in each dataset's LC matrix L_m. Fig. 6 directly demonstrates that the mixup reduces overfitting of the PFN surrogate and translates to improved BO regret, providing concrete evidence for the mechanism rather than just end-to-end performance.
 
-- **LC mixup is a specific, non-obvious data-augmentation strategy for PFNs.** The two-stage interpolation (first across datasets preserving inter-configuration correlations, then across configurations) addresses the finite-sample limitation of training PFNs on real datasets rather than synthetic priors. Fig. 6 provides a clear ablation showing reduced test loss and improved BO regret from this design choice alone.
+- **Coherent interpolation between two extreme stopping rules.** The BetaCDF(p_b; β, β)^γ formulation in Eq. (4) provides an interpretable one-parameter family: β→0 recovers the regret-only threshold used by baselines (δ_b = 0.2 when γ = log₂5), while β→∞ recovers a hard PI-based threshold. The smooth interpolation at β = e⁻¹ is well-motivated and tested across all three benchmarks in Fig. 7d.
 
-- **Breadth and consistency of empirical results.** The method is evaluated on three standard tabular LC benchmarks plus a collected real-world object-detection dataset, against eight baselines, across multiple utility families (linear, quadratic, square-root, staircase) and a range of penalty strengths α. CMBO achieves the best average rank in nearly all settings, with a particularly decisive margin for strong penalties (α = 2e-04), which is precisely the regime the method is designed for.
-
-- **Acquisition analysis illuminates the mechanism.** Fig. 7a/b/c directly tracks which configurations are selected and how far, confirming that CMBO focuses on fewer, higher-quality configurations under stronger cost pressure while baselines over-explore — this is an unusually transparent mechanistic analysis for a BO paper.
+- **Empirical breadth and real-world validation.** The method is tested on four distinct LC benchmarks spanning tabular classification (LCBench), diverse NLP tasks (TaskSet), large-scale vision and biology tasks (PD1), and a self-collected object detection dataset with three heterogeneous architectures. Multiple utility function shapes (linear, quadratic, square root, staircase, estimated) are evaluated, and Table 2 shows robustness across all of them with CMBO achieving rank 1.0 in every setting.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None. The core contribution is intact.
+None.
 
 ### Major
 
-- **Algorithm 1, Line 4 has a likely pseudocode error.** The line reads `n* ← argmax_{n∈C} A(n)`, optimizing over elements of the *observation history* C. At b=1, C is empty (initialized to ∅ in line 2), making this undefined. Conceptually the acquisition should range over configurations in X (or those with at least one observation, which requires clarification of how cold-start configurations are handled). This is not merely a formatting artifact — it reflects a genuine ambiguity in when and how new, never-evaluated configurations enter the optimization. The authors should clarify whether CMBO can ever propose a brand-new configuration, and fix the pseudocode accordingly.
+- **Table 3 ablation inconsistency undermines the incremental gain narrative.** Rows 3 and 4 in Table 3 are both labeled (p_b ✓, Acq. ✓, T. ✓) yet produce very different results (e.g., 4.4 vs. 0.9 for α=2e-04). The text claims "performance improves sequentially as each component is added," implying four distinct configurations, but only three distinct checkmark patterns appear (missing one intermediate ablation row). This makes it impossible to cleanly attribute gains to the stopping criterion vs. acquisition vs. transfer learning, which is a core claim of the paper. At minimum, one row is mislabeled, and the correct labels must be provided for the ablation to be interpretable.
 
-- **Table 3 ablation has duplicate row labels.** Rows 3 and 4 both carry the same checkmark pattern (p_b ✓, Acq. ✓, T. ✓) yet report substantially different numbers (e.g., α=2e-04: 4.4 vs. 0.9). Since these are the two rows that together span most of the improvement, the reader cannot tell what factor is being ablated between them. This must be corrected with explicit labels; as written, the ablation cannot be interpreted.
+- **Stopping-criterion confound in baseline comparisons.** As the paper notes in footnote 2, the PI-based term in Eq. (5) depends on the utility-aware acquisition, so baselines cannot directly use the same stopping rule. This is a principled justification, but it means the cost-sensitive results in Table 1 and Fig. 5 conflate: (i) better configuration selection from the utility-aware acquisition, and (ii) better stopping from the mixed PI+regret criterion. The ablation in Table 3 shows the stopping criterion alone contributes substantially (4.4→0.9 at α=2e-04), yet the baseline comparison gives baselines only the inferior regret-only stopping. A cleaner decomposition—e.g., showing CMBO's acquisition with regret-only stopping vs. full CMBO—would make the contribution boundaries clearer. The dotted "achievable regrets without stopping" lines in Fig. 5 are helpful but insufficient to resolve this.
 
-- **No fixed-budget baseline.** The most natural cost-sensitive alternative is simply running any existing BO method with a smaller budget cap. Without a "BOHB/iFBO run to b* steps" baseline, it is impossible to determine whether the utility framework and stopping criterion add value beyond the trivially obvious intervention of allocating less compute upfront. This is a substantive gap in the experimental story.
-
-- **No raw performance metric reported alongside utility regret.** The evaluation metric (normalized utility regret) inherently rewards cost-awareness, so methods that explicitly optimize utility will naturally score well on it. Without also reporting the best validation accuracy achieved at termination — and comparing it to what baselines achieve when allowed to run longer — readers cannot assess the actual performance sacrifice incurred by early stopping. Whether stopping at utility maximum corresponds to acceptable absolute performance degradation is a key practical question left unanswered.
+- **Uniform per-step cost assumption undermines the motivating scenario.** The utility U(b, ỹ_b) is defined over BO steps b and evaluated over "total epochs spent." This implicitly assumes each BO step (each epoch evaluation) has identical cost. The paper's motivating examples invoke cloud credits and Slurm allocations, where wall-clock cost is the relevant resource. The real-world object detection experiment includes ResNet-50, HRNet, and MobileNetV2 evaluated jointly, which almost certainly have different per-epoch wall-clock costs. The mismatch between the motivation (heterogeneous wall-clock costs) and the formulation (step counting) is a genuine gap that goes unacknowledged in the main text.
 
 ### Minor
 
-- **Utility learning validation is thin and artificial.** The "Estimated" column in Table 2 proxies user preferences by fitting a utility that improves on iFBO's trajectory, which is not a realistic user-elicitation scenario. §3.1 motivates preference learning from genuine user data as a core contribution, but Appendix B (showing utility recovery with varying datapoints) remains the only experiment touching this claim. More realistic validation — even simulated, with a held-out user utility and noisy pairwise queries — would substantially strengthen the case.
+- **Utility elicitation is empirically under-validated.** The Bradley-Terry preference model is demonstrated only via synthetic recovery in Fig. 2 (1,000 pairwise labels, no sensitivity to fewer/noisier labels). In the main experiments, all reported results use predefined utility functions (linear, quadratic, etc.). The single "Estimated" row in Table 2 constructs preferences from iFBO's trajectory assuming "the user wants a better tradeoff than iFBO"—this is an artificial proxy for user preference, not evidence that the end-to-end pipeline (elicitation → BO → stopping) works in practice.
 
-- **Sensitivity to γ is not analyzed.** β is studied in Fig. 7d and a clear optimum at β = e^{-1} is identified. However, γ — which sets the baseline stopping threshold (δ_b = 0.2 when β→0 corresponds to γ = log₂5) — is fixed throughout without any sensitivity experiment. Since γ controls the absolute stopping aggressiveness independent of p_b, its choice materially affects all results.
+- **Algorithm 1 notation inconsistency.** Line 4 reads: n* ← argmax_{n∈C} A(n), where C = {(x, t, y)} is the history of partial LC observations. At initialization C = ∅ (line 2), making this argmax undefined. Furthermore, the text in §3.1 says "we predict for all x∈X the remaining part of the LCs," implying the argmax should range over the full configuration pool X, not C. This discrepancy should be corrected for reproducibility.
 
-- **Several CMBO entries report ±0.0 standard deviation.** The paper explains that 5 runs are used for CMBO and 30 for noisier baselines, and that deterministic methods (FSBO, Quick-Tune†) naturally show ±0.0. However, CMBO itself reports ±0.0 in multiple entries (e.g., Table 1: 1.3±0.0 on TaskSet; Table 2: several entries). Standard deviation of exactly 0.0 across 5 independent BO runs is implausible unless the benchmarks are fully deterministic end-to-end. This should be investigated and explained.
+- **Notation inconsistency between Eq. (2) and Eq. (5).** Eq. (2) uses ỹ_{b+Δt} (tilde-y, the best-so-far BO performance), while Eq. (5) uses ȳ_{b+Δt} (bar-y). Whether these are identical quantities should be clarified explicitly, as the distinction between the running best performance (line 10: ȳ_b = max(ȳ_{b-1}, y_{n*,t_{n*}})) and the extrapolated BO performance matters for the stopping criterion computation.
 
-- **U_min approximation bias affects all reported numbers.** The paper acknowledges that exact U_min is a difficult combinatorial problem and approximates it with U(B, y₁^worst). Since all normalized regret numbers are divided by (U_max − U_min), a poor lower bound on U_min compresses the denominator and makes all methods appear to have higher regret. The direction of this bias is systematic and could affect ranking. At minimum, a brief sensitivity check on this approximation would add credibility.
+- **ESBO baseline is undefined.** ESBO appears in Tables 2 and 4 but is not described anywhere in the baselines section (§4). Its definition, source, and relationship to CMBO (it appears to be a strong baseline in Table 4) must be provided; its absence from Table 1 also suggests it is not applicable in all settings, which should be explained.
 
-- **The acquisition is a single-configuration rollout, not stated explicitly.** Eq. (2) evaluates the utility improvement from continuing one chosen configuration for Δt steps, treating other configurations as frozen. This is a one-step approximation to the true multi-step adaptive policy. The text sometimes implies the acquisition is optimizing over "the future BO process," which is stronger than what is computed. This approximation should be stated plainly rather than left to reader inference.
-
-- **No explicit limitations section.** The paper does not surface its own limitations — finite-pool assumption, dependence on in-domain transfer data, heuristic stopping criterion, preference elicitation burden, or benchmark-dependence. For ICLR standards this is a notable omission.
+- **γ parameter is fixed without sensitivity analysis.** β is ablated in Fig. 7d across all three benchmarks, but γ is fixed at log₂5 (corresponding to δ_b = 0.2) without any analysis. As γ and β jointly determine the stopping behavior, a sensitivity test on γ is warranted.
 
 ### Tiny
 
-- U_prev in Eq. (2) is the *most recently achieved* utility (not the running maximum), which is an intentional and important design choice (cost is irreversible). The paper explains this correctly in §3.2, but the rationale could be stated earlier, as readers familiar with standard EI will find this non-obvious.
-- The temperature τ in the Bradley-Terry model (Eq. 1) is introduced but its selection — whether fixed, fitted, or tuned — is not described in the main text.
+- **Mixup validity for discrete/categorical hyperparameters is not discussed.** Convex combinations of configuration vectors (step 2 of the mixup) may produce invalid hyperparameter settings when some hyperparameters are categorical or integer-valued. The paper should at minimum state that this is applied only to continuous hyperparameters or discuss how categorical cases are handled.
+
+- **Key PFN architecture details are deferred to appendices (§E, §G) that are not available in the main text.** Architecture size, tokenization of partial LCs, number of meta-training examples, and inference procedure are relevant for assessing the method's practical overhead and reproducibility.
 
 ---
 
 ## Nice-to-Haves
 
-- **Wall-clock cost validation.** All experiments use step-count as cost, which treats every epoch equally regardless of configuration (e.g., batch size, architecture size). At least one experiment with real model training, where different configurations have different per-epoch wall times, would validate the practical cost-sensitivity story.
-- **LC extrapolation calibration.** Since both the acquisition and stopping criterion depend heavily on the quality of probabilistic LC forecasts, an experiment measuring NLL or calibration of the PFN predictions at different stages of BO (especially early, where stopping decisions are most consequential) would strengthen confidence in the approach.
-- **Scatter plot of actual vs. oracle stopping points.** Aggregate metrics obscure whether the stopping criterion systematically stops too early or too late on specific task types. A scatter plot across all tasks would directly reveal this.
-- **Computational overhead of CMBO.** The paper optimizes HPO cost but does not report how much additional wall-clock overhead CMBO's PFN inference and acquisition rollouts impose compared to lighter baselines like BOHB. Even a rough comparison would be useful for practitioners.
-- **Broader utility estimation experiment.** A controlled study where synthetic "users" provide noisy pairwise preferences (with varying noise levels and query counts) would illuminate the robustness of the Bradley-Terry estimation under realistic conditions.
+- **EI/cost as a baseline.** The standard cost-aware acquisition divides EI by expected evaluation cost; including it (even as a black-box surrogate variant) would clarify whether the utility formulation offers advantages beyond this simpler cost-weighting approach.
+
+- **Utility trajectory visualization with oracle stopping point.** Showing U(b, ỹ_b) over BO steps for CMBO and baselines, with the actual stopping point marked and the oracle b* indicated, would directly demonstrate whether the stopping criterion is well-calibrated.
+
+- **Sensitivity to utility misspecification.** A brief analysis of how CMBO degrades when the estimated utility deviates from the true utility (e.g., wrong penalty weight α) would quantify the practical risk of the elicitation approach.
+
+- **Wall-clock time experiment.** One experiment with actual per-configuration compute time (rather than epoch counting) would validate the cost-sensitivity claim in a realistic heterogeneous-cost setting.
 
 ---
 
 ## Removed Points
-*These points are flagged for removal — treat them with caution.*
 
-- **"Insufficient engagement with cost-aware BO literature in related work"** (Harsh Critic): The paper explicitly defers further related work on cost-sensitive HPO and BO with user preferences to §A (Appendix A), and what remains in §2 is appropriately focused on freeze-thaw BO and LC extrapolation, which are the direct technical ancestors. Not a meaningful gap given the appendix coverage.
+*These points were flagged for removal; treat with caution.*
 
-- **"Lack of theoretical guarantees for the acquisition/stopping criterion"** (Harsh Critic): This is an empirical systems paper in the freeze-thaw BO tradition; none of the closely related works (DyHPO, iFBO, DPL) provide regret bounds either. Demanding theoretical proofs here imposes a non-standard requirement for this subfield.
+- **Zero variance (±0.0) as a credibility concern.** Quick-Tune† and FSBO are deterministic methods; ±0.0 is expected and not suspicious. The paper explicitly uses 30 runs only for methods with large variance.
 
-- **"Comparison to FSBO is unfair because FSBO is black-box"** (Harsh Critic): FSBO is included precisely to show how a strong black-box transfer method compares; the comparison is informative regardless of fidelity access. The fact that FSBO performs well in some settings is discussed and attributed to transfer quality, which strengthens rather than undermines the paper's analysis.
+- **β ablation limited to PD1 only.** This misreads Fig. 7d, which plots normalized regret vs. β for LCBench, TaskSet, PD1, and Average simultaneously, with asterisks marking optima for each. The ablation covers all three benchmarks.
 
-- **"Baselines adapted with stopping rule by the authors"** (Harsh Critic, framing as unfair): All baselines are given the same regret-based stopping rule (Eq. 3 with δ_b = 0.2) because they cannot use the PI-based component (which depends on CMBO's utility-aware acquisition). This is described transparently in footnote 2. The stopping rule used for baselines is a reasonable default, not a straw-man.
+- **Demand for theoretical guarantees.** This is an empirical systems paper in the freeze-thaw BO tradition; no prior competing method provides theoretical stopping or regret guarantees, and demanding them would impose a non-standard bar.
 
-- **"Missing references may not exist"**: Per instructions, any cited paper is assumed to exist.
+- **Finite configuration pool being too restrictive for "general BO."** All freeze-thaw BO methods operate in this setting (DyHPO, iFBO, DPL). The paper targets tabular HPO benchmarks where this is the standard setup; criticism for not covering continuous-space BO is scope creep.
 
-- **"Requesting confidence intervals for tabular benchmarks"**: Single-run evaluation with mean±std over 5 runs is standard in the multi-fidelity BO literature; demanding formal significance tests against every baseline exceeds community norms.
+- **Criticism about Quick-Tune† modification being unfair.** The modification removes the model-selection component to isolate the transfer learning mechanism, which makes the comparison fairer for the hyperparameter selection task—the baseline is weakened in a way that benefits it (more compute per HP eval), not the proposed method.
 
-- **"The problem formulation may collapse to budgeted BO with unknown horizon"** (Harsh Critic): This framing is inaccurate. The utility framework is strictly more expressive than a budget cap: it allows non-monotone stopping criteria, user-defined cost-performance tradeoff shapes (staircase, quadratic, etc.), and automatic stopping without committing to any budget a priori. The distinction is real and the paper demonstrates it empirically with non-linear utility functions in Table 2.
+- **Concern about comparison to methods not yet released / not existing.** The paper cites iFBO, Quick-Tune, DPL, etc.—these are assumed to exist.
 
 ---
 
 ## Novel Insights
 
-The most interesting observation emerging from synthesis of all three reviews is that **FSBO — a black-box transfer method that ignores fidelity entirely and trains only on last-epoch performance** — frequently outperforms sophisticated multi-fidelity methods (DyHPO, DPL, BOHB) in the α=0 (no cost penalty) setting. The paper attributes this to the outsized impact of transfer learning on sample efficiency, and this is directly supported by the mixup ablation (Fig. 6). The implication is that for regimes where data from related tasks is available, the benefit of multi-fidelity adaptation can be dominated by transfer quality, and the practical value of cost-sensitive multi-fidelity BO may lie specifically in the *regime of strong cost pressure* (large α) — where CMBO's margin over FSBO is large and where FSBO's black-box nature becomes a liability. This suggests a useful design principle: the justification for freeze-thaw BO over simpler black-box transfer BO is not sample efficiency per se but cost-awareness, and future work should more explicitly test this regime boundary.
+The acquisition function's dynamic horizon selection (Eq. 2: max over Δt) induces a principled behavioral transition from non-greedy to greedy over the course of BO—not by scheduling but as a direct consequence of cost-dominated utility. Fig. 7b visualizes this concretely: early BO steps select large Δt (look-ahead), while late steps collapse to Δt≈0 (myopic exploitation) as the cost term dominates. This is a cleaner explanation of the exploration-exploitation transition in cost-sensitive BO than ad hoc schedule designs, and the analysis in Fig. 7c shows the resulting configuration-selection concentration matches intuition. The LC mixup's cross-dataset shared λ₁ to preserve inter-configuration correlation is a subtle but nontrivial design choice that distinguishes it from naive per-curve augmentation and deserves attention from the broader PFN training community.
 
 ---
 
 ## Suggestions
 
-1. **Fix Algorithm 1 Line 4**: Change `argmax_{n∈C}` to `argmax_{n∈X}` (or clearly specify the set being optimized), and add an explicit initialization protocol for configurations that have never been evaluated (C is empty at b=1).
+1. **Fix Table 3**: Identify and correct the mislabeled row so the four ablation rows correspond to four distinct component combinations, enabling clean attribution of gains to stopping criterion, acquisition function, and transfer learning separately.
 
-2. **Resolve Table 3 ambiguity**: The two rows both labeled (p_b ✓, Acq. ✓, T. ✓) must be differentiated. If one uses a different β or a different stopping variant, label it explicitly.
+2. **Clarify Algorithm 1 initialization**: Specify how the first configuration is selected when C = ∅, and correct the domain of the argmax in line 4 from n∈C to n∈[N] (or n∈X) to match the described procedure.
 
-3. **Add a fixed-budget baseline**: Run iFBO and/or CMBO (without its stopping criterion) capped at exactly b* steps (where b* is the average stopping step of full CMBO), and report utility regret. This directly tests whether the stopping criterion adds value over simply running less.
+3. **Address uniform-cost assumption explicitly**: Add a paragraph acknowledging that U(b, ỹ_b) treats per-step cost as homogeneous, and either justify this for the benchmarked settings or describe a simple extension to variable per-step costs (e.g., replacing step count b with cumulative wall-clock time).
 
-4. **Report best validation performance at termination**: Add a companion table or figure showing mean best-found validation accuracy (not utility regret) at the stopping point of each method, across tasks, so readers can assess whether the utility-optimal solution is practically acceptable.
+4. **Define ESBO**: Add a description of the ESBO baseline in §4, clarify its relationship to CMBO, and explain why it appears only in Tables 2 and 4.
 
-5. **Explain or investigate zero-variance CMBO entries**: Verify whether the ±0.0 entries arise from full benchmark determinism, collapsed distributions across tasks, or an artifact of averaging. Report the explanation in the text.
-
-6. **Add γ sensitivity analysis**: Fig. 7d studies β but treats γ as fixed at log₂5. A brief supplementary sensitivity analysis on γ would complete the stopping criterion characterization.
-
-7. **Provide explicit statement of the finite-pool limitation and transfer-data dependency**: Add a short limitations paragraph acknowledging that (a) the method assumes a pre-specified pool X and has not been evaluated in continuous HP spaces, and (b) transfer gains depend on in-domain task availability.
-
----
-
-**Overall assessment**: The paper presents a **genuinely novel and practically motivated problem formulation** with **solid, consistent empirical results**. Novelty is moderate-to-high for the utility framework and the LC mixup strategy; technical soundness is moderate (the stopping criterion is heuristic and the pseudocode has real ambiguities); empirical support is good in breadth but has notable gaps (no fixed-budget baseline, no absolute performance metrics). Significance is high given the prevalence of resource-constrained HPO in practice. Clarity is adequate overall but requires specific fixes to the ablation table and algorithm pseudocode before the paper is ready for final publication.
+5. **Add stopping criterion decomposition**: Report CMBO with regret-only stopping (β→0) alongside baselines with the same stopping rule, to isolate acquisition quality improvements from stopping policy improvements in the cost-sensitive setting.

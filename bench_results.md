@@ -441,3 +441,542 @@ The paper's most transferable insight is a *negative* finding: OSR regularizatio
 
 ---
 
+## HozsY9Gdcl
+
+- GT: Reject (avg 5.0)
+- Predicted: Accept (5.8/10)
+- Match: NO
+
+### Final Review
+
+## Summary
+This paper introduces **Set-MI**, a wrapper method that improves membership inference (MI) for language models by aggregating per-document MI scores over metadata-defined groups ("sets") under the assumption that all documents in a set are either entirely in or entirely out of the training corpus. The authors construct five new MI benchmarks spanning Wikipedia, Arxiv, language identity, data license, and instruction-tuning datasets, and demonstrate an average AUROC gain of 0.14 over four Individual-MI baselines. Additional ablations analyze the effects of model size, training-data deduplication, document length, and set size, plus a controlled robustness analysis under simulated membership noise.
+
+---
+
+## Strengths
+
+- **Broadly applicable wrapper design.** Set-MI is formulated as a zero-overhead wrapper over any existing Individual-MI scoring function, verified empirically across four qualitatively different base methods (Loss Attack, LiRA, Min-K%, zlib entropy). The positive correlation between Individual-MI and Set-MI performance (r = 0.824, p = 0.0002) also provides an actionable prescription: improving base MI methods will compound into larger Set-MI gains.
+
+- **Novel benchmark suite.** To the authors' knowledge, these five benchmarks are the first set-structured MI benchmarks for LMs, and collectively the most domain-diverse. Covering temporal cutoffs (Wikipedia/Arxiv), language identity, license category, and fine-tuning datasets addresses a real gap since prior work typically evaluates on a single domain.
+
+- **Concrete motivating examples grounded in real data-pipeline practice.** The paper provides specific, verifiable examples (DOLMA's March 2023 Reddit cutoff, SILO license categories, Tulu instruction-dataset composition) rather than toy constructions, making the set assumption credible for practitioners.
+
+- **Insightful deduplication finding.** The result that deduplication widens the gap between Duplicated and Deduped models *more* for Set-MI than for Individual-MI is a genuinely novel empirical observation about memorization dynamics that is not obvious a priori and has implications for data-curation research.
+
+- **Scaling analysis.** The finding that Set-MI benefits disproportionately more from larger model sizes, while Individual-MI improvement is modest, adds concrete empirical content to the general understanding that memorization scales with model capacity.
+
+---
+
+## Weaknesses
+
+### Fatal
+None. The core contribution is sound and the empirical gains are real.
+
+### Major
+
+- **Benchmark statistics are internally inconsistent, harming reproducibility.** Table 1 states Wikipedia has 1,000 sets / 100,000 documents and Arxiv has 1,000 sets / 100,000 documents, but the construction text says "We subsample 100 sets with 100 documents per set" for each — giving 10,000 documents, not 100,000, and 100 sets, not 1,000. For the Language benchmark, the text says "resulting in 130 sets" but 20 languages × 10 subsets = 200 sets, matching Table 1 (200 sets / 20,000 docs). For License, the text again says "resulting in 130 sets" but 19 source datasets × 10 subsets = 190 sets, matching Table 1 (190 / 19,000). These appear to be systematic copy-paste errors in the text, but until resolved a reader cannot reproduce the benchmarks or interpret the scale of the evaluation. This must be corrected for the paper to be replicable.
+
+- **No uncertainty quantification.** The entire empirical contribution rests on AUROC point estimates, but no confidence intervals, bootstrap intervals, standard deviations, or significance tests are reported anywhere. This matters because many improvements are modest in absolute terms (e.g., Loss Attack on Wikipedia: 0.524 → 0.575; zlib on License: 0.647 → 0.674), and each estimate is computed from a single random 1,024-token span per document. Without error bars it is impossible to assess whether these gains represent reliable signal or sampling noise. This is a core requirement for an empirical claim paper, not a methodological nicety.
+
+- **Several benchmarks plausibly measure domain/distribution shift rather than true membership.** (a) *Language*: Bloom's per-language loss differences could reflect tokenizer coverage and overall language competence rather than document-level membership, because the model was trained with language selection as a first-order design choice. (b) *License*: different license categories often correspond to qualitatively different dataset topics and writing styles, so a model may separate them without memorizing any specific documents. (c) *Instructions*: the target model (Tulu-v1) is fine-tuned rather than pretrained on the instruction datasets, and the set label is the dataset identity itself — the model may recognize the format of an unseen ShareGPT conversation without that specific conversation being in training. These confounds do not invalidate the benchmarks outright, but the paper provides no control (e.g., removing the distributional cue while keeping the membership cue) to disentangle the two effects. The scientific claim — "Set-MI leverages membership signals" — requires at least acknowledging and, ideally, partially ruling out this alternative explanation.
+
+- **Robustness analysis (Section 6) is too narrow to support general claims.** The robustness experiments use a single base method (Loss Attack), a single domain (Wikipedia), and a single model (Pythia 2.8B-dedup) under synthetic noise generated by random replacement of members/non-members. This does not substantiate the claim that Set-MI is robust "under practical settings" across the paper's five benchmarks and four base methods. Different base methods have different tail shapes and calibration, and real-world violations of the set assumption (version updates, partial crawls, deduplication artifacts) do not follow a uniform random replacement model.
+
+### Minor
+
+- **The zlib + Set-MI failure on Instructions (0.458 → 0.429, below random) is not adequately analyzed.** The paper lists this number in Table 2 and notes the general caveat that poor Individual-MI can hurt Set-MI, but provides no domain-specific explanation for why zlib specifically fails here while the other three methods improve. This is a direct counterexample to the claim that "Set-MI significantly improves Individual-MI on most settings," and understanding it would strengthen the paper.
+
+- **Date-based sets create near-perfect correlation between the grouping variable and the membership label.** For Wikipedia and Arxiv, documents are labeled as members iff their creation date precedes the collection cutoff, and sets are defined by creation date. Set-MI on these benchmarks is therefore largely testing whether the model encodes the temporal training boundary, not individual document memorization. The 13-gram overlap validation in Section 6 partially addresses this for the robustness experiment, but not for the main results in Table 2. The paper should discuss whether temporal-cutoff monotonicity is the dominant driver of gains on these two benchmarks.
+
+- **The 30% threshold for MAX/MIN aggregation in Section 6 is unjustified.** No sensitivity analysis is provided and it is not clear whether this value was selected on the same data used for evaluation. A brief justification or sensitivity curve is needed.
+
+- **No random-set control.** Aggregating over any batch of documents reduces estimator variance. The paper does not show that aggregating over randomly assembled (non-membership-correlated) groups fails to achieve similar gains. Such a control would confirm that the set assumption — and not mere variance reduction — is what drives performance.
+
+### Tiny
+
+- A single random 1,024-token span is drawn per document for all experiments. The sensitivity of AUROC estimates to this random draw is not reported. Even a brief note on the variance across multiple draws (or evidence that results are stable) would strengthen confidence in the reported numbers.
+
+- The set-size ablation (Figure 4 right) keeps set count fixed while varying set size, but does not control for total tokens observed. A comparison at equal total token budget (e.g., 1 doc × 1,024 tokens vs. 4 docs × 256 tokens) would better isolate the benefit of the set assumption from the benefit of observing more tokens.
+
+---
+
+## Nice-to-Haves
+
+- **Random-set baseline.** Run Set-MI by grouping documents into sets with no membership correlation (e.g., random date assignments) and compare AUROC. This would directly quantify how much of the gain is due to meaningful shared membership versus pure averaging noise reduction.
+
+- **Evaluation on a model with genuinely unknown training data.** All target LMs have published training-corpus details used to define ground truth. Applying Set-MI to a semi-unknown model (e.g., using later-revealed information about GPT-2 or an early LLaMA checkpoint) would validate the practical use case more convincingly.
+
+- **Score distribution visualization.** Plotting per-document score distributions for member vs. non-member sets before and after aggregation would make it visually clear whether aggregation genuinely separates the classes or uniformly shifts all scores.
+
+- **More sophisticated aggregation alternatives.** Median, trimmed mean, or a simple confidence-weighted average are natural competitors to the mean that might be more robust to outliers. The paper explores MAX/MIN only in the noise robustness section; briefly comparing these alternatives in the main experiment would strengthen the design choice.
+
+- **Automatic set discovery.** The current method requires a practitioner to know which metadata attribute defines membership-correlated sets. A brief discussion or preliminary experiment on clustering-based set discovery would broaden applicability.
+
+- **LiRA reference-model sensitivity.** The paper notes that finding a good reference model is difficult in practice. A brief ablation varying the reference model quality would clarify whether LiRA-based Set-MI is stable or highly sensitive to this choice.
+
+---
+
+## Removed Points
+*These points are flagged for removal; treat them with caution.*
+
+- **"The method is too simple for ICLR"** (Harsh Critic): Simplicity is not a disqualifying weakness when the empirical contribution and benchmark construction are substantive. Many impactful systems papers succeed through principled evaluation of simple methods. Removed.
+
+- **"Missing stronger or more recent LM-specific baselines"** (Harsh Critic): No specific missing method is named; this is a generic criticism that applies to any paper. The four methods chosen span the main families of black-box MI scoring (loss, LiRA, n-gram, compression). Removed.
+
+- **"Loss Attack notation uses probability rather than log-probability"** (Harsh Critic): The paper consistently uses probability notation throughout Section 2.2 for all methods and Figure 2 illustrates the same. While log-probability is more common in practice, this is a presentation choice, not a technical error. Removed.
+
+- **"Demanding theoretical proofs for when averaging improves AUROC"** (Harsh Critic): This paper is an empirical systems contribution. Requesting formal proofs of AUROC improvement under averaging is not a standard expectation for this type of work. Removed.
+
+- **"Calibration/threshold discussion required"** (Harsh Critic): The paper evaluates with AUROC throughout, which is threshold-free. Requesting threshold calibration analysis is a nice-to-have at best and not a substantive weakness. Removed.
+
+- **Strength: "the paper is well-written / the topic is important"** (Generic): These are not retained as named strengths as they apply to virtually any paper in the area.
+
+---
+
+## Novel Insights
+
+The most insightful observation that emerges from synthesizing all three reviews is that Set-MI's gains on date-based benchmarks (Wikipedia, Arxiv) may reflect the model having internalized the **temporal training boundary** — a smooth monotonic signal — rather than per-document memorization. This interpretation, if correct, changes the scientific claim: the paper would partly be showing that LMs encode coarse temporal data-selection policies, which can be recovered by aggregating loss signals over time-cohort groups. This is itself a meaningful finding, but it is distinct from (and arguably stronger and more tractable than) the document-level membership inference framing. A clean disentanglement — for example, using 13-gram overlap labels for Wikipedia/Arxiv in the main experiments rather than only in Section 6 — would clarify whether gains come from temporal policy recovery, genuine per-document memorization, or both, and would substantially sharpen the paper's narrative.
+
+---
+
+## Suggestions
+
+1. **Fix benchmark statistics:** Reconcile Table 1 with the construction text. For each domain, state clearly whether the reported numbers are the full collected benchmark or the experimental subsample, and ensure these are consistent throughout.
+
+2. **Add uncertainty quantification:** Report AUROC estimates with 95% bootstrap confidence intervals (or at minimum standard deviations across random token draws). For large-scale benchmarks where this is expensive, report at least a small-scale variance study.
+
+3. **Add a random-set control:** Include one experiment where Set-MI is applied over randomly composed groups (size-matched to real sets). This is a cheap but decisive experiment that verifies the mechanism.
+
+4. **Use 13-gram overlap labels in the main Wikipedia/Arxiv experiments:** Since this cleaner labeling is already computed for Section 6, applying it to the main results table would partially address concerns about proxy ground truth and temporal confounding.
+
+5. **Analyze the zlib + Instructions failure case explicitly:** Identify whether this failure is due to zlib Individual-MI being below 0.5 (and thus aggregating in the wrong direction), or whether something about the Instructions domain specifically causes Set-MI to degrade. A sentence or two in the main paper would suffice.
+
+6. **Widen the robustness analysis to at least two base methods and two domains:** Even adding Min-K% on Arxiv alongside the existing Loss Attack on Wikipedia setup would substantially strengthen the generalizability of Section 6's claims.
+
+7. **Explicitly separate the temporal-boundary effect from per-document memorization:** Use 13-gram overlap labels in the main Wikipedia/Arxiv experiments, and add a discussion of whether removing the exact temporal ordering of sets changes the AUROC, to verify whether the set assumption is doing the work rather than temporal monotonicity.
+
+---
+
+## cojJ2s1e35
+
+- GT: Reject (avg 5.5)
+- Predicted: Accept (5.2/10)
+- Match: NO
+
+### Final Review
+
+## Summary
+WLA (World modeling through Lie Action) introduces an unsupervised framework that models video transitions as linear Lie group actions in an object-centric, slot-partitioned latent space, enabling continuous and compositional dynamics. A single shared model is trained across multiple environments simultaneously, and a lightweight supervised adapter (`Ctrl_adapt`) maps user-specified action labels to the learned Lie algebra parameters. The method is evaluated on Phyre (qualitatively), ProcGen (quantitatively against Genie on 8 games), and the 1X Android robotic dataset.
+
+---
+
+## Strengths
+
+- **Single multi-environment model with strong quantitative gains:** The paper trains one model across all 8 ProcGen environments and outperforms Genie substantially on both temporal metrics (Δ_t PSNR: e.g., 9.03 vs. 0.48 in coinrun; 4.06 vs. 0.05 in ninja) and LPIPS in 7 of 8 environments (Table 2). This is a concrete demonstration of cross-environment representation sharing, not merely an architectural story.
+
+- **Novel synthesis of Lie group structure with object-centric modeling:** The combination of slot attention with per-slot Lie algebra dynamics—where each slot evolves under structured rotation+scaling operators—is architecturally distinct from both pure slot models and generic Koopman/state-space approaches. The explicit connection to equivariant autoencoders (Eq. 2) provides a principled theoretical grounding.
+
+- **Least-action slot alignment principle:** The proposal to resolve temporal slot permutations by solving a linear assignment problem that minimizes the Lie-algebra operator norm is novel and motivated. The ablation (Table 1) confirms it reduces MSE meaningfully on both seen and unseen environments.
+
+- **Compelling Android robotics results:** The dramatically better FVD (131.02 vs. 393.85 for Genie, Table 3) and better Δ_t PSNR on real-world robot video indicate that the temporal coherence advantages generalize beyond synthetic game environments. The tradeoff (worse per-frame PSNR but much better FVD) is consistent with the hypothesis that WLA better captures action-conditional dynamics rather than static frame quality.
+
+- **Unsupervised pretraining + modular adapter design:** The decoupling of structure learning (unsupervised, label-free) from action mapping (`Ctrl_adapt`, small and supervised) is a clean and reusable design. The ablated version without rotation is explicitly noted to resemble diagonal-SSM models (Mamba), situating the contribution clearly.
+
+---
+
+## Weaknesses
+
+### Fatal
+None identified.
+
+### Major
+
+- **Unseen-environment evaluation is critically thin.** The headline claim of cross-environment generalization is only partially supported. Table 1 (right) reports ActionACC for unseen ProcGen environments, but full metrics (PSNR, Δ_t PSNR, LPIPS) for unseen settings are absent from the main paper. This is a direct evidentiary gap: the core generalization claim rests almost entirely on the seen-environment results in Table 2.
+
+- **Single baseline throughout.** The paper compares exclusively against Genie in all experiments. For an ICLR submission claiming a new structured-dynamics framework, this is insufficient. Critically absent: (a) an ablation with general linear (non-Lie) transition operators to isolate the rotation+scaling bias contribution; (b) an object-centric video predictor with MLP transitions to separate the object-centric contribution from the Lie structure contribution; and (c) a continuous latent-action model (e.g., LAPO, which directly addresses unsupervised action discovery). Without these, the source of WLA's improvements—whether structure, object-centricity, or something else—cannot be attributed.
+
+- **No few-shot label scaling experiment despite "minimal labels" claim.** The abstract and introduction prominently claim "minimal or no action labels" for adaptation, but Section 4.3 and the experiments never vary the number of labeled sequences used to train `Ctrl_adapt`, report the actual label budget used, or show a performance curve as a function of label count. This claim cannot be evaluated, making it the most poorly substantiated assertion in the paper.
+
+- **Long-horizon rollout degradation is unanalyzed.** All quantitative results appear to be over fixed 16-step rollouts. The exponential latent dynamics (Eq. 9) could compound errors at longer horizons, yet no rollout-length vs. error analysis is presented. For a paper positioned as a "world model," this analysis is essential to understand practical utility.
+
+- **Training details for per-sample (λ, θ) parameters are insufficient for reproducibility.** Footnote 3 notes that these trajectory-specific Lie algebra parameters "are not to be stored as parts of the model," implying per-trajectory optimization during training. However, the paper never explains how these are initialized, whether they are optimized jointly with network weights at every gradient step, what the computational overhead is, or whether there is any test-time inference procedure. These are essential for reproducibility and for understanding the effective inductive bias.
+
+- **Ablation study is incomplete.** Only two ablations are tested (rotation and least-action). Missing ablations that are necessary to understand the contribution: (a) no object slots (fully dense latent vs. slotted), (b) no shared cross-environment training (per-environment model vs. joint), and (c) shared vs. per-environment `Ctrl_adapt`. These are needed to verify whether the object-centric decomposition and the cross-environment sharing are each adding value.
+
+### Minor
+
+- **ActionACC values are low in absolute terms and the scale is under-explained.** The paper reports 21.07 (Ours) vs. 10.25 (Genie) for seen-environment ActionACC (Table 1 right). While WLA doubles Genie's score, 21% absolute accuracy on a classification task is low, and the number of action classes is not stated in the main text. The paper should clarify the chance-level performance for context. If there are 5 classes, 21% is near chance; if there are 15 classes, it is better. This is important for interpreting whether `Ctrl_adapt` is actually learning useful action correspondence.
+
+- **Phyre evidence is entirely qualitative.** Phyre is presented as validation of the core continuity and compositionality claims, yet only cherry-picked frames are shown (Figures 3 and 4). There is no numerical interpolation error, no composition error metric, and no baseline comparison. This weakens the foundational empirical support for the paper's inductive bias.
+
+- **Android experimental protocol is underdescribed.** The paper says the architecture was "slightly adapted" for the Android dataset without specifying what was changed, what action space is used, or how sequences are split. Without this, the Android results cannot be reproduced.
+
+- **Identifiability of (λ, θ) not discussed.** Nothing in the training objective (Eq. 7–9) prevents the encoder from absorbing dynamics while the Lie algebra parameters become weakly meaningful, or produces unique/stable representations across runs. The paper should discuss whether the learned parameters are stable or if degenerate solutions are observed.
+
+- **Eq. (3) ordering notation.** The Fact states F(h·g) = F(g)·F(h), reversing the standard group homomorphism order M(hg) = M(h)M(g). Whether this is intentional (e.g., right action convention) or an error should be clarified explicitly, as it affects how compositionality is interpreted.
+
+- **Key hyperparameters N and J absent from main text.** The number of slots and rotation components used in each experiment are relegated to the appendix but are central to understanding model capacity and reproducibility.
+
+### Tiny
+
+- The claim "the first of its kind as a generative interactive framework that is based on a state-space model" (Section 7) is overreaching and should be softened or precisely scoped given the substantial related SSM/Koopman literature.
+- The commutativity assumption in Eq. 9 (∑A[ℓ] inside the matrix exponential) should be foregrounded in Section 4 alongside the formal equations where it is used, rather than deferred to the limitations in Section 7.
+
+---
+
+## Nice-to-Haves
+
+- **Stochastic extension.** Extending the Lie algebra parameters (λ, θ) to distributions (e.g., Gaussian) would address environmental stochasticity—a stated limitation—and broaden applicability to RL settings. This is noted as future work and would be a natural extension.
+- **Visualization of (λ, θ) trajectories alongside ground-truth actions.** Showing whether learned Lie algebra parameters cluster by action type or are interpretably disentangled would strengthen the "compositional and continuous action representation" claim and provide important mechanistic insight.
+- **Commutativity violation analysis.** A controlled experiment measuring composition error when ground-truth action sequences are explicitly non-commutative (e.g., "up then right" vs. "right then up") would quantify when the core assumption holds and when the model is expected to fail.
+- **Sensitivity analysis for N and J.** A brief sweep over the number of slots and rotation components would allow future practitioners to set these hyperparameters for new domains.
+
+---
+
+## Removed Points
+*These points are flagged as removed; treat them with caution.*
+
+- **[REMOVED] Genie comparison unfairness (doubled training iterations).** The harsh critic raises the concern that Genie was given 0.4M training iterations instead of the original 0.2M. Per review policy, comparisons that are asymmetric in favor of the baseline (Genie receives more compute) are intentionally stronger baselines and do not constitute a weakness of the paper. The authors explicitly state this was done to accommodate multi-environment training.
+
+- **[REMOVED] No reconstruction loss per frame.** The harsh critic claims there is no reconstruction loss on x[t] independently of the prediction loss. This is incorrect: the forward and backward prediction losses (Eq. 8) include reconstruction of all frames x[t] via rolled-out latent dynamics, which amounts to frame-level reconstruction supervision.
+
+- **[REMOVED] Statistical rigor / confidence intervals.** Requesting confidence intervals or multiple-seed results for ProcGen evaluations is not standard practice in the video generation and world modeling community, where single-run evaluation on fixed benchmarks is the norm.
+
+- **[REMOVED] Missing related works.** Specific related works were requested by reviewers; per policy, we do not evaluate claims about missing citations without access to external literature.
+
+- **[REMOVED — formatting/scope] Formalism mismatch in CIP (Eq. 1 type signature vs. history input).** The paper explicitly acknowledges the abuse of notation in the text following Eq. (1) and Section A provides a formal definition. While the mismatch is slightly confusing, it is an acknowledged notation convenience, not a substantive error.
+
+- **[REMOVED — acknowledged] Deterministic environment assumption.** Fully acknowledged as a limitation in Section 7 with a proposed future direction (stochastic process modeling). It is a real constraint but not a hidden flaw.
+
+- **[REMOVED] Human analogy in introduction as scientific evidence.** The harsh critic flags the human analogy ("after mastering basic movements in a few 2D action-adventure games…") as unscientific. This is standard motivational framing, not a methodological claim, and is appropriately cited with cognitive science references.
+
+---
+
+## Novel Insights
+
+The most genuinely novel structural insight in this paper—underemphasized even by the authors—is the connection between the ablated "w/o rotation" WLA variant and diagonal-state-space models like Mamba. By explicitly identifying that restricting to scaling-only Lie group actions collapses the framework to a diagonal SSM, the paper provides a principled generalization of the SSM family toward richer, non-diagonal structured dynamics. This framing suggests that the rotation+scaling Lie group structure is not just an arbitrary inductive bias but a specific augmentation of the SSM with rotational degrees of freedom in the latent space, which could motivate a broader class of structured world models. The spark finder's observation that the (λ, θ) parameters could be interpreted and visualized to verify whether the Lie algebra dimensions correspond to semantically meaningful action axes (e.g., θ for orientation, λ for speed/magnitude) is a valuable diagnostic not pursued in the paper—its absence is a missed opportunity to substantiate the "compositional representation" claim mechanistically.
+
+---
+
+## Suggestions
+
+1. **Report full unseen-environment metrics.** Add PSNR, Δ_t PSNR, and LPIPS for out-of-domain ProcGen environments to Table 2 or a companion table. The data likely already exist given the setup.
+2. **Add a label-efficiency experiment.** Plot `Ctrl_adapt` performance (Δ_t PSNR or ActionACC) as a function of the number of labeled trajectories (e.g., 1, 5, 10, 50, 100). This single experiment would directly validate the "minimal labels" claim.
+3. **Add at least one structural ablation baseline.** Either a general linear (non-rotation-constrained) transition operator, or an object-centric MLP dynamics model, is needed to isolate the Lie group contribution from the object-centric contribution.
+4. **Clarify and quantify the per-sample (λ, θ) training procedure.** Explain whether these are optimized per-batch via gradient steps, amortized via a recognition network, or otherwise. Include training time and memory requirements relative to Genie.
+5. **Clarify ActionACC scale.** State the number of action classes, chance-level accuracy, and compute a normalized metric (e.g., accuracy above chance) so readers can interpret the absolute numbers in Table 1.
+6. **Include long-horizon rollout analysis.** Report a metric (e.g., MSE or PSNR) as a function of rollout length (e.g., 4, 8, 16, 32 steps) for at least one ProcGen environment to characterize error accumulation.
+7. **Visualize learned (λ, θ) parameters.** Show scatter plots or trajectory plots of the inferred Lie algebra parameters colored by ground-truth action class for a ProcGen environment to test whether the latent action space is disentangled and semantically interpretable.
+
+---
+
+## lNuGCXxvkn
+
+- GT: Reject (avg 5.2)
+- Predicted: Accept (5.5/10)
+- Match: NO
+
+### Final Review
+
+## Summary
+
+This paper develops an asymptotic Sobolev-norm learning curve for kernel ridge and ridgeless regression applied to elliptic linear inverse problems governed by PDEs. The central theoretical finding is that the PDE forward operator — by amplifying high-frequency components — effectively stabilizes the variance of min-norm interpolators, enabling benign overfitting in fixed spatial dimensions where standard regression would produce tempered or catastrophic overfitting. A secondary contribution is characterizing how the choice of Sobolev-norm inductive bias (parameter β) affects convergence, establishing a smoothness threshold above which the rate becomes independent of the specific inductive bias, and showing this threshold matches one previously identified in the Bayesian inverse-problem literature.
+
+---
+
+## Strengths
+
+- **Fixed-dimensional benign overfitting via PDE structure.** Theorem 4.2 and Remark 7 constitute a genuine and specific finding: the negative exponent p of the differential operator shifts the variance bound exponent from `max{λβ', −1}` (pure regression) to `max{2p + λβ', −1}` (inverse problem), and since p < 0, this can push variance below the regression baseline even without dimensional growth or kernel engineering. This mechanism — the inverse problem operator acting as a spectral smoother — is clearly articulated through the spectral transformation Σ̃ = A²Σ^β and gives a principled reason for variance stabilization that is new relative to prior kernel-interpolation analyses.
+
+- **Unified regularized + ridgeless framework recovering known rates.** The paper analyzes both ridge-regularized (Theorem 4.1) and min-norm interpolating (Theorem 4.2) estimators in a single spectral framework. Critically, Remark 5 shows the regularized bound reproduces the minimax-optimal rate from Lu et al. (2022) at the optimal γ, providing a meaningful sanity check that the framework is correctly calibrated. Simultaneously extending to interpolators in the same setting, and establishing where the dominant terms depend vs. do not depend on β, is a non-trivial analytical step.
+
+- **Smoothness threshold matching the Bayesian literature.** The finding that the threshold λβ ≥ λr/2 − p — above which the convergence rate becomes independent of the inductive bias — coincides with the analogous condition identified in Bayesian inverse problems (Knapik et al., 2011; Szabó et al., 2013) and with empirical understanding in semi-supervised learning is a surprising and useful connection. It elevates the result from an isolated technical bound to a structurally motivated condition. Extending this threshold to the ridgeless/interpolating regime is new.
+
+---
+
+## Weaknesses
+
+### Fatal
+None identified.
+
+### Major
+
+- **Bounded-observation assumption inconsistent with Gaussian noise model.** Assumption 2.2(a) stipulates that observations y are almost surely bounded by M, yet Section 3 explicitly sets ε ∼ N(0, σ²I_{n×n}), making y unbounded almost surely. If proofs use boundedness to invoke standard concentration inequalities, the Gaussian model is not formally covered by the stated assumptions. The paper needs to either relax Assumption 2.2(a) to sub-Gaussian or finite-variance noise, or clarify that the Gaussian model satisfies the technical conditions actually used in the proofs (rather than the stated ones).
+
+- **Critical dependence of benign-overfitting claims on ρ_{k,n} is underemphasized.** The headline claim — benign overfitting in fixed dimension — is established under Theorem 4.2, but both the variance bound (scaled by ρ²_{k,n}) and bias bound (scaled by ρ³_{k,n}) critically depend on the concentration coefficient. Remark 6 acknowledges that ρ_{k,n} = Θ(1) requires sub-Gaussian features, and in the worst case can grow as Õ(n^{2p+βλ−1}), which can substantially weaken or even eliminate the benign-overfitting conclusion. The abstract and main body consistently present benign overfitting as a consequence of the PDE structure, without foregrounding that this requires a separate, non-trivial assumption on the feature behavior. The paper should state clearly, in the main theorems, under exactly which feature conditions the benign-overfitting exponents hold, and what happens in the worst case for ρ_{k,n}.
+
+- **Experiments are too limited and indirect to substantiate the theoretical claims.** All experiments are conducted on a single 2D Poisson equation with one ground-truth function, using finite-width neural networks — not the kernel estimators the theory covers. There are no kernel experiments, no systematic variation of PDE order p (which is the central determinant of variance stabilization), no variation of the inductive bias parameter β directly (activation smoothness is an indirect proxy), and no comparison of regularized vs. interpolating estimators under controlled conditions. For a theory paper at ICLR, this leaves the theory entirely unvalidated in its own setting and makes Figure 1(Left)/(Middle) illustrative rather than confirmatory. At minimum, a controlled synthetic kernel experiment — e.g., Matérn kernel + Laplacian operator with known spectral decay — varying n at different values of p and β to check the predicted exponents, would substantially strengthen the paper.
+
+- **No lower bounds; benign vs. tempered regime is one-sided.** All results are upper bounds. "Benign overfitting" in the strict sense requires that risk vanishes, but without matching lower bounds the upper bounds may be loose. It is not possible from the present results to determine whether the benign/tempered/catastrophic trichotomy is tight or an artifact of proof looseness, especially given the max{·,−1} and max{·,−2p+λ(β'−2β)} exponents in Theorem 4.2. The paper should acknowledge this limitation, or present even partial lower bounds for the variance in the inverse-problem interpolation setting.
+
+### Minor
+
+- **Theory-to-experiment gap is not adequately bridged.** The experiments use overparameterized finite-width neural networks, and the connection to kernel regression is justified only informally via NTK heuristics. The paper frames Figure 1 as validating theory "beyond kernel methods" but this is an overstatement; the NTK approximation is not verified to hold in this inverse-problem setting, and the activation function smoothness is at best a proxy for the spectral decay parameter β. Section 5 should explicitly label these results as heuristic evidence rather than validation of the stated theorems.
+
+- **Diagonalizability assumption (Assumption 2.2(d)) limits scope more than framing suggests.** The requirement that A and Σ be simultaneously diagonalizable is strong and excludes most practical geometries beyond the torus. While this is standard in theoretical kernel-based inverse-problem analysis (acknowledged in Remark 2), the paper's broad framing around "physics-informed machine learning" and PINNs is at odds with this restriction. A short discussion of what happens qualitatively when this assumption fails, or under which conditions it approximately holds, would calibrate the reader's expectations.
+
+- **Practitioner takeaway about activation smoothness is heuristic, not theorem-derived.** Section 4.3 states that higher-order PDEs "require smoother activation functions," presenting this as a consequence of the theory. However, the formal results are for kernel estimators with prescribed spectral decay; the link between activation smoothness and the β parameter for finite neural networks is not established analytically. This guidance should be explicitly labeled as conjectural.
+
+### Tiny
+
+- The abstract says "the convergence rate is actually independent to the choice of (smooth enough) inductive bias" without the qualifier that this independence holds for β above a threshold and is subject to the ρ_{k,n} caveat. The abstract should reflect these conditions.
+- No dedicated limitations section; the key caveats (diagonalizability, kernel-only theory, ρ_{k,n} dependence) are scattered across remarks rather than consolidated.
+
+---
+
+## Nice-to-Haves
+
+- **Spectral visualization of the transformed kernel eigenspectrum.** A plot of Ã² Σ^β eigenvalues vs. standard kernel Σ eigenvalues for a concrete example (e.g., Matérn + Laplacian) would make the variance-stabilization mechanism intuitive and help readers assess whether the concentration assumptions hold in practice.
+- **Bias-variance decomposition plots.** Plotting bias and variance separately vs. n for both PINN and standard NN interpolators would directly validate the claim that the PDE operator specifically suppresses variance, rather than improving the combined risk through other mechanisms.
+- **Explicit benign vs. tempered parameter-regime table.** A table stating: for these ranges of (p, λ, r, β, β'), the variance exponent is negative (benign); for these ranges it is only bounded (tempered); for these it diverges (catastrophic) — would make Theorem 4.2 much more accessible and clarify the practical scope of the main result.
+- **Characterization of ρ_{k,n} for physics-informed kernels.** Showing that for, e.g., Matérn kernel + Laplacian on the torus the sub-Gaussian feature condition holds, and thus ρ_{k,n} = Θ(1), would close the gap between the theoretical claim and the setting for which it is actually established.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution as they either misread the paper or are overly pedantic.*
+
+- **Threshold inconsistency between Section 1.1 and Remark 5.** The harsh critic flags that Section 1.1 writes `λβ ≥ λ^r/λ^p − p` while Remark 5 writes `λβ ≥ λr/2 − p`. The former is almost certainly a PDF-to-text parsing artifact of `\frac{\lambda r}{2}` rendering as `λ^r/λ^p` (which would equal λ^{r−p}, a nonsensical expression in context). The Remark 5 expression is the coherent one and appears consistently in the applications. This is not a scientific inconsistency.
+
+- **Novelty is "just a reparameterization."** The critic suggests the results might follow by a black-box application of Barzilai & Shamir (2023) to the transformed kernel K̃. However, the extension to the inverse-problem operator setting, the derivation of the closed-form representer theorem under the Sobolev norm with operator A, the introduction of the concentration coefficient for the transformed kernel Σ̃ = A²Σ^β, and the derivation of threshold conditions involving p are genuine technical contributions, not trivial substitutions.
+
+- **Concern about φ and ψ basis confusion.** The critic raises notation inconsistency between L₂ and RKHS inner products. The paper defines φ_i = √λ_i ψ_i as the RKHS basis and ψ_i as the L₂ eigenbasis, and introduces ψ-maps and φ-maps explicitly with their relationships stated. The notation is dense but internally consistent given careful reading; this is not a mathematical error.
+
+- **Claim that experiments should include confidence intervals/error bars.** For neural-network experiments demonstrating qualitative phenomena (noise profiles, convergence trend with activation smoothness), single-run plots are acceptable; demanding multiple-run statistics here would be an atypical rigor requirement for this type of demonstration figure.
+
+- **Criticism of the "first rigorous upper bound" claim.** The paper scopes this claim specifically to min-norm kernel interpolators for fixed-dimensional physics-informed settings. Within that narrow scope, the claim is plausible; the critic's objection is largely about lack of a comprehensive literature survey, which does not mean the claim is false.
+
+---
+
+## Novel Insights
+
+The most significant insight synthesized from the reviews goes beyond the paper's own framing: the paper implicitly establishes a *spectral duality* between the forward PDE operator and the inductive bias in the interpolation regime. The forward operator A with p < 0 amplifies high-frequency components in the forward direction, but this amplification means the inverse-problem objective *penalizes* high-frequency errors more heavily, effectively acting as spectral regularization without any explicit regularizer. This is structurally dual to adding Sobolev norm regularization: increasing |p| has the same qualitative effect on variance as increasing β. The smoothness threshold condition λβ ≥ λr/2 − p makes this duality precise — p and β enter symmetrically in the admissibility condition. This perspective suggests that for practitioners, the choice of activation smoothness (proxy for β) and the PDE order (p) should be co-designed, and that for sufficiently high-order PDEs, relatively weak inductive bias may suffice for benign behavior. The connection to the Bayesian threshold suggests this duality may be fundamental rather than an artifact of the proof technique.
+
+---
+
+## Suggestions
+
+1. **Add at least one synthetic kernel experiment** on a 1D or 2D Poisson / Schrödinger problem using the actual kernel estimator (Matérn or RBF kernel + discretized Laplacian), varying n at multiple values of p and β, and plotting empirical excess risk against the theoretically predicted exponents. This is the single highest-value addition to strengthen the paper.
+
+2. **Resolve the bounded-y / Gaussian-noise inconsistency** in Assumption 2.2(a). Either extend the assumption to sub-Gaussian/finite-variance noise and verify the downstream inequalities hold, or add a footnote in Section 3 explaining that the proof uses only finite-variance properties and Gaussianity is for concreteness.
+
+3. **Make Theorem 4.2 self-contained with a regime table.** Add after Theorem 4.2 a corollary or remark that explicitly lists the parameter conditions under which (i) V → 0 and B → 0 (benign), (ii) V bounded but nonzero (tempered), and (iii) V → ∞ (catastrophic), so readers can immediately identify which operating regime applies to their problem.
+
+4. **Characterize ρ_{k,n} for at least one concrete kernel-operator pair.** Show (in the appendix) that the shift-invariant Matérn kernel on the torus with the Laplacian satisfies the sub-Gaussian feature condition, so ρ_{k,n} = Θ(1) in that case, providing a complete end-to-end statement of benign overfitting.
+
+5. **Separate heuristic from rigorous in Section 4.3.** Label the practitioner guidance on activation smoothness and higher-order PDEs explicitly as "conjectural extension" and reference the NTK connection, to avoid overstating what is formally established.
+
+6. **Add a limitations paragraph** consolidating: (i) joint diagonalizability of A and Σ; (ii) kernel theory vs. NN experiments gap; (iii) ρ_{k,n} assumption; (iv) linear self-adjoint elliptic operators only.
+
+---
+
+## F6s7OApF0n
+
+- GT: Reject (avg 4.8)
+- Predicted: Accept (5.8/10)
+- Match: NO
+
+### Final Review
+
+## Summary
+
+Cost-sensitive Multi-fidelity BO (CMBO) proposes a framework that reframes hyperparameter optimization from maximizing asymptotic validation performance under a fixed budget to maximizing a user-defined utility function that trades off BO performance against computational cost. The method introduces a utility-aware EI acquisition function with a dynamically chosen optimization horizon, a probabilistic stopping criterion interpolating between regret-based and probability-of-improvement signals, and a transfer learning scheme for Prior-Fitted Networks (PFNs) based on learning curve (LC) mixup across datasets and configurations. Extensive evaluation across LCBench, TaskSet, PD1, and a collected real-world object-detection dataset shows consistent and substantial improvements over multi-fidelity BO and transfer-BO baselines.
+
+---
+
+## Strengths
+
+- **Genuinely novel problem framing for multi-fidelity BO.** Existing freeze-thaw methods (DyHPO, iFBO, DPL) optimize either greedy one-step EI or asymptotic performance at a fixed horizon. Reformulating the objective as maximizing a user utility U(b, ỹ_b) over the BO trajectory—and deriving both acquisition and stopping from this objective—is a conceptually clean and practically relevant departure. The dynamic horizon selection (max over Δt in Eq. 2) is a direct consequence of this framing and is not present in prior work.
+
+- **LC mixup preserving inter-configuration correlations.** The two-stage mixup—across datasets first with a shared λ₁ applied to all configurations, then across configurations—is a simple yet thoughtful technique. Using a single shared λ₁ in the first stage explicitly preserves the correlation structure encoded in each dataset's LC matrix L_m. Fig. 6 directly demonstrates that the mixup reduces overfitting of the PFN surrogate and translates to improved BO regret, providing concrete evidence for the mechanism rather than just end-to-end performance.
+
+- **Coherent interpolation between two extreme stopping rules.** The BetaCDF(p_b; β, β)^γ formulation in Eq. (4) provides an interpretable one-parameter family: β→0 recovers the regret-only threshold used by baselines (δ_b = 0.2 when γ = log₂5), while β→∞ recovers a hard PI-based threshold. The smooth interpolation at β = e⁻¹ is well-motivated and tested across all three benchmarks in Fig. 7d.
+
+- **Empirical breadth and real-world validation.** The method is tested on four distinct LC benchmarks spanning tabular classification (LCBench), diverse NLP tasks (TaskSet), large-scale vision and biology tasks (PD1), and a self-collected object detection dataset with three heterogeneous architectures. Multiple utility function shapes (linear, quadratic, square root, staircase, estimated) are evaluated, and Table 2 shows robustness across all of them with CMBO achieving rank 1.0 in every setting.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Table 3 ablation inconsistency undermines the incremental gain narrative.** Rows 3 and 4 in Table 3 are both labeled (p_b ✓, Acq. ✓, T. ✓) yet produce very different results (e.g., 4.4 vs. 0.9 for α=2e-04). The text claims "performance improves sequentially as each component is added," implying four distinct configurations, but only three distinct checkmark patterns appear (missing one intermediate ablation row). This makes it impossible to cleanly attribute gains to the stopping criterion vs. acquisition vs. transfer learning, which is a core claim of the paper. At minimum, one row is mislabeled, and the correct labels must be provided for the ablation to be interpretable.
+
+- **Stopping-criterion confound in baseline comparisons.** As the paper notes in footnote 2, the PI-based term in Eq. (5) depends on the utility-aware acquisition, so baselines cannot directly use the same stopping rule. This is a principled justification, but it means the cost-sensitive results in Table 1 and Fig. 5 conflate: (i) better configuration selection from the utility-aware acquisition, and (ii) better stopping from the mixed PI+regret criterion. The ablation in Table 3 shows the stopping criterion alone contributes substantially (4.4→0.9 at α=2e-04), yet the baseline comparison gives baselines only the inferior regret-only stopping. A cleaner decomposition—e.g., showing CMBO's acquisition with regret-only stopping vs. full CMBO—would make the contribution boundaries clearer. The dotted "achievable regrets without stopping" lines in Fig. 5 are helpful but insufficient to resolve this.
+
+- **Uniform per-step cost assumption undermines the motivating scenario.** The utility U(b, ỹ_b) is defined over BO steps b and evaluated over "total epochs spent." This implicitly assumes each BO step (each epoch evaluation) has identical cost. The paper's motivating examples invoke cloud credits and Slurm allocations, where wall-clock cost is the relevant resource. The real-world object detection experiment includes ResNet-50, HRNet, and MobileNetV2 evaluated jointly, which almost certainly have different per-epoch wall-clock costs. The mismatch between the motivation (heterogeneous wall-clock costs) and the formulation (step counting) is a genuine gap that goes unacknowledged in the main text.
+
+### Minor
+
+- **Utility elicitation is empirically under-validated.** The Bradley-Terry preference model is demonstrated only via synthetic recovery in Fig. 2 (1,000 pairwise labels, no sensitivity to fewer/noisier labels). In the main experiments, all reported results use predefined utility functions (linear, quadratic, etc.). The single "Estimated" row in Table 2 constructs preferences from iFBO's trajectory assuming "the user wants a better tradeoff than iFBO"—this is an artificial proxy for user preference, not evidence that the end-to-end pipeline (elicitation → BO → stopping) works in practice.
+
+- **Algorithm 1 notation inconsistency.** Line 4 reads: n* ← argmax_{n∈C} A(n), where C = {(x, t, y)} is the history of partial LC observations. At initialization C = ∅ (line 2), making this argmax undefined. Furthermore, the text in §3.1 says "we predict for all x∈X the remaining part of the LCs," implying the argmax should range over the full configuration pool X, not C. This discrepancy should be corrected for reproducibility.
+
+- **Notation inconsistency between Eq. (2) and Eq. (5).** Eq. (2) uses ỹ_{b+Δt} (tilde-y, the best-so-far BO performance), while Eq. (5) uses ȳ_{b+Δt} (bar-y). Whether these are identical quantities should be clarified explicitly, as the distinction between the running best performance (line 10: ȳ_b = max(ȳ_{b-1}, y_{n*,t_{n*}})) and the extrapolated BO performance matters for the stopping criterion computation.
+
+- **ESBO baseline is undefined.** ESBO appears in Tables 2 and 4 but is not described anywhere in the baselines section (§4). Its definition, source, and relationship to CMBO (it appears to be a strong baseline in Table 4) must be provided; its absence from Table 1 also suggests it is not applicable in all settings, which should be explained.
+
+- **γ parameter is fixed without sensitivity analysis.** β is ablated in Fig. 7d across all three benchmarks, but γ is fixed at log₂5 (corresponding to δ_b = 0.2) without any analysis. As γ and β jointly determine the stopping behavior, a sensitivity test on γ is warranted.
+
+### Tiny
+
+- **Mixup validity for discrete/categorical hyperparameters is not discussed.** Convex combinations of configuration vectors (step 2 of the mixup) may produce invalid hyperparameter settings when some hyperparameters are categorical or integer-valued. The paper should at minimum state that this is applied only to continuous hyperparameters or discuss how categorical cases are handled.
+
+- **Key PFN architecture details are deferred to appendices (§E, §G) that are not available in the main text.** Architecture size, tokenization of partial LCs, number of meta-training examples, and inference procedure are relevant for assessing the method's practical overhead and reproducibility.
+
+---
+
+## Nice-to-Haves
+
+- **EI/cost as a baseline.** The standard cost-aware acquisition divides EI by expected evaluation cost; including it (even as a black-box surrogate variant) would clarify whether the utility formulation offers advantages beyond this simpler cost-weighting approach.
+
+- **Utility trajectory visualization with oracle stopping point.** Showing U(b, ỹ_b) over BO steps for CMBO and baselines, with the actual stopping point marked and the oracle b* indicated, would directly demonstrate whether the stopping criterion is well-calibrated.
+
+- **Sensitivity to utility misspecification.** A brief analysis of how CMBO degrades when the estimated utility deviates from the true utility (e.g., wrong penalty weight α) would quantify the practical risk of the elicitation approach.
+
+- **Wall-clock time experiment.** One experiment with actual per-configuration compute time (rather than epoch counting) would validate the cost-sensitivity claim in a realistic heterogeneous-cost setting.
+
+---
+
+## Removed Points
+
+*These points were flagged for removal; treat with caution.*
+
+- **Zero variance (±0.0) as a credibility concern.** Quick-Tune† and FSBO are deterministic methods; ±0.0 is expected and not suspicious. The paper explicitly uses 30 runs only for methods with large variance.
+
+- **β ablation limited to PD1 only.** This misreads Fig. 7d, which plots normalized regret vs. β for LCBench, TaskSet, PD1, and Average simultaneously, with asterisks marking optima for each. The ablation covers all three benchmarks.
+
+- **Demand for theoretical guarantees.** This is an empirical systems paper in the freeze-thaw BO tradition; no prior competing method provides theoretical stopping or regret guarantees, and demanding them would impose a non-standard bar.
+
+- **Finite configuration pool being too restrictive for "general BO."** All freeze-thaw BO methods operate in this setting (DyHPO, iFBO, DPL). The paper targets tabular HPO benchmarks where this is the standard setup; criticism for not covering continuous-space BO is scope creep.
+
+- **Criticism about Quick-Tune† modification being unfair.** The modification removes the model-selection component to isolate the transfer learning mechanism, which makes the comparison fairer for the hyperparameter selection task—the baseline is weakened in a way that benefits it (more compute per HP eval), not the proposed method.
+
+- **Concern about comparison to methods not yet released / not existing.** The paper cites iFBO, Quick-Tune, DPL, etc.—these are assumed to exist.
+
+---
+
+## Novel Insights
+
+The acquisition function's dynamic horizon selection (Eq. 2: max over Δt) induces a principled behavioral transition from non-greedy to greedy over the course of BO—not by scheduling but as a direct consequence of cost-dominated utility. Fig. 7b visualizes this concretely: early BO steps select large Δt (look-ahead), while late steps collapse to Δt≈0 (myopic exploitation) as the cost term dominates. This is a cleaner explanation of the exploration-exploitation transition in cost-sensitive BO than ad hoc schedule designs, and the analysis in Fig. 7c shows the resulting configuration-selection concentration matches intuition. The LC mixup's cross-dataset shared λ₁ to preserve inter-configuration correlation is a subtle but nontrivial design choice that distinguishes it from naive per-curve augmentation and deserves attention from the broader PFN training community.
+
+---
+
+## Suggestions
+
+1. **Fix Table 3**: Identify and correct the mislabeled row so the four ablation rows correspond to four distinct component combinations, enabling clean attribution of gains to stopping criterion, acquisition function, and transfer learning separately.
+
+2. **Clarify Algorithm 1 initialization**: Specify how the first configuration is selected when C = ∅, and correct the domain of the argmax in line 4 from n∈C to n∈[N] (or n∈X) to match the described procedure.
+
+3. **Address uniform-cost assumption explicitly**: Add a paragraph acknowledging that U(b, ỹ_b) treats per-step cost as homogeneous, and either justify this for the benchmarked settings or describe a simple extension to variable per-step costs (e.g., replacing step count b with cumulative wall-clock time).
+
+4. **Define ESBO**: Add a description of the ESBO baseline in §4, clarify its relationship to CMBO, and explain why it appears only in Tables 2 and 4.
+
+5. **Add stopping criterion decomposition**: Report CMBO with regret-only stopping (β→0) alongside baselines with the same stopping rule, to isolate acquisition quality improvements from stopping policy improvements in the cost-sensitive setting.
+
+---
+
+## AnPEfzBstD
+
+- GT: Reject (avg 3.5)
+- Predicted: Reject (3.8/10)
+- Match: YES
+
+### Final Review
+
+## Summary
+This paper presents a large-scale empirical benchmark comparing 1D (MolFormer/LLM), 2D (MPNN), and 3D (Equiformer v2) molecular representations for Bayesian Optimization in materials discovery. Across four datasets (QM7, QM9, GEOM MoleculeNet, GEOM DRUGS) with multiple surrogates (GP, LLA), the authors find that simpler 1D and 2D representations generally match or outperform 3D, and that 3D representations require considerably more training data to close the gap. The benchmark spans over 2100 runs and also investigates transfer learning and sample-complexity regimes.
+
+---
+
+## Strengths
+- **Fills a genuine, documented gap in BO benchmarking**: Prior BO benchmarks for molecular discovery (Olympus, Summit, Griffiths et al. 2024) explicitly omit 3D representations. This work is the first systematic study that adds equivariant GNNs (Equiformer v2) to the comparison, across both GP and LLA surrogates—a non-trivial engineering effort not attempted elsewhere.
+- **Sample complexity analysis has a concrete mechanistic anchor**: The finding in Section 5.2 that 3D (equivariant) models are substantially less data-efficient than 2D models is grounded in existing theory (Elesedy & Zaidi, 2021) and is demonstrated across all four datasets with four training-set sizes. This is the most original and actionable finding in the paper.
+- **Multi-axis evaluation**: The study simultaneously varies representation dimensionality, surrogate type (GP vs. LLA), data regime (four sizes), and task type (single-property vs. transfer learning), producing structured evidence rather than a single-condition comparison.
+- **Reproducibility practice**: 15 seeds per condition with reported standard errors, and an anonymous code repository, are above the norm for this class of benchmarking paper.
+
+---
+
+## Weaknesses
+
+### Fatal
+None. The core empirical findings are real, but a central methodological confound severely limits the scope of the strongest headline claims (see Major #1).
+
+### Major
+
+- **The 1D vs. 3D comparison conflates representation dimensionality with model scale and pretraining**. MolFormer is a masked language model pretrained on 1.1 billion SMILES strings (Ross et al. 2022), while the 2D/3D GNNs are constrained to ~1.5 million parameters trained from scratch on the benchmark tasks. The paper never accounts for this asymmetry. The dominant finding—"LLM/1D outperforms 2D and 3D"—is therefore at least as likely to reflect large-scale pretraining as it is to reflect anything about 1D representation dimensionality. This conflation is not minor: it makes the paper's central framing ("is 3D a step too far?") largely unanswerable from the presented experiments as the comparison is not isolating the dimensionality axis. The 2D vs. 3D comparison (both at ~1.5M parameters) is the paper's most internally fair comparison, and its conclusions should be foregrounded accordingly.
+
+- **No computational cost measurements, despite cost being a core claim**. The paper repeatedly argues that 3D's "computational overhead" outweighs its gains—this framing appears in the abstract, introduction, results, and conclusion. Yet no wall-clock times, GPU hours, or FLOPs are reported anywhere. The cost claim is entirely qualitative. For a paper whose thesis is explicitly about cost–accuracy trade-offs, this is not a stylistic gap: without cost numbers, the trade-off cannot be evaluated.
+
+- **Conformer handling for 3D models is never described**. GEOM datasets provide multiple conformers per molecule. The paper does not state which conformer is used for Equiformer v2 inputs—lowest-energy, random, or some other selection. This decision materially affects 3D model performance; if ground-truth minimum-energy conformers are used, 3D has an oracle advantage unavailable in real BO settings. If poor conformers are used, 3D's underperformance may reflect data quality rather than dimensionality. The confound directly undermines the interpretation of 3D vs. 2D results.
+
+- **Task selection bias undermines the generality of the main conclusion**. All four benchmark targets—atomization energy (QM7), HOMO-LUMO gap (QM9), absolute energy (MoleculeNet/DRUGS)—are quantum mechanical scalar properties that are primarily determined by molecular topology and composition, not by specific 3D conformation. The paper itself acknowledges in the conclusion that "future research should focus on tasks where 3D information might be more important, e.g. protein docking." This acknowledgment, however, is not sufficient: it means the paper's headline "3D is a step too far" is tested only on tasks where 3D is not theoretically expected to win. The finding is valid for these tasks, but should not be presented as a general verdict on 3D representations in BO.
+
+- **The acquisition function is never specified**. Section 4 describes datasets, feature extractors, and surrogates in detail, but never names the acquisition function (EI, UCB, Thompson sampling, etc.) or its hyperparameters. For a BO benchmark, this is a reproducibility-critical omission that prevents independent replication of any individual run.
+
+### Minor
+
+- **Only one 3D architecture tested**. The paper draws conclusions about "3D representations" using only Equiformer v2. Poor results could reflect architecture-specific failure modes (e.g., insufficient expressive power for the GP/LLA interface, initialization sensitivity) rather than a dimensionality-level verdict. Including even one additional 3D model (SchNet, DimeNet) would substantially strengthen the claim.
+
+- **Factual inconsistency between abstract/conclusion and body**: The abstract and conclusion state "LLMs consistently outperformed" all methods, but Section 5.1 explicitly says "LLMs performed worse than 2D and 3D models" on QM9. This is not a minor phrasing issue—it is a factual contradiction that misleads readers who read only the abstract or conclusion.
+
+- **Transfer learning analysis is incomplete and overclaims**: Section 5.3 and Fig. 5 show transfer learning results only for QM7 and QM9. Yet the text draws general conclusions about transfer learning and invokes "foundation model" potential. The claim "Foundation models prove a good tool" is overstated from two datasets with a limited fine-tuning protocol (only the final layer).
+
+- **Potential MolFormer data leakage not investigated**: MolFormer was pretrained on 1.1 billion SMILES from ZINC and PubChem. QM9 and MoleculeNet molecules are small, well-known, and could plausibly appear in those corpora. If so, MolFormer's strong performance could partly reflect memorization rather than generalization. A membership overlap check is warranted.
+
+- **Sample complexity analysis (Section 5.2) excludes the 1D/LLM comparison**: Despite MolFormer being a key performer, the sample complexity plots compare only 2D vs. 3D. If the paper's goal is a comprehensive 1D/2D/3D benchmark, omitting LLM from this axis is inconsistent.
+
+- **GP kernel on learned embeddings is not specified**. For the GP surrogate using pretrained/trained feature embeddings, the kernel (RBF, Matérn, ARD, etc.) is never stated. This matters because kernel choice interacts with embedding geometry and directly affects uncertainty calibration.
+
+### Tiny
+
+- **Laplace approximation notation is inconsistent**: The paper writes $p(\theta|\Omega_t) \approx \mathcal{N}(\theta_*, \Sigma_*^{-1})$ and then defines $\Sigma_*^{-1} = -\nabla_\theta^2 \log p(\theta|\Omega_t)$, treating $\Sigma_*^{-1}$ simultaneously as a covariance parameter and as the Hessian. Standard convention is to write $\Sigma_* = H^{-1}$ where $H$ is the (positive-definite) negative log-posterior Hessian. The current notation will confuse readers.
+- **"35 setups per dataset" is never broken down**. The abstract and introduction cite this number prominently, but the main text never enumerates the exact combination of representation × surrogate × regime × seed that generates the count. An explicit table in the appendix would make the benchmark auditable.
+- **GAP metric notation inconsistency**: The definition uses $y_i$, $y_0$, $y_*$ but the body text refers to $y^*$. Minor but worth fixing.
+
+---
+
+## Nice-to-Haves
+
+- **Include at least one genuinely conformation-dependent task** (e.g., docking score, stereoselective reaction yield, conformer-dependent binding affinity). Even a single dataset where 3D is theoretically expected to win would transform the negative results into a more principled and bounded statement rather than a potentially task-specific finding.
+- **Uncertainty calibration evaluation**: BO performance depends on calibrated posteriors, not just point prediction accuracy. Reliability diagrams or ECE plots per model type would help distinguish whether 3D underperforms because its features are uninformative vs. because its uncertainty estimates are poorly calibrated—a distinction with distinct implications for practitioners.
+- **Matched-pretraining controls**: A pretrained 2D GNN foundation model (e.g., from graph self-supervised pretraining) alongside a pretrained 3D model compared to MolFormer would allow cleaner disentanglement of the pretraining vs. dimensionality effect.
+- **Additional 3D architectures (SchNet, DimeNet, or SphereNet)** to ensure the 3D conclusions generalize beyond Equiformer v2.
+- **Per-subset breakdowns**: Reporting results for subsets of molecules by size, flexibility, or chirality would help practitioners understand when (not just whether) 3D helps.
+
+---
+
+## Removed Points
+*These points are flagged to be removed; treat them with caution.*
+
+- **"Why do nobody use them" is too informal** (Harsh Critic, Introduction): This is a pure style/tone complaint with no scientific content. Removed.
+- **Fingerprints are described as "unique identifiers"** (Harsh Critic, Section 2.3): While technically ECFP fingerprints can have collisions, the characterization is conventional shorthand used throughout cheminformatics and does not affect any experimental result. Removed as inconsequential.
+- **Comparison with Tanimoto GP is "unfair"**: The Tanimoto GP uses simple fingerprints and is explicitly used as a baseline *to prove a stronger point* for alternative methods. Any asymmetry favors the baseline, which strengthens rather than undermines the authors' claims. Removed per editorial rules.
+- **Writing quality nitpicks** (subject-verb agreement, mid-sentence cuts in parsed PDF): These are artifacts of PDF text extraction or minor grammatical issues that do not affect scientific content. Removed as formatting/style nitpicks.
+- **Requests for theoretical proofs of sample complexity bounds** (Spark Finder): This is an empirical benchmarking paper; demanding sample complexity theorems is not standard for this paper's scope or community setting. Moved to Nice-to-Have at most.
+- **Criticism that "MoleculeNet is not a standard headline target"**: The paper uses absolute energy from GEOM's augmented version of MoleculeNet, and GEOM is a published dataset. This is a legitimate benchmark target. Removed.
+
+---
+
+## Novel Insights
+
+The most genuinely novel finding beyond the benchmark results themselves is the *sample-complexity asymmetry* between 2D and 3D representations in BO: the paper provides converging evidence, consistent with equivariant model theory (Elesedy & Zaidi 2021), that equivariant 3D GNNs require substantially more training data before matching 2D performance, and that this crossover threshold (~10,000 examples in the cleaner comparisons) is well above what is typically available in realistic molecular BO campaigns with expensive oracle evaluations. This finding is actionable and not obvious: 3D models might be expected to learn more efficiently due to stronger inductive biases, but the data requirements of equivariance appear to dominate in practice. However, a clean mechanistic explanation—separating equivariance overhead from conformer noise and architecture-specific factors—remains an open question the paper does not fully answer.
+
+---
+
+## Suggestions
+
+1. **Reframe the headline finding**: Present the key contribution as "2D outperforms 3D under realistic BO data budgets" (the most defensible and interesting result), rather than "1D/LLM outperforms everything," since the latter conflates pretraining scale with representation dimensionality.
+2. **Report wall-clock time or GPU hours for each model class**—even a single table in the appendix comparing training and inference time per step would make the cost–accuracy trade-off argument empirically grounded.
+3. **Explicitly state the acquisition function, its hyperparameters, and the GP kernel** in the main experimental setup section.
+4. **Describe conformer selection policy for 3D models** (e.g., "we use the lowest-energy conformer from GEOM's precomputed ensemble") and, ideally, include a sensitivity analysis with random conformer selection.
+5. **Fix the abstract/conclusion claim about "consistent LLM outperformance"** to acknowledge the QM9 exception, and qualify all major claims to specify that results hold for topology-dominated quantum chemistry properties under the data budgets studied.
+6. **Add a breakdown table of the 35 setups** (representation × surrogate × task type × data regime) so the benchmark scope is auditable.
+
+---
+

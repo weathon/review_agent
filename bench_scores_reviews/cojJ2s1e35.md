@@ -1,113 +1,102 @@
-Now I have everything I need. Let me synthesize the three reviews against the actual paper.
-
----
-
 ## Summary
-WLA (World modeling through Lie Action) proposes an unsupervised framework that models environment transitions as Lie group actions—specifically block-diagonal rotation+scaling matrices—on a slot-attention latent space. The simulator is first trained without action labels via inverse dynamics across multiple environments, then a small adaptation network maps external action signals to Lie algebra parameters to solve the Controller Interface Problem (CIP). Results on ProcGen (8 games, seen setting) and a real-world Android robot dataset show clear improvements over Genie in temporal consistency (FVD, Δ_t PSNR), though with modest absolute action accuracy.
+WLA (World modeling through Lie Action) introduces an unsupervised framework that models video transitions as linear Lie group actions in an object-centric, slot-partitioned latent space, enabling continuous and compositional dynamics. A single shared model is trained across multiple environments simultaneously, and a lightweight supervised adapter (`Ctrl_adapt`) maps user-specified action labels to the learned Lie algebra parameters. The method is evaluated on Phyre (qualitatively), ProcGen (quantitatively against Genie on 8 games), and the 1X Android robotic dataset.
 
 ---
 
 ## Strengths
 
-- **Principled algebraic inductive bias for cross-environment generalization.** Enforcing latent transitions as elements of a rotation+scaling Lie group is a concrete, non-trivial structural choice that most continuous latent world models (SSMs, Koopman, diffusion) do not make. This directly guarantees compositionality ($\mathcal{F}(h \cdot g) = \mathcal{F}(g)\mathcal{F}(h)$) and continuity ($\lim_{\delta\to 0}\mathcal{F}(g_{t,\delta})=I$) by construction (Eq. 3), unlike black-box approaches that require ad-hoc identity-preservation tricks (e.g., the noise augmentation in Valevski et al., 2024).
+- **Single multi-environment model with strong quantitative gains:** The paper trains one model across all 8 ProcGen environments and outperforms Genie substantially on both temporal metrics (Δ_t PSNR: e.g., 9.03 vs. 0.48 in coinrun; 4.06 vs. 0.05 in ninja) and LPIPS in 7 of 8 environments (Table 2). This is a concrete demonstration of cross-environment representation sharing, not merely an architectural story.
 
-- **Single shared model across all ProcGen environments.** WLA trains and evaluates one model across all 8 ProcGen games simultaneously, which is a notably harder problem than the per-environment training used by Genie in its original form. The consistent per-game wins in Table 2 (e.g., PSNR: 11.30→22.10 on coinrun, Δ_t PSNR: 0.48→9.03) under this harder regime are meaningful.
+- **Novel synthesis of Lie group structure with object-centric modeling:** The combination of slot attention with per-slot Lie algebra dynamics—where each slot evolves under structured rotation+scaling operators—is architecturally distinct from both pure slot models and generic Koopman/state-space approaches. The explicit connection to equivariant autoencoders (Eq. 2) provides a principled theoretical grounding.
 
-- **Large FVD gap on real-world robot video.** Table 3 shows FVD of 131.02 (WLA) vs. 393.85 (Genie), a ~3× improvement, on the 1X Android dataset which contains continuous robot actions in diverse 3D settings. This directly supports the claim that the structured latent dynamics improve temporal coherence beyond per-frame fidelity.
+- **Least-action slot alignment principle:** The proposal to resolve temporal slot permutations by solving a linear assignment problem that minimizes the Lie-algebra operator norm is novel and motivated. The ablation (Table 1) confirms it reduces MSE meaningfully on both seen and unseen environments.
 
-- **Least action slot alignment.** The proposed slot permutation heuristic—choosing the permutation $\sigma$ minimizing $\|A_{n\to\sigma(n)}\|^2$ via a linear assignment solver—is a concrete and novel mechanism to maintain object-slot consistency over time, and the ablation in Table 1 shows it contributes meaningfully (MSE unseen: 0.675→0.602).
+- **Compelling Android robotics results:** The dramatically better FVD (131.02 vs. 393.85 for Genie, Table 3) and better Δ_t PSNR on real-world robot video indicate that the temporal coherence advantages generalize beyond synthetic game environments. The tradeoff (worse per-frame PSNR but much better FVD) is consistent with the hypothesis that WLA better captures action-conditional dynamics rather than static frame quality.
+
+- **Unsupervised pretraining + modular adapter design:** The decoupling of structure learning (unsupervised, label-free) from action mapping (`Ctrl_adapt`, small and supervised) is a clean and reusable design. The ablated version without rotation is explicitly noted to resemble diagonal-SSM models (Mamba), situating the contribution clearly.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None identified that fully invalidates the contribution, but several major issues cumulatively weaken confidence in the central claims.*
+None identified.
 
 ### Major
 
-- **The commutativity assumption is central to the math but buried in the Conclusion.** Equation (4), $z(t) = \exp(\int_0^t A(s)ds)z(0)$, is valid only when $A(s_1)$ and $A(s_2)$ commute for all $s_1, s_2$, or under a time-ordered exponential (which is not used). This same approximation propagates to the training objectives in Eq. (9), where $\exp(\Delta \sum_\ell A[\ell])$ is used. The paper acknowledges this only in the final paragraph of Section 7 ("we assume a priori that transitions in the environment commute with each other"), without any analysis of how often or how severely this assumption is violated in ProcGen or the Android dataset, or how large the resulting modeling error is. Given that this assumption underlies both the theoretical justification and the training procedure, its practical impact must be analyzed, not just mentioned.
+- **Unseen-environment evaluation is critically thin.** The headline claim of cross-environment generalization is only partially supported. Table 1 (right) reports ActionACC for unseen ProcGen environments, but full metrics (PSNR, Δ_t PSNR, LPIPS) for unseen settings are absent from the main paper. This is a direct evidentiary gap: the core generalization claim rests almost entirely on the seen-environment results in Table 2.
 
-- **No quantitative evaluation on unseen environments.** The paper's primary motivation is cross-environment generalization, and the abstract explicitly claims "quick adaptation to new environments with novel action sets." Yet Table 2 reports only *seen* environment results. The ablation Table 1 includes an unseen MSE column, but there is no unseen counterpart to Table 2 reporting PSNR/Δ_t PSNR/LPIPS across held-out environments. The claim of inter-environmental generalization is thus empirically unsupported at the headline metric level.
+- **Single baseline throughout.** The paper compares exclusively against Genie in all experiments. For an ICLR submission claiming a new structured-dynamics framework, this is insufficient. Critically absent: (a) an ablation with general linear (non-Lie) transition operators to isolate the rotation+scaling bias contribution; (b) an object-centric video predictor with MLP transitions to separate the object-centric contribution from the Lie structure contribution; and (c) a continuous latent-action model (e.g., LAPO, which directly addresses unsupervised action discovery). Without these, the source of WLA's improvements—whether structure, object-centricity, or something else—cannot be attributed.
 
-- **Only one baseline (Genie) throughout.** For a paper proposing a new modeling paradigm at ICLR, comparing against a single system is insufficient. Relevant missing comparisons include: (a) a continuous latent dynamics model without Lie structure (to isolate the group-theoretic contribution), (b) an object-centric video predictor without Lie structure (to isolate the object-centric contribution), and (c) any existing structured latent world model such as RSSM/Dreamer or STORM. The ablations in Table 1 do probe rotation vs. no-rotation and slot alignment, but they do not compare against a flat (non-slot) latent baseline, so the contribution of object-centricity per se remains unquantified.
+- **No few-shot label scaling experiment despite "minimal labels" claim.** The abstract and introduction prominently claim "minimal or no action labels" for adaptation, but Section 4.3 and the experiments never vary the number of labeled sequences used to train `Ctrl_adapt`, report the actual label budget used, or show a performance curve as a function of label count. This claim cannot be evaluated, making it the most poorly substantiated assertion in the paper.
 
-- **Abstract claims "minimal or no action labels" and "novel action sets," but no experiment tests this.** There is no label-efficiency experiment (e.g., performance as a function of the number of labeled adaptation trajectories), and no held-out environment with a genuinely new action vocabulary. The claim is stated in both the abstract and introduction but is never operationalized in the experimental section.
+- **Long-horizon rollout degradation is unanalyzed.** All quantitative results appear to be over fixed 16-step rollouts. The exponential latent dynamics (Eq. 9) could compound errors at longer horizons, yet no rollout-length vs. error analysis is presented. For a paper positioned as a "world model," this analysis is essential to understand practical utility.
 
-- **Incomplete ablation: object-centric and Lie-structure contributions are not separately disentangled.** The ablation in Table 1 only removes (i) the rotation component and (ii) least action alignment. There is no ablation removing slot structure entirely (using a flat latent), nor an ablation replacing Lie-structured transitions with a generic linear transition network. Without these, it is unclear whether gains come from the Lie structure, from object-centricity, or simply from the multi-environment training setup itself.
+- **Training details for per-sample (λ, θ) parameters are insufficient for reproducibility.** Footnote 3 notes that these trajectory-specific Lie algebra parameters "are not to be stored as parts of the model," implying per-trajectory optimization during training. However, the paper never explains how these are initialized, whether they are optimized jointly with network weights at every gradient step, what the computational overhead is, or whether there is any test-time inference procedure. These are essential for reproducibility and for understanding the effective inductive bias.
+
+- **Ablation study is incomplete.** Only two ablations are tested (rotation and least-action). Missing ablations that are necessary to understand the contribution: (a) no object slots (fully dense latent vs. slotted), (b) no shared cross-environment training (per-environment model vs. joint), and (c) shared vs. per-environment `Ctrl_adapt`. These are needed to verify whether the object-centric decomposition and the cross-environment sharing are each adding value.
 
 ### Minor
 
-- **Low absolute ActionACC (21.07% seen, 14.62% unseen) lacks contextualization.** WLA outperforms Genie (10.25%/8.30%), but the absolute values are low. The paper does not report the number of action classes in ProcGen to help interpret these figures, nor does it provide a downstream task evaluation (e.g., an RL score using the controller interface) to show whether these accuracy levels are sufficient for the CIP goal.
+- **ActionACC values are low in absolute terms and the scale is under-explained.** The paper reports 21.07 (Ours) vs. 10.25 (Genie) for seen-environment ActionACC (Table 1 right). While WLA doubles Genie's score, 21% absolute accuracy on a classification task is low, and the number of action classes is not stated in the main text. The paper should clarify the chance-level performance for context. If there are 5 classes, 21% is near chance; if there are 15 classes, it is better. This is important for interpreting whether `Ctrl_adapt` is actually learning useful action correspondence.
 
-- **The Eq. (3) IDM is an anti-homomorphism, not a homomorphism.** The paper writes $\mathcal{F}_{\Phi,\Psi}(h \cdot g) = \mathcal{F}_{\Phi,\Psi}(g) \cdot \mathcal{F}_{\Phi,\Psi}(h)$, reversing the standard homomorphism order. This is formally an anti-homomorphism and may be correct under specific left/right action conventions, but the paper does not state the convention explicitly. In a theory-grounded paper, this should be clarified.
+- **Phyre evidence is entirely qualitative.** Phyre is presented as validation of the core continuity and compositionality claims, yet only cherry-picked frames are shown (Figures 3 and 4). There is no numerical interpolation error, no composition error metric, and no baseline comparison. This weakens the foundational empirical support for the paper's inductive bias.
 
-- **Eq. (6) notation is ambiguous.** Both arrows in the composition diagram appear annotated with $\mathcal{F}_{\Phi,\Psi}^{-1}$, but the first step is performed by $\text{Ctrl}_{\text{adapt}}$ and the second by the fixed $\mathcal{F}_{\Phi,\Psi}^{-1}$. As written, the equation is misleading.
+- **Android experimental protocol is underdescribed.** The paper says the architecture was "slightly adapted" for the Android dataset without specifying what was changed, what action space is used, or how sequences are split. Without this, the Android results cannot be reproduced.
 
-- **Key architectural hyperparameters ($N$, $J$) deferred entirely to an appendix** that is not provided in the reviewed submission, hampering reproducibility assessment.
+- **Identifiability of (λ, θ) not discussed.** Nothing in the training objective (Eq. 7–9) prevents the encoder from absorbing dynamics while the Lie algebra parameters become weakly meaningful, or produces unique/stable representations across runs. The paper should discuss whether the learned parameters are stable or if degenerate solutions are observed.
+
+- **Eq. (3) ordering notation.** The Fact states F(h·g) = F(g)·F(h), reversing the standard group homomorphism order M(hg) = M(h)M(g). Whether this is intentional (e.g., right action convention) or an error should be clarified explicitly, as it affects how compositionality is interpreted.
+
+- **Key hyperparameters N and J absent from main text.** The number of slots and rotation components used in each experiment are relegated to the appendix but are central to understanding model capacity and reproducibility.
 
 ### Tiny
 
-- The $\Delta_t$ PSNR formula as typeset is missing a closing parenthesis, making the expression ambiguous. This should be corrected for clarity.
-
-- The conclusion's claim of being "the first of its kind as a generative interactive framework that is based on a state-space model" is too strong given the SSM-based video prediction literature (e.g., RSSM).
+- The claim "the first of its kind as a generative interactive framework that is based on a state-space model" (Section 7) is overreaching and should be softened or precisely scoped given the substantial related SSM/Koopman literature.
+- The commutativity assumption in Eq. 9 (∑A[ℓ] inside the matrix exponential) should be foregrounded in Section 4 alongside the formal equations where it is used, rather than deferred to the limitations in Section 7.
 
 ---
 
 ## Nice-to-Haves
 
-- **Long-horizon rollout evaluation.** Figures 5 and 6 show 16-frame sequences; quantifying rollout quality at 32/64 steps (e.g., via FVD over longer windows) would strengthen claims about temporal coherence.
-
-- **Visualization of slot assignments over time.** A qualitative figure showing which objects each slot tracks would validate whether the architecture truly decomposes dynamics object-wise as claimed.
-
-- **Per-environment WLA vs. joint WLA comparison.** Showing that joint multi-environment training improves per-environment performance (vs. training separate models per environment) would directly validate the "inter-environmental" premise.
-
-- **Discussion of failure cases.** Where does WLA break down—scenes with many objects exceeding slot capacity, fast dynamics where the commutative approximation fails, occlusion-heavy scenarios? A failure analysis would calibrate the method's operating envelope.
-
-- **Extension to non-commutative (non-abelian) groups.** The current restriction to abelian rotation+scaling excludes important cases (e.g., 3D rotations). Discussing concrete paths toward non-abelian Lie groups would improve the paper's significance.
+- **Stochastic extension.** Extending the Lie algebra parameters (λ, θ) to distributions (e.g., Gaussian) would address environmental stochasticity—a stated limitation—and broaden applicability to RL settings. This is noted as future work and would be a natural extension.
+- **Visualization of (λ, θ) trajectories alongside ground-truth actions.** Showing whether learned Lie algebra parameters cluster by action type or are interpretably disentangled would strengthen the "compositional and continuous action representation" claim and provide important mechanistic insight.
+- **Commutativity violation analysis.** A controlled experiment measuring composition error when ground-truth action sequences are explicitly non-commutative (e.g., "up then right" vs. "right then up") would quantify when the core assumption holds and when the model is expected to fail.
+- **Sensitivity analysis for N and J.** A brief sweep over the number of slots and rotation components would allow future practitioners to set these hyperparameters for new domains.
 
 ---
 
 ## Removed Points
+*These points are flagged as removed; treat them with caution.*
 
-*These points are flagged for removal; treat them with caution.*
+- **[REMOVED] Genie comparison unfairness (doubled training iterations).** The harsh critic raises the concern that Genie was given 0.4M training iterations instead of the original 0.2M. Per review policy, comparisons that are asymmetric in favor of the baseline (Genie receives more compute) are intentionally stronger baselines and do not constitute a weakness of the paper. The authors explicitly state this was done to accommodate multi-environment training.
 
-- **Harsh Critic: Fairness of Genie comparison.** The critic objects that Genie was given 0.4M iterations vs. its default 0.2M, and was adapted for multi-environment. However, this modification gives Genie *more* compute and a fairer regime. The asymmetry benefits the baseline, not the authors' method, making this a non-issue. REMOVED per rule on comparisons that favor the baseline.
+- **[REMOVED] No reconstruction loss per frame.** The harsh critic claims there is no reconstruction loss on x[t] independently of the prediction loss. This is incorrect: the forward and backward prediction losses (Eq. 8) include reconstruction of all frames x[t] via rolled-out latent dynamics, which amounts to frame-level reconstruction supervision.
 
-- **Harsh Critic: Human analogy is scientifically loose.** Using human skill transfer as motivation is standard rhetoric in ML papers and does not constitute a scientific error. REMOVED as stylistic criticism.
+- **[REMOVED] Statistical rigor / confidence intervals.** Requesting confidence intervals or multiple-seed results for ProcGen evaluations is not standard practice in the video generation and world modeling community, where single-run evaluation on fixed benchmarks is the norm.
 
-- **Harsh Critic: "Unstructured vs. structured CIP formalism contributes little."** The CIP formalism provides useful conceptual scaffolding for positioning the problem against prior work and is not harmful. Whether it adds "operational" novelty is debatable, but it does help frame the paper. REMOVED as opinion rather than substantive flaw.
+- **[REMOVED] Missing related works.** Specific related works were requested by reviewers; per policy, we do not evaluate claims about missing citations without access to external literature.
 
-- **Harsh Critic: Lack of no-action identity guarantee in diffusion-based models hurts them unfairly.** The critic notes this point is presented without evidence. However, the paper correctly identifies this as a real theoretical property difference: Lie group structure enforces identity as a group axiom, whereas black-box models do not. The connection is principled even if the empirical consequence is not further demonstrated. REMOVED as unfair characterization.
+- **[REMOVED — formatting/scope] Formalism mismatch in CIP (Eq. 1 type signature vs. history input).** The paper explicitly acknowledges the abuse of notation in the text following Eq. (1) and Section A provides a formal definition. While the mismatch is slightly confusing, it is an acknowledged notation convenience, not a substantive error.
 
-- **Harsh Critic: Requesting theoretical proofs for why Lie structure is necessary.** Demanding formal necessity proofs for an empirical systems paper is not standard for ICLR. REMOVED.
+- **[REMOVED — acknowledged] Deterministic environment assumption.** Fully acknowledged as a limitation in Section 7 with a proposed future direction (stochastic process modeling). It is a real constraint but not a hidden flaw.
 
-- **Harsh Critic: Training cost and optimization details missing.** Lack of optimization details in the main text (batch size, learning rate schedule, training time) is a reproducibility concern, but appendix placement is standard and acceptable. Moved to nice-to-have context only.
-
-- **Harsh Critic: "No broader impact discussion."** Not standard for ICLR 2025 submission requirements; absence of broader impact section is not a technical weakness. REMOVED.
+- **[REMOVED] Human analogy in introduction as scientific evidence.** The harsh critic flags the human analogy ("after mastering basic movements in a few 2D action-adventure games…") as unscientific. This is standard motivational framing, not a methodological claim, and is appropriately cited with cognitive science references.
 
 ---
 
 ## Novel Insights
 
-The most underappreciated insight in the paper is the connection between the "no-action = identity" problem in black-box world models and the Lie group axioms. Because $M(e) = I$ is guaranteed by group structure, and $\lim_{\delta\to 0} M_{t,\delta} = I$ follows from the continuity of the Lie group action (Eq. 3), WLA avoids the identity-corruption problem that plagues diffusion-based controllers (Valevski et al., 2024) without any heuristic noise augmentation. This is a structural advantage that deserves stronger emphasis in the paper, as it constitutes a concrete and verifiable theoretical advantage over black-box baselines rather than a mere inductive bias.
+The most genuinely novel structural insight in this paper—underemphasized even by the authors—is the connection between the ablated "w/o rotation" WLA variant and diagonal-state-space models like Mamba. By explicitly identifying that restricting to scaling-only Lie group actions collapses the framework to a diagonal SSM, the paper provides a principled generalization of the SSM family toward richer, non-diagonal structured dynamics. This framing suggests that the rotation+scaling Lie group structure is not just an arbitrary inductive bias but a specific augmentation of the SSM with rotational degrees of freedom in the latent space, which could motivate a broader class of structured world models. The spark finder's observation that the (λ, θ) parameters could be interpreted and visualized to verify whether the Lie algebra dimensions correspond to semantically meaningful action axes (e.g., θ for orientation, λ for speed/magnitude) is a valuable diagnostic not pursued in the paper—its absence is a missed opportunity to substantiate the "compositional representation" claim mechanistically.
 
 ---
 
 ## Suggestions
 
-1. **Add a held-out environment evaluation table** (parallel to Table 2 but for unseen ProcGen environments) with full PSNR/Δ_t PSNR/LPIPS metrics. This is the single highest-priority missing experiment given the paper's motivation.
-
-2. **Conduct a label-efficiency ablation**: report ActionACC and Δ_t PSNR on a held-out environment as a function of the number of labeled adaptation trajectories (e.g., 10, 50, 200, 1000). This directly tests the "minimal action labels" claim.
-
-3. **Acknowledge and analyze the commutativity assumption earlier** (at Eq. 4, not only in the conclusion), and add an empirical measurement of how much the commutative approximation error grows with rollout length or environment complexity.
-
-4. **Add a flat-latent (no-slot) and a generic-linear-transition ablation row to Table 1** to separately quantify the object-centric and Lie-structure contributions.
-
-5. **Provide N, J, and latent dimensions in the main text**, even as a table, rather than deferring entirely to an appendix.
-
-6. **Contextualize ActionACC** by stating the number of action classes and adding a chance-level baseline. If possible, add a downstream policy evaluation metric to show whether the latent actions are sufficient for actual control utility.
-
----
-
-**Overall evaluation:** The paper introduces a technically interesting and well-motivated framework with a clear structural advantage over discrete autoregressive baselines. The empirical improvements on ProcGen and the Android dataset are real and non-trivial. However, the central experimental claim of cross-environment generalization is not adequately tested (no unseen quantitative results), the comparison landscape is too narrow (Genie only), and a critical mathematical assumption (commutativity) is acknowledged only in the conclusion without impact analysis. In its current form, the paper reads as a promising and partially validated contribution rather than a fully substantiated ICLR result. Closing the unseen-evaluation and label-efficiency gaps would substantially strengthen the submission.
+1. **Report full unseen-environment metrics.** Add PSNR, Δ_t PSNR, and LPIPS for out-of-domain ProcGen environments to Table 2 or a companion table. The data likely already exist given the setup.
+2. **Add a label-efficiency experiment.** Plot `Ctrl_adapt` performance (Δ_t PSNR or ActionACC) as a function of the number of labeled trajectories (e.g., 1, 5, 10, 50, 100). This single experiment would directly validate the "minimal labels" claim.
+3. **Add at least one structural ablation baseline.** Either a general linear (non-rotation-constrained) transition operator, or an object-centric MLP dynamics model, is needed to isolate the Lie group contribution from the object-centric contribution.
+4. **Clarify and quantify the per-sample (λ, θ) training procedure.** Explain whether these are optimized per-batch via gradient steps, amortized via a recognition network, or otherwise. Include training time and memory requirements relative to Genie.
+5. **Clarify ActionACC scale.** State the number of action classes, chance-level accuracy, and compute a normalized metric (e.g., accuracy above chance) so readers can interpret the absolute numbers in Table 1.
+6. **Include long-horizon rollout analysis.** Report a metric (e.g., MSE or PSNR) as a function of rollout length (e.g., 4, 8, 16, 32 steps) for at least one ProcGen environment to characterize error accumulation.
+7. **Visualize learned (λ, θ) parameters.** Show scatter plots or trajectory plots of the inferred Lie algebra parameters colored by ground-truth action class for a ProcGen environment to test whether the latent action space is disentangled and semantically interpretable.

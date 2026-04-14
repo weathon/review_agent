@@ -539,9 +539,9 @@ async def run_merge(
     review_text = ""
     cost = 0.0
     async with ClaudeSDKClient(options=options) as sdk_client:
-        # merge pass
+        # merge pass and verify
         print("  [merger] merging reviews ...")
-        await sdk_client.query(f"{agent_prompt}\n\n{user_message}")
+        await sdk_client.query(f"{agent_prompt}\n\n{user_message} Only output the final review text wrapped in <cake></cake> without any additional commentary.")
         async for message in sdk_client.receive_response():
             if isinstance(message, AssistantMessage):
                 for block in message.content:
@@ -550,6 +550,7 @@ async def run_merge(
 
             if isinstance(message, ResultMessage):
                 cost += message.total_cost_usd or 0
+                final_review = block.text.split("<cake>")[-1].split("</cake>")[0].strip()
 
         # verify pass
         # print("  [merger] verifying review with a second pass ...")
