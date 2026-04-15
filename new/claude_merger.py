@@ -173,9 +173,8 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
 
     with open("prompts/merger.md", "r") as f:
         system_prompt = f.read()
-    # Override the line that says paper is in the user message — for SDK, agent reads it via tool
     system_prompt = system_prompt.replace(
-        "The full paper text is included in the user message. Use it to verify reviewer claims directly.",
+        "{{PAPER_ACCESS_INSTRUCTION}}",
         "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly.",
     )
 

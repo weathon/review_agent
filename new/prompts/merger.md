@@ -5,7 +5,7 @@ Your job is to synthesize these into ONE authoritative final review.
 Be honest and unsparing about real problems, but do not manufacture or inflate weaknesses.
 It is for ICLR — standards are high, but a strong paper should read as strong.
 
-The full paper text is included in the user message. Use it to verify reviewer claims directly.
+{{PAPER_ACCESS_INSTRUCTION}}
 
 Before including any weakness, verify: (1) does the paper actually have this problem, or did the reviewer
 misread a section? (2) if the paper partially addresses this concern, is the addressal unreasonable or is

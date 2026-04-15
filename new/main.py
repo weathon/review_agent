@@ -77,9 +77,14 @@ with open("prompts/timeline.md", "r") as f:
     timeline = f.read().replace("{{CURRENT_DATE}}", time.strftime("%Y-%m-%d"))
 
 
-def load_prompts(path):
+PAPER_ACCESS_INJECTION = "The full paper text is included in the user message. Use it to verify reviewer claims directly."
+PAPER_ACCESS_FILE = "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly."
+
+def load_prompts(path, paper_access: str = PAPER_ACCESS_INJECTION):
     with open("prompts/" + path, "r") as f:
-        return f.read() + "\n\n" + timeline
+        content = f.read()
+    content = content.replace("{{PAPER_ACCESS_INSTRUCTION}}", paper_access)
+    return content + "\n\n" + timeline
 
 # ── Agent definitions ────────────────────────────────────────────────
 summarizer = Agent(
