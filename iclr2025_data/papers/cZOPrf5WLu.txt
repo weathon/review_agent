@@ -1,0 +1,455 @@
+# LEARNING ON LoRAS: GL-EQUIVARIANT PROCESSING OF LOW-RANK WEIGHT SPACES FOR LARGE FINETUNED MODELS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Low-rank adaptations (LoRAs) have revolutionized the finetuning of large foundation models, enabling efficient adaptation even with limited computational resources. The resulting proliferation of LoRAs presents exciting opportunities for applying machine learning techniques that take these low-rank weights themselves as inputs. In this paper, we investigate the potential of Learning on LoRAs (LoL), a paradigm where LoRA weights serve as input to machine learning models. For instance, an LoL model that takes in LoRA weights as inputs could predict the performance of the finetuned model on downstream tasks, detect potentially harmful finetunes, or even generate novel model edits without traditional training methods. We first identify the inherent parameter symmetries of low rank decompositions of weights, which differ significantly from the parameter symmetries of standard neural networks. To efficiently process LoRA weights, we develop several symmetry-aware invariant or equivariant LoL models, using tools such as canonicalization, invariant featurization, and equivariant layers. We finetune thousands of text-to-image diffusion models and language models to collect datasets of LoRAs. In numerical experiments on these datasets, we show that our LoL architectures are capable of processing low rank weight decompositions to predict CLIP score, finetuning data attributes, finetuning data membership, and accuracy on downstream tasks.
+
+## 1 INTRODUCTION
+
+Finetuning of pretrained models such as Large Language Models (Devlin et al., 2019; Brown et al., 2020; Dubey et al., 2024) and Diffusion models (Ho et al. (2020), Rombach et al. (2022)) for improved performance on tasks such as generating images in a specific style or creating text for mathematical proofs has become an extremely common paradigm in deep learning. While full finetuning of all weights effectively boosts model capabilities, it requires a large amount of memory and computation time. In recent years, Low Rank Adaptation (LoRA) (Hu et al., 2021), a method for finetuning where a learnable low rank decomposition is added to each weight matrix ( $W_i \mapsto W_i + U_i V_i^\top$ ), has been used as an alternative to other finetuning methods thanks to its increased efficiency. LoRA finetuning and its variants have become widespread; there are now software packages (Mangrulkar et al., 2022; Han & Han, 2023), paid services (Replicate, 2024), and online communities (Civitai, 2024) in which countless LoRAs are trained and shared.
+
+Given the ubiquity of LoRA weights, one can imagine treating them as a data type. As in recent works in the emerging field of weight-space learning, we can process the weights of input neural networks by using other neural networks (often termed metanetworks (Lim et al., 2023a), neural functionals (Zhou et al., 2024b), or deep weight space networks (Navon et al., 2023a)).
+
+In this work, we are the first to extensively study applications, theory and architectures for Learning on LoRAs (LoL), which encompasses any tasks where LoRA weights are the input to some predictive model. An LoL model acting on a LoRA could predict various useful properties of the underlying finetuned model. For instance, given LoRA weights of a finetuned model, an LoL model could predict the downstream accuracy of the model on some task, predict properties of the (potentially private) training data used to finetune the model, or edit the LoRA to work in some other
+
+054 setting. Recently, Salama et al. (2024) and Dravid et al. (2024) also consider learning tasks on LoRA  
+055 weights, for some specific applications and a few types of models or learning algorithms.
+
+056  
+057 When developing LoL architectures for processing LoRA weights, we account for the structure and  
+058 symmetries of this unique data type. For one, the low rank decomposition  $(U, V)$  generally has  
+059 significantly fewer parameters  $((n + m)r)$  than the dense matrix  $UV^\top$  ( $nm$ ). This can be leveraged  
+060 to more efficiently learn tasks on LoRA weights. Moreover, for any invertible matrix  $R \in \text{GL}(r)$ ,  
+061 we have that  $URR^{-1}V^\top = UV^\top$ , so the low rank decompositions  $(U, V)$  and  $(UR, VR^{-\top})$  are  
+062 functionally equivalent. Because this transformation  $\tau_R$  does not affect the underlying function  
+063 represented by each LoRA, almost all relevant LoL problems are invariant to  $\tau_R$ . Therefore, the  
+064 outputs of an effective model for any such task should be invariant to  $\tau$ .
+
+![Figure 1: Overview of Learning on LoRAs (LoL). The diagram shows a four-stage pipeline: 1. Pretrained Model (theta_base) with weight matrices W1 to WL. 2. LoRA (theta_FT) with weight matrices U1, V1 to UL, VL. 3. Learning on LoRAs (LoL Model) where the function f_theta takes the LoRA weights as input. 4. Prediction with accuracy Acc(theta_FT) = 78.2% and examples of tasks like 'Data source 3 is in the finetuning set' or 'Model was finetuned on n data points'.](4792a2ccd62226861fadc22117edb7b1_img.jpg)
+
+065  
+066  
+067  
+068  
+069  
+070  
+071  
+072  
+073  
+074  
+075  
+076
+
+Figure 1: Overview of Learning on LoRAs (LoL). The diagram shows a four-stage pipeline: 1. Pretrained Model (theta\_base) with weight matrices W1 to WL. 2. LoRA (theta\_FT) with weight matrices U1, V1 to UL, VL. 3. Learning on LoRAs (LoL Model) where the function f\_theta takes the LoRA weights as input. 4. Prediction with accuracy Acc(theta\_FT) = 78.2% and examples of tasks like 'Data source 3 is in the finetuning set' or 'Model was finetuned on n data points'.
+
+077  
+078 Figure 1: Overview of Learning on LoRAs (LoL). A pretrained model  $\theta_{\text{base}}$  is finetuned to yield  
+079 LoRA weight matrices  $U_1, V_1, \dots, U_L, V_L$ . These LoRA weights are taken as input to an LoL model  
+080  $f_\theta$ , which can make predictions such as the downstream accuracy of the finetuned model.
+
+081  
+082 To this end, motivated by previous successes in invariant and equivariant weight space learn-  
+083 ing (Navon et al., 2023a; Kofinas et al., 2024; Lim et al., 2023a; Zhou et al., 2024a; Kalogeropoulos  
+084 et al., 2024) (and geometric deep learning in general (Bronstein et al., 2021)), we propose several  
+085  $\text{GL}(r)$  equivariant and invariant neural architectures that can effectively process weights of LoRAs.  
+086 Using various techniques from geometric deep learning such as canonicalization, invariant featur-  
+087 ization, and equivariant linear maps, we develop several LoL models with various trade-offs in terms  
+088 of efficiency, expressivity, and generalization.
+
+089  
+090 To explore the feasibility of Learning on LoRAs tasks, and to analyze the effectiveness of our pro-  
+091 posed architectures, we conduct experiments across various finetuned models. First, we create novel  
+092 datasets for Learning on LoRAs; we train thousands of diverse LoRAs, which are finetuned from  
+093 text-to-image diffusion generative models and language models. We then train LoL models on  
+094 these LoRAs for prediction tasks such as: predict the CLIP score (Hessel et al., 2022) of a Stable  
+095 Diffusion finetune given only its LoRA weights, predict attributes such as facial hair presence of  
+096 the person that a diffusion model was personalized to, predict which data sources a language model  
+097 LoRA was finetuned on, and predict the downstream reasoning accuracy of a language model LoRA.  
+098 We find that simple  $\text{GL}(r)$ -invariant LoL models can often perform some of these tasks well, and  
+099 equivariant-layer based LoL models can do well across most tasks.
+
+## 100 2 BACKGROUND AND RELATED WORK
+
+101  
+102 **LoRA background and symmetries** Hu et al. (2021) introduced the LoRA method, which is a  
+103 parameter-efficient method for finetuning (typically large) models (Mangrulkar et al., 2022; Han  
+104 et al., 2024). Consider a weight matrix  $W \in \mathbb{R}^{n \times m}$  of some pretrained neural network. Directly  
+105 finetuning  $W$  would require training  $nm$  parameters on additional data, which could be quite expen-  
+106 sive. LoRA instead trains low-rank matrices  $U \in \mathbb{R}^{n \times r}$  and  $V \in \mathbb{R}^{m \times r}$  so that the new finetuned  
+107 weight matrix is given by  $W + UV^\top$ . This only requires tuning  $(n + m)r$  parameters, which is  
+efficient as the rank  $r$  is taken to be significantly lower than  $n$  or  $m$  (for instance a rank of  $r = 8$  can  
+be sufficient to finetune a 7B-parameter language model with  $n = m = 4096$  (Liu et al., 2024)).
+
+As mentioned in the introduction, for any invertible matrix  $R \in \text{GL}(r)$ ,  $W + (UR)(VR^{-T})^T = W + UV^T$ , so the LoRA update given by  $(UR, VR^{-T})$  is functionally equivalent to the one given by  $(U, V)$ . As a special case, when  $Q \in O(r)$  is orthogonal,  $(UQ, VQ)$  is also functionally equivalent. Many variants of the original LoRA work have been proposed, and they often have comparable symmetries that can be handled similarly in our framework (Mangrulkar et al., 2022; Han et al., 2024); we discuss LoRA variants and their symmetries in Appendix E.
+
+Prior works have also studied continuous symmetries (Thomas et al., 2018; Bogatskiy et al., 2020; Satorras et al., 2022; Lim et al., 2023b; Pearce-Crump, 2023; Lawrence & Harris, 2024) such as rotation and scaling symmetries, especially for applications in the chemical and physical sciences. However, they study different classes of symmetries, such as  $O(n)$ ,  $E(n)$ , and  $SP(n)$ , none of which contain  $\text{GL}(n)$ . To the best of our knowledge, we are the first to study  $\text{GL}(n)$  equivariant and invariant architectures.
+
+**Weight-space learning and metanetworks** Several neural network architectures have been developed that take in neural network weights as input (Unterthiner et al., 2020; Eilertsen et al., 2020; Metz et al., 2022; Peebles et al., 2022; Navon et al., 2023a;b; Andreis et al., 2023; Shamsian et al., 2024). In many tasks, equivariance or invariance to parameter transformations that leave the network functionally unchanged has been found to be useful for empirical performance of weight-space networks (Navon et al., 2023a; Zhou et al., 2024b; Lim et al., 2023a; Kalogeropoulos et al., 2024; Tran et al., 2024). However, these works are not specialized for LoRA weight spaces, since they consider different symmetry groups: many such works focus only on discrete permutation symmetries (Navon et al., 2023a; Zhou et al., 2024b; Lim et al., 2023a; Zhou et al., 2024a), or scaling symmetries induced by nonlinearities (Kalogeropoulos et al., 2024; Tran et al., 2024). As covered in the previous section, LoRA weights have general invertible symmetries, which include as special cases certain permutations and scaling symmetries between  $U$  and  $V^T$ . While LoRAs contain inner permutation symmetries of the form  $UP^T PV^T = UV^T$ , we emphasize that they generally do not have outer permutation symmetries of the more recognizable form  $P_1 UV^T P_2$ , which would resemble those of standard weight spaces (e.g. MLPs or CNNs) more. This is an important difference; for instance, the outer permutation symmetries significantly harm linear merging of models trained from scratch (Entezari et al., 2022; Ainsworth et al., 2023; Lim et al., 2024), whereas finetuned models can be merged well with simple methods (Wortsman et al., 2022; Ilharco et al., 2023).
+
+Recently, two works have explored the weight space of LoRA finetuned models for certain tasks. Salama et al. (2024) develop an attack that, given the LoRA weights of a finetuned model, predicts the size of the dataset used to finetune the model. Inspired by correlations between finetuning dataset size and singular value magnitudes, they define a very specific type of LoL model that takes the singular values of dense, multiplied-out LoRA weights  $\sigma_1(U_i V_i^T), \dots, \sigma_r(U_i V_i^T)$  as input. In contrast, we study more tasks, consider the problem of general LoL model design, and develop more expressive and efficient LoL models in our paper. In another context, Dravid et al. (2024) study the LoRA weight space of finetuned personalized text-to-image diffusion models. They do not define LoL models, but instead study operations such as linear edits in the principal component space of their rank-one LoRA weights.
+
+## 3 LEARNING ON LORAS ARCHITECTURES
+
+Table 1: Properties of LoL architectures that we propose in this paper. Runtimes are for one LoRA layer with  $U \in \mathbb{R}^{n \times r}$  and  $V \in \mathbb{R}^{m \times r}$ , so the rank  $r$  is generally much lower than  $n$  and  $m$ . Expressivity refers specifically to a notion of ability to fit GL-invariant functions, which is formalized in Definition C.1.
+
+| Model         | GL-Invariant | O-Invariant  | Expressive   | Preprocess Time | Forward Time |
+|---------------|--------------|--------------|--------------|-----------------|--------------|
+| MLP           | $\times$     | $\times$     | $\checkmark$ | $O((m+n)r)$     | $O((m+n)r)$  |
+| MLP + O-Align | $\times$     | $\checkmark$ | $\checkmark$ | $O((m+n)r^2)$   | $O((m+n)r)$  |
+| MLP + SVD     | $\checkmark$ | $\checkmark$ | $\times$     | $O((m+n)r^2)$   | $O((m+n)r)$  |
+| MLP + Dense   | $\checkmark$ | $\checkmark$ | $\checkmark$ | $O(mnr)$        | $O(mn)$      |
+| GL-net        | $\checkmark$ | $\checkmark$ | $\checkmark$ | $O((m+n)r)$     | $O((m+n)r)$  |
+
+In this section, we develop several neural network architectures for Learning on LoRAs. These have different trade-offs and properties, which we summarize in Table 1. First, we mathematically formalize the LoL learning problem. Then we describe four methods based on feeding features into a simple Multi-layer Perceptron (MLP).<sup>1</sup> Finally, we derive GL-net, an architecture based on various equivariant and invariant modules.
+
+### 3.1 LEARNING ON LORAS MODELS
+
+We define a Learning on LoRAs (LoL) model that takes LoRA updates as input as follows. Suppose there are  $L$  matrices in a base model that are finetuned via LoRA, i.e. the LoRA weights are  $(U_1, V_1), \dots, (U_L, V_L)$ , where  $U_i \in \mathbb{R}^{n_i \times r}$  and  $V_i \in \mathbb{R}^{m_i \times r}$ . An LoL model with parameters  $\theta$  and output space  $\mathcal{Y}$  is a function  $f_\theta : \mathbb{R}^{\sum_i n_i r + \sum_i m_i r} \rightarrow \mathcal{Y}$ . An LoL model can output a scalar prediction ( $\mathcal{Y} = \mathbb{R}$ ) or latent LoRA weight representations  $(\tilde{U}_1, \tilde{V}_1), \dots, (\tilde{U}_L, \tilde{V}_L)$  where  $\tilde{U}_i \in \mathbb{R}^{\tilde{n}_i \times r}$  and  $\tilde{V}_i \in \mathbb{R}^{\tilde{m}_i \times r}$  ( $\mathcal{Y} = \mathbb{R}^{\sum_i \tilde{n}_i r + \sum_i \tilde{m}_i r}$ ).
+
+An LoL model is called *GL-invariant* if for all  $R_1, \dots, R_L \in \text{GL}(r)$
+
+$$f_\theta(U_1 R_1, V_1 R_1^{-T}, \dots, U_L R_L, V_L R_L^{-T}) = f_\theta(U_1, V_1, \dots, U_L, V_L). \quad (1)$$
+
+This represents invariance to the action of the direct product  $\text{GL}(r) \times \dots \times \text{GL}(r)$  of  $\text{GL}(r)$  with itself  $L$ -times ( $\text{GL}(r)^L$ ). When the output space has decomposition structure, i.e.  $f_\theta(U_1, V_1, \dots, U_L, V_L) = ((\tilde{U}_1, \tilde{V}_1), \dots, (\tilde{U}_L, \tilde{V}_L))$ , we say that the model is  $\text{GL}(r)$ -equivariant if for all  $R_1, \dots, R_L \in \text{GL}(r)$ ,
+
+$$f_\theta(U_1 R_1, V_1 R_1^{-T}, \dots, U_L R_L, V_L R_L^{-T}) = ((\tilde{U}_1 R_1, \tilde{V}_1 R_1^{-T}), \dots, (\tilde{U}_L R_L, \tilde{V}_L R_L^{-T})). \quad (2)$$
+
+Expressivity is an important property of LoL models. Informally, an LoL model is universally expressive if it can fit any nice  $\text{GL}$ -invariant function to arbitrary accuracy. We give a formal definition in Definition C.1, and prove our results in the context of this formal definition.
+
+### 3.2 MLP-BASED METHODS WITH FEATURIZATION
+
+**MLP: Simple MLP on LoRA Weights** The simplest of our models is a simple MLP that takes the flattened LoRA weights as input:  $\text{MLP}_\theta(U_1, V_1, \dots, U_L, V_L)$ . This method is not invariant to the LoRA parameter symmetries, but it is fully expressive, and it is efficient in that it does not need to form the  $n$ -by- $m$  dense matrices  $UV^T$ .
+
+**MLP + O-Align: Alignment for Canonicalization** One method for designing invariant or equivariant networks is to canonicalize the input by using a symmetry-invariant transformation to convert it into a canonical form (Kaba et al., 2023; Dym et al., 2024; Ma et al., 2024). For example, to canonicalize a dataset of point clouds with respect to rotations, one might choose one specific point cloud and then rotate all other point clouds in the dataset to it to maximize their relative similarity. After this alignment, any standard architecture can process the point clouds in an invariant manner without taking rotation into account. This kind of rotation alignment, known as  $O(r)$  canonicalization, admits a closed form solution and is significantly simpler than  $\text{GL}(r)$  canonicalization.
+
+We canonicalize LoRA weights  $U_i, V_i$  into  $O(r)$ -invariant representatives  $U_i Q_i, V_i Q_i$  as follows. First, we select template weights  $\mathbf{U}_i, \mathbf{V}_i$  of the same shape as  $U_i$  and  $V_i$  (in our experiments we randomly select  $U_i$  and  $V_i$  from our training set of LoRAs). Then we align  $U_i, V_i$  to the templates by finding the orthogonal matrix  $Q_i$ s that most closely match them in the Frobenius norm:
+
+$$Q_i = \arg \min_{Q_i \in O(r)} \|U_i Q_i - \mathbf{U}_i\|_F^2 + \|V_i Q_i - \mathbf{V}_i\|_F^2. \quad (3)$$
+
+This is an instance of the well-known Orthogonal Procrustes problem (Schönemann, 1966), which has a closed form solution:  $Q_i$  can be computed from the singular value decomposition of the  $r$ -by- $r$  matrix  $U_i^T \mathbf{U}_i + V_i^T \mathbf{V}_i$ , which can be computed efficiently when the rank  $r$  is low. After computing these  $Q_i$ s for pair of LoRA weights, we input the  $U_i Q_i, V_i Q_i$  into an MLP to compute predictions.
+
+<sup>1</sup>These features can also be processed by other generic architectures, such as recurrent or Transformer-based sequence models along the layer dimension, but we use only MLPs in the work for simplicity.
+
+216  
+217  
+218  
+219  
+220  
+221  
+222  
+223  
+224  
+225  
+226  
+227  
+228  
+229  
+230  
+231  
+232  
+233  
+234  
+235  
+236  
+237  
+238  
+239  
+240  
+241  
+242  
+243  
+244  
+245  
+246  
+247  
+248  
+249  
+250  
+251  
+252  
+253  
+254  
+255  
+256  
+257  
+258  
+259  
+260  
+261  
+262  
+263  
+264  
+265  
+266  
+267  
+268  
+269
+
+![Figure 2: Architecture of GL-net. The diagram shows two parallel processing paths for input pairs (U_i, V_i) and (U_L, V_L). Each path consists of a sequence of layers: an equivariant linear map (Phi_i^(1), Psi_i^(1)), an equivariant nonlinearity (sigma_GL), another equivariant linear map (Phi_i^(2), Psi_i^(2)), and another equivariant nonlinearity (sigma_GL). The outputs are new equivariant representations (U_tilde_i, V_tilde_i). These are then processed by invariant representations (red boxes) labeled (U_tilde_i V_i^T) and (U_tilde_L V_L^T). Finally, these invariant representations are fed into a matrix multiplication head (MLP) to produce the final output.](e394c2b5c61344f6a12397f430086072_img.jpg)
+
+Figure 2: Architecture of GL-net. The diagram shows two parallel processing paths for input pairs (U\_i, V\_i) and (U\_L, V\_L). Each path consists of a sequence of layers: an equivariant linear map (Phi\_i^(1), Psi\_i^(1)), an equivariant nonlinearity (sigma\_GL), another equivariant linear map (Phi\_i^(2), Psi\_i^(2)), and another equivariant nonlinearity (sigma\_GL). The outputs are new equivariant representations (U\_tilde\_i, V\_tilde\_i). These are then processed by invariant representations (red boxes) labeled (U\_tilde\_i V\_i^T) and (U\_tilde\_L V\_L^T). Finally, these invariant representations are fed into a matrix multiplication head (MLP) to produce the final output.
+
+Figure 2: Architecture of GL-net. Blue boxes are equivariant representations, and red boxes are invariant representations. First, equivariant linear maps lower the dimension of the input. Then our GL equivariant nonlinearities and more equivariant linear maps process the features. Finally, a matrix multiplication head computes invariant features that are processed by an MLP.
+
+**MLP + SVD: Singular Values as Features** Similarly to Salama et al. (2024), we also consider an LoL architecture that feeds the singular values of the multiplied-out LoRA weights,  $\sigma_1(U_i V_i^\top), \dots, \sigma_r(U_i V_i^\top)$  into an MLP to compute predictions (though Salama et al. (2024) mostly use nearest neighbor predictors instead of an MLP). Since  $U_i V_i^\top$  is rank  $r$ , there are at most  $r$  nonzero singular values. These singular values are GL-invariant features, but they are not expressive. For instance, negating  $U_i$  does not affect the singular values, but it can completely change the functionality and destroy the performance of the finetuned model.
+
+**MLP + Dense: Multiplying-Out LoRA Weights** Lastly, a simple, natural method is to first perform matrix multiplications to compute the full dense matrices  $U_i V_i^\top$ , and then apply a machine learning model to these dense matrices. In this paper, we will flatten and concatenate these dense matrices, and then apply a simple MLP to them. This approach is fully GL-invariant, and is universally expressive, but it is computationally expensive since the dense matrices are of size  $nm$  as opposed to the size  $(n + m)r$  of the low rank decomposition.
+
+### 3.3 GL-NET: CONSTRUCTING G-INVARIANT MODELS USING EQUIVARIANT LAYERS
+
+A common and effective method for parameterizing invariant neural networks is to first process the input with equivariant layers and then make the final prediction with invariant modules (Cohen & Welling, 2016; Maron et al., 2019a;b; Bronstein et al., 2021). Thus, we develop GL-net, which consists of a series of GL-equivariant linear layers and equivariant nonlinearities followed by a GL-invariant head to predict invariant characteristics of the input. See Figure 2 for an illustration.
+
+#### 3.3.1 EQUIVARIANT LINEAR LAYERS
+
+For LoRA weights  $U_i \in \mathbb{R}^{m_i \times r}$  and  $V_i \in \mathbb{R}^{m_i \times r}$ , we describe the GL-equivariant linear layers, which map to new weights  $\tilde{U}_i \in \mathbb{R}^{n_i' \times r}$  and  $\tilde{V}_i \in \mathbb{R}^{m_i' \times r}$ . For each of these LoRA weights, we have LoL model parameters  $\Phi_i \in \mathbb{R}^{n_i' \times m_i}$  and  $\Psi_i \in \mathbb{R}^{m_i' \times m_i}$ . The equivariant linear map is given by:
+
+$$F_{\text{Linear}}(U_1, V_1, \dots, U_L, V_L) = (\Phi_1 U_1, \Psi_1 V_1, \dots, \Phi_L U_L, \Psi_L V_L) \quad (4)$$
+
+That is, a GL equivariant linear layer consists of left matrix multiplying each  $U_i$  by a learnable  $\Phi_i$ , and left matrix multiplying each  $V_i$  by a learnable  $\Psi_i$ . In practice, we choose the same hidden dimension for every  $\tilde{U}_i$  and  $\tilde{V}_i$  for simplicity, so  $n_1' = m_1' = \dots = n_L' = m_L'$ . The equivariance of  $F_{\text{Linear}}$  can be easily seen. For instance, if there is only one layer ( $L = 1$ ), we have
+
+$$F_{\text{Linear}}(U_1 R, V_1 R^\top) = (\Phi_1 U_1 R, \Psi_1 V_1 R^\top) = (\tilde{U}_1 R, \tilde{V}_1 R^\top) = R * F_{\text{Linear}}(U_1, V_1), \quad (5)$$
+
+where  $(\tilde{U}_1, \tilde{V}_1) = F_{\text{Linear}}(U_1, V_1)$ , and  $R * (\tilde{U}_1, \tilde{V}_1) = (\tilde{U}_1 R, \tilde{V}_1 R^\top)$  is the action of  $R$  on the LoRA space. In fact, we can show a stronger statement — these linear maps in equation 4 constitute *all possible* GL-equivariant linear maps. See Appendix A for the proof.
+
+**Proposition 1.** *All linear GL-equivariant layers can be written in the form of equation 4.*
+
+**Extension to Convolution LoRAs.** Low rank convolution decompositions are generally represented as two consecutive convolutions where  $C_B$  projects the input down from  $m$  to  $r$  channels and  $C_A$  projects the input up to  $n$ . For our architecture we flatten all dimensions of the convolutions except the hidden channel dimension, and then we apply equivariant linear layers.
+
+#### 3.3.2 EQUIVARIANT NON-LINEARITY
+
+Equivariant networks often interleave pointwise non-linearities with linear equivariant layers. Unfortunately, non-trivial pointwise non-linearities are not equivariant to our symmetry group. A general recipe for designing equivariant non-linearities is taking  $f_{\text{equi}}(\mathbf{x}) = f_{\text{inv}}(\mathbf{x}) \cdot \mathbf{x}$ , for some scalar invariant function  $f_{\text{inv}}$  (Thomas et al., 2018; Villar et al., 2021; Blum-Smith & Villar, 2022). In our case, given any non-linearity  $\sigma : \mathbb{R} \rightarrow \mathbb{R}$ , we define a GL-equivariant non-linearity by
+
+$$\sigma_{\text{GL}}(U)_i = \sigma\left(\sum_j (UV^\top)_{ij}\right)U_i, \quad \sigma_{\text{GL}}(V)_i = \sigma\left(\sum_j (UV^\top)_{ji}\right)V_j. \quad (6)$$
+
+In other words, we scale the  $i$ -th row of  $U_i$  by a quantity that depends on the  $i$ -th row sum of  $UV^\top$ , and scale the  $i$ -th row of  $V_i$  by a quantity that depends on the  $i$ -th column sum of  $UV^\top$ . Since  $UV^\top$  is invariant under the action of GL, and GL acts independently on each row of  $U$  and  $V$ ,  $\sigma_{\text{GL}}$  is equivariant (we prove this in Appendix B). In our experiments, we often take  $\sigma(x) = \text{ReLU}(\text{sign}(x))$ , which has the effect of zero-ing out entire rows of  $U$  or  $V$  in a GL-equivariant way — this is a natural GL-equivariant generalization of ReLU. For our experiments we tune the number of equivariant linear layers and we frequently find that only one is required, so we often do not use this equivariant non-linearity; nonetheless, it may be more useful in other applications, such as GL-equivariant tasks.
+
+#### 3.3.3 INVARIANT HEAD
+
+Many equivariant architectures used for classification use an invariant aggregation step before applying a standard classifier model. For invariant classification tasks, we use an invariant head which consists of the relatively simple operation of computing the LoRA matrix products, concatenating them, and then applying an MLP on top. Explicitly, this is given as  $f_{\text{inv}}(U_1, V_1, \dots, U_L, V_L) = \text{MLP}(\text{cat}[U_1 V_1^\top, \dots, U_L V_L^\top])$ , where cat concatenates the entries of the inputs into a flattened vector. For the input, computing  $U_i V_i^\top$  would be both memory and time expensive. To avoid this, we use equivariant linear layers to lower the dimension of  $U_i, V_i$  to about  $32 \times r$ , such that  $U_i V_i^\top \in \mathbb{R}^{32 \times 32}$  is efficient to compute — see Figure 2 for an illustration.
+
+## 4 THEORY
+
+Here, we restate the properties of our models as described in Section 3 and Table 1. All proofs of these results are in the Appendix.
+
+**Theorem 1 (Invariance).** *MLP + Dense, MLP + SVD, GL-net are GL-Invariant. MLP + O-Align is O-Invariant but not GL-Invariant. MLP is not GL or O-Invariant.*
+
+**Theorem 2 (Universality).** *MLP, MLP + O-Align, MLP + Dense, and GL-net can arbitrarily approximate any GL-invariant continuous function on a compact set of full rank matrices.*
+
+## 5 EXPERIMENTAL RESULTS
+
+In this section, we present experimental results evaluating our five LoL models across tasks involving finetuned diffusion and language models (Subsections 5.2-5.3). Our experiments demonstrate the efficacy of LoL models in solving GL-invariant tasks on LoRAs. Additionally, we explore these models' ability to generalize to LoRAs of previously unseen ranks, with detailed findings presented in Subsection 5.4.
+
+### 5.1 DATASETS OF TRAINED LORA WEIGHTS
+
+We generate three new datasets of LoRAs of varying ranks. Two of these datasets correspond to finetunes of diffusion models on image datasets, while the last corresponds to finetunes of a language
+
+model on text. Our datasets have diversity in terms of LoRA rank, training hyperparameters (two datasets have randomly sampled hyperparameters, whereas one has fixed hyperparameters), and base model architecture.
+
+**CelebA-LoRA.** We train a dataset of 3,900 LoRA finetuned Stable Diffusion 1.4 models (Rombach et al., 2022) using the PEFT library (Mangrulkar et al., 2022). Each LoRA is rank 4, and is finetuned via DreamBooth personalization (Ruiz et al., 2023) on 21 images of a given celebrity in the CelebA dataset (Liu et al., 2015). Further, each LoRA is trained with randomly sampled hyperparameters (gradient accumulation steps, train steps, learning rate, prompt) and initialization. We train LoL models to predict hyperparameters, CLIP scores, and training images of finetuned diffusion models by using their LoRA weights.
+
+**Imagenette-LoRA.** We also use Dreambooth to finetune another 2,046 Stable Diffusion 1.4 models with LoRA rank 32 on different subsets of the Imagenette dataset (Howard, 2019) — a subset of ImageNet (Deng et al., 2009) consisting of images from ten dissimilar classes. Unlike CelebA LoRA, we use the same training hyperparameters for each finetuning run (but vary initialization, random seed, and finetuning dataset).
+
+**Qwen2-ARC-LoRA.** We create a dataset of 2,000 language model LoRAs by finetuning the 1.5 billion parameter Qwen2 model (Yang et al., 2024) on subsets of the training set of the commonly used ARC dataset (Clark et al., 2018), which is a dataset for testing question answering and science knowledge. The ARC dataset consists of questions from many data sources. For each LoRA, we randomly sample a subset of 19 data sources, and omit data from the unsampled data sources. Also, each LoRA is randomly initialized and trained with randomly sampled hyperparameters. See Appendix D.2 for more details.
+
+### 5.2 DIFFUSION MODEL CLASSIFICATION
+
+Table 2: We report train and test mean squared error (MSE) for predicting normalized CLIP score of CelebA-LoRA models. We also show test Kendall’s  $\tau$  and  $R^2$  coefficients. GL-net has significantly lower test MSE than any other LoL model, whereas a standard MLP does no better than random guessing. MLPs with O-Align, SVD, or Dense featurization all perform similarly on the test set.
+
+| LoL Model     | Train MSE       | Test MSE                          | $\tau$                            | $R^2$                             |
+|---------------|-----------------|-----------------------------------|-----------------------------------|-----------------------------------|
+| MLP           | .047 $\pm$ .004 | .988 $\pm$ .005                   | .226 $\pm$ .016                   | .333 $\pm$ .022                   |
+| MLP + O-Align | .001 $\pm$ .001 | .175 $\pm$ .006                   | .654 $\pm$ .004                   | .856 $\pm$ .004                   |
+| MLP + SVD     | .071 $\pm$ .003 | .148 $\pm$ .005                   | .667 $\pm$ .008                   | .863 $\pm$ .006                   |
+| MLP + Dense   | .013 $\pm$ .002 | .169 $\pm$ .011                   | .677 $\pm$ .006                   | .871 $\pm$ .005                   |
+| GL-net        | .009 $\pm$ .001 | <b>.111 <math>\pm</math> .004</b> | <b>.695 <math>\pm</math> .005</b> | <b>.884 <math>\pm</math> .003</b> |
+
+#### 5.2.1 CLIP SCORE PREDICTION.
+
+CLIP scores were introduced by Hessel et al. (2022) as an automated method for measuring text-image-alignment in diffusion models by evaluating the semantic similarity between their prompts and generated images. Higher CLIP scores generally correspond to better diffusion models, so CLIP score is a useful metric for evaluating these models. We calculate the CLIP score of each of our 3,900 diffusion models (with 33 fixed prompts) and train LoL models on the task of determining the CLIP score of a model given its finetuned weights; see Appendix D.1.1 for more details.
+
+The results are shown in Table 2. All of the LoL models (besides the vanilla MLP) can effectively predict the CLIP score of diffusion LoRAs using only their decomposed low rank matrices. The poor performance of vanilla MLP demonstrates the importance of GL symmetries, whereas the relatively good performance of MLP + Dense suggests “outer” permutation symmetries are less important for LoL models, confirming two of our hypotheses from Section 2. GL-net is able to calculate CLIP score significantly faster than generating images, which requires 660 score-network forward passes per finetuned model. Other baselines, including MLP + SVD, MLP + O-Align and MLP + Dense are less predictive. To demonstrate the utility of this task, we generate images from the two models in
+
+Figure 3: Images generated by two diffusion models in our test set. (a), (c), and (e) correspond to images generated by the model predicted by GL-net to have the highest CLIP score. (b), (d), and (f) correspond to outputs of the model predicted by GL-net to have the lowest CLIP score.
+
+![Figure 3: A 3x2 grid of images. The first row shows 'toy cars' (a) and a man's face (b). The second row shows a volcano (c) and a woman's face (d). The third row shows two wine bottles (e) and a man's face (f).](32a03202e95ff09a974e12e4be687885_img.jpg)
+
+Figure 3: A 3x2 grid of images. The first row shows 'toy cars' (a) and a man's face (b). The second row shows a volcano (c) and a woman's face (d). The third row shows two wine bottles (e) and a man's face (f).
+
+Table 3: Results for using LoL models to predict properties of the finetuning data of diffusion models, given only the LoRA weights. In the left section, the task is to predict 5 different binary attributes of the CelebA celebrity that each LoRA was finetuned on. In the right section, the task is to predict which of the 10 Imagenette classes were included in the finetuning data of the LoRA. MLP and MLP + SVD have trouble fitting these tasks, while GL-net performs the best overall.
+
+| LoL Model     | CelebA Attributes |                                   |                                  | Imagenette Classes |                                   |                                  |
+|---------------|-------------------|-----------------------------------|----------------------------------|--------------------|-----------------------------------|----------------------------------|
+|               | Train Loss        | Test Loss                         | Test Acc                         | Train Loss         | Test Loss                         | Test Acc                         |
+| MLP           | .551 $\pm$ .000   | .554 $\pm$ .000                   | 72.4 $\pm$ 0.0                   | .582 $\pm$ .004    | .709 $\pm$ .004                   | 49.6 $\pm$ 1.3                   |
+| MLP + O-Align | .074 $\pm$ .022   | .333 $\pm$ .008                   | 87.2 $\pm$ 0.5                   | .002 $\pm$ .001    | .278 $\pm$ .008                   | 87.8 $\pm$ 0.3                   |
+| MLP + SVD     | .490 $\pm$ .015   | .509 $\pm$ .013                   | 77.3 $\pm$ 1.3                   | .581 $\pm$ .013    | .638 $\pm$ .013                   | 65.6 $\pm$ 0.6                   |
+| MLP + Dense   | .131 $\pm$ .018   | .267 $\pm$ .007                   | 89.1 $\pm$ 0.4                   | .019 $\pm$ .001    | .264 $\pm$ .011                   | 88.9 $\pm$ 0.6                   |
+| GL-net        | .064 $\pm$ .008   | <b>.232 <math>\pm</math> .007</b> | <b>91.3 <math>\pm</math> 0.1</b> | .019 $\pm$ .000    | <b>.244 <math>\pm</math> .005</b> | <b>90.4 <math>\pm</math> 0.3</b> |
+
+our test set predicted by GL-net to have the highest and lowest CLIP scores respectively. As shown in Figure 3, GL-net’s predictions are highly correlated with the actual quality of model output.
+
+#### 5.2.2 PREDICTING PROPERTIES OF TRAINING DATA
+
+**Dataset attribute prediction.** On our CelebA-LoRA dataset, we train LoL models to classify attributes of the celebrity that each LoRA was finetuned on. Due to the noisy nature of CelebA labels, we follow the advice of (Lingenfelter et al., 2022) and only train and test on the five CelebA attributes they determine to be least noisy. Also, we train LoL models to predict which Imagenette classes appeared in the finetuning data of each model in Imagenette-LoRA. Our results are in Table 3.
+
+**Dataset size prediction.** The task of predicting the size of the finetuning dataset given LoRA weights was first studied recently by Salama et al. (2024). The success of this task implies a privacy leak, since model developers may sometimes wish to keep the size of their finetuning dataset private. Moreover, the dataset size is a useful quantity to know for data membership inference attacks and model inversion attacks, so accurately predicting dataset size could improve effectiveness of these attacks too (Shokri et al., 2017; Haim et al., 2022).
+
+In Table 4, we show results for finetuning-dataset-size prediction using LoL models. The task is to take in the LoRA weights of one of the diffusion models from our Imagenette-LoRA dataset, and predict the number of unique images that it was finetuned on. Although it struggles on some other tasks, we see that MLP + SVD is able to effectively predict dataset size, in line with observations from Salama et al. (2024). Other LoL models struggle to generalize well on this task. Interestingly, GL-net performs approximately as well as
+
+Table 4: Results for finetuning dataset size prediction with LoL models. We use our Imagenette-LoRA dataset, and predict the number of classes (or equivalently images) that are used to finetune each model.
+
+| LoL Model     | Train Loss      | Test Acc                         |
+|---------------|-----------------|----------------------------------|
+| MLP           | .439 $\pm$ .030 | 20.9 $\pm$ 3.1                   |
+| MLP + O-Align | .014 $\pm$ .004 | 35.2 $\pm$ 2.1                   |
+| MLP + SVD     | .082 $\pm$ .010 | <b>73.1 <math>\pm</math> 1.6</b> |
+| MLP + Dense   | .382 $\pm$ .119 | 31.6 $\pm$ 4.3                   |
+| GL-net        | .005 $\pm$ .003 | 46.8 $\pm$ 2.1                   |
+
+expected if using the following strategy: first predict which classes are present in the finetuning set of the LoRA (as in Table 3), and then sum the number of classes present to predict the dataset size. MLP+SVD is clearly using different predictive strategies for this task, as it cannot predict which individual classes are present (Table 3), but it can predict the number of classes present. See Appendix D.3 for more analysis on the learned prediction strategies of the LoL models on this task.
+
+### 5.3 LANGUAGE MODEL CLASSIFICATION
+
+Table 5: LoL model performance on LoRAs of the Qwen2 1.5B language model. The left column is prediction of which data sources the input LoRA was finetuned on, the middle column is prediction of the validation loss for the finetuning task, and the right column is prediction of the accuracy of the LoRA on the ARC-C (Clark et al., 2018) test set. All metrics are reported on the LoL task’s test set (on held-out input networks). Higher numbers are better on all metrics.
+
+| LoL Model     | LoL Model Prediction Target |                        |                        |
+|---------------|-----------------------------|------------------------|------------------------|
+|               | Data Membership (Acc)       | Val Loss ( $R^2$ )     | ARC-C Acc ( $R^2$ )    |
+| MLP           | $.516 \pm .006$             | $.113 \pm .059$        | $.107 \pm .035$        |
+| MLP + O-Align | $.550 \pm .016$             | $.821 \pm .078$        | $.965 \pm .004$        |
+| MLP + SVD     | $.551 \pm .001$             | <b>.999</b> $\pm .000$ | $.983 \pm .002$        |
+| MLP + Dense   | <b>.625</b> $\pm .008$      | $.987 \pm .003$        | $.981 \pm .002$        |
+| GL-net        | $.605 \pm .007$             | $.998 \pm .000$        | <b>.987</b> $\pm .001$ |
+
+In this section, we experiment with LoL models on our Qwen2-ARC-LoRA dataset of finetuned language models. For our first task, we consider a type of data membership inference task: we aim to predict whether each of the 19 data sources was used to train a given LoRA (this is a 19-label binary classification task). We also consider two performance prediction task: we train LoL models to predict, for each LoRA, the validation loss on the finetuning objective, and the downstream accuracy on the ARC-C test set (Clark et al., 2018).
+
+Results are in Table 5. Several of our LoL models are very successful at predicting the finetuning validation loss and ARC-C test accuracy of LoRA-finetuned language models, with some of them achieving  $.99 R^2$  on finetuning validation loss regression and over  $.98 R^2$  on ARC-C test accuracy regression. This could be useful in evaluations of finetuned models, as standard evaluations of language models can require a lot of time and resources, whereas our LoL models can evaluate these models with one quick forward pass. However, data membership inference is a harder task for the LoL models, with the best model achieving only 62.5% test accuracy in predicting which data sources were present in the finetuning dataset. Though our setup is quite different, these results could be related to work showing that model-based membership inference attacks are challenging for LLMs (Duan et al., 2024; Das et al., 2024).
+
+### 5.4 GENERALIZATION TO UNSEEN RANKS
+
+In the previous sections, each LoL model was trained on LoRA weights of one fixed rank (e.g. rank 4 for the LLMs, rank 32 for the Imagenette models). In practice, model developers can choose different LoRA ranks for finetuning their models, even when they are finetuning the same base model for similar tasks. Thus, we may desire LoL models that are effective for inputs of different ranks. In this section, we explore an even more difficult problem — whether LoL models can generalize to ranks that are unseen during training time.
+
+The MLP + Dense and GL-net models can directly take as input models of different ranks. We also use MLP + SVD on inputs of different ranks, by parameterizing the model for inputs of rank  $r$ , then truncating to top  $r$  singular values for inputs of rank greater than  $r$ , and zero-padding to length  $r$  for inputs of rank less than  $r$ .
+
+In Figure 4, we train LoL models on inputs of rank 4, and then test performance on inputs of ranks between 1 and 32. On the CelebA attribute prediction task, we see that MLP + Dense and GL-net mostly generalize very well to different ranks that are unseen during training (except not as well for  $r = 1$ ), while MLP + SVD does not generalize as well.
+
+![Figure 4: Performance of LoL models across inputs of varying ranks. The figure includes a line graph titled 'Test Accuracy Across Ranks' on the left and a table on the right. The graph shows test accuracy for three models (GL Net, MLP + Dense, MLP + SVD) across ranks 1, 2, 4, 8, 16, and 32. The table provides the exact accuracy values with standard deviations for each rank and model.](4e0ade2f41b66d5602160da5cc978274_img.jpg)
+
+**Test Accuracy Across Ranks**
+
+| Rank | MLP+SVD        | MLP+Dense      | GL-net         |
+|------|----------------|----------------|----------------|
+| 1    | .714 $\pm$ .03 | .424 $\pm$ .02 | .418 $\pm$ .01 |
+| 2    | 1.01 $\pm$ .06 | .357 $\pm$ .02 | .335 $\pm$ .01 |
+| 4    | .571 $\pm$ .02 | .369 $\pm$ .02 | .323 $\pm$ .01 |
+| 8    | .604 $\pm$ .04 | .349 $\pm$ .02 | .324 $\pm$ .01 |
+| 16   | .700 $\pm$ .07 | .343 $\pm$ .02 | .317 $\pm$ .01 |
+| 32   | .789 $\pm$ .01 | .328 $\pm$ .01 | .284 $\pm$ .01 |
+
+Figure 4: Performance of LoL models across inputs of varying ranks. The figure includes a line graph titled 'Test Accuracy Across Ranks' on the left and a table on the right. The graph shows test accuracy for three models (GL Net, MLP + Dense, MLP + SVD) across ranks 1, 2, 4, 8, 16, and 32. The table provides the exact accuracy values with standard deviations for each rank and model.
+
+Figure 4: Performance of LoL models across inputs of varying ranks. Each model is only trained on rank 4 LoRA weights from CelebA-LoRAs. (Left) Test accuracy on CelebA attribute prediction. (Right) Test loss on CelebA attribute prediction. MLP + Dense and GL-net generalize well to ranks that are unseen during training, but do face degradation at rank one. On the other hand, MLP + SVD does not generalize well.
+
+![Figure 5: Runtime and scaling to large models. The figure includes two line graphs. The left graph shows 'Preprocessing Time vs. Model Size' for five models across GPT-3 sizes from 125M to 175B. The right graph shows 'Forward Pass Time vs. Model Size' for the same models and sizes. Both graphs show that MLP + Dense has the highest preprocessing and forward pass times, especially at larger model sizes.](f519a5be118c846f631c992412353fb9_img.jpg)
+
+**Preprocessing Time vs. Model Size**
+
+**Forward Pass Time vs. Model Size**
+
+Figure 5: Runtime and scaling to large models. The figure includes two line graphs. The left graph shows 'Preprocessing Time vs. Model Size' for five models across GPT-3 sizes from 125M to 175B. The right graph shows 'Forward Pass Time vs. Model Size' for the same models and sizes. Both graphs show that MLP + Dense has the highest preprocessing and forward pass times, especially at larger model sizes.
+
+Figure 5: (Left) data preprocessing time for LoL models across 64 inputs of varying sizes. (Right) forward pass time for LoL models across 512 inputs of varying sizes. MLP + Dense runs out of memory for largest inputs.
+
+### 5.5 RUNTIME AND SCALING TO LARGE MODELS
+
+Previous weight-space models generally take in small networks as inputs, e.g. 5,000 parameters (Unternher et al., 2020), 80,000 parameters (Lim et al., 2023a), or sometimes up to 4 million parameters (Navon et al., 2023b). However, many of the most impactful neural networks have orders of magnitude more parameters. Thus, here we consider the runtime and scalability of LoL models as we increase the model size. We will consider all of the language model sizes in the GPT-3 family (Brown et al., 2020), which range from 125M to 175B parameters. We assume that we finetune rank 4 LoRA weights for one attention parameter matrix for each layer.
+
+In Figure 5, we show the time it takes for data preprocessing of 64 input networks, and forward passes for 512 input networks (with batch size up to 64). Even at the largest scales, it only takes at most seconds to preprocess and compute LoL model forward passes for each input LoRA. Every LoL model besides MLP + Dense scales well with the model size: forward passes barely take longer at larger model sizes, and data preprocessing is still limited to less than a second per input network.
+
+## 6 CONCLUSION
+
+In this work, we introduced the Learning on LoRAs framework, and investigated architectures, theory, and applications for it. There are many potential applications and future directions for using LoL models to process finetunes. For instance, future work could explore equivariant tasks, such as those that involve editing or merging LoRAs. Additionally, future work could consider learning an LoL model that can generalize across different model architectures, or different base models of the same architecture.
+
+## REFERENCES
+
+- Samuel Ainsworth, Jonathan Hayase, and Siddhartha Srinivasa. Git re-basin: Merging models modulo permutation symmetries. In *The Eleventh International Conference on Learning Representations*, 2023. URL <https://openreview.net/forum?id=CQsmMYm1P5T>.
+- Bruno Andreis, Soro Bedionita, and Sung Ju Hwang. Set-based neural network encoding. *arXiv preprint arXiv:2305.16625*, 2023.
+- Ben Blum-Smith and Soledad Villar. Machine learning and invariant theory. *Notices of the American Mathematical Society*, 2022.
+- Alexander Bogatskiy, Brandon M. Anderson, Jan T. Offermann, Marwah Roussi, David W. Miller, and Risi Kondor. Lorentz group equivariant neural network for particle physics. In *International Conference on Machine Learning*, 2020. URL <https://api.semanticscholar.org/CorpusID:219531086>.
+- Michael M Bronstein, Joan Bruna, Taco Cohen, and Petar Veličković. Geometric deep learning: Grids, groups, graphs, geodesics, and gauges. *arXiv preprint arXiv:2104.13478*, 2021.
+- Tom Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared D Kaplan, Prafulla Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen Krueger, Tom Henighan, Rewon Child, Aditya Ramesh, Daniel Ziegler, Jeffrey Wu, Clemens Winter, Chris Hesse, Mark Chen, Eric Sigler, Mateusz Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCandlish, Alec Radford, Ilya Sutskever, and Dario Amodei. Language models are few-shot learners. In H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin (eds.), *Advances in Neural Information Processing Systems*, volume 33, pp. 1877–1901. Curran Associates, Inc., 2020. URL [https://proceedings.neurips.cc/paper\\_files/paper/2020/file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf](https://proceedings.neurips.cc/paper_files/paper/2020/file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf).
+- Civitai, 2024. URL <https://civitai.com/>.
+- Peter Clark, Isaac Cowhey, Oren Etzioni, Tushar Khot, Ashish Sabharwal, Carissa Schoenick, and Oyvind Tafjord. Think you have solved question answering? try arc, the ai2 reasoning challenge. *arXiv preprint arXiv:1803.05457*, 2018.
+- Taco Cohen and Max Welling. Group equivariant convolutional networks. In *International conference on machine learning*, pp. 2990–2999. PMLR, 2016.
+- Debeshee Das, Jie Zhang, and Florian Tramèr. Blind baselines beat membership inference attacks for foundation models. *arXiv preprint arXiv:2406.16201*, 2024.
+- Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In *2009 IEEE conference on computer vision and pattern recognition*, pp. 248–255. Ieee, 2009.
+- Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. Bert: Pre-training of deep bidirectional transformers for language understanding, 2019. URL <https://arxiv.org/abs/1810.04805>.
+- Anil Dravid, Yossi Gandelsman, Kuan-Chieh Wang, Rameen Abdal, Gordon Wetzstein, Alexei A Efros, and Kfir Aberman. Interpreting the weight space of customized diffusion models. *arXiv preprint arXiv:2406.09413*, 2024.
+- Michael Duan, Anshuman Suri, Nilooofar Miresghallah, Sewon Min, Weijia Shi, Luke Zettlemoyer, Yulia Tsvetkov, Yejin Choi, David Evans, and Hannaneh Hajishirzi. Do membership inference attacks work on large language models? *arXiv preprint arXiv:2402.07841*, 2024.
+- Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. The llama 3 herd of models. *arXiv preprint arXiv:2407.21783*, 2024.
+
+- 594 Nadav Dym and Steven J Gortler. Low-dimensional invariant embeddings for universal geometric  
+595 learning. *Foundations of Computational Mathematics*, pp. 1–41, 2024.
+- 596  
+597 Nadav Dym, Hannah Lawrence, and Jonathan W. Siegel. Equivariant frames and the impossibility  
+598 of continuous canonicalization. In *Forty-first International Conference on Machine Learning*,  
+599 2024. URL <https://openreview.net/forum?id=4iy0q0carb>.
+- 600  
+601 Ali Edalati, Marzieh Tahaei, Ivan Kobyzhev, Vahid Partovi Nia, James J Clark, and Mehdi  
+602 Rezagholizadeh. Krona: Parameter efficient tuning with kronecker adapter. *arXiv preprint*  
+603 *arXiv:2212.10650*, 2022.
+- 604  
+605 Gabriel Eilertsen, Daniel Jönsson, Timo Ropinski, Jonas Unger, and Anders Ynnerman. Classifying  
+606 the classifier: dissecting the weight space of neural networks. In *ECAI 2020*, pp. 1119–1126. IOS  
+607 Press, 2020.
+- 608  
+609 Rahim Entezari, Hanie Sedghi, Olga Saukh, and Behnam Neyshabur. The role of permutation in-  
+610 variance in linear mode connectivity of neural networks. In *International Conference on Learning*  
+611 *Representations*, 2022. URL <https://openreview.net/forum?id=dNigytemkL>.
+- 612  
+613 Marc Finzi, Max Welling, and Andrew Gordon Wilson. A practical method for constructing equiv-  
+614 -ariant multilayer perceptrons for arbitrary matrix groups. In *International conference on machine*  
+615 *learning*, pp. 3318–3328. PMLR, 2021.
+- 616  
+617 William Fulton and Joe Harris. *Representation Theory: A First Course*, volume 129 of *Graduate*  
+618 *Texts in Mathematics*. Springer-Verlag, New York, 1991. ISBN 978-0-387-97495-8.
+- 619  
+620 Niv Haim, Gal Vardi, Gilad Yehudai, Ohad Shamir, and Michal Irani. Reconstructing training data  
+621 from trained neural networks. *Advances in Neural Information Processing Systems*, 35:22911–  
+622 22924, 2022.
+- 623  
+624 Daniel Han and Michael Han. Unslotoh, 2023.
+- 625  
+626 Zeyu Han, Chao Gao, Jinyang Liu, Sai Qian Zhang, et al. Parameter-efficient fine-tuning for large  
+627 models: A comprehensive survey. *arXiv preprint arXiv:2403.14608*, 2024.
+- 628  
+629 Soufiane Hayou, Nikhil Ghosh, and Bin Yu. LoRA+: Efficient low rank adaptation of large  
+630 models. In *Forty-first International Conference on Machine Learning*, 2024. URL <https://openreview.net/forum?id=NEv8YqBROO>.
+- 631  
+632 Jack Hessel, Ari Holtzman, Maxwell Forbes, Ronan Le Bras, and Yejin Choi. Clipscore: A  
+633 reference-free evaluation metric for image captioning, 2022. URL <https://arxiv.org/abs/2104.08718>.
+- 634  
+635 Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models, 2020. URL  
+636 <https://arxiv.org/abs/2006.11239>.
+- 637  
+638 Kurt Hornik, Maxwell Stinchcombe, and Halbert White. Multilayer feedforward networks are uni-  
+639 versal approximators. *Neural networks*, 2(5):359–366, 1989.
+- 640  
+641 Jeremy Howard. Imagenette dataset, 2019.
+- 642  
+643 Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang,  
+644 and Weizhu Chen. Lora: Low-rank adaptation of large language models, 2021. URL <https://arxiv.org/abs/2106.09685>.
+- 645  
+646 Gabriel Ilharco, Marco Tulio Ribeiro, Mitchell Wortsman, Ludwig Schmidt, Hannaneh Hajishirzi,  
+647 and Ali Farhadi. Editing models with task arithmetic. In *The Eleventh International Confer-*  
+648 *ence on Learning Representations*, 2023. URL <https://openreview.net/forum?id=6t0Kwf8-jrj>.
+- 649  
+650 Sékou-Oumar Kaba, Arnab Kumar Mondal, Yan Zhang, Yoshua Bengio, and Siamak Ravanbakhsh.  
+651 Equivariance with learned canonicalization functions. In *International Conference on Machine*  
+652 *Learning*, pp. 15546–15566. PMLR, 2023.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

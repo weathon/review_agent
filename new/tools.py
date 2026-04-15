@@ -1,0 +1,145 @@
+
+from agents import Agent, Runner, function_tool
+import os
+ALLOWED_PATHS = [os.path.abspath("../iclr2025_data/")]
+
+from rank_bm25 import BM25Okapi
+from openai import OpenAI
+import dotenv
+dotenv.load_dotenv()
+
+or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
+# ── Build Index ────────────────────────────────────────────────
+import time
+print(f"Indexing ...")
+start = time.time()
+database = {}
+for path in ALLOWED_PATHS:
+    all_files = []
+    all_file_paths = []
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            if file.endswith(".txt") or file.endswith(".md"):
+                with open(os.path.join(root, file), "r", errors="replace") as f:
+                    all_files.append(f.read())
+                    all_file_paths.append(os.path.join(root, file))
+
+    tokenized_corpus = [doc.split(" ") for doc in all_files if doc.strip()]
+    if not tokenized_corpus:
+        print(f"  Skipping {path} (no files found)")
+        continue
+    bm25 = BM25Okapi(tokenized_corpus)
+    database[path] = {"files": all_file_paths, "bm25": bm25}
+    
+print("Indexing complete. Time taken: {:.2f}s".format(time.time() - start))
+
+
+import numpy as np
+with open("./human_reviews_embeddings.pkl", "rb") as f:
+    import pickle
+    db = pickle.load(f)
+
+filenames = list(db.keys())
+vectors = np.array(list(db.values()))
+
+
+# ── Tools ────────────────────────────────────────────────────────────
+@function_tool
+def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
+    """Read lines from a file. Returns lines numbered start_line to end_line (inclusive, 1-based).
+    If end_line is 0, reads to end of file."""
+    resolved = os.path.abspath(abs_path)
+    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
+        print(f"  [read_file] BLOCKED: '{resolved}' is not under any allowed directory.")
+        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
+    if ("/papers/" in abs_path or abs_path.endswith("_paper.md")) and end_line == 0:
+        return "ERROR: Full paper reads blocked. Use grep_files first, then read_file with start_line/end_line."
+    with open(abs_path, "r") as f:
+        lines = f.readlines()
+    selected = lines[max(0, start_line - 1):end_line if end_line > 0 else len(lines)]
+    return "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
+
+
+@function_tool
+def read_file_full(abs_path: str) -> str:
+    """Read an entire file. Only use this inside the Summarizer agent."""
+    resolved = os.path.abspath(abs_path)
+    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
+        print(f"  [read_file_full] BLOCKED: '{resolved}' is not under any allowed directory.")
+        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
+    print(abs_path)
+    with open(abs_path, "r") as f:
+        return f.read()
+
+@function_tool
+def glob_files(pattern: str, directory: str = ".") -> str:
+    """Find files matching a glob pattern (e.g. '**/*.md', '*.txt') under a directory. Returns one path per line."""
+    import glob as _glob
+    matches = sorted(_glob.glob(pattern, root_dir=directory, recursive=True))
+    return "\n".join(os.path.join(directory, m) for m in matches) if matches else "No files matched."
+ 
+@function_tool
+def grep_files(pattern: str, directory: str = ".", file_glob: str = "*") -> str:
+    """Search file contents for a regex pattern. Returns matching lines with file paths and line numbers."""
+    resolved = os.path.abspath(directory)
+    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
+        print(f"  [grep_files] BLOCKED: '{resolved}' is not under any allowed directory.")
+        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
+    import glob as _glob
+    import re
+    matches = []
+    files = sorted(_glob.glob(file_glob, root_dir=directory, recursive=True))
+    for f in files[:500]:
+        fpath = os.path.join(directory, f)
+        if not os.path.isfile(fpath):
+            continue
+        try:
+            with open(fpath, "r", errors="replace") as fh:
+                for i, line in enumerate(fh, 1):
+                    if re.search(pattern, line):
+                        matches.append(f"{fpath}:{i}: {line.rstrip()}")
+        except Exception:
+            continue
+        if len(matches) >= 100:
+            matches.append(f"... and {len(files) - 500} more files searched, {len(matches) - 100} more matches found ...")
+    return "\n".join(matches) if matches else "No matches found."
+
+
+@function_tool
+def search_file(query: str, n: int = 5, mode: str = "vector") -> str:
+    """Search for a pattern in a file using the BM25/Vector index. Returns the top n matching files. Set mode='bm25' or 'vector' to use different mode"""
+    if mode == "bm25":
+        bm25 = list(database.values())[0]["bm25"]
+        files = list(database.values())[0]["files"]
+        tokenized_query = query.split(" ")
+        doc_scores = bm25.get_scores(tokenized_query)
+        top_indices = doc_scores.argsort()[-n:][::-1]
+        results = []
+        for idx in top_indices:
+            file_path = files[idx]
+            file_path = os.path.abspath(file_path)
+            score = doc_scores[idx]
+            with open(file_path, 'r', errors='replace') as f:
+                content = f.read()
+            results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+        return "\n---\n".join(results) if results else "No relevant files found."
+    elif mode == "vector":
+        query_embedding = or_client.embeddings.create( 
+            model="google/gemini-embedding-001",
+            input=query,
+            encoding_format="float" 
+        )
+        query_vector = np.array(query_embedding.data[0].embedding)
+        similarities = vectors @ query_vector.T
+        top_indices = similarities.argsort()[-n:][::-1]
+        results = []
+        for idx in top_indices:
+            file_path = os.path.abspath(f"./human_reviews/{filenames[idx]}")
+            score = similarities[idx]
+            with open(file_path, "r", errors="replace") as file_handle:
+                content = file_handle.read()
+            results.append(f"{file_path}\nscore: {score:.2f}\n first 1000 chars:\n{content[:1000]}\n")
+        return "\n---\n".join(results) if results else "No relevant files found."
+
+    else:
+        return "ERROR: Invalid search mode. Use 'bm25' or 'vector'."

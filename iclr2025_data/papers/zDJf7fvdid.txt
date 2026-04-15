@@ -1,0 +1,354 @@
+# NVS-SOLVER: VIDEO DIFFUSION MODEL AS ZERO-SHOT NOVEL VIEW SYNTHESIZER
+
+Meng You<sup>1†</sup>, Zhiyu Zhu<sup>1†\*</sup>, Hui Liu<sup>2</sup> & Junhui Hou<sup>1</sup>
+
+<sup>1</sup>City University of Hong Kong, <sup>2</sup>Saint Francis University  
+{mengyou2, zhiyuzhu2-c}@my.cityu.edu.hk  
+h2liu@sfu.edu.hk jh.hou@cityu.edu.hk
+
+![Figure 1: Visual demonstrations of the proposed algorithm. The figure is a 3x3 grid of images. The first column (a) shows a static scene of a temple with a camel in the foreground. The second column (b) shows a dynamic scene of people on a stage. The third column (c) shows a dynamic scene of a playground with a slide. The top row shows the input images. The middle row shows the algorithm's inputs for each scenario, which are multi-view images. The bottom row shows the synthesized novel views for each scenario.](5fb340ad68b0c71df0b56698b137e35b_img.jpg)
+
+Figure 1: Visual demonstrations of the proposed algorithm. The figure is a 3x3 grid of images. The first column (a) shows a static scene of a temple with a camel in the foreground. The second column (b) shows a dynamic scene of people on a stage. The third column (c) shows a dynamic scene of a playground with a slide. The top row shows the input images. The middle row shows the algorithm's inputs for each scenario, which are multi-view images. The bottom row shows the synthesized novel views for each scenario.
+
+Figure 1: Visual demonstrations of the proposed algorithm with input of (a) single-view, (b) monocolor video, and (c) multi-view (2 views). The middle row refers to the algorithm’s inputs for each scenario. Please use *Adobe Acrobat* to display these videos.
+
+## ABSTRACT
+
+By harnessing the potent generative capabilities of pre-trained large video diffusion models, we propose a new novel view synthesis paradigm that operates *without* the need for training. The proposed method adaptively modulates the diffusion sampling process with the given views to enable the creation of visually pleasing results from single or multiple views of static scenes or monocolor videos of dynamic scenes. Specifically, built upon our theoretical modeling, we iteratively modulate the score function with the given scene priors represented with warped input views to control the video diffusion process. Moreover, by theoretically exploring the boundary of the estimation error, we achieve the modulation in an adaptive fashion according to the view pose and the number of diffusion steps. Extensive evaluations on both static and dynamic scenes substantiate the significant superiority of our method over state-of-the-art methods both quantitatively and qualitatively. The source code can be found on [https://github.com/ZHU-Zhiyu/NVS\\_Solver](https://github.com/ZHU-Zhiyu/NVS_Solver).
+
+## 1 INTRODUCTION
+
+In the realm of computer vision and graphics, novel view synthesis (NVS) from limited visual data remains a formidable challenge with profound implications across various domains, from
+
+<sup>†</sup>Equal Contribution.
+
+<sup>\*</sup>Corresponding Author. This project was supported in part by the NSFC Excellent Young Scientists Fund 62422118, in part by the Hong Kong RGC under Grants 11219422 and 11219324, and in part by Hong Kong UGC under grants UGC/FDS11/E02/22 and UGC/FDS11/E03/24.
+
+entertainment (Tewari et al., 2020; Jiang et al., 2024) to autonomous navigation (Adamkiewicz et al., 2022; Kwon et al., 2023) and beyond (Avidan & Shashua, 1997; Zhou et al., 2016; Riegler & Koltun, 2020; Mildenhall et al., 2021; Kerbl et al., 2023). However, addressing this challenge demands a sophisticated method capable of extracting meaningful information from sparse visual inputs and synthesizing coherent representations of unseen viewpoints (Zou et al., 2024; Zhang et al., 2021). In this context, the emerging field of deep learning has witnessed remarkable strides, particularly with the advent of advanced generative models (Voleti et al., 2024; Chen et al., 2023; Gu et al., 2023).
+
+Recently, diffusion models (Ho et al., 2020; Song et al., 2020; 2021b) have garnered significant attention due to their exceptional ability to synthesize visual data. A prominent area of focus within this domain is video diffusion models (Blattmann et al., 2023; Khachatryan et al., 2023; Ho et al., 2022; Ni et al., 2023; Karras et al., 2023; Khachatryan et al., 2023; Wu et al., 2023), which have gained popularity for their remarkable video generation capabilities. In this paper, we explore the problem of NVS from single or multiple views of static scenes or monocular videos of dynamic scenes, leveraging the pre-trained large video diffusion model *without additional training*. Specifically, we theoretically formulate the NVS-oriented diffusion process as guided sampling, in which the intermediate diffusion results are modulated with the scene information from the given views. Moreover, we empirically and theoretically investigate the potential distribution of the error map to achieve *adaptive* modulation in the reverse diffusion process, with a reduced estimation error boundary.
+
+In summary, the main contributions of this paper lie in:
+
+- we propose a new *training-free* novel view synthesis paradigm by leveraging pre-trained video diffusion models;
+- we theoretically formulate the process of *adaptively* utilizing the given scene information to control the video diffusion process; and
+- we demonstrate the remarkable performance of our paradigm under various scenarios.
+
+## 2 RELATED WORK
+
+**Diffusion Model** indicates a kind of deep generative model (Sohl-Dickstein et al., 2015), which is inspired by non-equilibrium statistical physics by iteratively appending noise into image data and then reversely removing noise and transferring to noise-free data distribution. (Ho et al., 2020) proposed a variance preserving (VP) diffusion denoising probabilistic model via progressively removing noise. (Song et al., 2021b; Song & Ermon, 2019; 2020; Song et al., 2021a) proposed a score-based image generation model by iteratively calculating the derivative of data distribution and utilizing the stochastic differential equation (SDE) (Anderson, 1982) or ordinary differential equation (ODE)-based solvers (Maoutsa et al., 2020; Song et al., 2021b) to reverse the noise-adding process and derive the clean image distribution. Inspired by the success of image diffusion models, many works attempted to build video diffusion model to directly achieve video generation prompted by text (Khachatryan et al., 2023; Wu et al., 2023) or a single image (Blattmann et al., 2023; Karras et al., 2023).
+
+**Diffusion sampling algorithm** aims to speed up or control the diffusion process via regularizing or re-directing the reverse trajectory of diffusion models (Lu et al., 2022a;b; Zheng et al., 2024; Zhang & Chen, 2022; Wang et al., 2023b; Cao et al., 2024; Chung et al., 2023; 2022a;b). (Song et al., 2020) proposed denoising diffusion implicit models (DDIM) to accelerate the diffusion sampling by jumping to the clean image-space at each step. (Dhariwal & Nichol, 2021) utilized the classifier to guide the sampling process of diffusion model for controlling the results' categories. (Lu et al., 2022a;b; Zheng et al., 2024) proposed a series of fast ODE diffusion solvers given an analytic solution of ODE by its semi-linear nature. Moreover, the integration of non-linear network-related parts was further approximated by its Taylor series. (Zhang & Chen, 2022) explored the huge variance of distribution shift and then decoupled an exponential variance component from the score estimation model, thus reducing the discretization error. (Chung et al., 2023) proposed to regularize the intermediate derivative from the reconstruction process to achieve image restoration. (Wang et al., 2023b) decoupled the image restoration into range-null spaces and focused on the reconstruction of null space, which contains the degraded information.
+
+**Novel view synthesis (NVS)** targets at generating images of a scene from viewpoints not presented in the original data and has been a subject of extensive research in computer vision and graphics (Park et al., 2017; Choi et al., 2019; Tretschk et al., 2021; You et al., 2023; Avidan & Shashua, 1997;
+
+Riegler & Koltun, 2021; You & Hou, 2024). Early methods in this domain often relied on geometric approaches, such as multi-view stereo reconstruction (Seitz et al., 2006; Jin et al., 2005) and structure-from-motion (Schonberger & Frahm, 2016; Özyeşil et al., 2017) techniques, to synthesize novel viewpoints from multiple images captured from different angles. The advent of deep learning has revolutionized the field of NVS, enabling the synthesis of realistic images from pre-trained feature volumes. (Rombach et al., 2021; Ren & Wang, 2022) employed autoregressive Transformer to synthesize 3D scene from single image. Neural Radiance Fields (NeRF) (Mildenhall et al., 2021; Pumarola et al., 2021; Barron et al., 2021; Martin-Brualla et al., 2021; Kosiorek et al., 2021) enabled stunningly detailed renders from 2D images through volumetric rendering. Additionally, differentiable rendering has allowed gradients of rendering outputs with respect to scene parameters, facilitating direct optimization of scene geometries, lighting, and materials. Recently, 3D Gaussian Splatting (Kerbl et al., 2023; Liu et al., 2024) presented an explicit representation of the scene.
+
+While these methods have shown promising results, they often suffer from limitations such as dependence on dense scene geometry, challenges in handling complex scene dynamics, and being hard to generalize (Kerbl et al., 2023). Moreover, they require significant computational resources and suffer from artifacts such as disocclusions and view-dependent effects. More recently, (Charatan et al., 2024; Chen et al., 2025) introduced the use of feed-forward 3D Gaussians for novel view interpolation. (Wu et al., 2024b; Watson et al., 2023; Yu et al., 2023; Cai et al., 2023; Tseng et al., 2023; Chan et al., 2023; Sargent et al., 2024) explored the integration of 3D reconstruction techniques with diffusion models.
+
+In light of these challenges, our work builds upon the strengths of recent advancements in deep learning-based NVS, with a focus on leveraging the robust zero-shot view synthesis capabilities of the video diffusion model. By harnessing latent representations derived from sparse or single-view inputs, our approach aims to overcome the limitations of existing methods and produce high-quality novel views with improved realism.
+
+## 3 PRELIMINARY OF DIFFUSION MODELS
+
+We briefly introduce some preliminary knowledge of diffusion models (Sohl-Dickstein et al., 2015), which facilitates our subsequent analyses. We also refer readers to (Song & Ermon, 2019; Song et al., 2021b) for more details. Generally, the forward SDE process of the latent diffusion model can be formulated as
+
+$$dx = f(t)x dt + g(t)dw, \quad (1)$$
+
+where  $x$  is the noised latent state,  $t$  for the timestamp of diffusion, and the two scalar functions  $f(t)$  and  $g(t)$  output drift and diffusion coefficients, indicating the variation of data and noise components during the diffusion process, respectively. Naturally, we have the following ODE solution:
+
+$$dx = \left[ f(t)x - \frac{1}{2}g^2(x)\nabla_x \log(q_t(x)) \right] dt. \quad (2)$$
+
+Through training a score model  $S_\theta(x, t)$  parameterized with  $\theta$  to approximate the  $\nabla_x \log[q(x)]$  as
+
+$$\mathcal{L} = \gamma(t) \|S_\theta(x, t) - \nabla_x \log[q_t(x)]\|_2^2, \quad (3)$$
+
+with  $\gamma(t) > 0$ , we can calculate the clean image  $x_0$  via utilizing the score function  $S_\theta(x, t)$  to calculate the data distribution gradient as
+
+$$dx = \left[ f(t)x - \frac{1}{2}g^2(x)S_\theta(x, t) \right] dt. \quad (4)$$
+
+Moreover, since the noise of the diffusion process is usually parameterized by i.i.d. Gaussian noises  $\mathcal{N}(\epsilon_t; \mathbf{0}, \sigma(t)\mathbf{I})$  with a variance of  $\sigma(t)$ , the above diffusion process can be calculated as
+
+$$dx = \left[ f(t)x - \frac{1}{2}g^2(x)\frac{\mu_t - x}{\sigma^2(t)} \right] dt, \quad (5)$$
+
+where  $\mu_t = \mathcal{X}_\theta(x_t, t)$  is the estimated clean image from the noised image  $x_t$  at step  $t$  by the denoising U-Net  $\mathcal{X}_\theta(\cdot, \cdot)$ <sup>1</sup>. Finally, considering the special case of variance exploding (VE) diffusion process (Song et al., 2021b) of the stable video diffusion (SVD) (Blattmann et al., 2023), Eq. (5) can be further simplified as
+
+$$dx = \frac{x - \mu_t}{\sigma(t)} d\sigma(t). \quad (6)$$
+
+<sup>1</sup>For simplicity, here we combine some parameterizations stemmed from EDM (Karras et al., 2022) into  $\mathcal{X}_\theta(\cdot)$ .
+
+## 4 PROPOSED METHOD
+
+Motivated by the powerful generative capability with realistic and consistent frames by large video diffusion models, we aim to adapt the pre-trained video diffusion model to the task of NVS *without any additional training*, leading to a score modulation-based approach. Generally, our method warps the input image set to the target view and leverages these warped images as prior information to guide the reverse sampling of a video diffusion process. This not only ensures the accurate generation of the warped regions but also facilitates the meaningful synthesis of unknown or occluded areas, resulting in high-quality and visually consistent novel views with enhanced fidelity and coherence. Specifically, we first theoretically reformulate NVS-oriented reverse diffusion sampling by modulating the score function with the given views (Sec. 4.1). Based on theoretically exploring the boundary of the diffusion estimation and depth-based warping errors, we propose to adaptively modulate the prior of the given view into the diffusion process to reduce the potential boundary of the estimation error (Sec. 4.2).
+
+In the following, we take the single view-based NVS to illustrate our method, as summarized in Algorithm 1, which involves from a given view  $\mathbf{X}_{0,\mathbf{p}_0}$  with pose  $\mathbf{p}_0$ , reconstructing  $N - 1$  novel views at target poses  $\{\mathbf{p}_1, \dots, \mathbf{p}_i, \dots, \mathbf{p}_{N-1}\}$ , denoted as  $\hat{\mathbf{X}}_{0,\mathbf{p}_i}$ . Note that our method is suitable for scenarios involving NVS from multiple views, as well as from monocular videos, as explained in Sec. 4.3. Also, we consider the pre-trained image-to-video diffusion model SVD (Blattmann et al., 2023).
+
+**Notations.** Let  $\mathbf{X}_t \in \mathbb{R}^{H \times W \times N}$  be the spatial-temporal latent of a set of  $N$  images/views at the  $t$ -th diffusion step,  $\mathbf{p}_i \in \mathbb{R}^5$  the pose of the  $i$ -th image ( $0 \leq i \leq N - 1$ ),  $\mathcal{A}_\theta(\mathbf{X}_t, t)$  a U-Net denoising  $\mathbf{X}_t$  to estimate the clean image set  $\mu_t \in \mathbb{R}^{H \times W \times N}$ ,  $\mathbf{X}_{t,\mathbf{p}_i} \in \mathbb{R}^{H \times W}$  a typical latent at step  $t$ , time  $i$ , and spatial pose  $\mathbf{p}_i$ , and  $\mu_{t,\mathbf{p}_i} = \mathcal{A}_\theta^{p_i}(\mathbf{X}_t, t)$ , indicating an intermediate estimation of clean image  $\mathbf{X}_{0,\mathbf{p}_i}$ .
+
+### 4.1 SCENE PRIOR MODULATED REVERSE DIFFUSION SAMPLING
+
+Based on the formulation of the image reverse diffusion sampling process in Eq. (6), we have
+
+$$d\mathbf{X}_{t,\mathbf{p}_i} = \left[ \frac{\mathbf{X}_{t,\mathbf{p}_i} - \mathcal{A}_\theta^{p_i}(\mathbf{X}_t, t)}{\sigma(t)} \right] d\sigma(t). \quad (7)$$
+
+According to the intensity function (McMillan & Bishop, 1995), we can formulate the relationship between  $\mathbf{X}_{0,\mathbf{p}_0}$  and  $\mathbf{X}_{0,\mathbf{p}_i}$  through Taylor expansion:
+
+$$\mathbf{X}_{0,\mathbf{p}_i} = \mathcal{I}(\mathbf{p}_0) + \frac{d\mathcal{I}(\mathbf{p})}{d\mathbf{p}} \Delta \mathbf{p} + \mathcal{O}^2(\Delta \mathbf{p}), \quad (8)$$
+
+where  $\mathcal{I}(\cdot)$  is the intensity function,  $\Delta \mathbf{p} := \mathbf{p}_i - \mathbf{p}_0$  is the pose variation, and  $\mathcal{O}^2(\Delta \mathbf{p})$  is the high order Taylor expansions. Based on the depth-driven image-warping operation, we further have
+
+$$\mathcal{I}(\mathbf{p}_0) = \mathcal{W}(\mathbf{X}_{0,\mathbf{p}_0}, \mathbf{u}_i), \quad \mathbf{u}_i = \mathbf{K} \mathbf{D} \Delta \mathbf{p} \mathbf{K}^{-1} \mathbf{u}_0, \quad (9)$$
+
+where  $\mathcal{W}(\cdot, \cdot)$  denotes the image warping function;  $\mathbf{u}_0$  and  $\mathbf{u}_i$  are the pixel locations of the views at poses  $\mathbf{p}_0$  and  $\mathbf{p}_i$ , respectively;  $\mathbf{D}$  is the depth map;  $\mathbf{K}$  is the camera intrinsic matrix. Moreover, since the ground-truth depth  $\mathbf{D}$  is usually not available in practice, we can also use the estimated depth map  $\hat{\mathbf{D}}$  by an off-the-shelf depth estimation method to calculate the estimated pixel location, i.e.,  $\hat{\mathbf{u}}_i = \mathbf{K} \hat{\mathbf{D}} \Delta \mathbf{p} \mathbf{K}^{-1} \mathbf{u}_0$ . By substituting Eq. (9) with an estimated depth map to Eq. (8), we then have
+
+$$\underbrace{\mathbf{X}_{0,\mathbf{p}_i}}_{\hat{\mathbf{X}}_{0,\mathbf{p}_i}} = \underbrace{\mathcal{W}(\mathbf{X}_{0,\mathbf{p}_0}, \hat{\mathbf{u}}_i)}_{\mathcal{E}_T} + \underbrace{\frac{\partial \mathcal{W}(\mathbf{X}_{0,\mathbf{p}_0}, \hat{\mathbf{u}}_i)}{\partial \mathbf{u}} \Delta \mathbf{u} + \frac{d\mathcal{I}(\mathbf{p})}{d\mathbf{p}} \Delta \mathbf{p} + \mathcal{O}^2(\Delta \mathbf{p})}_{\mathcal{E}_T}, \quad \Delta \mathbf{u} = \mathbf{K} \Delta \mathbf{D} \Delta \mathbf{p} \mathbf{K}^{-1} \mathbf{u}_0, \quad (10)$$
+
+where  $\Delta \mathbf{D} := \mathbf{D} - \hat{\mathbf{D}}$ ,  $\hat{\mathbf{X}}_{0,\mathbf{p}_i}$  refers to the warped view from  $\mathbf{p}_0$  to pose  $\mathbf{p}_i$  through  $\hat{\mathbf{D}}$ , and  $\mathcal{E}_T$  is a residual term that contains high-order Taylor expansion series and warping error.
+
+Based on the above analysis that the rendered novel view at pose  $\mathbf{p}_i$  is highly correlated with  $\hat{\mathbf{X}}_{0,\mathbf{p}_i}$  and  $\mu_{t,\mathbf{p}_i}$ , an effective score function for NVS should take advantage of them. Then, we formulate the score function of NVS-oriented reverse diffusion sampling, which is modulated with the given scene information as
+
+$$\tilde{\mu}_{t,\mathbf{p}_i} = \arg \min_{\mu} \|\mu - \mu_{t,\mathbf{p}_i}\|_2^2 + \lambda(t, \mathbf{p}_i) \|\mu - \hat{\mathbf{X}}_{0,\mathbf{p}_i}\|_2^2, \quad (11)$$
+
+#### **Algorithm 1** Zero-shot NVS from Single Images
+
+- 
+- ```
+
+1: Input: given view  $\{\mathbf{X}_{\mathbf{p}_0}\}$ , estimated depth map  $\hat{\mathbf{D}}_{\mathbf{p}_0}$ , target view poses  $\{\mathbf{p}_0, \dots, \mathbf{p}_{N-1}\}$ , and
+diffusion U-Net  $\mathcal{A}_\theta(\cdot)$ .
+2: Derive the warping component  $\{\hat{\mathbf{X}}_{0,\mathbf{p}_0}, \dots, \hat{\mathbf{X}}_{0,\mathbf{p}_i}, \dots, \hat{\mathbf{X}}_{0,\mathbf{p}_{N-1}}\}$ , using the given views,
+corresponding poses and depth maps by Eq. (10).  $\triangleright$  Preparing diffusion guidance images.
+3: Initialize  $\mathbf{X}_T \sim \mathcal{N}(0, \sigma_T \mathbf{I})$ 
+4: For  $t = T, \dots, 1$  do  $\triangleright$  Video diffusion reverse sampling steps.
+5:   Diffusion network forward  $\mu_t = \mathcal{A}_\theta(\mathbf{X}_t, t)$ .
+6:   For  $i = 0, \dots, N-1$  do
+7:     Calculate weights  $\lambda(t, \mathbf{p}_i)$  via Eq. (17) and  $\tilde{\mu}_{t,\mathbf{p}_i}$  via Eq. (12).
+8:     If Directly guided sampling then
+9:       Reverse  $\mathbf{X}_{t,\mathbf{p}_i}$  to  $\mathbf{X}_{t-1,\mathbf{p}_i}$  via Eq. (13).
+10:    End If
+11:  End for
+12:  If Posterior sampling then
+13:    Derive the optimized  $\mathbf{X}'_t$  via Eq. (14) and apply a standard reverse step as Eq. (7) to get
+the  $\mathbf{X}_{t-1}$ .
+14:  End If
+15: End for
+16: Return Reconstructed sequence  $\mathbf{X}_0$ .
+
+```
+- 
+
+where  $\lambda(t, \mathbf{p}_i) > 0$  balances the two terms. It is obvious the closed-form solution of Eq. (11) is
+
+$$\tilde{\mu}_{t,\mathbf{p}_i} = \frac{1}{1 + \lambda(t, \mathbf{p}_i)} \mu_{t,\mathbf{p}_i} + \frac{\lambda(t, \mathbf{p}_i)}{1 + \lambda(t, \mathbf{p}_i)} \hat{\mathbf{X}}_{0,\mathbf{p}_i}. \quad (12)$$
+
+With the optimized clean image expectation term  $\tilde{\mu}_{t,\mathbf{p}_i}$ , we further utilize two ways to guide the reverse sampling of the pre-trained SVD: (1) *Directly Guided Sampling*, which is fast with limited quality; and (2) *Posterior Sampling*, which is slow but more effective. Specifically, the former directly replaces the  $\mu_{t,\mathbf{p}_i}$  in 7 with  $\tilde{\mu}_{t,\mathbf{p}_i}$ , as
+
+$$d\mathbf{X}_{t,\mathbf{p}_i} = \left[ \frac{\mathbf{X}_{t,\mathbf{p}_i} - \tilde{\mu}_{t,\mathbf{p}_i}}{\sigma(t)} \right] d\sigma(t). \quad (13)$$
+
+While the latter embeds the knowledge of  $\tilde{\mu}_t$  into  $\mathbf{X}_t$  via the backward gradient as
+
+$$\mathbf{X}'_t = \mathbf{X}_t - \kappa \nabla_{\mathbf{X}_t} \|\mu_t - \tilde{\mu}_t\|_2, \quad (14)$$
+
+where  $\kappa > 0$  controls the updating rate, which is empirically set to  $2e^{-2} \sqrt{\sigma(t)}$ ;  $\nabla_{\mathbf{X}_t} \|\mu_t - \tilde{\mu}_t\|_2$  computes the back-propagated gradient on  $\mathbf{X}_t$ ;  $\mathbf{X}'_t$  stands for the optimized noised latent  $\mathbf{X}_t$ . Here, we also normalize the gradient  $\nabla_{\mathbf{X}_t} \|\mu_t - \tilde{\mu}_t\|_2$  to stabilize the updating process.
+
+### 4.2 ADAPTIVE DETERMINATION OF $\lambda(t, \mathbf{p}_i)$
+
+Although we have reformulated the NVS-oriented diffusion process in the preceding section, the value of  $\lambda(t, \mathbf{p}_i)$  in Eq. (11) and Eq. (12), which is crucial to the quality of synthesized views, has to be appropriately determined. Here, we theoretically explore the formulation of  $\lambda(t, \mathbf{p}_i)$  via analyzing the upper boundary of the estimation error of  $\tilde{\mu}_{t,\mathbf{p}_i}$ .
+
+Let  $\tilde{\mu}_{t,\mathbf{p}_i}^*$  be the ideal value for the score function estimation in the NVS-oriented diffusion process, i.e., the ground-truth view at  $\mathbf{p}_i$ . Based on the formulation of  $\tilde{\mu}_{t,\mathbf{p}_i}$  in
+
+![Figure 2: Experimental observations of the relationship between diffusion estimation error and noise level, and between error of warped image and changed amount of view pose.](d6226b6d22b1babc1eeeb93e07cc9cc4_img.jpg)
+
+Figure 2 consists of two subplots. Subplot (a) shows the 'diffusion estimation error  $\mathcal{E}_D$ ' on the y-axis (ranging from 0.0 to 0.8) against the 'noise level  $\sigma_t$ ' on the x-axis (logarithmic scale from 10<sup>-2</sup> to 10<sup>0</sup>). A dense cloud of blue lines represents individual data points, with a solid blue line representing the 'Mean Value' which decreases as noise level increases. Subplot (b) shows the 'error of warped image  $\mathcal{E}_T$ ' on the y-axis (ranging from 0.00 to 0.40) against the 'changed amount of view pose  $\|\Delta \mathbf{p}\|_2$ ' on the x-axis (linear scale from 0.0 to 0.7). Similar to (a), a dense cloud of blue lines represents individual data points, with a solid blue line representing the 'Mean Value' which increases as the changed amount of view pose increases.
+
+Figure 2: Experimental observations of the relationship between diffusion estimation error and noise level, and between error of warped image and changed amount of view pose.
+
+Figure 2: Experimental observations of the relationship (a) between the diffusion estimation error  $\mathcal{E}_D$  and the noise level  $\sigma_t$  and (b) between the error of warped image  $\mathcal{E}_T$  and the changed amount of view pose  $\|\Delta \mathbf{p}\|_2$ .
+
+Eq. (12) and the triangle inequality, we have
+
+$$\|\tilde{\mu}_{t, \mathbf{p}_i} - \tilde{\mu}_{t, \mathbf{p}_i}^*\|_2 \leq \frac{1}{1 + \lambda(t, \mathbf{p}_i)} \|\mu_{t, \mathbf{p}_i} - \tilde{\mu}_{t, \mathbf{p}_i}^*\|_2 + \frac{\lambda(t, \mathbf{p}_i)}{1 + \lambda(t, \mathbf{p}_i)} \|\hat{\mathbf{X}}_{0, \mathbf{p}_i} - \tilde{\mu}_{t, \mathbf{p}_i}^*\|_2. \quad (15)$$
+
+Thus, we propose to minimize the estimation error upper bound to obtain an appropriate and adaptive  $\lambda(t, \mathbf{p}_i)$ , i.e.,
+
+$$\hat{\lambda}(t, \mathbf{p}_i) = \arg \min_{\lambda(t, \mathbf{p}_i)} \frac{1}{1 + \lambda(t, \mathbf{p}_i)} \mathbb{E}_{\mathbf{x}_i \sim \mathcal{P}(\mathbf{x}_i)} (\mathcal{E}_D) + \frac{\lambda(t, \mathbf{p}_i)}{1 + \lambda(t, \mathbf{p}_i)} \mathbb{E}_{\mathbf{x} \sim \mathcal{P}(\mathbf{x})} (\mathcal{E}_P) + v_1 |\log(\lambda(t, \mathbf{p}_i))|, \quad (16)$$
+
+where  $v_1 > 0$  and the last regularization term prevents the weights from being overfitting on the empirically estimated errors. In the following, we will provide the explicit formulations of the two error terms  $\mathcal{E}_D = \|\mu_{t, \mathbf{p}_i} - \tilde{\mu}_{t, \mathbf{p}_i}^*\|_2$  and  $\mathcal{E}_P = \|\hat{\mathbf{X}}_{0, \mathbf{p}_i} - \tilde{\mu}_{t, \mathbf{p}_i}^*\|_2$ <sup>2</sup>, based on theoretical analyses and experimental observations.
+
+**Diffusion Estimation Error  $\mathcal{E}_D$ .** This error is caused due to the fact that the diffusion model cannot perfectly estimate  $\tilde{\mu}_{t, \mathbf{p}_i}^*$  from the given noised latent  $\mathbf{X}_t$ . Recent works (Zhang & Chen, 2022; Zheng et al., 2024) indicate that the derivative  $S_\theta(\mathbf{X}_t, t)$  of SDE-based diffusion models varies intensely when  $\sigma(t)$  is huge. Accordingly, large values of  $\sigma$  would potentially lead to large errors. Moreover, we experimentally investigated the correlation of  $\|\mathcal{E}_D\|_2$  with  $\sigma(t)$ . As demonstrated in in Fig. 2 (a),  $\|\mathcal{E}_D\|_2$  gradually decreases with the diffusion reverse process (decreasing of  $\sigma(t)$ ). Thus, we empirically formulate  $\|\mathcal{E}_D\|_2 = v_2 \sigma(t)$ , where  $0 < v_2$ .
+
+**Intensity Truncation Error  $\mathcal{E}_P$ .** This error is mainly induced by the truncation of the Taylor series (here  $\tilde{\mu}_{t, \mathbf{p}_i}^*$  is the same with  $\mathbf{X}$ ), as shown in Eq. (10). If omitting the high-order terms, we have  $\mathcal{E}_P \approx \frac{\partial \mathcal{W}(\mathbf{X}_0, \mathbf{p}_0, \bar{\mathbf{u}}_i)}{\partial \mathbf{p}} \Delta \mathbf{u} + \frac{d\mathcal{Z}(\mathbf{p})}{d\mathbf{p}} \Delta \mathbf{p}$ . According to the definition of  $\Delta \mathbf{u}$  in Eq. (10), we also have  $\|\mathcal{E}_P\|_2 \leq v \|\Delta \mathbf{p}\|_2$ . Together with the experimental observation of the relationship between  $\|\mathcal{E}_P\|_2$  and  $\|\Delta \mathbf{p}\|_2$  in Fig. 2 (b), we empirically formulate  $\|\mathcal{E}_P\|_2 = v_3 \|\Delta \mathbf{p}\|_2$ .
+
+Finally, with the explicit formulations of the two error terms, we can rewrite Eq. (16) as
+
+$$\hat{\lambda}(t, \mathbf{p}_i) = \arg \min_{\lambda(t, \mathbf{p}_i)} \frac{v_2 \sigma(t)}{1 + \lambda(t, \mathbf{p}_i)} + \frac{\lambda(t, \mathbf{p}_i) v_3 \|\Delta \mathbf{p}\|_2}{1 + \lambda(t, \mathbf{p}_i)} + v_1 |\log(\lambda(t, \mathbf{p}_i))|, \quad (17)$$
+
+whose closed-form solution is (we have visualized  $\hat{\lambda}$  in Appendix D)
+
+$$\hat{\lambda}(t, \mathbf{p}_i) = \frac{-(2v_1 + Q) + \sqrt{Q^2 + 4v_1 Q}}{2v_1}, \quad Q = v_3 \|\Delta \mathbf{p}\|_2 - v_2 \sigma(t). \quad (18)$$
+
+**Claim of Novelty.** Our method presents a theoretical analysis that links NVS with diffusion processes. Examining the relationships between different views and assessing their potential error distributions enable adaptive modulation of the diffusion score function, effectively minimizing errors from both the warping operator and the diffusion process. This makes our method uniquely suited to addressing NVS challenges. *In contrast*, traditional guided sampling algorithms typically rely on image degradation models, such as blurring and noise, to guide the diffusion process, setting our approach apart. Moreover, we have theoretically discussed that the proposed method regularizes the diffusion trajectories towards a more accurate direction in *Appendix A.1*. We have also proved the proposed method (DGS) can safely regularize the samples on the data manifolds in *Appendix A.2*. We also experimentally compare with inpainting-based methods in *Appendix G*.
+
+### 4.3 NVS FROM MULTIVIEWS AND MONOCULAR VIDEOS
+
+We have illustrated the single view-based NVS via the proposed method in Algorithm 1, which can be further modified for NVS from multiple views or monocular videos. Specifically, given multiple views of a static scene and target poses, we first estimate the depth map of each of the given views and derive the warped view at target poses by warping the nearest given views to each target pose. For a monocular video, we warp each frame of the video sequence to the corresponding target pose with the same timestamp (See the *Appendix E for the detailed warp strategy pipeline*). Then, we sample the novel view via the proposed method as Lines 3-16 of Algorithm 1.
+
+<sup>2</sup>There is also inherent discretization error as investigated by (Lu et al., 2022a;b; Zhang & Chen, 2022). However, we could reduce such error terms by enlarging the number of reversing steps.
+
+Table 1: Quantitative comparison of different methods on view synthesis, where we measure the FID and the error of view pose. We name our method with Ours (DGS) or (Post) for utilizing directly guided sampling in Eq. (13) or posterior sampling in Eq. (14), respectively. “\*” indicates **incomplete** evaluation, where the corresponding metric cannot output a meaningful value on some sequences by the method due to the failure of pose estimation. “- -” denotes that the method cannot work on the condition or the metrics cannot be calculated. *For all metrics, the lower, the better.*
+
+| Methods                               | Overfitting | Single view |        |        |        | Multi-view |        |        |        |
+|---------------------------------------|-------------|-------------|--------|--------|--------|------------|--------|--------|--------|
+|                                       |             | FID         | ATE    | RPE-T  | RPE-R  | FID        | ATE    | RPE-T  | RPE-R  |
+| Sparse Gaussian (Xiong et al., 2023)  | ✓           | 369.19      | --     | --     | --     | 324.60     | --     | --     | --     |
+| Sparse Nerf (Wang et al., 2023a)      | ✓           | --          | --     | --     | --     | 180.26     | 6.129  | 1.711  | 1.804  |
+| Text2Nerf (Zhang et al., 2024)        | ✓           | 187.05      | 2.223* | 0.718* | 0.107* | --         | --     | --     | --     |
+| Photoconsistent-NVS (Yu et al., 2023) | ✗           | 193.87      | 7.64   | 1.19   | 1.45   | --         | --     | --     | --     |
+| 3D-aware (Xiang et al., 2023)         | ✗           | 217.19      | 2.836  | 1.258  | 1.662  | 211.25     | 2.159* | 5.679* | 2.119* |
+| MotionCtrl (Wang et al., 2024)        | ✗           | 179.24      | 3.851  | 0.705  | 0.835  | 154.27     | 37.68  | 19.61  | 1.646  |
+| <b>Ours (DGS)</b>                     | ✗           | 166.50      | 4.533  | 0.810  | 0.742  | 124.31     | 22.00  | 17.34  | 1.338  |
+| <b>Ours (Post)</b>                    | ✗           | 165.12      | 0.767  | 0.156  | 0.170  | 126.44     | 4.052  | 2.030  | 0.330  |
+
+## 5 EXPERIMENT
+
+**Datasets.** For *single view-based* NVS, we employed a total of nine scenes, with six scenes from the *Tanks and Temples* dataset (Knapitsch et al., 2017), containing both outdoor and indoor environments. The other three additional scenes are randomly chosen from the Internet. For *multiview-based* NVS, we used three scenes from the *Tanks and Temples* dataset (Knapitsch et al., 2017), including both outdoor and indoor settings, as well as six scenes from the *DTU* dataset (Jensen et al., 2014), which feature indoor objects. For each scene, we selected two images as input to perform view interpolation. For *monocular video-based* NVS, we downloaded nine videos from YouTube, each comprising 25 frames and capturing complex scenes in both urban and natural settings.
+
+**Implementation Details.** We conducted all the experiments with PyTorch using a single NVIDIA GeForce RTX A6000 GPU-48G. We adopted the point-based warping (Somraj, 2020) to achieve  $\mathcal{W}(\cdot)$  and employed Depth Anything (?) to estimate the maps of the input views (See the Appendix F for more results with different depth estimation methods). We simultaneously rendered 24 novel views and set the reverse steps as 100 for high-quality sample generation. For the implementation of Eq. (11), since applying directly weighted sum usually results in blurry, we ordered the feature pixels by the  $\|\mu_{t,p_i} - \tilde{X}_{0,p_i}\|_2$  and take the ratio of  $\frac{\lambda(t,p_i)}{1+\lambda(t,p_i)}$  smaller pixels from  $\tilde{X}_{0,p_i}$  and the others from  $\mu_{t,p_i}$  to modulate  $\tilde{\mu}_{t,p_i}$ . We choose the values  $(v_1, v_2, v_3)$  as  $(1e^{-6}, 9e^{-1}, 5e^{-2})$ ,  $(1e^{-6}, 7e^{-1}, 1e^{-2})$ , and  $(1e^{-6}, 1.75, 3e^{-2})$  for single, sparse, dynamic scene view synthesis.
+
+**Metrics.** We utilized four metrics to measure the reconstruction performance, i.e., *Fréchet Inception Distance (FID)* (Heusel et al., 2017) evaluating the quality and diversity of synthesized views; *Absolute trajectory error (ATE)* (Goel et al., 1999) measuring the difference between the estimated trajectory of a camera or robot and the ground truth trajectory; *Relative pose error (RPE)* (Goel et al., 1999) measuring the drift, where we separately calculated the transition and rotation as RPE-T and RPE-R, respectively. We utilize Particle-SfM (Zhao et al., 2022) to estimate the camera trajectory and assess the pose metrics. Since current depth estimation algorithms struggle to derive absolute depth from a single view or monocular video, resulting in a scale gap between the synthesized and ground truth images, we only compare the paired metrics in Appendix I, such as *LPIPS*.
+
+### 5.1 RESULTS OF NVS FROM SINGLE OR MULTIPLE VIEWS OF STATIC SCENES
+
+Fig. 3 visualizes synthesized novel views of two scenes by different methods from single views, where we can see that our method can consistently generate high-quality novel views with visually pleasing geometry and textures. The quantitative results listed in Table 1 also validate the significant superiority of our method over state-of-the-art methods. Although MontionCtrl (Wang et al., 2024) can generate high-quality images reflected by the FID value, its results have significantly large view pose errors reflected by the higher ATE and RPE values. For Text2Nerf (Zhang et al., 2024), only 7 out of the total 9 sequences can be calculated metrics, which may be induced by the inherent errors of the learned geometric structure.
+
+Fig. 4 shows the synthesized views by different methods from two given views, where it can be seen that our method outperforms state-of-the-art methods by clearer views, especially for the 2<sup>nd</sup> and 3<sup>rd</sup>
+
+![Figure 3: Visual comparison of single view-based NVS results. The figure is a 4x4 grid of images. Rows (a) through (d) represent different methods: (a) Text2Nerf, (b) 3D-aware, (c) MotionCtrl, and (d) Ours (Post). Each row shows four views of a scene: a house, a garden with a statue, a building, and a street scene. In each row, the second image is highlighted with a red rectangle, indicating it as the input view. The third and fourth images show the synthesized results from that input view.](892f25e3d71d8e315a2a51092a8a8da7_img.jpg)
+
+Figure 3: Visual comparison of single view-based NVS results. The figure is a 4x4 grid of images. Rows (a) through (d) represent different methods: (a) Text2Nerf, (b) 3D-aware, (c) MotionCtrl, and (d) Ours (Post). Each row shows four views of a scene: a house, a garden with a statue, a building, and a street scene. In each row, the second image is highlighted with a red rectangle, indicating it as the input view. The third and fourth images show the synthesized results from that input view.
+
+Figure 3: Visual comparison of single view-based NVS results by (a) Text2Nerf (Zhang et al., 2024), (b) 3D-aware (Xiang et al., 2023), (c) MotionCtrl (Wang et al., 2024), (d) Ours (Post). The middle view of each scene highlighted with the red rectangle refers to the input view. Here, we only show the results of the best two of all compared methods. We also refer reviewers to the *Appendix B* and *video demo* contained in the supplementary file for more impressive results and comparisons.
+
+![Figure 4: Visual results of multiview-based NVS. The figure is a 4x6 grid of images. Rows (a) through (d) represent different methods: (a) Input views, (b) 3D-aware, (c) MotionCtrl, and (d) Ours (Post). Each row shows six views of a scene: a truck, a house, a street, and a building. The first two images in each row are highlighted with red rectangles, indicating the two input views. The remaining four images show the synthesized results from these two input views.](efca2dce0095c9dc2a68e9af6b2bfd40_img.jpg)
+
+Figure 4: Visual results of multiview-based NVS. The figure is a 4x6 grid of images. Rows (a) through (d) represent different methods: (a) Input views, (b) 3D-aware, (c) MotionCtrl, and (d) Ours (Post). Each row shows six views of a scene: a truck, a house, a street, and a building. The first two images in each row are highlighted with red rectangles, indicating the two input views. The remaining four images show the synthesized results from these two input views.
+
+Figure 4: (a) The two input views of each scene highlighted with the red rectangle. Visual results of multiview-based NVS by (b) 3D-aware (Xiang et al., 2023), (c) MotionCtrl (Wang et al., 2024), (d) Ours (Post).
+
+scenes. In addition, it is worth noting that the lower ATE of 3D-aware (Xiang et al., 2023) is due to the incomplete evaluation (See the *Appendix C* for more results).
+
+Note that our method can also achieve  $360^\circ$  NVS through iterative execution of the proposed algorithm. Fig. 5 shows the synthesized  $360^\circ$  NVS from both single-view and multi-view inputs, demonstrating the capability of the proposed method to effectively handle the NVS task (See the *Appendix H* for the detailed strategy).
+
+### 5.2 RESULTS OF NVS FROM MONOCULAR VIDEOS OF DYNAMIC SCENES
+
+The non-generative Gaussian-based methods Deformable-Gaussian (Yang et al., 2024c) and 4D-Gaussian (Wu et al., 2024a) usually cannot handle the marginal area, as illustrated in 2<sup>nd</sup>, 4<sup>th</sup> and 6<sup>th</sup> columns of Fig. 6 (b) and (c). Although the SVD-based method MotionCtrl can generate the boundary region as shown in Fig. 6 (c), the synthesized views are blurry and the poses of generated samples cannot follow the prompt, especially on the 3<sup>rd</sup> sample. However, our method consistently generates high-quality novel views with lower pose errors, indicating its strong potential.
+
+Table 2: Quantitative comparison of different methods on NVS from monocular videos of dynamic scenes. For all metrics, the lower, the better.
+
+| Methods                                  | Train | FID    | ATE    | RPE-T  | RPE-R  |
+|------------------------------------------|-------|--------|--------|--------|--------|
+| Deformable-Gaussian (Yang et al., 2024c) | ✓     | 115.82 | 1.813* | 0.678* | 0.613* |
+| 4D-Gaussian (Wu et al., 2024a)           | ✓     | 74.34  | 2.087  | 0.625  | 0.825  |
+| 3D-aware (Xiang et al., 2023)            | ×     | 159.03 | 3.100  | 1.343  | 1.368  |
+| MotionCtrl (Wang et al., 2024)           | ×     | 70.25  | 3.384* | 1.089* | 0.652* |
+| <b>Ours (DGS)</b>                        | ×     | 37.973 | 2.236  | 0.691  | 0.446  |
+| <b>Ours (Post)</b>                       | ×     | 39.86  | 2.308  | 0.725  | 0.400  |
+
+![Figure 5: Input views of each scene highlighted with the red rectangle. (a) single view and (b) multi-view input.](d4e9f8f6bf5d7853ecae9c9633900af1_img.jpg)
+
+Figure 5 shows two rows of images, (a) and (b), representing input views for scene synthesis. Row (a) shows a single view of a yellow excavator in a park-like setting, with a red rectangle highlighting the input frame. Row (b) shows multiple views of the same excavator from different angles, also with red rectangles highlighting the input frames. The images are arranged in a grid, with (a) on top and (b) below.
+
+Figure 5: Input views of each scene highlighted with the red rectangle. (a) single view and (b) multi-view input.
+
+Figure 5: The input views of each scene highlighted with the red rectangle. Visual results of synthesized 360° NVS from (a) single view and (b) multi-view input.
+
+![Figure 6: Visual comparison on dynamic scene view synthesis of (a) input frames in the corresponding time of generated images, (b) Deformable-Gaussian, (c) 4D-Gaussian, (d) 3D-aware, (e) MotionCtrl, (f) Ours (Post).](c37fe03d7cad74ad675a0eb16aa43821_img.jpg)
+
+Figure 6 is a visual comparison of dynamic scene view synthesis across six rows (a-f) and five columns. Row (a) shows the input frames. Rows (b) through (f) show the synthesized views from different methods: (b) Deformable-Gaussian, (c) 4D-Gaussian, (d) 3D-aware, (e) MotionCtrl, and (f) Ours (Post). Each row contains five images, with the first image being the input and the subsequent four being the synthesized views. The scenes include a park with trees and a building by a river.
+
+Figure 6: Visual comparison on dynamic scene view synthesis of (a) input frames in the corresponding time of generated images, (b) Deformable-Gaussian, (c) 4D-Gaussian, (d) 3D-aware, (e) MotionCtrl, (f) Ours (Post).
+
+Figure 6: Visual comparison on dynamic scene view synthesis of (a) input frames in the corresponding time of generated images, (b) Deformable-Gaussian (Yang et al., 2024c), (c) 4D-Gaussian (Wu et al., 2024a), (d) 3D-aware (Xiang et al., 2023), (e) MotionCtrl (Wang et al., 2024), (f) Ours (Post).
+
+### 5.3 ABLATION STUDY
+
+**Reverse Inference Steps.** The quantitative results in Table 3 show that the synthesized image quality of our method does not improve intensely with the number of inference steps increasing. However, the pose error decreases significantly, indicating the necessity of a sufficient number of inference steps for accurately rendering novel views.
+
+**Posterior Sampling vs. Directly Guided Sampling.** The quantitative results listed in Tables 1 and 2 show that both the Ours (DGS) and Ours (Post) can generate high-quality images with comparable FID. However, the view pose of Ours (Post) is much more accurate than Ours (DGS), which is also visually verified by the results in Figs. 7 (c) and (d). Besides, Ours (DGS) takes 6 minutes to render 25 views, while Ours (Post) uses 1 hour.
+
+**Effectiveness of Back-propagation in Posterior Sampling.** We performed ablation studies on the updating rate  $\kappa$  and the normalization schemes in Eq. (14). The experimental results shown in Tab. 4 empirically guarantee that the back-propagation brings the latent space closer to the inherent low-dimensional manifold structure during each update step, further validating the performance of the proposed score-modulation schemes.
+
+Table 3: Quantitative comparison of different numbers of inference steps. For all metrics, the lower, the better.
+
+| Inference step | FID     | ATE   | RPE-T | RPE-R |
+|----------------|---------|-------|-------|-------|
+| 25             | 175.432 | 5.317 | 0.691 | 0.847 |
+| 50             | 168.938 | 2.275 | 0.428 | 0.402 |
+| 100            | 165.12  | 0.767 | 0.156 | 0.170 |
+
+Table 4: Quantitative comparison of ablating updating rate  $\kappa$  and the normalization schemes on Ours (Post). For all metrics, the lower, the better.
+
+| $\kappa$                | Normalization | FID    | ATE   | RPE-T | RPE-R |
+|-------------------------|---------------|--------|-------|-------|-------|
+| $2\pi^{-2}\sqrt{\pi/2}$ | Y             | 165.12 | 0.767 | 0.156 | 0.170 |
+| 0.5                     | Y             | 268.17 | 1.92  | 0.318 | 0.399 |
+| $2\pi^{-2}\sqrt{\pi/2}$ | N             | 176.00 | 4.71  | 0.568 | 1.05  |
+
+![Figure 7: Ablation studies of the proposed weight strategy and embedding strategy. The figure is a 4x4 grid of images. Row (a) shows the warped input image $\tilde{\mathbf{X}}_{0,p_i}$. Row (b) shows results without the proposed weight strategy, with red boxes highlighting warping errors. Row (c) shows results of Ours (DGS), with red boxes highlighting non-Lambert reflections. Row (d) shows results of Ours (Post), which are visually improved. Columns represent four different scenes: a theater interior, a statue in a park, a classical building, and a mountain landscape.](625e10f48104ba2b06b2220a9b224712_img.jpg)
+
+Figure 7: Ablation studies of the proposed weight strategy and embedding strategy. The figure is a 4x4 grid of images. Row (a) shows the warped input image \$\tilde{\mathbf{X}}\_{0,p\_i}\$. Row (b) shows results without the proposed weight strategy, with red boxes highlighting warping errors. Row (c) shows results of Ours (DGS), with red boxes highlighting non-Lambert reflections. Row (d) shows results of Ours (Post), which are visually improved. Columns represent four different scenes: a theater interior, a statue in a park, a classical building, and a mountain landscape.
+
+Figure 7: Ablation studies of the proposed weight strategy of  $\hat{\lambda}(t, p_i)$  and embedding strategy. Visual comparison of (a) warped input image  $\tilde{\mathbf{X}}_{0,p_i}$ , (b) results without our proposed weight strategy, (c) results of Ours (DGS), and (d) results of Ours (Post).
+
+**Effectiveness of Adaptive  $\hat{\lambda}(t, p_i)$ .** Here, we illustrate the effectiveness of adaptively adjusting  $\hat{\lambda}(t, p_i)$  via setting it to  $+\infty$ , i.e.,  $\tilde{\mu}_{t,p_i} = \tilde{\mathbf{X}}_{0,p_i}$ . Visual comparison results in Fig. 7 indicates that the proposed method significantly correct *the warping errors* (1<sup>st</sup>, 2<sup>nd</sup> and 4<sup>th</sup> samples in Fig. 7) and *non-Lambert reflection* (3<sup>rd</sup> sample in Fig. 7) as indicated in  $\mathcal{E}_T$  of Eq. (10).
+
+**Different Trajectories.** We detailedly visualize the result of the proposed method on different trajectories. We apply transitions in eight different directions. The results are shown in Fig. 8. The proposed method can consistently render high-quality novel views.
+
+![Figure 8: NVS results of Ours (Post) with different trajectories. The figure is a 3x3 grid of images showing a statue in a park from various novel viewpoints. Each sub-figure has a blue circle bounding the given view and a red arrow at the bottom right indicating the camera pose direction.](61ce9760bffbecba8f5e63310be1ebec_img.jpg)
+
+Figure 8: NVS results of Ours (Post) with different trajectories. The figure is a 3x3 grid of images showing a statue in a park from various novel viewpoints. Each sub-figure has a blue circle bounding the given view and a red arrow at the bottom right indicating the camera pose direction.
+
+Figure 8: NVS results of Ours (Post) with different trajectories, where the given view is bounded by a blue circle. We draw the pose at the right bottom corner of each sub-figure.
+
+## 6 CONCLUSION & DISCUSSION
+
+We have presented a training-free novel view synthesis paradigm. The proposed method achieves remarkable performance compared with state-of-the-art methods. The advantages are credited to the powerful generative capacity of the pre-trained large stable video diffusion model and our elegant designs of the adaptive modulation of the diffusion score function through comprehensive theoretical and empirical analyses.
+
+Although our method takes longer than existing methods, the promising generative capacity inherent in the large pre-trained diffusion model may attract improvements in the future. Since the proposed method can synthesize views more accurate poses, we believe it may be a potential solution for the distillation of a pose controllable video diffusion model. In the age of generative intelligence, the authors expect the proposed algorithm would inspire future work to unify computer graphics pipelines with generative models. Finally, the authors sincerely appreciate Stability AI for the open-sourced SVD (Blattmann et al., 2023).
+
+## ETHICS & REPRODUCIBILITY STATEMENTS
+
+The proposed method is specifically designed for novel view synthesis through video diffusion. As such, no additional information regarding human subjects or potentially harmful insights is introduced during the process. This approach prioritizes privacy and ethical considerations by relying solely on the data available from the input images or videos, without requiring any sensitive or external information. Furthermore, all of our experiments are conducted in a training-free manner, which not only simplifies implementation but also ensures reproducibility. More importantly, the source code can be found on the webpage: [https://github.com/ZHU-Zhiyu/NVS\\_Solver](https://github.com/ZHU-Zhiyu/NVS_Solver).
+
+## REFERENCES
+
+- Michal Adamkiewicz, Timothy Chen, Adam Caccavale, Rachel Gardner, Preston Culbertson, Jeanette Bohg, and Mac Schwager. Vision-only robot navigation in a neural radiance world. *IEEE Robotics and Automation Letters*, 7(2):4606–4613, 2022.
+- Brian DO Anderson. Reverse-time diffusion equation models. *Stochastic Processes and their Applications*, 12(3):313–326, 1982.
+- Shai Avidan and Amnon Shashua. Novel view synthesis in tensor space. In *Proceedings of IEEE Computer Society Conference on Computer Vision and Pattern Recognition*, pp. 1034–1040. IEEE, 1997.
+- Jonathan T Barron, Ben Mildenhall, Matthew Tancik, Peter Hedman, Ricardo Martin-Brualla, and Pratul P Srinivasan. Mip-nerf: A multiscale representation for anti-aliasing neural radiance fields. In *Proceedings of the IEEE/CVF International Conference on Computer Vision*, pp. 5855–5864, 2021.
+- Andreas Blattmann, Tim Dockhorn, Sumith Kulal, Daniel Mendelevitch, Maciej Kilian, Dominik Lorenz, Yam Levi, Zion English, Vikram Voleti, Adam Letts, et al. Stable video diffusion: Scaling latent video diffusion models to large datasets. *arXiv preprint arXiv:2311.15127*, 2023.
+- Shenggu Cai, Eric Ryan Chan, Songyou Peng, Mohamad Shabbazi, Anton Obukhov, Luc Van Gool, and Gordon Wetzstein. Diffdreamer: Towards consistent unsupervised single-view scene extrapolation with conditional diffusion models. In *Proceedings of the IEEE/CVF International Conference on Computer Vision*, pp. 2139–2150, 2023.
+- Jiezhang Cao, Yue Shi, Kai Zhang, Yulun Zhang, Radu Timofte, and Luc Van Gool. Deep equilibrium diffusion restoration with parallel sampling. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 2824–2834, 2024.
+- Eric R Chan, Koki Nagano, Matthew A Chan, Alexander W Bergman, Jeong Joon Park, Axel Levy, Miika Aittala, Shalini De Mello, Tero Karras, and Gordon Wetzstein. Generative novel view synthesis with 3d-aware diffusion models. In *Proceedings of the IEEE/CVF International Conference on Computer Vision*, pp. 4217–4229, 2023.
+- David Charatan, Sizhe Lester Li, Andrea Tagliasacchi, and Vincent Sitzmann. pixelsplat: 3d gaussian splats from image pairs for scalable generalizable 3d reconstruction. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 19457–19467, 2024.
+- Hansheng Chen, Jiatao Gu, Anpei Chen, Wei Tian, Zhuowen Tu, Lingjie Liu, and Hao Su. Single-stage diffusion nerf: A unified approach to 3d generation and reconstruction. In *Proceedings of the IEEE/CVF International Conference on Computer Vision*, pp. 2416–2425, 2023.
+- Yuedong Chen, Haofei Xu, Chuanxia Zheng, Bohan Zhuang, Marc Pollefeys, Andreas Geiger, Tat-Jen Cham, and Jianfei Cai. Mvsplat: Efficient 3d gaussian splatting from sparse multi-view images. In *European Conference on Computer Vision*, pp. 370–386. Springer, 2025.
+- Inchang Choi, Orazio Gallo, Alejandro Troccoli, Min H Kim, and Jan Kautz. Extreme view synthesis. In *Proceedings of the IEEE/CVF International Conference on Computer Vision*, pp. 7781–7790, 2019.
+
+- Hyungjin Chung, Byeongsu Sim, and Jong Chul Ye. Come-closer-diffuse-faster: Accelerating conditional diffusion models for inverse problems through stochastic contraction. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 12413–12422, 2022a.
+- Hyungjin Chung, Byeongsu Sim, and Jong Chul Ye. Improving diffusion models for inverse problems using manifold constraints. 2022b.
+- Hyungjin Chung, Jeongsol Kim, Michael Thompson Mccann, Marc Louis Klasky, and Jong Chul Ye. Diffusion posterior sampling for general noisy inverse problems. In *International Conference on Learning Representations*, 2023.
+- Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. *Advances in neural information processing systems*, 34:8780–8794, 2021.
+- Puneet Goel, Stergios I Roumeliotis, and Gaurav S Sukhatme. Robust localization using relative and absolute position estimates. In *Proceedings 1999 IEEE/RSJ International Conference on Intelligent Robots and Systems. Human and Environment Friendly Robots with High Intelligence and Emotional Quotients (Cat. No. 99CH36289)*, volume 2, pp. 1134–1140. IEEE, 1999.
+- Jiatao Gu, Alex Trevithick, Kai-En Lin, Joshua M Susskind, Christian Theobalt, Lingjie Liu, and Ravi Ramamoorthi. Nerfdiff: Single-image view synthesis with nerf-guided distillation from 3d-aware diffusion. In *International Conference on Machine Learning*, pp. 11808–11826. PMLR, 2023.
+- Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. *Advances in neural information processing systems*, 30, 2017.
+- Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. *Advances in neural information processing systems*, 33:6840–6851, 2020.
+- Jonathan Ho, Tim Salimans, Alexey Gritsenko, William Chan, Mohammad Norouzi, and David J Fleet. Video diffusion models. *Advances in Neural Information Processing Systems*, 35:8633–8646, 2022.
+- Chin-Wei Huang, Milad Aghajohari, Joey Bose, Prakash Panangaden, and Aaron C Courville. Riemannian diffusion models. *Advances in Neural Information Processing Systems*, 35:2750–2761, 2022.
+- Rasmus Jensen, Anders Dahl, George Vogiatzis, Engil Tola, and Henrik Aanæs. Large scale multi-view stereopsis evaluation. In *2014 IEEE Conference on Computer Vision and Pattern Recognition*, pp. 406–413. IEEE, 2014.
+- Ying Jiang, Chang Yu, Tianyi Xie, Xuan Li, Yutao Feng, Huamin Wang, Minchen Li, Henry Lau, Feng Gao, Yin Yang, and Chenfanfu Jiang. Vr-gs: A physical dynamics-aware interactive gaussian splatting system in virtual reality. In *ACM SIGGRAPH 2024 Conference Papers*, 2024.
+- Hailin Jin, Stefano Soatto, and Anthony J Yezzi. Multi-view stereo reconstruction of dense shape and complex appearance. *International Journal of Computer Vision*, 63:175–189, 2005.
+- Johanna Karras, Aleksander Holynski, Ting-Chun Wang, and Ira Kemelmacher-Shlizerman. Dreampose: Fashion image-to-video synthesis via stable diffusion. In *IEEE/CVF International Conference on Computer Vision*, pp. 22623–22633. IEEE, 2023.
+- Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusion-based generative models. *Advances in Neural Information Processing Systems*, 35:26565–26577, 2022.
+- Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, and George Drettakis. 3d gaussian splatting for real-time radiance field rendering. *ACM Transactions on Graphics*, 42(4):1–14, 2023.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

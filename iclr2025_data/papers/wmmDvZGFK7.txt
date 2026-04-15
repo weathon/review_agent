@@ -1,0 +1,285 @@
+# PFDIFF: TRAINING-FREE ACCELERATION OF DIFFUSION MODELS COMBINING PAST AND FUTURE SCORES
+
+Guangyi Wang<sup>1,2</sup>, Yuren Cai<sup>1</sup>, Lijiang Li<sup>1,2</sup>, Wei Peng<sup>3</sup>, Songzhi Su<sup>1,2\*</sup>
+
+<sup>1</sup>School of Informatics, Xiamen University.
+
+<sup>2</sup>Key Laboratory of Multimedia Trusted Perception and Efficient Computing,  
+Ministry of Education of China, Xiamen University, 361005, P.R. China.
+
+<sup>3</sup>Department of Psychiatry and Behavioral Sciences, Stanford University.  
+{wangguangyi, caiyuren, lilijiang}@stu.xmu.edu.cn,  
+wepeng@stanford.edu, ssz@xmu.edu.cn
+
+## ABSTRACT
+
+Diffusion Probabilistic Models (DPMs) have shown remarkable potential in image generation, but their sampling efficiency is hindered by the need for numerous denoising steps. Most existing solutions accelerate the sampling process by proposing fast ODE solvers. However, the inevitable discretization errors of the ODE solvers are significantly magnified when the number of function evaluations (NFE) is fewer. In this work, we propose *PFDiff*, a novel *training-free* and *orthogonal* timestep-skipping strategy, which enables existing fast ODE solvers to operate with fewer NFE. Specifically, PFDiff initially utilizes score replacement from past time steps to predict a “springboard”. Subsequently, it employs this “springboard” along with foresight updates inspired by Nesterov momentum to rapidly update current intermediate states. This approach effectively reduces unnecessary NFE while correcting for discretization errors inherent in first-order ODE solvers. Experimental results demonstrate that PFDiff exhibits flexible applicability across various pre-trained DPMs, particularly excelling in conditional DPMs and surpassing previous state-of-the-art training-free methods. For instance, using DDIM as a baseline, we achieved 16.46 FID (4 NFE) compared to 138.81 FID with DDIM on ImageNet 64x64 with classifier guidance, and 13.06 FID (10 NFE) on Stable Diffusion with 7.5 guidance scale. Code is available at <https://github.com/onefly123/PFDiff>.
+
+## 1 INTRODUCTION
+
+In recent years, Diffusion Probabilistic Models (DPMs) (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2020b) have demonstrated exceptional modeling capabilities across various domains including image generation (Dhariwal & Nichol, 2021; Peebles & Xie, 2023; Karras et al., 2024), video generation (Dehghani et al., 2023), text-to-image generation (Rombach et al., 2022; Betker et al., 2023), speech synthesis (Song et al., 2022), and text-to-3D generation (Poole et al., 2022; Lin et al., 2023). They have become a key driving force advancing deep generative models. DPMs initiate with a forward process that introduces noise onto images, followed by utilizing a neural network to learn a backward process that incrementally removes noise, thereby generating images (Ho et al., 2020; Song et al., 2020b). Compared to other generative methods such as Generative Adversarial Networks (GANs) (Goodfellow et al., 2014) and Variational Autoencoders (VAEs) (Kingma & Welling, 2013), DPMs not only possess a simpler optimization target but also are capable of producing higher quality samples (Dhariwal & Nichol, 2021). However, the generation of high-quality samples via DPMs requires hundreds or thousands of denoising steps, significantly lowering their sampling efficiency and becoming a major barrier to their widespread application.
+
+---
+
+\*Corresponding Author.
+
+Existing techniques for rapid sampling in DPMs primarily fall into two categories. First, training-based methods (Salimans & Ho, 2022; Liu et al., 2022b; Song et al., 2023; Yin et al., 2024), which can significantly compress sampling steps, even achieving single-step sampling. However, this compression often comes with a considerable additional training cost, and these methods are challenging to apply to large pre-trained models. Second, training-free samplers (Song et al., 2020a; Lu et al., 2022a;b; Bao et al., 2022b;a; Liu et al., 2022a; Li et al., 2023; Zheng et al., 2023; Ma et al., 2024; Wimbauer et al., 2024; Zhao et al., 2023; Xue et al., 2023), which typically employ implicit or analytical solutions to Stochastic Differential Equations (SDE)/Ordinary Differential Equations (ODE) for lower-error sampling processes. For instance, Lu et al. (Lu et al., 2022a;b), by analyzing the semi-linear structure of the ODE solvers for DPMs, have sought to analytically derive optimally the solutions for DPMs’ ODE solvers. These training-free sampling strategies can often be used in a plug-and-play fashion, compatible with existing pre-trained DPMs. However, when the NFE is below 10, the discretization error of these training-free methods will be significantly amplified, leading to convergence issues (Lu et al., 2022a;b), which can still be time-consuming.
+
+To further enhance the sampling speed of DPMs, we have analyzed the potential for improvement in existing training-free accelerated methods. Initially, we observed a high similarity in the model’s outputs for the existing ODE solvers when time step size  $\Delta t$  is not extremely large, as illustrated in Fig. 1a. This observation led us to utilize the scores that have been computed from past time steps to approximate current scores, thereby predicting a “springboard”. Furthermore, due to the similarities between the sampling process of DPMs and Stochastic Gradient Descent (SGD) (Robbins & Monro, 1951) as noted in Remark 1, we incorporated a *foresight* update mechanism using Nesterov momentum (Nesterov, 1983), known for accelerating SGD training. Specifically, we first predict future scores using the “springboard” to reduce errors, as shown in Fig. 1b. Then, we further replace the current scores with the future scores to facilitate a larger update step size  $\Delta t$ , as shown in Fig. 1c.
+
+Motivated by these insights, we propose *PFDiff*, a timestep-skipping sampling algorithm that rapidly updates the current intermediate state combining past and future scores. Notably, PFDiff is *training-free* and *orthogonal* to existing DPMs sampling algorithms, providing a new orthogonal axis for DPMs sampling. Furthermore, we prove that PFDiff, despite utilizing fewer NFE, corrects for errors in the sampling trajectories of first-order ODE solvers, as visualized in Fig. 1c. This ensures that improving sampling speed does not compromise sampling quality; it only reduces unnecessary NFE in existing ODE solvers. To validate the orthogonality and effectiveness of PFDiff, extensive experiments were conducted on both unconditional (Ho et al., 2020; Song et al., 2020b;a) and conditional (Dhariwal & Nichol, 2021; Rombach et al., 2022) pre-trained DPMs. The results of the visualization experiment are depicted in Appendix D.9. The results indicate that PFDiff significantly enhances the sampling performance of existing ODE solvers. Particularly in conditional DPMs, PFDiff, using only DDIM as the baseline, surpasses the previous state-of-the-art training-free sampling algorithms.
+
+## 2 BACKGROUND
+
+### 2.1 DIFFUSION SDES
+
+Diffusion Probabilistic Models (DPMs) (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2020b) aim to generate  $D$ -dimensional random variables  $x_0 \in \mathbb{R}^D$  that follow a data distribution  $q(x_0)$ . Taking Denoising Diffusion Probabilistic Models (DDPM) (Ho et al., 2020) as an example, these models introduce noise to the data distribution through a forward process defined over discrete time steps, gradually transforming it into a standard Gaussian distribution  $x_T \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ . The forward process’s latent variables  $\{x_t\}_{t \in [0, T]}$  are defined as follows:
+
+$$q(x_t | x_0) = \mathcal{N}(x_t | \alpha_t x_0, \sigma_t^2 \mathbf{I}), \quad (1)$$
+
+where  $\alpha_t$  is a scalar function related to the time step  $t$ , with  $\alpha_t^2 + \sigma_t^2 = 1$ . In the model’s reverse process, DDPM utilizes a neural network model  $p_\theta(x_{t-1} | x_t)$  to approximate the transition probability  $q(x_{t-1} | x_t, x_0)$ ,
+
+$$p_\theta(x_{t-1} | x_t) = \mathcal{N}(x_{t-1} | \mu_\theta(x_t, t), \sigma_\theta^2(t) \mathbf{I}), \quad (2)$$
+
+![Figure 1: (a) score Changes in SDE/ODE Solvers. (b) Future score More Reliable than 'Springboard'. (c) Comparison of Sampling Trajectories.](d9d706121d1c4ba9ad2c793746382361_img.jpg)
+
+Figure 1 consists of three subplots. Subplot (a) shows the MSE of the noise network output  $\epsilon_\theta(x_t, t)$  over time step size  $\Delta t$  for various ODE and SDE solvers. Subplot (b) shows the MSE of the score separately updated using "springboard" and the future score  $\epsilon_\theta(\tilde{x}_{t_{k+1}}, t_{k+1})$  relative to the sampling process with 1000 NFE. Subplot (c) shows a comparison of partial sampling trajectories between PFDiff-1 and a first-order ODE solver, where the update directions are guided by the tangent direction of the sampling trajectories.
+
+Figure 1: (a) score Changes in SDE/ODE Solvers. (b) Future score More Reliable than 'Springboard'. (c) Comparison of Sampling Trajectories.
+
+Figure 1: (a) The trend of the MSE of the noise network output  $\epsilon_\theta(x_t, t)$  over time step size  $\Delta t$ , where  $\eta$  comes from  $\bar{\sigma}_t$  in Eq. (6). Solid lines: ODE solvers, dashed lines: SDE solvers. (b) MSE of the score separately updated using “springboard”  $\tilde{x}_{t_{k+1}}$  and future score  $\epsilon_\theta(\tilde{x}_{t_{k+1}}, t_{k+1})$ , relative to the sampling process with 1000 NFE, is given by:  $\|\tilde{x}_{t_{k+1}(k+1)} - \tilde{x}_{t_{k+1}(k+1)}^{gt}\|^2$ . (c) Comparison of partial sampling trajectories between PFDiff-1 and a first-order ODE solver, where the update directions are guided by the tangent direction of the sampling trajectories.
+
+where  $\sigma_\theta^2(t)$  is defined as a scalar function related to the time step  $t$ . By sampling from a standard Gaussian distribution and utilizing the trained neural network, samples following the data distribution  $p_\theta(x_0) = \prod_{t=1}^T p_\theta(x_{t-1} | x_t)$  can be generated.
+
+Furthermore, Song et al. (2020b) introduced SDE to model DPMs over continuous time steps, where the forward process is defined as:
+
+$$dx_t = f(t)x_t dt + g(t)d\tilde{w}_t, \quad x_0 \sim q(x_0), \quad (3)$$
+
+where  $\tilde{w}_t$  represents a standard Wiener process, and  $f$  and  $g$  are scalar functions of the time step  $t$ . It's noteworthy that the forward process in Eq. (1) is a discrete form of Eq. (3), where  $f(t) = \frac{d \log \alpha_t}{dt}$  and  $g^2(t) = \frac{d\sigma_t^2}{dt} - 2 \frac{d \log \alpha_t}{dt} \sigma_t^2$ . Song et al. (2020b) further demonstrated that there exists an equivalent reverse process from time step  $T$  to 0 for the forward process in Eq. (3):
+
+$$dx_t = [f(t)x_t - g^2(t)\nabla_x \log q_t(x_t)] dt + g(t)d\tilde{w}_t, \quad x_T \sim q(x_T), \quad (4)$$
+
+where  $\tilde{w}$  denotes a standard Wiener process. In this reverse process, the only unknown is the *score function*  $\nabla_x \log q_t(x_t)$ , which can be approximated through neural networks.
+
+### 2.2 DIFFUSION ODEs
+
+In DPMs based on SDE, the discretization of the sampling process often requires a significant number of time steps to converge, such as the  $T = 1000$  time steps used in DDPM (Ho et al., 2020). This requirement primarily stems from the randomness introduced at each time step by the SDE. To achieve a more efficient sampling process, Song et al. (2020b) utilized the Fokker-Planck equation (Øksendal & Øksendal, 2003) to derive a *probability flow ODE* related to the SDE, which possesses the same marginal distribution at any given time  $t$  as the SDE. Specifically, the reverse process ODE derived from Eq. (3) can be expressed as:
+
+$$dx_t = \left[ f(t)x_t - \frac{1}{2}g^2(t)\nabla_x \log q_t(x_t) \right] dt, \quad x_T \sim q(x_T). \quad (5)$$
+
+Unlike SDE, ODE avoids the introduction of randomness, thereby allowing convergence to the data distribution in fewer time steps. Song et al. (2020b) employed a high-order RK45 ODE solver (Dormand & Prince, 1980), achieving sample quality comparable to SDE at 1000 NFE with only 60 NFE. Furthermore, research such as DDIM (Song et al., 2020a) and DPM-Solver (Lu et al., 2022a) explored discrete ODE forms capable of converging in fewer NFE. For DDIM, it breaks the Markov chain constraint on the basis of DDPM, deriving a new sampling formula expressed as follows:
+
+$$x_{t-1} = \sqrt{\alpha_{t-1}} \left( \frac{x_t - \sqrt{1 - \alpha_t} \epsilon_\theta(x_t, t)}{\sqrt{\alpha_t}} \right) + \sqrt{1 - \alpha_{t-1} - \bar{\sigma}_t^2} \epsilon_\theta(x_t, t) + \bar{\sigma}_t \epsilon_t, \quad (6)$$
+
+where  $\bar{\sigma}_t = \eta\sqrt{(1 - \alpha_{t-1})/(1 - \alpha_t)}\sqrt{1 - \alpha_t/\alpha_{t-1}}$ , and  $\alpha_t$  corresponds to  $\alpha_t^2$  in Eq. (1). When  $\eta = 1$ , Eq. (6) becomes a form of DDPM; when  $\eta = 0$ , it degenerates into an ODE, the form adopted by DDIM, which can obtain high-quality samples in fewer time steps.
+
+**Remark 1.** In this paper, we regard the score  $d\bar{x}_t$ , the noise network output  $\epsilon_\theta(x_t, t)$ , and the score function  $\nabla_x \log q_t(x_t)$  as expressing equivalent concepts. This is because Song et al. (2020b) demonstrated that  $\epsilon_\theta(x_t, t) = -\sigma_t \nabla_x \log q_t(x_t)$ . Moreover, we have discovered that any first-order solver of DPMs can be parameterized as  $x_{t-1} = \bar{x}_t - \gamma_t d\bar{x}_t + \xi \epsilon_t$ . Taking DDIM (Song et al., 2020a) as an example, where  $\bar{x}_t = \sqrt{\frac{\alpha_{t-1}}{\alpha_t}} x_t$ ,  $\gamma_t = \sqrt{\frac{\alpha_{t-1}}{\alpha_t}} - \alpha_{t-1} - \sqrt{1 - \alpha_{t-1}}$ ,  $d\bar{x}_t = \epsilon_\theta(x_t, t)$ , and  $\xi = 0$ . This indicates the similarity between SGD and the sampling process of DPMs, a discovery also implicitly suggested in the research of Xue et al. (2023) and Wang et al. (2024).
+
+## 3 METHOD
+
+### 3.1 SOLVING FOR REVERSE PROCESS DIFFUSION ODEs
+
+By substituting  $\epsilon_\theta(x_t, t) = -\sigma_t \nabla_x \log q_t(x_t)$  (Song et al., 2020b), Eq. (5) can be rewritten as:
+
+$$\frac{dx_t}{dt} = s(\epsilon_\theta(x_t, t), x_t, t) := f(t)x_t + \frac{g^2(t)}{2\sigma_t} \epsilon_\theta(x_t, t), \quad x_T \sim q(x_T). \quad (7)$$
+
+Given an initial value  $x_T$ , we define the time steps  $\{t_i\}_{i=0}^T$  to progressively decrease from  $t_0 = T$  to  $t_T = 0$ . Let  $\tilde{x}_{t_0} = x_T$  be the initial value. Using  $T$  steps of iteration, we compute the sequence  $\{\tilde{x}_{t_i}\}_{i=0}^T$  to obtain the solution of this ODE. By integrating both sides of Eq. (7), we can obtain the exact solution of this sampling ODE:
+
+$$\tilde{x}_{t_i} = \tilde{x}_{t_{i-1}} + \int_{t_{i-1}}^{t_i} s(\epsilon_\theta(x_t, t), x_t, t) dt. \quad (8)$$
+
+For any  $p$ -order ODE solver, Eq. (8) can be discretely represented as:
+
+$$\tilde{x}_{t_{i-1} \rightarrow t_i} \approx \phi(Q, \tilde{x}_{t_{i-1}}, t_{i-1}, t_i) := \tilde{x}_{t_{i-1}} + \sum_{n=0}^{p-1} h(\epsilon_\theta(\tilde{x}_{\hat{t}_n}, \hat{t}_n), \tilde{x}_{\hat{t}_n}, \hat{t}_n) \cdot \Delta \hat{t}, \quad i \in [1, \dots, T]. \quad (9)$$
+
+Here,  $Q = \left( \{\epsilon_\theta(\tilde{x}_{\hat{t}_n}, \hat{t}_n)\}_{n=0}^{p-1}, t_{i-1}, t_i \right)$  stores the set of  $p$  scores computed over the intervals  $t_{i-1}$  and  $t_i$ , where  $\hat{t}_0 = t_{i-1}$ ,  $\hat{t}_p = t_i$ , and  $\Delta \hat{t} = \hat{t}_{n+1} - \hat{t}_n$  denote the time step size. Particularly, when  $p = 1$ ,  $Q = \epsilon_\theta(\tilde{x}_{t_{i-1}}, t_{i-1})$ . The function  $\phi$  is any  $p$ -order ODE solver that updates the current state  $\tilde{x}_{t_{i-1}}$  from time point  $t_{i-1}$  to  $t_i$ , using the scores stored in  $Q$ . The function  $h$  represents the way in which different  $p$ -order ODE solvers handle the function  $s$ , and its specific form depends on the solver's design. For example, in the DPM-Solver (Lu et al., 2022a), an exponential integrator is used to transform  $s$  into  $h$  in order to eliminate linear terms. In the case of a first-order Euler-Maruyama solver (Kloeden et al., 1992), it serves as an identity mapping of  $s$ .
+
+When using the ODE solver defined in Eq. (9) for sampling, the choice of  $T = 1000$  leads to significant inefficiencies in DPMs. The study on DDIM (Song et al., 2020a) first revealed that by constructing a new forward sub-state sequence of length  $M + 1$  ( $M \leq T$ ),  $\{\tilde{x}_{t_i}\}_{i=0}^M$ , from a subsequence of time steps  $[0, \dots, T]$  and reversing this sub-state sequence, it is possible to converge to the data distribution in fewer time steps. However, as illustrated in Fig. 1a, for ODE solvers, as the time step size  $\Delta t = t_i - t_{i-1}$  increases, the score direction changes slowly initially, but undergoes abrupt changes as  $\Delta t \rightarrow T$ . This phenomenon indicates that under minimal NFE (i.e., maximal time step size  $\Delta t$ ) conditions, the discretization error in Eq. (9) is significantly amplified. Consequently, existing ODE solvers, when sampling under minimal NFE, must sacrifice sampling quality to gain speed, making it an extremely challenging task to reduce NFE to below 10 (Lu et al., 2022a;b). Given this, we aim to develop an efficient timestep-skipping sampling algorithm, which reduces NFE while correcting discretization errors, thereby ensuring that sampling quality is not compromised, and may even be improved.
+
+### 3.2 SAMPLING GUIDED BY PAST SCORES
+
+As illustrated in Fig. 1a, when the time step size  $\Delta t$  (i.e.,  $t_i - t_{i-1}$ ) is not excessively large, the MSE of the noise network, defined as  $\frac{1}{T-\Delta t} \sum_{t=0}^{T-\Delta t-1} \|\epsilon_\theta(x_t, t) - \epsilon_\theta(x_{t+\Delta t}, t + \Delta t)\|^2$ , is remarkably similar. This phenomenon is especially pronounced in ODE-based sampling algorithms, such as DDIM (Song et al., 2020a) and DPM-Solver (Lu et al., 2022a). This observation suggests that there are many unnecessary time steps in ODE-based sampling methods during the complete sampling process (e.g., when  $T = 1000$ ), which is one of the reasons these methods can generate samples in fewer steps. Based on this, we propose replacing the noise network of the current timestep with the output from a previous timestep to reduce unnecessary NFE without compromising the quality of the final generated samples. Specifically, for any  $p$ -order ODE solver  $\phi$ , the sampling process from  $\tilde{x}_{t_{i-1}}$  to  $\tilde{x}_{t_i}$  can be reformulated according to Eq. (9) as follows:
+
+$$\tilde{x}_{t_i} \approx \phi(\{\epsilon_\theta(\tilde{x}_{t_n}, \hat{t}_n)\}_{n=0}^{p-1}, \tilde{x}_{t_{i-1}}, t_{i-1}, t_i). \quad (10)$$
+
+Then, we store the noise network output in a *buffer* for use in the next timestep, as follows:
+
+$$Q \xleftarrow{\text{buffer}} \left( \{\epsilon_\theta(\tilde{x}_{t_n}, \hat{t}_n)\}_{n=0}^{p-1}, t_{i-1}, t_i \right), \quad (11)$$
+
+where  $t_{i-1}$  and  $t_i$  represent the intervals over which the set of  $p$  scores are computed. For the sampling process from  $\tilde{x}_{t_i}$  to  $\tilde{x}_{t_{i+1}}$ , we directly use the noise network output saved in the buffer from the previous timestep to replace the current timestep’s noise network, thereby updating the intermediate states to the next timestep (i.e., the “springboard”  $\tilde{x}_{t_{i+1}}$ ), as detailed below:
+
+$$\tilde{x}_{t_{i+1}} \approx \phi(Q, \tilde{x}_{t_i}, t_i, t_{i+1}), \quad \text{where } Q = \left( \{\epsilon_\theta(\tilde{x}_{t_n}, \hat{t}_n)\}_{n=0}^{p-1}, t_{i-1}, t_i \right). \quad (12)$$
+
+By using this approach, we can reduce unnecessary NFE, thereby accelerating the sampling process.
+
+**Remark 2.** Notably, when the time step size  $\Delta t$  is very large ( $\text{NFE} < 10$ ), the similarity between past and current scores decreases sharply, making “springboard”  $\tilde{x}_{t_{i+1}}$  unreliable in Eq. (12). Therefore, in Sec. 3.3, we use  $\tilde{x}_{t_{i+1}}$  solely to predict a foresight update direction (i.e., future score) to reduce errors caused by the replacement, as shown in Fig. 1b and Fig. 1c. Both past and future scores are complementary and indispensable, as demonstrated by the ablation study in Sec. 4.3.
+
+### 3.3 SAMPLING GUIDED BY FUTURE SCORES
+
+As stated in Remark 1, considering the similarities between the sampling process of DPMs and SGD, and inspired by Nesterov momentum (Nesterov, 1983), we introduce a *foresight* update direction (i.e., future score) to assist the current intermediate state in achieving more efficient leapfrog updates. Notably, employing future scores is more reliable than directly using the “springboard”, as discussed in Remark 2. Specifically, during the sampling process from  $\tilde{x}_{t_i}$  to  $\tilde{x}_{t_{i+2}}$ , we consider using future scores (corresponding to time point  $t_{i+1}$ ) to replace the current scores (corresponding to  $t_i$ ). Continuing from Eq. (12), we estimate the future score using the “springboard”  $\tilde{x}_{t_{i+1}}$  and update the *buffer* as follows:
+
+$$Q \xleftarrow{\text{buffer}} \left( \{\epsilon_\theta(\tilde{x}_{t_n}, \hat{t}_n)\}_{n=0}^{p-1}, t_{i+1}, t_{i+2} \right). \quad (13)$$
+
+Subsequently, leveraging the concept of foresight updates, we predict a further future intermediate state  $\tilde{x}_{t_{i+2}}$  using the current intermediate state  $\tilde{x}_{t_i}$  along with the future score corresponding to time point  $t_{i+1}$ , as shown below:
+
+$$\tilde{x}_{t_{i+2}} \approx \phi(Q, \tilde{x}_{t_i}, t_i, t_{i+2}), \quad \text{where } Q = \left( \{\epsilon_\theta(\tilde{x}_{t_n}, \hat{t}_n)\}_{n=0}^{p-1}, t_{i+1}, t_{i+2} \right). \quad (14)$$
+
+Furthermore, we analyze how to correct the errors of the first-order ODE solvers in the discretized Eq. (8) using future scores. Let  $s_\theta(x_t, t) := s(\epsilon_\theta(x_t, t), x_t, t)$ , we further analyze the term from Eq. (8) that may cause errors,  $\int_{t_{i-1}}^{t_i} s_\theta(x_t, t) dt$ . Assuming that  $s_\theta^{(n)}(x_r, r)$ ,  $r \in [t_{i-1}, t_i]$  exists and is
+
+![Figure 2: Illustration of a single iteration update of PFDiff-k-h combined with any first-order ODE solver phi. The diagram shows a sequence of states x_t, x_{t_1}, x_{t_2}, ..., x_{t_{h-1}}, x_{t_{h+1}}, ..., x_{t_{h+k}}. A 'Buffer' stores the 'Past Score Q' from the previous iteration. The process involves: 1. Status update (solid black arrow) from x_t to x_{t_1}. 2. Temporary status update (dashed black arrow) from x_{t_1} to a 'springboard' state x_{t_{h+1}}. 3. Scores propagation (red arrow) from the 'springboard' state to the 'Buffer'. 4. Buffer access order (red arrow) from the 'Buffer' to the next state x_{t_{h+1}}. The 'Past Score Q' is updated to the 'Future Score' calculated using the 'springboard' state. The 'Future Score' is then passed to the next iteration as the 'Past Score' relative to the next round.](191a4a245a7d36d03be9a990d0f758f5_img.jpg)
+
+Figure 2: Illustration of a single iteration update of PFDiff-k-h combined with any first-order ODE solver phi. The diagram shows a sequence of states x\_t, x\_{t\_1}, x\_{t\_2}, ..., x\_{t\_{h-1}}, x\_{t\_{h+1}}, ..., x\_{t\_{h+k}}. A 'Buffer' stores the 'Past Score Q' from the previous iteration. The process involves: 1. Status update (solid black arrow) from x\_t to x\_{t\_1}. 2. Temporary status update (dashed black arrow) from x\_{t\_1} to a 'springboard' state x\_{t\_{h+1}}. 3. Scores propagation (red arrow) from the 'springboard' state to the 'Buffer'. 4. Buffer access order (red arrow) from the 'Buffer' to the next state x\_{t\_{h+1}}. The 'Past Score Q' is updated to the 'Future Score' calculated using the 'springboard' state. The 'Future Score' is then passed to the next iteration as the 'Past Score' relative to the next round.
+
+Figure 2: Illustration of a single iteration update of PFDiff- $k$ - $h$  combined with any first-order ODE solver  $\phi$ . Given specific values of  $k$  and  $h$  ( $k \leq 3$  ( $h \leq k$ )), PFDiff first uses the past score  $Q$  stored in the Buffer from the previous iteration to replace the current score, updating to the “springboard”  $x_{t_{h+1}}$ ; then the future score is calculated using the “springboard”; finally, the future score is used to replace the current score, completing a full update iteration. The future score will also be passed to the next iteration as the “past” score for the next round of updates.
+
+continuous, applying Taylor’s expansion at  $t = r$ , we derive:
+
+$$\begin{aligned}
+ \int_{t_{i-1}}^{t_i} s_\theta(x_t, t) dt &= \int_{t_{i-1}}^{t_i} \left[ \sum_{n=0}^{\infty} \frac{s_\theta^{(n)}(x_r, r)}{n!} (t - r)^n + R_n(t) \right] dt \\
+ &\approx \int_{t_{i-1}}^{t_i} \left[ \sum_{n=0}^{\infty} \frac{s_\theta^{(n)}(x_r, r)}{n!} (t - r)^n \right] dt \\
+ &= \sum_{n=0}^{\infty} \frac{(t_i - r)^{n+1} - (t_{i-1} - r)^{n+1}}{(n + 1)!} s_\theta^{(n)}(x_r, r) \\
+ &= s_\theta(x_r, r) (t_i - t_{i-1}) + \underbrace{\sum_{n=1}^{\infty} \frac{(t_i - r)^{n+1} - (t_{i-1} - r)^{n+1}}{(n + 1)!} s_\theta^{(n)}(x_r, r)}_{\text{"higher-order derivative terms"}}.
+ \end{aligned} \tag{15}$$
+
+**Proposition 3.1.** *For any given DPM first-order ODE solver, the absolute values of the coefficients for higher-order derivative terms in Eq. (15) are smaller when using the future time point  $r = \varepsilon$  score compared to the current time point  $r = t_{i-1}$  score, as follows (Proof in Appendix B.2):*
+
+$$\left| \frac{(t_i - \varepsilon)^n - (t_{i-1} - \varepsilon)^n}{n!} \right| < \left| \frac{(t_i - t_{i-1})^n}{n!} \right|, \quad \text{where } \varepsilon \in (t_{i-1}, t_i), n \geq 2. \tag{16}$$
+
+Proposition 3.1 indicates that neglecting higher-order derivative terms has less impact when sampling with future scores, correcting for the discretization errors inherent in first-order ODE solvers. However, higher-order ODE solvers approximate higher-order derivative terms by estimating the noise network’s output multiple times (Lu et al., 2022a;b; Zheng et al., 2023). Future scores and higher-order ODE solvers reduce the discretization errors caused by neglecting higher-order derivative terms in two parallel manners, complicating the error analysis when both methods are used simultaneously. Therefore, when using higher-order ODE solvers as a baseline, the sampling process is accelerated by only using past scores. It is only necessary to modify Eq. (14) to  $\tilde{x}_{t_{h+2}} \approx \phi(\tilde{Q}, \tilde{x}_{t_{h+1}}, t_{h+1}, t_{h+2})$  while keeping  $Q$  constant.
+
+### 3.4 PFDIFF: SAMPLING GUIDED BY PAST AND FUTURE SCORES
+
+Combining Sec. 3.2 and Sec. 3.3, the “springboard”  $\tilde{x}_{t_{h+1}}$  obtained through Eq. (12) is used to update the buffer  $Q$  in Eq. (13). In this way, we achieve our proposed efficient timestep-skipping algorithm, which we name PFDiff. Notably, during the iteration from intermediate state  $\tilde{x}_{t_i}$  to  $\tilde{x}_{t_{h+2}}$ , we only perform a single batch computation (NFE =  $p$ ) of the noise network in Eq. (13). Furthermore, we propose that in a single iteration process,  $\tilde{x}_{t_{h+2}}$  in Eq. (14) can be modified to  $\tilde{x}_{t_{h+(k+1)}}$ .
+
+achieving a  $k$ -step skip to sample more distant future intermediate states. Also, when  $k \neq 1$ , the buffer  $Q$  from Eq. (13) has various computational origins. This can be accomplished by modifying “springboard”  $\tilde{x}_{t_{i+1}}$  in Eq. (12) to  $\tilde{x}_{t_{i+h}}$ , which represents  $h$  ( $h \leq k$ ) different springboard selections. We collectively refer to this multi-step skipping and different “springboard” selection strategy as PFDiff- $k$ - $h$  ( $h \leq k$ ). The algorithmic process is illustrated in Fig. 2 and Algorithm 1, with further details provided in Appendix C. Additionally, through the comparison of sampling trajectories between PFDiff-1 and a first-order ODE sampler, as shown in Fig. 1c, PFDiff-1 showcases its capability to correct the sampling trajectory of the first-order ODE sampler while reducing the NFE. Meanwhile, we observed that PFDiff completes two updates with just one score computation (1 NFE), which is equivalent to achieving an update process of a second-order ODE solver with 2 NFE. This effectiveness is derived from PFDiff’s *information-efficient* update process, which utilizes both past and future scores that are complementary and indispensable. The convergence of PFDiff’s sampling outcomes to the data distribution consistent with solver  $\phi$  relies on the *Mean Value Theorem*, as detailed in Appendix B.3. Finally, it is important to emphasize that although PFDiff is orthogonal to an arbitrary ODE solver, PFDiff can also be viewed as an independent ODE solver, depending on the perspective.
+
+### 3.5 ANALYSIS OF EFFECTIVENESS BASED ON THE SHAPE OF THE TRAJECTORY
+
+In Proposition 3.1, we theoretically analyze how PFDiff corrects the error of the first-order ODE solver to achieve efficient sampling. In this section, we explain the effectiveness of PFDiff from the perspective of the trajectory’s geometric shape. Previous studies have explored the sampling trajectories of diffusion models (Sabour et al., 2024; Zhou et al., 2024; Chen et al., 2024). Zhou et al. (2024) pointed out that the sampling trajectories of DPMs lie in a low-dimensional subspace embedded in a high-dimensional space, and the trajectory shapes closely resemble a straight line. This finding supports the strategy of using past scores to replace the current score in PFDiff as reliable. Moreover, Chen et al. (2024) further noted that the sampling trajectories exhibit a “boomerang” shape, meaning the curvature of the sampling trajectory starts small, then increases, and finally decreases. Based on this observation, we can analyze that the first-order ODE solver, which samples along the tangent direction, leads to larger discretization errors in regions of the trajectory with large curvature. On the other hand, PFDiff uses future scores to predict the future update direction, thereby correcting the discretization errors introduced by sampling along the tangent direction. In Fig. 1c, we vividly demonstrate the sampling correction process of PFDiff for first-order ODE solvers, thereby validating the effectiveness of PFDiff.
+
+#### --- Algorithm 1 PFDiff-1 ---
+
+**Require:** initial value  $x_T$ , NFE  $N$ , model  $\epsilon_\theta$ , any  $p$ -order solver  $\phi$
+
+- 1: Define time steps  $\{t_i\}_{i=0}^M$  with  $M = 2N - 1p$
+- 2:  $\tilde{x}_{t_0} \leftarrow x_T$
+- 3:  $Q \xleftarrow{\text{buffer}} \left( \left\{ \epsilon_\theta(\tilde{x}_{t_n}, \hat{t}_n) \right\}_{n=0}^{p-1}, t_0, t_1 \right)$  ▷ Initialize buffer
+- 4:  $\tilde{x}_{t_1} = \phi(Q, \tilde{x}_{t_0}, t_0, t_1)$
+- 5: **for**  $i \leftarrow 1$  to  $\frac{M}{p} - 2$  **do**
+- 6:   **if**  $(i - 1) \bmod 2 = 0$  **then**
+- 7:      $\tilde{x}_{t_{i+1}} = \phi(Q, \tilde{x}_{t_i}, t_i, t_{i+1})$  ▷ Updating guided by past scores
+- 8:      $Q \xleftarrow{\text{buffer}} \left( \left\{ \epsilon_\theta(\tilde{x}_{t_n}, \hat{t}_n) \right\}_{n=0}^{p-1}, t_{i+1}, t_{i+2} \right)$  ▷ Update buffer (overwrite)
+- 9:     **if**  $p = 1$  **then**
+- 10:        $\tilde{x}_{t_{i+2}} = \phi(Q, \tilde{x}_{t_i}, t_i, t_{i+2})$  ▷ Anticipatory updating guided by future scores
+- 11:     **else if**  $p > 1$  **then**
+- 12:        $\tilde{x}_{t_{i+2}} = \phi(Q, \tilde{x}_{t_{i+1}}, t_{i+1}, t_{i+2})$  ▷ The higher-order solver uses only past scores
+- 13:     **end if**
+- 14:   **end if**
+- 15: **end for**
+- 16: **return**  $\tilde{x}_{t_M}$
+
+---
+
+## 4 EXPERIMENTS
+
+In this section, we validate the effectiveness of PFDiff as an *orthogonal and training-free* sampler through a series of extensive experiments (**the results of the visualization experiment are shown in Figs. 7-13 of Appendix D.9**). This sampler can be integrated with any order of ODE solvers, thereby significantly enhancing the sampling efficiency of various types of pre-trained DPMs. To systematically showcase the performance of PFDiff, we categorize the pre-trained DPMs into two main types: conditional and unconditional. Unconditional DPMs are further subdivided into discrete and continuous, while conditional DPMs are subdivided into classifier guidance and classifier-free guidance. In choosing ODE solvers, we utilized the widely recognized first-order DDIM (Song et al., 2020a), Analytic-DDIM (Bao et al., 2022b), and the higher-order DPM-Solver (Lu et al., 2022a) as baselines. For each experiment, we use the Fréchet Inception Distance (FID $\downarrow$ ) (Heusel et al., 2017) as the primary evaluation metric, and provide the experimental results of the Inception Score (IS $\uparrow$ ) (Salimans et al., 2016) in the Appendix D.7 for reference. Lastly, apart from the ablation studies on parameters  $k$  and  $h$  discussed in Sec. 4.3, we showcase the optimal results of PFDiff- $k.h$  (where  $k = 1, 2, 3$  and  $h \leq k$ ) across six configurations as a performance demonstration of PFDiff. As described in Appendix C, this does not increase the computational burden in practical applications. All experiments were conducted on an NVIDIA RTX 3090 GPU.
+
+### 4.1 UNCONDITIONAL SAMPLING
+
+For unconditional DPMs, we selected discrete DDPM (Ho et al., 2020) and DDIM (Song et al., 2020a), as well as pre-trained models from continuous ScoreSDE (Song et al., 2020b), to assess the effectiveness of PFDiff. For these pre-trained models, all experiments sampled 50k samples to compute evaluation metrics.
+
+For unconditional discrete DPMs, we first select first-order ODE solvers DDIM (Song et al., 2020a) and Analytic-DDIM (Bao et al., 2022b) as baselines, while implementing SDE-based DDPM (Ho et al., 2020) and Analytic-DDPM (Bao et al., 2022b) methods for comparison, where  $\eta = 1.0$  is from  $\bar{\sigma}_t$  in Eq. (6). We conduct experiments on the CIFAR10 (Krizhevsky et al., 2009) and CelebA 64x64 (Liu et al., 2015) datasets using the quadratic time steps employed by DDIM. By varying the NFE from 6 to 20, the evaluation metric FID $\downarrow$  is shown in Figs. 3a and 3b. Additionally, experiments with uniform time steps are conducted on the CelebA 64x64, LSUN-bedroom 256x256 (Yu et al., 2015), and LSUN-church 256x256 (Yu et al., 2015) datasets, with more results available in Appendix D.2. Our experimental results demonstrate that PFDiff, based on pre-trained models of discrete unconditional DPMs, significantly improves the sampling efficiency of DDIM and Analytic-DDIM samplers across multiple datasets. For instance, on the CIFAR10 dataset, PFDiff combined with DDIM achieves a FID of 4.10 with only 15 NFE, comparable to DDIM’s performance of 4.04 FID with 1000 NFE. This is something other time-step skipping algorithms (Bao et al., 2022b; Ma et al., 2024) that sacrifice sampling quality for speed cannot achieve. Furthermore, in Appendix D.2, by varying  $\eta$  from 1.0 to 0.0 in Eq. (6) to control the scale of noise introduced by SDE, we observe that as  $\eta$  decreases (reducing noise introduction), the performance of PFDiff gradually improves. This is consistent with the trend shown in Fig. 1a, where reducing noise introduction leads to an improvement in the similarity of the model’s outputs.
+
+For unconditional continuous DPMs, we choose the DPM-Solver-1, -2 and -3 (Lu et al., 2022a) as the baseline to verify the effectiveness of PFDiff as an orthogonal timestep-skipping algorithm on the first and higher-order ODE solvers. We conducted experiments on the CIFAR10 (Krizhevsky et al., 2009) using quadratic time steps, varying the NFE. The experimental results using FID $\downarrow$  as the evaluation metric are shown in Fig. 3c. More experimental details can be found in Appendix D.3. We observe that PFDiff consistently improves the sampling performance over the baseline with fewer NFE settings, particularly in cases where higher-order ODE solvers fail to converge with a small NFE (below 10) (Lu et al., 2022a).
+
+### 4.2 CONDITIONAL SAMPLING
+
+For conditional DPMs, we selected the pre-trained models of the widely recognized classifier guidance paradigm, ADM-G (Dhariwal & Nichol, 2021), and the classifier-free guidance paradigm, Stable-Diffusion (Rombach et al., 2022), to validate the effectiveness of PFDiff. We employed
+
+![Figure 3: Unconditional sampling results. Three line plots showing FID↓ vs NFE for CIFAR10 (Discrete), CelebA 64x64 (Discrete), and CIFAR10 (Continuous).](b93cbfb52e37619e688175a6aad9edd9_img.jpg)
+
+Figure 3 consists of three line plots showing the Inception Fidelity (FID $\downarrow$ ) versus the Number of Function Evaluations (NFE) for unconditional sampling. The plots are for (a) CIFAR10 (Discrete), (b) CelebA 64x64 (Discrete), and (c) CIFAR10 (Continuous). Each plot compares several methods: DDPM( $t_j = 1.0$ ) (blue solid line), Analytic-DDPM( $t_j = 1.0$ ) (orange dashed line), DDIM (green dashed line), Analytic-DDIM (red dashed line), DDIM+Ours (yellow dashed line), and Analytic-DDIM+Ours (purple dashed line). In all cases, the proposed methods (Analytic-DDIM and Analytic-DDIM+Ours) achieve lower FID scores faster than the baselines as NFE increases.
+
+Figure 3: Unconditional sampling results. Three line plots showing FID↓ vs NFE for CIFAR10 (Discrete), CelebA 64x64 (Discrete), and CIFAR10 (Continuous).
+
+Figure 3: Unconditional sampling results. We report the FID $\downarrow$  for different methods by varying the number of function evaluations (NFE), evaluated on 50k samples.
+
+![Figure 4: Conditional sampling results. Three line plots showing FID↓ vs NFE for ImageNet 64x64 (Guided-Diffusion), MS-COCO2014 (Stable-Diffusion), and MS-COCO2014 (Stable-Diffusion).](bedcca5cdf168e3508ef511d94ec514c_img.jpg)
+
+Figure 4 consists of three line plots showing the Inception Fidelity (FID $\downarrow$ ) versus the Number of Function Evaluations (NFE) for conditional sampling. The plots are for (a) ImageNet 64x64 (Guided-Diffusion) with Classifier Guidance  $s=1.0$ , (b) MS-COCO2014 (Stable-Diffusion) with Classifier-Free Guidance  $s=1.5$ , and (c) MS-COCO2014 (Stable-Diffusion) with Classifier-Free Guidance  $s=7.5$ . Each plot compares DDIM (green dashed line), DPM-Solver-2 (blue dashed line), DPM-Solver-3 (red dashed line), DPM-Solver++(2M) (yellow dashed line), AutoDiffusion (orange dashed line), and DDIM+Ours (purple dashed line). In all cases, the proposed DDIM+Ours method achieves lower FID scores faster than the baselines as NFE increases.
+
+Figure 4: Conditional sampling results. Three line plots showing FID↓ vs NFE for ImageNet 64x64 (Guided-Diffusion), MS-COCO2014 (Stable-Diffusion), and MS-COCO2014 (Stable-Diffusion).
+
+Figure 4: Conditional sampling results. We report the FID $\downarrow$  for different methods by varying the NFE. Evaluated: ImageNet 64x64 with 50k, others with 10k samples. \*AutoDiffusion (Li et al., 2023) requires additional search costs. †We borrow the results reported in DPM-Solver-v3 (Zheng et al., 2023) directly.
+
+uniform time steps setting and the DDIM (Song et al., 2020a) ODE solver as a baseline across all datasets. Evaluation metrics were computed by sampling 50k samples on the ImageNet 64x64 (Deng et al., 2009) dataset for ADM-G and 10k samples on other datasets, including ImageNet 256x256 in ADM-G and MS-COCO2014 (Lin et al., 2014) in Stable-Diffusion.
+
+For conditional DPMs employing the classifier guidance paradigm, we conducted experiments on the ImageNet 64x64 dataset with a guidance scale ( $s$ ) set to 1.0. For comparison, we implemented DPM-Solver-2 and -3 (Lu et al., 2022a), and DPM-Solver++(2M) (Lu et al., 2022b), which exhibit the best performance on conditional DPMs. Additionally, we introduced the AutoDiffusion method (Li et al., 2023) using DDIM as a baseline for comparison, noting that this method incurs additional search costs. We compared FID $\downarrow$  scores by varying the NFE as depicted in Fig. 4a, with corresponding visual comparisons shown in Fig. 7b. We observed that PFDiff reduced the FID from 138.81 with 4 NFE in DDIM to 16.46, achieving an 88.14% improvement in quality. The visual results in Fig. 7b further demonstrate that, at the same NFE setting, PFDiff achieves higher-quality sampling. Furthermore, we evaluated PFDiff’s sampling performance based on DDIM on the large-scale ImageNet 256x256 dataset. Detailed results are provided in Appendix D.4.
+
+For conditional, classifier-free guidance paradigms of DPMs, we employed the `sd-v1-4` checkpoint and computed the FID $\downarrow$  scores on the validation set of MS-COCO2014 (Lin et al., 2014). We conducted experiments with a guidance scale ( $s$ ) set to 7.5 and 1.5. For comparison, we implemented DPM-Solver-2 and -3 (Lu et al., 2022a), and DPM-Solver++(2M) (Lu et al., 2022b) methods. At  $s = 7.5$ , we introduced the state-of-the-art method reported in DPM-Solver-v3 (Zheng et al., 2023) for comparison, along with DPM-Solver++(2M) (Lu et al., 2022b), UniPC (Zhao et al., 2023), and DPM-Solver-v3(2M). The FID $\downarrow$  metrics by varying the NFE are presented in Figs. 4b and 4c, with additional visual results illustrated in Fig. 7a. We observed that PFDiff, solely based on DDIM, achieved state-of-the-art results during the sampling process of Stable-Diffusion, thus demonstrat-
+
+Table 1: Sample quality measured by FID<sub>↓</sub> on the MS-COCO2014 dataset (Lin et al., 2014), using Stable-Diffusion (Rombach et al., 2022) pre-trained model with a guidance scale of 7.5, varying the number of function evaluations (NFE). Evaluated with 10k samples.
+
+| Method                          | NFE           |               |              |              |              |              |
+|---------------------------------|---------------|---------------|--------------|--------------|--------------|--------------|
+|                                 | 4             | 6             | 8            | 10           | 15           | 20           |
+| DPM-Solver-1 (Lu et al., 2022a) | 35.48         | 20.33         | 17.46        | 16.78        | 16.08        | 15.95        |
+| + PFDiff                        | <b>29.02</b>  | <b>15.47</b>  | <b>13.26</b> | <b>13.06</b> | <b>13.57</b> | <b>13.97</b> |
+| DPM-Solver-2 (Lu et al., 2022a) | 184.21        | 157.95        | 148.67       | 135.81       | 92.62        | 40.47        |
+| + PFDiff                        | <b>147.20</b> | <b>106.24</b> | <b>57.07</b> | <b>31.66</b> | <b>17.87</b> | <b>14.13</b> |
+
+ing the efficacy of PFDiff. Further experimental details can be found in Appendix D.5. Additionally, to further validate the orthogonality of PFDiff, we conducted experiments on the original (single-step) DPM-Solver-1 and -2, comparing the performance with and without the PFDiff, using the Stable-Diffusion pre-trained model, as shown in Tab. 1. The experimental results demonstrate that PFDiff effectively enhances the performance of DPM-Solver across different orders.
+
+### 4.3 ABLATION STUDY
+
+We conducted ablation experiments on the six different algorithm configurations of PFDiff mentioned in Appendix C, with  $k = 1, 2, 3$  ( $h \leq k$ ). Specifically, we evaluated the FID<sub>↓</sub> scores on the unconditional and conditional pre-trained DPMs (Ho et al., 2020; Dhariwal & Nichol, 2021). Detailed experimental setups and results can be found in Appendix D.6.1. The experimental results indicate that for various pre-trained DPMs, the choice of parameters  $k$  and  $h$  is not critical, as most combinations of  $k$  and  $h$  within PFDiff can enhance the sampling efficiency over the baseline. Moreover, with  $k = 2$  and  $h = 1$  fixed, PFDiff-2.1 can always improve the baseline’s sampling quality within the range of 4~20 NFE. For even better sampling quality, one can sample a small subset of examples (e.g., 5k) to compute evaluation metrics or directly conduct visual analysis, easily identifying the most effective  $k$  and  $h$  combinations. Furthermore, in Appendix D.6.1, we propose an automatic search strategy with almost no additional cost, which can more rapidly obtain more competitive combinations of  $k$  and  $h$  based on truncation error.
+
+To validate the effectiveness of PFDiff, a key factor is its information-efficient update process, which uses both past and future scores that are complementary and indispensable in jointly guiding first-order ODE solvers. We employ DDIM (Song et al., 2020a) as the baseline, removing past and future scores separately. Moreover, we introduce methods (Ma et al., 2024) that cache part of past scores for comparison. As shown in Appendix D.6.2, experimental results indicate that only past (including cache) or only future scores can slightly improve sampling performance, but their combination (i.e., the complete PFDiff) significantly enhances the performance of first-order ODE solvers, especially with very few NFE (<10). Additionally, we provide experimental results on inference time in Appendix D.6.2, revealing that methods (Ma et al., 2024) that cache part of past scores not only incur additional inference costs but also exhibit relatively weak acceleration effects with few NFE (<10). However, PFDiff and the used baseline have consistent inference times and exhibit significantly accelerated effects, further validating its effectiveness.
+
+## 5 CONCLUSION
+
+In this paper, based on the recognition that the ODE solvers of DPMs exhibit significant similarity in model outputs when the time step size is not excessively large, and with the aid of a foresight update mechanism, we propose PFDiff, a novel method that leverages past and future scores to rapidly update the current intermediate state. This approach effectively reduces the unnecessary number of function evaluations (NFE) in the ODE solvers and significantly corrects the errors of first-order ODE solvers during the sampling process. Extensive experiments demonstrate the orthogonality and effectiveness of PFDiff on both unconditional and conditional pre-trained DPMs, especially in conditional pre-trained DPMs where PFDiff outperforms previous state-of-the-art training-free sampling methods.
+
+## ETHICS STATEMENT
+
+DPMs, like GANs and VAEs, may be utilized as deep generative models for generating fake and malicious content. The proposed PFDiff can accelerate the generation of DPMs, which may facilitate the rapid creation of such content, thereby posing a potential negative impact on society.
+
+## REPRODUCIBILITY STATEMENT
+
+Our code is based on the official implementations of DDIM (Song et al., 2020a), DPM-Solver (Lu et al., 2022a), and Analytic-DPM (Bao et al., 2022b). We utilized unconditional checkpoints from DDPM (Ho et al., 2020), DDIM (Song et al., 2020a), and ScoreSDE (Song et al., 2020b), as well as conditional checkpoints from AMD-G (Dhariwal & Nichol, 2021) and Stable-Diffusion (Rombach et al., 2022). Detailed experimental settings and algorithm implementations are described in Appendices C and D.
+
+## REFERENCES
+
+- Fan Bao, Chongxuan Li, Jiacheng Sun, Jun Zhu, and Bo Zhang. Estimating the optimal covariance with imperfect mean in diffusion probabilistic models. *arXiv preprint arXiv:2206.07309*, 2022a.
+- Fan Bao, Chongxuan Li, Jun Zhu, and Bo Zhang. Analytic-dpm: an analytic estimate of the optimal reverse variance in diffusion probabilistic models. *arXiv preprint arXiv:2201.06503*, 2022b.
+- James Betker, Gabriel Goh, Li Jing, Tim Brooks, Jianfeng Wang, Linjie Li, Long Ouyang, Juntang Zhuang, Joyce Lee, Yufei Guo, et al. Improving image generation with better captions. *Computer Science. https://cdn.openai.com/papers/dall-e-3.pdf*, 2(3):8, 2023.
+- Defang Chen, Zhenyu Zhou, Can Wang, Chunhua Shen, and Siwei Lyu. On the trajectory regularity of ode-based diffusion sampling. In *Forty-first International Conference on Machine Learning*, 2024.
+- Elliott Ward Cheney, EW Cheney, and W Cheney. *Analysis for applied mathematics*, volume 1. Springer, 2001.
+- Mostafa Dehghani, Basil Mustafa, Josip Djolonga, Jonathan Heek, Matthias Minderer, Mathilde Caron, Andreas Steiner, Joan Puigcerver, Robert Geirhos, Ibrahim Alabdulmohsin, et al. Patch n’pack: Navit, a vision transformer for any aspect ratio and resolution. In *Proceedings of the 37th International Conference on Neural Information Processing Systems*, pp. 2252–2274, 2023.
+- Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In *2009 IEEE conference on computer vision and pattern recognition*, pp. 248–255. Ieee, 2009.
+- Prafulla Dhariwal and Alexander Nichol. Diffusion models beat gans on image synthesis. *Advances in neural information processing systems*, 34:8780–8794, 2021.
+- John R Dormand and Peter J Prince. A family of embedded runge-kutta formulae. *Journal of computational and applied mathematics*, 6(1):19–26, 1980.
+- Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. *Advances in neural information processing systems*, 27, 2014.
+- Martin Heusel, Hubert Ramsauer, Thomas Unterthiner, Bernhard Nessler, and Sepp Hochreiter. Gans trained by a two time-scale update rule converge to a local nash equilibrium. *Advances in neural information processing systems*, 30, 2017.
+- Jonathan Ho, Ajay Jain, and Pieter Abbeel. Denoising diffusion probabilistic models. *Advances in neural information processing systems*, 33:6840–6851, 2020.
+- Tero Karras, Miika Aittala, Timo Aila, and Samuli Laine. Elucidating the design space of diffusion-based generative models. *Advances in neural information processing systems*, 35:26565–26577, 2022.
+
+- Tero Karras, Miika Aittala, Jaakko Lehtinen, Janne Hellsten, Timo Aila, and Samuli Laine. Analyzing and improving the training dynamics of diffusion models. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 24174–24184, 2024.
+- Diederik P Kingma and Max Welling. Auto-encoding variational bayes. *arXiv preprint arXiv:1312.6114*, 2013.
+- Peter E Kloeden, Eckhard Platen, Peter E Kloeden, and Eckhard Platen. *Stochastic differential equations*. Springer, 1992.
+- Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images. 2009.
+- Lijiang Li, Huixia Li, Xiawu Zheng, Jie Wu, Xuefeng Xiao, Rui Wang, Min Zheng, Xin Pan, Fei Chao, and Rongrong Ji. Autodiffusion: Training-free optimization of time steps and architectures for automated diffusion model acceleration. In *Proceedings of the IEEE/CVF International Conference on Computer Vision*, pp. 7105–7114, 2023.
+- Chen-Hsuan Lin, Jun Gao, Luming Tang, Towaki Takikawa, Xiaohui Zeng, Xun Huang, Karsten Kreis, Sanja Fidler, Ming-Yu Liu, and Tsung-Yi Lin. Magic3d: High-resolution text-to-3d content creation. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 300–309, 2023.
+- Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In *Computer Vision–ECCV 2014: 13th European Conference, Zurich, Switzerland, September 6–12, 2014, Proceedings, Part V 13*, pp. 740–755. Springer, 2014.
+- Luping Liu, Yi Ren, Zhijie Lin, and Zhou Zhao. Pseudo numerical methods for diffusion models on manifolds. *arXiv preprint arXiv:2202.09778*, 2022a.
+- Xingchao Liu, Chengyue Gong, and Qiang Liu. Flow straight and fast: Learning to generate and transfer data with rectified flow. *arXiv preprint arXiv:2209.03003*, 2022b.
+- Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. Deep learning face attributes in the wild. In *Proceedings of the IEEE international conference on computer vision*, pp. 3730–3738, 2015.
+- Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver: a fast ode solver for diffusion probabilistic model sampling in around 10 steps. In *Proceedings of the 36th International Conference on Neural Information Processing Systems*, pp. 5775–5787, 2022a.
+- Cheng Lu, Yuhao Zhou, Fan Bao, Jianfei Chen, Chongxuan Li, and Jun Zhu. Dpm-solver++: Fast solver for guided sampling of diffusion probabilistic models. *arXiv preprint arXiv:2211.01095*, 2022b.
+- Xinyin Ma, Gongfan Fang, and Xinchao Wang. Deepcache: Accelerating diffusion models for free. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition*, pp. 15762–15772, 2024.
+- Yurii Nesterov. A method of solving a convex programming problem with convergence rate  $o(1/k^{**}2)$ . *Doklady Akademii Nauk SSSR*, 269(3):543, 1983.
+- Bernt Øksendal and Bernt Øksendal. *Stochastic differential equations*. Springer, 2003.
+- William Peebles and Saining Xie. Scalable diffusion models with transformers. In *Proceedings of the IEEE/CVF International Conference on Computer Vision*, pp. 4195–4205, 2023.
+- Ben Poole, Ajay Jain, Jonathan T Barron, and Ben Mildenhall. Dreamfusion: Text-to-3d using 2d diffusion. *arXiv preprint arXiv:2209.14988*, 2022.
+- Herbert Robbins and Sutton Monro. A stochastic approximation method. *The annals of mathematical statistics*, pp. 400–407, 1951.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]

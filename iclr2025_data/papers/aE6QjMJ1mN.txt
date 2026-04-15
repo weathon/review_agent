@@ -1,0 +1,559 @@
+# --- TRANSFORMERS USE CAUSAL WORLD MODELS IN MAZE-SOLVING TASKS
+
+Anonymous authors
+
+Paper under double-blind review
+
+## ABSTRACT
+
+Recent studies in interpretability have explored the inner workings of transformer models trained on tasks across various domains, often discovering that these networks naturally develop surprisingly structured representations. When such representations comprehensively reflect the task domain’s structure, they are commonly referred to as “World Models” (WMs). In this work, we discover such WMs in transformers trained on maze tasks. In particular, by employing Sparse Autoencoders (SAEs) and analysing attention patterns, we examine the construction of WMs and demonstrate consistency between the circuit analysis and the SAE feature-based analysis. We intervene upon the isolated features to confirm their causal role and, in doing so, find asymmetries between certain types of interventions. Surprisingly, we find that models are able to reason with respect to a greater number of active features than they see during training, even if attempting to specify these in the input token sequence would lead the model to fail. Furthermore, we observe that varying positional encodings can alter how WMs are encoded in a model’s residual stream. By analyzing the causal role of these WMs in a toy domain we hope to make progress toward an understanding of emergent structure in the representations acquired by Transformers, leading to the development of more interpretable and controllable AI systems.
+
+## 1 INTRODUCTION
+
+The study of world models (WMs) in AI systems has gained significant traction of late, yet much interpretability research focuses on large language models trained on diverse, complex datasets (Belrose et al., 2023; Lieberum et al., 2023; Olsson et al., 2022). In an attempt to seek a more comprehensive understanding, our work examines WMs acquired by Transformers (Vaswani, 2017) in a controlled, synthetic environment. In particular, we use Maze-solving tasks (Subsection 2.1) as an ideal testbed for understanding learned WMs due to their human-understandable structure, controllable complexity, and relevance to spatial reasoning. Using this constrained domain, we can rigorously analyze how transformers trained (Subsection 2.2) to solve mazes construct and utilize internal representations of their environment.
+
+Our methodology leverages Sparse Autoencoders (SAEs) (Bricken et al., 2023) to overcome the limitations of linear probes in detecting WM features. While linear probes can and have been used to identify latent directions associated with features defined in an imposed ontology, SAEs are found to discover features actually used by our models to make decisions (Section 3). By manipulating specific features identified by the SAEs and observing the impact on our models’ maze-solving behavior, we provide strong evidence that these features are causally involved in the model’s decision-making process (Section 4). This stands in contrast to prior work analyzing the formation of WMs in maze settings where no causal features were able to be isolated (Ivanitskiy et al., 2024).
+
+Our findings provide important considerations for AI interpretability and alignment. By investigating how transformers form causal WMs even in relatively simple tasks, we hope to provide new avenues for understanding representations and potentially steering behavior in more complex AI systems. This work lays the groundwork for future research into how we might intervene on WMs to better align transformer-based AI systems to desired constraints.
+
+![Figure 1: Overview of our methodology for discovering and validating world models in transformer-based maze solvers. (A) Attention Analysis: Shows attention patterns between tokens like (1,3) and (1,4) for Head 1 and Head 3. (B) Residual SAEs: Shows a sparse autoencoder training on the residual stream to identify features that encode maze connectivity. (C) Methodology Comparison: Shows a comparison between patching attention heads and patching features in the SAE.](68ac34ff111db52afaa786afcb8346c3_img.jpg)
+
+The diagram is divided into three main sections: (A) Attention Analysis, (B) Residual SAEs, and (C) Methodology Comparison.   
+ (A) Attention Analysis: A diagram on the left shows a transformer block with an embedding, a maze sequence, and attention heads. A circle labeled 'A' points to the attention heads. To the right, a table shows attention patterns for Head 1 and Head 3. Head 1 shows attention between (1,3) and (1,4). Head 3 shows attention between (4,5) and (5,5).   
+ (B) Residual SAEs: A diagram shows a hammer icon pointing to a maze, with a circle labeled 'B' pointing to a sparse autoencoder. The autoencoder has an encode-decode structure. Below it, a table shows features that encode connections on ";".   
+ (C) Methodology Comparison: A diagram shows a hammer icon pointing to a maze, with a circle labeled 'C' pointing to a comparison of two methods. The top method shows patching "Connection Heads" in the SAE. The bottom method shows patching attention in the transformer.
+
+Figure 1: Overview of our methodology for discovering and validating world models in transformer-based maze solvers. (A) Attention Analysis: Shows attention patterns between tokens like (1,3) and (1,4) for Head 1 and Head 3. (B) Residual SAEs: Shows a sparse autoencoder training on the residual stream to identify features that encode maze connectivity. (C) Methodology Comparison: Shows a comparison between patching attention heads and patching features in the SAE.
+
+Figure 1: Overview of our methodology for discovering and validating world models in transformer-based maze solvers. (A) We analyze attention patterns in early layers, finding heads that consolidate maze connectivity information at semicolon tokens. (B) We train sparse autoencoders on the residual stream immediately following the first block, identifying interpretable features that encode maze connectivity. (C) We demonstrate the causal role of the world models in our transformers comparing the features extracted through both methods and validating them through causal interventions.
+
+We outline our methodology in Figure 1. In short, we begin in Subsection 3.1, identifying attention heads that appear to construct world model features by examining their attention patterns across maze coordinate tokens (A). We validate these findings in Subsection 3.3 by training sparse autoencoders on the residual stream and demonstrating that the extracted features match those identified through attention analysis (B). Lastly, in Subsection 3.3 we establish the causal nature of these representations through targeted interventions, showing that perturbing specific features produces predictable changes in the model’s maze-solving behavior (C).
+
+### Contributions
+
+- **Empirical Findings:** We show that transformers form WMs when solving mazes and that these WMs are causal: they can be intervened upon in the latent space of SAEs. Surprisingly, we find that interventions that activate features are more effective than those that remove them, suggesting an asymmetry in how transformers utilize WM features. In performing these interventions we also uncovered our models’ abilities to reason in the presence of a out-of-distribution number of activated features than would naturally arise for a given token sequence length.
+- **Methodological Insights:** By effectively utilizing decision trees to isolate WMs features in SAEs, we demonstrate that transformers utilizing different encodings schemes may use varyingly compositional codes to represent their WMs. More generally, our analyses suggest that SAEs are generally better suited than linear probes to isolate WMs, even in the absence of feature splitting.
+
+## 2 PRELIMINARIES
+
+### 2.1 ENVIRONMENT
+
+Though it remains a matter of debate whether Large Language Models (LLMs) construct structured internal models of the real world, we can begin to understand the representations acquired by such models by focusing on “toy” tasks with clear spatial or temporal structure (Brinkmann et al., 2024; Momennejad et al., 2024; Jenner et al., 2024; McGrath et al., 2022). Previous works along these lines (Li et al., 2022; Ivanitskiy et al., 2024; Nanda, 2023; Karvonen, 2024; He et al., 2024) have found a variety of both correlational and causal evidence for internal models of the environment within trained transformers. In this work, we utilize `maze-dataset` (Ivanitskiy et al., 2023), a package providing maze-solving tasks as well as ways of turning these tasks into text representations. In particular, we use a dataset of mazes consisting of up to  $7 \times 7$  grids, generated via constrained randomized depth first search (see Subsection 2.2) (which produces mazes that are acyclic and thus have a unique solution).
+
+To train autoregressive transformers to solve such mazes, we employed a tokenization scheme provided by `maze-dataset`, shown in Figure 2. This scheme is designed to present the maze structure, start and end points, and solution path in a format amenable to transformer processing whilst remaining straight-forward to analyse with standard tools from the mechanistic interpretability literature - primarily due to the existence of a unique token for every position in the maze (aka “lattice”).
+
+```
+<ADJLIST_START> (0,0) <--> (1,0) ; (2,0) <--> (3,0) ; (4,1) <-->
+(4,0) ; (2,0) <--> (2,1) ; (1,0) <--> (1,1) ; (3,4) <--> (2,4)
+; (3,1) <--> (3,2) ; ... (1,3) <--> (1,4) ; <ADJLIST_END>
+<ORIGIN_START> (1,3) <ORIGIN_END> <TARGET_START> (2,3) <TARGET_END>
+<PATH_START> (1,3) (0,3) (0,2) (1,2) (2,2) (2,1) (2,0) (3,0)
+(4,0) (4,1) (4,2) (4,3) (4,4) (3,4) (2,4) (2,3) <PATH_END>
+```
+
+![Figure 2: Visualization of a 5x5 maze. The maze has a start point (green) at (1,3) and an end point (red) at (2,3). A blue path shows the shortest route from start to end. The axes are labeled 'row' (0-4) and 'col' (0-4).](3cab54230d8ae3b786ddda81346602cc_img.jpg)
+
+Figure 2: Visualization of a 5x5 maze. The maze has a start point (green) at (1,3) and an end point (red) at (2,3). A blue path shows the shortest route from start to end. The axes are labeled 'row' (0-4) and 'col' (0-4).
+
+(a) An example of a tokenized maze. **1:** The `adjacency list` describes the connectivity of the maze, with the semicolon token ; delimiting consecutive connections. The order of connections is randomized, ellipses represent omitted connection pairs. **2,3:** The `origin` and `target` specify where the path should begin and end, respectively. **4:** The `path` itself a sequence of coordinate tokens representing the shortest path from the origin to the target. For a “rollout,” we provide everything up to (and including) the `<PATH_START>` token and autoregressively sample with `argmax` until a `<PATH_END>` token is produced.
+
+(b) Visual representation of the same maze as in the tokenized representation on the left. The origin is indicated in green, the target in red, and the path in blue.
+
+Figure 2: Tokenization scheme and visualization of a shortest-path maze task generated using Ivanitskiy et al. (2023).
+
+### 2.2 MAZE SOLVING TRANSFORMERS
+
+Utilizing the tokenized representations of mazes provide by the `maze-dataset` library, a suite of transformer models implemented using `TransformerLens` (Nanda & Bloom, 2022) were trained to predict solution paths in acyclic mazes. We performed extensive hyperparameter sweeps (Figure 10) over several variants of the transformer architecture, yielding models with stronger generalization performance than those found by prior work Ivanitskiy et al. (2024).
+
+To allow the testing of generalization to large maze size, the models were trained on  $5 \times 5$  fully-connected and  $6 \times 6$  sparsely connected mazes, embedded in a  $7 \times 7$  lattice. This ensured that all coordinate tokens in the  $7 \times 7$  vocabulary had been seen during training time, such that generalization to  $7 \times 7$  mazes was conceivable but out-of-distribution during inference. For our experiments, we investigated the two best performing models for each positional embedding (Su et al., 2024) scheme, as shown in Table 1. Note that whilst these models had different numbers of heads, their parameter counts varied only slightly - on account of Stan’s use of learned positional embeddings.
+
+## 3 DISCOVERING WORLD MODELS
+
+Broadly speaking there are two ways to go about trying to identify internal world models: 1) Assuming the form of the world model and inspecting the transformer with e.g. supervised probes to see if this world model is present ((Nanda, 2023) SELF CITE Workshop proceeding), or 2) Exploring the model internals and investigating any structure which may be present in the representations to see if something akin to a world model exists. In our work we take both approaches.
+
+| Model Nickname | Positional Embeddings | $d_{\text{model}}$ | $n_{\text{layers}}$ | $n_{\text{heads}}$ | Num. Params | Maze Solving Accuracy |
+|----------------|-----------------------|--------------------|---------------------|--------------------|-------------|-----------------------|
+| Stan           | standard learned      | 512                | 6                   | 8                  | 19,225,660  | 96.6%                 |
+| Terry          | rotary                | 512                | 6                   | 4                  | 18,963,516  | 94.3%                 |
+
+Table 1: Models chosen for mechanistic investigation (most performant in the sweep, given their respective position embedding schemes). The number of parameters varies as Stan learns position encodings ( $W_{\text{pos}} \in \mathbb{R}^{512 \times 512}$ )
+
+162 First, in [Subsection 3.1](#) we investigate attention heads in the earliest layer of our models and find  
+163 heads specialising in the construction of representations akin to a world model. On the basis of this,  
+164 we use SAEs (an unsupervised method) alongside supervised classifiers to identify latent features  
+165 corresponding to the world model. Finally, we use patching experiments and interventions to show  
+166 that both investigations yield consistent features, and that these form a causal world model with  
+167 some interesting properties.
+
+###### 170 3.1 WORLD MODEL CONSTRUCTION: CONNECTIVITY ATTENTION HEADS
+
+172 We began by examining the attention patterns of the maze-solving transformer models and uncovered  
+173 a notable pattern: in both models, some or all of the attention heads at the first layer (“layer  
+174 0”) appear to consolidate information about maze connections into the `;` context positions. In  
+175 particular, for all  $4i^{\text{th}}$  context-positions tokens (the semicolon separation tokens `;`), these heads  
+176 attend back 1 or 3 tokens - that is, to one of the two coordinate tokens corresponding to the given  
+177 connection preceeding the `;` token. This pattern is observable for 3/8 L0 heads in Stan ([Figure 3](#))  
+178 and 4/4 L0 heads in Terry ([Figure 14](#)). This observation suggests the hypothesis that these heads  
+179 are in essence constructing a world model for the maze task, for use by later layers.
+
+180 If this were the case, then we should expect that the output of these heads, mediated by the “OV-  
+181 Circuit” ([Elhage et al., 2021](#)), should consist of combinations of the coordinates captured in a given  
+182 connection. This can be measured by taking the  $W_{OV}$  matrix for each head and measuring the cosine  
+183 distance between its elements and the model’s token embeddings (where coordinate directions are  
+184 directly given)<sup>1</sup>. With this in mind, we investigated the structure of these vectors more closely. We  
+185 find an intriguing pattern in the magnitudes of these vectors in the Stan model ([Figure 4](#)), while the  
+186 patterns in Terry were less clear cut ([Figure 5](#)).
+
+![Figure 3: Attention values for heads LOH3, LOH5, and LOH7 in Stan. The figure consists of three heatmaps. Each heatmap has a y-axis with labels '1 back', '2 back', '3 back', and '7 back', and an x-axis with values from 4 to 140 in increments of 4. A color bar on the right of each heatmap indicates attention values from 0 (light blue) to 1 (dark blue). Head 3 shows high attention (dark blue) at '1 back' and '3 back' for x-values 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140. Head 5 shows high attention at '1 back' and '3 back' for x-values 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140. Head 7 shows high attention at '1 back' and '3 back' for x-values 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140.](b7251436a2a3c0d1c00c3e935df2a8f5_img.jpg)
+
+Figure 3: Attention values for heads LOH3, LOH5, and LOH7 in Stan. The figure consists of three heatmaps. Each heatmap has a y-axis with labels '1 back', '2 back', '3 back', and '7 back', and an x-axis with values from 4 to 140 in increments of 4. A color bar on the right of each heatmap indicates attention values from 0 (light blue) to 1 (dark blue). Head 3 shows high attention (dark blue) at '1 back' and '3 back' for x-values 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140. Head 5 shows high attention at '1 back' and '3 back' for x-values 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140. Head 7 shows high attention at '1 back' and '3 back' for x-values 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140.
+
+201 [Figure 3: Attention values for heads LOH3, LOH5, and LOH7 in Stan.](#) We use a rather nonstandard  
+202 representation, looking only at a fixed window into the past of which tokens are attended to by  
+203 semicolon `;` tokens. Every 4th position, up to 140, is shown along the  $x$ -axis. Color shows  
+204 attention to positions 1, 3, 5, and 7 earlier in the context (shown along the  $y$ -axis), for an example  
+205 6x6 maze input. This sort of pattern is typical across all inputs examined. Up until context position  
+206 100, the heads are attending 1 and 3 positions back; after this the pattern shifts to 5 and 7 back. Note  
+207 the complementary attention patterns of LOH3 and LOH7. Closer examination shows that LOH3  
+208 prefers to direct its attention to ‘even-parity’ maze cells, with LOH7 preferring ‘odd-parity’ cells.  
+209 LOH5 more frequently splits its attention between 1 and 3 back, but sometimes ‘fills in’ for LOH7.  
+210 The origins of this pattern are explored further in [appendix E](#); note also the similarities to [Figure 4](#).  
+211 The other five heads in L0 show no similar pattern. Full patterns are shown in [Figure 13](#)
+
+212 <sup>1</sup>As we analyze the first attention layer we can ignore potential “residual drift” in the representations of a  
+213 given maze coordinate between early and later layers in our transformers ([Belrose et al., 2023](#)).
+
+216  
+217  
+218  
+219  
+220  
+221  
+222
+
+![Figure 4: Magnitudes of vectors resulting from applying the W_OV matrices of heads L0H3, L0H5 and L0H7 of Stan to maze-cell token embeddings, projected onto the maze grid. The figure shows three heatmaps: Head 0.3, Head 0.5, and Head 0.7. Head 0.3 shows a checkerboard pattern of high and low magnitudes. Head 0.5 shows a more diffuse pattern. Head 0.7 shows a checkerboard pattern similar to Head 0.3. A color bar on the right indicates magnitudes from 0.02 to 0.08.](e0d425c8e4eef259e4c52d81426d93fa_img.jpg)
+
+Figure 4: Magnitudes of vectors resulting from applying the W\_OV matrices of heads L0H3, L0H5 and L0H7 of Stan to maze-cell token embeddings, projected onto the maze grid. The figure shows three heatmaps: Head 0.3, Head 0.5, and Head 0.7. Head 0.3 shows a checkerboard pattern of high and low magnitudes. Head 0.5 shows a more diffuse pattern. Head 0.7 shows a checkerboard pattern similar to Head 0.3. A color bar on the right indicates magnitudes from 0.02 to 0.08.
+
+223  
+224  
+225  
+226  
+227  
+228  
+229
+
+Figure 4: Magnitudes of vectors resulting from applying the  $W_{OV}$  matrices of heads L0H3, L0H5 and L0H7 of Stan to maze-cell token embeddings, projected onto the maze grid. The pattern here mirrors the way that the heads divide their attention between the 1-back and 3-back context positions (exemplified in Figure 3) with L0H3 focused on ‘even-parity’ cells, and L0H7 and L0H5 focused primarily on ‘odd-parity’ cells. This pattern also recurs in the overlaps between query and key vectors of token embeddings, explored in detail in Appendix E.
+
+230  
+231  
+232  
+233  
+234  
+235  
+236  
+237
+
+![Figure 5: Magnitudes of vectors resulting from applying the W_OV matrices of layer-0 heads of Terry to maze-cell token embeddings, projected onto the maze grid. The figure shows four heatmaps: Head 0.0, Head 0.1, Head 0.2, and Head 0.3. The patterns are much less striking than in Figure 4, showing more localized regions of high magnitude. A color bar on the right indicates magnitudes from 0.02 to 0.12.](6bbc398f520a7bcc5491cab18d3e4cac_img.jpg)
+
+Figure 5: Magnitudes of vectors resulting from applying the W\_OV matrices of layer-0 heads of Terry to maze-cell token embeddings, projected onto the maze grid. The figure shows four heatmaps: Head 0.0, Head 0.1, Head 0.2, and Head 0.3. The patterns are much less striking than in Figure 4, showing more localized regions of high magnitude. A color bar on the right indicates magnitudes from 0.02 to 0.12.
+
+238  
+239  
+240  
+241  
+242
+
+Figure 5: Magnitudes of vectors resulting from applying the  $W_{OV}$  matrices of layer-0 heads of Terry to maze-cell token embeddings, projected onto the maze grid. The pattern here is much less striking than that for Stan (shown in Figure 4) although it does suggest that the heads specialise in even/odd-parity cells in localised regions of the maze.
+
+243  
+244  
+245
+
+### 3.2 WORLD MODEL REPRESENTATION: SPARSE AUTOENCODERS
+
+246  
+247  
+248  
+249  
+250  
+251  
+252  
+253  
+254
+
+As previous work (Ivanitskiy et al., 2024) struggled to intervene on WM features identified via linear probing (Alain & Bengio, 2016), we trained Sparse Autoencoders to attempt to find disentangled features in our models (Cunningham et al., 2023; Bricken et al., 2023). Sparse Autoencoders are motivated by the notion of superposition (Elhage et al., 2022) which posits that artificial neural networks store more features than an orthogonal representation would allow. By training an autoencoder with a higher-dimensional latent space than that of the transformer, tasked with reconstructing a residual stream vector under a sparsity penalty, the hope is that the SAE will recover interpretable features which the transformer was forced to superimpose. Similar approaches have previously seen success on other toy tasks (He et al., 2024; Karvonen et al., 2024).
+
+255  
+256  
+257  
+258  
+259
+
+To prevent “neuron death” in the SAE latent space, resulting from high sparsity penalties, we apply the method of “Ghost Gradients” proposed by Jermyn & Templeton (2024). The resulting trained SAEs faithfully reconstructed the activations (in our case, the residual stream after L0), and replacing these activations with their SAE reconstructed counterparts did not affect model behaviour (Figure 8), giving confidence in the completeness of their representation.
+
+260  
+261  
+262  
+263  
+264  
+265  
+266
+
+Initial attempts to isolate SAE features corresponding to connections in the maze attempted to use differences in the features present in mazes with or without certain connections. This approach worked well in some cases, but not in others, as not all relevant features varied in magnitude by the same amount, and many features were co-active to a given connection (i.e. those implicated in the path representation, which itself might change when connections are added/removed). To address this, we instead trained decision trees to isolate the relevant features in our transformers (akin to Spies et al. (2022)), as shown in Figure 6.
+
+267  
+268  
+269
+
+This analysis yielded our first unexpected finding: Stan’s WM consisted of two features for each connection - a somewhat generic “semicolon” feature, as well as a connection specific feature. We visualize highly activating examples of these features in Figure 17, and show that Stan’s representation was stable for an additionally trained SAE in Figure 18.
+
+270  
+271  
+272  
+273  
+274  
+275  
+276  
+277  
+278  
+279  
+280  
+281  
+282  
+283  
+284  
+285  
+286  
+287  
+288  
+289  
+290  
+291  
+292  
+293  
+294  
+295  
+296  
+297  
+298  
+299  
+300  
+301  
+302  
+303  
+304  
+305  
+306  
+307  
+308  
+309  
+310  
+311  
+312  
+313  
+314  
+315  
+316  
+317  
+318  
+319  
+320  
+321  
+322  
+323
+
+We speculate that this “compositional code” arises in Stan as a result of the transformer imperfectly separating positional information from its WM. This representation also explains why previous efforts to intervene on models with learned positional encodings by using linear probes were unsuccessful - as intervening with a single direction yielded from supervised decoding would also affect the semicolon feature.
+
+It is also interesting to note that Terry encoded connection information very cleanly into single features for each connection - i.e., a single direction in the residual stream. This is in-spite of the fact that Terry’s attention heads appeared to operate in a more entangled fashion than those of Stan.
+
+![Figure 6: Decision tree decoding accuracies and relevant features for each connection in the maze. (a) Stan: A 5x5 grid showing accuracy and features for connections between Maze X (0-4) and Maze Y (0-4). (b) Terry: A 5x5 grid showing accuracy and features for connections between Maze X (0-4) and Maze Y (0-4). Both grids include a color bar for accuracy from 0.90 to 1.00.](46f43cb4ffd47565e7c0ca306d461435_img.jpg)
+
+Figure 6 consists of two 5x5 grids, (a) Stan and (b) Terry, showing decision tree decoding accuracies and relevant features for each connection in a maze. The x-axis represents 'Maze X' (0 to 4) and the y-axis represents 'Maze Y' (0 to 4). Each cell in the grid contains a percentage (accuracy), a feature vector (in parentheses), and a triangle indicating the connection direction (upper right for right connections, lower left for down connections). A color bar on the right of each grid indicates accuracy from 0.90 to 1.00.
+
+**(a) Stan**
+
+| Maze Y \ Maze X | 0                                    | 1                                    | 2                                    | 3                                    | 4                              |
+|-----------------|--------------------------------------|--------------------------------------|--------------------------------------|--------------------------------------|--------------------------------|
+| 0               | 97% (419, 1422)<br>96% (1616, 1422)  | 96% (944, 1422)<br>96% (1265, 1422)  | 97% (536, 1422)<br>96% (1246, 1422)  | 97% (1246, 1422)<br>96% (1535, 1422) | 96% (1535, 1422)<br>96% (1422) |
+| 1               | 96% (1616, 1422)<br>97% (1332, 1422) | 96% (1185, 1422)<br>96% (1586, 1422) | 96% (1142, 1422)<br>97% (1688, 1422) | 96% (1644, 1422)<br>96% (1422)       | 96% (1644, 1422)<br>96% (1422) |
+| 2               | 96% (1616, 1422)<br>96% (1807, 1422) | 97% (1424, 1422)<br>96% (1822, 1422) | 97% (1643, 1422)<br>97% (1355, 1422) | 96% (1696, 1422)<br>97% (1407, 1422) | 97% (1407, 1422)<br>97% (1422) |
+| 3               | 97% (1482, 1422)<br>97% (1706, 1422) | 97% (1504, 1422)<br>97% (1090, 1422) | 97% (1188, 1422)<br>97% (1315, 1422) | 95% (1079, 1422)<br>95% (1222, 1422) | 97% (1222, 1422)<br>96% (1422) |
+| 4               | 98% (226, 1422)<br>96% (1627, 1422)  | 95% (1106, 1422)<br>93% (786, 1422)  | 97% (1102, 1422)<br>96% (1281, 1422) | 97% (1422)<br>96% (1422)             | 97% (1199, 1422)<br>97% (1422) |
+
+**(b) Terry**
+
+| Maze Y \ Maze X | 0                          | 1                          | 2                          | 3                          | 4           |
+|-----------------|----------------------------|----------------------------|----------------------------|----------------------------|-------------|
+| 0               | 100% (1248)<br>100% (294)  | 100% (1997)<br>100% (294)  | 100% (967)<br>100% (944)   | 100% (944)<br>100% (1248)  | 100% (1248) |
+| 1               | 100% (417)<br>100% (417)   | 100% (1559)<br>100% (1588) | 100% (1197)<br>100% (1147) | 100% (1319)<br>100% (1696) | 100% (1696) |
+| 2               | 100% (417)<br>100% (2073)  | 100% (417)<br>100% (1578)  | 100% (256)<br>100% (952)   | 100% (2334)<br>100% (2039) | 100% (2039) |
+| 3               | 100% (1563)<br>100% (1764) | 100% (225)<br>100% (1968)  | 100% (833)<br>100% (1759)  | 100% (1426)<br>100% (976)  | 100% (976)  |
+| 4               | 100% (497)<br>100% (1777)  | 100% (1074)<br>100% (1461) | 100% (1739)<br>100% (1548) | 100% (2073)<br>100% (1384) | 100% (1384) |
+
+Figure 6: Decision tree decoding accuracies and relevant features for each connection in the maze. (a) Stan: A 5x5 grid showing accuracy and features for connections between Maze X (0-4) and Maze Y (0-4). (b) Terry: A 5x5 grid showing accuracy and features for connections between Maze X (0-4) and Maze Y (0-4). Both grids include a color bar for accuracy from 0.90 to 1.00.
+
+Figure 6: Decision tree decoding accuracies and relevant features (in parentheses) for each connection in the maze. Upper right triangles correspond to right connections, and lower left triangles correspond to down connections. The decision trees were trained to predict the presence, or absence, of a connection from the SAE feature vector at the semicolon immediately following the definition of that connection. See Figure 17 for more details.
+
+### 3.3 COMPARING SAEs AND CIRCUITS
+
+In Subsection 3.1 we advanced the claim that certain L0 heads construct features representing maze edges at the  $\text{;}$  context positions, specifically by attending to earlier positions containing maze-cell token embeddings, and rewriting those embeddings by application of their  $W_{OV}$  matrices. Subsection 3.2 identified features representing maze edges via an independent line of reasoning, by training SAEs, and identifying which of their features were indicative of the presence of a maze edge.
+
+To verify whether these approaches yielded consistent features for the WM, we first calculated the cosine similarity between the features written by isolated attention heads, and those encoded in the SAE (Figure 7a). These showed excellent agreement for Stan, where the attention patterns were clear, but only once the compositional code was taken into account (see Appendix G for details).
+
+Though these results were promising, we carried out a further comparison (Figure 7b) to minimize the assumptions required, and to account for two potential effects: 1) There may be “wiggle room” between feature directions in the model’s residual stream, and the circuits that construct them (which would lead to low cosine similarities, even for the same features), 2) As our SAEs are trained after an entire block of computation, it is possible that the MLPs, applied after attention, also played a role in forming the representations. In this second experiment we patched attention head values in the presence of a connection to the mean of a maze set without that connection. By looking at the effect of patching the attention heads on the resulting SAE Latent vectors, we were able to observe that the features considered relevant for any given connection were indeed sensitive to the heads implicated in constructing those features.
+
+In particular, we consider the effect on the SAE features identified in Subsection 3.2 when each attention head is patched at the semicolon position for with its average non-connection value across 500 examples (i.e. removing the contribution a given head toward encoding that connection).
+
+This captures the extent to which a given head contributes towards the “creation” of a maze-connection’s representation in the residual stream. These plots not only confirm the link between the attention circuits and the SAE features, but even show the same spatial partitioning of different parts of the maze between different heads. The same plots for Terry, and Stan’s down connection, are shown in [Appendix F](#).
+
+![Figure 7: Comparison of SAE features and attention head analysis. (a) Cosine similarities heatmap between edge features derived from the SAE and edge features derived by direct application of the WoV matrices of the heads. (b) Effect of patching attention heads on SAE features for Stan's connection-specific WM features.](73c3e4508cae529acf4e6c7fa70b361a_img.jpg)
+
+(a) Cosine similarities between edge features derived from the SAE and edge features derived by direct application of the  $WoV$  matrices of the heads discussed in [Subsection 3.1](#) to token embeddings for Stan (for reasons of space, only the right directed edge features are shown here, but the pattern is the same for the full set). Details of how features are computed are given in [Appendix G](#).
+
+(b) Effect of patching attention heads on SAE features (rightward connections) for Stan’s connection-specific WM features (identified from [Figure 6](#)). Compared against [Figure 4](#), we see agreement between the attention analysis and the SAE Feature analysis. We normalize the per-head patching effect magnitudes, such that 100% was the maximal effect seen on an SAE feature’s magnitude as a result of patching the attention head (across all features for a given head).
+
+Figure 7: Comparison of SAE features and attention head analysis. (a) Cosine similarities heatmap between edge features derived from the SAE and edge features derived by direct application of the WoV matrices of the heads. (b) Effect of patching attention heads on SAE features for Stan's connection-specific WM features.
+
+Figure 7: Comparison of SAE features and attention head analysis.
+
+## 4 INTERVENING ON WORLD MODELS
+
+Though a universally agreed upon definition does not exist, we shall consider world Models to be “structure preserving [...] causally efficacious representations” ([Millière & Buckner, 2024](#)) of an environment; i.e. representations which preserve the causal structure of the environment as far as is necessitated by the tasks an agent needs to perform. As such, we are interested in understanding how the WMs we have discovered are leveraged by our models to facilitate generation of valid solution sequences. In [Figure 8](#), we give an example of perturbing a feature to “fool” the model into behaving as though it is in a different maze. When patching in the SAE-reconstructed residual stream without perturbations we still see the same behavior as in the original model; when patching in with a modified feature, we see a change in the path. We perform such interventions across 200 examples for each connection feature, and show the resulting intervention efficacies in [Figure 9](#).
+
+The intervention process involves toggling a feature on (to the maximal value observed for that feature in a small dataset) or turning it off (setting it to 0) *at all semicolon positions*<sup>2</sup>. We measure the impact of these interventions on the model’s maze-solving accuracy, with a particular focus on how activating versus removing features affects performance. Our results reveal an intriguing asymmetry that constitutes our second finding: interventions that activate features tend to be more effective in altering the model’s behavior compared to those that remove features.
+
+<sup>2</sup>For the case of adding a connection, this is necessary as there is no semicolon in the sequence which “belongs” to the connection that doesn’t exist. We also experimented with toggling to a fixed maximal value in [Figure 19](#), but this was generally less effective. In the case of removal, it made little difference if the feature was disabled everywhere, as it is almost always exactly 0 for a non-matching connection semicolon
+
+This suggests that the transformer may rely more heavily on the presence of certain connectivity cues rather than their absence when constructing its internal world model.
+
+Our final finding relates to the toggling of features in Stan. Though Stan utilized a compositional code, activating the connection-specific features at unrelated semicolons worked in 35% of cases. Conversely, we saw that all removal interventions failed for Stan, for the simple reason that Stan was unable to generalize to sequences containing more connections than it had seen during training - thus failing when shown examples containing the additional connection to be removed (this failure was a result of Stan using learned positional embeddings (Table 1), as shown in Figure 10). The fact that activating connections in the space of the SAE worked at all means that Stan’s maze-solving behaviour was at least partially able to generalize in the latent space, where it was decoupled from the positional embeddings.
+
+![Figure 8: Four maze diagrams showing ground truth and model predictions. The first two show 'Ground Truth without Connection' and 'SAE Recons Model Output' for a maze with a missing connection. The last two show 'Ground Truth with Connection' and 'Patched SAE Model Output: (1, 2) <--> (1, 3)' for a maze with an added connection. The patched model's prediction (dashed orange line) matches the ground truth with the connection, while the original model's prediction (dashed green line) does not.](a71911ad87414271aeb190e0eebcb989_img.jpg)
+
+Figure 8: Four maze diagrams showing ground truth and model predictions. The first two show 'Ground Truth without Connection' and 'SAE Recons Model Output' for a maze with a missing connection. The last two show 'Ground Truth with Connection' and 'Patched SAE Model Output: (1, 2) <--> (1, 3)' for a maze with an added connection. The patched model's prediction (dashed orange line) matches the ground truth with the connection, while the original model's prediction (dashed green line) does not.
+
+Figure 8: An example of an intervention on Terry where a connection is added by enabling the relevant feature in the SAE’s latent space (in this case, feature 250 for  $(1, 2) \leftrightarrow (1, 3)$ ). From left to right: 1) input maze with ground truth 2) model’s prediction with the unperturbed SAE reconstruction patched in 3) perturbed ground truth 4) model’s prediction with the perturbed SAE reconstruction in its residual stream at layer 0.
+
+![Figure 9: Aggregated accuracy of interventions for Terry and Stan models. (a) Terry model: 'Add Connection, Right' and 'Add Connection, Down' show high accuracy (up to 100%), while 'Remove Connection, Right' and 'Remove Connection, Down' show low accuracy (mostly below 20%). (b) Stan model: 'Add Connection, Right' and 'Add Connection, Down' show high accuracy (up to 100%), while 'Remove Connection, Right' and 'Remove Connection, Down' show 0% accuracy across all cases.](ecb25d766719ce041cf4cc390791a098_img.jpg)
+
+Figure 9: Aggregated accuracy of interventions for Terry and Stan models. (a) Terry model: 'Add Connection, Right' and 'Add Connection, Down' show high accuracy (up to 100%), while 'Remove Connection, Right' and 'Remove Connection, Down' show low accuracy (mostly below 20%). (b) Stan model: 'Add Connection, Right' and 'Add Connection, Down' show high accuracy (up to 100%), while 'Remove Connection, Right' and 'Remove Connection, Down' show 0% accuracy across all cases.
+
+Figure 9: Aggregated accuracy of interventions for examples on which the original prediction was correct. An accurate intervention is one in which the toggling of a connection in the SAE feature space leads the model to act accordingly. Note that Stan removal interventions fail as the inputs in these cases have more connections than the model is able to handle (see length generalization failure in Figure 10).
+
+## 5 RELATED WORK
+
+Our work builds on existing literature in interpretability (Räuker et al., 2023), particularly how transformers develop structured internal representations, often called world models. World Models, as defined by Millière & Buckner (2024), are “structure-preserving, causally efficacious representations of properties of [a model’s] input domain.”
+
+432       Here, structure-preserving means that the representations reflect the causal structure of the observa-  
+433       tion space and causally efficacious means that the model leverages these representations to enable  
+434       relevant interactions with its environment.
+
+435       Research into world models has gained traction across various domains, with transformers trained  
+436       to play complex games like chess being prime examples. For instance, McGrath et al. (2022) trained  
+437       linear probes to extract various features in AlphaZero’s chess model, showing how different aspects  
+438       of the game, such as piece positioning and potential future moves, are captured within the model’s  
+439       layers. Similarly, Karvonen (2024) investigates the internal representations of a chess model us-  
+440       ing linear probes and contrastive activations, revealing structured representations of the game state.  
+441       Jenner et al. (2024) explores the emergence of learned look-ahead capabilities in Leela Chess Zero,  
+442       where the model encodes an internal representation of future optimal moves.
+
+443       Another task used to study internal representations in transformers is Othello. Several works have  
+444       explored the emergence of causal linear world models in this domain Li et al. (2022); Nanda (2023),  
+445       with recent advancements leveraging SAEs (see Subsection 3.2 to uncover these world models He  
+446       et al. (2024).
+
+447       Beyond game-playing tasks, the study of learned world models in transformers extends to other  
+448       domains, such as natural language processing, where Hewitt & Manning (2019) used probing tech-  
+449       niques to uncover the syntactic structure encoded by BERT. This line of research demonstrates that  
+450       transformer models can implicitly learn hierarchical structures in their residual streams, as explored  
+451       by Manning et al. (2020). Further supporting this, Pal et al. (2023) demonstrated that the residual  
+452       stream corresponding to individual input tokens encodes information to predict the correct token  
+453       several positions ahead, highlighting the model’s capacity for structured, anticipatory reasoning.
+
+454       Additionally, graph traversal as multi-step reasoning has been investigated both from a model capa-  
+455       bilities perspective Momenejad et al. (2024) and through mechanistic interpretability Brinkmann  
+456       et al. (2024); Ivanitskiy et al. (2024), providing further evidence of transformers’ ability to encode  
+457       and utilize structured representations in complex tasks.
+
+###### 458 459 6 CONCLUSIONS AND FUTURE WORK
+
+460  
+461       In this work, we demonstrated that transformers trained to solve maze navigation tasks form highly  
+462       structured internal representations that capture the connectivity of the maze and thus act as world  
+463       models. Through exploratory analysis of attention patterns, we found that connection information  
+464       was consolidated into semicolon tokens by a subset of attention heads. By using Decision Trees  
+465       to analyze the latent space of Sparse Autoencoders on these semicolons, we were able to identify  
+466       sparse features that encoded the position in the maze. We showed that these world models were con-  
+467       structed differently in transformers leveraging learned vs. rotary positional encodings, suggesting  
+468       that simpler methods such as activation steering or probing would have been insufficient to extract  
+469       causal world models in at least some cases. More interesting still, we showed that interventions to  
+470       add connections by toggling features were consistently more effective than interventions that sought  
+471       to remove connections by zeroing the corresponding features. Furthermore, we found that models  
+472       with learned position encodings, which were unable to generalize to longer input sequences (i.e.,  
+473       mazes with more connections), were able to behave consistently if additional connection features  
+474       were enabled via SAE interventions, even if the corresponding token sequence would have caused  
+475       the model to fail.
+
+476       These findings shed light on the inner workings of transformers trained on sequential planning tasks  
+477       and suggest that maze-solving tasks are a rich testbed for understanding the formation of world  
+478       models in transformers. Future work should aim to uncover whether our findings on intervention  
+479       asymmetries and steerability are universal - and if not, which conditions give rise to each. An  
+480       empirical understanding of the reliability of SAE feature discovery and steerability is crucial for AI  
+481       Safety efforts that attempt to constrain or coerce model behavior through interventions or monitoring  
+482       based on such methods.
+
+486  
+487  
+488  
+489  
+490  
+491  
+492  
+493  
+494  
+495  
+496  
+497  
+498  
+499  
+500  
+501  
+502  
+503  
+504  
+505  
+506  
+507  
+508  
+509  
+510  
+511  
+512  
+513  
+514  
+515  
+516  
+517  
+518  
+519  
+520  
+521  
+522  
+523  
+524  
+525  
+526  
+527  
+528  
+529  
+530  
+531  
+532  
+533  
+534  
+535  
+536  
+537  
+538  
+539
+
+## REFERENCES
+
+- Guillaume Alain and Yoshua Bengio. Understanding intermediate layers using linear classifier probes. *arXiv preprint arXiv:1610.01644*, 2016.
+- Nora Belrose, Zach Furman, Logan Smith, et al. Eliciting Latent Predictions from Transformers with the Tuned Lens. *arXiv preprint arXiv:2303.08112*, 2023.
+- Trenton Bricken, Adly Templeton, Brian Chen, et al. Towards monosemanticity: Decomposing language models with dictionary learning. *Transformer Circuits Thread*, Oct 4 2023. URL <https://transformer-circuits.pub/2023/monosemantic-features/index.html>.
+- Jannik Brinkmann, Abhay Sheshadri, Victor Levoso, et al. A mechanistic analysis of a transformer trained on a symbolic multi-step reasoning task. *arXiv preprint arXiv:2402.11917*, 2024.
+- Hoagy Cunningham, Aidan Ewart, Logan Riggs, et al. Sparse Autoencoders Find Highly Interpretable Features in Language Models, October 2023. URL <http://arxiv.org/abs/2309.08600>.
+- Nelson Elhage, Neel Nanda, Catherine Olsson, et al. A mathematical framework for transformer circuits. *Transformer Circuits Thread*, 2021. <https://transformer-circuits.pub/2021/framework/index.html>.
+- Nelson Elhage, Tristan Hume, Catherine Olsson, et al. Toy models of superposition. *arXiv preprint arXiv:2209.10652*, 2022.
+- Zhengfu He, Xuyang Ge, Qiong Tang, et al. Dictionary learning improves patch-free circuit discovery in mechanistic interpretability: A case study on othello-gpt. *arXiv preprint arXiv:2402.12201*, 2024.
+- John Hewitt and Christopher D Manning. A structural probe for finding syntax in word representations. In *Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)*, pp. 4129–4138, 2019.
+- Michael I. Ivanitskiy, Rusheb Shah, Alex F Spies, et al. A configurable library for generating and manipulating maze datasets. *arXiv preprint arXiv:2309.10498*, 2023.
+- Michael I. Ivanitskiy, Alex F. Spies, Tilman Räuker, et al. Linearly structured world representations in maze-solving transformers. In *Proceedings of UniReps: the First Workshop on Unifying Representations in Neural Models*, volume 243 of *Proceedings of Machine Learning Research*, pp. 133–143. PMLR, 15 Dec 2024. URL <https://proceedings.mlr.press/v243/ivanitskiy24a.html>.
+- Erik Jenner, Shreyas Kapur, Vasil Georgiev, et al. Evidence of learned look-ahead in a chess-playing neural network. *arXiv preprint arXiv:2406.00877*, 2024.
+- Adam Jermyn and Adly Templeton. Anthropic circuits Updates - January 2024, January 2024. URL <https://transformer-circuits.pub/2024/jan-update#dict-learning-resampling>.
+- Adam Karvonen. Emergent world models and latent variable estimation in chess-playing language models. *arXiv preprint arXiv:2403.15498*, 2024.
+- Adam Karvonen, Benjamin Wright, Can Rager, et al. Measuring progress in dictionary learning for language model interpretability with board game models. *arXiv preprint arXiv:2408.00113*, 2024.
+- Kenneth Li, Aspen K Hopkins, David Bau, et al. Emergent world representations: Exploring a sequence model trained on a synthetic task. *arXiv preprint arXiv:2210.13382*, 2022.
+- Tom Lieberum, Matthew Rahtz, János Kramár, et al. Does Circuit Analysis Interpretability Scale? Evidence from Multiple Choice Capabilities in Chinchilla. *arXiv preprint arXiv:2307.09458*, 2023.
+
+---
+
+540 Christopher D Manning, Kevin Clark, John Hewitt, et al. Emergent linguistic structure in artificial  
+541 neural networks trained by self-supervision. *Proceedings of the National Academy of Sciences*,  
+542 117(48):30046–30054, 2020.  
+543  
+544 Callum McDougall. SAE Visualizer. [https://github.com/callummcDougall/sae\\_](https://github.com/callummcDougall/sae_vis)  
+545 [vis](https://github.com/callummcDougall/sae_vis), 2024.  
+546  
+547 Thomas McGrath, Andrei Kapishnikov, Nenad Tomašev, et al. Acquisition of chess knowledge in  
+548 alphazero. *Proceedings of the National Academy of Sciences*, 119(47):e2206625119, 2022.  
+549  
+550 Raphaël Millière and Cameron Buckner. A philosophical introduction to language models - part ii:  
+551 The way forward, 2024. URL <https://arxiv.org/abs/2405.03207>.  
+552  
+553 Ida Momennejad, Hosein Hasanbeig, Felipe Vieira Frujeri, et al. Evaluating cognitive maps and  
+554 planning in large language models with cogeval. *Advances in Neural Information Processing*  
+555 *Systems*, 36, 2024.  
+556  
+557 Neel Nanda. Actually, othello-gpt has a linear emergent world representation. *Neel Nanda's Blog*,  
+558 7, 2023.  
+559  
+560 Neel Nanda and Joseph Bloom. TransformerLens. [https://github.com/](https://github.com/TransformerLensOrg/TransformerLens)  
+561 [TransformerLensOrg/TransformerLens](https://github.com/TransformerLensOrg/TransformerLens), 2022.  
+562  
+563 Catherine Olsson, Nelson Elhage, Neel Nanda, et al. In-context Learning and Induction Heads.  
+564 *arXiv preprint arXiv:2209.11895*, 2022.  
+565  
+566 Koyena Pal, Jiuding Sun, Andrew Yuan, et al. Future lens: Anticipating subsequent tokens from a  
+567 single hidden state. *arXiv preprint arXiv:2311.04897*, 2023.  
+568  
+569 Tilman Räuber, Anson Ho, Stephen Casper, and Dylan Hadfield-Menell. Toward Transparent AI:  
+570 A Survey on Interpreting the Inner Structures of Deep Neural Networks. In *2023 ieee conference*  
+571 *on secure and trustworthy machine learning (satml)*, pp. 464–483. IEEE, 2023.  
+572  
+573 Alex F. Spies, Alessandra Russo, and Murray Shanahan. Sparse Relational Reasoning with Object-  
+574 Centric Representations, July 2022. URL <http://arxiv.org/abs/2207.07512>.  
+575  
+576 Jianlin Su, Murtadha Ahmed, Yu Lu, Shengfeng Pan, Wen Bo, and Yunfeng Liu. Roformer: En-  
+577 hanced transformer with rotary position embedding. *Neurocomputing*, 568:127063, 2024.  
+578  
+579 A Vaswani. Attention is all you need. *Advances in Neural Information Processing Systems*, 2017.  
+580  
+581  
+582  
+583  
+584  
+585  
+586  
+587  
+588  
+589  
+590  
+591  
+592  
+593
+
+## Appendices
+
+### A GENERALIZATION AS A FUNCTION OF INPUT SEQUENCE LENGTH
+
+![Figure 10: Model Performance Comparison. A line plot showing Accuracy (Y-axis, 0.0 to 1.0) versus Performance on Full 7x7 Mazes (DFS Generalization) (X-axis, 0.0 to 0.7). The plot compares various transformer models (d_model, n_heads, n_layers, pos_emb_type) across two conditions: Train Val (Mixed Maze (Max DFS 6x6)) and Generalization (Full Maze (DFS 7x7)). The legend indicates models like (512, 4, 6, 'rotary'), (256, 4, 8, 'rotary'), (256, 8, 6, 'rotary'), (256, 8, 8, 'rotary'), (256, 4, 6, 'rotary'), (512, 4, 6, 'standard'), (256, 4, 8, 'standard'), (256, 4, 6, 'standard'), (256, 8, 6, 'standard'), (256, 8, 8, 'standard'), (256, 4, 6, 'standard'), (256, 4, 8, 'standard'), (512, 8, 6, 'standard'), and (256, 8, 6, 'standard'). A color bar at the bottom indicates the performance on the full 7x7 maze, ranging from 0.0 (red) to 0.7 (teal).](f176174c2978785e86a8352bd45e322e_img.jpg)
+
+Figure 10: Model Performance Comparison. A line plot showing Accuracy (Y-axis, 0.0 to 1.0) versus Performance on Full 7x7 Mazes (DFS Generalization) (X-axis, 0.0 to 0.7). The plot compares various transformer models (d\_model, n\_heads, n\_layers, pos\_emb\_type) across two conditions: Train Val (Mixed Maze (Max DFS 6x6)) and Generalization (Full Maze (DFS 7x7)). The legend indicates models like (512, 4, 6, 'rotary'), (256, 4, 8, 'rotary'), (256, 8, 6, 'rotary'), (256, 8, 8, 'rotary'), (256, 4, 6, 'rotary'), (512, 4, 6, 'standard'), (256, 4, 8, 'standard'), (256, 4, 6, 'standard'), (256, 8, 6, 'standard'), (256, 8, 8, 'standard'), (256, 4, 6, 'standard'), (256, 4, 8, 'standard'), (512, 8, 6, 'standard'), and (256, 8, 6, 'standard'). A color bar at the bottom indicates the performance on the full 7x7 maze, ranging from 0.0 (red) to 0.7 (teal).
+
+Figure 10: Accuracies of all transformers trained in our sweep on a generalization task. “Train Val” shows the accuracy on the held out in-length-distribution mazes from train time, and “Full Maze” features mazes with more connections (longer input sequences) than those seen at train time. Only rotary models are able to generalize at all
+
+### B SAE TRAINING DETAILS
+
+To choose optimal hyperparameters for our SAEs we ran a sweep over SAEs at layers 2 to 4 on Terry, finding consistent trends across layers. The results of this sweep are shown in Figure 11, and the final details of the SAE analyzed in the main paper are given in Table 2. We also provide feature density histograms for the SAEs analyzed in the main paper in Figure 12 noting that these look good, in that many features are sparse, but also rather distinct from is typically observed in LLMs. This is not surprising, as our token and features distributions will be very distinct from those of natural language, as most mazes have many active connections, and connections are similarly likely to be present in any given maze.
+
+| Sparsity         |                 |                      | Dataset    |                | Optimizer     |                      |
+|------------------|-----------------|----------------------|------------|----------------|---------------|----------------------|
+| Expansion Factor | Ghost Threshold | (L0) Sparsity Weight | Batch Size | Training Steps | Learning Rate | Linear Warm Up Steps |
+| 4                | 100             | 0.01                 | 1024       | $\sim 10^6$    | $10^{-4}$     | 1000                 |
+
+Table 2: Hyperparameter values for the final SAEs analyzed in the main paper.
+
+[Appendix and supplementary materials beyond page 12 have been removed.]
