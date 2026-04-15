@@ -18,9 +18,7 @@ dotenv.load_dotenv()
 import os
 os.environ["OPENAI_DEFAULT_MODEL"] = "z-ai/glm-5.1"
 HARSH_MODEL = "gpt-5.4"
-SCORER_MODEL = "gpt-5.4-mini" 
-MODEL_FIND_HUMAN = None
-MERGER_MODEL = "z-ai/glm-5.1"
+MERGER_MODEL = "claude-sonnet-4.6"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_export_api_key
 
@@ -42,7 +40,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
-CONCURRENCY = 5
+CONCURRENCY = 2
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -92,14 +90,14 @@ summarizer = Agent(
 
 _tool_agents = [read_file, summarizer.as_tool(
     tool_name="summarization", tool_description="Summarizing or answering questions about a specific file given **its absolute path** and question.",
-)] 
+), search_file, grep_file] 
 
 harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=HARSH_MODEL)
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"))
 merger = Agent(name="Merger", instructions=load_prompts("merger.md"), model=MERGER_MODEL, tools=_tool_agents)
 spark = Agent(name="Spark", instructions=load_prompts("spark_finder.md"))
 
-human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents + [search_file, grep_file])
+human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents)
 # scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents, model=SCORER_MODEL)
 
 
@@ -125,7 +123,6 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
     review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
     
     find_human_prompt = (
-        f"Paper file path: {paper_path_abs}\n"
         f"Human reviews directory: {HUMAN_REVIEW_DIR}\n\n"
         f"--- PAPER CONTENT START ---\n{paper_content}\n--- PAPER CONTENT END ---\n"
     )
@@ -137,8 +134,13 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
 
     print(f"  Phase 1: Running {len(agents_and_prompts)} agents in parallel ...")
     responses = await asyncio.gather(
-        *(run_agent_with_retry(a, p) for a, p in agents_and_prompts)
+        *(run_agent_with_retry(a, p) for a, p in agents_and_prompts),
+        return_exceptions=True,
     )
+    for (a, _), r in zip(agents_and_prompts, responses):
+        if isinstance(r, Exception):
+            print(f"  🔥ERROR: {paper_path} — agent '{a.name}' raised {type(r).__name__}: {r}")
+            return None
 
     labeled = [f"### {a.name}\n{out}" for (a, _), out in zip(agents_and_prompts, responses)]
     merger_prompt = (
@@ -243,6 +245,8 @@ async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: boo
                 result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring)
             except Exception as e:
                 raise RuntimeError(f"[{pid}] pipeline failed: {e}") from e
+            if result is None:
+                return
             callback(paper_info, result)
 
     await asyncio.gather(*(process_one(i, p) for i, p in enumerate(papers, 1)))

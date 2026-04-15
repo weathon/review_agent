@@ -130,16 +130,48 @@ Do evaluate the paper on these axis using language first, do not be afraid to be
 
 ## Score and Decision
 After you finish writing a review, assign a score to the review. 
-Use comparative scoring, check the similar papers found in human reviews, and score this paper relative to those. You can use read_file or summarizer to read these files. List the papers you compared and the reasoning.
+
+Use comparative scoring to calibrate your final score. You have access to human reviews of other papers through the review finder and search/grep tools. Search tool supports both bm25 and vector search.
+
+Your calibration process:
+
+1. **Topic-based anchors**: Use the review finder to retrieve papers with similar topics. Note their human scores.
+
+2. **Quality-based anchors**: This is critical. Do NOT only search by topic. Search for papers that share similar strength/weakness patterns with the paper under review:
+   - If this paper has strong empirical results but overclaims, search for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
+   - If this paper has a novel framing but weak baselines, search for reviews mentioning "novel framing" "missing baselines" and note those scores.
+
+3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale:
+   - Search for reviews of papers that were scored ~7+ by humans. Read what made them strong.
+   - Search for reviews of papers that were scored ~3 or below by humans. Read what made them weak.
+   - Compare the paper under review against BOTH ends, not just the middle.
+
+   Examples: if reviewing a paper about privacy attacks on face recognition, search for:
+   - "privacy attack face recognition strong paper" → find high-scored papers in the same area
+   - "privacy attack face recognition weak paper" → find low-scored papers in the same area
+   - "face recognition evaluation paper high score" → broaden to related topics at the high end
+   - "privacy evaluation rejected" → find low-end anchors with similar flaws
+
+   If no papers are found with the same topic, you can use more general queries. 
+
+4. **Score relative to anchors**: Your final score should be positioned relative to the retrieved examples. If retrieved papers with similar strengths got 7s from humans, and papers with similar weaknesses got 3s, use that range. Do not compress everything into 4-6.
+
+When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
+
+
+You can use read_file or summarizer to read these files. List the papers you compared and the reasoning.
+
+If the FUNDAMENTAL ISSUES was triggered on top, rate the paper low accordingly. 
 
 Do NOT be afraid to give very high (>8) or very low (<4) scores when the
-paper clearly warrants it.
+paper warrants it.
 
-Score continuously (e.g. 3.5, 4.7, 8.1). Do not round to .5 or .0 unless the
-comparison to calibration examples genuinely supports that value.
+Score round to .5 or .0.
+You should keep in mind this is for ICLR, the average score is about 5.12.
 
 Let the score distribution follow the actual quality of the paper relative to
 the calibration examples.
+The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well. 
 
 IMPORTANT: At the very end of your response, you MUST write exactly this line (using a pineapple XML tag):
 MY FINAL SCORE: <pineapple>score</pineapple>

@@ -51,10 +51,10 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     resolved = os.path.abspath(abs_path)
     print(f"  [read_file] Request to read '{resolved}' lines {start_line} to {end_line if end_line > 0 else 'EOF'}")
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
-        print(f"  [read_file] BLOCKED: '{resolved}' is not under any allowed directory.")
+        print(f"  [read_file] 🔥BLOCKED: '{resolved}' is not under any allowed directory.")
         return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
     if ("/papers/" in abs_path or abs_path.endswith("_paper.md")) and end_line == 0:
-        print(f"  [read_file] BLOCKED: Full read of '{resolved}' is not allowed. Use grep_files first to find relevant sections.")
+        print(f"  [read_file] 🔥BLOCKED: Full read of '{resolved}' is not allowed. Use grep_files first to find relevant sections.")
         return "ERROR: Full paper reads blocked. Use grep_files first, then read_file with start_line/end_line."
     with open(abs_path, "r") as f:
         lines = f.readlines()
@@ -68,7 +68,7 @@ def read_file_full(abs_path: str) -> str:
     resolved = os.path.abspath(abs_path)
     print(f"  [read_file_full] Request to read full file '{resolved}'")
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS + ["/home/wg25r/review_agent/iclr2025/papers/"]):
-        print(f"  [read_file_full] BLOCKED: '{resolved}' is not under any allowed directory.")
+        print(f"  [read_file_full] 🔥BLOCKED: '{resolved}' is not under any allowed directory.")
         return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
     print(abs_path)
     with open(abs_path, "r") as f:
@@ -90,7 +90,7 @@ def grep_file(pattern: str, abs_path: str) -> str:
     resolved = os.path.abspath(abs_path)
     print(f"  [grep_file] Request to grep for pattern '{pattern}' in '{resolved}'")
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
-        print(f"  [grep_file] BLOCKED: '{resolved}' is not under any allowed directory.")
+        print(f"  [grep_file] 🔥BLOCKED: '{resolved}' is not under any allowed directory.")
         return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
     if not os.path.isfile(resolved):
         return f"ERROR: '{resolved}' is not a file."
