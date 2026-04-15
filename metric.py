@@ -77,6 +77,60 @@ def bootstrap_metric_ci(x, y, metric_fn, confidence=0.95, n_bootstrap=5000, seed
     return lower, upper
 
 
+def bootstrap_ai_vs_one_vs_rest(df, gt_score_cols, confidence=0.95, n_bootstrap=5000, seed=42):
+    rng = np.random.default_rng(seed)
+    spearman_diffs = []
+    pearson_diffs = []
+
+    for _ in range(n_bootstrap):
+        indices = rng.integers(0, len(df), size=len(df))
+        sample = df.iloc[indices]
+
+        pred = sample["pred_score"].to_numpy(dtype=float)
+        gt_avg = sample["gt_avg_score"].to_numpy(dtype=float)
+        if np.all(pred == pred[0]) or np.all(gt_avg == gt_avg[0]):
+            continue
+
+        one_vs_rest = one_vs_rest_baseline(sample, gt_score_cols)
+        if one_vs_rest is None:
+            continue
+
+        rest_means = np.asarray(one_vs_rest["rest_means"], dtype=float)
+        heldout_scores = np.asarray(one_vs_rest["heldout_scores"], dtype=float)
+        if np.all(rest_means == rest_means[0]) or np.all(heldout_scores == heldout_scores[0]):
+            continue
+
+        ai_spearman = float(stats.spearmanr(pred, gt_avg).statistic)
+        human_spearman = float(stats.spearmanr(rest_means, heldout_scores).statistic)
+        ai_pearson = float(stats.pearsonr(pred, gt_avg).statistic)
+        human_pearson = float(stats.pearsonr(rest_means, heldout_scores).statistic)
+        spearman_diffs.append(ai_spearman - human_spearman)
+        pearson_diffs.append(ai_pearson - human_pearson)
+
+    if not spearman_diffs or not pearson_diffs:
+        raise RuntimeError("Bootstrap AI-vs-human comparison failed because every resample was degenerate.")
+
+    alpha = 1 - confidence
+    spearman_diffs = np.asarray(spearman_diffs, dtype=float)
+    pearson_diffs = np.asarray(pearson_diffs, dtype=float)
+
+    return {
+        "n_bootstrap": int(len(spearman_diffs)),
+        "spearman_diff": float(np.mean(spearman_diffs)),
+        "spearman_ci": (
+            float(np.quantile(spearman_diffs, alpha / 2)),
+            float(np.quantile(spearman_diffs, 1 - alpha / 2)),
+        ),
+        "spearman_p_greater": float((np.sum(spearman_diffs <= 0) + 1) / (len(spearman_diffs) + 1)),
+        "pearson_diff": float(np.mean(pearson_diffs)),
+        "pearson_ci": (
+            float(np.quantile(pearson_diffs, alpha / 2)),
+            float(np.quantile(pearson_diffs, 1 - alpha / 2)),
+        ),
+        "pearson_p_greater": float((np.sum(pearson_diffs <= 0) + 1) / (len(pearson_diffs) + 1)),
+    }
+
+
 def split_half_baseline(df, gt_score_cols):
     """Estimate human reliability via all unique split-half partitions per paper."""
     half_a, half_b = [], []
@@ -179,6 +233,9 @@ def analyze_and_plot(path):
     raw_regression = linear_regression_with_ci(gt_avg, pred)
     one_vs_rest = one_vs_rest_baseline(df, gt_score_cols)
     split_half = split_half_baseline(df, gt_score_cols)
+    ai_vs_one_vs_rest = None
+    if one_vs_rest is not None:
+        ai_vs_one_vs_rest = bootstrap_ai_vs_one_vs_rest(df, gt_score_cols)
 
     # Bin-based MAE summaries using GT score bins: [0,2), [2,4), [4,6), [6,8), [8,10]
     bin_edges = [0, 2, 4, 6, 8, 10.01]
@@ -284,6 +341,17 @@ def analyze_and_plot(path):
         print(f"    Spearman:            {one_vs_rest['spearman']:.4f}")
         print(f"    Pearson:             {one_vs_rest['pearson']:.4f}")
         print(f"    MAE:                 {one_vs_rest['mae']:.4f}")
+        print(f"    AI > human bootstrap test ({ai_vs_one_vs_rest['n_bootstrap']} resamples):")
+        print(
+            f"      Spearman Δ:        {ai_vs_one_vs_rest['spearman_diff']:+.4f}  "
+            f"(95% CI {ai_vs_one_vs_rest['spearman_ci'][0]:+.4f}, {ai_vs_one_vs_rest['spearman_ci'][1]:+.4f}; "
+            f"p={ai_vs_one_vs_rest['spearman_p_greater']:.4f})"
+        )
+        print(
+            f"      Pearson Δ:         {ai_vs_one_vs_rest['pearson_diff']:+.4f}  "
+            f"(95% CI {ai_vs_one_vs_rest['pearson_ci'][0]:+.4f}, {ai_vs_one_vs_rest['pearson_ci'][1]:+.4f}; "
+            f"p={ai_vs_one_vs_rest['pearson_p_greater']:.4f})"
+        )
     if split_half is not None:
         print(f"  {'─'*45}")
         print(f"  Human split-half baseline ({split_half['n_pairs']} exact split pairs):")
