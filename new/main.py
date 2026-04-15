@@ -16,10 +16,11 @@ from agents import Agent, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
 import os
-os.environ["OPENAI_DEFAULT_MODEL"] = "qwen/qwen3.6-plus"
+os.environ["OPENAI_DEFAULT_MODEL"] = "z-ai/glm-5.1"
 HARSH_MODEL = "gpt-5.4" 
-MERGER_MODEL = "gpt-5.4" 
-# MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
+HUMAN_FINDER = "kimi-k2.5"
+# MERGER_MODEL = "gpt-5.4" 
+MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
 # MERGER_MODEL = "claude-sonnet-4.6"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_export_api_key
@@ -42,7 +43,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
-CONCURRENCY = 10
+CONCURRENCY = 5
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -137,7 +138,7 @@ _tool_agents = [read_file, search_file, grep_file]
     # tool_name="summarization", tool_description="Summarizing or answering questions about a specific file given **its absolute path** and question.",
 harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=HARSH_MODEL)
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"))
-human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents)
+human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=HUMAN_FINDER)
 
 
 if MERGER_MODEL.startswith("claude_sdk:"):
