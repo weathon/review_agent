@@ -167,7 +167,7 @@ Do NOT be afraid to give very high (>8) or very low (<4) scores when the
 paper warrants it.
 
 Score round to .5 or .0.
-You should keep in mind this is for ICLR, the average score is about 5.12.
+You should keep in mind this is for ICLR, the average score is about 5.12 but do not cluster near the mean, use it as a anchor. 
 
 Let the score distribution follow the actual quality of the paper relative to
 the calibration examples.

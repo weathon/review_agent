@@ -1,108 +1,109 @@
-Now I have enough information to write the final review. Let me synthesize all the reviewer inputs against the actual paper content.
+Now let me check the calibration papers to help score this work.Now I have enough information to write the final review. Let me synthesize it carefully.---
 
-**Key verifications against paper:**
-
-1. **Theory–practice mismatch**: The paper does use `β₂ = K/(K+1)` or `1-1/K` in theory vs `β₂=0.999` in practice. This is acknowledged as standard theoretical treatment for Adam (see Section 1.3: "the standard choice of β₂ in theory is β₂ = 1 − 1/K"). The paper openly discusses this in Section 1.3 as the "Adam-twin" connection to AdaGrad. So this is a real but partially acknowledged gap.
-
-2. **Clipping in b_t not ablated**: The paper claims in Section 3 that "clipping prevents b_t from growing too quickly" but there is no ablation comparing clipping only in m_t vs clipping in both. This is a real gap.
-
-3. **Scalar vs coordinate-wise**: The paper is explicit (footnote 5) that it analyzes "AdaGrad-Norm" (scalar version), not coordinate-wise AdaGrad-CW. This is stated clearly, not hidden.
-
-4. **Assumption 4**: Explicitly stated as an "Optional" assumption for non-delay methods. The paper acknowledges this.
-
-5. **Convex rate not optimal**: Explicitly acknowledged in the paper ("the first term in (10) is not optimal").
-
-6. **Empirical scope**: Two GLUE tasks, ALBERT Base, 100 runs each with percentile bands. Clipping levels tuned for clipped methods. This is real but narrow.
-
-7. **Negative result strength**: Theorem 1 is for α=2 (bounded variance), so even a sub-case shows the pathology. Valid and strong.
+## Summary
+This paper addresses a gap in the high-probability convergence theory of Adam and AdaGrad under heavy-tailed stochastic gradient noise. The authors prove a negative result (Theorem 1): these methods can have high-probability complexity with inverse-power dependence on the confidence level δ, rather than the desirable polylogarithmic dependence. They then show that gradient clipping repairs this (Theorems 2–4), yielding first-of-kind high-probability convergence bounds with polylogarithmic δ-dependence for Clip-Adam(D)/Clip-M-AdaGrad(D) in convex and non-convex settings with bounded α-th moment noise. Experiments on a synthetic quadratic and ALBERT fine-tuning are provided, with the theoretical predictions qualitatively reflected in the results.
 
 ---
 
-## Summary
-This paper addresses the high-probability convergence of Adam and AdaGrad (and their delayed variants) under heavy-tailed stochastic gradient noise. It makes two key contributions: (1) a negative result (Theorem 1) showing that the unclipped methods can require complexity with inverse-power dependence on the confidence level δ, even under bounded variance; and (2) positive high-probability convergence theorems (Theorems 2–4) for Clip-Adam(D)/Clip-M-AdaGrad(D) that achieve polylogarithmic dependence on δ in both convex and non-convex settings.
-
 ## Strengths
 
-- **Sharp, well-motivated negative result**: Theorem 1 constructs a concrete worst-case example (Huber loss with specific noise) showing polynomial dependence on δ⁻¹ even when α=2. The failure mechanism—uncontrolled growth of the adaptive denominator b_t after a single large-noise step—is explained clearly, and the proof covers both no-delay and delay variants via distinct constructions. This is a genuinely novel identification of a failure mode specific to adaptive methods, separate from the SGD heavy-tail story.
+- **Novel and decisive negative result (Theorem 1).** The construction—using a Huber loss with a carefully designed discrete noise sequence—directly attacks the polylogarithmic-δ property rather than a proxy. The fact that the pathology appears even for α=2 (bounded variance) is surprising given the folk intuition that Adam acts like implicit clipping. This is not achievable with routine proof-from-prior-work.
 
-- **Comprehensive positive theory**: Theorems 2–4 provide polylogarithmic-δ high-probability bounds for a broad family of clipped adaptive methods (convex with delay, non-convex with delay, non-convex without delay), with explicit comparison to Clip-SGD rates showing the leading stochastic terms match up to logarithmic factors. The identification that clipping must be applied both to m_t and to b_t—with distinct roles for each—is a conceptually clear insight beyond simply "add clipping."
+- **First high-probability guarantees with polylogarithmic δ-dependence for Adam/AdaGrad under heavy-tailed noise without sub-Gaussian or bounded-noise assumptions (Theorems 2–4).** Prior work either required sub-Gaussian/bounded noise (Li & Orabona, 2020; Li et al., 2023) or had inverse-power δ-dependence (Wang et al., 2023). The paper explicitly documents this gap in Table/Section 1.3. The proof that the iterates remain in Q with high probability is an additional technical contribution.
 
-- **First high-probability results for adaptive methods under genuinely heavy-tailed noise**: As the paper carefully argues, prior work on AdaGrad/Adam high-probability convergence required either sub-Gaussian/bounded noise (stronger than bounded α-moment with α<2) or accepted inverse-power dependence on δ. Theorems 2 and 3 are the first results addressing convex and non-convex settings for delayed variants without Assumption 4 and with only bounded α-th moment.
+- **Delayed-method results avoid the restrictive Assumption 4.** Theorems 2 and 3 cover Clip-AdamD/Clip-M-AdaGradD without requiring bounded function values, while Theorem 4 (non-delayed) requires Assumption 4. The paper correctly notes this separation and contextualizes it against Li & Liu (2023), whose stronger bounded-empirical-risk assumption in the worst case implies sub-Gaussian noise, effectively trivializing the problem.
 
-- **Synthetic experiments well-aligned with theory**: The 1D quadratic with heavy-tailed additive noise directly instantiates the theoretical setting, the 100-run percentile bands directly visualize high-probability behavior, and the comparison clearly shows the failure mode the theory predicts for unclipped methods.
+- **Insightful identification of two distinct roles of clipping.** The paper carefully distinguishes clipping in m_t (controlling step size in the presence of heavy-tailed noise, as in Clip-SGD) from clipping in b_t (preventing the adaptive scale from growing catastrophically). The connection of the latter role to the mechanism in Theorem 1's failure example is clear and adds methodological insight beyond simply "add clipping."
+
+- **Empirical results qualitatively aligned with theory.** The differential behavior on CoLa (heavy-tailed noise, large benefit from clipping) vs. RTE (lighter tails, similar performance) is exactly what the theory predicts and constitutes meaningful, non-trivial validation.
+
+---
 
 ## Weaknesses
 
 ### Fatal
-None.
+*None identified.*
 
 ### Major
 
-- **No ablation isolating clipping in b_t vs clipping in m_t**: A central mechanistic claim (Section 3) is that clipping b_t specifically is what prevents the pathological behavior from Theorem 1. The positive results apply to algorithms that clip both m_t and b_t, but no experiment compares clipping only m_t, only b_t, and both. Since the paper explicitly motivates dual clipping as a design choice (not just inheriting Clip-SGD structure), the absence of this ablation weakens the empirical case for that insight. This is particularly important because the practical experiments use layer-wise or coordinate-wise clipping that is not the global clipping analyzed in theory—so it is unclear whether the theoretical mechanism (b_t control) or a different regularization effect drives the empirical gains.
+- **Experiment-theory gap on clipping type.** The theoretical guarantees cover global norm clipping (clip(x, λ) = min{1, λ/‖x‖}x), yet the ALBERT experiments use coordinate-wise and layer-wise clipping—explicitly acknowledged in footnote 6: *"We did not consider the global/norm clipping (the considered in theory), since typically coordinate-wise or layer-wise clipping work better in training neural networks."* This is a significant disconnect: the theoretical guarantees may not apply to the experimentally used methods, and the paper never discusses whether the proofs extend or shows even one experiment with norm clipping to allow a direct check. As a result, the positive theory and positive experiments are loosely coupled.
 
-- **Theory–practice gap in experimental setup**: The theoretical guarantees require β₂ = K/(K+1) (horizon-dependent, converging to 1), while all practical experiments use β₂=0.999 (standard fixed value). While the paper explicitly discusses this equivalence in Section 1.3 ("twins" argument with ≈O(·) effective step-size correspondence), the experiments do not test the theoretically-analyzed parameterization. Additionally, experiments use layer-wise/coordinate-wise clipping, whereas the theory covers norm/scalar clipping. This leaves the bridge between theory and practical performance partially implicit. The paper should more explicitly discuss what the "twins" argument implies for the validity of empirical results as evidence for the theorems.
+- **Negative result proved only for α=2 (bounded variance), leaving the core heavy-tail regime (α<2) as a conjecture.** Section 2 states: *"we also conjecture that for α<2 one can show even worse dependence on ε and δ for Adam/AdaGrad... since b_t will grow with high probability even faster in this case."* The paper does prove non-convergence for AdamD/M-AdaGradD when α<2 citing a reference analogy, but the formal lower bound of Theorem 1 covers only α=2. Since the primary motivation of the paper is heavy-tailed noise (α<2), the case most important to the narrative is left as a conjecture.
 
 ### Minor
 
-- **Convex rate is not rate-optimal**: The paper acknowledges that the first term in (10) is not optimal (Nemirovskij & Yudin, 1983), and that improvement is possible (Gorbunov et al., 2020; Sadiev et al., 2023). While the non-convex rates are near-optimal up to logs, the convex case is incomplete. This reduces the theoretical sharpness of Theorem 2 somewhat, though does not undermine the paper's central message.
+- **Asymmetric hyperparameter tuning in ALBERT experiments.** Batchsize and learning rate are tuned for plain Adam, and these are reused for clipped variants with only the clipping threshold tuned. The paper states: *"For the methods with clipping, we used the same batchsize and stepsize as for Adam and tuned the clipping level."* It is not clear whether this biases toward or against clipping methods (different lrs may be optimal for clipped variants), but it introduces confounding and makes the claim of practical "superiority" harder to sustain rigorously.
 
-- **Bounded objective assumption (Assumption 4) for non-delay non-convex case**: Theorem 4 requires f(x) − f∗ ≤ M globally, which the paper acknowledges is restrictive. The practical deep learning experiments involve objectives that may not satisfy this globally. While acknowledged, the paper does not discuss whether this assumption is plausible in the fine-tuning setting tested.
+- **Restrictive β₂ = K/(K+1) requirement.** The convergence results require β₂ = K/(K+1) (equivalently, β₂ → 1 as K → ∞), which the paper acknowledges makes Adam a "twin" of AdaGrad. As stated in Section 1.3: *"the standard choice of β₂ in theory is β₂ = 1 − 1/K... that is why, as noticed by Défossez et al. (2022), AdaGrad and Adam are 'twins'."* The negative result in Theorem 1 also covers only this parameterization. The practical default β₂ = 0.999 is not covered theoretically, and the paper does not discuss whether the positive or negative results would extend to fixed β₂ < 1.
 
-- **Empirical scope is narrow relative to the claimed practical relevance**: Real-world experiments are limited to ALBERT Base fine-tuning on two small GLUE tasks (CoLa and RTE). The introduction motivates the work with LLMs and pre-training, but the experiments cover fine-tuning on relatively small classification tasks. The heavy-tailedness analysis (Figure 2) is informative but based on only four checkpoints per task.
+- **Assumption 4 (bounded function values) for non-delayed methods is restrictive.** Theorem 4 requires f(x) − f* ≤ M for all x ∈ ℝ^d. The paper provides appropriate context (this is weaker than Li & Liu's assumption), but the practical applicability of Theorem 4 for neural network training—where function values are not globally bounded—is left unaddressed. The delayed variants in Theorems 2-3 are the more practically relevant results.
 
-- **No summary table for Theorems 2–4**: The complexity expressions in Theorems 3 and 4 are intricate, and there is also a notation issue (Theorem 4 references Δ while the statement uses M). A table comparing assumptions, output measure, and complexity across results and against Clip-SGD would significantly aid readability.
+- **The "match Clip-SGD in the convex case" claim is overstated.** The paper itself notes (page 7/8): *"the first term in (10) is not optimal... The optimality of the second term in (10) is still an open question."* This is an appropriate acknowledgment in the main text, but the abstract and Contributions section (Section 1.1) state "match the complexity of Clip-SGD in the convex case up to logarithmic factors" without qualification, which is too broad given that one term is known to be suboptimal.
 
 ### Trivial
 
-- There appears to be a minor notation inconsistency in Theorem 4 where the complexity expression references Δ while the theorem's setup uses M.
+- **Non-convex rate expressions are complex.** The exponents (3α−2)/(2α−1) and (3α−2)/(2α−2) in Theorems 3 and 4 are difficult to parse without concrete examples. A brief table showing values at α ∈ {1.2, 1.5, 2.0} alongside Clip-SGD rates would help readers assess significance.
+
+---
 
 ## Nice-to-Haves
-- An ablation comparing: (i) clipping only m_t, (ii) clipping only b_t, (iii) clipping both—on the synthetic quadratic and/or a real task—would directly validate the paper's key mechanistic insight about b_t.
-- A discussion of how to choose the clipping threshold λ in practice without knowledge of problem constants L, σ, α would improve actionability.
-- Empirical survival curves or CDFs of final error across 100 seeds would more directly visualize the high-probability claim than median-plus-percentile-band plots.
-- At least one larger-scale or pre-training experiment to better match the LLM motivation of the introduction.
+
+- **Extend the negative result to α < 2.** Even a partial result (e.g., non-convergence or a lower bound on the complexity growth) for α < 2 would complete the theoretical story and strengthen the paper's motivational narrative significantly.
+
+- **Ablation isolating clipping in b_t vs. m_t only.** The paper makes a specific design argument about why clipping b_t matters (Section 3), but this is not isolated experimentally or theoretically. A theorem or even a synthetic experiment showing that clipping only m_t is insufficient for high-probability guarantees would substantiate this insight.
+
+- **Add Clip-SGD as an experimental baseline.** The paper positions Clip-Adam as analogous to Clip-SGD, but never benchmarks against it. This would clarify whether the benefit comes from clipping per se or from the interaction between clipping and adaptive step sizes.
+
+- **Practical guidance on setting λ.** The formulas for γ and λ in Theorems 2–4 depend on σ, R, Δ, L, which are usually unknown. A brief discussion of adaptive or heuristic rules, or a sensitivity analysis in the experiments, would help practitioners.
+
+---
 
 ## Removed Points
+
 *These points are flagged to be removed; treat them with caution.*
 
-- **Scalar vs. coordinate-wise Adam/AdaGrad**: Multiple reviewers criticized the theory being for "scalar/norm" variants, not coordinate-wise. However, the paper explicitly states this in footnote 5 ("for the sake of simplicity, we use the name AdaGrad to describe a 'scalar' version...") and the remark is entirely transparent. This is a known theoretical simplification, not a flaw.
+- **[Harsh Critic] "Match Clip-SGD broadly overstated"** — partially valid and preserved in Weaknesses (minor), but the paper does explicitly acknowledge the known suboptimality of the first convex term; the issue is one of abstract/intro framing, not a technical error.
 
-- **Practicality of β₂ schedule being unrealistic**: The harsh critic labeled the β₂=K/(K+1) schedule as creating a "theory–practice mismatch that breaks the paper's main bridge." However, the paper clearly discusses in Section 1.3 that this is the standard theoretical treatment (citing Défossez et al., 2022) and explicitly computes why Adam with β₂=1−1/K is essentially a rescaled AdaGrad ("twins"). This is the standard mathematical treatment in Adam theory papers; it is not hidden and does not invalidate the contribution.
+- **[Spark] "No comparison with coordinate-wise AdaGrad/Adam (standard practical versions)"** — The paper's theory covers scalar-norm versions (AdaGrad-Norm, not AdaGrad-CW), which is explicitly stated and is standard in the convergence theory literature. Criticizing the absence of coordinate-wise theoretical results is scope creep.
 
-- **Overstatement that "clipping fixes Adam and AdaGrad"**: The harsh critic argued this is too broad. However, the paper does precisely qualify what is proven (specific scalar variants, specific parameter schedules), and the headline is a natural shorthand for the specific result. The paper is not presenting this as a claim about all possible hyperparameter configurations.
+- **[Spark/Neutral] "No pre-training or larger-scale LLM experiments"** — The paper frames its practical relevance around the observation that LLM training exhibits heavy-tailed noise. Fine-tuning is the experimental domain; demanding full LLM pre-training is beyond the scope of a theory paper. This would be desirable but is not a methodological flaw.
 
-- **Claiming experiments are too weak to support "superiority" claims**: For a primarily theoretical paper, the experiments are appropriately scoped. The broad practical relevance framing in the introduction is somewhat ambitious, but the core claims are theoretical, and the experiments provide consistent supporting evidence. This is not a fatal flaw for a theory-forward paper.
+- **[Harsh Critic] Practical generalization from analyzed Adam variants to default Adam is misleading** — The paper clearly scopes its claims to the analyzed scalar-norm variants throughout the main text (Section 1.3 explains the "twin" relationship explicitly). The abstract phrasing could be tightened, but this is a writing suggestion already captured in Minor weaknesses.
+
+- **[Generic Strengths removed]** The following were identified as too generic: "well-motivated and timely research question" (applies to any paper on LLM training), "the paper is well-written," "well-organized." These have been replaced with specific evidenced strengths above.
+
+---
 
 ## Novel Insights
-The paper's most genuinely novel insight is the *bifurcation of the role of clipping* in adaptive methods: clipping the gradient estimate in the update (m_t) and clipping the gradient in the adaptive scaling factor (b_t) serve distinct and both essential purposes. Clipping m_t prevents large individual update steps (analogous to Clip-SGD), while clipping b_t prevents the adaptive denominator from becoming inflated by a single catastrophic noise realization—which is the specific failure mode proved in Theorem 1. This distinction clarifies why AdaGrad/Adam (which adaptively scale without clipping the denominator inputs) can fail in high-probability convergence even when Clip-SGD with a similar effective step-size succeeds. This identification of the denominator inflation failure mode is a conceptually clean and previously uncharacterized source of high-probability failure in adaptive optimization.
+
+The paper's most underappreciated contribution may be the identification that the failure mode of Adam/AdaGrad under heavy-tailed noise is not the step size magnitude per se, but the growth of the adaptive scale accumulator b_t, which—if left unclipped—can absorb a single early catastrophic gradient and permanently degrade all subsequent steps. This is structurally different from the failure mode of SGD under heavy-tailed noise (a single bad step of large magnitude), and explains why the "implicit clipping" intuition for Adam is misleading: the division by b_t controls the step norm, but a large b_t also ensures the division is always small, trapping the iterates near their post-shock location. Clipping b_t is thus not merely "following Clip-SGD's logic" but addressing a genuinely distinct pathology that appears only in adaptive methods.
+
+---
 
 ## Suggestions
-- Add explicit ablation experiments comparing clipping configurations (m_t only, b_t only, both) on the synthetic quadratic problem.
-- Add a summary table comparing Theorems 2–4 against Clip-SGD rates and against prior AdaGrad/Adam bounds, with columns for assumptions and applicable settings.
-- Clarify and fix the apparent Δ vs. M notation inconsistency in Theorem 4's complexity expression.
-- Discuss in Section 4 how the "twins" argument (Section 1.3) connects the experimental β₂=0.999 setting to the theoretically analyzed β₂=K/(K+1) setting.
 
-## Calibration
+1. Prove the negative result (or at minimum a non-convergence result) for α < 2 to close the gap between the motivational narrative and the formal result.
+2. Include at least one synthetic experiment comparing norm clipping (as analyzed) and coordinate-wise clipping to bridge the theory-practice gap, and add a brief discussion of whether the proof technique could extend to coordinate-wise variants.
+3. Narrow the abstract's "match Clip-SGD in the convex case" claim to the second term in (10), which is the only term where the claim holds under current theory.
+4. Add a sensitivity plot for the clipping level λ in the ALBERT experiments to help calibrate the robustness of the improvement.
 
-**Comparison papers:**
-- *High-Probability Convergence for Composite and Distributed Stochastic Minimization with Heavy-Tailed Noise* (qOFLn0pMoe): Rejected, scores 5/5/5. Very similar theme (heavy-tailed noise, Clip-SGD-style methods, high-probability analysis), but focused on distributed/composite settings. The reviewers cited weak experiments and unclear novelty increments. The current paper has stronger novelty (negative result + adaptive methods) and cleaner focus.
-- *Complexity Lower Bounds of Adaptive Gradient Algorithms under Relaxed Smoothness* (ZjOXuAfS6l): Accepted (Poster), scores 8/6/6/6/5. Purely theoretical negative results + lower bounds for AdaGrad variants. Similar "negative result for adaptive methods" framing. That paper has no experiments. This paper additionally provides positive results and experiments.
-- *AdaGrad under Anisotropic Smoothness* (4GT9uTsAJE): Accepted (Poster), scores 6/6/8/6. Novel theoretical analysis of AdaGrad with supporting experiments; similar scope and depth of contribution.
-- *Convergence of Distributed Adaptive Optimization with Local Updates* (VNg7srnvD9): Accepted (Poster), scores 8/6/8/6. Strong theory paper on adaptive methods with clipping, comprehensive analysis.
-
-The paper under review is substantially stronger than the rejected heavy-tail/clipping papers (scores 5) due to its sharper negative result and more comprehensive positive theory. It is comparable to the accepted-poster adaptive methods papers (scores 6–8). The combination of negative + positive results on a clean, practically motivated question, with supporting experiments, places this firmly in the 6–7 range. The limited empirical scope (only two small NLP tasks), the missing b_t ablation, and the partially implicit theory–practice bridge prevent a score above 7. I assign **6.5**.
+---
 
 ## Score and Decision
 
-**Novelty**: High — first negative result establishing polynomial-δ failure of unclipped Adam/AdaGrad under bounded variance, combined with first polylog-δ positive guarantees for clipped variants without sub-Gaussian assumptions.
+**Calibration anchors:**
+- *High-Probability Convergence for Composite/Distributed* (qOFLn0pMoe, scores 5/5/5, rejected): Comparable theoretical template (clipping for high-prob under heavy-tailed noise), but no negative result, no experiments, and presentation issues. The paper under review is meaningfully stronger: cleaner story, both negative + positive results, empirical validation.
+- *To Clip or not to Clip* (jmN1zXMq0O, scores 6/6/6/8, accepted): High-dim analysis of clipping dynamics in linear regression. Comparable impact level; that paper had more precise mechanics in its specific setting but narrower scope. The paper under review is at roughly comparable quality.
+- *Provable Benefit of Adaptivity in Adam* (qx02elXpf9, scores 3/8/5/3, rejected): Similar territory (proving something novel about Adam theoretically), but its negative result was contested on assumption validity. The paper under review is on stronger ground.
+- *Convergence of Adaptive Gradient Methods under Refined Assumptions* (UmMKbG2Ubr, scores 5/5/6/6, rejected): Comparable contribution level but narrower novelty gap over prior work than the paper under review.
 
-**Technical soundness**: Strong — theorems are complete with proof sketches in main text and full proofs in appendix; assumptions are explicit and carefully compared to prior work.
+**Assessment:** The paper's theoretical contributions—a genuine negative result and first polylogarithmic-δ high-probability bounds for Adam/AdaGrad under heavy-tailed noise without sub-Gaussian assumptions—are solid and fill a real gap. The weaknesses (experiment-theory clipping gap, negative result limited to α=2, β₂ restriction) are real but non-fatal. This paper is clearly above the 5/5/5 rejected threshold and in the range of the accepted clipping paper at 6–7. The major clipping-type disconnect in experiments and the α=2-only negative result keep it from the higher end. I place it at **6.5**.
 
-**Empirical support**: Moderate — synthetic experiments are tight and well-designed; real-world experiments are narrow and lack the key ablation.
-
-**Significance**: Good — fills a genuine and practically relevant gap in adaptive optimizer theory; directly relevant to LLM training practice.
-
-**Clarity**: Good — the conceptual story is clear and well-motivated; theorem statements are dense but adequately discussed.
+**Novelty:** High — first results of this kind for Adam/AdaGrad under heavy-tailed noise
+**Technical soundness:** High — theorems are well-structured, assumptions clearly stated, limitations acknowledged
+**Empirical support:** Moderate — illustrative but the experiment-theory gap is a genuine concern
+**Significance:** High for the optimization theory community
+**Clarity:** Good — the narrative is coherent and the assumptions are carefully contextualized
 
 MY FINAL SCORE: <pineapple>6.5</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

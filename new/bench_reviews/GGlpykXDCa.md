@@ -1,111 +1,113 @@
-Now I have sufficient calibration data. Let me compile my findings and write the final review.
-
-Key calibration anchors:
-- **Spider 2.0** (real-world text-to-SQL benchmark): Oral, 8/8/8/8 — very high quality, real data, rigorous evaluation with execution accuracy
-- **CofCA** (multi-hop QA benchmark): Poster, 8/5/5/6 — accepted with some issues around metric validity
-- **DSBench** (data science benchmark): Poster, 6/8/8/6/6 — accepted, has multi-table but real data
-- **MDBench** (synthetic multi-document reasoning): Rejected, 5/3/3/5 — synthetic benchmark with quality and methodology concerns
-- **LAIA-SQL** (multi-table QA with text-to-SQL): Rejected (withdrawn), 3/6/3/8 — directly comparable paper
-
-The paper under review is closer to MDBench and LAIA-SQL in quality and issues. The Text-to-SQL evaluation with BLEU/ROUGE is a real methodological flaw (the field standard is execution accuracy). The GPT-4 circular dependency is genuine. The data source inconsistency (Spider vs. Wikipedia in Table 2) is a real issue. The MTR method's comparison isn't clean. However, the benchmark idea is genuinely useful and fills a real gap.
+Now let me look at the human reviews for calibration.Now let me do a targeted search to anchor the score better.Now I have enough information to write the final consolidated review. Let me synthesize all findings.
 
 ---
 
 ## Summary
-MMQA introduces a multi-table, multi-hop question answering benchmark built on Spider databases, evaluating LLMs across five subtasks: multi-table retrieval, text-to-SQL generation, multi-table QA, and primary/foreign key selection. The paper also proposes a multi-table retrieval method (MTR) that decomposes multi-hop questions into sub-questions and iteratively retrieves tables by combining question-table and table-table relevance. Experiments reveal a large gap between current LLMs and human performance on multi-table understanding tasks.
+
+This paper introduces MMQA, a multi-table multi-hop question answering benchmark built atop the Spider database, with questions generated via 45 hand-crafted SQL templates and GPT-4-turbo paraphrasing. The evaluation framework spans Multi-Table Retrieval, Text-to-SQL Generation, QA, Primary Key Selection, and Foreign Key Selection. The authors also propose MTR, an iterative multi-table retrieval method combining question decomposition with a table-table relevance score. Experiments across open-source and proprietary LLMs reveal a substantial gap behind human performance.
+
+---
 
 ## Strengths
 
-- **Genuinely fills an underexplored niche**: Most existing table QA benchmarks (WikiSQL, WikiTableQuestions, Spider, BIRD) evaluate single-table scenarios. MMQA is among the first to package multi-table, multi-hop QA evaluation with explicit foreign/primary key tasks. The specific diagnostic subtasks (PKS, FKS) go beyond simple answer accuracy to expose *which* aspect of multi-table reasoning models fail at—this is a concrete contribution most comparable benchmarks do not offer.
+- **Multi-granularity evaluation design**: The paper's task suite spans table-level (retrieval), column-level (PK/FK selection), and cell-level (QA) evaluation. This is a concrete, non-trivial decomposition that enables fine-grained diagnosis of where LLMs fail—not just *that* they fail. Most existing tabular benchmarks (WikiTableQuestions, WikiSQL, Spider) do not offer this coverage.
+- **Table length impact analysis**: The elbow-point finding in Figure 4—QA performance degrades sharply past 800 rows while Text-to-SQL declines gently—is an interesting and plausibly interpretable empirical finding. The explanation (SQL relies on schema headers rather than content) is testable and actionable.
+- **Breadth of LLM evaluation**: The paper evaluates open-source and proprietary models across both 2-table and 3-table subsets, with three-run averages and standard deviations. The inclusion of O1-preview as the strongest system sets a useful upper bound.
+- **Ablation confirming Question Decomposition (QD)**: Table 4's "w/o QD" variant demonstrates a meaningful contribution from the decomposition module (72.3 → 65.3 precision in Top-2 2-table), providing direct evidence for a design choice.
 
-- **Multi-table retrieval component is novel and empirically supported**: The MTR method logically combines question-table relevance (via sub-question decomposition) with table-table relevance (via column overlap propagation), and Table 4 shows clear, consistent improvements over prior retrievers (BM25, TF-IDF, DTR, SGPT, TableLlama) across multiple K values and both 2-table and 3-table splits. The ablation removing question decomposition (w/o QD) provides at least partial mechanistic evidence.
-
-- **Table-length elbow point finding is practically informative**: The observation in Figure 4 that QA performance drops sharply past ~800 rows while Text-to-SQL remains more stable (because SQL operates on headers, not content) is a concrete and useful empirical finding for practitioners designing LLM-based table systems.
-
-- **Both 2-table and 3-table difficulty tiers are included**: Reporting results separately for 2-table and 3-table subsets gives granularity about difficulty scaling, a design choice most QA benchmarks omit.
+---
 
 ## Weaknesses
 
 ### Fatal
-*(None that would completely invalidate the paper's existence as a benchmark resource, but there is one structural methodological error that severely undermines the text-to-SQL contribution.)*
+
+*(none that single-handedly invalidate all contributions, but the first major weakness below critically undermines a primary task of the framework)*
 
 ### Major
 
-- **Text-to-SQL is evaluated with ROUGE/BLEU, which are inappropriate metrics for SQL.** This is a field-level standard violation. ROUGE and BLEU measure lexical overlap; semantically equivalent SQL queries can have low lexical overlap, and lexically close but semantically wrong queries score highly. The text-to-SQL community uniformly uses execution accuracy and/or exact-set-match (EX/EM over query result sets) as primary metrics—see Spider, BIRD, and Spider 2.0. Since Text-to-SQL is positioned as one of the benchmark's four core evaluation tasks, this metric choice renders conclusions about model SQL capability on MMQA unreliable. All comparative statements about model SQL ability (Tables 5 and 6) rest on these flawed metrics and should not be trusted.
+- **Text-to-SQL is evaluated with ROUGE/BLEU rather than execution accuracy — making all SQL conclusions invalid.** The paper explicitly uses Rouge-1, Rouge-L, and BLEU to evaluate SQL generation (Section 3.3: *"we utilize Rouge-1, Rouge-L (Lin, 2004), and BLEU (Papineni et al., 2002) to evaluate the LLM-generated SQL query quality"*). These lexical-overlap metrics are fundamentally inappropriate for SQL: semantically equivalent queries can differ entirely in surface form (aliases, ordering, join direction), while syntactically similar strings may be logically wrong. Conclusions in Section 4.3—e.g., "O1-preview's sophisticated language parsing and structured output generation capabilities"—are drawn from BLEU/ROUGE differentials and cannot be trusted. Execution accuracy (EX) or test-suite accuracy is the community standard for Spider and BIRD and its absence is a critical gap, not a minor oversight.
 
-- **MTR's headline result is confounded by GPT-4-turbo question decomposition not available to baselines.** MTR uses GPT-4-turbo as its first-stage question decomposer. Baselines like BM25, DTR, SGPT, and TableLlama receive no equivalent decomposition assistance. The ablation "w/o QD" confirms that removing decomposition significantly hurts performance—which means a large fraction of MTR's gain may come from the decomposer, not from the retrieval algorithm itself. The paper does not compare against a baseline that also uses GPT-4-turbo decomposition but uses a simpler retrieval strategy. Thus the "SOTA" claim for MTR as a retrieval method is not cleanly supported.
+- **MTR's table-table relevance mechanism directly contradicts the paper's motivating claim about FK/PK-aware relational reasoning.** The paper opens with the importance of identifying primary and foreign keys for multi-table traversal. Yet the β score in Eq. (1) is a binary indicator based solely on column-name overlap (Section 3.2: *"If the retrieved tables overlap columns with tables retrieved in the previous round, then assign a score of 1 and 0"*). Column-name overlap is not a proxy for foreign-key semantics: common column names (e.g., "id", "name") create spurious links, while genuine FK joins with different header names (e.g., `stu_id` → `student_id`) are missed. The paper annotates PK/FK explicitly but does not use these annotations in MTR. This conceptual mismatch between the stated motivation and the actual implementation significantly weakens the core method claim.
 
-- **Data source inconsistency undermines benchmark clarity.** Section 3.1 explicitly states MMQA is built over Spider database ("We develop the MMQA benchmark over Spider database"). Yet Table 2 (benchmark comparison table) lists MMQA's data source as "Wikipedia." This is not a parser artifact; Spider databases themselves come from many crowdsourced domains, not primarily Wikipedia. This ambiguity affects readers' understanding of the benchmark's provenance and contamination risk.
+- **The "reasoning steps" metric used to establish benchmark complexity is undefined and unvalidated.** Figure 3 presents MMQA as having 7.46 average reasoning steps versus 2.14–6.28 for other datasets, which is deployed as key evidence that MMQA is substantially harder. However, no protocol is given for how reasoning steps are counted or standardized across datasets. For MMQA, if steps are derived from SQL template structure, the counts may be an artifact of generation rather than a valid difficulty measure. No inter-annotator agreement for step counts is reported, and no correlation between step count and empirical model difficulty is shown.
 
-- **Human performance comparison is incompletely specified and partially reported.** Tables 5 and 6 show human performance only for PM (QA) and two text-to-SQL metrics, leaving EM and other columns blank. The paper states annotators' agreement is "used as human performance," but annotators who created the data have advantages not available to models (familiarity with schema, knowledge of annotation conventions). The protocol for human evaluation under matched task conditions is not described, weakening the central human-vs-LLM finding.
+- **The paper does not specify whether downstream QA and SQL tasks are evaluated on gold tables or retrieved tables.** This ambiguity is consequential: if downstream tasks receive gold tables, reported QA/SQL scores overstate model capability by bypassing retrieval errors; if retrieved tables are used, propagation of retrieval errors is not analyzed. The paper (Figure 2, Section 4.1) is silent on this point, leaving the two-step evaluation pipeline unspecified.
+
+- **Human evaluation is underspecified and incomparable across metrics.** The abstract and conclusion strongly foreground the human/LLM gap, but Tables 5 and 6 show human results only for PM (not EM for QA), only one SQL metric, and omit the evaluation procedure entirely: number of annotators, interfaces provided, whether annotators had access to full schemas, and how the human EM would look. The claim that "LLMs leave significant performance room for improvement" is directionally plausible but not rigorously demonstrated at the metric level.
 
 ### Minor
 
-- **GPT-4-turbo is used for question generation, question decomposition in MTR, and partial-match evaluation of other LLMs including GPT-4.** This creates multiple circular dependencies. Most critically, using GPT-4-turbo to evaluate GPT-4's partial-match scores with no calibration against human judgment is a validity concern. No validation of the GPT-4-turbo judge against human ratings is provided.
+- **Narrative in Section 4.2 is internally inconsistent with the data.** The text states: *"the MTR combined with TableLlama-7b while showing commendable recall with a score of 64.7%, lagged in precision."* But Table 4 shows MTR(TableLlama-7b) has Top-2 precision of 72.3—the highest value in the table. This appears to be an analysis copy-paste error.
 
-- **Dataset size discrepancy is unexplained.** The paper states 5,000 samples were selected from Spider, but Table 1 lists 2,591 (2-table) + 721 (3-table) = 3,312 items. The filtering criteria responsible for the ~34% reduction in samples are not described.
+- **GPT-4-turbo serves three conflicting roles: question generator, QD module in MTR, and answer evaluator for PM.** This creates a potential circularity loop (the generator may embed stylistic biases that inflate GPT-4-turbo downstream performance). No ablation with an alternative evaluator or human-calibration study for the PM metric is provided.
 
-- **Table-table relevance in MTR is a coarse binary column-name overlap heuristic.** The β score is 1 if any column name exactly matches between tables, 0 otherwise. This will fail when join keys are semantically related but have different names (e.g., "Employee_ID" vs. "emp_id"), a common real-world schema issue. The paper does not test MTR under such conditions, limiting generalizability claims.
+- **The table length analysis is underpowered.** Only 50 samples per bucket, no confidence intervals, and no control for confounding variables (question type, domain, or schema complexity) across length buckets. The "elbow point" at 800 rows is presented definitively but the statistical warrant is thin.
 
-- **The "elbow at 800 rows" finding is based on only 50 samples per bucket with no confidence intervals.** While the pattern in Figure 4 is suggestive, the small per-bucket sample size and absence of statistical testing mean this finding is descriptive rather than statistically established.
-
-- **End-to-end pipeline evaluation is absent.** MTR retrieval and downstream QA/SQL tasks are evaluated independently. The paper does not show that better MTR retrieval causally leads to better downstream QA, leaving the utility of the retrieval improvement for the full pipeline unestablished.
+- **Algorithm 1 contains confusing notation.** γ is used both as an initialization and as a scalar in the update step `γ ← γ + α(q₀, table₀)` and then later `ArgSort(γ)` as if it is a vector. This makes the method unreproducible as described.
 
 ### Trivial
 
-- The "reasoning steps" complexity metric in Figure 3 is defined only implicitly. Without a cross-dataset consistent counting protocol, the comparison to other benchmarks is illustrative rather than rigorous.
+- The benchmark covers only 2- and 3-table scenarios. While a step beyond single-table, real-world schemata frequently involve larger join chains. The scope limitation itself is acceptable for a first benchmark but should be explicitly stated as a limitation rather than implicitly overstated as "multi-table."
+
+---
 
 ## Nice-to-Haves
 
-- Replace ROUGE/BLEU for Text-to-SQL with execution accuracy computed over the Spider database instances (SQL is executable since the underlying databases are available). This would be a significant upgrade to validity.
-- Add an ablation comparing MTR with GPT-4 decomposition against a simpler retriever also augmented with GPT-4 decomposition, to isolate the retrieval algorithm's contribution.
-- Include a small-scale independent human evaluation (non-annotators) to establish a more realistic human baseline under controlled conditions.
-- Investigate semantic similarity (embedding-based) for the table-table relevance score β instead of binary column-name overlap, to test robustness on non-obvious foreign key names.
-- Provide an error analysis categorizing QA failures (wrong join reasoning, incorrect key identification, arithmetic errors) to make benchmark results more actionable.
+- Add execution accuracy or exact set match as the primary SQL metric; this alone would substantially improve the paper's credibility.
+- Provide a full end-to-end evaluation (retrieved tables → QA/SQL) alongside the gold-table setting for a cleaner empirical story.
+- Ablate table-table relevance via PK/FK annotations vs. column-name overlap to test whether relational structure matters beyond surface similarity.
+- Validate PM scoring (GPT-4-turbo judge) against human agreement on a 100-sample subset.
+- Include error analysis categorized by question type and failure mode (retrieval error, key mismatch, SQL error, etc.).
+
+---
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution:*
+*These points are flagged to be removed; treat them with caution.*
 
-- **"Real-world framing" as a major weakness** (Harsh Critic): The critic argues that the benchmark fails to prove its questions reflect a "realistic user-query distribution." However, the paper's primary claim is about evaluation of multi-table reasoning, not about distributional realism of the question source. The Spider databases span 138 domains and the benchmark's construction is no worse than Spider itself on this axis. This criticism is scope creep.
+- **"SOTA claim is too strong"** (Harsh Critic, Claim 5): On the paper's own benchmark, claiming SOTA among evaluated baselines is standard practice. The claim is mildly overstated in framing but does not reflect a methodological error.
+- **Reproducibility concerns about hyperparameters and training logs**: Removed per hard rule on trivial implementation details.
+- **Missing related work on HybridQA/OTT-QA retrieval baselines** (Spark): Removed per hard rule—cannot verify existence of cited works independently.
+- **Generic strength "addresses an important gap"**: Removed per hard rule—this is true of any benchmark paper.
+- **Generic strength "the paper is well-written/comprehensive"**: Removed per hard rule.
+- **Data contamination from Spider**: Flagged but removed as a primary weakness—this is a known limitation of any Spider-based benchmark and all similar benchmarks (HoloBench included) share it. It is a real concern but standard to the field and should be disclosed as a limitation, not a blocking flaw.
 
-- **Novelty claim is "too broad"** (Harsh Critic): The critic calls for a narrower novelty claim. While this is a fair writing suggestion, it is not a substantive weakness; multi-table + multi-hop + key selection evaluation is genuinely new as a packaged benchmark. Moved to Nice-to-Haves.
-
-- **Counting protocol for "reasoning steps" across benchmarks is incomparable** (Harsh Critic): The reasoning step comparison is informal but is clearly presented as illustrative, not as a rigorous metric. This is a minor clarity issue, not a substantive weakness.
-
-- **Weakness about the benchmark not isolating "multi-table reasoning" vs. prompt overload** (Harsh Critic): This is a meta-criticism that would apply to virtually any benchmarking study; it is not specific enough to be actionable and does not invalidate the benchmark.
-
-- **"Missing related work"** (Multiple reviewers): Per hard rules, missing related works are not flagged.
-
-- **Reproducibility concerns about hyperparameters and temperature settings** (Harsh Critic, minor): Averaging three runs at temperature 0.7 and reporting ±standard deviation is reasonable practice for stochastic LLM evaluation. This does not merit a weakness.
+---
 
 ## Novel Insights
 
-The most genuinely novel empirical insight in this paper is the decomposition of table-length failure modes: the "elbow point" near 800 rows where multi-table QA performance drops sharply while Text-to-SQL remains more stable. The mechanistic explanation—that SQL generation attends only to table headers while QA requires attending to cell content—is a concrete, actionable finding that differentiates performance degradation modes across tasks. This insight is not present in prior table benchmarks and could guide future work on LLM table-processing architectures (e.g., selective cell retrieval vs. full table ingestion).
+The most genuinely novel observation surfacing from this review is the elbow-point finding in Figure 4: QA performance degrades sharply past ~800 rows while Text-to-SQL declines gradually, suggesting that multi-table QA and SQL generation have qualitatively different failure modes under long-context conditions—cell retrieval versus schema-reading. This aligns with the intuition that SQL generation relies on header structure (which scales gracefully) while QA requires row-level lookup (which degrades with table length). This finding, if replicated with better-controlled experiments, would be a useful contribution independent of the benchmark construction choices.
+
+---
 
 ## Suggestions
 
-1. **Fix the Text-to-SQL metric before submission**: Add execution accuracy as the primary metric. The Spider databases that underlie MMQA are available, making execution-based evaluation directly feasible.
-2. **Add a "GPT-4-turbo augmented baseline" to Table 4**: A simple retriever (e.g., TableLlama) that also receives GPT-4-turbo question decomposition would clarify whether MTR's gains are from the algorithm or the decomposer.
-3. **Resolve the data source inconsistency in Table 2**: Correct "Wikipedia" to "Spider (multiple crowdsourced domains)" or add a clarifying footnote.
-4. **Extend human evaluation to matched-condition non-annotators**: Even 50 questions would substantially strengthen the human-vs-LLM comparison.
-5. **Report the filtering criteria for the 5,000→3,312 reduction**: One paragraph in Section 3.1 would suffice.
+1. **Replace ROUGE/BLEU with execution accuracy for SQL**: This is the highest-priority fix; without it, the SQL subsection's findings cannot be trusted.
+2. **Specify gold vs. retrieved tables in downstream evaluation**: Add a clear statement and ideally an end-to-end evaluation condition.
+3. **Use annotated PK/FK links in MTR's β score**: The paper already has this annotation; integrating it into the method would close the gap between motivation and implementation.
+4. **Report human EM for QA and human EM for SQL**, with a description of the annotation interface and sample size.
+5. **Fix Algorithm 1 notation** to make γ clearly a vector accumulator, not a scalar.
 
 ---
 
 ## Score and Decision
 
-**Calibration reasoning:**
+**Calibration against retrieved papers:**
 
-- *Spider 2.0* (Oral, 8s): Uses real enterprise data, execution accuracy, novel realistic benchmark — significantly stronger than MMQA on all dimensions.
-- *CofCA* (Poster, avg ~6): Multi-hop QA benchmark, accepted. Has some metric concerns (GPT-4 judge) but uses counterfactual data to address contamination. Comparable in concept to MMQA but somewhat stronger in evaluation rigor.
-- *DSBench* (Poster, avg ~6.8): Real-world data science benchmark with multi-table tasks, accepted. Uses real data from competitions, stronger ecological validity.
-- *MDBench* (Rejected, avg ~4): Synthetic multi-document benchmark. Rejected partly due to quality concerns and limited rigor, weakly similar to MMQA's template-based construction.
-- *LAIA-SQL* (Rejected, avg ~5): Multi-table QA + text-to-SQL paper. Shares the SQL metric flaw and circular GPT-4 dependency with MMQA.
+| Paper | Score | Decision | Key similarities |
+|---|---|---|---|
+| MDBench (KNkalZnq3f) | 3–5, avg ~4 | Rejected | Synthetic benchmark from existing database, unvalidated complexity claims |
+| HoloBench (5LXcoDtNyq) | 5–8, avg ~6.25 | Accepted | Built on Spider, evaluates LLMs on database operations, more rigorous experimental design |
+| DivKnowQA (9AnR2z7iNL) | 3–5, avg ~4.3 | Rejected | Machine-generated QA benchmark, naturalness concerns |
+| LAIA-SQL (WYdpjwKQma) | 3–8, avg ~5 | Rejected | Multi-table QA task decomposition, flawed evaluation |
 
-MMQA's gap: the benchmark idea is more complete than MDBench (more subtasks, larger scale, better annotation). However, it shares the LAIA-SQL problem of using BLEU/ROUGE for SQL (a material flaw) and a confounded retrieval comparison. The data source inconsistency and incomplete human evaluation further weaken confidence. The paper is more valuable as a benchmark contribution than as a methods paper, but the evaluation methodology holes are real.
+MMQA sits closer to MDBench/DivKnowQA than to HoloBench on evaluation rigor. The key differentiators: MMQA has more models, a multi-faceted framework, and a proposed retrieval method with ablations—which MDBench lacks. But unlike HoloBench, MMQA's primary SQL evaluation metric is fundamentally inappropriate, its core method claim (relational FK/PK reasoning) is not matched by the implementation, and its benchmark complexity argument rests on an undefined metric. The paper's benchmark idea has genuine merit but the execution falls short of the level of rigor expected at ICLR. A score of **4.0** is appropriate—below the ICLR mean (~5.12), consistent with similar synthetic benchmark papers that were rejected, and reflecting that the work requires substantial methodological corrections before the central claims can be substantiated.
 
-Positioning: This paper sits between MDBench (rejected ~4) and CofCA (accepted ~6). The multi-table retrieval and PKS/FKS tasks are genuinely novel additions. The elbow-point finding is interesting. But the SQL metric flaw is more serious than any flaw in the accepted CofCA, and the retrieval comparison is genuinely confounded. I place this at **4.5**: better than a clear reject (there's a real benchmark contribution) but the methodological issues prevent acceptance without revision.
+**Novelty:** Moderate — addressing a real gap but built on existing Spider schemas with template-based synthesis.
+**Technical soundness:** Low — invalid SQL metric, conceptual mismatch in MTR's core mechanism.
+**Empirical support:** Partial — retrieval and QA results are credible; SQL conclusions are not.
+**Significance:** Moderate potential if methodological issues are fixed.
+**Clarity:** Fair, with one notable internal inconsistency (Section 4.2 narrative vs. Table 4).
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

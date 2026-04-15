@@ -1,133 +1,123 @@
-Now I have sufficient data to write the final review. Let me compile my analysis:
-
-**Calibration Summary:**
-- BiLO (PDE inverse problems, bilevel method, decent results): Rejected at 6,6,6,6 — not accepted despite decent contribution, suggesting the threshold for this area is high
-- PI-DIONs (physics-informed inverse operator networks): Accepted (Poster) at 6,5,6 — strong problem framing, theoretical foundation, some limitations
-- Learning a Neural Solver: Accepted (Poster) at 3,8,8,6,3 — strong methodological contribution, noisy reception
-- Neural Spectral Methods: Accepted at 8,8,8,3 — 1-2 orders of magnitude better than baselines, very strong results
-- PIED: Accepted (Poster) at 6,6,8,8 — experimental design for inverse problems, comprehensive evaluation
-- Pseudo Physics-Informed NOs: Rejected at 3,6,5,3,6,3 — overclaiming, missing baselines
-- TE-FNO: Rejected at 3,5,6,6 — incremental, weak novelty
-
-**Paper's Position:**
-The SC-FNO paper occupies a middle ground. Its core contribution—adding Jacobian supervision to FNO training—is a clean, well-motivated, and empirically effective idea. The improvements are demonstrated across multiple PDEs and operators. However:
-- The paper overclaims in several places (training time, concept drift)
-- Missing inversion protocol details
-- No loss-weight ablation
-- No theoretical analysis
-- Experiments limited to 1D/2D synthetic PDEs
-- Suspicious identical R² values in Figure 2
-
-Compared to BiLO (6,6,6,6 → rejected) which also works on PDE inverse problems with solid empirical results, SC-FNO is arguably comparable or slightly below in rigor. Compared to PI-DIONs (6,5,6 → accepted), SC-FNO has broader experimental validation but less theoretical grounding and some overstatements. 
-
-The paper is at the margin. Given the evidence quality and the genuine (if somewhat obvious in retrospect) finding about sensitivity supervision improving inversion, I'd place this around **5.5**, with a possible borderline accept if the overstatements are addressed.
+Now let me search for calibration papers to score this properly.Now I have enough to produce the final review. Let me compile everything.
 
 ---
 
 ## Summary
-SC-FNO (Sensitivity-Constrained Fourier Neural Operator) augments standard FNO training with a supervised Jacobian-matching loss term (L_s) that compels the neural operator to correctly learn how outputs respond to physical parameter changes (∂u/∂p). The paper demonstrates that standard FNOs, despite predicting solution paths well, systematically produce unreliable parameter sensitivities, which degrades inversion performance and robustness under parameter perturbation. SC-FNO is evaluated on 2 ODEs and 4 PDEs (including Navier-Stokes and Allen-Cahn) and shows substantial improvements in parameter inversion accuracy, robustness under out-of-distribution parameters, reduced training data requirements, and generalization to other neural operator architectures.
+The paper introduces Sensitivity-Constrained Fourier Neural Operators (SC-FNO), which augments the standard FNO training loss with a Jacobian supervision term L_s, enforcing that the surrogate correctly captures parameter sensitivities ∂u/∂p. The method is validated on 2 ODEs and 4 PDEs and shown to substantially improve parameter inversion accuracy, surrogate sensitivity fidelity, and robustness to out-of-range parameter inputs relative to vanilla FNO and FNO-PINN. Both automatic differentiation and finite-difference gradient sources are supported.
+
+---
 
 ## Strengths
 
-- **Precisely diagnoses a genuine failure mode of FNOs**: The observation that FNOs can achieve high solution-path R² (~0.99) while producing wildly inaccurate sensitivities (R² as low as 0.21 for PDE2 in Table 1, with unphysical oscillations in Figure 3) is a specific, well-documented, and practically important finding that goes beyond vague generalization concerns. This diagnostic makes the paper's motivation unusually concrete.
+- **The core observation is genuinely important and well-demonstrated.** Table 1 (PDE2) shows FNO achieving state R²=0.997 while simultaneously having ∂u/∂α R²=0.206 — a dramatic dissociation between forward accuracy and sensitivity fidelity. This finding is reproducible across PDE1, PDE2, PDE3, and ODEs and constitutes a previously under-recognized failure mode of neural operators.
 
-- **The insight about why PINN loss fails**: The paper's explanation that PINN-type equation losses constrain ∂u/∂x and ∂u/∂t but not ∂u/∂p (since physical parameters don't appear in the spatial-temporal derivative terms), and thus do not adequately regularize parameter sensitivity, is a meaningful mechanistic observation that justifies SC-FNO as something distinct from FNO+PINN.
+- **FNO-PINN ablation provides a clean mechanistic insight.** The paper demonstrates that PINN-type residual losses (which supervise ∂u/∂x and ∂u/∂t) do not improve ∂u/∂p, because the physical parameters p appear in f(u, x, t, p) rather than in the time/space derivative terms directly. This distinction is sharp and non-obvious, and Table 1/Figure 3 make it convincingly.
 
-- **The 82-parameter high-dimensional experiment (Table 4)**: SC-FNO with 100 training samples achieves relative L² = 0.0087 while FNO with 500 samples achieves 0.0282 for the zoned PDE2. This is a striking practical result suggesting the method has disproportionate value in high-dimensional parameter regimes where data coverage is hardest.
+- **Demonstrated generality across architectures and gradient sources.** The framework is applied to FNO, WNO, MWNO, and DeepONet (Appendix D.1), and Section 3.5 shows SC-FNO remains effective when sensitivity labels come from finite differences rather than AD, making the approach applicable to legacy non-differentiable simulators.
 
-- **Finite-difference gradient supervision (Table 5)**: Demonstrating that FD-based Jacobians also work (R² > 0.95 for solutions, > 0.9 for sensitivities) makes the method applicable to researchers without differentiable solver infrastructure, which is the practical majority of scientific computing users.
+- **The 82-parameter zoned Burgers experiment (Section 3.4)** provides a useful stress test showing that, at high parameter dimensionality, FNO's R² for the solution itself degrades significantly (0.960 → 0.927 as N drops from 500 to 100) whereas SC-FNO stays flat (0.997 → 0.996). This shows sensitivity supervision helps more as the parameter space grows.
 
-- **Generalization across operator architectures**: The validation across WNO, MWNO, and DeepONet (Appendix D.1) with consistent improvements substantiates that the sensitivity-supervision principle is not FNO-specific.
+---
 
 ## Weaknesses
 
 ### Fatal
-*None that invalidate the paper's core claims.*
+*None that fully invalidate the core contribution.*
 
 ### Major
 
-- **Inversion protocol under-specified**: The paper's headline claim is that SC-FNO dramatically improves parameter inversion (SC-FNO R²=0.986 vs. FNO R²=0.642, multi-parameter). However, Section 3.1 omits all details necessary to reproduce or assess these results: optimizer used for inversion (gradient descent? Adam? L-BFGS?), initialization distribution, number of restarts, stopping criterion, whether parameter bounds are enforced, and whether observations are noise-free. Inverse problems are highly sensitive to optimizer conditioning and local minima. Without these details, the reported gains are suggestive rather than conclusive. As a minimum, the paper should specify the complete inversion protocol and report variance over multiple random initializations.
+1. **R² > 1 and extreme negative R² in Tables 3 and 4 (Allen-Cahn and zoned PDE2) — makes Jacobian claims for those sections uninterpretable.** Table 3 reports FNO Mean Jacobian R² = 3.11 (N=500) and -5.84 (N=100); Table 4 reports 4.332 (N=500) and -14.01 (N=100). Standard R² is bounded above by 1. Values exceeding 1 indicate either a non-standard aggregation scheme (e.g., averaging component-wise R² with different baseline variances) or a computation error. Neither case is explained anywhere in the paper. Because Tables 3 and 4 are used to support the high-dimensional parameter and Allen-Cahn claims, the quantitative conclusions for those experiments cannot currently be trusted.
 
-- **Inconsistent "reduces training time" claim**: The abstract states SC-FNO "decreases training time while maintaining accuracy," but the paper itself reports "30%–130% extra training time per epoch" and Section 2.4 acknowledges meaningful per-epoch overhead. The only defensible version of the training-time claim is conditional and regime-specific (fewer training samples may be needed in high-dimensional cases, potentially offsetting higher per-epoch cost). As stated in the abstract, the claim is internally inconsistent and misleading. This needs to be corrected or removed.
+2. **Identical R² across all five parameters in Figure 2 / associated table is unexplained and suspicious.** The text and table both report FNO achieving exactly R²=0.635 for all five parameters (e, γ, c, u, v) of PDE1, and SC-FNO achieving exactly R²=0.945 for all five. For PDE2 the situation repeats: FNO=0.850, SC-FNO=0.960 for all four parameters. The probability of five independent inversion problems producing identical R² to three decimal places is negligible unless these values are somehow averaged or rounded from a single aggregated metric. The paper offers no explanation. If these are true per-parameter results they raise a data integrity concern; if they are per-run averages the reporting is misleading.
 
-- **Identical R² values across all parameters in Figure 2**: The table accompanying Figure 2 lists all five PDE1 parameters with identical R²=0.635 for FNO and identical R²=0.945 for SC-FNO, and similarly for PDE2. This is physically implausible — different parameters govern different aspects of system dynamics and should have different inversion difficulty. This pattern either reflects an aggregation/reporting error or a non-independent evaluation of parameters. This data anomaly directly affects one of the paper's strongest claims and must be explained or corrected.
+3. **82-parameter inversion is never actually demonstrated.** The abstract states the method "accommodates more complex parameter spaces (tested with up to 82 parameters)" and the paper's title includes "inverse problems." Yet Table 4 (zoned PDE2, 82 parameters) reports only forward surrogate and Jacobian metrics — never inversion R² or L² for any parameter. The paper's claim that sensitivity supervision helps with inversion in high-dimensional spaces is therefore unsubstantiated for the only high-dimensional experiment.
 
-- **Missing ablation on loss weighting (L_u vs. L_s balance)**: The paper never discusses the relative weighting between the solution loss and the sensitivity loss. In practice, the scales of u and ∂u/∂p can differ by orders of magnitude depending on the PDE. Without a systematic ablation on this hyperparameter, practitioners cannot reliably apply SC-FNO, and the robustness of the reported results to weighting choices is unknown.
+4. **Loss weighting between L_u and L_s is nowhere specified.** Section 2.1 defines both losses but gives no formula, table, or discussion of their relative weight. Multi-task losses are well-known to be sensitive to weighting, and the paper's reproducibility and fairness of comparison depend on this choice. With four configurations (FNO, FNO-PINN, SC-FNO, SC-FNO-PINN) evaluated, the weighting of L_s versus L_u could materially affect all results. This is the most fundamental missing implementation detail.
 
 ### Minor
 
-- **"Concept drift" claim overstated**: The paper claims SC-FNO handles "concept drift" (situations where physical parameters in testing exceed training ranges). However, the experiments only test one-sided parameter-range extrapolation (from [a,b] to [b,(1+λ)b]). This is a specific extrapolation test, not a demonstration of handling structural changes in system dynamics or joint distribution shifts. The term "concept drift" should be replaced with the more accurate "out-of-distribution parameter extrapolation."
+1. **Inversion protocol is underspecified.** Section 3.1 describes gradient-based inversion through the surrogate but gives no optimizer, learning rate, stopping criterion, number of restarts, or initialization strategy. For an optimization-based inverse problem, these details affect whether observed performance differences reflect surrogate quality or optimization tuning. Without them, independent replication of the inversion experiments is impossible.
 
-- **Causal claim about sensitivity → inversion not rigorously established**: The paper argues that accurate parameter sensitivities are causally responsible for improved inversion. The evidence demonstrates association (better Jacobians correlate with better inversion), not causation. There is no sensitivity-weight ablation to show dose-response between Jacobian quality and inversion success, and no control for generic regularization effects. The language in Section 3.2 ("we argue that the large perturbation-induced error is a primary reason...") appropriately hedges, but the conclusion section treats this as established.
+2. **Abstract's "decreases training time" claim is misleading.** The abstract lists "decreases training time" as a headline claim; the paper itself reports 30–130% extra training time per epoch. The only basis for "less total training time" is the Section 3.4 comparison: SC-FNO with 100 samples trains faster than FNO with 500 samples. That is a cross-data-regime comparison, not a wall-clock-to-accuracy-target comparison under equal conditions. As written, this is an overclaim.
 
-- **Jacobian data generation cost underreported**: The paper claims modest computational overhead (30%-130% per epoch, 722 vs. 764 MB for PDE1), but the one-time cost of generating sensitivity data for the training set—particularly for FD-based gradients requiring n+1 solver runs per sample for n parameters—is not quantified in the main text. For the 82-parameter case, this is 83 solver runs per training sample, which could dominate total cost. Table D.12 is mentioned but not summarized in the main paper.
-
-- **Suspicious uniform R² in Table 4 for FNO**: The Mean Jacobian R² for FNO is listed as "3.11" (N=500) and "-5.8373" (N=100), which are physically plausible (negative R² indicates predictions worse than mean), but these negative and >1 values should be explicitly noted as such in the text for clarity.
+3. **"Concept drift" terminology is misused.** The paper uses "concept drift" to describe parameter values at test time exceeding the training distribution. In the ML literature, concept drift refers to changes in the joint distribution P(y|x) over time in a streaming setting. The phenomenon tested is simply out-of-distribution extrapolation. Using nonstandard terminology without definition leads to imprecision.
 
 ### Trivial
-- Sampling strategy details (how many spatiotemporal points are sampled per epoch for the sensitivity loss) are mentioned but never specified. This is relevant to reproducing results but is a secondary detail.
+
+- Robustness evaluation uses only one-sided upper-bound extrapolation (λ applied to upper end of training range). Bidirectional or structured extrapolation would have broadened the evidence slightly, but this does not materially weaken the core claim.
+
+---
 
 ## Nice-to-Haves
 
-- **Wall-clock time comparison at equivalent accuracy**: A controlled comparison showing total training cost (including data preparation) for FNO vs. SC-FNO to reach a target accuracy level in the high-dimensional setting would either substantiate or qualify the efficiency story.
+- **Ablation on L_s weight and point subsampling fraction (n < N, t < T).** Even a small grid search showing stability across weighting values would significantly strengthen the reproducibility case and demonstrate robustness of the method.
+- **Inversion convergence trajectory plots** (loss vs. iteration, FNO vs. SC-FNO) would directly visualize the optimization landscape difference and make the causal story more convincing.
+- **End-to-end wall-clock comparison including dataset preparation** to fairly characterize efficiency (Table D.12 in the appendix apparently reports solver times for data generation, which should at minimum be cited in the efficiency discussion).
+- **Baseline comparison with gradient-enhanced / Sobolev-trained FNO** to isolate what is specific to the operator-learning setting versus generic derivative supervision.
+- **Test under noisy sensitivity labels** (perturbed finite-differences) to understand robustness to label noise, relevant for practitioners whose solvers have numerical precision limits.
 
-- **Inversion results for the 82-parameter case**: This is the paper's most challenging setup for inversion. Including inversion results there would strongly support the generalization claim.
-
-- **Comparison with a direct inverse mapping baseline**: The paper mentions Vadeboncoeur et al. (2023) as an alternative but never benchmarks against it. A brief comparison would clarify when a unified forward+sensitivity model offers advantages over separately trained inverse models.
-
-- **Ablation over perturbation direction**: The out-of-distribution evaluation only tests one-sided extrapolation. Testing bidirectional extrapolation, within-range distribution shift, and correlated parameter variation would make the robustness story more complete.
-
-- **Theoretical motivation (even informal)**: A brief argument for why supervising ∂u/∂p should help the model learn smoother, more physically consistent parameter dependencies (e.g., via implicit Lipschitz regularization) would strengthen the paper's conceptual contribution.
+---
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **[HARSH CRITIC: "Causal story is asserted, not demonstrated via sensitivity-weight ablation"]** — The paper does say "we argue" and presents a plausible explanation. The absence of a formal ablation is a minor gap, not a fundamental validity concern. Kept as Minor weakness.
+- **"SC-FNO reduces training data requirements" is unfair because derivative supervision is not free (Harsh Critic, Critical Issue 1):** The paper explicitly acknowledges and reports the dataset preparation cost in Table D.12 (Appendix D.3, line 99–102). The authors correctly frame it as a "one-time cost per equation." This is a reasonable characterization and the concern, while worth noting as a minor point, does not rise to a "structural" overclaim when the data preparation cost is disclosed.
 
-- **[HARSH CRITIC: "Baseline fairness not established in low-data/high-dimensional setting"]** — This is a legitimate concern but amounts to asking the authors to re-tune baselines for multiple regimes. The paper uses the same hyperparameter settings across conditions, which is standard practice. Removed as an independent weakness; partially folded into the "data generation cost" point.
+- **"Comparison against adjoint-based / direct numerical inversion is missing" (multiple reviewers):** The paper explicitly positions itself as a surrogate approach for fast amortized inversion, not as a replacement for direct numerical adjoint methods. Comparing against direct inversion would mix methods with fundamentally different computational profiles (one-time vs. amortized). This falls outside the paper's stated scope and removing it as a core weakness is appropriate.
 
-- **[HARSH CRITIC: "Mechanistic claim that SC-FNO 'ensures inputs are utilized correctly'"]** — This is indeed loose language in Section 2.1 but does not affect the validity of the method or results. Removed as a weakness; trivial.
+- **"Lack of theoretical analysis / convergence guarantees" (Human Finder, Neutral):** The paper is an empirical systems contribution demonstrating a training objective for neural operators. Demanding convergence theory from an empirical paper is not standard in this subfield, and the contribution stands on its empirical merits.
 
-- **[NEUTRAL/HARSH: "Limited novelty relative to Sobolev training"]** — The paper explicitly cites this prior work and notes the key distinction: SC-FNO supervises ∂u/∂p (parameter sensitivities) whereas prior Sobolev training focused on ∂u/∂x in low-dimensional settings. The application to neural operator parameter sensitivities for PDE inversion is a genuine extension. Removed as a standalone weakness; the connection is already acknowledged.
+- **"Long-term temporal stability not evaluated" (Human Finder):** The experiments test the time horizons natural to each equation. SC-FNO is not presented as a long-horizon rollout method; it predicts full trajectories or final-time-step states. Fault-finding on long-horizon stability is scope creep.
 
-- **[SPARK: "Missing comparison with Sobolev training as empirical baseline"]** — Without knowing whether a Sobolev-trained FNO (matching spatial derivatives) performs differently from SC-FNO, the claim of distinct benefit is less sharp. However, this is a nice-to-have rather than a critical flaw since the paper's focus is specifically on parameter (not spatial) derivatives.
+- **"No evaluation under noisy data" (Human Finder):** Valid as a nice-to-have but not a fundamental flaw for the demonstrated contribution.
 
-- **[NEUTRAL: "All data are synthetic; does not support claims in realistic inverse settings"]** — Essentially all neural operator papers use synthetic data. This is not a distinguishing weakness for this paper in particular.
+- **"Limited comparison with alternative inverse problem methods" (Human Finder):** Removed as stated above — the inversion baseline choice (FNO, FNO-PINN) is appropriate for isolating the effect of the sensitivity loss.
+
+---
 
 ## Novel Insights
 
-The paper's most genuinely novel and underappreciated insight is the demonstration that a neural operator can achieve very high forward-prediction accuracy (R² > 0.99) while simultaneously having essentially no useful information in its learned parameter-sensitivity structure (R² < 0.25 for some Jacobians), and that these failures are mechanistically distinct from what PINN-style losses address. This creates a specific and previously undocumented failure mode for surrogate-based inversion: the surrogate looks good in the training distribution but provides misleading gradient directions during optimization-based inversion. The connection between this failure and the one-sided perturbation degradation results (FNO R² collapses from 0.997 to 0.734 under 40% parameter perturbation while SC-FNO holds at 0.933) provides a coherent mechanistic narrative, even if the causal chain is not formally proved.
+The most genuinely interesting finding in this paper — and one that deserves emphasis beyond the paper's own framing — is the empirical decoupling between forward solution accuracy and parameter sensitivity accuracy in standard FNOs. The paper demonstrates (Table 1, PDE2) that a surrogate can achieve state R²=0.997 while having sensitivity R²=0.206, and that this is not a PDE-specific accident but a systematic property across multiple architectures and equations. The companion finding that PINN-type losses (which supervise ∂u/∂x and ∂u/∂t) do not close this gap is mechanistically illuminating and has direct implications for the growing literature on physics-informed operator learning: equation-residual supervision and parameter-sensitivity supervision address orthogonal failure modes.
+
+---
 
 ## Suggestions
 
-1. **Fix or remove the "decreases training time" claim in the abstract**. Replace with: "SC-FNO achieves comparable or better accuracy than FNO with fewer training samples in high-dimensional parameter settings, though it incurs 30–130% additional per-epoch cost."
+1. **Fix or explain the R² > 1 values in Tables 3 and 4 immediately.** If these result from averaging component R² values across outputs with different baseline variances, explain the aggregation formula and whether it is meaningful; otherwise recompute with a standard definition.
+2. **Clarify or retract the identical per-parameter R² values in Figure 2's table.** Either show true per-parameter values or explain that this is an aggregated metric.
+3. **Add at least one inversion experiment on the 82-parameter zoned PDE2** to support the headline claim about high-dimensional parameter spaces. This is the most impactful missing experiment given the paper's framing.
+4. **Specify loss weighting** between L_u and L_s in the main text, and provide a brief sensitivity analysis or note on how to choose it.
+5. **Revise the abstract** to remove "decreases training time" or replace it with "can require fewer training trajectories to reach a target accuracy."
 
-2. **Fully specify the inversion protocol in Section 3.1**: optimizer, learning rate, initialization distribution, number of restarts, stopping criterion, observation setup (noise-free or noisy), and compute budget per method. Report mean ± std over multiple runs.
+---
 
-3. **Investigate and explain the identical R² values across parameters in Figure 2's accompanying table**. If parameters are evaluated jointly, clarify the metric definition and consider reporting per-parameter statistics.
+## Axis Evaluation
 
-4. **Add a loss-weight ablation**: vary the coefficient of L_s relative to L_u and report sensitivity accuracy and inversion performance as a function of this weight, for at least one PDE.
-
-5. **Replace "concept drift" with precise terminology** ("out-of-distribution parameter extrapolation") or design an experiment that genuinely tests concept drift (e.g., changed forcing structure, model-form changes).
-
-6. **Quantify Jacobian data generation cost in the main text** for the 82-parameter FD case, to give a complete picture of the method's total computational budget.
+- **Novelty:** *Moderate-to-good.* The idea of Jacobian supervision for neural operators is natural and, as the paper claims, not previously demonstrated for this setting. The insight about the FNO/PINN blind spot to ∂u/∂p is genuinely new.
+- **Technical soundness:** *Mixed.* The training methodology is sound; the R²>1 anomaly and identical-value issue in the tables are not.
+- **Empirical support:** *Mixed.* The core Tables 1 and 2 are strong and convincing. Tables 3 and 4 are currently uninterpretable due to the R²>1 issue. The 82-parameter inversion claim is not empirically demonstrated.
+- **Significance:** *Moderate.* Accurate surrogate gradients matter a great deal for any optimization/inversion use-case. If the core finding is correct (which the Tables 1–2 evidence supports), this is practically impactful.
+- **Clarity:** *Fair.* The method description is clear, but missing loss weighting details, unexplained abnormal metric values, and overstatements in the abstract hurt the overall clarity.
 
 ---
 
 ## Score and Decision
 
-**Calibration against comparable papers:**
+**Calibration anchors:**
 
-- **BiLO** (PDE inverse problems, bilevel optimization with derivative supervision): Rejected at 6,6,6,6 — strong empirical contribution, no theory, limited problem scope, no variance reported.
-- **PI-DIONs** (physics-informed inverse operator networks): Accepted (Poster) at 6,5,6 — theoretical grounding, limited experimental breadth, somewhat weak baselines.
-- **Learning a Neural Solver** (Accepted Poster, 3,8,8,6,3): A similar surrogate-enhanced paper with some very strong reviewer reactions.
-- **Pseudo PINO** (Rejected, 3,6,5,3,6,3): Overclaims, missing baselines, narrow experiments — similar pattern to this paper.
-- **TE-FNO** (Rejected, 3,5,6,6): Incremental FNO modification with modest empirical improvements.
+| Paper | Topic | Scores | Decision |
+|---|---|---|---|
+| BiLO (uIg9Vcw2CY) | PDE inverse, gradient-based, neural operator | 6,6,6,6 | Reject |
+| PI-DIONs (0FxnSZJPmh) | PDE inverse operator learning, no labels | 6,5,6 | Accept (Poster) |
+| PPI-NO (CrmUKllBKs) | Physics-informed neural operators | 3,6,5,3,6,3 | Reject |
+| MemNO (o9kqa5K3tB) | Neural operator + memory for PDEs | 8,6,8,8 | Accept (Oral) |
 
-**Assessment**: SC-FNO is substantially stronger than Pseudo PINO and TE-FNO (both rejected) in terms of the specificity and magnitude of its empirical contribution. It addresses a real and important problem, provides genuinely useful findings, and the code is public. However, it is weaker than PI-DIONs (accepted) in theoretical grounding and protocol specification, and weaker than BiLO in rigor. The identical-R²-across-parameters anomaly in Figure 2 is a genuine data concern that needs resolution. The training-time inconsistency and missing inversion protocol are substantive gaps. The method is simple—essentially Sobolev training applied to neural operators for parameter sensitivities—but applied to a well-motivated and underexplored problem.
+**Positioning:** SC-FNO's core observation (state/sensitivity dissociation in FNOs) is stronger and more original than BiLO's engineering contribution, and the breadth of experiments exceeds PI-DIONs. However, the R²>1 anomaly in Tables 3 and 4, the suspicious identical R² values in Figure 2, and the missing 82-parameter inversion all represent substantive unresolved issues that go beyond mere framing problems. The paper sits below PI-DIONs (which, despite lower novelty, does not have metric integrity issues) and well below MemNO.
 
-Given the ICLR average score of ~5.12, comparable rejected papers at ~5-6 (BiLO, PseudoPINO) and accepted posters at ~5.7-6 (PI-DIONs), I position this paper at **5.5** — borderline, on the margin of acceptance. The genuine empirical contribution and important problem identification push toward accept, but the anomalous data in Figure 2, missing inversion protocol, and overclaiming in the abstract push toward conditional accept or revise. A clean cycle addressing these issues would make this a solid poster.
+The paper has a real and interesting core contribution that is convincingly demonstrated in Tables 1 and 2. But two of its four main experimental sections (Sections 3.3 and 3.4) currently present metrics that are either uninterpretable (R²>1) or suspicious (identical values), and the headline high-dimensional claim lacks the inversion evidence needed to support it. These are fixable but are currently unresolved in the submission.
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+**Final score: 4.5 — Reject (revise and resubmit)**
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

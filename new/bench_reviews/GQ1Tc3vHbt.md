@@ -1,104 +1,115 @@
-Now I have sufficient information for calibration. Let me now write the final review.
+Now let me look at the calibration papers referenced by the Human Finder reviewer.Now I have all the information I need to write the final consolidated review. Let me verify the key disputed claims directly from the paper text before proceeding.
 
-**Summary of calibration:**
-- The Gorbunov et al. paper (0wmfzWPAFu) is the closest comparator—a concurrent work on convex (L₀,L₁)-smooth optimization that got accepted as a poster with scores 6,6,6,8,5. The paper under review is arguably stronger than Gorbunov et al.: it covers nonconvex + convex + acceleration, provides better acceleration complexity (polynomial vs exponential in L₁R), and derives principled stepsizes. 
-- The lower bounds paper (ZjOXuAfS6l) scored 8,6,6,6,5 (Spotlight) — that paper proved lower bounds which is arguably harder than upper bounds. The paper under review doesn't prove lower bounds.
-- The reject papers (UmMKbG2Ubr, O2GBkHujdP) have significantly weaker contributions.
+**Verified: Nonconvex rate misstatement** — Contributions list (line 57) and Conclusion (line 326) both write O(L₀F₀/ε + L₁F₀/ε), but Theorem 3.1 (line 191) gives K+1 ≥ 2L₀F₀/(aε²) + 3L₁F₀/(aε), i.e., O(L₀F₀/ε² + L₁F₀/ε). The first term's exponent on ε is wrong in the summary/conclusion. This is confirmed.
 
-The paper under review is stronger than Gorbunov et al. in terms of results and comprehensiveness, but the nonconvex complexity is misstated in the abstract/contributions (a real error), and it lacks numerical experiments. Overall, it aligns well with a 6-7 range at ICLR. Given the stronger results but presentation issue, I'll score around 7.
+**Verified: Convex improvement conditioned on F₀** — Paper explicitly states (line 209): "the second estimate O(L₀R²/ε + [L₁R]²) comes from a very pessimistic bound on F₀ with the exponentially large quantity exp(L₁R)·L₀R²/2." The regime-conditionality of the improvement is acknowledged.
+
+**Verified: AGMsDR 1D search** — Line 322 confirms it requires ν oracle queries per iteration and calls eliminating this "an important open question."
+
+**Verified: NGM requires hat_R and fixed K** — Theorem 4.1 (lines 221–225) confirms both requirements.
+
+**Verified: PS-GM requires known f\*** — Lines 251–253 confirm this; the paper is transparent and provides the overparameterization use-case.
+
+**Verified: No experiments** — Paper is purely theoretical throughout; no empirical section exists.
 
 ---
 
 ## Summary
-The paper studies gradient methods for $(L_0, L_1)$-smooth optimization—a generalization of Lipschitz-smooth functions motivated by neural network training. The authors derive tighter first-order characterizations of this function class (Lemma 2.2), use these to derive principled stepsize rules (including connections to clipped steps), and establish improved complexity bounds: $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + L_1 R \ln\frac{F_0}{\epsilon})$ for convex functions (Theorem 3.2), $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + [L_1 R]^2)$ for parameter-free NGM and PS-GM, and $\nu\mathcal{O}(\sqrt{L_0 R^2/\epsilon} + (L_1 R)^{2/3} \ln\frac{F_0}{\epsilon})$ for an accelerated method (AGMsDR).
+
+This paper develops a principled optimization framework for (L₀,L₁)-smooth functions. Starting from a tight upper bound on function growth via the Fenchel conjugate of φ(t) = eᵗ−t−1, the authors derive "optimal" gradient stepsizes, establish their equivalence (up to constants) with clipping-style rules, and obtain improved complexity bounds: O(L₀R²/ε + L₁R ln(F₀/ε)) for convex gradient descent, O(L₀R²/ε + [L₁R]²) for parameter-free NGM and PS-GM, and ν·O(√(L₀R²/ε) + (L₁R)^{2/3} ln(F₀/ε)) for an accelerated method (AGMsDR).
+
+---
 
 ## Strengths
 
-- **Principled derivation of stepsizes from the tight upper model.** The paper explicitly minimizes the surrogate upper bound from Lemma 2.2 to obtain stepsizes (9), then shows simplified (12) and clipped (13) variants satisfy the same per-iteration decrease (Eq. 11). This gives a clean structural reason for *why* clipping works—it approximates the surrogate-optimal stepsize—which is genuinely new insight not established in prior work.
+- **Principled stepsize derivation via conjugate analysis**: The derivation of the optimal stepsize (9) from minimizing the tight upper bound (4) via φ* is genuinely elegant. Crucially, this framework provides a theoretical explanation for *why* clipping stepsizes work—they are convenient approximations to the upper-bound minimizer—rather than treating them as empirical heuristics. The ordering η^{cl} ≤ η^{si} ≤ η^{opt} (eq. 14) concisely summarizes a relationship that had not been identified in prior work.
 
-- **Tighter first-order characterizations enabling the entire analysis.** Lemma 2.2's inequalities (3) and (4) are provably sharper than prior bounds (Zhang et al. 2020, Hübler et al. 2024), and the convex lower bound Lemma 2.4/Corollary 2.5 generalizes the classical quadratic lower bound of Nesterov (2018, Theorem 2.1.5) to the $(L_0,L_1)$ setting. The paper exploits these tighter bounds throughout.
+- **Strictly better convex GM rate in practical regimes**: Theorem 3.2 achieves O(L₀R²/ε + L₁R ln(F₀/ε)) where prior best bounds were O(L₀R²/ε + [L₁R]²). When F₀ is polynomially (not exponentially) bounded in L₁R—as in warm-start settings or well-conditioned problems like logistic regression—the logarithmic term is genuinely smaller than [L₁R]², constituting a real improvement.
 
-- **Strong convex GM result (Theorem 3.2) with logarithmic $L_1$-dependence.** The $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + L_1 R \ln\frac{F_0}{\epsilon})$ bound does not require $L$-smoothness, improving over Koloskova et al. (2023)'s $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + \sqrt{L/\epsilon} L_1 R^2)$ which required additional $L$-smooth assumption, and avoids the initial-gradient dependence of Li et al. (2023). The paper correctly acknowledges the pessimistic $F_0$ case.
+- **Acceleration without exponential dependence on L₁R**: Theorem 6.2 achieves ν·O(√(L₀R²/ε) + (L₁R)^{2/3} ln(F₀/ε)), compared to the concurrent Gorbunov et al. (2024) bound of O(1)·exp(O(L₁R))·√(L₀R²/ε). Eliminating exponential dependence on L₁R is a substantive theoretical advance that can be significant when L₁R > 1.
 
-- **Modular AGMsDR theorem (Theorem 6.1).** The generic acceleration framework—which only requires any update rule with strictly positive decrease—cleanly separates the acceleration scaffold from the per-step progress mechanism. This modularity may be independently useful. The resulting $\mathcal{O}(\sqrt{L_0 R^2/\epsilon} + (L_1 R)^{2/3}\ln(F_0/\epsilon))$ complexity replaces the exponential $\exp(\mathcal{O}(1)L_1 R)\sqrt{L_0 R^2/\epsilon}$ bound in Gorbunov et al. (2024) with a polynomial in $L_1 R$.
+- **Tighter structural inequalities for the function class**: Lemma 2.2 (conditions 3–4) and Lemma 2.4/Corollary 2.5 are strictly tighter than prior characterizations (e.g., Zhang et al. 2020, Hübler et al. 2024). These are foundational results with value beyond the specific methods analyzed, as future work can leverage them directly.
 
-- **Bounds free of exponential dependence on $L_0, L_1$ and free of initial gradient norm.** All complexity results avoid $\|\nabla f(x_0)\|$ and exponential dependence on $L_0, L_1$ (unlike Li et al. 2023), with the important caveat that $F_0$ can be exponentially large in the worst case (which the paper acknowledges).
+- **Unified framework across four method classes**: The same analytical toolbox covers plain GM, NGM, PS-GM, and AGMsDR, enabling fair comparison and showing that parameter-free methods (NGM, PS-GM) automatically adapt to the best (L₀,L₁) parameterization—a practically valuable observation.
+
+---
 
 ## Weaknesses
 
 ### Fatal
-None.
+*(None — the paper's core mathematical content is sound; see Major #1 for a serious presentation error.)*
 
 ### Major
 
-- **Nonconvex complexity is misstated in the abstract, contribution bullets (Section 1), and conclusion.** The abstract and Section 1 claim the nonconvex complexity is $\mathcal{O}(\frac{L_0 F_0}{\epsilon} + \frac{L_1 F_0}{\epsilon})$, but Theorem 3.1 states the bound requires $K+1 \geq \frac{2L_0 F_0}{a\epsilon^2} + \frac{3L_1 F_0}{a\epsilon}$—i.e., the $L_0$ term has $\epsilon^2$ in the denominator, not $\epsilon$. This is materially different in complexity order. The conclusion repeats the incorrect expression. A paper should not misstate its own headline result in multiple prominent locations. (This is a presentation error that does not appear to affect the actual theorem, which is correct, but it corrupts the contribution claims as written.)
+- **Nonconvex rate is misstated in the contributions list and conclusion**: The paper's Contributions bullet (Section 1) and Conclusion (Section 7) both claim the nonconvex complexity is O(L₀F₀/ε + L₁F₀/ε), but Theorem 3.1 correctly gives O(L₀F₀/ε² + L₁F₀/ε). The first term's exponent on ε is wrong by an order of magnitude in both summary locations. This is not a cosmetic typo—it misstates the scaling of the dominant term and would mislead readers about the paper's primary nonconvex contribution. Theorem 3.1 itself is correct and matches Koloskova et al. (2023) as claimed; only the English summaries are wrong.
 
-- **The headline convex improvement is conditional on $F_0$ being reasonably bounded.** As the paper itself acknowledges in the paragraph after Theorem 3.2, $F_0$ can be as large as $\exp(L_1 R)\frac{L_0 R^2}{2}$, in which case $L_1 R \ln(F_0/\epsilon)$ becomes $\mathcal{O}([L_1 R]^2)$ — the same as the parameter-free methods. This means the claimed "significant improvement" over prior work depends on an extra favorable condition ($F_0$ bounded), which is not an assumption but a property of specific problem instances. The abstract and contribution bullets present the log dependence as the general result without adequate foregrounding of this conditionality.
+- **Convex improvement is regime-conditional but framed too broadly**: The abstract claims the approach "significantly improves the best-known complexity bounds for convex objectives" without qualification. However, the paper itself acknowledges (Section 3.2) that F₀ can be as large as exp(L₁R)·L₀R²/2, at which point ln(F₀/ε) ≥ L₁R + ln(L₀R²/2ε) and the new bound O(L₁R ln(F₀/ε)) is no better than—or worse than—O([L₁R]²). The discussion correctly identifies "hot-start" and "well-behaved functions" as favorable regimes, but this nuance does not appear in the abstract's headline claim. The improvement is real but conditional, and the paper should state this upfront.
+
+- **No empirical validation**: The paper proposes concrete stepsize rules (9), (12), (13) with explicit constants, makes precise claims about the relative performance of four methods, and argues that the ν factor in AGMsDR is practically "negligible" for many problems. Yet it provides no numerical experiments to support any of these claims. For a paper with strong practical motivation (deep learning, overparameterized models), the absence of even a simple synthetic demonstration—e.g., on f(x) = (1/p)||x||^p or logistic regression—makes it impossible to assess whether theoretical rate improvements survive constant factors.
 
 ### Minor
 
-- **The $\nu$ factor in AGMsDR renders the acceleration comparison imprecise.** The comparison in Section 6 against Gorbunov et al. (2024) and Li et al. (2023) is done at the iteration level, but AGMsDR requires solving a 1D subproblem per step (costing $\nu$ oracle queries), while comparison methods do not. Since $\nu$ is left abstract, the oracle complexity comparison is not apples-to-apples. The paper acknowledges the line-search elimination as an open problem, but the comparison language should be qualified by the oracle model difference.
+- **AGMsDR requires an uncharacterized 1D search oracle (ν factor)**: Algorithm 1, line 4, requires minimizing f over a line segment at each iteration. The paper introduces ν as the oracle count for this subproblem but provides no bound on ν for any specific function class. If ν depends polynomially on problem parameters, the advantage over simpler methods could be partially erased. The paper honestly identifies this as an open question but does not discuss even tractable special cases (e.g., quadratic objectives) where ν could be characterized concretely.
 
-- **No experimental validation.** The paper is entirely theoretical. Given the ML motivation and the importance of practical method selection (optimal vs. simplified vs. clipped stepsizes), even a few numerical experiments on canonical $(L_0,L_1)$-smooth functions (logistic regression, $p$-norm objectives from Example A.1) would clarify whether the theoretical improvements materialize in practice and whether the $\nu$ overhead of AGMsDR is negligible.
+- **NGM's "parameter-free" framing overstates adaptivity**: Theorem 4.1 requires (i) an estimate R̂ of the initial distance to a solution and (ii) the total number of iterations K fixed in advance. The complexity degrades by ρ² for a poor estimate of R̂. While the paper does acknowledge this in the theorem discussion, the earlier framing of NGM as a method that "does not require the knowledge of (L₀,L₁)" may lead readers to expect broader adaptivity than actually delivered.
 
-- **NGM and PS-GM "adaptivity" claim is overstated.** The paper claims these methods "automatically adapt to the best possible $(L_0, L_1)$" (end of Section 4, end of Section 5, Conclusion), but this is a post-hoc analytic statement: the *bound* can be minimized over valid $(L_0, L_1)$ pairs, but the algorithm itself does not estimate or exploit this pair online. This is standard in the literature, but the phrasing overpromises algorithmic adaptivity.
+- **PS-GM requires known f\***: Section 5 presents PS-GM as a method that avoids knowing (L₀,L₁), which is true, but requires exact knowledge of f\*. This is a strong assumption in general. The paper offers the overparameterized ML setting (f\* = 0) as a use case, which is valid but specialized. The claim that PS-GM is "nearly as efficient as methods that rely on explicit knowledge of (L₀,L₁)" should be accompanied by a clearer comparison of what each method assumes.
 
 ### Trivial
 
-- The paper calls stepsize (9) "optimal" without qualification; it is optimal for the surrogate upper model induced by (4), not globally optimal. This is a minor writing issue.
+- **Notation inconsistency in Section 3**: The paper uses η_k\*, η_k^{opt}, and "optimal" interchangeably. Standardizing notation would improve readability.
+
+---
 
 ## Nice-to-Haves
 
-- Provide lower bounds (even partial) for the $L_1 R \ln(F_0/\epsilon)$ and $(L_1 R)^{2/3} \ln(F_0/\epsilon)$ terms to establish whether these rates are optimal. The conclusion acknowledges this as an open question; even brief progress would strengthen significance claims.
+- **Regime analysis for convex improvement**: Provide a concrete proposition or worked example identifying sufficient conditions on F₀ (e.g., F₀ ≤ poly(L₀, L₁, R)) under which O(L₁R ln(F₀/ε)) is strictly better than O([L₁R]²) by a meaningful factor.
+- **Lower bounds or optimality discussion**: The paper makes no claim about whether its rates are tight for the (L₀,L₁) class. Even a conjecture or comparison to information-theoretic lower bounds for standard smooth optimization would help contextualize the contributions.
+- **Extension to strongly convex setting**: A natural follow-up would be linear convergence rates for strongly convex (L₀,L₁)-smooth functions; mentioning this as an open direction would round out the scope.
+- **Stochastic extension**: Since the original motivation is deep learning (inherently stochastic), noting whether the stepsize derivation extends to stochastic gradient methods would strengthen the paper's practical relevance claim.
 
-- Extend NGM and PS-GM convergence analysis to the nonconvex case, or explain why this is fundamentally harder. The nonconvex setting is a primary ML motivation, and these parameter-free methods are practically important.
-
-- Discuss or explore adaptive estimation of $\hat{R}$ for NGM (e.g., via doubling tricks), since the sensitivity to $\hat{R}$ is a practical limitation acknowledged in the paper.
-
-- Add a complexity summary table comparing all methods (GM, NGM, PS-GM, AGMsDR) against prior work under unified assumptions and oracle models.
-
-- Consider an extension to stochastic gradients, given the ML motivation (deep network training under $(L_0,L_1)$-smoothness is fundamentally stochastic).
+---
 
 ## Removed Points
 
 *These points are flagged to be removed; treat them with caution.*
 
-**Removed — misleading about "exponential dependency"**: One reviewer flags that the "no exponential dependency" claim is undermined because $F_0$ can be exponentially large. However, the paper *explicitly acknowledges* this in the discussion after Theorem 3.2: "the second estimate ... comes from a very pessimistic bound on $F_0$ with the exponentially large quantity $\exp(L_1 R)\frac{L_0 R^2}{2}$." The complaint is that the abstract doesn't foreground this (subsumed under the major weakness above), but characterizing the result as having "exponential dependency on $L_0$ or $L_1$" misreads the paper.
+- **Harsh Critic: "Proof details are in the appendix and therefore unverifiable"**: This is standard practice for theory papers submitted to ICLR; reviewers have access to the appendix. The harsh critic repeatedly penalizes the paper for deferring proofs, but this is normal and not a flaw. The main text provides sufficient sketch-level justification for the key claims. *Removed as a reproducibility/nitpick concern.*
 
-**Removed — "twice differentiability is too restrictive"**: The paper states that its Definition 2.1 is equivalent to the $\alpha$-symmetric class with $\alpha=1$ for $C^2$ functions (Section 2), and that all $\alpha$-symmetric $C^2$ functions are also $(L_0,L_1)$-smooth. The paper's scope is explicitly twice-differentiable functions, and this is consistent with the original Zhang et al. (2019) definition. Whether non-$C^2$ examples exist is a separate question not central to the paper's contributions.
+- **Harsh Critic: "PS-GM's dependence on known f\* is harder to justify than knowing a smoothness surrogate"**: This is a reasonable point but the paper is fully transparent about this assumption and gives a concrete use case (overparameterized models). The criticism is valid as a minor point but has been promoted to Minor Weakness in the main review rather than Major as the Harsh Critic suggests. *Kept but weakened.*
 
-**Removed — "no stochastic extension limits ML relevance"**: The paper's scope is deterministic optimization, which is stated upfront. Requesting stochastic extensions is scope creep for this submission, though acknowledged above as a nice-to-have.
+- **Neutral/Spark: "Twice differentiability is more restrictive than Chen et al. (2023)"**: The paper explicitly addresses this (Section 2): "For twice differentiable functions, this definition is equivalent to that of α-symmetric functions with α=1 proposed in Chen et al. (2023). Since any α-symmetric twice differentiable function is also (L₀,L₁)-smooth with a different choice of parameters, all our subsequent results hold for α-symmetric functions as well." The paper explicitly bounds its scope to twice-differentiable functions, which covers all standard examples (logistic regression, p-norm objectives). The criticism that this "limits scope" ignores the paper's own resolution. *Removed as a strawman.*
 
-**Removed — "significance of NGM/PS-GM improvement over prior work"**: The reviewer from the competing paper (Gorbunov et al.) criticized that "only the non-dominant $O(\sqrt{1/\varepsilon})$ term" is improved. This critique applies to Gorbunov et al.; for the present paper, the improvement of NGM/PS-GM is against Koloskova et al. (2023) and Takezawa et al. (2024), which required extra $L$-smoothness assumptions. Removing a separate assumption is a genuine contribution.
+- **Harsh Critic: "Nonconvex results are not novel in rate"**: The paper explicitly acknowledges this matches Koloskova et al. (2023). The claimed contribution for the nonconvex case is the *new derivation pathway* (from principled stepsizes) and the elimination of dependence on ∥∇f(x₀)∥, not a rate improvement. *Removed as misreading the paper's claim.*
+
+---
 
 ## Novel Insights
 
-The most genuinely novel conceptual contribution is the formal identification of clipped stepsizes as controlled approximations to the surrogate-optimal step derived from the tight upper model (4). This unifies several previously disparate stepsize heuristics (clipping, normalization, Polyak) under a single derivation principle, and the modular AGMsDR framework (Theorem 6.1) — which reduces accelerated convergence analysis to bounding $M_k = \|\nabla f(y_k)\|^2 / (2[f(y_k)-f(x_{k+1})])$ — is an independently interesting template that could extend beyond $(L_0, L_1)$-smoothness. The convex lower bound (Lemma 2.4) as a generalization of Nesterov's classical Theorem 2.1.5 is also a clean structural result that fills a gap in the theory.
+The most genuinely novel insight in this paper is the conjugate-function derivation of gradient stepsizes for (L₀,L₁)-smooth optimization. By identifying that the tighter upper bound (4) has a term depending only on ∥y−x∥, the 1D minimization over the upper bound yields a stepsize expressible via φ\*—and this stepsize is provably equivalent (up to constants) to the clipping rule used in practice. This is not merely a curiosity: it places clipping-style methods within the standard model-based optimization paradigm and shows that the "right" clipping constants (1/(2L₀), 1/(3L₁‖∇f‖)) can be derived from first principles rather than tuned empirically. The subsequent acceleration improvement (polynomial vs. exponential in L₁R) flows naturally from this tighter analysis.
 
-## Suggestions
+---
 
-1. **Fix the nonconvex complexity in the abstract, Section 1 contribution bullet, and Section 7 conclusion**: replace $\mathcal{O}(\frac{L_0 F_0}{\epsilon} + \frac{L_1 F_0}{\epsilon})$ with $\mathcal{O}(\frac{L_0 F_0}{\epsilon^2} + \frac{L_1 F_0}{\epsilon})$ throughout.
+## Axis Evaluation
 
-2. **Qualify the convex bound more clearly in the abstract and contributions**: state that the improvement to $O(L_1 R \ln(F_0/\epsilon))$ over $O([L_1 R]^2)$ holds when $F_0$ is reasonably bounded, and give a representative condition (e.g., $F_0 \leq \text{poly}(L_0, L_1, R)$).
+- **Novelty**: Moderate-to-high. The conjugate-based stepsize derivation and the improved convex and acceleration rates are genuine contributions; the nonconvex rate is a recovery, not an advance.
+- **Technical soundness**: High for the presented theorems; the proofs are in the appendix which is standard. The identified misstatement is in the English summaries, not the formal statements.
+- **Empirical support**: None—purely theoretical. This is a weakness given practical motivation claims.
+- **Significance**: High for the optimization theory community; the acceleration result (eliminating exponential L₁R dependence) is particularly significant.
+- **Clarity**: Good overall; the stepsize derivation is unusually transparent. Marred by the nonconvex rate misstatement in two key locations.
 
-3. **Add oracle-model qualification to the AGMsDR comparison**: the stated complexity is $\nu$-oracle queries vs. 1-oracle per iteration for baseline methods; comparisons should make this explicit.
-
-4. **Add at least one or two numerical experiments** on canonical $(L_0,L_1)$-smooth functions comparing the three stepsize variants and the four methods; this directly addresses whether the theoretical gains matter in practice.
+---
 
 ## Score and Decision
 
-**Calibration:**
-- Gorbunov et al. (0wmfzWPAFu) — concurrent work on convex $(L_0,L_1)$-smooth optimization, accepted as poster, scores 6,6,6,8,5 (avg ≈ 6.2). The paper under review covers more ground (nonconvex + convex + acceleration) and achieves stronger results on acceleration and the convex GM bound, but has the nonconvex complexity error and lacks experiments. 
-- Lower-bounds paper (ZjOXuAfS6l) — accepted as poster/spotlight, scores 8,6,6,6,5 (avg ≈ 6.2). That paper proved lower bounds (arguably harder), was also theory-only.
-- Reject papers: AdaGrad convergence (UmMKbG2Ubr, scores 5,5,6,6) and I-NSGD (O2GBkHujdP, scores 3,3,5,6) are clearly weaker in contribution.
+**Calibration**:
+- *Gorbunov et al. (2024)* (0wmfzWPAFu.md), the most directly comparable concurrent paper, received scores 6, 6, 6, 8, 5 → accepted as poster. That paper covers strongly convex, stochastic, and adaptive extensions not present here but has an exponential-in-L₁R acceleration bound and a slightly weaker convex rate.
+- *MGDA under Generalized Smoothness* (wgDB1QuxIA.md) received 5, 5, 6, 8 → accepted as poster, with a more modest (application-specific) theoretical contribution.
+- *Independently-Normalized SGD* (O2GBkHujdP.md): 3, 3, 5, 6 → rejected; weaker contributions and rate improvements.
 
-The paper under review is stronger than Gorbunov et al. in breadth and the acceleration result, but shares the weakness of being purely theoretical and having a presentation error in the headline nonconvex rate. The error is correctable but is real: the abstract states a complexity strictly stronger than what Theorem 3.1 proves. The convex bound is genuinely improved. The AGMsDR result is notably better than prior acceleration results (polynomial vs. exponential in $L_1 R$). Considering these factors and the calibration anchors, a score of **7** is appropriate — above the comparable accepted papers due to stronger technical content, but held back by the presentation error and absence of experiments.
+The paper under review surpasses Gorbunov et al. on the acceleration result (eliminating exponential dependence on L₁R) and has the cleaner principled derivation, but falls short in breadth (no stochastic/strongly-convex extensions, no experiments). The nonconvex rate misstatement in the contributions and conclusion is a real error that needs correction but does not invalidate the theorems. Weighing these factors against the Gorbunov et al. anchor at ~6.2, and accounting for the misstatement and lack of experiments, I place this paper slightly below—at **6.0**.
 
-**Novelty:** High — principled stepsize derivation, improved convex rates, superior acceleration  
-**Technical soundness:** High for the theorems proved; moderate for the presentation accuracy  
-**Empirical support:** None — purely theoretical  
-**Significance:** High in the (L₀,L₁)-smooth theory literature  
-**Clarity:** Good overall, with the notable exception of the nonconvex complexity mismatch
+**Score: 6.0** — Accept (Poster), with a mandatory correction of the nonconvex complexity statement in the contributions list (Section 1) and conclusion (Section 7) from O(L₀F₀/ε + L₁F₀/ε) to O(L₀F₀/ε² + L₁F₀/ε).
 
-MY FINAL SCORE: <pineapple>7.0</pineapple>
+MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

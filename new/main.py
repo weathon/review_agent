@@ -17,8 +17,9 @@ import dotenv
 dotenv.load_dotenv()
 import os
 os.environ["OPENAI_DEFAULT_MODEL"] = "z-ai/glm-5.1"
-HARSH_MODEL = "gpt-5.4"
-MERGER_MODEL = "claude_sdk:claude-sonnet-4.6"
+HARSH_MODEL = "gpt-5.4" 
+MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
+# MERGER_MODEL = "claude-sonnet-4.6"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_export_api_key
 
@@ -40,7 +41,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
-CONCURRENCY = 2
+CONCURRENCY = 5
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -130,7 +131,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
     paper_path_abs = os.path.abspath(paper_path)
     with open(paper_path, "r") as f:
         paper_content = f.read()
-    paper_content = paper_content.split("REFERENCES")[0]
+    paper_content = paper_content
 
     review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
     
