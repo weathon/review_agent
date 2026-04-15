@@ -64,7 +64,7 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
 
 @function_tool
 def read_file_full(abs_path: str) -> str:
-    """Read an entire file. Only use this inside the Summarizer agent."""
+    """Read an entire file."""
     resolved = os.path.abspath(abs_path)
     print(f"  [read_file_full] Request to read full file '{resolved}'")
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS + ["/home/wg25r/review_agent/iclr2025/papers/"]):

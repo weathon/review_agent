@@ -1,123 +1,137 @@
-Now I have enough information to produce the final consolidated review.
+Now let me search for calibration papers to anchor my score.Now I have enough information. Let me compose the final review.
 
 ---
 
 ## Summary
 
-This paper proposes a three-stage deep learning pipeline for automated hip implant loosening analysis from X-ray images: (1) a fitness check to flag images unsuitable for diagnosis, (2) an encoder-decoder network that segments the implant into 10 clinically defined Charnley and Gruen zones, and (3) a transfer-initialized classifier that assigns each zone a 3-class loosening status (control / loose / not visible). The authors extend the existing Rahman et al. 206-image public dataset with expert zone-level masks and per-zone loosening annotations, report 0.95 Dice for zone segmentation and 98% overall loosening accuracy, and validate on an external blind set of 38 clinical images.
+This paper proposes a three-stage automated pipeline for hip implant health assessment from X-rays: (1) image fitness screening, (2) segmentation of 3 Charnley + 7 Gruen zones, and (3) zone-wise loosening classification. The key dataset contribution is zone-level segmentation masks and per-zone loosening labels added to the existing Rahman et al. (2022) dataset. The paper reports 94% fitness screening accuracy, 0.95 Dice for segmentation, and 98% loosening detection accuracy, with an external blind test yielding 0.92 Dice and 0.93 accuracy.
+
+---
+
+## Claims and Support
+
+**Claim 1 — Zone-wise annotation contribution:**
+The paper describes creating polygonal zone annotations, landmark points, line annotations, and an Excel sheet with per-zone loosening labels for the existing 206-image dataset. This contribution is plausible and the Figure 3 annotation example supports it. However, the annotation protocol is thin: a single orthopedic surgeon is mentioned with no mention of inter-rater agreement, adjudication procedure, or per-zone class-distribution statistics (especially the critical "not visible" class). *Partially supported.*
+
+**Claim 2 — Stage 1 achieves 94% accuracy for Fit/Not Fit screening:**
+The dataset contains 19 "not fit" images vs 187 "fit" images. A trivial always-fit classifier would score ~90.7%. The paper reports only accuracy — no confusion matrix, no sensitivity/specificity, and no class-balanced metric. The 94% figure is barely better than the trivial baseline and does not establish the screening model is clinically useful. *Unsupported as stated.*
+
+**Claim 3 — Stage 2 segments zones with ~0.95 Dice and outperforms prior work:**
+Per-zone Dice scores in Table 1 and average results on the blind test (0.92) are directionally consistent. The result is plausible. However, the evaluation lacks standard baselines on the same dataset (U-Net, nnUNet), variance reporting from 5-fold CV, or clarification of how folds relate to the 70:30 split. The one prior method comparison (Alzaid et al. 0.8 Dice) uses different data and different annotations, making it a loose reference, not a controlled comparison. *Partially supported.*
+
+**Claim 4 — CE+Dice loss improves segmentation from 87% to 95%:**
+Stated in running text without an ablation table, without per-zone breakdown, and with an ambiguous metric ("segmentation accuracy" vs "Dice score" used interchangeably). *Unsupported as stated.*
+
+**Claim 5 — 98% overall loosening detection accuracy:**
+This is the paper's headline claim. The evaluation rests on a 57-image holdout. The stage 3 description (Section 3.2.3 and Figure 5) explicitly says the network "takes three inputs: zonal segmentation information from stage 2, the input image, and zonal loosening information from the created Excel" — yet the Excel file is simultaneously labelled "Annotated GroundTruth Excel File" in Figure 5. The paper never resolves this: if the labels are runtime inputs, the result is trivially inflated; if they are merely training targets, the model description is severely misleading. The aggregation from per-zone predictions to image-level confusion matrix (Table 2) is also unspecified. *Unsupported as stated given critical ambiguity.*
+
+**Claim 6 — Robustness demonstrated by blind testing:**
+External blind testing (38 images, 0.93 accuracy) is a genuine positive. However, the label-generation process for the blind set is not described, class balance is unreported, and manual preprocessing (image cropping) limits deployment realism. *Partially supported — strongest part of the evaluation.*
+
+**Claim 7 — Proposed method outperforms prior methods "on the same dataset" (Table 3):**
+Table 3 is labelled "comparison of loosening with other reported methods on the same dataset." Inspection shows the Alirez et al. (2019) entry corresponds to a *private* 236-image dataset per the literature review, not the Rahman et al. dataset. Additionally, the table attributes "Xception" to Alirez et al., but the literature review states Alirez used DenseNet201 while Lau et al. (Lawrence et al. 2022) used Xception — indicating an internal citation mixup. No method in the table was run on identical preprocessing, splits, or annotations. *Unsupported — the comparison is not controlled or even consistent.*
+
+**Claim 8 — Grad-CAM shows the network uses the "right features":**
+The paper states "blue reflects the most significant features, yellow denotes moderate significance, and red represents the least significant features" — the opposite of the conventional heatmap color convention. Grad-CAM is qualitative only; no localization metric is provided. *Unsupported as a mechanistic validation; interpretable at best as illustration.*
 
 ---
 
 ## Strengths
 
-- **Zone-level annotation contribution**: The paper creates zone-wise segmentation masks and per-zone loosening labels (an Excel file with 3-class status per zone per image) on top of a dataset that previously contained only binary control/loose labels. This is a genuinely novel and reusable resource. No prior open-source dataset of this kind exists.
+- **Zone-level annotation of an existing dataset**: Adding polygonal masks for 10 anatomical zones (Gruen + Charnley) plus per-zone loosening labels to a public dataset addresses a documented gap. To the authors' knowledge, no prior open-source dataset combined zonal segmentation and zone-wise loosening information for hip THR. This is a concrete and nontrivial contribution if properly released.
 
-- **Task formulation beyond binary classification**: Predicting loosening per Gruen/Charnley zone, rather than a single image-level label, is clinically more informative — it distinguishes stem-level (Gruen) from cup-level (Charnley) involvement and can directly guide revision planning. This framing is a concrete advancement over the cited image-level classifiers.
+- **External blind test set**: Testing on 38 anonymized clinical images from an independent orthopedic surgeon (not used in training) is a stronger evaluation step than what most papers in this space provide. The 0.92 Dice and 0.93 loosening accuracy on unseen data are meaningful, even if imperfect.
 
-- **Meaningful external blind test**: The evaluation on 38 unseen clinical images from an orthopedic surgeon, none used in training, is a genuine positive. Dice 0.92 and accuracy 0.93 on a new distribution demonstrates some generalizability. This is notably better than purely in-domain reporting, which is common in small-dataset medical imaging papers.
-
-- **Concrete advantage over the only directly comparable segmentation method**: Alzaid et al. (2024) reported 0.8 Dice for Gruen-only zone segmentation; the proposed method reports 0.94–0.96 Dice for all 10 zones (a harder task). This is the one technically fair and favorable comparison in the paper.
+- **Clinically motivated zonal granularity**: Shifting from binary loose/control classification to per-zone analysis is a genuine improvement in actionability for surgical planning, and the paper makes this motivation concrete by linking to established Gruen/Charnley clinical protocols.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None that fully invalidates the paper.*
+
+*No fatal/paper-invalidating issues strictly per policy, but the combination of issues below makes the central claim unverifiable.*
 
 ### Major
 
-- **Evaluation protocol inconsistency undermines all headline numbers.** Section 4 simultaneously states "we used 130 images for training and 57 images for testing" (a fixed 70:30 split) and "we have performed 5-fold cross-validation and the reported results are the average values." These are mutually inconsistent. The confusion matrix in Table 2 has exactly 57 cells (23+1+0+33), which matches the fixed split, not a fold average. If 5-fold CV were actually performed, the confusion matrix would need to be based on the full 187 samples, not 57. This contradiction means the reader cannot determine which protocol produced which numbers, and the claim of reporting "average values" cannot be trusted. This is the most serious issue in the paper because it affects every headline metric.
+- **Stage 3 label-leakage ambiguity:** Section 3.2.3 and Figure 5 describe the Excel ground-truth loosening labels as a *model input*, not merely as training supervision. The text reads: "the proposed network is designed to take three inputs: zonal segmentation information from stage 2, the input image, and zonal loosening information from the created Excel." The Figure labels this file "Annotated GroundTruth Excel File." This is either a critical implementation error (if labels are actually input at inference) or a severe writing failure. Either way, it makes the 98% result untrustworthy as written. **This is the central weakness of the paper** and must be resolved before the headline claim can be accepted.
 
-- **Stage 1 fitness classification is inadequately evaluated.** Only 19 of 206 images are "not fit." Without any augmentation accounting, a classifier predicting "fit" for everything achieves ~90.8% accuracy on this dataset — the paper's 94% figure provides almost no information. No per-class breakdown, sensitivity, or specificity is reported. Since failing to detect an unfit image is the highest-risk error (it passes a bad image to downstream stages), recall for the not-fit class is the clinically critical metric, and it is entirely absent.
+- **Table 3 comparison is neither controlled nor internally consistent:** The table claims to compare "on the same dataset" but includes Alirez et al. (2019), which the paper's own literature review describes as using a *private* 236-image dataset. Additionally, the table attributes "Xception" to Alirez et al., while the literature review attributes DenseNet201 to Alirez and Xception to Lau et al. — a within-paper citation error. No method in the table was re-evaluated under the proposed method's preprocessing, split, or annotation scheme. The "superiority" claim is structurally invalid.
 
-- **Table 3's headline comparison is partially invalid.** The paper states it "compares performance of our proposed method with other methods reported in the literature on **the same dataset**." However, Xception (Alirez et al., 2019) and DenseNet (Lawrence et al., 2022) were evaluated on different private datasets — Alirez on 236 images from 15,277 patients; Lawrence on their own data. Only Rahman et al.'s own results (DenseNet201 and Random Forest) are on the same dataset. Claiming superiority over "other methods on the same dataset" while including out-of-distribution baselines in that table is misleading. Furthermore, even the same-dataset comparisons (Rahman et al. methods) involve different supervision regimes: the proposed method uses richer zone-level annotations that the baselines did not have access to, making the comparison a different-supervision result rather than a head-to-head algorithm comparison.
+- **Stage 1 evaluated only by accuracy under severe class imbalance:** 19 not-fit vs 187 fit images makes accuracy nearly uninformative (trivial baseline: ~90.7%). The paper reports no confusion matrix, no sensitivity/specificity for the not-fit class, and no class-balanced metric. For a clinical screening stage where false negatives are consequential, this evaluation provides essentially no evidence of utility.
 
-- **Stage 3 inference pipeline is not clearly specified.** Figure 5 and Section 3.2.3 list the "Annotated GroundTruth Excel File" as one of the three inputs to Stage 3. If this ground-truth annotation is required at inference time, the system cannot operate on new images without expert input — eliminating the claim of automation. If the Excel file is only a training-time label source (which is the sensible interpretation), the paper never explicitly states that Stage 3 operates purely on predicted Stage 2 segmentations at inference. This ambiguity makes the 98% loosening accuracy difficult to interpret.
+- **Image-level aggregation from zone-level predictions is unspecified:** The paper says an image is classified as loose if "any zone is radiolucent," but never explains how per-zone predictions (3-class: control/loose/not-visible) are aggregated into the 2-class confusion matrix in Table 2. How are "not visible" zones handled? Are ground-truth or predicted masks used to crop inputs? This gap makes Table 2 uninterpretable.
 
 ### Minor
 
-- **Confusion matrix labels are inverted.** Table 2 labels "Control" as True Positive and "Loose" as True Negative. In this task, loosening is the condition of interest (the positive class). The actual counts may still support the headline accuracy, but mislabeled confusion matrices undermine confidence in derived precision/recall calculations and raise questions about whether all secondary metrics were computed correctly.
+- **No standard segmentation baseline:** The segmentation model is compared only loosely against Alzaid et al. on different data. No established baseline (U-Net, nnU-Net, or similar) is evaluated on the same annotations, making it impossible to determine whether the architecture or the loss design is responsible for performance.
 
-- **No segmentation baseline comparison.** The segmentation architecture is a standard encoder-decoder; the paper provides no comparison against U-Net or any other established architecture on the same data. It is impossible to determine whether the strong Dice scores reflect architectural merit or merely the constrained geometric nature of the zones plus annotation quality.
+- **Loss ablation is stated, not shown:** The claim that combining CE+Dice improves mean Dice from 87% to 95% is stated in one sentence of running text. No ablation table is provided, and the metric name switches between "segmentation accuracy" and "Dice score" within the same paragraph.
 
-- **Exponential Logarithmic Loss (Stage 3) is underspecified.** Equation 5 only defines the total loss as the sum of two named sub-components, but never provides the actual exponential or logarithmic transformations for either term. This is insufficient for reproducibility and is not cited as a prior formulation.
+- **Annotation details are sparse:** A single orthopedic surgeon performed all annotations. No inter-rater agreement, adjudication protocol, or per-zone class-distribution statistics are reported. Given that loosening assessment is inherently subjective and the labels drive all three stages, this is a meaningful gap.
 
-- **Single annotator with no inter-rater agreement.** All annotations were created by one orthopedic surgeon. For a task as perceptually subtle as zone-boundary delineation and radiolucency classification, without any inter-rater reliability measurement, the annotations cannot be treated as a gold standard.
+- **Leaky ReLU as final segmentation activation:** The paper uses leaky ReLU rather than softmax in the 11-class output layer. While not necessarily incorrect (argmax can still be taken), this is non-standard for multi-class segmentation and is not justified.
 
-- **GradCAM color convention is inverted from standard.** The paper describes "blue reflects the most significant features… red represents the least significant features," which is opposite to standard GradCAM convention (red = highest activation). If the figures actually follow standard convention (which the figure captions in the alt-text appear to suggest), the text description is wrong, casting doubt on interpretability claims.
+- **Confusion matrix labeling convention:** Table 2 labels (Control, Control) as "True Positive" and (Loose, Loose) as "True Negative," reversing the standard convention where the positive class is "Loose." This adds unnecessary confusion around the key result.
 
 ### Trivial
 
-- **Stage 1 uses a different split (80:20) from Stages 2/3 (70:30)** without justification beyond "due to the limited number of samples." While understandable, this creates three incompatible evaluation protocols within one paper (80:20, 70:30, and the claimed but unverified 5-fold CV).
-
-- **The "Conv1d" labeling in Figure 4** for a 2D image segmentation network is clearly a diagram labeling error (the text correctly describes 2D convolutions), not a methodological problem.
+- The blind test section does not specify whether Stage 1 was applied to the 38 external images or bypassed.
 
 ---
 
 ## Nice-to-Haves
 
-- A second annotator's labels on a random subset (e.g., 30 images) with Cohen's kappa for both zone boundaries and loosening status would substantially strengthen the dataset contribution.
-- Reporting class distributions for the 3-class loosening task (how many zones are loose vs. control vs. not visible) is essential context for interpreting the per-zone metrics.
-- Error propagation analysis: what happens to Stage 3 accuracy when Stage 2 produces a Dice score of, say, 0.80 instead of 0.95? Understanding this sensitivity would be important for deployment.
-- An end-to-end comparison (skip Stage 2, directly classify zones from the raw image) would validate that the staged design is necessary.
+- A formal inter-observer agreement study (Cohen's kappa) would strengthen the dataset contribution and establish the reliability ceiling for automated loosening detection.
+- An ablation isolating the contribution of zone segmentation (Stage 2) versus an image-only baseline for Stage 3 would directly support the paper's premise that zonal analysis improves loosening detection over prior image-level classifiers.
+- Subgroup analysis of the blind test by hip side and imaging configuration would clarify where generalization succeeds or degrades.
+- Error propagation analysis from Stage 2 segmentation errors into Stage 3 classification would quantify the risk of cascaded failures.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed — treat them with caution.*
 
-- **"Not yet released" / availability concerns about any cited work**: All reviewers accepted existing citations as valid; none questioned the existence of Rahman et al. dataset or other references.
-
-- **Requesting confidence intervals for 5-fold CV**: Given the dataset is only 57 test images, reporting standard deviations across folds would be desirable but demanding CIs is not standard in this field for such small sets. Retained as a minor concern only because the 5-fold claim itself is inconsistent (not because CIs are lacking per se).
-
-- **"Conv1d is an error for 2D convolution"**: The neutral reviewer flagged this as a potential error. The figure legend says "Conv1d" but the text clearly describes 2D convolutional blocks. This is a diagram labeling inconsistency, not a methodological error; removed from substantive weaknesses.
-
-- **Requesting ethics/IRB statement**: The harsh critic/Spark reviewer flagged the absence of an IRB statement. This is a legitimate concern for clinical data but is a presentation/compliance matter, not a technical or scientific weakness that affects the paper's contributions. Removed from substantive weaknesses.
-
-- **Comparison asymmetry concern (unfair comparison disfavoring baselines)**: One reviewer noted the proposed method benefits from richer supervision. Per the hard rules, if asymmetry favors the baseline (as it would when the prior methods had less supervision), this would be removed. However, here the asymmetry favors the *proposed* method (richer supervision → higher accuracy), so the comparison criticism is retained.
-
-- **"Robustness and repeatability" terminology**: Spark reviewer suggested these terms are overused. The concern about "repeatability" being misused is valid as a writing note but too minor to be a substantive weakness.
+- **Demand for confidence intervals / statistical significance tests across 5-fold CV:** While desirable, single-run or average reporting without variance is common in applied medical imaging at this scale. Removed as a primary weakness; moved to nice-to-have.
+- **Reproducibility concern: no code or hyperparameter logs shared:** Removed per hard rule (undisclosed hyperparameters and training logs are not reasonable reproducibility standards for submission).
+- **Grad-CAM does not "validate mechanism":** Partially retained as a minor issue (color convention inconsistency is real), but the broader objection that GradCam cannot "prove" the model uses correct features is standard and applies universally; retained only as minor rather than a separate weakness.
+- **Generic strengths removed:** "The paper is clinically relevant," "well-structured problem framing," and "the multi-metric reporting is comprehensive" were removed as generic. Only specific, evidenced strengths are kept.
 
 ---
 
 ## Novel Insights
 
-The paper's most interesting contribution is not architectural but rather the task formulation itself: zone-level loosening classification creates a structured, anatomically grounded output space where clinical actionability is intrinsic to the prediction (Gruen zones implicate the stem; Charnley zones implicate the cup). This multi-label structured output design, where each zone has an independently interpretable label rather than a single image-level score, is more clinically meaningful than any prior reported approach on this dataset and could be adopted by future work even with much larger datasets. The "not visible" class design choice is also genuinely thoughtful: rather than forcing a binary decision on occluded zones, the model is designed to flag uncertainty for expert review, which is the correct clinical behavior.
+The framing of hip implant assessment as a staged zonal segmentation-then-classification problem — rather than a binary image-level classification — is a coherent and clinically grounded contribution. The zone-level annotation effort is the most original element. However, the paper does not yet deliver on this framing at the evaluation level: the stage 3 setup is ambiguous, the comparison baseline is methodologically invalid, and the small dataset limits generalizability. The insight is real; the validation is not yet adequate to support it.
 
 ---
 
 ## Suggestions
 
-1. **Resolve the 5-fold CV vs. fixed split contradiction explicitly**: Either report results from one clean protocol (recommended: patient-level 5-fold CV on the 187 usable images, reporting mean ± std for all metrics), or remove the 5-fold CV claim entirely and report fixed-split results only.
-2. **Report sensitivity/specificity for Stage 1**: Given only 19 not-fit examples, the primary metric must be sensitivity (recall) for the not-fit class, not overall accuracy.
-3. **Clarify Stage 3 inference pipeline**: A single sentence in Section 3.2.3 explicitly stating "At inference time, only the original X-ray image and the Stage 2 predicted masks are used as inputs; the Excel file provides training labels only" would resolve a major ambiguity.
-4. **Correct Table 3**: Either restrict it to same-dataset comparisons only, or add an explicit column indicating which results were measured on the same dataset vs. different datasets, and remove the claim of "outperforming other methods on the same dataset" for the out-of-distribution baselines.
-5. **Fix the confusion matrix labels**: Flip TP/TN labels in Table 2 so that "Loose" is the positive class (TP = correctly identified loose, TN = correctly identified control).
-6. **Add U-Net as a segmentation baseline**: Run a standard U-Net with the same data split and loss function to demonstrate that the proposed architecture adds value beyond a widely available off-the-shelf segmentation model.
-
----
-
-## Evaluation on Key Axes
-
-- **Novelty**: Low-to-moderate. The zone-level task formulation and annotation are the primary novelty contributions. Individual network components (encoder-decoder segmentation, transfer-initialized classifier) are standard. No new architecture, loss function, or training paradigm is introduced.
-- **Technical soundness**: Below average. The 5-fold CV vs. fixed split inconsistency, underspecified Stage 3 loss function, and inadequate Stage 1 evaluation are real methodological gaps.
-- **Empirical support**: Weak. The headline 98% accuracy is on 57 test images with an inconsistent evaluation protocol; the comparison table mixes on-dataset and off-dataset baselines; no baseline comparison exists for the main segmentation task.
-- **Significance**: Moderate in motivation; low in current demonstrated impact given the small dataset and evaluation issues.
-- **Clarity**: Below average due to the evaluation protocol contradictions and ambiguous Stage 3 inference description.
+1. Resolve the Stage 3 input ambiguity: explicitly state which information is provided at inference time vs. only at training time. If the Excel labels are only supervision, rewrite Section 3.2.3 and Figure 5 to say so clearly.
+2. Re-run Table 3 only with methods evaluated on the identical 70:30 split and preprocessing. Remove or clearly flag entries that used different datasets.
+3. Add a confusion matrix, sensitivity, and specificity for Stage 1 to replace the uninformative accuracy-only report.
+4. Add a formal ablation table for the loss function (CE-only, Dice-only, CE+Dice) with consistent metric naming.
+5. Describe the blind-test annotation process: who labeled the 38 images, were labels blinded, what is the class distribution.
 
 ---
 
 ## Score and Decision
 
 **Calibration:**
-- AAZ3vwyQ4X (4.0, Reject): MSPL paper — had a structural F1 metric flaw certifying degenerate results as near-perfect, unintelligible table rows, and no external baselines. That paper's methodology was more sophisticated but the evaluation framework was broken.
-- 1F8xTfv6ah (5.5, Accept): KAN OOD paper — genuine empirical contributions with solid ImageNet results, overclaiming in abstract but core contribution was real and verifiable.
+- *UKZqSYB2ya* (Two-stage CT lung nodule segmentation): Scores 1, 3, 3, 3 → Reject. Similar pattern: clinical motivation, two-stage pipeline, no ablations, weak novelty, no standard baselines.
+- *4bOCP1GtX4* (WenXinGPT orthopedic VLM): Scores 3, 3, 3 → Reject. Unclear evaluation, missing methodological details, small dataset.
+- *mYOYjhXGop* (Brain tumor segmentation, weakly supervised): Scores 3, 3, 3, 3 → Reject. Novel problem framing but evaluation and methodological issues prevent acceptance.
 
-This paper is **below** AAZ3vwyQ4X (4.0). The MSPL paper had a stronger methodological core (the DRIAMS result was genuine even if the F1 metric was broken) and a more mature presentation. The present paper suffers from: (1) a dataset of 206 images which is extremely small even for applied medical imaging at ICLR, (2) an internal inconsistency (5-fold CV vs. 57-sample confusion matrix) that makes the primary headline result unverifiable, (3) a partially misleading comparison table, and (4) a core inference ambiguity. The clinical motivation is sound and the annotation contribution is genuine, but this work is more appropriate for a clinical informatics venue than ICLR, and it requires substantial methodological fixes before the central claims can be trusted.
+The paper under review sits at the same quality tier as these rejected papers. It has modestly more going for it (the zone annotation contribution is concrete; blind testing is genuine) than the weakest rejected papers, but the Stage 3 label-leakage ambiguity alone is serious enough to undermine the headline claim. The unfair Table 3 comparison, uninformative Stage 1 evaluation, and absence of any standard baseline further compound this. At ICLR, where empirical claims must be cleanly established, the paper does not meet the bar.
 
-**Score: 3.5 — Reject**
+**Score: 3.0 — Reject**
 
-MY FINAL SCORE: <pineapple>3.5</pineapple>
+Novelty: Low-to-moderate (zonal framing is sensible; architecture is incremental)
+Technical soundness: Weak (Stage 3 ambiguity, no ablation table, leaky ReLU output layer unexplained)
+Empirical support: Weak (Stage 1 imbalance, Table 3 invalid, Stage 3 aggregation unspecified)
+Significance: Moderate potential (clinical application is relevant; not realized in this submission)
+Clarity: Below average in critical sections (Stage 3 is genuinely confusing, Figure 5 conflates ground truth with inputs)
+
+MY FINAL SCORE: <pineapple>3.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

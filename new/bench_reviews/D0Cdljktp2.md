@@ -1,67 +1,73 @@
-Now I have sufficient information to write the consolidated review. Let me synthesize all inputs, with direct verification against the paper.
+Now let me search for calibration papers.Now I have sufficient context to write the comprehensive final review.
 
 ---
 
 ## Summary
 
-This paper studies memory-augmented Transformers (Memformers) as in-context algorithm learners, arguing that memory registers enable the architecture to implement richer iterative optimization methods — specifically Conjugate Gradient Descent (CGD) and general Linear First-Order Methods (LFOMs) — going beyond what standard linear Transformers can express. Two propositions establish constructive existence results, and experiments on synthetic linear regression tasks (d=5, n=20) compare trained Memformers to CGD baselines.
+This paper studies whether memory-augmented linear Transformers (Memformers) can implement Linear First-Order Methods (LFOMs) — including Conjugate Gradient Descent (CGD), momentum, and general gradient-accumulating methods — during the forward pass for in-context linear regression. Building on Ahn et al. (2024)'s result that linear Transformers can simulate preconditioned gradient descent, the paper introduces memory registers that retain past attention outputs across layers, provides two representational propositions claiming exact LFOM/CGD implementation, and presents empirical comparisons on small synthetic regression tasks ($d=5$, $n=20$).
+
+---
+
+## Claims and Support
+
+**Claim 1 — Memformers can implement exact CGD/LFOM in their forward pass (Propositions 1 & 2):**
+*Partially supported.* For general LFOM recurrences (Prop. 2), the architecture is plausibly expressive enough — the cumulative Hadamard-gated memory over past attention outputs can in principle emulate the cumulative gradient structure of Eq. (16). For *exact CGD* (Prop. 1), the claim is overstated. True CGD requires instance-dependent coefficients computed via line search or closed-form Polak-Ribière/Fletcher-Reeves formulas; Prop. 1 only introduces layerwise scalars $\alpha_\ell, \gamma_\ell$ and states "With $\mathbf{A}_\ell = \mathbf{I}$, this process matches CGD applied to the loss $R_{w^*}(\mathbf{w})$" — which does not demonstrate that the architecture computes the required per-instance conjugacy coefficients from the prompt. The paper itself acknowledges this indirectly by consistently using "CGD-like" in experimental sections.
+
+**Claim 2 — Trained Memformers learn CGD-like/LFOM-like procedures (Section 3.3):**
+*Weakly supported.* The training procedure produces models that achieve low prediction loss on the synthetic task family, and some variants outperform vanilla CGD on non-isotropic data. However, there is no mechanistic verification that registers store actual search directions or gradients, no out-of-distribution tests, and no analysis of whether the learned computation genuinely executes LFOM steps versus converging to a task-specific predictor. The paper appropriately hedges with "CGD-like," but the "learned optimizer" framing in the abstract and contribution bullets goes beyond what is verified.
+
+**Claim 3 — Memformers can outperform CGD (headline claim):**
+*Partially supported, but the comparison is not uniform.* The paper explicitly acknowledges in Section 3.3 that Figure 1b "is therefore not a CGD-like algorithm" and that its Memformer uses preconditioned/richer update families vs. vanilla CGD. Superiority appears only for preconditioned or GD++-augmented variants on non-isotropic data; on isotropic data (Fig. 2b), CGD strongly dominates. The comparison in Fig. 4 (small batch) also mixes the Memformer trained at $B=1000$ against CGD run at $B=1$ or $B=10$, which conflates meta-learning benefit with algorithmic superiority.
+
+**Claim 4 — Multi-head attention improves performance (Section 5):**
+*Empirically observed, mechanistically unverified.* The heuristic explanation (ensemble-like variance reduction) is speculative, and there is no parameter-matched ablation to rule out that the gain simply comes from extra capacity. The paper correctly labels this a "heuristic explanation" in the text but overstates it as "theoretical insights" in the contributions.
+
+**Claim 5 — Rigorous theoretical framework (Main Contributions bullet 1):**
+*Overstated.* The proof sketches in the main text are not sufficient for the strong CGD claim; the full proofs are in the appendix. Even granting the full proofs, Prop. 1's structural resemblance to CGD does not establish instance-dependent conjugacy.
 
 ---
 
 ## Strengths
 
-- **Natural and conceptually well-motivated extension of prior work.** The connection between attention outputs and gradient-like quantities (from Ahn et al. 2024) is clean, and the move to memory registers to accumulate past-gradient information — mimicking the structure of CGD and momentum methods — is a logical next step that prior works had not taken. This contributes genuinely to the growing literature on the algorithmic capabilities of Transformers.
+- **Concrete memory mechanism extending a well-established framework.** The paper builds naturally and transparently on Ahn et al. (2024)'s linear attention/preconditioned GD connection. The addition of recursive memory registers $\mathbf{R}_\ell = \text{Attn}(\mathbf{Z}_\ell) + \gamma_\ell \mathbf{R}_{\ell-1}$ is a specific, implementable modification with a clear theoretical motivation for enabling gradient history accumulation — which prior Transformer-as-optimizer papers lacked.
 
-- **Proposition 2 + LFOM framework identifies a plausible general principle.** The observation that maintaining per-layer attention outputs as memory registers, combined with Hadamard-weighted cumulative updates (Eq. 20), subsumes the structure of LFOM iterations (Eq. 16) is architecturally interesting. The paper correctly acknowledges the architecture may be richer than pure LFOMs and does not overstate this specific claim.
+- **Honest ablation of when memory helps vs. when it does not.** The paper explicitly compares isotropic (Fig. 2b) vs. non-isotropic (Fig. 2a) data, correctly identifying that past-gradient accumulation only benefits problems with varying curvature. This theoretical alignment (conjugacy is only useful when curvature differs across directions) is a genuine insight, and its accurate reflection in experiments reflects good experimental design.
 
-- **Honest acknowledgment of isotropic failure case.** Figure 2b explicitly shows CGD dramatically outperforming the LFOM Memformer on isotropic data, with the paper noting: "In quadratics with isotropic data, there is no significant variation in curvature across directions; thus, incorporating past gradients via momentum offers little advantage." This is an appropriate scope limitation that the authors surface rather than hide.
-
-- **Interesting small-batch observation.** The finding in Section 4 (Figure 4) that amortized shared-parameter optimizers can behave differently from per-instance CGD on small batch regimes points to a genuine and underexplored regime — even if the comparison has issues (see below).
+- **Transparent acknowledgment of limitations.** Section 6.1 explicitly concedes that Memformers "do not radically outperform preconditioned GD on general quadratic problems," and Discussion Section 1 clarifies the paper is not advocating for Transformers as practical optimizer replacements. This calibration is more honest than is common in this literature.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None that fully invalidate the conceptual contribution, but the following major weaknesses collectively mean the paper in its current form falls below the ICLR threshold.*
-
----
+*None. The issues below are significant but do not render the paper's core ideas void.*
 
 ### Major
 
-- **Proposition 1 does not establish exact CGD implementation — the central theoretical claim is unsubstantiated.** The paper's title and Contribution (1) claim that Memformers "can implement" CGD. But the CGD algorithm (as the paper itself specifies in lines 163–183) requires *instance-specific* coefficients: γ_n = ‖∇f(w_n)‖²/‖∇f(w_{n-1}‖² and α_n = argmin_α f(w_n + α s_n), both computed from the current problem instance at runtime. Proposition 1, by contrast, uses per-layer learned scalars α_ℓ, γ_ℓ fixed across all test instances. The proof sketch only asserts that the recurrence "mimics" CGD: *"The recursive update for R_ℓ thus mimics s_n, the search direction in CGD."* Morphological resemblance is not implementation. The paper's own Section 3.3 quietly retreats to a weaker claim — *"while they may not match the exact CGD parameters for individual observations"* — but Proposition 1 still bears the headline title "A memory-augmented Transformer can implement Conjugate Gradient Descent." This is misleading. At best, the architecture realizes a CG-inspired recurrence with fixed layerwise scalars, which is a substantially weaker statement.
+- **Proposition 1 does not establish exact CGD implementation.** True CGD on quadratics requires instance-dependent coefficients $\gamma_n = \|\nabla f(\mathbf{w}_n)\|^2 / \|\nabla f(\mathbf{w}_{n-1})\|^2$ and exact line-search step sizes $\alpha_n$. The proposition parameterizes these as fixed layerwise scalars $\alpha_\ell, \gamma_\ell$ and claims "With $\mathbf{A}_\ell = \mathbf{I}$, this process matches CGD." This conflates structural resemblance with exact algorithm implementation. The distinction matters because a model with fixed shared parameters cannot execute per-instance CGD updates across a batch. The contribution would be more defensible if restated as: "for any fixed quadratic problem, there exists a parameter setting that executes CGD," which is the true expressivity claim.
 
-- **Figure 4's "outperforms CGD" result is demonstrated on training data, not test data.** The paper's caption reads explicitly: *"The Memformer demonstrates superior performance on the training data."* For B=1 and B=10, the model is shown performing well on the same small batch it was optimized for (in an amortized sense), while CGD is run on those same instances cold. This is not a fair generalization test. A Memformer trained on a distribution can be expected to overfit its own training instances relative to a per-instance solver. The paper does not report test-set performance at these small batch sizes, which makes the headline "outperforms CGD" framing for Figure 4 misleading.
+- **The headline "outperforms CGD" claim rests on an asymmetric comparison.** The strongest superiority results (Figs. 1b, 2a, 3) compare preconditioned or GD++-augmented Memformers — which the paper itself admits are "not CGD-like" — against vanilla CGD. A distribution-specific learned preconditioner reliably outperforms a distribution-agnostic solver; this is unsurprising and does not support the claim of "learning a superior optimization algorithm." The more honest comparison in Fig. 4 (scalar preconditioners at small batch sizes) conflates meta-learning advantage with algorithmic improvement because CGD is cold-started on 1 or 10 samples while the Memformer was meta-trained on 1000. The abstract and Contribution (2) should be reworded to reflect these caveats.
 
-- **The theory-practice gap is unaddressed: propositions show expressiveness, not learnability.** Propositions 1 and 2 are pure existence constructions — they state that *there exist* parameter settings under which the Memformer implements CGD/LFOM-style updates. There is no analysis of the training loss landscape, no convergence guarantee for the pre-training process (Eq. 8), and no verification that the specific parameter configurations exploited in the propositions are reachable by Adam training. The paper acknowledges this gap as a future direction (Contribution iv) but does not treat it as the significant open issue it is: without knowing whether training finds these configurations, the propositions do not directly explain the empirical results.
-
-- **Experimental scope is too narrow to support the paper's broader claims.** All experiments use d=5, n=20, L=3–4 layers, and Gaussian covariates. The claims about Memformers learning "advanced optimization algorithms" and exhibiting "generalization capabilities ... not fully recognized" are framed broadly, but the evidence base consists entirely of a single tiny synthetic quadratic family. There is no variation in dimension, context length, noise, non-Gaussian distributions, or distribution shift.
-
----
+- **No mechanistic validation of the "learned optimizer" interpretation.** The paper claims Memformers learn "CGD-like" or "LFOM-like" procedures, but no diagnostic confirms that memory registers store past gradients or search directions as claimed. Without internal probing — e.g., projecting registers onto theoretical CG directions, verifying that learned $\alpha_\ell, \gamma_\ell$ align with CGD schedules for specific instances — the observed loss improvements could equally reflect the model learning a distribution-specific shortcut to the least-squares solution, bypassing iterative optimization altogether.
 
 ### Minor
 
-- **The "outperforms CGD" claim in favorable settings (Figures 1b, 2a, 3) conflates method expressiveness.** Figure 1b allows the Memformer to use learned matrix preconditioners A_ℓ while comparing to plain (unpreconditioned) CGD. The paper does note *"this is therefore not a 'CGD-like' algorithm"* in Section 3.3 — so this is not hidden — but the abstract and contribution statement ("even learning methods that outperform conjugate gradient") do not carry these qualifications. Readers will naturally read the abstract without Section 3.3's nuances. The abstract should specify that the wins come from a richer method class, not from the memory mechanism alone.
+- **Experiments limited to $d=5$, $n=20$, single synthetic distribution.** All comparisons are within a narrow Gaussian task family. CGD's key theoretical property — convergence in $d$ steps for quadratics — is barely testable at 3–4 layers with $d=5$. Whether the memory mechanism provides any advantage for larger, more ill-conditioned, or non-quadratic problems is unknown and would substantially affect the paper's significance.
 
-- **Contribution (3) overstates the multi-head result.** The contribution item promises "theoretical insights" for multi-head attention, but Section 5 is explicitly heuristic throughout, with no proof or formal characterization. The section correctly uses language like "heuristically" and "this phenomenon is supported by recent studies," but "theoretical insights" in the contributions list misrepresents the nature of what is provided. This should be labeled as an empirical observation with heuristic interpretation.
-
-- **No mechanism verification of what trained models actually implement.** The experiments report only loss-vs-layer curves; they do not probe whether the learned α_ℓ, γ_ℓ, or Γ_j matrices correspond to the constructions in the propositions. Without inspecting the learned parameters, comparing update directions to CGD's search directions, or checking residual orthogonality/conjugacy properties, the claim that trained models execute "CGD-like" or "LFOM-like" algorithms is supported only by performance similarity — which is weak evidence of algorithmic identity.
-
----
+- **Multi-head ablation is under-controlled.** Figure 5 compares 1-head vs. 5-head without matching parameter counts. The observed improvement may reflect extra capacity rather than the "ensemble-like variance reduction" mechanism proposed. The paper labels this a "heuristic explanation" in the text, but Contribution (3) says "with theoretical insights," which is not warranted.
 
 ### Trivial
 
-- The paper's Figure 5 comparison of 1-head vs. 5-head attention does not control for parameter count. The gain could be due to more parameters rather than the multi-head mechanism itself.
+- No variance bands are shown in any figure despite only averaging over five runs. This makes it impossible to assess statistical reliability of the differences.
 
 ---
 
 ## Nice-to-Haves
 
-- **Probe learned parameters.** Report learned α_ℓ, γ_ℓ values per layer alongside the theoretical CGD-optimal values for sample instances. Compare Memformer update directions to CGD search directions on the same quadratic instance.
-- **Scale up even modestly.** Test at d=20 or d=50 with n=80–200 to provide some evidence that findings are not artifacts of the extremely low-dimensional regime.
-- **Report test-set performance for Figure 4.** Evaluate the small-batch regime on held-out test instances to turn this into a valid generalization comparison.
-- **Weaken Proposition 1 to match what is actually proved.** State it as "Memformers can implement a CG-inspired recurrence that reduces to exact CGD when coefficients are instance-specific" and provide the construction for that special case.
-- **Non-quadratic experiments.** Even a mildly non-quadratic objective (logistic regression) would substantially strengthen the significance claim.
+- **Align learned $\alpha_\ell, \gamma_\ell$ against CGD schedules.** Plotting the trained parameter values against the analytical CGD values for specific instances would either validate the CGD-like claim or surface how far the learned procedure diverges from true CGD. This is a natural and low-cost diagnostic.
+- **Parameter-matched head ablation.** A 5-head 1-layer vs. 1-head 5-layer or matched-parameter comparison would cleanly isolate the head diversity hypothesis from capacity.
+- **Convergence analysis for the LFOM Memformer.** While full convergence theory for learned optimizers is beyond scope, even numerical convergence-rate estimates as a function of condition number and $d$ would help situate the results.
+- **Extend Figure 4 analysis.** An experiment varying batch size $B$ from 1 to 1000 during training (not just testing) would clarify whether small-batch superiority reflects meta-learning or algorithmic quality.
 
 ---
 
@@ -69,58 +75,61 @@ This paper studies memory-augmented Transformers (Memformers) as in-context algo
 
 *These points are flagged to be removed; treat them with caution.*
 
-**[Removed — Strawman, the paper is transparent]** The harsh critic argues the "outperforms CGD" in Figures 1b/2a/3 constitutes a structural flaw because the Memformer is more expressive than CGD. However, the paper explicitly flags this: *"This is therefore not a 'CGD-like' algorithm."* This is a writing/framing issue (abstract doesn't carry the qualification) and is addressed under Minor weaknesses, but characterizing it as a "structural" flaw that undermines the paper's core contribution is too strong given the paper's own transparency.
+- **"Missing proofs / unassessable theory" (Harsh Critic, Claim 5):** The appendix containing full proofs was stripped from the reviewed document as a submission packaging artifact. The paper cites full proofs in "Appendix A" for both propositions. This is not an author error. Removed.
 
-**[Removed — Scope creep]** Multiple reviewers demand theoretical proofs of training convergence (loss landscape analysis, proof that Adam finds the CGD parameterization). This is a legitimate nice-to-have for a stronger paper, but the paper explicitly scopes itself to expressivity ("can implement") plus empirical evidence. Asking for training-dynamics theory exceeds the paper's stated scope. Retained as a Major weakness (theory-practice gap) but downgraded from "fatal."
+- **"Reproducibility concern: undisclosed hyperparameters":** Section 3.3 explicitly states initialization (i.i.d. Gaussian), optimizer (ADAM), batch size (1000), gradient clipping (max norm 0.01), resampling frequency (every 100 steps), and covariance structure. Sufficient for replication. Removed.
 
-**[Removed — Generic strength]** "The paper addresses a natural and important extension of prior work" and "the topic is timely and important" — removed as generic; applies to any reasonable ICL paper.
+- **Neutral Reviewer Weakness 4 ("hand-designed memory vs. emergent behavior"):** The paper does not claim the memory registers are emergent; they are an architectural modification explicitly designed to test LFOM expressivity. Criticizing an architectural choice as non-emergent is scope creep. Removed.
 
-**[Removed — Related work nitpick]** Requests for additional comparisons to L-BFGS, quasi-Newton methods, or specific non-transformer learned optimizers — no external source available to confirm existence of specific alternatives, per hard rules.
-
-**[Removed — Reproducibility nitpick]** Requests for error bars in all figures and formal confidence intervals — the paper reports 5-run averages; single-run evaluation is norm in this small-scale synthetic setting.
+- **Harsh Critic "unfair comparison because baseline is vanilla CGD":** Partially removed in the context of Figure 4 (scalar Memformer vs. vanilla CGD at same batch size). For Figures 1b/2a/3, the asymmetry is already flagged as a weakness above.
 
 ---
 
 ## Novel Insights
 
-The genuinely novel observation from the aggregate reviews is the following: the paper's architecture — specifically the Hadamard-weighted cumulative memory update (Eq. 20) — is *broader* than the LFOM class it claims to implement, because the full (d+1)×(n+1) matrices Γ_j^ℓ subsume the diagonal matrices Λ_i^k that define LFOMs. The paper acknowledges this in passing but does not develop it: the Memformer architecture may in fact define a *strictly richer* class of iterative update rules than classical LFOMs, and characterizing this class could be a more interesting contribution than claiming it implements (a subset of) LFOMs. This inversion — where the architecture turns out to be richer, not just expressive enough — is the most original observation in the paper and could anchor a stronger paper if properly developed.
+The paper's most genuinely new observation is that memory-based gradient accumulation only provides meaningful gain over single-step preconditioned GD in the *non-isotropic* setting — where curvature varies across directions and past conjugate directions carry information. This is theoretically sensible (conjugacy is trivially satisfied in isotropic quadratics) and is cleanly illustrated by the isotropic vs. non-isotropic comparison in Figure 2. This insight could usefully generalize: memory augmentation may only help transformers approximate iterative first-order methods in problems where gradient directions are highly correlated across steps, not in well-conditioned settings. This is a concrete, falsifiable claim that the paper only partially develops.
 
 ---
 
 ## Suggestions
 
-1. **Weaken the title claim to match what is proved**: replace "can implement" CGD with "can implement CG-inspired update rules" or "realize a class of algorithms that includes CGD-like iterations."
-2. **Fix Figure 4**: report test-set performance (not training-data performance) at B=1 and B=10, or remove the comparison.
-3. **Add a direct ablation**: compare Memformer (with memory) vs. standard linear Transformer (same parameter count, no memory) under identical conditions across all experimental settings, to isolate the contribution of the memory mechanism versus preconditioning.
-4. **Add learned-parameter inspection**: report α_ℓ, γ_ℓ values from trained models and compare to what exact CGD would require on sample instances.
-5. **Reframe Contribution (3)**: change "with theoretical insights" to "with heuristic interpretations," or add a formal proposition (even a simple one) backing the multi-head claim.
+1. **Restate Proposition 1 precisely.** Replace "can implement Conjugate Gradient Descent" with "for any fixed quadratic problem instance, there exist parameter settings under which the forward pass executes CGD updates." Distinguish this expressivity result from the trained/shared-parameter experiment. This removes the discrepancy that the abstract/contributions promise exact CGD while the experimental sections consistently use "CGD-like."
 
----
+2. **Add at minimum one mechanistic probe.** Extract memory register states $\mathbf{R}_\ell$ from a trained model and compute cosine similarity with analytical CGD search directions $\mathbf{s}_n$ on the same problem instances. Even a negative result (divergence from CGD directions) would be scientifically informative.
 
-## Evaluation
+3. **Scale one ablation to larger $d$.** Even testing $d = 10, 20, 50$ with matched depth (up to $d$ layers) would allow CGD's finite-step property to manifest and provide a fairer algorithmic comparison.
 
-- **Novelty**: *Low-to-moderate.* The idea of using memory to implement richer optimization iterations is natural given prior work; the LFOM framing is clean but the specific architectural observation (Eq. 20 subsumes LFOM structure) is the most original part.
-- **Technical soundness**: *Weak.* Propositions are proof sketches showing structural analogy rather than rigorous implementation proofs. The central CGD claim in Proposition 1 is not established.
-- **Empirical support**: *Weak.* Toy scale (d=5, n=20), training-data comparison in a key result (Figure 4), no mechanism verification.
-- **Significance**: *Low-to-moderate.* Extends a growing literature with an architecturally interesting idea, but the contribution is too thin in its current form to have clear scientific impact.
-- **Clarity**: *Moderate.* The paper is readable and somewhat honest about limitations, but the abstract and contribution statements are overstated relative to the body.
+4. **Retitle or reframe the batch-size comparison.** Figure 4 compares the Memformer trained at $B=1000$ against CGD at $B=1$. This is a statement about meta-learned generalization, not algorithmic superiority per se. Framing it as "meta-learned initialization beats cold-start CGD on small batches" is both accurate and interesting on its own terms.
 
 ---
 
 ## Score and Decision
 
-**Calibration against past reviews:**
+**Calibration papers:**
 
-- **8QqQk1c0Dg (6.5, Accept):** A theory paper with real proofs, a clean negative result, and matching positive results for Adam under heavy-tailed noise. Has a theory-practice gap but the core theoretical contribution is rigorous and substantial.
-- **GQ1Tc3vHbt (7.0, Accept):** A pure theory paper with no experiments; stronger unified framework with improved bounds and principled stepsize derivation.
+| Paper | Topic | Scores | Decision |
+|-------|-------|--------|----------|
+| `YKzGrt3m2g.md` | Transformers implement Newton's method (similar theory+empirics on ICL linear regression) | 3, 3, 6, 5 | Reject |
+| `nxQ0Bjp8zD.md` | Transformers implement EM for mixture regressions (narrow synthetic, theoretical expressivity) | 5,5,5,5,5 | Reject |
+| `52XG8eexal.md` | SSMs implement GD in-context (same architectural expressivity framing) | 3,3,5,5 | Reject |
+| `snocoXIQXz.md` | Learning high-precision least-squares algorithms (richer contribution, new architecture, OOD evaluation) | 6,6,6 | Accept |
+| `lZNb1CVm5O.md` | Task descriptors help ICL (similar theoretical framework, more focused) | 6,5,6,8 | Accept |
 
-This paper is **clearly and substantially below both**. The "theory" in this paper consists of proof sketches showing structural analogy, not rigorous proofs. The central claim (exact CGD implementation) is not established. The experiments are at a far smaller scale than is typical even for ICL theory papers, and the headline result in Figure 4 uses training data. The paper has a genuine conceptual idea — memory registers enabling richer iterative updates — but that idea is underdeveloped both theoretically and empirically.
+**Positioning:** The paper under review is more developed experimentally than `52XG8eexal.md` and `YKzGrt3m2g.md` (multiple figures, ablations, isotropic/non-isotropic split), but less rigorous and novel than `snocoXIQXz.md` or `lZNb1CVm5O.md`. The theoretical claim about exact CGD falls short of what Proposition 1 delivers. The experiments are narrow (d=5, n=20 only) with no mechanistic validation. The strongest headline claim (outperforming CGD) uses architecturally richer variants than the baseline.
 
-Placement: **below 8QqQk1c0Dg (6.5)** and well below **GQ1Tc3vHbt (7.0)**, scoring around the weak-reject range.
+Compared to the `nxQ0Bjp8zD.md` case (5,5,5,5 → Reject), the paper under review is comparable in scope but has more experimental content and a cleaner (if imprecise) theoretical framework. Compared to the human finder scores of 5,6,6,5 → Accept, I note that the "outperforms CGD" framing is misleading in its headline form, and the theoretical precision issue with Prop. 1 is a genuine deficiency.
 
-**Score: 4.0 — Reject**
+**Overall axis ratings:**
+- *Novelty*: Moderate — natural extension of Ahn et al. (2024) with memory registers; the isotropic/non-isotropic insight is new but modest.
+- *Technical soundness*: Weak-to-moderate — Prop. 1 is imprecise on the CGD coefficient issue; proof sketches are heuristic rather than rigorous for the CGD case.
+- *Empirical support*: Weak — d=5, n=20, no OOD, no mechanistic validation, no error bars.
+- *Significance*: Moderate for the narrow subfield; limited practical impact as acknowledged.
+- *Clarity*: Moderate — the paper body is reasonably careful, but the abstract and contribution bullets oversell relative to the evidence.
 
-The paper has an interesting premise and a plausible architectural insight, but neither the theoretical claims nor the empirical evidence meet ICLR standards in their current form. The central proposition does not prove what it claims, the key Figure 4 comparison uses training data, and the experimental scope (d=5, n=20) is insufficient to support the broad framing. Substantial revision would be needed — including either rigorous proofs or weaker claims, and proper test-set comparisons at meaningful scale.
+The paper is borderline, landing between the `nxQ0Bjp8zD.md` reject cluster (5,5,5,5) and the lower-end accept papers (5,6,6). I position it at **5.0** — it advances the line of research in a principled direction but falls short of the precision and evidence required for ICLR acceptance in its current form.
 
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+**Score: 5.0**
+**Decision: Reject**
+
+MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

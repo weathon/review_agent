@@ -1,114 +1,112 @@
-Now let me read one of the past reviews in full for calibration:Now I have enough information to write the consolidated meta-review. Let me synthesize.
+Now let me look at the human reviews for calibration:Now let me check some more of the calibration reviews:Now I have enough to write the comprehensive meta-review. Let me synthesize.
 
 ---
 
 ## Summary
-
-This paper introduces RADD (Reparameterized Absorbing Discrete Diffusion), built on a key theoretical observation (Theorem 1): for absorbing discrete diffusion, the concrete score for the only relevant reverse transitions (masked → unmasked) factorizes exactly into an analytic time-dependent scalar times a time-independent conditional clean-data probability. This explains SEDD's previously mysterious "scaling trick" and motivates removing time conditioning from the score network entirely. A caching strategy then naturally follows from time-independence, with the expected NFEs quantified in closed form (Eq. 3.4). Theorem 2 further unifies absorbing discrete diffusion with any-order autoregressive models (AO-ARMs) in the limit σ̄(T) → ∞, producing a chain of four equivalent loss functions. Empirically, all four RADD variants consistently outperform SEDD on average across five zero-shot language modeling benchmarks at GPT-2 scale.
+This paper reveals that the concrete score in absorbing discrete diffusion factorizes into a time-dependent scalar (in closed form) multiplied by a time-independent conditional distribution over clean data (Theorem 1). Motivated by this finding, the authors propose RADD — a model without time-conditioning that admits output caching during sampling, reducing expected NFEs analytically quantified in Eq. (3.4). The paper further proves that the DSE training objective is equivalent to the AO-ARM expected NLL in the infinite-noise limit (Theorem 2), unifying two apparently different families of models. Empirically, RADD achieves SOTA among discrete diffusion models on five zero-shot language modeling benchmarks at GPT-2 scale.
 
 ---
 
 ## Strengths
 
-- **Theorem 1 is a clean, nontrivial structural insight specific to absorbing diffusion.** The factorization in Eq. (3.2) — that the concrete score at a masked position equals an analytic time-dependent scalar times the clean conditional distribution — is the kind of observation that simultaneously explains a puzzling empirical practice (SEDD's scaling trick) and unlocks a simpler model design. The proof is specific to the absorbing matrix structure (Eq. 2.4) and does not trivially generalize to other noise processes.
+- **Theorem 1 provides a sharp, operationally useful factorization.** The insight that only masked→unmasked reverse transitions matter in absorbing diffusion, and that those transitions satisfy an exact factorization, is non-obvious and had not been formally stated before. This directly explains SEDD's empirically-motivated "scaling trick" (Section 3.1, Eq. 3.2) — an outstanding theoretical puzzle in the field.
 
-- **The E-NFEs formula (Eq. 3.4) is a rigorously derived and empirically validated quantification of caching efficiency.** Fig. 1a shows tight agreement between the theoretical curve and experimental measurements. This is more thorough than concurrent work (Sahoo et al., 2024), which proposed caching empirically without such analysis.
+- **Caching mechanism is principled and analytically characterized.** The E-NFEs formula (Eq. 3.4) follows directly from the time-independence of c_θ and the absorbing dynamics. Fig. 1a demonstrates tight agreement between theory and experiment. This combination of analysis and validation gives the efficiency claim genuine evidential weight beyond pure heuristics.
 
-- **Theorem 2 and the four-loss equivalence chain (Eq. 3.7) provide a principled alternative to treating DSE as merely an upper bound.** By showing DSE ↔ t-DCE ↔ λ-DCE ↔ AO-ARM (in the large-T limit), the paper reframes absorbing diffusion perplexity evaluation as an exact AO-ARM NLL rather than an upper bound with unknown gap — a meaningful conceptual advance with practical implications for training loss selection.
+- **Theorem 2 unifies four equivalent training losses and bridges to AO-ARMs.** The clean chain DSE ⟺ t-DCE ⟺ λ-DCE ⟺ AO (Eq. 3.7), while asymptotic, provides a fresh perspective that reframes the DSE upper bound as an expected NLL over orderings — strengthening the evaluation justification compared to all prior work in this family.
 
-- **The ablation between SEDD-Scale and RADD-DSE is appropriately controlled.** Both use the same DSE loss and comparable parameter counts; the only change is removal of time conditioning. The consistent win for RADD-DSE across Tables 1 and 2 (e.g., WikiText2 small: 41.84 → 38.83; PTB medium: 87.12 → 75.16) provides direct empirical support for the theoretical claim that time conditioning is unnecessary in the absorbing case.
+- **Empirical results are consistently strong and well-ablated.** RADD-DSE (with *fewer* parameters than SEDD-Scale, since time-conditioning is removed) outperforms SEDD-Scale on all five benchmarks at both scales (Tables 1 & 2). The ablation between SEDD-Unscale and SEDD-Scale directly confirms Theorem 1's practical implication, and the ablation between SEDD-Scale and RADD-DSE provides evidence for the time-independence claim.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None.*
+*None. The core claims are consistent with the evidence.*
 
 ### Major
 
-- **Novelty is significantly diluted by concurrent work.** The paper acknowledges that Shi et al. (2024) derived a nearly identical weighted cross-entropy loss and a proposition connecting score and mean parameterizations resembling Theorem 1, and Sahoo et al. (2024) independently removed time conditioning and proposed caching. The paper's unique additions — the explicit scalar factorization in Theorem 1 (simplifying Shi et al.'s conditional expectation to a time-zero distribution), the E-NFEs closed-form analysis, and the full four-loss equivalence chain — are genuine but incremental over a crowded concurrent space. The paper should not be faulted for concurrent discovery, but reviewers and authors should both be clear-eyed that this substantially reduces the novelty score relative to a standalone contribution.
+- **Concurrent work substantially overlaps with the practical contributions.** As the authors candidly acknowledge in Section 5, Shi et al. (2024) independently derive the equivalent cross-entropy loss (analogous to t-DCE), and their Proposition 1 closely resembles Theorem 1. Sahoo et al. (2024) derive the same cross-entropy losses, conduct a time-conditioning ablation, and propose a caching strategy. The paper's claimed unique contribution — the formal decomposition of the concrete score and the time-independent parameterization as a conceptual foundation — is valid, but the three practical takeaways (remove time conditioning, use cross-entropy loss, cache outputs) all exist in concurrent work. The novelty rests almost entirely on the formal apparatus of Theorem 1 and the complete equivalence chain of Theorem 2, not on the downstream design choices. Reviewers and readers should calibrate novelty expectations accordingly.
 
-- **The finite-T gap for Theorem 2 is unexamined.** Theorem 2 requires σ̄(T) → +∞ for the four losses to be equivalent. The practical experiments use finite T. The paper does not analyze how large T must be for the equivalence to hold approximately, nor does it characterize how sensitive empirical results are to this limit. Given that Table 1 shows non-trivial differences between theoretically equivalent losses (e.g., RADD-λ-DCE vs. RADD-AO on 1BW small: 72.99 vs. 74.28; RADD-t-DCE vs. RADD-λ-DCE on PTB medium: 78.77 vs. 82.08), the paper attributes these gaps vaguely to "variations in gradient estimation on finite data" without principled analysis. A variance analysis or discussion of why certain losses converge to different local optima would considerably strengthen confidence in the theoretical equivalence's practical relevance.
-
-- **Caching benefits under batched generation are not evaluated.** The E-NFEs formula (Eq. 3.4) assumes a single sequence — each token independently unmasks according to the noise schedule. In batched generation, sequences in a batch unmask at different rates, and a cache hit on one sequence does not help others. The paper includes a brief note on batch size ablations in Appendix J.4, but the main paper does not address how caching efficiency degrades with batch size. Since practical inference uses batching, this is a meaningful gap between the theoretical speedup claim and real-world utility.
+- **Perplexity comparisons across different losses are not straightforwardly comparable.** The paper reports perplexities "calculated based on their corresponding loss" (Section 4.3) and presents them in a unified table against GPT-2 and each other. But RADD-λ-DCE achieves 44.10 on LAMBADA medium while RADD-DSE achieves 42.30 — a ~4% gap — despite the paper claiming these losses are equivalent in expectation. The explanation ("variations in gradient estimation on finite data, leading models to converge at distinct local optima") is plausible but uninvestigated. More importantly, comparing perplexities derived from different loss functions (DSE-based, λ-weighted, AO-style) as if they are the same quantity requires more justification than a single sentence. The paper does provide theoretical support via the AO-ARM reinterpretation, which is an advance over SEDD's silent use of the upper bound — but the practical inconsistency remains unexplained.
 
 ### Minor
 
-- **Scale is limited to GPT-2 small/medium, and this is a real constraint.** The paper explicitly acknowledges this limitation. Given that concurrent works (and follow-up masked diffusion scaling papers) suggest the efficiency gap between diffusion and autoregressive models may widen at scale, the GPT-2-scale results leave open whether RADD's advantages persist. This is a genuine limitation, appropriately disclosed but worth emphasis.
+- **Theorem 2's asymptotic condition (σ̄(T)→∞) is underemphasized in the surrounding prose.** The theorem statement is clear, but Section 3.3 treats the four losses as practically interchangeable without quantifying the gap between finite-T training and the asymptotic limit. For the log-linear schedule used, σ̄(T) is large but finite; a brief sensitivity analysis or gap bound would make the practical equivalence claim more trustworthy.
 
-- **Fixed-length generation limits practical applicability.** The paper acknowledges (Section 6) that RADD "can only generate full-length outputs, unlike auto-regressive models that can produce variable-length outputs." This is a significant restriction for real deployment. The limitation is honestly stated but no roadmap is offered for resolving it.
+- **Evaluation scope is narrow.** The paper evaluates almost exclusively via zero-shot perplexity on language modeling benchmarks, with generative perplexity appearing only in Fig. 1b. There is no assessment of generation diversity, coherence of samples, conditional generation, or downstream tasks. While zero-shot perplexity is the established protocol for this model family (following SEDD), a paper claiming "SOTA performance among diffusion models" is evaluated on a limited slice of what a language generation model does.
 
-- **No direct benchmark against concurrent works in tables.** Tables 1 and 2 do not include Shi et al. (2024) or Sahoo et al. (2024) as baselines, which makes the marginal contribution of RADD over these specific works difficult to quantify empirically for readers.
+- **Fixed-length generation is a significant practical limitation.** Acknowledged in Section 6, but the paper does not sketch even a conceptual path toward variable-length generation, despite the AO-ARM equivalence potentially offering a natural connection (e.g., treating EOS as an absorbing state). The limitation is real and consequential for practical deployment.
 
 ### Trivial
 
-- The perplexity comparison between RADD and GPT-2 is not perfectly apples-to-apples: RADD-DSE is evaluated using the DSE loss (acknowledged as having an "unknown gap" to true NLL), while GPT-2 reports exact perplexity. The AO-ARM connection (Theorem 2) provides a principled justification for RADD-AO perplexities being exact NLL values, but the DSE/t-DCE variants do not have this clean interpretation at finite T. This is a minor presentational issue; the paper's best-performing numbers on most benchmarks come from RADD-DSE/RADD-AO, and the latter has the cleaner likelihood interpretation.
+- RADD still lags GPT-2 on LAMBADA at medium scale (41.96 vs. 35.66) and on 1BW. This is expected given model family differences and does not undermine the paper's actual claims; the paper targets SOTA among diffusion models, not AR models.
 
 ---
 
 ## Nice-to-Haves
 
-- A variance/sensitivity analysis explaining why theoretically equivalent losses converge to different local optima, with guidance on which loss to prefer in practice.
-- Batched-generation caching evaluation: report actual cache hit rate and wall-clock time as a function of batch size, to bound the practical speedup.
-- At minimum one experiment at larger scale (GPT-2 large or beyond) to test whether the architectural simplification benefits scale.
-- A cleaner ablation isolating the effect of removing time conditioning from the simplification of the adaptive layer norm structure (since RADD removes both simultaneously from SEDD-Scale). This is not a fatal gap since removing both is principled under Theorem 1, but it would sharpen the causal argument.
+- A controlled ablation isolating time-conditioning from all other architecture/parameterization changes (same backbone, same parameter budget) would strengthen the "time-conditioning is unnecessary" claim, even though RADD already wins with *fewer* parameters.
+- An investigation of why theoretically equivalent losses produce meaningfully different perplexity values (gradient variance analysis, per-timestep loss breakdown) would convert a hand-wavy explanation into a scientific contribution.
+- Even a brief qualitative analysis of generated samples in the main text would help readers assess generation quality beyond perplexity.
+- Scaling beyond GPT-2 (~100-350M): with the theoretical foundation now established, even one data point at a larger scale would substantially increase impact.
 
 ---
 
 ## Removed Points
 
-*These points are flagged for removal — treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **"SOTA perplexity claim is not well-supported due to non-comparable evaluation"** (Harsh Critic, Weakness 1): Partially misfires. The paper provides explicit justification in Section 3.3 that the loss functions are valid for likelihood estimation via the AO-ARM equivalence. For RADD-AO specifically, the perplexity is an exact AO-ARM NLL. The concern is more narrowly applicable to RADD-DSE/t-DCE at finite T, and is retained as a Trivial weakness — but the broad framing that "Table comparisons are ambiguous" is too strong given the paper's principled response.
+**Harsh Critic: "Perplexity comparisons are invalid because DSE has an unknown gap to NLL"** — Removed as a fatal/structural issue. While DSE was described as an upper bound in Section 2.1, Theorem 2 provides a formal reinterpretation as AO-ARM expected NLL, which IS a proper likelihood quantity. The paper explicitly uses this reinterpretation as justification for perplexity evaluation (Section 3.3, Section 4.3). This is an advance over prior SEDD evaluation (which used the upper bound without justification). A concern about comparability across different loss variants survives and is kept as a Major weakness, but the claim that the entire evaluation framework is invalid is too strong.
 
-- **"The time-conditioning is unnecessary claim is empirically overstated"** (Harsh Critic, Weakness 4): This is a strawman. The paper's ablation (SEDD-Scale vs. RADD-DSE under the same DSE loss) is a fair controlled comparison. The paper does not claim this generalizes to all absorbing diffusion architectures, only that in this well-matched setting, time conditioning is unnecessary. The claim is appropriately scoped.
+**Harsh Critic: "Proof of Theorem 1 is missing from the main text"** — Removed. Proofs in appendices are standard ICLR practice. The main text provides proof intuition (the absorbing structure argument in Section 3.1) and the theorem statement. Demanding a full derivation in the body is not a reasonable standard.
 
-- **"Inference speed advantage over AR models not convincingly demonstrated"** (Human Finder, Weakness 5): The paper's sampling comparison in Fig. 1b is explicitly RADD vs. SEDD, not RADD vs. GPT-2. The paper references Fig. 1 of Lou et al. (2024) for the SEDD-vs-AR comparison and does not make new claims about AR comparison. The criticism confuses the paper's scope.
+**Harsh Critic: "Time-conditioning ablation confounds architecture and parameter count"** — Removed as a standalone weakness. RADD has *fewer* parameters than SEDD-Scale and still outperforms it. The directionality of the confound argues for the paper's claim, not against it. The concern is noted but substantially weakened.
 
-- **"Generated text samples not provided in main paper"** (Spark): The paper states samples are in Appendix K.1. Requesting them in the main paper is a formatting nitpick.
+**Human Finder: Float32 / Gumbel sampling precision issue (from CTC7CmirNr)** — Removed as applied to this paper. The float32 issue from CTC7CmirNr affects categorical sampling in generative perplexity experiments. The primary evaluation in RADD is zero-shot language modeling perplexity, which does not involve categorical sampling. Applying this concern to RADD requires speculation not supported by the paper.
 
-- **"Error bars / multiple seeds required"** (Spark): Single-run evaluation is the norm for GPT-2-scale language modeling benchmarks. The differences between RADD and SEDD-Scale are consistent across five datasets and two model sizes, providing sufficient internal replication.
+**Human Finder / Neutral: No wall-clock comparison against AR+KV-cache** — Removed. The paper's efficiency claims are explicitly scoped to reduction in NFEs relative to SEDD, not relative to autoregressive models with KV-caching. Criticizing the absence of this comparison is scope creep — the paper positions caching as closing the gap to SEDD, not overtaking AR models.
 
-- **"Training compute (FLOPs/GPU-hours) not reported"** (Spark): A reproducibility detail not standard for reporting in this area at this scale.
+**Neutral Reviewer: "SOTA among diffusion models framing is misleading"** — Removed. The framing is accurate and clearly qualified ("among diffusion models"). The gap to GPT-2 is noted as a trivial observation above.
 
 ---
 
 ## Novel Insights
 
-The most underappreciated contribution of this paper is the conceptual reframing it enables for the discrete diffusion literature: the DSE loss, previously treated as an upper bound with unknown gap on NLL (and therefore a somewhat unsatisfying evaluation criterion), can be reinterpreted through Theorem 2 as the exact expected NLL across all orderings of an AO-ARM ensemble. This means the perplexity numbers in prior SEDD papers are not upper bounds but are exact likelihoods under a distributional interpretation — a point with implications for how the whole field evaluates and compares discrete diffusion models. The paper identifies this but does not fully foreground it as its own contribution, focusing instead on training objectives and architecture. Surfacing this reframing more prominently would strengthen the paper's position in the literature.
+The most genuinely novel synthesis across all reviewers: the concrete score decomposition in Theorem 1 is not merely a reparameterization — it explains why the architecture of SEDD-Scale converges faster, why time-conditioning is redundant, and why caching is possible, all from a single algebraic identity. This is a rare case where a theoretical observation has a clean cascade of practical consequences. The concurrent work (Shi et al., Sahoo et al.) arrived at the *same* practical endpoints empirically, which indirectly validates the theoretical account: the theory explains why the same simplifications were independently discovered. This convergence also highlights a limitation: the unique contribution of RADD is primarily the theory unifying these observations, not the observations themselves.
 
 ---
 
 ## Suggestions
 
-1. **Quantify the finite-T gap**: Run an experiment varying T and reporting how quickly the four losses converge toward equivalent perplexities. Even a single curve showing RADD-AO vs. RADD-DSE perplexity gap as a function of σ̄(T) would make Theorem 2's practical scope concrete.
-2. **Batched caching evaluation**: Report cache hit rate and wall-clock time as a function of batch size (e.g., 1, 8, 32, 128) for the medium model to characterize real-world speedup.
-3. **Foreground the NLL reframing**: Explicitly note in the abstract or intro that Theorem 2 resolves the longstanding concern that DSE perplexity is only an upper bound — this is a genuine service to the community.
-4. **Add Shi et al./Sahoo et al. baselines to the main tables**, even with a note on training differences, to help readers position RADD's marginal contribution numerically.
-
----
-
-## Evaluation on Key Axes
-
-- **Novelty**: Moderate. Theorem 1 is a clean and specific insight, but Shi et al. derived a closely related result concurrently. The E-NFEs analysis and full loss-equivalence chain are genuinely original. Overall novelty is real but reduced by the crowded concurrent space.
-- **Technical soundness**: Good. Theorems 1 and 2 appear correct, the E-NFEs formula is verified experimentally, and the model design follows cleanly from the theory. The finite-T caveat in Theorem 2 is a notable limitation that should be better characterized.
-- **Empirical support**: Moderate. Results are consistent across five benchmarks and two model sizes, which is encouraging. But the scale is limited (GPT-2 only), the caching evaluation is narrow (single sequence, one batch setting), and there is no direct comparison with concurrent works in the tables.
-- **Significance**: Moderate-to-good. The theoretical insights are genuinely useful for the absorbing diffusion community. The practical impact (simplified architecture, caching acceleration) is real. Significance is bounded by the GPT-2 scale and the concurrent discovery of similar ideas.
-- **Clarity**: Good. The paper is well-organized, the proof roadmap is clearly presented, and limitations are honestly disclosed. The concurrent work section is unusually candid.
+1. **Quantify the finite-T gap for Theorem 2:** Provide an empirical measurement or bound of how close λ-DCE and AO losses are in the practical finite-noise setting (e.g., plot perplexity as a function of σ̄(T)).
+2. **Decompose the discrepancy among equivalent losses:** Report per-timestep or per-λ gradient variance for each loss variant to explain why theoretically equivalent objectives converge to different solutions on finite data.
+3. **Add a controlled time-conditioning ablation:** Same GPT architecture, same parameter count, same training budget, with vs. without time input — to cleanly establish the null effect of time-conditioning.
+4. **Report generative diversity metrics alongside generative perplexity** throughout, given the CTC7CmirNr concern that perplexity alone under-represents diversity; the current unigram entropy in Appendix J.4 should appear in the main text.
 
 ---
 
 ## Score and Decision
 
-**Calibration against past reviews:**
+**Calibration:**
 
-- **mMPaQzgzAN (6.5, Accept)**: JumpReLU SAE paper with a clean KDE-STE theoretical contribution and solid multi-site empirical validation. RADD has a comparably clean theoretical insight (Theorem 1) and consistent empirical validation, but faces a significantly larger concurrent-work problem (two papers independently discovering the same ideas) and a more limited empirical scope (one scale only vs. multiple models/sites). RADD is *below* this benchmark.
-- **1F8xTfv6ah (5.5, Weak Accept)**: KAN OOD paper with genuine empirical contributions but framing issues and base-method failure modes. RADD has a stronger theoretical foundation and fewer framing problems, but comparable scale limitations and a bigger novelty-dilution issue. RADD is *above* this benchmark.
+- **CTC7CmirNr** ("Masked Diffusion Models are Secretly Time-Agnostic", accepted poster, scores 6/8/8/6 ≈ 7.0): The closest thematic analog. Also discovers time-agnostic training, also proposes a sampling acceleration (FHS, 20× speedup), also has concurrent work overlap. Additional contribution: identifies a novel float32 numerical bug. RADD has a more complete theoretical framework (Theorems 1 & 2, E-NFE formula) and stronger empirical SOTA claim, but CTC7CmirNr has a more novel empirical finding (the precision bug). The two papers are roughly comparable in overall quality; RADD's greater overlap with Shi et al./Sahoo et al. is a meaningful disadvantage.
 
-RADD sits between 5.5 and 6.5, closer to 6.0. The theoretical insight is real and contributes to understanding an important model class; the architecture simplification is elegant and well-motivated; the empirical results are consistent. Against this, the concurrent-work situation is substantive, the empirical scope is narrow (GPT-2 only), and the key theorem's practical regime is undercharacterized. This is a clear weak accept: solid work that advances the community's understanding without being a breakthrough.
+- **71mqtQdKB9** (SEDD, rejected, scores 8/6/8/5/6 ≈ 6.6): SEDD is the direct predecessor. RADD's contributions are narrower in scope but more rigorously motivated. SEDD was rejected despite high average scores (likely due to divergence among reviewers). RADD avoids SEDD's theoretical holes (proofs were initially missing/incorrect in SEDD).
 
-**Score: 6.0 — Weak Accept**
+- **m4Ya9RkEEW** (Fast-Sampling DNDM, rejected, scores 5/5/6/6 ≈ 5.5): Weaker than RADD — less rigorous theory, no SOTA language modeling claim, narrower scope.
+
+**Assessment:**  
+RADD sits comfortably above m4Ya9RkEEW and at or slightly below CTC7CmirNr. The paper has a real, clean theoretical contribution (Theorem 1's factorization is genuinely sharp), solid empirical validation, and the Theorem 2 equivalence chain is intellectually satisfying even if asymptotic. The primary drag is the substantial overlap with two concurrent works on the practical side — the theory is novel, but three of the four paper contributions are independently rediscovered in Shi et al. and Sahoo et al. A score of **6.0** reflects a borderline accept: the theoretical foundation justifies acceptance as it provides the missing conceptual basis for a set of empirically-discovered simplifications, but the reduced novelty from concurrent overlap prevents a stronger recommendation.
+
+**Axis evaluation:**
+- *Novelty*: Moderate — formal decomposition is new, but practical contributions substantially overlap with concurrent work.
+- *Technical soundness*: Strong — theorems are stated clearly with appropriate conditions; caching analysis is validated empirically.
+- *Empirical support*: Good — consistent SOTA across 5 benchmarks at two scales; ablations are informative.
+- *Significance*: Moderate-to-high — provides the theoretical foundation that concurrent work lacked; E-NFE analysis is a practical contribution.
+- *Clarity*: Good — concurrent work limitations are transparently disclosed; theoretical flow is clear.
+
+**Final Score: 6.0 — Borderline Accept**
 
 MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

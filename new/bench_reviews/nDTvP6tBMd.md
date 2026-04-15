@@ -1,114 +1,136 @@
-Now I have enough information to write the consolidated meta-review. Let me produce it.
+Now let me read the human review files cited by the Human Finder to calibrate scores.Now I have enough information to write the final consolidated review. Let me synthesize everything.
 
 ---
 
 ## Summary
 
-HARDMATH is a benchmark of 1,466 algorithmically generated problems focused on asymptotic approximation methods (primarily the Method of Dominant Balance), inspired by a graduate course on asymptotic methods. The dataset uses SymPy/SciPy to auto-generate problems and validates approximate analytical solutions against numerical ground truths within a 10% error threshold. Evaluation of five LLMs on the 366-problem HARDMATH-MINI subset shows that even the strongest model (o1-mini, 5-shot CoT) achieves only 62.3% overall accuracy, with fine-grained analysis of correctness levels and error modes across problem types.
+HARDMATH introduces a scalable, algorithmically generated benchmark of 1,060 graduate-level applied mathematics problems (plus 366-problem HARDMATH-MINI evaluation subset and 40 word problems) focused on asymptotic methods, dominant balance, and approximation-oriented reasoning. Unlike prior graduate-level benchmarks (ARB: 34 problems; GHOSTS/GRAD-TEXT: 130–190 problems), HARDMATH is generated programmatically and numerically validated via a <10% error threshold against numerical ground truths. Evaluation of five LLMs across zero- and few-shot CoT settings reveals that even the best model (o1-mini) achieves only 62.3% accuracy, with substantive error-mode analysis showing how CoT shifts the nature of failures.
+
+---
+
+## Claims and Support
+
+| Claim | Verdict |
+|---|---|
+| C1: Existing benchmarks underrepresent asymptotic/approximation-style applied math | Partially supported — Table 1 documents size gap; specific coverage gap is argued qualitatively |
+| C2: HARDMATH is a large graduate-level benchmark | Partially supported — "large" vs. graduate-level peers confirmed; "graduate-level difficulty" not externally validated |
+| C3: Auto-generated solutions validated against numerical ground truths | Partially supported — *final approximate formulas* at selected evaluation points are validated; full derivation correctness is not audited |
+| C4: Problems require computational tools and subjective judgment | Partially supported — generation process uses these; models are tested without tool access, so the tool-use claim is not demonstrated in evaluation |
+| C5: HARDMATH-MINI sufficiently reliable for evaluation | Partially supported — type-composition match shown in Fig. 1; no variance/stability analysis reported |
+| C6: Evaluation protocol accurately measures model performance | Weakly supported — LLM grader validation states "we manually verify a subset…found close alignment" without sample size, agreement metrics, or error rates |
+| C7: Few-shot CoT substantially improves performance | Well supported — Table 2 shows large consistent gains across all models and problem types |
+| C8: All models score lower on HARDMATH than on existing benchmarks | Descriptively supported; comparisons are uncontrolled (different shot counts, different model versions, different metrics — e.g., MINIGHOSTS is "4.15/5" vs. HARDMATH exact accuracy) |
+| C9: HARDMATH challenges arise specifically from approximation-oriented reasoning | Partially supported — models do struggle; failure modes isolated to some extent; causal attribution to "uniquely approximation-oriented" reasoning is not established |
+| C10: 40-word-problem set evaluates the effect of additional context | Unsupported — evaluation simultaneously removes problem-specific hints and changes problem set, confounding the context variable |
+| C11: Auto-generated contexts are diverse and plausible (preliminary) | Sufficiently supported as a preliminary claim; relies on model-generated scoring which the authors themselves flag |
 
 ---
 
 ## Strengths
 
-- **Fills a genuine, specific gap in existing benchmarks.** Current graduate-level math benchmarks (GHOSTS: 190 problems, ARB: 34 problems) are small, manually sourced, and focused on formal/proof-based mathematics. HARDMATH specifically targets *approximate analytical reasoning via asymptotic methods* — a reasoning style that cannot be formalized with tools like Lean and is distinct from exact-solution computation. This is a credible and previously underserved niche.
+- **Scalable algorithmic generation for a genuinely underrepresented domain.** The pipeline (Fig. 2, SymPy + SciPy) auto-generates problems with regime-specific approximate solutions and filters for <10% numerical error. This directly addresses the core limitation of prior graduate-level benchmarks (ARB: 34 problems; GHOSTS: 130–190), producing a dataset nearly 10× larger than any prior graduate-level math benchmark. This generation-and-validation design is concrete and replicable.
 
-- **Algorithmically scalable, copyright-free generation pipeline is a substantive methodological contribution.** Rather than scraping textbooks (legally constrained, inherently limited), the authors implement a SymPy/SciPy pipeline that can generate arbitrary numbers of verified problems. The numerical validity check (analytical solution vs. SciPy ground truth) provides an automated quality gate that avoids the hallucination errors endemic to LLM-generated math datasets. The code is released publicly, enabling community extension.
+- **Domain specificity targeting asymptotic/dominant-balance methods.** HARDMATH problems genuinely require multi-regime reasoning (small-ε, large-ε, very-large-ε), dominant balance, and self-consistency checks—reasoning patterns essentially absent from MATH, GSM8K, ARB, and GHOSTS. Box 1 and Appendix A.2 illustrate this concretely.
 
-- **Problem-type error analysis for Roots/GPT-4 (Fig. 4) provides actionable, non-trivial insight.** The finding that 5-shot CoT shifts GPT-4's primary error from "incorrect dominant balance terms" (66.1%) to "missing dominant balance cases" (50.8%) reveals that CoT genuinely improves conceptual setup rather than merely copying solution format. This is a qualitatively interesting and non-obvious finding about how prompting affects reasoning structure.
+- **Fine-grained error analysis that goes beyond aggregate accuracy.** Fig. 4 shows that 5-shot CoT shifts GPT-4's error mode on Roots from "incorrect dominant balance terms" (66.1% → 9.5%) to "missing dominant balance cases" (27.4% → 50.8%), revealing that CoT improves structural reasoning while exposing subtler multi-regime gaps. This is a quantitatively grounded diagnostic, not just a narrative.
 
-- **Core empirical result is directionally compelling.** Even acknowledging that cross-benchmark comparisons are informal, the absolute scores — GPT-4 at 43.8%, o1-mini at 62.3%, Llama3-8b at 20.2% — on a structured, verifiable benchmark make it clear that asymptotic approximation problems expose a real capability gap.
+- **Numerical validation as a principled quality filter.** For a domain where approximate answers are inherently the target, embedding a numerical acceptance criterion in dataset generation is methodologically appropriate and operationally transparent.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None. The core contribution — a generated benchmark revealing model limitations on asymptotic reasoning — stands.
+*None. The core dataset and its main empirical findings are not invalidated by the weaknesses below.*
 
 ### Major
 
-**1. LLM procedural grader is inadequately validated, yet central results depend on it.**
-The paper uses GPT-4o as a procedural grader for *Roots*, *ODEs*, and *Integrals* — exactly the problem types where exact-answer checking fails because approximate answers are multi-valued or regime-dependent. The only validation offered is: *"We manually verify a subset of grading responses and found that LLM-based grading is closely aligned with human grading"* (Sec. 4.1). No sample size, no inter-rater agreement metric, no disagreement analysis, no rubric reliability assessment is reported. All claims about partial credit distributions (Fig. 3) and error mode frequencies (Fig. 4) depend on trusting this grader. This is not a peripheral concern — for a benchmark paper that presents graded partial-credit results as its primary evidence of nuanced model behavior, grader reliability is foundational. The circularity concern is real: GPT-4o grades GPT-4 outputs.
+- **LLM procedural grader is under-validated, undermining reported accuracy figures.** Sec. 4.1 states: "We manually verify a subset of grading responses and found that LLM-based grading is closely aligned with human grading. Average score adjustment for each model and problem type is summarized in Appendix A.3.3." This is the entire validation: no sample size, no inter-rater agreement coefficient (e.g., Cohen's κ), no breakdown of grader errors by problem type or model family, and no analysis of whether grader bias systematically advantages certain model families. Since procedural grading is used for the Roots, ODEs, and Integrals subtasks that constitute the majority of the reported partial-credit analysis and the fine-grained correctness-level results (Fig. 3), the trustworthiness of those results rests on an unquantified foundation. For a benchmark paper, this is a significant gap—benchmark credibility depends on the scoring procedure.
 
-**2. Cross-benchmark hardness comparison is not controlled.**
-The paper's headline framing — that models score "significantly lower compared to results on existing mathematics benchmark datasets" — rests on comparing HARDMATH numbers against published benchmark scores using different shot counts, different model snapshots, and different scoring protocols. Specifically: Llama3-8b is compared at 4-shot on MATH vs. 5-shot on HARDMATH; GPT-4's 72.2% on MATH uses 0-shot CoT while HARDMATH uses 5-shot CoT; MATH-500 comparisons for o1-mini likely use different decoding configurations. The gap is directionally plausible and probably real, but the paper cannot claim a controlled quantitative demonstration that HARDMATH is harder.
+- **Cross-benchmark difficulty comparisons are methodologically uncontrolled.** The paper's key framing claim—that "all models demonstrate significantly lower performance compared to results on existing mathematics benchmark datasets"—relies on direct numerical comparisons between HARDMATH-MINI results and externally reported numbers under incompatible conditions. Concretely: Llama3-8b's MATH score uses 4-shot CoT and GSM8K uses 8-shot CoT, while HARDMATH-MINI uses 5-shot CoT; GPT-4's MATH score is 0-shot CoT; MINIGHOSTS uses "average score out of 5" as the metric rather than exact accuracy. These protocol mismatches mean the observed gaps could partly reflect prompting and grading differences rather than intrinsic difficulty. The paper cannot credibly claim HARDMATH is harder than MATH/GSM8K without controlled re-evaluation under matched protocols.
 
-**3. Benchmark scope is substantially narrower than the title and framing imply.**
-The paper claims to address "challenging problems in applied mathematics" and frames HARDMATH as covering applied math broadly. In reality, all seven problem types — nondimensionalization, root-finding, root correction, nonlinear ODEs, traditional integrals, Laplace integrals — share a single unifying solution technique: the Method of Dominant Balance. The paper is explicit about this (Sec. 3.1: *"One key commonality between all HARDMATH problems is the use of the Method of Dominant Balance"*). This is a legitimate and valuable niche, but the paper's framing significantly overextends the scope claim. Other major asymptotic techniques (matched asymptotics, boundary layer theory, WKB approximation, multiple-scale analysis, perturbation theory for PDEs) are entirely absent.
-
-**4. Tool-augmented evaluation is absent despite being a core motivational claim.**
-The introduction explicitly argues that HARDMATH is *"particularly valuable for benchmarking and developing LLMs capable of effective tool use"* and that *"LLMs must integrate tool use with sophisticated reasoning"* (Sec. 2.1). No evaluation with code execution or SymPy access is presented. A dataset whose stated purpose includes tool-use evaluation that then evaluates only text-in/text-out prompting has not delivered on a core claimed contribution. Without this, the tool-use motivation is unsupported.
+- **Word-problem experiment does not isolate the effect of contextualization.** Sec. 3.4 claims the 40-problem set is "large enough to evaluate the effect of additional context in the problem statement on LLM accuracy." But Sec. 4.3.1 explicitly notes: "We avoided additional prompt engineering, omitting the problem-specific hints listed in Table 4." The resulting 28.1% accuracy vs. 43.8% on HARDMATH-MINI therefore conflates: (a) the presence of applied-science framing, (b) the absence of structural hints, and (c) possible differences in underlying problem composition. No paired controls are used. The experiment cannot support any inference about how context affects model accuracy.
 
 ### Minor
 
-**5. Word-problem evaluation is confounded and underpowered.**
-GPT-4 scores 28.1% on 40 hand-crafted word problems vs. 43.8% on HARDMATH-MINI, and the paper presents this as evidence that realistic contexts degrade performance. But the comparison is confounded: the word-problem prompt *explicitly omits problem-specific hints* that the main evaluation includes (Sec. 4.3.1). Only one model is tested. The lower score could be entirely due to the prompt change, not the additional context. The inference about contextualization cannot be drawn from this experimental design.
+- **"Graduate-level" difficulty claim is asserted rather than validated.** While HARDMATH problems are inspired by a graduate course on asymptotic methods, the paper provides no human expert performance baseline and no calibration against actual course assessments. Some problem families are templated (e.g., polynomials of the form εx^n₁ ± x^n₂ ± 1), and cognitive difficulty across the full generated set is not characterized. Replacing "graduate-level" with "graduate-course-inspired" would be more defensible without further validation.
 
-**6. No math-specialized models evaluated.**
-The paper evaluates GPT-3.5, GPT-4, o1-mini, Llama3-8b, and CodeLlama-13b. For a benchmark published at ICLR 2024/2025, the absence of math-specialized models (Qwen2.5-Math, DeepSeek-Math, MathCoder) limits the paper's utility as a community benchmark. The open-source models selected (8b, 13b) are particularly weak representatives of open-source capabilities.
+- **Validation of solutions vs. validation of derivations is conflated.** The paper frames the pipeline as producing "solutions validated against numerical ground truths," but the actual validation (Fig. 2 and Sec. 3.2) checks that the final approximate formulas agree within 10% at selected evaluation points. The generated derivation text—which is presented to models as gold chain-of-thought and used in rubric-based grading—is not separately audited. The paper partially acknowledges this ("manually verifying each solution step-by-step is impractical"), but the framing does not adequately distinguish final-answer validation from derivation validation.
 
-**7. Error mode analysis is narrow.**
-Figure 4's error mode breakdown is presented as an "error analysis," but it covers only one problem type (*Roots*) and one model (GPT-4). ODEs and Integrals — the hardest types — have no corresponding analysis. The paper does not compare error modes across models. The limitation for o1-mini (no intermediate steps) is noted but unresolved.
+- **HARDMATH-MINI reliability claim is unsubstantiated.** The paper asserts the 366-problem subset "maintains the integrity of our evaluation" but offers no variance estimates, no ranking-stability analysis under multiple seeds, and no confidence intervals on reported accuracy figures. Given the heterogeneous task mix and partial-credit grading, 366 examples may be sufficient, but demonstrating this rather than asserting it would strengthen the benchmark's claims.
 
 ### Trivial
 
-**8.** The 10% numerical error threshold is stated but not justified. No sensitivity analysis is provided showing what fraction of problems would be retained at 5% or 1% thresholds, or whether the threshold affects problem type composition.
-
-**9.** "Significantly boosts performance" and "significantly lower performance" are used in statistical senses without significance tests or confidence intervals. The directional claims are reasonable, but the language should be "substantially."
+- The comparison to MINIGHOSTS (GPT-4 achieves 4.15/5) alongside exact accuracy percentages from HARDMATH-MINI should at least note that these are incommensurable metrics, even if the footnote is brief.
 
 ---
 
 ## Nice-to-Haves
 
-- Difficulty stratification within problem types would allow tracking of fine-grained progress as models improve and help diagnose whether failures are reasoning-difficulty or domain-unfamiliarity.
-- A data contamination check — even a lightweight one using n-gram overlap with training corpora — would address whether high Nondim scores (o1-mini: 84.5%) partly reflect memorization of the canonical Bender & Orszag examples.
-- Extending to matched asymptotics, WKB, or boundary layer problems would meaningfully broaden the benchmark's coverage of asymptotic reasoning.
-- Fine-tuning experiments on the HARDMATH training set, which the paper claims the dataset supports, would validate the claimed utility for model development.
-- A grader robustness check: reporting how model rankings would change if thresholds or rubrics were adjusted slightly would build confidence in the evaluation stability.
+- **Human/expert performance baseline on HARDMATH-MINI.** Even a small sample (e.g., graduate students solving 20–30 problems) would ground the "graduate-level difficulty" claim and contextualize LLM scores in a way that inter-model comparisons cannot.
+
+- **Tool-augmented model evaluation.** The paper positions HARDMATH as valuable for tool-use benchmarking (Sec. 2.1: "LLMs must integrate tool use with sophisticated reasoning"). Running even one model with a Python interpreter would test this advertised application, and the comparison would also illuminate whether low scores stem from reasoning failure vs. computational limitations.
+
+- **Extended error analysis to more models and problem types.** The CoT error-mode analysis in Fig. 4 is one of the paper's most insightful contributions, but it covers only GPT-4 on Roots. Extending to at least o1-mini and ODEs would substantially increase its value.
+
+- **Dataset selection bias analysis.** Reporting the proportion of randomly generated problems rejected by the <10% numerical filter, and whether rejection correlates with specific parameter configurations, would inform understanding of what kinds of asymptotic problems HARDMATH actually covers.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed — treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **"Solutions do not match the style and rigor of traditional problem set solutions"** (Harsh Critic, Claim 4): Overstated. The paper says "match the style and rigor" in the sense of embedding steps in explanatory text with boxed answers — the same convention used by MATH. This is a documentation claim, not an assertion that the solutions are proof-quality mathematics. The concern is a minor writing issue, not a meaningful weakness.
+- **Criticism about the availability/existence of cited models and benchmarks.** No such criticism was raised and none should be.
 
-- **"1.4K in Table 1 vs. 1,060 + 366 in text is misleading"** (Harsh Critic): The paper clarifies this is 1,466 total (1,060 training + 366 MINI + 40 word problems ≈ 1.4K rounded). Not a real inconsistency.
+- **Concern about math-specialized models (Qwen-Math, NuminaMath) not being included.** The Human Finder raises this, and the Spark reviewer also notes the model set is narrow. However, the paper does evaluate o1-mini (an STEM-specialized reasoning model that achieves 90% on MATH-500), which represents the frontier. Adding Qwen-Math would be additive but the absence does not invalidate conclusions. *Removed as generic "add more models" request.*
 
-- **"Benchmark's claim of being fundamentally different type of reasoning is too strong"** (Harsh Critic): Partially valid but over-flagged. The asymptotic/approximate reasoning framing is legitimate; the critique that it's "not fundamentally different" is a philosophical quibble that does not damage the benchmark's usefulness.
+- **Concern about data contamination via problem templates appearing in training data.** The Human Finder raises this. However, the algorithmic generation produces novel coefficient combinations and functional forms. While the mathematical *techniques* (dominant balance, etc.) appear in training data, the benchmark's *evaluation* tests whether models can apply them correctly to new instances—which is precisely its intent. This is not a meaningful contamination concern for this type of benchmark. *Removed.*
 
-- **"Word problem automatic context generation section should be removed"** (Spark): The paper itself explicitly labels this as *preliminary* and *future work* (Sec. 3.5: *"We plan to refine these methods in future work"*). Criticizing a section the paper scopes out as preliminary is scope creep.
+- **LLM-generated context plausibility scoring using another LLM is unreliable.** This is raised for the automated word-problem generation in Sec. 3.5. The paper explicitly labels this as a "preliminary experiment" and "promising step toward automating." Given this scoping, demanding external validation is out-of-scope for this contribution. *Downgraded from weakness to already-scoped preliminary claim.*
 
-- **"Smallest per-category size makes per-category conclusions unreliable"** (Human Finder, W2): The minimum category (Polynomials) has ~54 examples in HARDMATH-MINI (~14.8% of 366), which is enough for rough directional conclusions. The paper does not make fine-grained statistical claims about individual categories.
-
-- **"HARDMATH cannot be independently verified because the citation exists"**: Not raised by reviewers but pre-empted: the dataset is publicly available at the GitHub URL in the abstract.
+- **"Subjective judgment" claim and lack of tool-use experiments.** The harsh critic argues this is a structural problem because models are not given tool access. But the paper's claim is that the *problems* require these capabilities, and the evaluation is testing whether models have them—the finding that they do not is precisely the paper's empirical point. The tool-use claim is an aspiration for future use of the benchmark, not a tested claim. *Downgraded to nice-to-have.*
 
 ---
 
 ## Novel Insights
 
-The finding that 5-shot CoT shifts GPT-4's primary failure mode on Roots problems from *wrong dominant balance identification* (66% → 10%) to *missing dominant balance cases* (27% → 51%) is a genuine insight into how prompting affects asymptotic reasoning: CoT helps models correctly set up the dominant terms but exposes a different, more subtle failure — identifying all relevant regimes. This is a richer decomposition of CoT's effect than simply "improves accuracy," and it suggests that asymptotic benchmarks could be designed to specifically stress-test completeness of case enumeration as a distinct skill from term-level accuracy.
+The most genuinely novel observation in this paper—supported by concrete evidence—is the *error-mode shift* under few-shot CoT prompting. Rather than simply increasing accuracy, CoT qualitatively changes the failure structure: GPT-4 moves from applying dominant balance incorrectly (66.1% → 9.5%) to correctly identifying the method but missing multi-case coverage (27.4% → 50.8%). This suggests that surface-level mathematical technique can be communicated via CoT, but the combinatorial challenge of exhaustively enumerating all asymptotic regimes represents a distinct, harder reasoning bottleneck for LLMs—a finding with implications for how future prompting and training strategies should target regime enumeration rather than method application.
 
 ---
 
-## Evaluation on Key Axes
+## Suggestions
 
-- **Novelty**: Moderate-high. The combination of algorithmic generation, asymptotic-methods focus, and regime-based approximate solutions is genuinely distinct from existing benchmarks. However, the single-technique homogeneity (all dominant balance) constrains what is truly novel about the benchmark's coverage.
-- **Technical soundness**: Mixed. The generation pipeline is well-engineered. The evaluation methodology has a real gap in grader validation that affects confidence in partial-credit and error-mode claims.
-- **Empirical support**: Adequate for the core claim (models struggle), weak for comparative-hardness framing and word-problem conclusions.
-- **Significance**: Moderate. The benchmark addresses a real gap and shows non-trivial model limitations. Significance would be higher with tool-use evaluation and broader model coverage.
-- **Clarity**: Good in the description of problem types and generation pipeline; weaker in evaluation methodology specification.
+1. **Run a grader validation study** before claiming the evaluation methodology is trustworthy: sample at least 100 model outputs across problem types, have two independent human graders score them, compute agreement with GPT-4o grader (Cohen's κ or Krippendorff's α), and report error rates by problem type. Release the grading rubrics and a calibration set.
+
+2. **Controlled cross-benchmark re-evaluation**: re-evaluate at minimum GPT-4 and Llama3-8b on MATH-500 using the exact same 5-shot prompting format used for HARDMATH-MINI, report numbers in a clearly labeled comparison table, and narrow the "HARDMATH is harder" claim to be relative to that controlled comparison.
+
+3. **Redesign the word-problem experiment**: pair each word problem with a decontextualized version sharing identical mathematical content and the same hint format. Evaluate the same model on both, and report whether the drop is attributable to context, hint absence, or problem composition.
+
+4. **Clarify the "solutions validated" language** throughout to distinguish (a) final approximate formula validated at selected numerical points vs. (b) derivation text audited for correctness.
 
 ---
 
 ## Score and Decision
 
-**Calibration against past reviews:**
+**Calibration comparisons:**
 
-- *1tZLONFMjm.md* (GAOKAO-Eval, score 4.5): That paper had a structural contradiction (WQX figure contradicts text), a miscalibrated central metric (ISR), and a fundamentally unjustified model assumption (Rasch as normative LLM target). HARDMATH does not have any of these — its dataset construction is sound, its primary empirical finding is directionally credible, and no internal contradiction is present.
+- **Omni-MATH** (scores: 8,8,6,5 → ~6.75, Accepted as Poster): 4,428 problems, rigorous human annotation, purpose-built Omni-Judge with 86% human consistency, fine-grained sub-domain categorization. HARDMATH is substantially below this bar on evaluation rigor and dataset size.
 
-HARDMATH is **clearly above** GAOKAO-Eval (4.5). The benchmark contribution is real, the pipeline is documented, and the results are interpretable. However, the major weaknesses — particularly the under-validated LLM grader, the informal cross-benchmark comparison, the narrow scope relative to its stated framing, and the missing tool-use evaluation — prevent a strong acceptance. I place this at **5.0**: a genuine but limited contribution that falls short of the validation standard a benchmark paper at ICLR requires for its nuanced evaluation claims.
+- **ARB** (scores: 6,6,5,5 → ~5.5, Rejected): Advanced reasoning benchmark with LLM-based rubric grader. ARB's grader validation reported "moderately high correlation" between GPT-4 and human graders—more explicit than HARDMATH's "we manually verify a subset." ARB was still rejected. HARDMATH's grader validation is weaker than ARB's, but HARDMATH's domain novelty (asymptotic methods vs. ARB's broader multi-domain coverage) and generation pipeline are stronger contributions.
+
+- **U-MATH** (scores: 5,5,6,5 → ~5.25, Rejected): 1,100 university-level problems, LLM-as-judge concerns, no validated agreement metrics—very similar profile to HARDMATH.
+
+**Assessment positioning**: HARDMATH sits approximately at the ARB/U-MATH tier. Its domain specificity and algorithmic generation pipeline are genuine and stronger than U-MATH's contribution, but the evaluation methodology—especially grader validation—is weaker than what was accepted in Omni-MATH. The cross-benchmark comparison issues and word-problem experiment design are real methodological problems that undercut some of the paper's framing claims. The dataset itself is real and useful; the paper's strongest contribution is the generation framework, not the evaluation analysis as currently validated.
+
+**Score: 5.0**
+
+**Axis summary:**
+- *Novelty*: Moderate-to-good — asymptotic-methods focus is genuinely absent from existing benchmarks; algorithmic generation for this domain is a real advance.
+- *Technical soundness*: Below average for a benchmark paper — grader validation and cross-benchmark comparisons are the main gaps.
+- *Empirical support*: Moderate — within-benchmark trends are internally supported; comparative difficulty claims are not.
+- *Significance*: Moderate — fills a real gap; value would be higher with a more rigorous evaluation protocol.
+- *Clarity*: Good — paper is well-organized; Box 1 and Fig. 2/4 communicate the core ideas well.
 
 MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

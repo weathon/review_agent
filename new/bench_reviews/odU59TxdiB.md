@@ -1,61 +1,73 @@
-Now I have enough context to write the final consolidated review.
+Now let me search the review database for calibration papers.Now I have enough information to write the consolidated review. Let me synthesize everything.
 
 ---
 
 ## Summary
 
-SSLAM introduces audio mixtures into self-supervised audio pre-training by combining partial spectrogram mixing (via element-wise max on log-mel spectrograms), a source retention loss (SRL), and a two-stage curriculum on top of a masked latent bootstrapping baseline. The paper also expands the evaluation suite by incorporating polyphonic datasets (SPASS, IDMT-DESED-FL, URBAN-SED) and degrees-of-polyphony subsets. On standard benchmarks, SSLAM achieves 50.2 mAP on AudioSet-2M — the best among reported methods — while internal ablations show improvements on polyphonic datasets over the unmixed baseline.
+SSLAM introduces a pretraining modification to masked latent bootstrapping (MLB) for audio SSL: two log-mel spectrograms are combined via elementwise-max partial mixing, the student sees the mixed signal, the teacher sees the individual sources, and a Source Retention Loss (SRL) pushes the student's patch predictions toward the average of the per-source teacher representations. The authors claim SSLAM achieves SOTA on AS-2M (50.2 mAP) and "new SOTA in both linear evaluation and fine-tuning regimes" on a set of polyphonic datasets, while remaining competitive on monophonic benchmarks. The core empirical observation—mixture-based SSL can help on polyphonic evaluations without catastrophically harming standard benchmarks—is plausible and partly well-supported; however, the paper overclaims on its polyphonic SOTA status and on the mechanism behind SRL.
+
+---
+
+## Claims and Support
+
+| Claim | Support |
+|---|---|
+| **C1: Existing SSL models are underexplored for polyphonic audio; SSLAM addresses this.** | *Partially supported.* The paper rightly shows standard benchmarks are monophonic-dominated. SSLAM improves on the authors' chosen polyphonic benchmarks. But the stronger external-validity claim ("real-world polyphonic robustness") is unsupported—all polyphonic test sets are synthetically composed, matching the synthetic training augmentation. |
+| **C2: SSLAM improves polyphonic performance while maintaining monophonic performance.** | *Partially supported.* The polyphonic gain relative to the authors' own baseline MB-UA is real. The "maintaining or exceeding" claim is mostly accurate but overstated (ESC-50 96.2 vs best 98.1, KS2 98.1 vs best 98.9 in Table 1). "Competitive while improving polyphonic evaluations" is the fair characterisation. |
+| **C3: SSLAM achieves "3.9% relative improvement" on AS-2M, reaching 50.2 mAP.** | *Inaccurate as stated.* Table 1 shows the previous best is 48.6 (BEATs_iter2, A-JEPA, EAT). (50.2 − 48.6)/48.6 = 3.29%, not 3.9%. The absolute gain (1.6 mAP) is genuine and notable; the percentage figure needs correction. |
+| **C4: SSLAM "sets new SOTA" on polyphonic datasets in both eval regimes.** | *Unsupported.* Tables 2–3 compare exclusively among the authors' four variants (MB-UA, MB-PMA, MB-UA-PMA, SSLAM). No external published baselines (e.g., PANNs, PaSST, supervised models known to have been tested on SPASS/URBAN-SED) appear in the polyphonic tables. "Best among our variants" is not a SOTA claim. |
+| **C5: Benefits scale with polyphony level.** | *Well-supported.* Table 3 clearly shows that SSLAM's linear-eval gain over MB-UA widens from {4,5} onward, reaching up to 9.7% at {8,9}, a direct, clean validation of the scaling hypothesis. |
+| **C6: SRL "explicitly preserves individual source characteristics."** | *Partially supported empirically, unsupported mechanistically.* SSLAM beats MB-UA-PMA on most linear-eval polyphonic metrics in Tables 2–3. However, Table 5 shows adding the global SRL loss *lowers* AS-20K fine-tuning from 40.9 to 40.6, and there is no source-recoverability analysis, no source-aware probe, and no controlled test showing that the mixed representation retains both sources distinctly because of SRL. The "preserves integrity of each source" language is much stronger than the evidence permits. |
+| **C7: Elementwise-max spectrogram mixing is better than waveform mixing.** | *Partially supported* (comparison reportedly in Appendix E.0.1, not verified in main body). The IBM/CASA motivation is a heuristic analogy, not a physical model. This should be presented as an empirically effective augmentation choice, not a principled simulation of polyphony. |
+| **C8: Partial mixing is better than full mixing.** | *Partially supported.* Table 4 shows a consistent trend (40.6 vs 40.4 in Stage 2), but margins are 0.2 mAP with no variance reported. |
+| **C9: Using only the final teacher layer for global loss is important under mixing.** | *Weakly supported.* Table 6 shows 40.6 (Global:1, Local:12) vs 40.5 (Global:12, Local:12)—a 0.1 mAP difference. The explanation about "excessive information compression" is speculative. |
 
 ---
 
 ## Strengths
 
-- **Genuine state-of-the-art on AudioSet-2M in Table 1**: SSLAM reaches 50.2 mAP, a +3.9% relative gain over the previous best (EAT, A-JEPA, BEATs all at 48.6), compared under the same protocol against a broad set of prior SSL methods. This is the most credible empirical result because external baselines are present.
-
-- **Introducing polyphonic evaluation to audio SSL benchmarking**: The paper systematically adds SPASS (five sub-environments), IDMT-DESED-FL, URBAN-SED, and a degrees-of-polyphony analysis (Table 3 across seven polyphony levels from 2 to 14+ events). The degrees-of-polyphony ablation — showing that SSLAM's margin grows as the number of concurrent events increases — is a concrete, useful diagnostic that other audio SSL papers lack.
-
-- **Efficient two-stage curriculum with matched compute**: All internal ablation variants (MB-UA, MB-PMA, MB-UA-PMA, SSLAM) are trained for the same 5-epoch Stage 2 on the same hardware, making the component-wise comparison internally fair. The batch-concatenation trick in Algorithm 1 incorporates five objectives without doubling training time.
-
-- **Code and pre-trained models released**: The authors provide a public GitHub repository, which meaningfully lowers the barrier for the polyphonic evaluation pipeline to be adopted by future work.
+- **Genuine empirical advance on AS-2M.** SSLAM achieves 50.2 mAP on AudioSet-2M fine-tuning against a prior best of 48.6 across multiple strong competitors (BEATs_iter2, A-JEPA, EAT) sharing the same AS-only pretraining data and parameter count bracket. A 1.6 mAP gain in this crowded, heavily-benchmarked setting is meaningful.
+- **Degrees-of-polyphony analysis in Table 3.** The stratified breakdown showing linear-eval gains that widen monotonically with the number of distinct simultaneous events (no gain at {2,3}, up to 9.7% at {8,9}) is the paper's most scientifically informative result—it directly and specifically validates the main hypothesis rather than reporting aggregate numbers.
+- **Evaluation in both linear-probing and fine-tuning regimes.** Providing frozen-encoder (linear-eval) results is practically informative given the frozen-encoder deployment context described in the introduction, and allows separation of representation quality from task-specific adaptation.
+- **Two-stage curriculum with efficient batch implementation.** The design choice to concatenate the unmixed and mixed halves into a 2B batch (reducing multitask clones from 16 to 8) maintains throughput while incorporating five objectives—a practical contribution that makes the framework accessible.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None that invalidates the entire paper.*
+*None.* The paper's core empirical finding (mixture-based SSL improves polyphonic performance and yields SOTA on AS-2M) is directionally supported. The problems are overclaiming and missing external comparisons, not fabrication of results.
 
 ### Major
 
-- **"New SOTA on polyphonic datasets" is unsupported by external comparisons.** Tables 2 and 3 compare only SSLAM variants against each other (MB-UA, MB-PMA, MB-UA-PMA, SSLAM); no prior SSL method from Table 1 — not BEATs, not EAT, not Audio-MAE — is evaluated on these same polyphonic benchmarks. The abstract and conclusion both state "SSLAM sets new SOTA in both linear evaluation and fine-tuning regimes," but this requires showing that external methods underperform, not merely that the proposed components improve over an unmixed ablation. This is the paper's headline claim and it is not established.
+- **"SOTA on polyphonic datasets" is unsupported by the comparisons shown.** Tables 2–3 compare only SSLAM against the authors' own three ablation variants. Prior supervised systems such as PANNs and PaSST have been evaluated on some of these datasets (the related work cites Abeßer et al. 2023 doing exactly this), yet they do not appear in the polyphonic tables. A SOTA claim requires beating published external methods under matched protocols; "best among our ablations" does not qualify. This claim appears prominently in the abstract and conclusion, materially overstating what the experiments establish.
 
-- **Ablations are confounded: mixtures co-vary with teacher layer selection.** Section 3.2.1 explicitly states that the global loss for mixed audio uses only the final teacher layer ("we used only the final layer's output for the global loss, denoted as $\mathcal{L}_{\text{global,mixed}}$"), whereas the baseline averages 12 layers. MB-PMA vs MB-UA thus differs in at least two axes: input data and target construction. Because this change is bundled into the "mixing" condition, the paper does not cleanly establish that it is the audio mixtures driving the gains rather than the altered teacher-target configuration. Table 6 shows that top-k selection alone (Global:1, Local:12 → 40.6 vs Global:12, Local:12 → 40.5) has minor impact for the unmixed case, but a controlled experiment matching teacher-layer choice across all four variants is absent from the main paper.
+- **SRL mechanistic claim is not demonstrated, and is partially contradicted by the paper's own ablation.** The paper states SRL "explicitly preserves the individual characteristics of each audio source" and "ensures the integrity of each source." Table 5 shows that adding the global SRL term *reduces* AS-20K fine-tuning from 40.9 to 40.6. The paper acknowledges this in passing but does not revise the mechanistic language. No source-recoverability probe, retrieval experiment, or controlled disentanglement analysis is provided to support the preservation claim. Currently SRL is an empirically mixed regularizer, not a demonstrated source-preservation mechanism.
 
-- **Fine-tuning gains on polyphonic datasets are very small and uneven.** Looking at Table 2 directly: URBAN-SED is identical across all four variants (90.9), IDMT-DESED-FL improves by only 0.1 (94.4 → 94.5), and SPASS Market — the dataset where the headline 9.1% figure is cited — shows gains only in linear evaluation (62.8 → 68.5), while the fine-tuning gain for Market is 89.7 → 90.2 and SSLAM actually underperforms MB-PMA there (90.2 vs 90.8). The paper buries this in the discussion ("performance improvements of up to 9.1% (mAP)") without clarifying that nearly all large gains are in the linear probe regime on synthetic datasets, not in fine-tuning on real-world deployments.
+- **"Real-world polyphonic audio" framing overstates external validity.** The polyphonic evaluation relies entirely on synthetically constructed datasets (SPASS, IDMT-DESED-FL, URBAN-SED via Scaper, and manually stratified degree-of-polyphony splits from AudioSet). The training augmentation also uses synthetic mixing. This creates a train/test alignment that validates the augmentation within the synthetic regime, but cannot support the broad claim of robustness to "real-world" polyphonic soundscapes with natural co-occurrence, room acoustics, and recording noise. The framing should be narrowed accordingly.
 
-- **The SRL "source retention" mechanism is not directly validated.** The target in Eq. 4 is the average of two teacher embeddings; this penalizes deviation from the centroid of two source representations, which does not obviously force the network to retain *both* sources distinctly. No probe confirms that SSLAM representations can recover individual source identity from a mixture (e.g., source-wise linear probing, retrieval, or disentanglement analysis). The paper frames this as a conceptual innovation ("preserves distinct characteristics of each audio source"), but the evidence is limited to downstream task accuracy improvements, which could arise from other factors.
+- **Inaccurate percentage claim in abstract and Section 5.** The abstract and Section 5 state "3.9% relative improvement" over SOTA on AS-2M. The calculation from Table 1 gives (50.2 − 48.6)/48.6 ≈ 3.3%. While the absolute gain is real and substantial, reporting an inflated percentage undermines the paper's credibility; the exact comparator for 3.9% is never disclosed.
 
 ### Minor
 
-- **Regression at low polyphony in linear evaluation.** Table 3 shows SSLAM at 60.6 vs MB-UA at 61.5 for {2,3} events under linear evaluation. The paper notes this briefly ("although performance slightly decreased for lower polyphony level ({2,3}) in the linear evaluation setting") but does not investigate the cause. For a system deployed in real-world settings where many clips are lightly polyphonic or monophonic, a regression at low polyphony is non-trivial.
+- **No statistical uncertainty for small-margin results.** Tables 2, 4, 5, and 6 contain many comparisons where the gap is 0.1–0.4 mAP (e.g., AS-20K 40.4 → 40.9, Table 6 margins of 0.1). Single-run results are common in this field, but for design decisions reported as clear improvements, at least two seeds would help distinguish signal from noise.
 
-- **Potential evaluation circularity for polyphonic datasets.** The polyphonic benchmarks (SPASS, IDMT-DESED-FL, URBAN-SED) are synthetically constructed using tools like RAVEN and Scape, applying mixing processes similar to those used in pretraining. Gains in linear probing may partly reflect that training-time and test-time mixtures are generated by similar procedures, rather than genuine generalization to natural polyphonic audio. The paper does not address this potential circularity.
+- **Downstream evaluation restricted to classification/tagging.** All downstream tasks are audio event tagging or keyword spotting (clip-level classification or mAP). For a model claimed to improve polyphonic *understanding*, frame-level sound event detection (onset/offset) or polyphonic transcription would constitute more direct evidence than global-label prediction, which aggregates over temporal structure.
 
-- **Global SRL hurts AS-20K.** Table 5 shows that adding a global SRL on top of all other objectives drops AS-20K from 40.9 to 40.6. The paper notes this and omits global SRL from the final SSLAM model, but the mechanism for this degradation is not explained.
+- **Computational overhead not quantified relative to baseline.** Stage 1 takes 10 × 7 h and Stage 2 takes 5 × 7.5 h on 4× 3090 GPUs—a substantial compute investment. The paper reports no comparison of total GPU-hours versus the MB-UA baseline, making it unclear whether gains on polyphonic datasets reflect the mixture objective or simply a longer/more complex training regime.
 
 ### Trivial
 
-- The abstract claims "SOTA performance across general audio and speech tasks" but SSLAM is not best on KS2 (98.1 vs ASIT's 98.9). This is an overstatement that should be tightened to enumerate exactly which datasets hold SOTA.
+- **Elementwise-max mixing presented as a physical model of polyphony.** The IBM/CASA analogy is a heuristic, not a physical argument—real mixing is additive in the waveform domain. The presentation should emphasise this as an empirical design choice.
 
 ---
 
 ## Nice-to-Haves
 
-- Evaluate at least two or three prior SSL methods (e.g., BEATs, EAT) on the polyphonic benchmark suite under the same linear evaluation and fine-tuning protocol. This is the single change that would most strengthen the paper's main claim.
-- Include a source-level representation analysis (e.g., linear probe predicting source identity from mixture embeddings) to validate the mechanistic claim behind SRL.
-- Report GPU-hours and memory overhead for SSLAM vs the unmixed baseline, since the doubled batch and extra teacher forward passes are non-trivial.
-- Evaluate with 3+ source mixtures to test scalability beyond the two-source setting used in all experiments.
-- Clarify that element-wise max on log-mel spectrograms is a training heuristic inspired by IBM, not a faithful simulation of acoustic superposition, and discuss what that implies for generalisation to natural polyphonic audio.
+- **Compare elementwise-max mixing against additive waveform mixing in the main paper** (currently relegated to Appendix E.0.1), especially since the physical justification for elementwise-max is contested. If the gain is robust across mixing strategies, this would strengthen the conclusion.
+- **Include at least one frame-level polyphonic task** (e.g., DCASE Sound Event Detection on DESED) to demonstrate temporal polyphonic understanding beyond global-label mAP.
+- **Add external baseline comparisons on polyphonic datasets** (PANNs, PaSST, or BEATs evaluated with the same protocol) to substantiate any SOTA claim on those benchmarks.
+- **Sensitivity analysis on partial-mixing hyperparameters** (mixing fraction, number of regions, number of sources) to show robustness of the design choices beyond the single selected configuration.
 
 ---
 
@@ -63,53 +75,53 @@ SSLAM introduces audio mixtures into self-supervised audio pre-training by combi
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **Harsh Critic — "AudioSet alone cannot provide polyphonic signals" not directly proven**: This was raised as a critical issue, but it is a motivational framing claim rather than a falsifiable headline contribution. The gains from mixing are consistent with the hypothesis and the claim is modest enough in context. Removed as a standalone weakness.
+**Neutral Reviewer — "Methodologically Sound Innovations" (Generic Strength):** Calling the method "conceptually elegant" and "methodologically sound" without specifics is generic praise applicable to many SSL papers. Removed in favour of the specific strength about degrees-of-polyphony analysis.
 
-- **Harsh Critic / Neutral — "Architectural complexity with five losses is a barrier"**: The paper provides Algorithm 1 showing how all five objectives are computed without significantly increasing training time (Stage 1: 7 hr/epoch, Stage 2: 7.5 hr/epoch). The complexity concern is not strongly substantiated. Removed.
+**Neutral Reviewer — "Comprehensive and Rigorous Evaluation" (Generic Strength):** "The experimental design thoroughly isolates the impact of each component" is boilerplate. Replaced by specific remarks on what is and isn't evaluated.
 
-- **Spark — "Training duration confound between SSLAM and Table 1 baselines"**: The four internal variants are all trained for Stage 2 (5 epochs) matched exactly, and the comparison against Table 1 prior methods follows standard audio SSL benchmarking practice where each method is evaluated at its optimal published setting. This is not a meaningful confound by field standards.
+**Neutral Reviewer — "Reproducibility: High" (Nitpick):** Reproducibility praise about disclosed hyperparameters is generic and per the rules, nitpicks about implementation details are removed.
 
-- **Harsh Critic — "Claim 4/5 overclaims SOTA across all categories"**: Addressed as a Trivial weakness (KS2 exception). Not retained as a major concern since the rest of Table 1 is legitimately best-in-class.
+**Spark — Compute-controlled curriculum baseline as a required experiment:** Asking for an exact curriculum-matched baseline (same epoch budget, no mixing) is a legitimate concern but is already partially addressed by the paper's Stage 1 ablation and the MB-UA variant. Without this being a full-paper-invalidating omission, it belongs in Nice-to-Haves rather than a major weakness.
 
-- **Human Finder — "Hyperparameter sensitivity not explored"**: The paper provides targeted ablations on key design choices (mixing fraction, partial vs. full, top-k layers). Sensitivity analysis beyond this is a nice-to-have, not a substantive gap at ICLR.
+**Neutral Reviewer — Token alignment ambiguity in SRL:** The claim that positional synchronization between student mixed patches and teacher source targets is technically ambiguous is not well-supported reading the paper. Algorithm 1 Step 4 ("mask and drop unmixed regions in B post-positional embedding and forward to the teacher") is a reasonable, if compact, description. This is removed as insufficiently grounded.
 
 ---
 
 ## Novel Insights
 
-The degrees-of-polyphony analysis in Table 3 — stratifying evaluation by the actual count of concurrent sound events rather than treating all polyphonic audio as equivalent — is a methodologically useful contribution that would benefit the broader audio SSL community even independent of the SSLAM method itself. The finding that gains over the unmixed baseline monotonically grow with polyphony level ({8,9} events: +4.5 mAP in linear eval; {14+}: +3.0 mAP) while the low-polyphony regime shows slight regression provides genuine insight into where mixture-based pretraining helps and where it may hurt. This deserves more emphasis than the paper gives it.
+The most genuinely novel and defensible scientific finding in this paper is the **degrees-of-polyphony scaling result** in Table 3: mixture-based SSL pretraining provides *no measurable linear-evaluation benefit at low polyphony ({2,3} sources)* but exhibits a widening advantage that reaches ~10% at {8,9+} sources. This non-uniform, threshold-crossing pattern suggests that synthetic mixture pretraining specifically trains the model for features that become discriminative only when time-frequency overlap is dense enough that single-source cues are ambiguous—a non-obvious finding that has direct implications for how future audio SSL benchmarks should be stratified. The observation that fine-tuning largely erases this gap (the model adapts regardless of pretraining), while linear evaluation reveals the representation difference, also points to a useful methodological principle: that linear eval is more diagnostic than fine-tuning for detecting SSL representation quality on out-of-distribution conditions.
 
 ---
 
 ## Suggestions
 
-1. **Add external baselines to Tables 2 and 3**: Run BEATs and EAT (already in Table 1) on the same polyphonic datasets under the same linear probing and fine-tuning protocol. This single addition would transform the polyphonic evaluation from an internal ablation into a credible SOTA comparison.
-2. **Disentangle teacher-layer change from mixture introduction**: Add one ablation row where MB-UA uses the top-1 layer for global loss (matching MB-PMA's target construction) to isolate the effect of mixing from the effect of changed targets.
-3. **Probe source retention directly**: Add a simple experiment testing whether SSLAM embeddings of a mixture are closer to both constituent sources than MB-UA embeddings are, e.g., using cosine similarity to source embeddings from the same teacher.
-
----
-
-## Axis Evaluation
-
-- **Novelty**: Moderate. Incorporating mixing into masked latent bootstrapping is a natural but underexplored idea; the specific element-wise max + SRL recipe is novel. The evaluation contribution (polyphonic benchmark suite) is independently valuable.
-- **Technical soundness**: Moderate. The method is implementable and the internal ablations are fair, but the confounding of teacher-layer selection with mixing, and the unvalidated mechanistic claim for SRL, weaken the technical story.
-- **Empirical support**: Mixed. Table 1 results are strong and externally validated. Tables 2–3 lack external baselines, and fine-tuning gains on polyphonic datasets are often negligible.
-- **Significance**: Moderate-to-high. If the polyphonic evaluation methodology is adopted by the community and the approach scales to natural polyphonic settings, the impact is meaningful. Currently the scope is limited by the absence of external comparisons.
-- **Clarity**: Above average. The methodology is clearly described and Algorithm 1 aids reproducibility. The overclaiming in the abstract and conclusion detracts from overall precision.
+1. **Restate the polyphonic SOTA claim** in the abstract and conclusion to accurately reflect that it is SOTA among the paper's own variants on a new evaluation protocol, and add external SSL/supervised baselines (at minimum PANNs and PaSST) to the polyphonic tables.
+2. **Correct the 3.9% figure** to 3.3% (or disclose the exact comparator baseline that yields 3.9%).
+3. **Revise the SRL mechanistic language** throughout (abstract, contributions, Section 3.2.2) from "explicitly preserves the individual characteristics of each audio source" to language that reflects the empirical finding (e.g., "encourages the model to retain discriminative information from constituent sources, improving linear-evaluation performance on polyphonic tasks").
+4. **Acknowledge Table 5's counter-evidence** for SRL on AS-20K fine-tuning directly in the text rather than in passing; discuss the task-dependence of SRL's benefit.
+5. **Narrow the "real-world polyphonic" framing** to "synthetic-polyphonic evaluation" and add at least one genuinely recorded polyphonic dataset, or a disclaimer about the scope of the evidence.
 
 ---
 
 ## Score and Decision
 
-**Calibration against past reviews:**
-- *MSPL (AAZ3vwyQ4X)*: Score 4.0 — structural evaluation flaw (metric certifies degenerate clustering), weak external comparisons, claims outrun evidence significantly.
-- *JumpReLU SAEs (mMPaQzgzAN)*: Score 6.5 — clean theoretical contribution + broad empirical validation + honest reporting.
+**Calibration:**
 
-SSLAM is clearly **above** the MSPL paper: it achieves genuine externally-verified SOTA on standard benchmarks (Table 1), the methodology is well-described, and the polyphonic evaluation framework is a real contribution. However, SSLAM is **below** JumpReLU SAEs: its headline polyphonic SOTA claim is unsupported by external baselines, the SRL mechanism is not directly validated, and the fine-tuning gains on the primary new benchmarks are marginal. The paper sits between 4.0 and 6.5, closer to the midpoint.
+- *CRAFT (audio cross-representation SSL, Reject, 3,3,5,5)*: Much weaker than SSLAM—limited novelty, non-SOTA results, no code. SSLAM is clearly above this.
+- *qqExiDNsa7 (pre-trained models for speech separation, Reject, 5,5,5,5)*: Similar in spirit—explores how pretraining distribution affects downstream polyphonic tasks—but weaker contribution. SSLAM has a stronger empirical footprint (SOTA on AS-2M).
+- *XRtyVELwr6 (synthetic audio contrastive learning, Accept Poster, 8,6,5,6)*: Higher novelty (entirely new contrastive framework using synthesized data), but also had similar weaknesses (only classification tasks; synthetic-to-real domain gap; mechanistic overclaiming). SSLAM has stronger empirical SOTA results but is more incremental methodologically and overclaims more substantively.
+- *CompA (audio compositional reasoning, Accept Poster, 6,6,8,6)*: Comparable in scope—expanding audio understanding evaluation to underexplored compositional settings—and rated around 6.
 
-Given strong Table 1 performance (externally validated), a genuine evaluation contribution, and reasonable but not fully substantiated core claims, I place this at **5.5** — slightly above average for ICLR, but not meeting the bar for acceptance as-is due to the missing external comparisons on the paper's primary claimed contribution.
+**Assessment:** SSLAM's genuine contributions are: a 1.6 mAP advance on the crowded AS-2M benchmark, an informative degree-of-polyphony analysis, and a reproducible framework that others can build on. Its major deficiencies are: (i) SOTA on polyphonic datasets is unsupported without external baselines; (ii) the SRL mechanistic claim is unsupported and partly contradicted by Table 5; (iii) all polyphonic evidence is synthetic, undermining the "real-world" claim; (iv) the 3.9% figure is incorrect. These are correctable in a revision but are significant enough to prevent acceptance in the current form. The paper sits between the qqExiDNsa7 reject (5,5,5,5) and the CompA accept (6,6,8,6), closer to the borderline.
 
-**Score: 5.5 — Weak Reject / Borderline**
+**Axis summary:**
+- *Novelty*: Moderate — mixing as SSL augmentation exists; the specific SSL framing for polyphony and the SRL loss are incremental but worthwhile.
+- *Technical soundness*: Moderate — architecture is clear and reasonable; mechanistic claims exceed evidence.
+- *Empirical support*: Mixed — strong on AS-2M; weak for the SOTA polyphonic claim; no external baselines.
+- *Significance*: Moderate — the AS-2M gain is meaningful; the polyphonic evaluation framework has value; the real-world claim is overstated.
+- *Clarity*: Good — structure is logical; the overclaiming language is the main clarity problem.
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
+**Score: 5.0** (marginally below acceptance threshold; compelling empirical direction undermined by overstated claims and missing external comparisons)
+
+MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -4,8 +4,8 @@ Most LLM reviewers fail in a specific way: they identify real problems but syste
 
 ## Claim Verification
 
-Extract every substantive claim the paper makes — not just the headline contribution, but specific empirical claims ("our method outperforms X by Y%"), mechanistic claims ("this works because of Z"), scope claims ("this generalizes to domain W"), and implicit claims embedded in framing choices (e.g., choosing a particular baseline implies the comparison is fair).
-
+Extract every main claim the paper makes, not every tiny details but the main contributions.
+ 
 For each claim, assess:
 
 1. **Evidence chain**: What evidence does the paper provide for this claim? Trace the chain from claim → experiment/analysis → result. Identify where the chain is solid, where it has gaps, and where it relies on unstated assumptions.

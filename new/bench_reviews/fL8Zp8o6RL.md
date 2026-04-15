@@ -1,121 +1,148 @@
-Now I have everything I need. Let me write the consolidated meta-review.
+Now let me look at the calibration papers mentioned and search for more.Now I have enough to write the consolidated review.
 
 ---
 
 ## Summary
 
-FTP (FFN Token Pruning) proposes accelerating the prefilling stage of long-context LLM inference by dynamically pruning tokens before the FFN sublayer in each transformer layer, while leaving the attention mechanism intact. Token importance is determined via summed attention scores from the last N queries, and pruned tokens retain their hidden states via the residual connection. The method is training-free and achieves 1.19–1.30× TTFT speedup on 7B/8B models and up to 1.39–1.45× on 32B/72B models, evaluated on LongBench.
+FTP (FFN Token Pruning) is a training-free inference-time method that prunes non-critical tokens selectively before the FFN sublayer during prefilling. Token importance is derived from attention scores in each layer; pruned tokens bypass the FFN and pass through unchanged via the residual path. The method is validated on LongBench across four models (7B–72B), reporting TTFT speedups of 1.2–1.4× with reportedly small accuracy loss. The core contribution is shifting the optimization target from the heavily studied attention/KV-cache pathway to the FFN, which profiling shows dominates per-layer prefilling time.
+
+---
+
+## Claims and Support
+
+**Claim 1: FFN dominates prefilling wall time.**
+**Well-supported.** Figure 3 shows direct profiling: FFN occupies 62.4% and 61.3% on Llama3-8B and Qwen2-7B respectively. The observation is valid for the tested models and flash-attention deployment setting, though the text occasionally implies universality.
+
+**Claim 2: FTP reduces TTFT while retaining most information via the residual path.**
+**Partially supported.** The speedup side is empirically demonstrated. The "retaining most information" argument via residual is a plausible heuristic but not mechanistically established. No ablation isolates the residual path's contribution (e.g., comparing against dropping tokens entirely or zeroing both FFN and residual).
+
+**Claim 3: Attention-based token importance is an effective criterion for FFN pruning.**
+**Partially supported.** Table 3 shows attention >> random pruning, which is meaningful but a weak baseline. No comparison against other non-random heuristics (recency, norm-based, aggregated differently) is provided.
+
+**Claim 4: Cumulative attention-mass thresholding (η) is better than a fixed-k pruning rule.**
+**Unsupported.** Figure 6 illustrates attention concentration but provides no direct comparison between the η-based rule and a fixed pruning ratio. This is an asserted design choice without ablation.
+
+**Claim 5: Preserving the first F layers is important.**
+**Weakly supported in the main text.** Section 3.2.2 cites "Section 4.6" and Appendix 6.1, but the main ablation section (4.6) only compares attention vs. random and does not show results across varying F values. The F=10 choice is not validated in the main paper.
+
+**Claim 6: FTP outperforms prior prefilling-acceleration methods.**
+**Partially supported.** FTP generally outperforms reimplemented PyramidInfer, but the comparison relies on a custom reimplementation whose reproduction fidelity is not fully documented. LLMLingua2 is a prompt compression method not a direct architectural counterpart. LazyLLM (Fu et al., 2024), which the paper explicitly acknowledges as a directly competing prefilling-stage method in related work, is absent from the experimental comparison.
+
+**Claim 7: Performance drop is negligible.**
+**Overstated.** The abstract claims "only a negligible decrease in performance." However, Table 1 shows Llama3-8B Code Completion drops from 55.17 → 35.91 (~35% relative decline). Table 2 shows Qwen1.5-32B Synthetic drops from 52.67 → 46.25 (~12% relative). The 1.30% figure cited in the abstract refers specifically to Qwen2-7B averaged across all tasks, and does not represent the range of outcomes.
+
+**Claim 8: FTP generalizes across models.**
+**Partially supported.** Results on four models covering 7B–72B are presented, which is a reasonable range for the ICLR setting.
 
 ---
 
 ## Strengths
 
-- **FFN-targeted pruning with residual preservation is a clean, novel architectural intervention.** Prior prefilling-acceleration methods prune tokens from entire layers; FTP's insight to prune only before the FFN while leaving attention outputs (and thus key-value computation and hidden states) intact is a conceptually distinct design that specifically targets the bottleneck module (62.4% / 61.3% of per-layer walltime, confirmed in Fig. 3 for both Llama3-8B and Qwen2-7B).
+- **Novel optimization target.** Unlike virtually all prior prefilling-acceleration work (LazyLLM, GemFilter, SnapKV, H2O), which reduces attention computation or KV cache size, FTP targets the FFN sublayer. Backed by profiling showing FFN >60% of per-layer wall time, this is a genuinely underexplored angle with strong empirical motivation.
 
-- **Layer-adaptive pruning ratio via cumulative attention threshold.** Rather than a fixed global pruning count, FTP uses the reserve ratio η to determine how many tokens to retain per layer based on each layer's attention distribution. This is a principled design given that attention concentration genuinely varies across layers (Fig. 5, Fig. 6 showing 95% attention mass on ~60% of tokens).
+- **Clean, training-free design.** The method is conceptually simple: prune tokens before FFN, let residual connections preserve pruned token states. Algorithm 1 provides sufficient pseudocode for replication. No finetuning or auxiliary models needed.
 
-- **Empirical speedups are real and consistent across model scales.** Table 1 shows 1.19–1.30× TTFT speedups on 7B/8B models; Table 2 shows 1.31–1.45× on 32B/72B models. This is demonstrated across four model families without any finetuning, and the overhead analysis in Table 3 rigorously shows the attention-score computation adds only 7–15 ms (1–3% of TTFT).
+- **Attention vs. random ablation (Table 3) quantifies both selection quality and overhead.** The comparison simultaneously shows the attention criterion is essential (random causes catastrophic degradation) and that recomputing attention scores adds only 7–15ms (1–3% of TTFT), directly addressing the overhead concern.
 
-- **The random-vs-attention ablation (Table 3) establishes that token selection is the critical component.** Random pruning at the same token count causes catastrophic accuracy collapses (e.g., Synthetic: 37.00 → 2.72 on Llama3), while attention-based selection recovers near-baseline performance. This is compelling evidence that the selection mechanism, not merely the pruning volume, drives quality.
+- **Empirical breadth across four models and six task categories.** Presenting results on 7B, 7B, 32B, and 72B models, with explicit handling of memory constraints (OOM on PyramidInfer official), gives a credible foundation for generalization claims.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None that fully invalidate the conceptual contribution.*
+*None that would invalidate the core empirical contribution outright, but the headline framing materially misrepresents the results.*
 
 ### Major
 
-- **The paper's central "negligible accuracy loss" claim is factually overstated by its own results.** The abstract states "only a 1.30% performance drop" (referring specifically to Qwen2-7B-Instruct), but Table 1 shows **Llama3-8B Code Completion: 55.17 → 35.91** — a ~35% relative degradation that is catastrophic, not negligible. Table 2 shows Qwen1.5-32B Synthetic 52.67 → 46.25 (~12% relative) and Single-Doc QA 40.68 → 37.16 (~8.7% relative). These are not corner cases; they span multiple models and a full task category. Yet the paper does not discuss these failures, does not characterize which conditions are unsafe, and does not adjust its framing. A practical acceleration paper whose primary value claim is "low accuracy loss" must accurately characterize that tradeoff, including its failure modes — and as written, it does not. The claim must be narrowed to "favorable tradeoff on most tasks/models, with documented failure modes," rather than presenting FTP as a near-universal low-loss method.
+- **The "negligible decrease" headline claim is directly contradicted by reported results.** Code Completion for Llama3-8B drops from 55.17 → 35.91 (−19.3 points, ~35% relative). The Synthetic task on Qwen1.5-32B drops from 52.67 → 46.25 (−6.42 points). These are not negligible. The paper's own abstract and conclusion use the word "negligible" globally without qualification, misleading readers about the method's reliability. This framing needs correction; the paper should instead describe FTP as showing *modest average degradation on most tasks with notable failures on code-related tasks*, and analyze why code completion is particularly vulnerable.
 
-- **The evaluation is confined to LongBench (5k–15k average context length), yet the paper's entire motivation cites 128k–200k context models.** The introduction explicitly references GPT-4 (128k), Claude-3 (200k), and Qwen2 (128k) as the target regime; Figure 2's TTFT motivation relies on long-context bottleneck analysis. But all LongBench tasks have average context lengths of 5k–15k tokens — well below the paper's stated target. It is unknown whether the method's hyperparameters (η, F, P, N), its speedup profile, or its accuracy tradeoff generalize to truly long inputs. Since the attention recomputation overhead scales quadratically with sequence length and the pruning ratio depends on attention sparsity patterns, the gap between the paper's evaluation range and its motivating use case is substantial.
+- **LazyLLM is explicitly described in the related work as a directly competing prefilling-stage method but is absent from empirical comparison.** Section 2.1 states: *"LazyLLM (Fu et al., 2024) also drops tokens from the prefilling stage... However, these methods either yield subtle speedup during prefilling or defer some computation to the decoding stage."* This critique of LazyLLM is the paper's central competitive claim. Without a direct experimental comparison, the claimed superiority over this closest competitor is unverified. This is the most salient baseline gap.
 
-- **No experimental comparison with LazyLLM (Fu et al., 2024), the most directly comparable prefilling acceleration baseline.** LazyLLM is discussed at length in Section 2.1, recognized as a method that also accelerates prefilling by dropping tokens with an aux-cache mechanism. Yet it is entirely absent from the experimental section. The paper compares against LLMLingua2 (a prompt compression method, not a prefilling accelerator) and a reimplemented PyramidInfer. Without LazyLLM comparison, it is impossible to assess FTP's true standing among prefilling acceleration methods.
-
-- **The comparison against PyramidInfer depends on an inadequately validated author reimplementation.** The official PyramidInfer implementation is dismissed for using PyTorch attention (making it slower), and the main fair-comparison column uses the authors' own flash-attention reimplementation with "20% attention weights following the official setting." No validation is provided that this reimplementation faithfully reproduces PyramidInfer's intended quality-speed operating point. The paper reports a single operating point without sweeping the speed-accuracy tradeoff for PyramidInfer, making it impossible to determine whether FTP is Pareto-superior or merely operating at a different hyperparameter setting. On Code Completion (Qwen2), PyramidInfer actually achieves comparable or slightly better results: 56.52 at 1.24× vs FTP's 56.74 at 1.22×. This marginal advantage is not discussed.
+- **Critical design choices are asserted without ablation.** The paper makes at least three specific design claims (1) cumulative-mass threshold η is better than fixed-k, (2) protecting the first F=10 layers is important, (3) residual preservation is the key to accuracy retention. Only the third is tangentially addressed by the random comparison. No ablation compares η-thresholding vs. a fixed pruning ratio, and no ablation in the main text varies F. These are listed as key contributions of the method design (Section 3.2.1–3.2.2) and their empirical justification is deferred entirely to the appendix or absent.
 
 ### Minor
 
-- **Core hyperparameters (P=100, N=50, F=10, η) are stated without justification of their tuning protocol.** Section 4.1 gives these values but does not explain whether they were tuned on a validation split of LongBench, on a held-out set, or via pilot experiments. Since the benchmark mixes heterogeneous tasks and the paper reports averaged metrics, benchmark-specific tuning would be a concern. The main-text ablation (Section 4.6) only compares random vs. attention selection — there is no sensitivity analysis for η, F, P, or N.
+- **PyramidInfer reimplementation fairness is not fully established.** The paper appropriately discloses that it reimplements PyramidInfer with flash attention and recalculates 20% attention weights, but does not state whether the same hyperparameter search effort was applied to both methods, nor verifies behavioral equivalence to the official implementation beyond mentioning the 20% attention weight threshold. Since much of the comparative claim rests on this reimplementation, a brief validation step is warranted.
 
-- **Shallow-layer sensitivity (motivating the F-layer preservation design) is asserted with a reference to Section 4.6, but the actual ablation in 4.6 only covers random vs. attention selection.** This is a central design choice (it controls which fraction of the model gets pruned at all), yet the evidence for it appears only in the appendix according to the text, and the provided main paper does not contain it.
+- **Hyperparameters (η, F, P, N) are manually tuned per model with no sensitivity analysis.** Different η values (0.90 vs. 0.93 vs. 0.95) are set for different models without explanation of how they were chosen. A practitioner facing a new architecture has no guidance. This limits plug-and-play applicability.
 
-- **The paper reports only TTFT speedup, not end-to-end inference latency.** Figure 2 shows that decoding accounts for 20–76% of total inference time depending on the task. FTP retains all token hidden states in the KV cache, so decoding is unaffected — and since hidden states of pruned tokens are degraded by skipping FFN updates, there may be quality effects in downstream autoregressive generation that LongBench's short-answer metrics do not capture.
-
-- **Attention-score importance and FFN-importance are conflated without direct validation.** The paper assumes tokens with high attention mass also require FFN computation, but the two modules serve different functions. Table 3 provides strong pragmatic evidence (attention-based selection dramatically beats random), but this is compared only to random — not to FFN activation norms, hidden-state magnitude, or any other domain-appropriate importance proxy.
+- **End-to-end latency impact is not discussed.** FTP leaves the full KV cache intact (all tokens are stored). Total query latency depends on both TTFT and decode time. For tasks with long generation outputs (e.g., code completion, where decode time is large), the TTFT gain may not meaningfully improve user-perceived latency. Table 3's TTFT numbers show, e.g., that code completion has the smallest baseline TTFT (449ms for Llama3) while having the largest accuracy failure, suggesting the method's deployment value is limited precisely where generation is long.
 
 ### Trivial
 
-- The explanation for why larger models benefit more from FTP (Sec. 4.5: "deeper architecture allows more pruned layers"; "larger models have up to 4× and 10× weights and exhibit robustness") is speculative. This is a reasonable hypothesis but should be presented as one, not as a demonstrated causal account.
+- The profiling results in Section 3.1 are presented as universal facts; they should be qualified as specific to flash-attention deployment on A100 GPUs, since the balance may differ under memory-bound regimes or different hardware.
 
 ---
 
 ## Nice-to-Haves
 
-- **Sensitivity analysis over η, F, P, N:** Even a modest grid search on one model would quantify robustness and guide practitioners. The current fixed-value presentation gives no guidance for new models.
-- **Per-layer pruning rate reporting:** The realized percentage of tokens pruned per layer (not just η) would reveal whether FTP is doing meaningful work across all layers or concentrating pruning in a few. A layer × input-sample heatmap would be informative.
-- **Evaluation at 32k–128k context lengths:** Even if LongBench is used as the quality metric, testing TTFT speedup and attention-recomputation overhead at true long-context lengths would validate the method's relevance to its stated use case.
-- **Discussion of combining FTP with KV-cache compression methods:** FTP reduces prefilling time but does not reduce KV-cache size or decoding latency. Explicitly analyzing whether FTP + SnapKV/H2O yields end-to-end gains would be practically valuable.
-- **Case study on the Llama3 Code Completion failure:** A token-level visualization showing which tokens are pruned in code inputs and why the attention heuristic fails structurally on this task type would be genuinely informative and could lead to a targeted fix.
+- A GPU kernel-level profiling of the dynamic token gather/scatter overhead. Dynamic indexing breaks tensor core coalescence and the claimed wall-clock speedup rests on the assumption that FLOP reduction translates linearly to latency.
+- A brief failure-case study for code completion on Llama3 to understand whether FFN pruning disrupts syntactic structure or multi-step code reasoning.
+- Memory profiling of attention score recomputation at 32k+ contexts, where the O(L²) recomputation cost could approach or dominate the FFN savings at maximum sequence lengths.
+- Discussion of compatibility with GQA/MQA architectures (used in most 70B+ models) where importance scoring on shared KV heads may introduce head-specific bias.
 
 ---
 
 ## Removed Points
 
-*These points are flagged as removed; treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **"Profiling based on two models/one dataset doesn't establish general FFN bottleneck"** (Harsh Critic): The paper shows 62.4%/61.3% FFN walltime consistently across both Llama3 and Qwen2 on TriviaQA (Fig. 3). This is a plausible and practically relevant result for the two model families used throughout. Demanding breakdowns across all possible setups is scope creep for a systems paper where the profiling serves as motivation, not a central empirical claim.
+- **Harsh Reviewer: "The paper's main quality evaluation is too coarse."** Partially valid but overstated. LongBench's protocol of averaging heterogeneous metrics (F1, Rouge-L, etc.) into a single score is the community-standard evaluation methodology for long-context LLMs — the paper follows the official LongBench pipeline faithfully. The valid version of this criticism (code completion failure) is retained above.
 
-- **"Last-N-query sufficiency not validated"** (Harsh Critic): The paper explicitly cites prior work (Li et al., 2024 / SnapKV) for the empirical finding that last-query attention patterns are nearly consistent with all-query patterns. Adopting a validated heuristic from prior work does not require re-validating it in every new application.
+- **Harsh Reviewer: "Recalculating attention adds only negligible cost (unsupported)."** Table 3 directly quantifies this: 7–15ms, 1–3% of TTFT. This is empirically established and the criticism is incorrect.
 
-- **"Eq. 2–3 reserve ratio not justified vs. fixed-ratio pruning"** (Harsh Critic): The paper provides both analytical motivation (attention distributions vary across layers, Fig. 5 third observation) and qualitative justification for an adaptive threshold. The lack of a formal proof of optimality is not a weakness for an empirical systems paper.
+- **Spark Reviewer: "Claimed 1.2–1.4x speedup is not convincing without kernel-level profiling of gather/scatter overhead."** Moved to Nice-to-Haves. The claimed speedups are measured wall-clock results on real hardware (A100), not theoretical FLOP calculations. While kernel-level profiling would strengthen the paper, the empirical timing measurements in Tables 1–3 are real evidence.
 
-- **"PyramidInfer* inclusion inflates FTP's perceived advantage"** (Neutral Reviewer): The paper is transparent that PyramidInfer* uses a different (slower) attention kernel and notes it "fails to accelerate the prefilling stage." Its inclusion documents the state of the official release rather than artificially manipulating comparisons. The more substantive concern — that the reimplemented PyramidInfer is not validated — is kept as a Major weakness.
+- **Spark Reviewer: Confidence intervals and multiple-run statistical tests.** Single-run evaluation over LongBench's 200 samples per dataset is the community norm. Not holding the paper to a non-standard.
 
-- **"FTP surpasses baseline in certain tasks is overinterpreted"** (Harsh Critic): The paper does note this (Fig. 7, e.g., Single-Document QA and Synthetic Task), and this is a real empirical observation in the data. Without variance estimates one cannot claim statistical significance, but calling it out as an observation rather than removing it is reasonable.
+- **Neutral/Spark Reviewer: Memory footprint of attention recomputation.** Moved to Nice-to-Haves. The time overhead is documented; memory profiling is useful but not standard in this setting.
 
-- **"Residual preservation does not establish 'substantial information' retention as a validated mechanism"** (Harsh Critic): This is partially a writing-fix concern. The observation is architecturally true (hidden states are unchanged through the FFN sublayer). Demanding a full representation-drift analysis is beyond the paper's scope; the empirical near-baseline performance is itself evidence. Kept as writing-fix level, not a substantive weakness.
+- **Harsh Reviewer: "The residual-path argument requires layerwise representational analysis."** Excessive demand for mechanistic proof in an empirical systems paper. The ablation showing attention >> random partially supports this, and the accuracy results mostly support it (code completion aside). Moved to Nice-to-Have framing.
 
 ---
 
 ## Novel Insights
 
-The paper's most original contribution is the observation that token pruning can be *layer-sublayer-selective* — applied only to the FFN while leaving attention (and thus KV cache and context integration) fully intact. This is architecturally distinct from prior token-dropping methods that prune from the entire layer and must compensate with elaborate reconstruction schemes (LazyLLM's aux-cache). The residual-connection bypass for pruned tokens is not merely a trick but a principled choice: the FFN update is set to zero, meaning the pruned token's hidden state is carried forward unchanged, which preserves the full attention-integrated representation across layers. The practical consequence is that the method can operate with a high reserve ratio (η=0.90–0.95) yet still achieve meaningful speedups, because attention distributions are naturally sparse. Whether this advantage persists at truly long contexts (where attention becomes less concentrated due to sink token saturation) is the key open question the paper leaves unaddressed.
+The most substantive insight across all reviewers — raised but not fully developed — is the *disaggregation of prefilling bottleneck*. Prior work has universally treated prefilling as an attention/KV-cache problem. FTP demonstrates empirically that, under flash attention (the de facto production standard), the FFN module dominates per-layer wall time at a ratio of ~2:1 over attention. This reframes the optimization problem: methods that only reduce attention computation are leaving >60% of the prefilling bottleneck untouched. If the code completion failure is resolved (either by task-specific operating points or a task-adaptive η), this insight could motivate a broader family of FFN-targeted inference optimizations. The observation that larger models appear more robust to FFN token pruning (Table 2 vs. Table 1) is also interesting but unexplained — it may reflect either parameter redundancy or the 32k context enabling a higher absolute number of retained tokens.
 
 ---
 
 ## Suggestions
 
-1. **Narrow the "negligible accuracy drop" claim in the abstract and conclusion.** The Llama3 Code Completion result (35% relative drop) directly contradicts the current framing. Acceptable reframing: "strong tradeoff on most tasks, with code-completion on Llama3-8B being a documented failure case requiring further investigation."
-2. **Add experimental comparison with LazyLLM on at least the main model-benchmark combination.** This is the most critical missing comparison given LazyLLM's direct relevance.
-3. **Investigate the Llama3 code completion failure.** Analyze which tokens are pruned, whether code-structured inputs have different attention sparsity patterns, and whether task-adaptive η or a different F value mitigates the degradation.
-4. **Report TTFT and accuracy at longer context lengths** (16k, 32k tokens at minimum), as this directly tests the headline motivation.
-5. **Provide an η-sensitivity plot and a shallow-layer sensitivity ablation in the main paper.** These support two central design choices that are currently under-evidenced.
+1. **Reframe the accuracy claim honestly.** Replace "negligible decrease" throughout with "modest average degradation on most tasks, with task-specific variation." Explicitly address the code completion failure for Llama3 and discuss why the method is less suitable for that task category.
+2. **Add LazyLLM as an experimental baseline** (Section 4.3). Since it is already described in related work as the most directly competing prefilling-stage method, its absence is conspicuous. If LazyLLM cannot achieve real speedup due to implementation constraints, document this honestly as a comparison note.
+3. **Add main-text ablations for η-threshold vs. fixed-k and for varying F.** These are design claims, not supplementary curiosities. Even a 2×2 table on a single dataset would substantially strengthen Section 3.2.
+4. **Provide a hyperparameter selection heuristic** or show sensitivity across the range (η = 0.85–0.99, F = 5–20) so users can configure FTP without a full grid search on each new model.
 
 ---
 
 ## Evaluation on Key Axes
 
-- **Novelty**: Moderate. FFN-only token pruning via attention scores with residual preservation is a specific and distinct variant of token pruning, not seen in prior work. The core insight is genuine but the individual components (attention-based importance, residual connection, first/last token preservation) are each borrowed from prior work.
-- **Technical soundness**: Below average. The method is algorithmically sound, but hyperparameter choices are poorly justified, the main comparison baseline relies on an author reimplementation without validation, and the ablation is thin.
-- **Empirical support**: Weak-to-moderate. Real speedups are demonstrated consistently; the main accuracy claim is overstated by the paper's own results; critical comparisons are missing; evaluation is confined to contexts well below the motivating use case.
-- **Significance**: Moderate if the failure modes are characterized and addressed. The method is training-free, simple, and complementary to decoding-stage acceleration — these are practical virtues. But in its current form, practitioners cannot predict when FTP is safe to deploy.
-- **Clarity**: Mixed. The method description is clear. The experimental section hides failures in averaged metrics and does not discuss outliers, which is a significant clarity failure for a paper whose value rests on the accuracy-speedup tradeoff claim.
+- **Novelty:** Moderate-to-high. Targeting the FFN sublayer specifically is genuinely underexplored and well-motivated by profiling. The use of cumulative attention mass as a dynamic pruning criterion is a clean contribution.
+- **Technical soundness:** Moderate. The method is well-defined and reproducible. However, several design choices are asserted without ablation, and the residual pathway argument is a plausible heuristic rather than an established principle.
+- **Empirical support:** Mixed. Strong on 5 of 6 task categories, with a clear and significant failure on code completion for Llama3 (35.91 vs. 55.17 baseline) that directly contradicts the headline claim. The absence of a comparison with LazyLLM — the most similar prior method — weakens the competitive positioning.
+- **Significance:** Moderate. A 1.2–1.4× TTFT speedup is real but modest. The FFN-targeting insight is valuable for the community even if the current implementation has limitations.
+- **Clarity:** Good. Algorithm 1, Figure 4, and the performance profiling figures are well-presented. The motivation flows logically from profiling to design. The abstract's "negligible" framing is the main clarity failure.
 
 ---
 
 ## Score and Decision
 
-**Calibration against past reviews:**
+**Calibration anchors:**
 
-- `mMPaQzgzAN.md` — JumpReLU SAEs, **6.5 (Accept)**: Clean theoretical contribution with KDE-STE equivalence, solid multi-site empirical evaluation, moderate novelty, real interpretability study. Core claims are defensible.
-- `GGlpykXDCa.md` — MMQA benchmark, **4.5 (Reject)**: Useful benchmark, but structurally wrong SQL metric and unsupported claims undermine central results.
-- `D0Cdljktp2.md` — Memformers, **4.0 (Reject)**: Core proposition does not prove what it claims; toy-scale experiments; Figure 4 uses training data.
+| Paper | Topic | Scores | Decision |
+|---|---|---|---|
+| LazyLLM (am5Z8dXoaV) | Dynamic token pruning for prefilling | 6, 5, 6, 3 (~5.0 avg) | Reject |
+| GemFilter (9iN8p1Xwtg) | Early-layer token filtering for context reduction | 6, 5, 5, 5 (~5.25 avg) | Reject |
+| UNComp (28oMPC5bcE) | Uncertainty-aware KV compression for prefilling | 6, 5, 6, 5 (~5.5 avg) | Reject |
+| FlexPrefill (OfjIlbelrT) | Adaptive sparse attention for prefilling | 8, 8, 8, 8 | Accept (Oral) |
 
-**Relative placement:** FTP is better than Memformers (4.0) — the method actually works empirically and the speedups are genuine. It is comparable to or slightly above MMQA (4.5): both have a useful core contribution and both have meaningful methodological gaps that undermine the central claim. FTP's central claim ("negligible accuracy loss") is undermined by its own Table 1 results, and the missing LazyLLM comparison and reimplemented PyramidInfer baseline are real evidentiary problems. However, unlike MMQA's metric error, FTP's failures are quantified in the paper (they just aren't discussed), which is less damaging. I place FTP just above MMQA at **5.0 — borderline reject**. The idea is good enough to pursue, but the paper needs the Llama3 failure mode addressed, the LazyLLM comparison, and the overclaiming narrowed before it is ready for acceptance.
+FTP is most directly comparable to GemFilter and LazyLLM. It improves on both in presentation and methodological clarity. The evaluation is broader (4 models, 6 tasks). However, the significant code completion failure directly contradicts the headline claim, the ablation suite is inadequate for the design choices claimed, and LazyLLM — explicitly identified in the related work as the nearest competitor — is not empirically compared. These issues collectively mirror the weaknesses that led to GemFilter and LazyLLM being rejected.
 
-**Score: 5.0 — Reject**
+Relative to FlexPrefill (Oral, 8s): FlexPrefill has stronger theoretical grounding, multiple novel components with ablations, and a more careful treatment of its accuracy claims. FTP does not approach that bar.
+
+**Final Score: 5.0 — Reject.** The FFN-targeting insight is worth publishing but the current submission overstates its results, has a significant unaddressed failure case (code completion), and lacks the ablations needed to validate its design claims.
 
 MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

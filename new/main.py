@@ -5,7 +5,6 @@ import json
 import random
 import re
 import logging
-import shutil
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -18,10 +17,9 @@ import dotenv
 dotenv.load_dotenv()
 import os
 os.environ["OPENAI_DEFAULT_MODEL"] = "z-ai/glm-5.1"
-HARSH_MODEL = "gpt-5.4"
+HARSH_MODEL = "gpt-5.4" 
 MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
 # MERGER_MODEL = "claude-sonnet-4.6"
-DIRECT_SCORE = False  # set via --direct_score flag; merger skips search_review and scores directly
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_export_api_key
 
@@ -83,23 +81,59 @@ with open("prompts/timeline.md", "r") as f:
 PAPER_ACCESS_INJECTION = "The full paper text is included in the user message. Use it to verify reviewer claims directly."
 PAPER_ACCESS_FILE = "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly."
 
-def load_prompts(path, paper_access: str = PAPER_ACCESS_INJECTION):
+CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score. You have access to human reviews of other papers through the review finder and search/grep tools. Search tool supports both bm25 and vector search.
+
+Your calibration process:
+
+1. **Topic-based anchors**: Use the review finder to retrieve papers with similar topics. Note their human scores.
+
+2. **Quality-based anchors**: This is critical. Do NOT only search by topic. Search for papers that share similar strength/weakness patterns with the paper under review:
+   - If this paper has strong empirical results but overclaims, search for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
+   - If this paper has a novel framing but weak baselines, search for reviews mentioning "novel framing" "missing baselines" and note those scores.
+
+3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale:
+   - Search for reviews of papers that were scored ~7+ by humans. Read what made them strong.
+   - Search for reviews of papers that were scored ~3 or below by humans. Read what made them weak.
+   - Compare the paper under review against BOTH ends, not just the middle.
+
+   Examples: if reviewing a paper about privacy attacks on face recognition, search for:
+   - "privacy attack face recognition strong paper" → find high-scored papers in the same area
+   - "privacy attack face recognition weak paper" → find low-scored papers in the same area
+   - "face recognition evaluation paper high score" → broaden to related topics at the high end
+   - "privacy evaluation rejected" → find low-end anchors with similar flaws
+
+   If no papers are found with the same topic, you can use more general queries.
+
+4. **Score relative to anchors**: Your final score should be positioned relative to the retrieved examples. If retrieved papers with similar strengths got 7s from humans, and papers with similar weaknesses got 3s, use that range. Do not compress everything into 4-6.
+
+When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
+
+You can use read_file to read these files. List the papers you compared and the reasoning.
+
+Let the score distribution follow the actual quality of the paper relative to the calibration examples.
+The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well."""
+
+CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
+
+
+def load_prompts(path, paper_access: str = PAPER_ACCESS_INJECTION, no_cal: bool = False):
     with open("prompts/" + path, "r") as f:
         content = f.read()
     content = content.replace("{{PAPER_ACCESS_INSTRUCTION}}", paper_access)
+    cal_instruction = CAL_INSTRUCTION_WITHOUT if no_cal else CAL_INSTRUCTION_WITH
+    content = content.replace("{{CALIBRATION_INSTRUCTION}}", cal_instruction)
     return content + "\n\n" + timeline
 
 # ── Agent definitions ────────────────────────────────────────────────
-summarizer = Agent(
-    name="Summarizer",
-    instructions="You are a subagent that summarizes files or answers questions about them. Read the file using read_file_full, then respond. You are only able to do specific files, deny other requests. If there is no file path given, return the error message.",
-    tools=[read_file_full],
-)
+# summarizer = Agent(
+#     name="Summarizer",
+#     instructions="You are a subagent that summarizes files or answers questions about them. Read the file using read_file_full, then respond. You are only able to do specific files, deny other requests. If there is no file path given, return the error message.",
+#     tools=[read_file_full],
+# )
 
-_tool_agents = [read_file, summarizer.as_tool(
-    tool_name="summarization", tool_description="Summarizing or answering questions about a specific file given **its absolute path** and question.",
-), search_file, grep_file] 
-
+_tool_agents = [read_file, search_file, grep_file] 
+# summarizer.as_tool(
+    # tool_name="summarization", tool_description="Summarizing or answering questions about a specific file given **its absolute path** and question.",
 harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=HARSH_MODEL)
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"))
 human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents)
@@ -129,19 +163,14 @@ NOTE: This paper was extracted from PDF by an automated parser. There may be for
 
 # ── Core pipeline ────────────────────────────────────────────────────
 
-async def run_pipeline(paper_path: str, skip_scoring: bool = False, reviews_dir: str | None = None, direct_score: bool = False) -> dict:
+async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool = False) -> dict:
     paper_path_abs = os.path.abspath(paper_path)
-    paper_filename = Path(paper_path_abs).stem + ".md"
-    if reviews_dir is None:
-        reviews_dir = str(Path(__file__).parent / "bench_reviews")
-    Path(reviews_dir).mkdir(exist_ok=True)
-
     with open(paper_path, "r") as f:
         paper_content = f.read()
     paper_content = paper_content
 
     review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
-
+    
     find_human_prompt = (
         f"Human reviews directory: {HUMAN_REVIEW_DIR}\n\n"
         f"--- PAPER CONTENT START ---\n{paper_content}\n--- PAPER CONTENT END ---\n"
@@ -178,12 +207,11 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, reviews_dir:
             f"picky — cross-check everything against the actual paper before including it."
         )
         paper_dir = str(Path(paper_path_abs).parent)
-        merged_review = await run_merger_claude_sdk(
-            _MERGER_SDK_MODEL, merger_prompt, paper_dir,
-            reviews_dir=reviews_dir, paper_filename=paper_filename,
-            direct_score=direct_score,
-        )
+        merged_review = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir, no_cal=no_cal)
     else:
+        _merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=no_cal)
+        _merger_tools = [read_file, grep_file] if no_cal else _tool_agents
+        _merger = Agent(name="Merger", instructions=_merger_instructions, model=MERGER_MODEL, tools=_merger_tools)
         merger_prompt = (
             f"Here is the paper being reviewed (extracted from PDF — formatting "
             f"artifacts are parser issues, not paper problems):\n\n"
@@ -193,7 +221,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, reviews_dir:
             f"Remember: many of the harsh critic's points may be nonsensical or overly "
             f"picky — cross-check everything against the actual paper before including it."
         )
-        merged_review = await run_agent_with_retry(merger, merger_prompt)
+        merged_review = await run_agent_with_retry(_merger, merger_prompt)
     scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
     decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"
 
@@ -271,7 +299,7 @@ def match_label(match: bool | None) -> str:
     return "YES" if match else "NO"
 
 
-async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: bool, callback, reviews_dir: str | None = None, direct_score: bool = False):
+async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: bool, callback, no_cal: bool = False):
     """Run pipeline on a list of papers with CONCURRENCY concurrent tasks."""
     sem = asyncio.Semaphore(CONCURRENCY)
 
@@ -281,7 +309,7 @@ async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: boo
         print(f"\n[{i}/{len(papers)}] {paper_info.get('title', pid)} (avg={paper_info['avg_score']:.1f})")
         async with sem:
             try:
-                result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring, reviews_dir=reviews_dir, direct_score=direct_score)
+                result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring, no_cal=no_cal)
             except Exception as e:
                 raise RuntimeError(f"[{pid}] pipeline failed: {e}") from e
             if result is None:
@@ -293,7 +321,7 @@ async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: boo
 
 # ── Benchmark ────────────────────────────────────────────────────────
 
-async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, balanced: bool = False):
+async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, balanced: bool = False, no_cal: bool = False):
     data_path = Path(data_dir)
     cal_ids = [i.split(".")[0] for i in os.listdir(HUMAN_REVIEW_DIR) if i.endswith(".md")]
 
@@ -321,12 +349,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
         print(f"\nFound existing bench_scores.csv with {existing_count} results.")
         choice = input("  [C]ontinue (skip finished papers) or [O]verwrite? [C/o]: ").strip().lower()
         if choice in ("o", "overwrite"):
-            print("  Overwriting existing results.")
-            # Clear the reviews dir and its embedding DB so the first run starts fresh
-            if reviews_dir.exists():
-                shutil.rmtree(reviews_dir)
-            reviews_dir.mkdir()
-            print("  Cleared bench_reviews/.\n")
+            print("  Overwriting existing results.\n")
         else:
             finished = set(existing_df["paper_id"].astype(str))
             print(f"  Continuing — will skip {len(finished)} already-finished papers.\n")
@@ -365,7 +388,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
     if not samples:
         print("Nothing to run."); return
     print(f"Running {len(samples)} benchmark papers (concurrency={CONCURRENCY}) ...")
-    await process_papers(samples, papers_dir, skip_scoring=False, callback=on_complete, reviews_dir=str(reviews_dir), direct_score=DIRECT_SCORE)
+    await process_papers(samples, papers_dir, skip_scoring=False, callback=on_complete, no_cal=no_cal)
 
     scored = [r for r in results if r["pred_score"] != -1]
     if scored:
@@ -375,13 +398,19 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
 
 # ── Single paper ─────────────────────────────────────────────────────
 
-async def run_single_paper(paper_path: str):
+import datetime
+
+async def run_single_paper(paper_path: str, no_cal: bool = False):
     print(f"Reviewing: {paper_path}")
-    result = await run_pipeline(paper_path, direct_score=DIRECT_SCORE)
+    result = await run_pipeline(paper_path, no_cal=no_cal)
     print(f"\n{'=' * 72}\nFINAL REVIEW\n{'=' * 72}\n{result['merged_review']}")
     score = result["scorer_output"]
     if score != -1:
         print(f"\nPredicted score: {score}")
+    with open(os.path.join(Path(__file__).parent, os.path.basename(paper_path).split(".")[0] + f"_review_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"), "w", encoding="utf-8") as f:
+        f.write(f"# Review of {paper_path}\n\n")
+        f.write(result["merged_review"])
+        f.write(f"\n\n**Predicted score: {score}**\n" if score != -1 else "") 
 
 
 # ── CLI ──────────────────────────────────────────────────────────────
@@ -394,14 +423,10 @@ if __name__ == "__main__":
     parser.add_argument("--n_samples", type=int, default=10)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--balanced", action="store_true")
-    parser.add_argument("--direct_score", action="store_true", help="Skip search_review calibration; merger scores directly from its own judgment")
+    parser.add_argument("--no_cal", action="store_true", help="Skip calibration sample search; score based on paper merits alone")
     args = parser.parse_args()
 
-    if args.direct_score:
-        import main as _self
-        _self.DIRECT_SCORE = True
-
     if args.single_paper:
-        asyncio.run(run_single_paper(args.single_paper))
+        asyncio.run(run_single_paper(args.single_paper, no_cal=args.no_cal))
     elif args.benchmark:
-        asyncio.run(run_benchmark(args.benchmark, n_samples=args.n_samples, seed=args.seed, balanced=args.balanced))
+        asyncio.run(run_benchmark(args.benchmark, n_samples=args.n_samples, seed=args.seed, balanced=args.balanced, no_cal=args.no_cal))
