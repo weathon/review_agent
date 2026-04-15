@@ -16,9 +16,10 @@ from agents import Agent, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
 import os
-os.environ["OPENAI_DEFAULT_MODEL"] = "z-ai/glm-5.1"
+os.environ["OPENAI_DEFAULT_MODEL"] = "qwen/qwen3.6-plus"
 HARSH_MODEL = "gpt-5.4" 
-MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
+MERGER_MODEL = "gpt-5.4" 
+# MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
 # MERGER_MODEL = "claude-sonnet-4.6"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_export_api_key
@@ -41,7 +42,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
-CONCURRENCY = 5
+CONCURRENCY = 10
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5

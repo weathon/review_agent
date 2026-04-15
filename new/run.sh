@@ -1,1 +1,1 @@
-python main.py --n_samples 200 --benchmark ../iclr2025 --balanced --seed 765434 --no_cal
+python main.py --n_samples 200 --benchmark ../iclr2025 --seed $(cksum <<< '天上的星星不说话' | cut -f 1 -d ' ')
