@@ -1,124 +1,110 @@
-Let me read the key calibration papers referenced by the human reviewer, and search for more relevant comparisons.Now I have enough information to write the final review. Let me synthesize everything.
+Now I have a thorough understanding of the paper. Let me produce the final consolidated review.
 
 ---
 
 ## Summary
-
-Multimodal Structure Preservation Learning (MSPL) proposes to learn representations of one data modality (MALDI mass spectrometry) that preserve the dissimilarity-based clustering structure of a second modality (whole genome sequencing or antimicrobial resistance profiles). The method combines three objectives—input reconstruction (autoencoder), a pretext classification task (species ID), and a structure-preservation loss that minimizes MSE between pairwise distances in the learned feature space and an external dissimilarity matrix—applied in the epidemiological context of outbreak detection. Experiments are conducted on a synthetic time series dataset, a proprietary MALDI/WGS dataset, and the public DRIAMS MALDI/AMR dataset.
+The paper proposes Multimodal Structure Preservation Learning (MSPL), a framework that learns representations of one data modality (MALDI mass spectrometry) by aligning its pairwise dissimilarity structure with that of another modality (WGS/AMR data), rather than performing feature-level alignment. MSPL combines an autoencoder reconstruction objective, a pretext classification task, and a structure preservation loss (pairwise distance MSE, with a domain-specific SNP variant). The method is evaluated on synthetic time series and two epidemiological datasets with the goal of making cheap MALDI spectra carry the clustering structure of expensive WGS data for bacterial outbreak detection.
 
 ---
 
 ## Strengths
 
-- **Well-targeted, domain-specific structural loss (Eq. 15–16):** The custom SNP-threshold loss that applies no penalty when both feature distance and SNP distance exceed the outbreak threshold is a thoughtful design choice. It explicitly avoids overfitting to irrelevant long-range distances and ties the learning objective directly to the operational definition used by epidemiologists. This is a non-trivial domain adaptation rather than a generic MSE on all distances.
+- **Domain-informed SNP loss design**: The custom $f_\text{SNP}$ loss (Eqs. 15–16) that fits small SNP distances while ignoring large ones is a non-trivial, epidemiologically motivated design choice that reflects the actual outbreak detection criterion. Most papers in this space would use a generic MSE; this adaptation is thoughtful.
 
-- **Well-designed synthetic validation:** The Synth-TS setup—where (f,k) parameters define a latent Gaussian grid structure orthogonal to the observable pretext signal (sine vs. triangle waves)—is carefully constructed to isolate the structure-preservation mechanism from the pretext task. The results on Synth-TS(10,20) and Synth-TS(16,10) clearly show MSPL recovering the parameter-space clusters better than classification-based supervision, providing a clean proof-of-concept.
+- **Honest limitations section**: The authors explicitly document low ARI/NMI for threshold-based clustering on the proprietary dataset, acknowledge the cluster imbalance problem, and note that $\text{MSPL}_\text{num}$ is infeasible in clinical practice—an unusually candid acknowledgment that is valuable even if it partly undercuts the application-level framing.
 
-- **Honest acknowledgment of failure modes:** The Discussion section explicitly identifies that MSPL_thr collapses 544 ground-truth clusters into 38 on the proprietary dataset, and that low ARI across both real datasets points to a fundamental challenge with imbalanced cluster distributions. This transparency is above average for the field.
+- **Controlled synthetic validation**: The Synth-TS setup provides a clean, controllable demonstration of latent structure transfer across modalities. The sparsity experiment across three configurations (5×80, 10×20, 16×10) is well-designed and the results are internally consistent.
 
-- **Meaningful per-species analysis:** Rather than reporting only aggregate metrics, the paper analyzes MSPL lift broken down by species subsets and relates performance to cluster Shannon entropy (diversity). This provides genuine insight into when and why the structural objective adds value over a pure classification approach.
+- **DRIAMS MSPL_num result is substantive**: On the public DRIAMS dataset under the number-constrained scheme, MSPL_num achieves ARI=0.574±0.026, substantially above all baselines, providing one solid piece of evidence that the structural supervision is working.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*(None that fully invalidate the core technical contribution, but the headline practical claim is severely undermined.)*
+*None that fully invalidates the paper, but Critical Issues below rise to near-fatal on the real-world claim.*
 
 ### Major
 
-- **F1 vs. ARI/NMI contradiction invalidates the headline interpretation on the primary real-world dataset.** On the proprietary WGS dataset, MSPL_thr achieves Precision=0.962, Recall=0.962, F1=0.962—but simultaneously ARI=0.001, NMI=0.137, and only 38 predicted clusters versus 544 ground-truth clusters (Table 1, Figure 6). This is not a minor evaluation inconsistency: it demonstrates that the custom cluster F1 can declare near-perfect success while the predicted partition is grossly coarser than the target (massive under-segmentation). The paper frames MSPL_thr's result as demonstrating "superior ability to preserve structure in real-world settings" and "effectively mimicking the decision-making criterion of epidemiologists," but ARI≈0 tells the opposite story for any standard notion of cluster recovery. This contradiction must be explicitly resolved, not silently absorbed as a "limitation." The paper's own metric is permissive of severe over-merging, and using it as the headline success criterion while burying ARI=0.001 in a limitations paragraph is misleading.
+- **The custom cluster F1 metric certifies degenerate under-clustering as near-perfect success.** On the proprietary dataset, MSPL_thr achieves F1=0.962 while ARI=0.001, and Figure 6 explicitly states only 38 predicted clusters against 544 ground-truth clusters. Under the metric definition (Eqs. 12–14), recall approaches 1 when all data points of the same true label land in one large predicted cluster—which is exactly what happens at threshold-based over-merging. An F1=0.962 in this regime is not evidence of "recovering WGS clusters"; it certifies a severely under-segmented partition. Since this is the headline proprietary result, and the paper's core application claim is outbreak-cluster recovery, this is a structural flaw in the evaluation framework. The paper does cite it as a limitation, but continues to present the F1 as a primary positive result in Observation 1, which overclaims.
 
-- **The "bridge the utility gap / viable substitute for WGS" claim is not supported.** MSPL requires paired WGS-derived dissimilarities during training—this is supervised transfer from the expensive modality, not its replacement. The paper nowhere demonstrates performance when WGS information is unavailable for new domains, new hospitals, or new species. The strongest real-world result produces 38 predicted clusters against 544 true clusters with near-zero ARI; this does not establish practical substitutability. The abstract phrase "substantially reduce data acquisition cost" and the introduction's "viable substitute for WGS in practice" should be withdrawn or constrained to a precisely scoped claim (e.g., "may reduce the frequency of WGS required for outbreak screening, given sufficient paired training data").
+- **Table 1 DRIAMS rows are unlabeled duplicates, making results unverifiable.** The DRIAMS section of Table 1 contains two rows labeled "MSPL_thr" and two rows labeled "MSPL_num" with entirely different values (e.g., MSPL_thr rows: ARI=0.437 vs ARI=0.207; MSPL_num rows: ARI=0.005 vs ARI=0.574). These correspond to DRIAMS-B and DRIAMS-C, but no labeling is provided. As written, it is impossible to determine which numbers correspond to which subset, invalidating any per-subset narrative.
 
-- **The clusCLS baseline is compromised by using full-dataset label derivation.** The paper states that ground-truth cluster labels C_T for clusCLS are "derived beforehand using the external dissimilarity matrix d on the full dataset." In cross-validation, this means the supervised targets used by clusCLS encode information from validation/test samples. Since several of the paper's primary conclusions hinge on MSPL outperforming clusCLS, this information asymmetry weakens those conclusions. A split-correct baseline—where cluster labels are derived using only training-fold data—is needed.
+- **Only ablation variants serve as baselines; no independent methods compared.** clusCLS and onlyCLS are both derived from MSPL itself. There is no comparison to metric learning (triplet loss, contrastive loss), classical manifold alignment, or any cross-modal distance/structure learning baseline from the literature. It is therefore impossible to assess whether the structural supervision specifically, or any distance-based representation learning, produces the gains.
 
-- **No comparison to any external baseline.** Both onlyCLS and clusCLS are ablations of MSPL itself, not independent methods. There is no comparison to any established metric learning approach (triplet/contrastive loss with structure-aware positives/negatives), manifold alignment technique, or even a trivial baseline such as applying MDS directly to the external dissimilarity matrix. Without this, it is impossible to assess whether MSPL's specific architecture contributes anything beyond any pairwise-distance-matching objective would.
+- **clusCLS cluster labels are derived from the full dataset before cross-validation splits.** Section 3 states: "the ground truth cluster labels $C_T$ are derived beforehand using the external dissimilarity matrix $d$ on the full dataset." If these labels are then used as training targets within cross-validation folds, validation-set membership influences the supervised targets, creating information leakage. This means the clusCLS comparison may be inflated relative to MSPL, yet MSPL still sometimes trails clusCLS—undermining confidence in both directions.
 
 ### Minor
 
-- **Claim of robustness to pretext task difficulty is unsupported.** Figure 5(b,d,f) shows lift vs. per-species pretext accuracy as a scatter plot and notes "no obvious relationship." Absence of a visual trend is not evidence of robustness: the plots have no confidence intervals, no statistical test, and pretext accuracy is confounded with species size and separability. This should either be demoted to an observation ("pretext difficulty does not obviously correlate with lift") or supported with a controlled experiment.
+- **The "cost reduction" application claim is not empirically supported.** The abstract and conclusion state MSPL can "substantially reduce data acquisition cost" and enable MALDI as a "viable substitute for WGS." The experiments only show that paired training can shape MALDI embeddings; no deployment scenario is evaluated, no MALDI-only inference from a site without WGS is tested, and no cost-performance analysis is conducted. The leap from "structural supervision improves clustering" to "substantially reduces data acquisition cost" is not justified.
 
-- **The evaluation threshold is selected on training-set cluster F1.** For both the proprietary and DRIAMS datasets, the hierarchical clustering threshold is optimized on training data against the cluster F1 criterion, then applied to evaluation. This tightly couples model selection to the same metric used for final evaluation. Since the cluster F1 is already shown to be permissive of over-merging, optimizing it on training data can select thresholds that favor merging solutions aligned with the metric's bias. A held-out threshold search or sensitivity analysis over thresholds is needed.
+- **No hyperparameter sensitivity analysis for $\lambda_0$, $\lambda_1$.** These weights balance three objectives and are presumably tuned per dataset, but no ablation or sensitivity analysis is reported. The model's practical robustness to these choices is unknown.
 
-- **DRIAMS Table 1 rows appear duplicated or misformatted.** Two rows labeled MSPL_thr appear for DRIAMS with substantially different values (ARI 0.437 vs. 0.207; Pretext Accuracy 0.804 vs. 0.912), and a second MSPL_num row appears after clusCLS with yet different values. This makes the DRIAMS results uninterpretable as presented. Whether this is a parser artifact or a genuine table error, it must be corrected for the results to support the claimed conclusions.
+- **The threshold selection procedure for MSPL_thr is tuned on training-set F1 against the same target metric later used for evaluation.** This is a model selection choice that is defensible in principle, but the paper does not treat it as such; it presents tuned-threshold results as standard evaluation without caveat. The proper framing would be to call this out explicitly and also report untuned performance.
 
-- **Claim of advantage on "sparse/high-diversity" data is correlational only.** The paper supports MSPL's advantage in high-entropy species subsets with scatter plots (Figure 5(c,e)) but provides no statistical analysis, no control for sample size or class imbalance, and no mechanism explaining why continuous distance matching should outperform discrete cluster classification specifically in high-diversity regimes. This limits Observation 2 to an empirical tendency, not an established principle.
+- **Observation 2 and Observation 3 are descriptive scatter plots, not statistical analyses.** Claims about lift vs. Shannon entropy and lift vs. pretext accuracy are based on visual trends across a small number of species (10–15 per dataset) without regression, significance testing, or control for sample size per species.
 
 ### Trivial
 
-- The discussion of why Euclidean distances in learned feature space should reproduce external dissimilarities is thin, but for an applied empirical paper this is acceptable if experiments are decisive.
+- **MSPL_num is acknowledged as clinically infeasible but still used as a result vehicle.** This is discussed in limitations, but leads to internal inconsistency: the more compelling numbers require oracle knowledge of the number of clusters. This should be clarified as an upper bound/oracle setting throughout the results.
 
 ---
 
 ## Nice-to-Haves
 
-- **Scatter plots of learned pairwise distances vs. external dissimilarities on held-out data** would directly show whether the structure-preservation loss achieves distance-level alignment or collapses into a degenerate solution. This would provide mechanistic evidence independent of downstream clustering decisions.
-- **Sensitivity analysis for λ₀ and λ₁** to assess how fragile the learned representations are to the relative weighting of the three loss components.
-- **Discussion of O(N²) scaling of the pairwise distance loss** and practical strategies (subsampling, approximate nearest-neighbor) for large datasets.
-- **Comparison of downstream outbreak detection decisions** (outbreak vs. non-outbreak pair retrieval) rather than only static clustering recovery metrics, which would better align with the motivating application.
+- A scatter plot of predicted pairwise distances vs. true pairwise distances ($\text{pdist}(\mathbf{h})$ vs. $d$) would directly validate whether the distance matching objective is working as intended.
+- Comparison against at least one metric learning baseline (e.g., a Siamese network trained with contrastive or triplet loss on pairwise SNP dissimilarities) would situate the contribution in the broader literature.
+- Per-species t-SNE/UMAP colored by both WGS cluster and predicted cluster for multiple species would expand on the single *K. pneumoniae* bipartite graph.
+- Ablation comparing the custom SNP loss vs. standard MSE on the proprietary dataset to justify the design.
 
 ---
 
 ## Removed Points
 
-*These points are flagged for removal—treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **Reproducibility concern about the proprietary dataset being unavailable (Neutral Reviewer, Spark):** Per hard rules, criticisms questioning the availability of datasets cited in the paper are removed. The proprietary dataset exists; the inability of external reviewers to reproduce its results does not constitute an author error.
+- **"The proprietary dataset limits reproducibility"** (Human Finder, Neutral Reviewer): Per the hard rules, pure reproducibility concerns are removed. The proprietary dataset reflects a real clinical data environment; using it is a scientific strength even if not publicly shareable.
 
-- **"Cannot independently verify" phrasing (Harsh Critic):** Same rule applies.
+- **"Unfair comparison with clusCLS because it has access to cluster labels while MSPL does not"** (Neutral Reviewer): On reflection, this is not an unfair comparison in the direction that hurts the author—MSPL with *less* supervision sometimes matches or beats clusCLS, which is actually evidence in favor of MSPL. This asymmetry favors the baseline, making the point moot under the hard rules.
 
-- **Request for confidence intervals on per-species lift scatter plots:** Standard in the paper's application domain (clinical microbiology + ML) to report aggregate metrics with cross-validation CIs, but per-species breakdowns with confidence bands are not the norm for this scale. Moved to nice-to-have.
+- **"CLIP-style contrastive objectives could achieve the same thing"** (multiple reviewers): This is speculative without evidence. The suggestion is included above as a nice-to-have comparison, but the claim of equivalence is unsubstantiated and removed as a stated weakness.
 
-- **Request for theoretical proof of why Euclidean feature distances should approximate external dissimilarities (Harsh Critic):** This is an empirical systems paper in a biological application domain; demanding theoretical guarantees is outside community norms.
+- **"Generic: the paper is well-written / the topic is important"** (Neutral Reviewer strength #1 framing): Removed as too generic. The domain specificity is kept in the substantive strengths.
 
-- **DRIAMS threshold selection heuristic (choosing threshold to maximize non-singleton clusters):** The Harsh Critic raises this as inflating learnability of the target structure, but the paper explicitly states the choice and its rationale. While imperfect, this is a domain-driven heuristic, not a hidden design choice. The concern is weakened.
-
-- **Generic strengths removed:** "Three-component loss is well-formulated" (applies to any multi-task loss paper), "the paper is well-organized" (applies to any readable paper), "the problem is practically relevant" (applies to any applied paper in the domain).
+- **"Requesting user studies or theoretical proofs"** (implicit in some reviewer comments): Not applicable, correctly absent.
 
 ---
 
 ## Novel Insights
 
-The paper's most genuinely novel empirical observation—not its core method—is that a direct pairwise distance matching objective degrades relative to a classification-based structure supervision as the diversity of the cluster distribution increases. The per-species entropy vs. lift analysis in Figure 5(c,e) suggests that MSPL's continuous distance-space supervision becomes relatively more valuable precisely when the discrete cluster structure is complex and hard for a classification head to represent. This is a useful secondary finding for the multimodal representation learning community, independent of the (overstated) headline claims, and motivates a cleaner follow-up study controlling for cluster count and size distribution.
+The structural insight that pairwise dissimilarity matching produces *more* robust structure transfer than cluster-label classification (clusCLS) under data sparsity is genuinely non-obvious and interesting: at low samples-per-cluster, direct distance supervision degrades more gracefully than classification supervision. This is most clearly shown on Synth-TS and is the paper's sharpest empirical contribution. If this finding were validated with stronger statistical rigor and proper external baselines, it would be a noteworthy result for the metric learning and multimodal representation communities.
 
 ---
 
 ## Suggestions
 
-1. **Disentangle the metric story:** Report ARI and NMI as co-primary metrics alongside cluster F1; do not bury ARI≈0 in Figure 6 while foregrounding F1=0.962. If the paper's intent is specifically outbreak *screening* (grouping related strains together regardless of fine cluster boundaries), reframe the task definition, metric, and claims accordingly. This would be a defensible and more honest framing.
-
-2. **Add a split-correct clusCLS baseline** where cluster labels are derived only from training-fold dissimilarities and validation/test points are assigned by nearest-cluster membership. This would remove the information asymmetry and make the comparison to the classification baseline fair.
-
-3. **Add at least one external baseline:** A Siamese network trained with binary labels derived from the same SNP threshold, or MDS+clustering directly on the external dissimilarity matrix, would calibrate how much MSPL's neural architecture contributes over simpler distance-matching approaches.
-
-4. **Retract or narrow the "viable substitute for WGS" framing:** Replace with "may complement WGS-based surveillance by preserving outbreak-relevant structure in MALDI representations, given sufficient paired training data," and add analysis of how performance degrades as the fraction of paired training samples decreases.
-
-5. **Provide a confusion heatmap or bipartite graph for the full proprietary dataset** (not only K. pneumoniae) showing how MSPL_thr's 38 predicted clusters map to the 544 ground-truth clusters. This would allow readers to judge whether the high recall reflects meaningful grouping or trivial merging.
+1. **Fix the DRIAMS table**: Label rows as DRIAMS-B and DRIAMS-C explicitly, or merge with a clear column identifier. As written, the table is uninterpretable.
+2. **Replace F1 as the primary proprietary-dataset metric**: Use pairwise clustering F1, B-cubed, or V-measure alongside the current F1. Present the current F1 only as a supplementary metric with the caveat that it rewards coarse solutions.
+3. **Add one external baseline**: A Siamese network or triplet-loss metric learner trained on the same pairwise SNP/AMR supervision would address the most serious empirical gap.
+4. **Separate model selection from evaluation**: Clearly label threshold-tuned results as "oracle-threshold" and present a held-out threshold selection strategy for the deployment-realistic setting.
+5. **Fix clusCLS label derivation**: Derive cluster labels fold-wise within each cross-validation split to avoid leakage.
 
 ---
 
+## Evaluation
+
+- **Novelty**: Low-to-moderate. The pairwise MSE structure loss is known; the framing as "structure-level vs. feature-level alignment" and the domain-specific SNP loss are new, but the gap from existing manifold alignment and metric learning is not clearly quantified.
+- **Technical soundness**: Moderate. The method is coherent but the evaluation framework has a structural flaw (F1 metric) and the clusCLS comparison has a potential leakage problem.
+- **Empirical support**: Weak for the main application claim on real data; moderate on synthetic data and DRIAMS MSPL_num.
+- **Significance**: Moderate in motivation; lower in demonstrated impact given the evaluation issues.
+- **Clarity**: Below average due to the unlabeled duplicate DRIAMS rows and the gap between headline F1 numbers and ARI.
+
 ## Score and Decision
 
-**Calibration anchors used:**
+No past reviews exist for this run; calibration is against ICLR training priors (average ~5.12). The paper sits below the acceptance threshold: it has a real application, honest limitations, and one solid result (DRIAMS MSPL_num ARI=0.574), but the headline proprietary result is driven by a metric that certifies severe under-clustering as near-perfect, the DRIAMS table is unintelligible as presented, baseline comparisons are limited to ablations only, and the application-level claims outrun the evidence. This is not a fatal flaw in the sense that the method itself may work—the DRIAMS and synthetic results suggest genuine signal—but the paper as submitted does not make a convincing case for its strongest claims and has a structural evaluation problem that must be corrected before the results can be trusted.
 
-| Paper | Type | Scores | Decision |
-|-------|------|--------|----------|
-| k5THrhXDV3 (Multimodal Diffusion VAE clustering) | Multimodal clustering with clear baselines, novel cluster selection | 8, 6, 6 | Accept poster |
-| khsBg6Cl7s (GRACE single-cell multimodal) | Biological multimodal learning, marginal real-data improvements, compromised baselines | 3, 3, 5 | Reject |
-| ayupWYA1qD (Toto time series foundation model) | Proprietary data, incremental novelty, insufficient baselines | 3, 3, 5, 3 | Reject |
-| yNyDvFQNEm (Network-aware clustering) | Combination of existing methods, limited real-world experiments | 3, 5, 5, 3, 1 | Reject |
-
-This paper sits between the reject cluster and the accepted poster. Relative to k5THrhXDV3 (the accepted multimodal clustering paper), this paper has: no comparison to external methods, a genuine evaluation metric pathology (F1≈1 vs ARI≈0), and overclaimed real-world conclusions. Relative to GRACE and Toto (rejected papers), this paper has: a cleaner core formulation, a well-designed synthetic proof-of-concept, and transparent limitations discussion.
-
-The deciding factors against acceptance are the severity of the F1/ARI contradiction on the primary real-world use case, the absence of any external baselines, the compromised clusCLS comparison, and the gap between the abstract's "viable substitute for WGS" framing and what the experiments actually show. These collectively fall short of the ICLR acceptance bar even for a poster.
-
-**Axis summary:**
-- **Novelty:** Low-moderate. Pairwise distance matching is well-established; the contribution is the domain application and the thresholded SNP loss variant.
-- **Technical soundness:** Fair. The method is coherent; the evaluation protocol has real problems.
-- **Empirical support:** Weak for the headline claims. Strong on synthetic data only.
-- **Significance:** Potentially moderate if the real-data evidence were stronger.
-- **Clarity:** Good. The paper is honest about what it does and doesn't show.
+**Score: 4.0**
+**Decision: Reject**
 
 MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

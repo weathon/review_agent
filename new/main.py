@@ -18,9 +18,10 @@ import dotenv
 dotenv.load_dotenv()
 import os
 os.environ["OPENAI_DEFAULT_MODEL"] = "z-ai/glm-5.1"
-HARSH_MODEL = "gpt-5.4" 
+HARSH_MODEL = "gpt-5.4"
 MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
 # MERGER_MODEL = "claude-sonnet-4.6"
+DIRECT_SCORE = False  # set via --direct_score flag; merger skips search_review and scores directly
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_export_api_key
 
@@ -128,7 +129,7 @@ NOTE: This paper was extracted from PDF by an automated parser. There may be for
 
 # ── Core pipeline ────────────────────────────────────────────────────
 
-async def run_pipeline(paper_path: str, skip_scoring: bool = False, reviews_dir: str | None = None) -> dict:
+async def run_pipeline(paper_path: str, skip_scoring: bool = False, reviews_dir: str | None = None, direct_score: bool = False) -> dict:
     paper_path_abs = os.path.abspath(paper_path)
     paper_filename = Path(paper_path_abs).stem + ".md"
     if reviews_dir is None:
@@ -180,6 +181,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, reviews_dir:
         merged_review = await run_merger_claude_sdk(
             _MERGER_SDK_MODEL, merger_prompt, paper_dir,
             reviews_dir=reviews_dir, paper_filename=paper_filename,
+            direct_score=direct_score,
         )
     else:
         merger_prompt = (
@@ -269,7 +271,7 @@ def match_label(match: bool | None) -> str:
     return "YES" if match else "NO"
 
 
-async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: bool, callback, reviews_dir: str | None = None):
+async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: bool, callback, reviews_dir: str | None = None, direct_score: bool = False):
     """Run pipeline on a list of papers with CONCURRENCY concurrent tasks."""
     sem = asyncio.Semaphore(CONCURRENCY)
 
@@ -279,7 +281,7 @@ async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: boo
         print(f"\n[{i}/{len(papers)}] {paper_info.get('title', pid)} (avg={paper_info['avg_score']:.1f})")
         async with sem:
             try:
-                result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring, reviews_dir=reviews_dir)
+                result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring, reviews_dir=reviews_dir, direct_score=direct_score)
             except Exception as e:
                 raise RuntimeError(f"[{pid}] pipeline failed: {e}") from e
             if result is None:
@@ -363,7 +365,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
     if not samples:
         print("Nothing to run."); return
     print(f"Running {len(samples)} benchmark papers (concurrency={CONCURRENCY}) ...")
-    await process_papers(samples, papers_dir, skip_scoring=False, callback=on_complete, reviews_dir=str(reviews_dir))
+    await process_papers(samples, papers_dir, skip_scoring=False, callback=on_complete, reviews_dir=str(reviews_dir), direct_score=DIRECT_SCORE)
 
     scored = [r for r in results if r["pred_score"] != -1]
     if scored:
@@ -375,7 +377,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
 
 async def run_single_paper(paper_path: str):
     print(f"Reviewing: {paper_path}")
-    result = await run_pipeline(paper_path)
+    result = await run_pipeline(paper_path, direct_score=DIRECT_SCORE)
     print(f"\n{'=' * 72}\nFINAL REVIEW\n{'=' * 72}\n{result['merged_review']}")
     score = result["scorer_output"]
     if score != -1:
@@ -392,7 +394,12 @@ if __name__ == "__main__":
     parser.add_argument("--n_samples", type=int, default=10)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--balanced", action="store_true")
+    parser.add_argument("--direct_score", action="store_true", help="Skip search_review calibration; merger scores directly from its own judgment")
     args = parser.parse_args()
+
+    if args.direct_score:
+        import main as _self
+        _self.DIRECT_SCORE = True
 
     if args.single_paper:
         asyncio.run(run_single_paper(args.single_paper))

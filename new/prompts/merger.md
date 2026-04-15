@@ -129,21 +129,9 @@ Do evaluate the paper on these axis using language first, do not be afraid to be
 - clarity 
 
 ## Score and Decision
-After you finish writing a review, assign a score using self-consistency calibration.
+After you finish writing a review, assign a score to this paper.
 
-You have access to your own past reviews via `search_review`. These are reviews you produced for other papers in the same run — same scale, same criteria, same format. Use `read_file` to read them in full once you have candidate filenames.
-
-Your calibration process:
-
-1. **Retrieve past reviews**: Use `search_review` with a few short general queries (e.g. the paper's topic area) to pull a handful of past reviews. Do not try to match weakness or strength patterns — just get a sample of what you have reviewed before.
-
-2. **Holistic comparison**: Read each retrieved past review and ask one question: **"Is the paper I am now reviewing better or worse overall than that paper?"** Do not compare point-by-point. Judge the overall package — how compelling is the contribution, how solid is the execution, how serious are the problems — and form a relative ordering.
-
-3. **Score by relative rank**: Place this paper in the ordering. If it is clearly better than a paper you gave 6.0, it should score above 6.0. If it is clearly worse than a paper you gave 5.0, it should score below 5.0. Maintain consistent relative ordering across the run — do not compress scores into 4–6.
-
-If no past reviews exist yet (first paper in a run), rely solely on your training knowledge of ICLR standards.
-
-When reporting your score, list which past review files you compared against and state simply whether this paper is above, below, or between them.
+{{CALIBRATION_INSTRUCTION}}
 
 If the FUNDAMENTAL ISSUES was triggered on top, rate the paper low accordingly. 
 

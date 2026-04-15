@@ -1,60 +1,62 @@
-Good, now let me look at the calibration papers referenced by the Human Finder reviewer.Now I have enough information to write the final review. Let me synthesize everything.
+Now I have enough information from the paper. Let me write the final consolidated review.
 
 ---
 
 ## Summary
 
-This paper investigates whether training language models to win debates via self-play improves an evaluator's ability to identify correct answers, a critical test for debate as a scalable oversight mechanism. Using a modified DPO objective with continuous reward signals and Llama3-8B on the QuALITY reading-comprehension task with information asymmetry, the authors find a 4-percentage-point absolute gain in judge accuracy as debater skill increases — a relationship notably absent for consultancy baselines. The paper introduces two novel consultancy evaluation protocols (ensembled and double consultancy) to disentangle the mechanisms behind debate's advantage.
+This paper investigates whether **training** language models to win debates via self-play improves a judge's ability to identify correct answers, using an information-asymmetric reading comprehension setup (QuALITY-HARD). The core finding is that debate training yields a statistically significant 4% absolute improvement in judge accuracy, while consultancy training shows no such relationship. The authors develop a modified DPO objective using continuous judge confidence as reward, introduce two novel consultancy baselines (ensembled and double consultancy) that help decompose the sources of debate's advantage, and present behavioral evidence that debate training drives more evidence-based argumentation while consultancy training encourages judge-exploitation.
 
 ---
 
 ## Strengths
 
-- **First training-time empirical demonstration that debate improves judge accuracy.** Prior work (Radhakrishnan 2023) failed to show this effect; only inference-time optimization had been validated. Demonstrating the same positive skill–accuracy trend through actual training closes an important gap in the literature.
+- **First training-based demonstration that debate improves judge accuracy.** Prior work (Radhakrishnan, 2023) failed to find this effect. The paper cleanly distinguishes inference-time optimization from training-time optimization and closes that gap empirically. The p < 10⁻⁶ result on 433 questions is at least statistically credible within its setting.
 
-- **Modified DPO with continuous Bradley-Terry rewards.** Standard DPO discards the continuous reward information from an AI judge's probabilities. The proposed DPO⁺ objective converts continuous judge confidence into soft preference targets, retaining information that the binary formulation throws away. The empirical superiority over log/logit transforms and vanilla DPO is clearly shown.
+- **Decomposition of debate's advantage via novel consultancy baselines.** The introduction of ensembled (72%) and double (75%) consultancy baselines is a genuinely useful methodological contribution. The triplet—single (68%), ensembled (72%), double (75%), debate (77%)—enables a principled decomposition into asymmetric evidence, side-by-side comparison, and adversarial training effects. This kind of structured ablation is rare in the scalable oversight literature.
 
-- **Well-designed consultancy baselines (ensembled and double consultancy).** The decomposition of consultancy into three variants with increasing presentation strength — isolating asymmetric evidence, side-by-side comparison, and adversarial training effects — is a methodological contribution that sharpens interpretation. Double consultancy as a near-equivalent to debate (without opponent access) is a particularly useful scientific control.
+- **Modified DPO with continuous reward signal.** Converting judge confidence into soft preference targets via the Bradley-Terry model (DPO⁺) is a concrete and implementable technical contribution that outperforms both standard DPO (71% win rate) and the SFT baseline (31%). The design rationale is clearly articulated.
 
-- **Informative transfer analysis distinguishing truthful argumentation from judge exploitation.** The Pearson correlation of debate win rates across the trained GPT-4T judge and an untrained GPT-4o judge is 0.98, versus 0.51 for consultancy. This provides targeted evidence that debate learns generalizable strategies while consultancy learns judge-specific exploits, supported by the concrete proxy of quote usage and repetition rates.
+- **Honest reporting of the refutation non-finding.** The paper explicitly notes that single-turn debates match two-turn debates (Appendix G) and that double consultancy nearly closes the gap to debate, directly contradicting the canonical Irving et al. (2018) motivation based on adversarial refutation. Reporting this honestly, and retheorizing debate's benefit around information exposure and anti-exploitation, is intellectually honest and improves the field's understanding.
 
-- **Honest treatment of the refutation null result.** Explicitly reporting that one-turn debates are judged as accurately as two-turn debates, and that double consultancy nearly matches debate (75% vs 77%), complicates the canonical theoretical motivation from Irving et al. (2018). This intellectual honesty strengthens rather than weakens the paper's scientific credibility.
-
-- **Judge sycophancy mitigation.** The deliberate finetuning of GPT-4T to reduce sycophancy makes the consultancy baseline substantially harder, addressing a known flaw in prior comparisons (Khan et al. (2024) reports >90% consultant agreement with the sycophantic judge).
+- **GPT-4o transfer analysis as partial cross-validation.** The Pearson correlation of 0.98 (debate) vs 0.51 (consultancy) between trained GPT-4T and untrained GPT-4o win rates provides suggestive evidence that debate training learns more judge-general strategies, partially mitigating the evaluator-coupling concern.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None. The paper's core result is appropriately scoped and credibly supported within its stated domain.*
+None. The methodological concerns below are significant but do not fully invalidate the empirical signal.
 
 ### Major
 
-- **Single task domain limits generalizability of the main result.** The entire experiment rests on one reading-comprehension task with one form of information asymmetry (story access). The paper itself acknowledges Kenton et al. (2024) found debate less helpful for non-reading-comprehension tasks. The 4% gain is only shown in this single domain with a single base model (Llama3-8B). This is a genuine limitation — not just a "please add another benchmark" complaint — because the paper's framing as a validation step for debate as a scalable oversight paradigm requires broader evidence than a single bespoke setup can supply. The current evidence supports "debate training helps here," not a general mechanism.
+- **Judge-evaluator coupling undermines the headline claim's generality.** The same finetuned GPT-4T judge both supplies the reward signal during DPO training (via rollout-based judge confidence) and serves as the evaluator for the main judge accuracy metric. This creates a non-trivial confound: training models against this judge produces transcripts that this judge finds compelling, and if that judge is also the evaluator, the reported accuracy gain may partly reflect transcripts being stylistically adapted to a specific evaluator rather than genuinely more truth-revealing debate. The paper notes the debaters are "not trained to maximize judge accuracy" and the judge was not finetuned on the current debaters' transcripts—which partially addresses the concern—but the coupling through the reward mechanism remains. The GPT-4o transfer analysis provides partial reassurance only for win rates, not for the main judge accuracy outcome. **What is needed:** judge accuracy evaluation under at least one held-out judge model that never supplied reward signals.
 
-- **All evaluation uses an AI judge, not a human.** The fundamental motivation of scalable oversight is to help *human* evaluators supervise superhuman AI. Every accuracy figure in the paper comes from a finetuned GPT-4T model — the same model that also provides the reward signal for debater training. This introduces a form of judge-relative circularity: the result shows debate training improves accuracy as judged by one specific GPT-4T model with particular inductive biases, not necessarily by human evaluators who may reason quite differently. The GPT-4o transfer analysis (Section 4.4) is partial mitigation, but it measures only win-rate correlation across checkpoints, not actual judge accuracy. Even a small human evaluation on a subset of transcripts would substantially strengthen the oversight claim.
+- **Information-asymmetry proxy does not match the scalable oversight setting.** The paper artificially creates expertise asymmetry by giving debaters access to text the judge cannot read. However, the judge (GPT-4T) has substantially stronger general reasoning capabilities than the debaters (Llama3-8B). In actual scalable oversight, we need to verify whether a *weaker* judge can supervise *stronger* debaters—the opposite configuration from this paper. The paper acknowledges this ("the debater's expertise comes from superior access to information") but does not fully confront the implications for scalability claims. A judge stronger than both debaters will succeed for reasons unrelated to debate's oversight-theoretic properties.
 
-- **Consultancy comparison asymmetry.** The paper trains consultancy models exclusively for single-consultancy win rate, then uses those models to evaluate three distinct consultancy protocols (single, ensembled, double). The paper acknowledges explicitly that "ensembled and double consultancy are different *evaluation* methods, not training procedures" (Sec. 2.3). This means the claim "consultancy training does not produce a positive skill–accuracy trend" is only directly supported for single consultancy; whether a model specifically trained for double consultancy (with matching adversarial-style training incentives) would show the same null trend is not tested. This creates an asymmetry where debate is optimized and tested under the same protocol, while consultancy is tested under protocols it was not trained for.
+- **Self-play-only evaluation is too narrow for the oversight claim.** Judge accuracy is measured only on self-play transcripts (a model debating itself). This leaves open the possibility that training changes transcript style in ways that make self-vs-self interactions easier for this particular judge, without improving truth-revealing properties in more realistic cross-play settings (e.g., trained debater vs. untrained, or early vs. late checkpoint debates). The paper frames its contribution as validating debate as a scalable oversight method; self-play evaluation alone does not support that claim.
+
+- **Consultancy optimization asymmetry confounds the key comparison.** Debate reaches ~67% win rate while consultancy reaches only ~52%. The "no positive skill-accuracy trend for consultancy" could partly reflect that the consultancy DPO training was simply weaker or less converged, rather than a fundamental protocol difference. The paper notes "whether due to differences in skill or distribution shift, the judge treats the initial SFT model's outputs with skepticism" (Sec. 4.1) but does not satisfactorily rule out that further consultancy training would begin to show a positive trend. This confound weakens the core debate-vs-consultancy comparison.
 
 ### Minor
 
-- **Modest absolute improvement and near-parity with double consultancy.** The core result is a 4-percentage-point gain in judge accuracy (73% to 77%), and double consultancy achieves 75% without any adversarial interaction at training time. The marginal value of full debate training beyond simultaneously presenting both sides is small (2 percentage points), and neither the statistical nor practical significance of this residual gap is established with confidence intervals. This narrows the paper's argument for debate's unique necessity as an oversight mechanism.
+- **Missing significance test for the debate vs. double-consultancy gap.** The central claim that debate uniquely benefits from adversarial format rests substantially on a 77% vs 75% accuracy difference. No significance test for this comparison is reported, despite it being directly policy-relevant. If this gap is not statistically distinguishable, the claim that adversarial training per se (beyond information exposure) matters collapses.
 
-- **Limited training scale.** Only two DPO iterations are run on 1,252 questions with an 8B-parameter model. Whether the positive trend continues, plateaus, or reverses (via obfuscated argument strategies) with more training or larger models is unknown. The win-rate curve in Figure 4 shows a dip around epoch 0.5 before recovering, which the paper does not explain — raising questions about training stability.
+- **Mechanistic conclusions (evidence use, helpfulness) outrun the data.** Quote count is a weak proxy for argument quality—more quoting could reflect verbosity or quote-stuffing rather than evidentiary strength. The consultancy repetition finding is noted as "barely significant due to high variance" (Sec. 4.4). These are useful exploratory analyses but are presented with more confidence than their evidential basis warrants.
+
+- **Limited scale:** All results use Llama3-8B as debater. Whether the positive skill-accuracy trend persists or degrades with stronger debater models (which are the models we ultimately need oversight for) is entirely open and directly pertinent to the paper's central motivation.
 
 ### Trivial
 
-- The reward-transform comparison (confidence vs. log vs. logit) is described in the main text but the details deferred to Appendix C, making the 42%/41%/50% head-to-head win-rate comparison in Sec. 3.2.2 hard to interpret without cross-referencing.
+- The "without ground truth supervision signal" framing in the abstract slightly overstates independence from ground truth: the judge was finetuned on human-labeled transcripts, and the task itself requires labeled correct answers. The accurate claim is that *debater policy optimization* does not use direct answer labels.
 
 ---
 
 ## Nice-to-Haves
 
-- Training consultancy models specifically for double consultancy (matching the adversarial protocol they are being evaluated under) would make the debate vs. consultancy comparison cleaner and settle whether the null result is about the training objective or the evaluation protocol.
-- Per-question or difficulty-stratified analysis would clarify whether the 4% aggregate gain reflects uniform improvements or is driven by easy questions where strong evidence exists.
-- Analysis of judge accuracy when the stronger debater defends the *incorrect* answer would help assess whether the oversight value is genuine or whether trained debaters are equally persuasive regardless of truth value.
-- Extended training runs (more DPO iterations) or decay analysis to characterize whether the positive trend continues or reverses would directly address the scalability question the paper raises.
+- A baseline where the judge is given a random sample of quotes matching the debate's total quote volume, which would clarify how much accuracy gain stems from intelligent quote selection vs. debate structure.
+- Experiments on at least one reasoning-type task (math, code) to bound the scope of generalization, even if negative.
+- A "consultant vs. consultant with cross-visibility" condition (double consultancy with models specifically trained for that format), which would more cleanly isolate adversarial training effects from information exposure effects.
+- Bootstrap confidence intervals on all main accuracy comparisons, especially the 77% vs 75% debate-double-consultancy gap.
 
 ---
 
@@ -62,45 +64,47 @@ This paper investigates whether training language models to win debates via self
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **"For the first time" is a literature-positioning overclaim (Harsh Critic).** The paper says "for the first time that training language models to win debates can produce more accurate evaluator judgments." Within the cited literature (specifically positioning against Radhakrishnan 2023 as the only prior training work), this claim is supported. Removed because the concern is speculative absent external references confirming prior art.
-
-- **Significance claim not informative without variance details (Harsh Critic).** The paper reports p < 10⁻⁶ on 433 questions. That statistical evidence is reasonably informative; requesting confidence intervals when p < 10⁻⁶ is a trivial methodological nitpick. Removed.
-
-- **Self-play judge accuracy is a "questionable proxy" (Spark).** The paper explicitly frames the evaluation as tracking judge accuracy on self-play transcripts from each checkpoint (matching the methodology of Khan et al. 2024). Criticizing self-play evaluation as a proxy conflates the paper's study design with a different, unscoped question about cross-play robustness. Removed as scope creep.
-
-- **DPO re-initialization from SFT at each round is "unusual and unjustified" (Harsh Critic).** This is a training implementation choice that doesn't affect the reported empirical comparisons. The paper provides the procedure clearly. Removed as a trivial implementation nitpick.
-
-- **"The judge accuracy claim requires out-of-judge validation" (Harsh Critic).** The paper does provide partial cross-judge validation via the GPT-4o transfer analysis. While imperfect, this concern, in its "fatal" framing, overstates the gap. Retained as a softened major weakness above.
+- **Harsh Critic: "No ground truth supervision" is a fundamental misrepresentation.** The paper specifies this refers to the debater training signal, which is accurate. The claim is slightly imprecise but not dishonest and the paper's body makes the nuance clear.
+- **Harsh Critic: The modified DPO objective is not isolated from gains.** The paper's claim is about debate training, not DPO⁺ per se, and comparing against the SFT baseline is appropriate. This is not a fatal gap.
+- **Spark Reviewer: Demand for task-domain experiments as missing for acceptance.** The paper explicitly scopes to reading comprehension and honestly cites evidence both for and against generalizability. Demanding domain coverage the paper explicitly scopes out is scope creep.
+- **Harsh Critic: p-value is uninformative without clustering correction.** This is a reasonable statistical concern but rises to a minor precision issue, not a fundamental problem. Moved to minor rather than major.
+- **Human Finder: Concern about "whether LLM judge perturbations can be trusted."** This is a generic concern about LLM-as-judge methodology not specific to this paper's claimed contribution.
+- **Spark Reviewer: Computational cost and scalability.** Reasonable as a discussion point but not a weakness of the paper's claims; the paper does not claim its pipeline is computationally cheap.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel observation in the paper is the mechanistic decomposition of debate's advantage: by showing that double consultancy (75%) nearly matches debate (77%) without adversarial interaction at *inference* time but *not* during training, the paper identifies a subtle but important distinction — it is the training-time incentive structure, not the inference-time refutation, that primarily differentiates debate from consultancy. This reframes the theoretical justification for debate away from Irving et al. (2018)'s refutation-centric account toward an anti-exploitation account: adversarial training prevents the model from learning judge-specific cheap-talk strategies that inflated consultancy win rates without truth-tracking value. The Pearson 0.98 vs. 0.51 transfer result provides corroborating evidence for this hypothesis in a clean, interpretable way.
+The most genuinely novel observation—one that the paper surfaces but does not fully theorize—is the mechanism by which adversarial training prevents judge exploitation: the *presence of a competing argument at training time* acts as an implicit regularizer against cheap rhetorical strategies. A consultant learning to repeat quotes and assert without evidence is never penalized because there is no opponent to expose the weakness; a debater faces that opponent directly, and quote-stuffing is surfaced as empty if the opponent provides stronger-contextualized evidence. This suggests that the debate format's key contribution to scalable oversight may be less about truth discovery at inference time and more about **policy shaping at training time**—making the reward landscape for debate training more truth-correlated than for consultancy training, even with an imperfect judge. This reframing has implications beyond debate: any multi-agent training setup where one model can expose another's rhetorical weaknesses might have similar anti-exploitation properties.
 
 ---
 
-## Evaluation Axes
+## Suggestions
 
-- **Novelty:** Moderate-high. The first training-time positive result in the debate-as-scalable-oversight literature is a specific and meaningful gap closed. The modified DPO and consultancy baselines are methodological novelties. However, the work is clearly incremental within an established paradigm.
-- **Technical soundness:** Moderate. The modified DPO objective is principled and clearly derived. The experimental design is careful in many respects. The main gap is the consultancy training asymmetry and the absence of human evaluation.
-- **Empirical support:** Moderate. The main result (4%, p < 10⁻⁶) is statistically solid within its scope. The analysis of mechanisms is suggestive but partially proxy-based. Single task/model/judge is the binding constraint.
-- **Significance:** Moderate. Important to the debate/scalable-oversight literature specifically; limited broader impact given narrow task scope. The paper honestly delineates its limits, which is admirable but does not expand its demonstrated scope.
-- **Clarity:** High. The paper is well-organized and transparent about design choices and limitations. The consultancy baseline decomposition is explained cleanly.
+1. **Independent judge evaluation for the main accuracy metric**: Run judge accuracy under a model that never supplied reward during training (e.g., untrained GPT-4o or a separate judge family) and report this alongside the trained GPT-4T results.
+2. **Cross-play accuracy matrix**: Evaluate judge accuracy not just on self-play but on pairings of different checkpoints (early vs. late training), to rule out style-adaptation to self-play transcripts.
+3. **Significance test for debate vs. double consultancy**: Report a paired test on the 77% vs. 75% gap.
+4. **Report consultant win rate with matched compute**: Run consultancy training to convergence with the same DPO budget, or explicitly show the convergence curve, before concluding there is "no positive trend."
 
 ---
+
+## Evaluation
+
+- **Novelty:** Moderate-high. Being the first to demonstrate training-based debate improvement is meaningful. The modified DPO and baseline decomposition are incremental but useful. The refutation non-finding is a genuinely surprising result.
+- **Technical soundness:** Moderate. The DPO variant is well-motivated. The main methodological concerns (judge coupling, self-play evaluation, consultancy optimization asymmetry) are real and partially unaddressed.
+- **Empirical support:** Moderate. The 4% gain is statistically significant and the analysis is mostly honest, but the narrow scope (one task, one debater size, self-play only) and evaluation confounds limit the strength of the evidence for the broader oversight claim.
+- **Significance:** Moderate-high for the debate/oversight subfield; moderate for ICLR overall. The paper takes a real step forward but stops short of the evidence needed to strongly validate debate as a scalable oversight mechanism.
+- **Clarity:** Good. The paper is honest about its limitations, the baselines are well-explained, and the analysis is structured clearly.
 
 ## Score and Decision
 
-**Calibration:**
+No prior reviews exist in this run, so I calibrate against ICLR training knowledge. This paper:
+- Makes the first positive training-based result in a contested area of alignment research
+- Is methodologically careful but has real and partially unresolved validity concerns
+- Is limited to one domain and one scale
+- Is honest about limitations and surprising findings
 
-- *tCfvktlrHI* (Self-play in non-zero-sum games, one task, one model, similar narrow scope): Scores 3, 5, 6, 5 → Reject, avg ~4.75. That paper had weaker mechanistic analysis and less careful baselines.
-- *QAwaaLJNCk* (Multiagent debate, inference-time, multiple tasks, overclaimed): Scores 5, 5, 6, 8 → Reject, avg ~6. That paper had broader scope but was methodologically weaker.
-- *49ZYkhEGmv* (Doubly-efficient debate, theoretical contribution): Scores 6, 8, 6, 6 → Reject, avg ~6.5. A stronger theoretical contribution to the same literature.
+A strong accept at ICLR (8+) would require broader scope, independent evaluation, or a much larger effect. A clear reject (<5) would require fundamental invalidity. This paper occupies the borderline accept/weak-accept space: the contribution is real, the concerns are real, and the work is worth building on. I place it at **6.5**—above the ICLR mean, reflecting a meaningful and honest empirical contribution with acknowledged limitations that do not fully invalidate the core finding.
 
-The paper under review is more rigorous than tCfvktlrHI and more careful than QAwaaLJNCk, but narrower than 49ZYkhEGmv. Its primary positive discriminators are: (1) it fills a specific and acknowledged gap (first training-time result); (2) the modified DPO is a principled technical contribution; (3) the consultancy baseline decomposition is genuinely useful to the community. Its primary negative discriminators relative to a strong accept are: (1) single task domain; (2) no human judge evaluation; (3) modest effect size with double consultancy closing most of the gap; (4) limited training scale.
-
-Positioned between tCfvktlrHI (~5 avg) and 49ZYkhEGmv (~6.5 avg), with the balance of honest limitations, careful design, and a real first result, I place this paper at **5.5** — marginally below the ICLR acceptance threshold. The contribution is genuine but the scope is too narrow and the evaluation too AI-judge-centric to confidently recommend for publication at the venue's current standards, though it is close.
-
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>

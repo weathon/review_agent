@@ -1,97 +1,130 @@
+Now I have enough to write the consolidated review.
+
+---
+
 ## Summary
-This paper proposes PFM-Net, a learning-based framework for automated mechanism design that parameterizes truthful mechanisms via full-menu pricing functions constrained to be convex. The main idea is theoretically appealing: characterize truthful direct mechanisms through convex full-menu mechanisms, then learn the pricing function with convex architectures such as PICNN and GroupMax. Empirically, the method performs well on a single-buyer multi-item setting and on a stylized social-planner market setting.
+
+PFM-Net is a learning-based automated mechanism design framework built around a theoretical characterization result: Theorems 3.4 and 3.5 show that truthful (IC+IR) direct mechanisms are equivalent (up to measure-zero type profiles) to full-menu mechanisms whose pricing satisfies convex decomposition and no-buy-no-pay, substantially generalizing Rochet (1987) and Hammond (1979) to a quasi-linear setting with allocation constraints, regularization terms, and signed types/allocations. Building on this, the paper parameterizes the convex pricing function using PICNN and GroupMax architectures to construct PFM-Net, and provides universal approximation guarantees (Theorem 5.4) along with experiments showing improvement over baselines in single-buyer and social-planner settings.
+
+---
 
 ## Strengths
-- **The core representation choice is principled and specific to the mechanism-design problem.** The paper does not merely apply a generic neural net to mechanism design; it uses the characterization in Section 3 to motivate parameterizing the pricing rule as  
-  \(p_i(x_i;t_{-i};\theta)=c_i(x_i)+f_i(x_i;t_{-i};\theta)\)  
-  with \(f_i\) convex in \(x_i\), and enforces no-buy-no-pay by normalization. This is a concrete and elegant way to bake truthfulness structure into the model class.
-- **The modeling setup is broader than standard auction-only formulations.** The paper allows positive and negative types/allocations, player-specific allocation sets \(\mathcal X_i\), regularization terms \(c_i(x_i)\), and platform utility \(v_0(\mathbf x;\mathbf t)\) that can depend on types. This gives the framework reach beyond canonical selling-only auctions.
-- **Theoretical ambition is substantial.** Theorems 3.4 and 3.5 aim to characterize IC/truthful mechanisms as equivalent to full-menu mechanisms with convex pricing decomposition and no-buy-no-pay. If correct, this is the conceptual centerpiece of the paper and is more interesting than a purely empirical neural auction paper.
-- **The empirical results do show meaningful gains over the included baselines in the tested regimes.** In Table 1, GroupMax-based PFM-Net consistently beats UM-GemNet and simple baselines for larger \(m\), and in Table 2 GroupMax outperforms UM-GemNet and VCG on all shown settings. The gap over Bundle-OPT in the single-buyer setting, while modest, suggests the learned mechanism is doing more than pure bundling.
-- **The paper targets an important gap in prior learning-based mechanism design: exact truthfulness versus expressive learned parameterizations.** That focus is well chosen, and the paper’s best aspects come from trying to resolve this tension structurally rather than through regret penalties.
+
+- **Genuine extension of the Rochet/Hammond characterization to a strictly broader setting.** Theorems 3.4–3.5 characterize truthful mechanisms in a model that includes a regularization term $c_i(x_i)$ in valuations, allows signed types and allocations (enabling market settings where agents can buy or sell), permits platform utility depending on the full type profile, and accommodates player-wise allocation constraints. This is a nontrivial generalization beyond the standard unit-demand or additive-good auction settings, and formalizing it in a way that enables neural parameterization is a real contribution.
+
+- **Exact DSIC by architectural construction, not penalty.** Unlike RegretNet-style approaches where approximate IC is enforced by a Lagrange penalty that can be violated in practice, PFM-Net enforces truthfulness structurally: a player facing a full menu with convex pricing has a dominant strategy to optimize honestly. This is a methodologically important distinction — it removes a degree of freedom that regret-based methods have to manage empirically.
+
+- **The no-buy-no-pay normalization is elegant and non-trivial.** The trick of replacing $f_i$ with $\hat{f}_i = f_i - f_i(\mathbf{0}; \mathbf{t}_{-i}; \theta)$ hard-codes IR without any penalty term or constrained optimization. The dependence of the shift on $\mathbf{t}_{-i}$ means the normalization remains valid across the full multi-player setting. This is a clean design choice.
+
+- **Meaningful empirical gains in the multi-player social planner setting.** GroupMax-1 strictly dominates both UM-GemNet and VCG across all six cells of Table 2. In particular, VCG achieves zero expected utility under the uniform distribution (because welfare-neutral outcomes dominate in that distribution), while GroupMax-1 achieves positive welfare — illustrating that the framework genuinely learns to exploit the trading structure (buyers and sellers being matched) that rigid VCG cannot.
+
+---
 
 ## Weaknesses
-###: Fatal
-- **The paper does not clearly establish that the mechanism actually trained/evaluated in the social-planner experiments is exactly the truthful mechanism class characterized in Section 3.**  
-  This is the most serious issue. The theorem-based story is: a truthful mechanism can be represented as a full-menu mechanism, each player chooses a utility-maximizing allocation from her menu, and thus truthfulness is inherited by construction. However, the actual algorithm description introduces a different object: Figure 1 and Section 4 describe alternating optimization over “players’ allocations” and “platform allocations,” with a penalty enforcing “platform-player consensus.” In the social-planner setting, the platform objective includes a cross-player coupling term  
-  \[
-  -\frac12 \sum_j \left(\sum_i x_{ij}\right)^2,
-  \]
-  so the platform side is not separable across players.  
-  The paper does not make fully explicit whether the deployed mechanism is simply “publish per-player menus and let each player choose independently,” or whether the final outcome depends on a coupled optimization/consensus procedure. If it is the latter, truthfulness does not automatically follow from Theorem 3.5, because DSIC is a property of the implemented outcome rule, not of an intermediate representation. Since “truthful by construction” is a central claim, this gap materially weakens the paper.
 
-### Major:
-- **The strongest “full expressive power” claim is overstated relative to what is actually established in the main text.**  
-  There is an important distinction between:  
-  1. the unparameterized truthful mechanism class being equivalent to convex full-menu mechanisms, and  
-  2. the chosen parameterized neural class approximating that space well enough for the platform objective.  
-  The paper often slides from the former to the latter. Proposition 5.1 and especially Theorem 5.4 are doing the heavy lifting for the approximation story, but in the main text they are only stated, not substantiated.
-- **Theorem 5.4 relies on a strong-convexity assumption that is nontrivial and potentially restrictive, yet the paper uses it to justify a very broad utility-preservation claim.**  
-  The theorem assumes the pricing function is \(\varepsilon_1\)-strongly convex in \(x\) for all mechanisms in the target class. The paper itself concedes this is “only a technical condition” and says it believes the theorem should hold without it. That is not enough for the headline claim that there is no loss in maximal expected utility. This matters because the induced allocation comes from an argmax, and continuity of the economic objective with respect to pricing is precisely the subtle point.
-- **The empirical evidence is too limited to support the broad claims about “efficiency” or “avoiding the curse of dimensionality.”**  
-  The experiments go up to 20 items for one buyer and up to 3 players with 5 goods in the social-planner setting. Those are useful proof-of-concept scales, but they do not justify language like “avoiding the curse of dimensionality” or “closing the joint gaps of truthfulness, full expressive power and efficiency.” There is no runtime, memory, scaling, or sample-complexity analysis.
-- **The baseline comparison is not strong enough to support the paper’s most ambitious comparative claims.**  
-  The paper does outperform the included baselines, but several caveats remain: the comparisons are on a limited set of methods, baseline implementations are adapted, and for UM-GemNet the paper explicitly omits the original post-training transformation (footnote 10). Since the paper argues heavily about truthfulness/menu compatibility, omitting that component weakens the force of the comparison.
-- **The optimization procedure is under-specified in the main paper despite being central to validity.**  
-  Section 4 says “We leave the derivations of our algorithm to Appendix E,” but the algorithm is not a peripheral implementation detail: it is central to whether the learned mechanism actually corresponds to the characterized truthful class and whether the method is stable. The paper provides only a high-level figure and prose description of alternating optimization.
+### Fatal
+*None that fully invalidate the core claim, but Major weaknesses collectively put this below the acceptance threshold in its current form.*
+
+---
+
+### Major
+
+- **The "full expressive power" claim is not fully established due to the strong convexity assumption in Theorem 5.4.** The key step connecting function approximation to MEU preservation requires the optimal pricing rule to be $\varepsilon_1$-strongly convex. The paper dismisses this as "only a technical condition" because "$\varepsilon_1$ can be chosen so small that strong convex functions can be arbitrarily close to any convex function," but this argument has a gap: approximating the optimal pricing rule by a strongly convex one changes the argmax correspondence and thus the mechanism. Whether the MEU of the modified mechanism is close to the original requires additional argument (e.g., stability of the demand map under perturbation). The claim "we believe that the theorem also holds even if this condition is removed" is an assertion without a proof sketch. Until this is resolved, Theorem 5.4 establishes MEU-preservation only within the strongly-convex subclass, which is a materially weaker statement than the paper's headline claim of "full expressive power."
+
+- **The efficiency and curse-of-dimensionality claims are asserted, not demonstrated.** The paper repeatedly claims PFM-Net avoids the curse of dimensionality relative to discretization-based methods (Introduction, Section 5, Section 6.3), but the experiments report only expected-utility values — no runtime comparisons, no parameter-count scaling, no performance-vs.-dimension curves. The argument in Section 5 rests on "neural networks are commonly regarded as an ideal tool" and "realistic problems exhibit favorable structures," which are conceptual statements, not empirical evidence. These are the paper's central practical claims and they are currently unsubstantiated as comparative efficiency statements.
+
+- **The algorithm is too underspecified in the main text.** Section 4 defers all training derivations to Appendix E, leaving only a diagram (Figure 1) and a sentence about "alternately optimizing" and "penalizing on difference." The actual training objective is never written down in the main text, nor is the penalty schedule, the convergence criterion, or a formal description of the bilevel optimization. This matters for interpreting the empirical results: since truthfulness of the implemented mechanism depends on player best responses being computed exactly at inference, and since the training procedure relies on approximate best responses during optimization, the connection between the stated theory and what is actually trained is invisible without the appendix.
+
+---
 
 ### Minor
-- **No uncertainty estimates are reported in the experiments.**  
-  Some margins are small, especially in the lower-dimensional settings in Table 1, and the paper gives only point estimates. This does not invalidate the results, but it makes it harder to tell which rankings are robust.
-- **Training stability is not analyzed.**  
-  Given the alternating optimization and consensus penalties, some discussion of convergence behavior or sensitivity would help. This is especially relevant because the paper claims practical efficiency.
-- **The social-planner experimental section is somewhat narrow relative to the paper’s general framing.**  
-  Table 2 only compares GroupMax, UM-GemNet, and VCG. This is enough to show a positive result, but not enough to establish a broad “new paradigm” claim.
-- **The paper’s language sometimes exceeds the evidence.**  
-  Phrases such as “close the joint gaps,” “full expressive power,” and “new paradigm” should be toned down unless the theory/experiments are strengthened.
+
+- **No uncertainty quantification in experimental results.** All Tables 1 and 2 report single point estimates. For neural mechanism learning with stochastic training, seed variance can be material, especially in settings like $S_2$ and $S_3$ where differences between methods are in the third decimal place.
+
+- **Limited multi-player scale.** The multi-player experiments are restricted to $n \leq 3$ players, $m = 5$ items. Since the pricing function $f_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta)$ takes $\mathbf{t}_{-i}$ as input and its dimension grows with $n$, the claimed practical efficiency for multi-player settings cannot be assessed from this evidence.
+
+- **VCG's zero performance under uniform distribution is unexplained.** In Table 2, VCG achieves 0 utility under all uniform-distribution settings ($P^U$ columns). This is a striking result — and correct, given the market-clearance penalty and uniform type distribution — but the paper provides no explanation. Readers unfamiliar with this specific welfare-computation setting cannot interpret whether the 0 reflects fundamental VCG limitations here or a baseline implementation issue.
+
+- **Theorem 5.4's equivalence notion (a.s. under $\mathcal{F}$) should be stated more precisely.** The equivalence between mechanism classes (Definition 3.1) is measure-theoretic under the prior. While the implemented PFM-Net mechanism is exactly truthful by construction, the claimed class-level equivalence should clearly state whether it is exact DSIC equivalence or only distribution-relative, and what happens on any type profile (not just a.s.).
+
+---
 
 ### Trivial
-- **The single-buyer evidence for “non-trivial components” is suggestive rather than definitive.**  
-  Beating Bundle-OPT is a useful sign, but the paper would need more direct mechanism analysis to substantiate what structure was actually learned.
+
+- **Table 2 columns are duplicated in the extracted text** ($P^U_{2,5}$ appears twice), which is a formatting artifact from the parser. This is not a paper flaw.
+
+---
 
 ## Nice-to-Haves
-- Add direct empirical verification of IC/regret on sampled profiles. This is not required if the mechanism is truly exact by construction, but given the ambiguity between theorem and implementation, it would be highly reassuring.
-- Include scaling plots with runtime and objective versus number of items/players.
-- Add an ablation clarifying the role of architecture choice (PICNN vs GroupMax, depth, etc.).
-- Show more concrete visualizations of learned pricing rules/allocation behavior in the main text rather than only referring to the appendix.
+
+- **Add RegretNet as a baseline with IC-violation measurements.** The paper criticizes regret-based methods but does not include them in experiments. Adding one such comparison (even at small scale) with both revenue/welfare numbers and max-regret measurements would quantify the practical truthfulness advantage of PFM-Net vs. the approximate-IC paradigm.
+
+- **Provide even informal convergence properties for the alternating optimization.** A brief analysis of whether the bilevel procedure converges to the same solution as joint optimization, or an empirical convergence curve showing objective value and constraint-violation across training iterations, would substantially improve confidence in the method.
+
+- **Add dimension-scaling experiments.** Running GroupMax-3 and UM-GemNet from $m=5$ to $m=30$ or $m=50$ with logged runtime and objective would turn the efficiency claim from an assertion into an evidenced argument.
+
+- **Prove or more carefully discuss the strong convexity relaxation.** Even a proof sketch showing that continuity of the argmax correspondence under small perturbations (via, e.g., Berge's maximum theorem) can recover the MEU result in the convex (not strongly convex) case would substantially strengthen Section 5.
+
+---
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **Requests for additional related work comparisons.** Removed per instruction: I do not have external knowledge to verify omitted related works.
-- **Complaints that proofs are in the appendix and therefore theorems are unverifiable.** Kept only in weakened form where it affects how much the paper can claim in the main text; removed as a standalone reproducibility complaint.
-- **Generic demand for many more baselines, especially unspecified “state-of-the-art” methods.** Weakened/removed unless directly tied to a substantive fairness issue already visible in the paper.
-- **Pure reproducibility nitpicks about hyperparameters or training details.** Removed as non-core.
-- **Criticism that the paper should compare against methods disadvantaged by asymmetric setup choices benefiting the baselines.** Removed where applicable by instruction.
-- **The neutral reviewer’s generic strengths (“clear framing,” “comprehensive formulation,” etc.) were filtered unless tied to specific evidence.**
+*These points are flagged to be removed; treat them with caution.*
+
+**[Removed — Symmetric omission, not a baseline fairness issue]** The harsh critic raises concern that GemNet's integer-programming post-training transformation is omitted, disadvantaging the baseline. However, footnote 10 explicitly states this transformation is omitted for *both* UM-GemNet and PFM-Net. The comparison within the paper is symmetric; if anything, restoring the transformation would improve GemNet's score and make PFM-Net's advantage harder to show. This is not a fairness problem.
+
+**[Removed — The a.s. equivalence does not invalidate DSIC of the implemented mechanism]** The harsh critic argues that "equivalence except measure-zero" fundamentally weakens the DSIC claim. This is overstated: mechanisms in $\mathcal{M}^{F,M,pn}$ are *exactly* truthful by construction (the menu structure plus convex pricing makes truthful reporting a dominant strategy). The a.s. equivalence is about representational equivalence between mechanism classes for MEU purposes, not about the IC property of any implemented mechanism. The concern is better characterized as a clarity issue in theorem-statement precision (retained as a Minor weakness) rather than a fundamental flaw.
+
+**[Removed — Missing related works]** Multiple reviewers suggest additional references or comparisons. Per hard rules, no external sources are available to confirm existence, so this is not raised.
+
+**[Removed — Real-world data demand]** Human Finder argues for validation on real-world datasets. Mechanism design papers at ICLR routinely use stylized synthetic settings (additive auction distributions, etc.), and there is no standard real-world benchmark. This is not a norm violation in the field.
+
+**[Removed — Calling into question specific distribution coverage]** Requests for correlated distributions, while reasonable as a nice-to-have, are not a core flaw given that the model explicitly allows correlated priors and the framework is distribution-agnostic.
+
+---
 
 ## Novel Insights
-The central issue is not merely that the paper needs more experiments; it is that the paper currently mixes three layers that should be separated much more carefully: (i) an appealing characterization of truthful mechanisms as convex full-menu mechanisms, (ii) a neural parameterization of that class, and (iii) an alternating training/inference pipeline with coupled platform-player optimization. The submission’s strongest claims implicitly treat these as equivalent, but they are only equivalent if the final deployed mechanism is exactly the per-player menu mechanism induced by the characterized class. That distinction is especially important in the social-planner experiment, where cross-player coupling is intrinsic. Clarifying this would either substantially strengthen the paper or force a narrower but more defensible claim.
+
+The paper's most conceptually interesting move is the reframing of multi-player mechanism design as a *conditional* pricing problem: each player $i$ faces a menu priced by $f_i(\mathbf{x}_i; \mathbf{t}_{-i}; \theta)$ that is convex in $\mathbf{x}_i$ but can depend arbitrarily on others' reported types. This bridges two streams that are usually kept separate — the economic theory of convex-pricing / revelation-equivalent menus (Rochet 1987) and the machine-learning toolkit for conditional function approximation. The key insight that the no-buy-no-pay normalization $\hat{f}_i = f_i - f_i(\mathbf{0}; \mathbf{t}_{-i}; \theta)$ handles IR without any constraint enforcement, even when the shift depends on $\mathbf{t}_{-i}$, is genuinely clever and generalizes non-obviously from the single-player case.
+
+---
 
 ## Suggestions
-- **Define the deployed mechanism formally.** In particular, for the social-planner setting, state exactly what outcome rule is executed at test time and prove that this rule is the truthful direct mechanism induced by the learned menus.
-- **Move at least a proof sketch of Theorems 3.4/3.5 and Theorem 5.4 into the main paper.** These are too central to remain almost entirely deferred.
-- **Narrow the claims unless stronger support is added.** “Truthful convex full-menu parameterization with promising empirical gains” is defensible; “closing the joint gaps of truthfulness, full expressive power, and efficiency” is not yet.
-- **Strengthen the empirical section with scaling and stability analysis.** Runtime, parameter count, and behavior across larger dimensions would materially improve the efficiency claim.
-- **Report variability over seeds** and clarify budget parity for baselines.
-- **Analyze the learned mechanism more directly.** For example, compare against bundle-only or separable pricing restrictions to show what extra structure GroupMax is exploiting.
+
+1. **Resolve or clearly scope the strong convexity assumption.** Either (a) provide a proof that MEU-preservation extends to the convex (non-strongly-convex) case using continuity arguments, or (b) explicitly state that Theorem 5.4 covers only the strongly-convex subclass and acknowledge the "full expressive power" claim is conditional on this assumption.
+
+2. **Include the training objective in the main text.** Write down the penalized platform objective in closed form (even in a single display equation), identify the two optimization subproblems, and state the penalty schedule. This makes the connection to the theory transparent.
+
+3. **Add a scaling experiment.** Plot GroupMax-3 vs. UM-GemNet (and Bundle-OPT) expected utility *and* training/inference time as a function of $m$ from 5 to 30+. This would directly test the curse-of-dimensionality claim.
+
+4. **Report standard deviation across seeds for all tables.** Three to five seeds with mean ± std would make the numerical comparisons credible.
+
+5. **Explain VCG=0 under uniform distribution.** Add one sentence explaining this is an artifact of the market-clearance penalty and the type distribution symmetry, not a baseline failure.
+
+---
+
+## Evaluation
+
+- **Novelty:** *Moderate.* The characterization result is a genuine generalization of Rochet/Hammond to a broader setting, and the neural convex-pricing implementation is a natural but not obvious combination. The contribution is incremental relative to the economics literature but provides meaningful new machinery for the ML community.
+- **Technical soundness:** *Weak to moderate.* The characterization theorems are plausible and likely correct (their intuition is sound), but the MEU-preservation theorem has an unresolved assumption, and the algorithm is too underspecified to assess correctness rigorously.
+- **Empirical support:** *Modest.* The experiments support that the method works in practice for small settings and outperforms specific baselines, but the efficiency/scaling claims are entirely unsupported.
+- **Significance:** *Moderate.* Closing the exact-truthfulness gap in neural mechanism design is a real problem, and the approach is principled. The significance is limited by the overselling of efficiency claims and the narrow experimental scope.
+- **Clarity:** *Adequate, with notable gaps.* The theoretical setup and characterization are clear; the methodology and training procedure are too brief to be actionable.
+
+---
 
 ## Score and Decision
-**Novelty:** Good. The characterization-plus-convex-parameterization angle is more novel than many learned mechanism-design submissions.  
-**Technical soundness:** Mixed. Theoretical ambition is strong, but a key theorem-to-implementation bridge is insufficiently nailed down, especially for the social-planner setting.  
-**Empirical support:** Moderate but not enough for the strongest claims. The results are promising, yet limited in scale and not accompanied by scaling/stability evidence.  
-**Significance:** Potentially high if the characterization and implementation alignment are fully established; currently more promising than definitive.  
-**Clarity:** Mixed. The high-level motivation is clear, but the actual optimization/deployment pipeline is under-specified where it matters most.
 
-**Calibration papers compared:**
-- **p1HeFnn2AA.md — “Deep Learning for Two-Sided Matching” (Reject; scores 6,8,8).** Similar in that it is an ambitious learning-based mechanism/matching paper with interesting ideas but incomplete validation of the strongest claims. This submission is comparably ambitious, but the theorem-to-implementation gap here makes me less convinced overall.
-- **SVd9Ffcdp8.md — “Deep Reinforcement Learning for Sequential Combinatorial Auctions” (Reject; scores 6,6,6,5).** Similar strength/weakness pattern: promising empirical mechanism-design direction, but methodological and evaluation gaps keep it below acceptance.
-- **WkSP7DfwVW.md — “Extending Myerson's Optimal Auctions to Correlated Bidders via Neural Network Interpolation” (Reject; scores 5,6,8,3).** Particularly relevant because it mixes mechanism-design theory with neural approximation and faces questions about the rigor connecting approximation to truthful optimality.
-- **JQQDePbfxh.md — “Private Mechanism Design via Quantile Estimation” (Accept).** Useful positive calibration: that paper makes narrower claims and supports them more tightly with clear computational guarantees. Relative to that standard, this paper overclaims.
+**Calibration against past reviews:**
 
-Overall, this is **better than a weak reject** because there is a genuine conceptual contribution and nontrivial positive empirical evidence, but **not yet at the bar for ICLR acceptance** because the paper has not convincingly connected its theory to the actual evaluated mechanism or supported its broad efficiency/expressiveness claims.
+- **GQ1Tc3vHbt (7.0, Accept):** Pure theory paper with genuinely improved bounds for $(L_0,L_1)$-smooth optimization, principled stepsize derivation from first principles, no experiments. Strong on technical rigor.
+- **D0Cdljktp2 (4.0, Reject):** Central theoretical claim (exact CGD implementation) is unsubstantiated; key experimental result uses training data; tiny synthetic scope.
 
-**Score: 5.9**
+This paper is **clearly above D0Cdljktp2**: its core characterization theorem is well-motivated and the claim it makes is not false (unlike D0Cdljktp2's central proposition), its experiments don't have methodological errors, and it has genuine practical results. It is **below GQ1Tc3vHbt**: the strong convexity gap in Theorem 5.4 is unresolved, the efficiency claims are unsupported, and the algorithm is underspecified. The paper has a real contribution — the convex-pricing characterization and its neural implementation — but overclaims substantially relative to what is proved.
 
-MY FINAL SCORE: <pineapple>5.9</pineapple>
+This is a borderline paper sitting between the weak-reject and weak-accept range. The core idea is sound and novel enough to be interesting, but the execution — particularly the unresolved MEU theorem assumption and the absence of any efficiency/scaling evidence — prevents a confident accept recommendation.
+
+**Score: 5.5 — Borderline Reject**
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

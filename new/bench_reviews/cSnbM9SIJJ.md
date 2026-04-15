@@ -1,111 +1,114 @@
-Now let me check the calibration papers mentioned by the human finder reviewer.Now I have enough context. Let me write the final consolidated review.
+Now I have enough information to write the final consolidated review. Let me compile it.
 
 ---
 
 ## Summary
 
-This paper extends AgentScope, an existing multi-agent platform, with four enhancements to support very large-scale LLM-powered simulations: (1) an actor-based distributed mechanism with automatic workflow conversion via a `to_dist` function, (2) an environment abstraction supporting agent-environment interactions, (3) a configurable tool and automatic background generation pipeline for heterogeneous agent populations, and (4) a web-based Agent-Manager. The system is demonstrated exclusively through a "guess 2/3 of the average" game, scaled up to 1 million agents across 4 devices, with behavioral experiments varying LLM models, prompts, educational backgrounds, and group compositions.
+This paper extends AgentScope, an existing multi-agent platform, with four new features: (1) an actor-based distributed execution mechanism with automatic workflow conversion (`to_dist`), (2) an agent-environment abstraction for shared state and bi-directional interactions, (3) a configurable tool and LLM-driven background generation pipeline for heterogeneous agent populations, and (4) a web-based management UI (Agent-Manager). The system is empirically demonstrated through simulations of the "guess 2/3 of the average" game at scales up to 1 million agents across multiple devices, with ablations across LLM types, prompts, background diversity, and game variants.
 
 ---
 
 ## Strengths
 
-- **Genuine engineering achievement at 1M-agent scale.** The paper demonstrates running 1 million LLM-powered agents (Llama3-8B, Prompt 1) in 12 minutes on 4 consumer-grade GPU nodes. The dummy-model orchestration comparison (Fig. 2b) — showing 40 seconds vs. 12 days (serial) and 8.6 hours (Python async) — is informative for quantifying scheduling overhead independent of inference time, and the `to_dist` single-function API for effortless workflow conversion is a practically thoughtful design.
+- **Genuine large-scale engineering achievement**: Completing a 1M-agent simulation in 12 minutes on 4 devices (Llama3-8B + Prompt 1) is a substantive and non-trivial systems result. This pushes the demonstrated frontier of LLM-agent simulation further than any prior published platform.
 
-- **Candid prior-knowledge experiment (Sec 4.6).** Changing the ratio from 1/2 to 51/100 produces dramatically different agent behavior despite equivalent game structure; adding a note that references the classic game then shifts behavior back toward equilibrium. This is one of the more honest and scientifically informative findings in the paper — with real implications for any simulation study relying on canonical tasks.
+- **Proxy/placeholder automatic workflow conversion**: The `to_dist` mechanism (Section 3.1) — where agents are replaced with proxies in the orchestrator, futures/placeholders propagate lazily, and distributed agents become active as dependencies are satisfied — is a concrete and practically useful engineering design. The centralized → distributed conversion with a single function call substantially lowers the barrier for users.
 
-- **Behavioral sweep across 6 LLMs, 2 prompts, multi-round dynamics, demographic backgrounds, and mixed-LLM groups.** While the game is narrow, the breadth of agent configurations studied (Figs. 3–7) provides useful empirical data on LLM heterogeneity and prompt sensitivity within this setting.
+- **Two-mode process design informed by actual bottleneck analysis**: The one-to-one vs. many-to-one process mode distinction (Section 3.1), tailored to computation-intensive vs. I/O-bound workloads, reflects a thoughtful analysis of real deployment constraints rather than a one-size-fits-all approach.
+
+- **Intellectually honest exposure of prior-knowledge confound**: Section 4.6's 51/100 vs. 1/2 experiment (Fig. 8) directly reveals that LLM behavior is substantially driven by training corpus familiarity rather than task reasoning. Surfacing and quantifying this confound within the paper itself is a genuine contribution to the community's understanding of LLM-based simulation validity.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None triggered.
+None that fully invalidate the engineering contribution, but the behavioral/scientific framing is severely overstated relative to the evidence (see Major #1).
 
 ### Major
 
-- **Single-task evaluation across all experiments** — Every empirical finding derives from one canonical, single-number guessing game. The platform claims to support "various real-world scenarios," but no second simulation scenario is demonstrated. This prevents any assessment of whether the infrastructure (especially the environment abstraction, the background pipeline, or the workflow conversion) generalizes to richer tasks involving multi-turn interaction, spatial reasoning, or emergent dynamics. The omission severely narrows the scientific contribution.
+- **The paper's central scientific claims about "realistic," "reliable," and "meaningful" simulation are not supported by a single toy game.** The entire behavioral argument rests on variants of the "guess 2/3 of average" game. The paper's abstract and conclusion assert that the framework enables "various and realistic behaviors" and "meaningful and valuable insights" from large-scale simulations, and that results "confirm the reliability and potential of multi-agent-based simulations." A single stylized number-reporting game cannot bear this weight. Agents independently report one number per round; there are no rich inter-agent interactions, no emergent social dynamics, and no comparison to validated ground-truth behavioral data from human experiments (Nagel 1995; Camerer et al. 2004 are cited but never quantitatively compared against). The paper's conclusion overstates what has actually been demonstrated by a large margin.
 
-- **Simulation validity is overclaimed and self-contradicted.** Sec 4.3 states: *"these experimental results are consistent with previous studies (Nagel, 1995; Camerer et al., 2004) in social simulation, which confirms the reliability and potential of multi-agent-based simulations."* This is a sweeping claim for one game. More critically, Sec 4.6 directly reveals that changing 2/3 to 51/100 causes substantial behavioral change — exposing memorization as a primary driver. The paper never reconciles this with the reliability claim in Sec 4.3, leaving the central scientific narrative internally inconsistent.
+- **The efficiency evaluation (Fig. 2b) removes the dominant real-world bottleneck.** As the paper explicitly states: *"we adopt a dummy model request (i.e., agents sleep for 1 second and generate random numbers rather than posting the requests)"*. Comparing the distributed framework against serial and async Python using a dummy sleep request isolates orchestration overhead only. In realistic deployments, LLM inference dominates. The paper does not demonstrate that the distributed mechanism's advantage persists or is meaningful at the scale of real LLM inference, where batching and model-serving throughput dominate. The reported 40 seconds vs. 12 days comparison is therefore not an honest end-to-end systems evaluation.
 
-- **Efficiency comparison uses a dummy model; Ray superiority claim is empirically unsubstantiated.** The "orders-of-magnitude" speedup in Fig. 2b is measured with agents that sleep 1 second and return random numbers — an orchestration-overhead benchmark, not an end-to-end LLM simulation. The paper is transparent about this, but does not draw the appropriate limits on the claim. More critically, Sec 3.1 asserts: *"it also makes a significant advancement over existing actor-based distributed frameworks, such as Ray"* — yet provides zero head-to-head empirical comparison with Ray under equivalent hardware and workload. This claim is stated as fact without any supporting measurement.
+- **Prior-knowledge contamination directly undermines the paper's reasoning/rationality claims.** Section 4.6 shows that changing the ratio from 2/3 to 51/100 yields materially different behavior, and adding a note referencing the classic game drops the winning number from 11.85 to 6.46. This is strong evidence that agents are primarily pattern-matching to a memorized game description rather than reasoning about game theory. This directly contradicts Section 4.3's claim that convergence toward Nash equilibrium shows agents have *"a good understanding of this game and are capable of... making rational decisions"* and that results *"confirm the reliability and potential of multi-agent-based simulations."* The confound is surfaced but significantly underweighted in the paper's conclusions.
 
-- **Three of four main contributions are not independently evaluated.** Only the distributed execution mechanism receives focused quantitative analysis. The environment abstraction, background generation pipeline, and Agent-Manager are primarily feature descriptions. In Sec 4.4, the authors note they "manually provide a basic configuration for each group," which is inconsistent with the claimed automation. No ablation or comparison to alternatives is provided for any of these three components.
+- **No empirical comparison to existing distributed frameworks.** The paper claims design advantages over Ray (Section 3.1: *"resulting in wasted computational resources when applying for large-scale agent-based simulations"*) and over async Python (Wu et al., 2023; Hong et al., 2024b), but provides no head-to-head empirical comparison. The claim of superiority over Ray is asserted without measurement. A paper making headline efficiency claims for a distributed systems contribution should compare against the strongest relevant baseline.
 
 ### Minor
 
-- **No statistical rigor for behavioral experiments.** All results appear to be single-run measurements. Key claims about education-level effects (Fig. 5), model differences (Fig. 3), and multi-round convergence (Fig. 4) are reported without confidence intervals, variance estimates, or repeated trials. The effect size for MistralAI-8×22B across five education levels is only 3.49 points — a difference that requires statistical validation to interpret meaningfully.
+- **"Linear benefit" claim is overstated for the evidence.** The paper states it "provides linear benefit on running time from the addition of devices." The evidence (Fig. 2c) covers only 3 device counts (1, 2, 4) at one workload size (10,000 agents). The single cited example (22 min → 5.6 min, approximately 4×) is consistent with near-linear scaling in the tested regime, but the paper does not establish this as a general property. No communication overhead analysis, no saturation point, no confidence intervals.
 
-- **No comparison with human behavioral data.** The paper claims results are "consistent with previous studies (Nagel, 1995; Camerer et al., 2004)" but presents no quantitative comparison with human experimental distributions. Without this calibration, it is impossible to assess whether LLM agents are valid behavioral proxies or simply activating memorized patterns.
+- **Background generation validation does not establish population-modeling fidelity.** Section 4.4 shows that education-labeled agents report lower numbers with higher education level (Fig. 5). While interesting, this finding could simply reflect the LLM associating "Ph.D." with "analytical" and "lower number" in its training data — a prompt effect, not evidence that the generation pipeline creates realistic, distribution-faithful demographic populations. There is no audit of distribution fidelity (do generated populations actually match configured distributions?), internal consistency, or diversity beyond a single attribute.
 
-- **Mechanistic language ("rational decisions," "good understanding") is not justified given prior knowledge confound.** Secs 4.3 and 4.5 use language like "agents have a good understanding of this game" and "making rational decisions," but Sec 4.6 demonstrates that these behaviors depend strongly on prompt template matching and memorization. The language in the earlier sections should be qualified accordingly.
+- **Multi-round scalability not demonstrated at large scale.** The 1M-agent result is for a single-round game where agents act independently (perfectly parallelizable). Multi-round experiments (Sections 4.3–4.5) use only 500–1,500 agents. The scalability under iterative, stateful interactions with agent-environment synchronization — the more interesting and harder case — is not evaluated at large scale.
+
+- **No statistical reporting.** Experiments appear to be single runs with no confidence intervals, error bars, or repeated trials. LLM outputs are stochastic; reported distributions and round-by-round convergences may have substantial variance across different random seeds.
 
 ### Trivial
 
-- The scaling curve in Fig. 2c covers only three device counts (1, 2, 4), which is sufficient to observe the trend but too sparse to characterize the scaling relationship precisely. Claims about proportional reduction should be stated as observations within the tested range.
+- The Agent-Manager contribution (Section 3.4) is described but not evaluated. No evidence that it materially improves monitoring efficiency, debugging, or experiment management.
 
 ---
 
 ## Nice-to-Haves
 
-- Add at least one second simulation scenario (opinion dynamics, epidemic spreading, or a market game) to validate that the infrastructure generalizes and that the observed scale is necessary for the phenomena.
-- Provide an actual empirical comparison against Ray on the same hardware and workload, even at small scale, to substantiate the distributed framework claims.
-- Report repeated runs with variance for the behavioral experiments, particularly for background-conditioned effects where effect sizes are small.
-- Surface the prior knowledge finding from Sec 4.6 as a first-class contribution (it is the most scientifically novel part of the paper) rather than treating it as an optional discussion.
+- Run the serial/async/distributed efficiency comparison with actual LLM inference at a manageable scale (e.g., 10K agents) to give a realistic lower bound on end-to-end speedup.
+- Overlay human behavioral data from Nagel (1995) or Camerer et al. (2004) on the simulation distributions to quantify alignment rather than asserting qualitative consistency.
+- Evaluate on at least one scenario with richer inter-agent dependencies (e.g., negotiation, market, opinion dynamics) to show that the framework's benefits generalize beyond perfectly-parallelizable one-shot tasks.
+- Ablate the background generation pipeline (detailed LLM-generated background vs. a simple keyword label) to isolate whether the generation pipeline adds anything beyond a system prompt keyword.
+- Quantify agent response validity at large scale (what fraction of 1M agents produce parseable, in-range responses?).
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed — treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **"Dummy model comparison is misleading/hidden"** — Multiple reviewers implied the paper obfuscates that Fig. 2b uses a dummy model. This is incorrect. Sec 4.2(ii) is explicit: *"we adopt a dummy model request (i.e., agents sleep for 1 second and generate random numbers rather than posting the requests) in the simulation to remove the impact of the LLM inference speed."* The paper is transparent here. The valid criticism is that the paper should more clearly limit the scope of efficiency claims derived from this benchmark, not that it conceals the setup. **REMOVED as a misreading.**
+- **Human Finder's references to OASIS reviews, "Playing repeated games with LLMs" reviews, and "Large Language Models Assume People are More Rational" reviews**: These are citations from other review documents about other papers. They should not be used as evidence in this review, as they introduce external material that cannot be verified and may not be applicable to this specific paper's context.
 
-- **"Background generation promotes stereotyped outputs"** — While a legitimate open question for LLM simulation broadly, the paper does not strongly claim to avoid stereotyping. This critique overstates what the paper promises from the background generation feature. **WEAKENED/REMOVED as scope creep.**
+- **Harsh Critic: "No formal statement of what workflows are supported" (Claim 3)**: While a formal characterization would strengthen the contribution, the paper's `to_dist` mechanism is demonstrated working on a concrete multi-agent workflow (Fig. 1), and asking for formal semantic guarantees is a theoretical demand on what is explicitly an engineering/systems contribution. Moved to nice-to-have.
 
-- **"Claim that 1M agents is needed for behavioral insights"** — Neutral reviewer noted that behavioral patterns visible at 1,000 agents don't require 1M agents, framing this as an inconsistency. However, the paper's primary claim for scale is efficiency/platform demonstration, not that 1M is needed for the observed insights. This is a valid nice-to-have but not a flaw in the stated contribution. **MOVED to Nice-to-Haves.**
+- **Neutral Reviewer: "Missing cost analysis"**: Reporting API costs or GPU-hours is good practice but not a standard requirement for a systems/platform research paper at ICLR. Absence of cost analysis does not affect the validity of the claims.
 
-- **Generic strengths** — "The paper is well-written," "the topic is important," "engineering effort is substantial" — removed per hard rules.
+- **Neutral Reviewer and Harsh Critic: Fault tolerance discussion**: Fault tolerance is an important engineering concern for production systems, but its absence does not undermine the paper's claims about the framework's capabilities in research settings. This is a nice-to-have.
+
+- **Spark and Human Finder: "Lack of reproducibility details"**: The paper specifies hardware (8 A100-80G GPUs per device), LLMs used, prompts verbatim, and game rules in full. The core experiments appear reproducible. Demanding additional hyperparameter detail rises to a nitpick level given what is disclosed.
+
+- **Harsh Critic: The claim about automatic workflow conversion being "too broad"**: The paper scopes its demonstration to the depicted centralized → distributed transformation. Demanding formal characterization of all supported workflow classes is scope creep beyond the paper's stated systems contribution.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel observation emerging from the collective reviews is the **prior-knowledge contamination finding in Sec 4.6**: a canonical game whose ratio changes from 1/2 to 51/100 (logically equivalent) produces measurably different agent behavior, and explicitly referencing the classic game in the prompt then restores behavior toward equilibrium. This finding implies that much of what is reported in published LLM simulation studies — including in this paper — may reflect retrieval of memorized task patterns rather than genuine emergent reasoning. This is a scientifically important negative result that deserves much higher prominence than it receives in the current submission.
+The most genuinely useful insight embedded in this paper — which the authors surface but underweight — is that LLM-based social simulation is fundamentally confounded by training corpus familiarity at the task level. The 51/100 vs. 1/2 experiment (Section 4.6) provides a concrete, quantifiable diagnostic: when a semantically near-identical game variant yields substantially different behavior (winning number jumps from ~6 to ~12), and explicitly referencing the source game restores behavior (dropping back to ~6), the simulation is measuring pattern-matching fidelity to training data, not genuine strategic reasoning. This suggests a useful evaluation methodology for any future LLM simulation work: run parallel experiments on functionally equivalent but superficially unfamiliar variants as a "reasoning integrity check." No existing multi-agent simulation platform paper has this kind of built-in validity probe, and the authors could make this a first-class contribution rather than burying it in a limitations section.
 
 ---
 
 ## Suggestions
 
-1. **Restructure the framing:** Decide whether this is a systems paper (scalability/infrastructure) or a simulation-methodology paper. The current paper tries to be both and undersupports each. Systems papers require comparisons against the specific systems they claim to improve upon (Ray); methodology papers require broader task coverage and human-data validation.
-2. **Run a second task** — even something simple like a 2-player coordination game or an opinion diffusion model — to demonstrate that the platform is genuinely task-agnostic.
-3. **Add Ray comparison:** A minimal head-to-head on the dummy-model benchmark or a small-scale real-LLM task would substantiate Sec 3.1's direct claim.
-4. **Foreground Sec 4.6:** Restructure the paper so the prior-knowledge finding motivates design choices and tempers claims throughout, rather than being tucked at the end as a discussion item.
-5. **Report error bars:** Even a small number of repeated seeds for the education-level and multi-round experiments would substantially strengthen the behavioral claims.
+1. **Narrow the scientific framing to match the evidence**: Replace claims about "realistic behaviors," "reliable simulations," and "meaningful insights" with the more accurate claim that the framework enables large-scale behavioral studies of LLM agent populations on well-defined strategic tasks. The current framing will attract skepticism that undermines the paper's legitimate engineering contributions.
+2. **Run end-to-end efficiency comparisons with real LLM inference**: Even at 1K–10K agents, a head-to-head against Python async under real model calls would substantially strengthen the systems claim. Report framework overhead vs. model-serving cost separately.
+3. **Quantitative alignment with human data**: Compute KL divergence or distance between agent response distributions and reported human distributions from Nagel (1995) to give "consistent with prior studies" a specific meaning.
+4. **Add one richer simulation scenario**: Even a small-scale (500-agent) simulation involving multi-turn inter-agent communication (e.g., opinion formation, cooperative task allocation) would demonstrate that the platform's value generalizes beyond the current loosely-coupled task.
 
 ---
 
+## Evaluation
+
+- **Novelty**: Low–moderate. The actor-based distributed mechanism and `to_dist` conversion are useful engineering contributions, but the actor model itself is well-established (Agha, 1985), and the contribution is incremental on top of the existing AgentScope platform. The behavioral study is observational with no novel scientific finding beyond "prompts and model choice affect outputs."
+- **Technical soundness**: Moderate for the systems components; weak for the behavioral claims, which are undermined by the prior-knowledge confound the authors themselves document.
+- **Empirical support**: Weak relative to the claims. Impressive at the infrastructure layer (1M agents), but a single toy game with no human baseline is insufficient to support the paper's scientific framing.
+- **Significance**: Modest. The platform may be useful to practitioners needing large-scale LLM agent simulation, but the scientific contribution to the understanding of LLM agent behavior is limited.
+- **Clarity**: Adequate. The system design is described clearly; the experimental section is organized. The mismatch between claims and evidence is the primary clarity concern.
+
 ## Score and Decision
 
-**Calibration:**
+**Calibration**: Compared against the debate training paper (gAEEjGv5Oa.md, score 6.5), which made the first training-based demonstration of a contested scientific claim, with careful methodology and honest reporting of surprising results. That paper has substantially higher scientific novelty, stronger evidence, and more targeted contribution. This paper is clearly weaker than a 6.5 on all three dimensions: novelty, evidence quality, and scientific rigor. The engineering contributions are real, but the behavioral claims are severely overstated for a top ML venue.
 
-| Paper | Topic | Scores | Decision |
-|---|---|---|---|
-| OASIS (JBzTculaVV) | Large-scale LLM social simulation, ~1M agents, multiple social phenomena | 3, 8, 5, 1 (avg ≈ 4.25) | Reject |
-| WarAgent (RBaDiInDRg) | LLM multi-agent simulation (war scenarios), thin scientific contribution | 5, 3, 3, 3 (avg ≈ 3.5) | Reject |
-| Internet of Agents (o1Et3MogPw) | Multi-agent distributed platform, strong baselines, diverse task evals | 8, 8, 6, 8, 6 (avg ≈ 7.2) | Accept (Spotlight) |
+Relative placement: clearly **below** gAEEjGv5Oa.md (6.5). The ICLR mean of ~5.12 is the anchor; this paper is modestly below it due to the gap between stated claims and actual evidence, the weak baselines for the systems evaluation, and the limitation to a single toy task.
 
-**Reasoning:** This paper is most similar to OASIS — a large-scale LLM simulation infrastructure paper demonstrating up to 1M agents. OASIS showed multiple social phenomena (information spreading, polarization, herding) across two platforms and was rejected at ~4.25 average. This paper demonstrates stronger raw scalability engineering but uses a narrower evaluation (single game), has weaker simulation science (one memorizable task vs. three distinct phenomena), and claims advances over Ray without comparison. Relative to IoA (the high-scoring platform paper), this work lacks performance benchmarks against baselines, formal analysis of system properties, and diverse task validation. The real contribution — the 1M-agent execution and `to_dist` API — is meaningful but insufficient for ICLR given the unsupported claims and single-task scope.
+**Score: 4.5** — Weak reject. The system is real and the scale demonstration is non-trivial, but the paper's scientific framing exceeds what the evidence supports, the efficiency comparison is not honest about real-world conditions, and the behavioral analysis is too thin to carry the paper's broader conclusions.
 
-**Axis evaluation:**
-- *Novelty:* Moderate — incremental extensions to an existing platform using well-established concurrency patterns (actor model)
-- *Technical soundness:* Partial — the distributed mechanism is sound, but Ray claim is unsupported and other contributions are unvalidated
-- *Empirical support:* Weak — single game, dummy-model efficiency comparison, no statistical rigor, no human-data calibration
-- *Significance:* Moderate — 1M-agent execution is practically impressive, but scientific insights are thin
-- *Clarity:* Adequate — the paper is readable, but conflates systems contribution with simulation-methodology contribution
-
-**Final Score: 4.0 — Reject**
-
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

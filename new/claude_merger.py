@@ -242,11 +242,12 @@ def _make_merger_mcp_server(paper_dir: str, reviews_dir: str):
     )
 
 
-async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: str, reviews_dir: str, paper_filename: str) -> str:
+async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: str, reviews_dir: str, paper_filename: str, direct_score: bool = False) -> str:
     """
     Run the merger agent via Claude Agent SDK.
     Returns the final merged review text.
     After completion, embeds the review and saves it to the per-run DB.
+    If direct_score=True, the merger skips search_review and scores from its own judgment.
     """
     from claude_agent_sdk import (
         ClaudeSDKClient,
@@ -266,20 +267,50 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
         "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly.",
     )
 
+    if direct_score:
+        calibration_instruction = (
+            "Score this paper directly based on your own assessment of its quality relative to ICLR standards. "
+            "Do not use any calibration tool — rely solely on your judgment."
+        )
+    else:
+        calibration_instruction = (
+            "Use self-consistency calibration via `search_review`. "
+            "These are reviews you produced for other papers in the same run — same scale, same criteria, same format. "
+            "Use `read_file` to read them in full once you have candidate filenames.\n\n"
+            "Your calibration process:\n\n"
+            "1. **Retrieve past reviews**: Use `search_review` with a few short general queries (e.g. the paper's topic area) "
+            "to pull a handful of past reviews. Do not try to match weakness or strength patterns — just get a sample of what you have reviewed before.\n\n"
+            "2. **Holistic comparison**: Read each retrieved past review and ask one question: "
+            "**\"Is the paper I am now reviewing better or worse overall than that paper?\"** "
+            "Do not compare point-by-point. Judge the overall package — how compelling is the contribution, "
+            "how solid is the execution, how serious are the problems — and form a relative ordering.\n\n"
+            "3. **Score by relative rank**: Place this paper in the ordering. "
+            "If it is clearly better than a paper you gave 6.0, it should score above 6.0. "
+            "If it is clearly worse than a paper you gave 5.0, it should score below 5.0. "
+            "Maintain consistent relative ordering across the run — do not compress scores into 4–6.\n\n"
+            "If no past reviews exist yet (first paper in a run), rely solely on your training knowledge of ICLR standards.\n\n"
+            "When reporting your score, list which past review files you compared against and state simply whether this paper is above, below, or between them."
+        )
+    system_prompt = system_prompt.replace("{{CALIBRATION_INSTRUCTION}}", calibration_instruction)
+
     mcp_server = _make_merger_mcp_server(paper_dir, reviews_dir)
+
+    allowed_tools = [
+        "mcp__merger_fs__read_file",
+        "mcp__merger_fs__grep_file",
+        "mcp__merger_fs__search_file",
+    ]
+    if not direct_score:
+        allowed_tools.append("mcp__merger_fs__search_review")
 
     options = ClaudeAgentOptions(
         model=model_id,
-        allowed_tools=[
-            "mcp__merger_fs__read_file",
-            "mcp__merger_fs__grep_file",
-            "mcp__merger_fs__search_file",
-            "mcp__merger_fs__search_review",
-        ],
+        allowed_tools=allowed_tools,
         permission_mode="bypassPermissions",
         disallowed_tools=["Read", "Glob", "Grep", "Bash", "Edit", "Write", "Agent"],
         mcp_servers={"merger_fs": mcp_server},
         max_turns=30,
+        cwd="/tmp",
     )
 
     full_prompt = f"{system_prompt}\n\n---\n\n{merger_prompt}"
