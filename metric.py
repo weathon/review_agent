@@ -216,6 +216,11 @@ def analyze_and_plot(path):
     gt_dec = df["gt_binary"].str.strip().str.lower()
     valid_dec_mask = ~pred_dec.isin(["n/a", ""])
     dec_match = ((pred_dec == gt_dec) & valid_dec_mask).sum()
+    dec_eval_mask = valid_dec_mask & pred_dec.isin(["accept", "reject"]) & gt_dec.isin(["accept", "reject"])
+    dec_tn = int(((gt_dec == "reject") & (pred_dec == "reject") & dec_eval_mask).sum())
+    dec_fp = int(((gt_dec == "reject") & (pred_dec == "accept") & dec_eval_mask).sum())
+    dec_fn = int(((gt_dec == "accept") & (pred_dec == "reject") & dec_eval_mask).sum())
+    dec_tp = int(((gt_dec == "accept") & (pred_dec == "accept") & dec_eval_mask).sum())
 
     match_any = 0
     within_1std = 0
@@ -295,6 +300,10 @@ def analyze_and_plot(path):
     if valid_dec_mask.any():
         valid_decisions = int(valid_dec_mask.sum())
         print(f"  Decision accuracy:     {dec_match}/{valid_decisions} = {dec_match/valid_decisions:.1%}")
+        print(f"  Direct decision confusion matrix:")
+        print(f"    {'':<12} {'Pred Reject':>12} {'Pred Accept':>12}")
+        print(f"    {'GT Reject':<12} {dec_tn:>12} {dec_fp:>12}")
+        print(f"    {'GT Accept':<12} {dec_fn:>12} {dec_tp:>12}")
     else:
         print("  Decision accuracy:     N/A (decision labels disabled)")
     print(f"  Within 1 human std:    {within_1std}/{len(df)} = {within_1std/len(df):.1%}")
@@ -441,8 +450,8 @@ def analyze_and_plot(path):
         ax2.grid(True, alpha=0.2)
         ax2.text(
             0.05, 0.95,
-            f"Pearson: {one_vs_rest['pearson']:.3f}\n"
             f"Spearman: {one_vs_rest['spearman']:.3f}\n"
+            f"Pearson: {one_vs_rest['pearson']:.3f}\n"
             f"MAE: {one_vs_rest['mae']:.3f}\n"
             f"{one_vs_rest['n_pairs']} held-out reviews",
             transform=ax2.transAxes, fontsize=10, va="top",
@@ -509,8 +518,8 @@ def analyze_and_plot(path):
         ax5.grid(True, alpha=0.2)
         ax5.text(
             0.05, 0.95,
-            f"Pearson: {split_half['pearson']:.3f}\n"
             f"Spearman: {split_half['spearman']:.3f}\n"
+            f"Pearson: {split_half['pearson']:.3f}\n"
             f"MAE: {split_half['mae']:.3f}\n"
             f"{split_half['n_pairs']} exact split pairs",
             transform=ax5.transAxes, fontsize=10, va="top",
