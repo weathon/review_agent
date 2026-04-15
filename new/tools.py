@@ -1,7 +1,7 @@
 
 from agents import Agent, Runner, function_tool
 import os
-ALLOWED_PATHS = [os.path.abspath("../iclr2025_data/")]
+ALLOWED_PATHS = [os.path.abspath("../human_reviews/")]
 
 from rank_bm25 import BM25Okapi
 from openai import OpenAI
@@ -53,6 +53,7 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
         print(f"  [read_file] BLOCKED: '{resolved}' is not under any allowed directory.")
         return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
     if ("/papers/" in abs_path or abs_path.endswith("_paper.md")) and end_line == 0:
+        print(f"  [read_file] BLOCKED: Full read of '{resolved}' is not allowed. Use grep_files first to find relevant sections.")
         return "ERROR: Full paper reads blocked. Use grep_files first, then read_file with start_line/end_line."
     with open(abs_path, "r") as f:
         lines = f.readlines()
@@ -64,20 +65,22 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
 def read_file_full(abs_path: str) -> str:
     """Read an entire file. Only use this inside the Summarizer agent."""
     resolved = os.path.abspath(abs_path)
-    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
+    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS + ["/home/wg25r/review_agent/iclr2025/papers/"]):
         print(f"  [read_file_full] BLOCKED: '{resolved}' is not under any allowed directory.")
         return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
     print(abs_path)
     with open(abs_path, "r") as f:
         return f.read()
 
-@function_tool
-def glob_files(pattern: str, directory: str = ".") -> str:
-    """Find files matching a glob pattern (e.g. '**/*.md', '*.txt') under a directory. Returns one path per line."""
-    import glob as _glob
-    matches = sorted(_glob.glob(pattern, root_dir=directory, recursive=True))
-    return "\n".join(os.path.join(directory, m) for m in matches) if matches else "No files matched."
- 
+# glob_files is unused — no agent has it in tools=[]; also had a bug (doubled directory in paths)
+# @function_tool
+# def glob_files(pattern: str, directory: str = ".") -> str:
+#     """Find files matching a glob pattern (e.g. '**/*.md', '*.txt') under a directory. Returns one path per line."""
+#     import glob as _glob
+#     matches = sorted(_glob.glob(pattern, root_dir=directory, recursive=True))
+#     return "\n".join(os.path.join(directory, m) for m in matches) if matches else "No files matched."
+
+
 @function_tool
 def grep_files(pattern: str, directory: str = ".", file_glob: str = "*") -> str:
     """Search file contents for a regex pattern. Returns matching lines with file paths and line numbers."""
@@ -134,7 +137,7 @@ def search_file(query: str, n: int = 5, mode: str = "vector") -> str:
         top_indices = similarities.argsort()[-n:][::-1]
         results = []
         for idx in top_indices:
-            file_path = os.path.abspath(f"./human_reviews/{filenames[idx]}")
+            file_path = os.path.abspath(f"../human_reviews/{filenames[idx]}")
             score = similarities[idx]
             with open(file_path, "r", errors="replace") as file_handle:
                 content = file_handle.read()

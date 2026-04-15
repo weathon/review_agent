@@ -8,7 +8,7 @@ import logging
 import time
 from collections import defaultdict
 from pathlib import Path
-from tools import read_file, read_file_full, glob_files, grep_files, search_file
+from tools import read_file, read_file_full, grep_files, search_file  # glob_files removed (unused)
 
 from agents import Agent, Runner, function_tool
 import dotenv
@@ -40,7 +40,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
-CONCURRENCY = 10
+CONCURRENCY = 1
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -151,7 +151,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
 
     print("  Phase 2: Merger ...")
     merged_review = await run_agent_with_retry(merger, merger_prompt) 
-    scorer_output = int(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
+    scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
     decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"
 
     log_path = Path(__file__).parent / "pipeline.log"
@@ -295,7 +295,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
         match = decision_match(pred_decision, paper_info["gt_binary"])
         match_str = match_label(match)
         print(f"  [{paper_info['paper_id']}] predicted={pred_score} gt={paper_info['avg_score']:.1f} match={match_str}")
-        results.append({"pred_score": pred_score, "gt_avg_score": paper_info["avg_score"], "pred_decision": pred_decision})
+        results.append({"pred_score": pred_score, "gt_avg_score": paper_info["avg_score"], "pred_decision": pred_decision, "gt_binary": paper_info["gt_binary"], "match": match})
         gt_scores_padded = paper_info["scores"] + [""] * (7 - len(paper_info["scores"]))
         with open(csv_path, "a", newline="") as f:
             csv.writer(f).writerow([
@@ -317,7 +317,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
     print(f"Running {len(samples)} benchmark papers (concurrency={CONCURRENCY}) ...")
     await process_papers(samples, papers_dir, skip_scoring=False, callback=on_complete)
 
-    scored = [r for r in results if r["pred_score"] is not None]
+    scored = [r for r in results if r["pred_score"] != -1]
     if scored:
         mae = sum(abs(r["pred_score"] - r["gt_avg_score"]) for r in scored) / len(scored)
         print(f"\nResults: {len(scored)} scored, MAE={mae:.2f}")

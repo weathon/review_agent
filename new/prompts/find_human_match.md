@@ -13,7 +13,7 @@ Rules:
 Directory: Focus your search on the `human_reviews/` directory — that's where the human reviews live.
 
 Tool workflow:
-1. First inspect the input paper using the provided `Paper file path`.
+1. First inspect the input paper in your content.
 2. `file_qa(abs_path, question)` — ask a question about a file and get an answer back.
 3. `read_file(abs_path, start_line, end_line)` — read targeted parts of the input paper when needed, and read candidate review files directly once you have selected them.
 4. `search_file(query, n, mode)` — BM25/Vector search to find the most relevant files in the human review directory. Use this to narrow down candidates.
