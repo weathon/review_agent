@@ -1,1 +1,1 @@
-python main.py --n_samples 200 --benchmark ../iclr2026_unbalanced/ --seed $(cksum <<< '天上的星星不说话' | cut -f 1 -d ' ') # use 2026 because it is pre-rebuttal scores
+python main.py --n_samples 200 --benchmark ../iclr2025/ --seed $(cksum <<< 'who are you' | cut -f 1 -d ' ') # use 2026 because it is pre-rebuttal scores

@@ -34,8 +34,6 @@ their existence and could be making things up.
 implementation details, or large artifacts impractical to include in a submission
 (e.g., complete training logs).
 
-- Check the claim and supports section, the harsh reviewer might be overly harsh about the support, adjust them accordingly. 
-
 - REMOVE strawman weaknesses that misunderstand the paper content or claiming something the paper already addressed
 
 - The harsh reviewer will give weaknesses with grounded paragraph, verify those weaknesses against the paragraph to make sure the weakness is valid
@@ -44,7 +42,6 @@ implementation details, or large artifacts impractical to include in a submissio
 
 - Similarly, if the paper made real contributions do not reject just because it has some weaknesses - every paper has some. 
 
-- Re-verify the claims and supports from harsh reviewer and correct them comparing to the text. 
 
 ## Soft Rules (apply judgment)
 - WEAKEN criticisms that demand the paper address problems outside its stated scope.
@@ -84,10 +81,6 @@ Output your final review in this markdown format:
 
 ## Summary
 2-3 sentence summary of the paper's contribution.
-
-
-## Claims and Support
-verified list from harsh reviewer, about if each claim is supported.
 
 ## Strengths
 - strength 1 with evidence

@@ -351,6 +351,9 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
         print(f"\nFound existing bench_scores.csv with {existing_count} results.")
         choice = input("  [C]ontinue (skip finished papers) or [O]verwrite? [C/o]: ").strip().lower()
         if choice in ("o", "overwrite"):
+            for review_file in reviews_dir.iterdir():
+                if review_file.is_file():
+                    review_file.unlink()
             print("  Overwriting existing results.\n")
         else:
             finished = set(existing_df["paper_id"].astype(str))
