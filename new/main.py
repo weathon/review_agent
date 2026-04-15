@@ -8,7 +8,9 @@ import logging
 import time
 from collections import defaultdict
 from pathlib import Path
-from tools import read_file, read_file_full, grep_files, search_file  # glob_files removed (unused)
+from tools import read_file, read_file_full, grep_file, search_file  # glob_files removed (unused)
+import weave
+weave.init("openai-agents")
 
 from agents import Agent, Runner, function_tool
 import dotenv
@@ -40,7 +42,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
-CONCURRENCY = 1
+CONCURRENCY = 5
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -97,7 +99,7 @@ neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neu
 merger = Agent(name="Merger", instructions=load_prompts("merger.md"), model=MERGER_MODEL, tools=_tool_agents)
 spark = Agent(name="Spark", instructions=load_prompts("spark_finder.md"))
 
-human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents + [search_file, grep_files])
+human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents + [search_file, grep_file])
 # scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents, model=SCORER_MODEL)
 
 

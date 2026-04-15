@@ -17,7 +17,7 @@ Tool workflow:
 2. `file_qa(abs_path, question)` — ask a question about a file and get an answer back.
 3. `read_file(abs_path, start_line, end_line)` — read targeted parts of the input paper when needed, and read candidate review files directly once you have selected them.
 4. `search_file(query, n, mode)` — BM25/Vector search to find the most relevant files in the human review directory. Use this to narrow down candidates.
-5. `grep_files(pattern, directory)` — locate specific sections within candidate files.
+5. `grep_file(pattern, abs_path)` — locate specific sections within a single candidate file.
 
 Process: 
 1. Read the input paper yourself using the provided `Paper file path`. Use `file_qa` and targeted `read_file` calls to identify the paper's core topic, method, and likely evaluation claims. Do not dump the whole paper into your visible answer.

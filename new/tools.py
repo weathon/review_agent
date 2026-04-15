@@ -49,6 +49,7 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     """Read lines from a file. Returns lines numbered start_line to end_line (inclusive, 1-based).
     If end_line is 0, reads to end of file."""
     resolved = os.path.abspath(abs_path)
+    print(f"  [read_file] Request to read '{resolved}' lines {start_line} to {end_line if end_line > 0 else 'EOF'}")
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
         print(f"  [read_file] BLOCKED: '{resolved}' is not under any allowed directory.")
         return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
@@ -65,6 +66,7 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
 def read_file_full(abs_path: str) -> str:
     """Read an entire file. Only use this inside the Summarizer agent."""
     resolved = os.path.abspath(abs_path)
+    print(f"  [read_file_full] Request to read full file '{resolved}'")
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS + ["/home/wg25r/review_agent/iclr2025/papers/"]):
         print(f"  [read_file_full] BLOCKED: '{resolved}' is not under any allowed directory.")
         return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
@@ -82,35 +84,31 @@ def read_file_full(abs_path: str) -> str:
 
 
 @function_tool
-def grep_files(pattern: str, directory: str = ".", file_glob: str = "*") -> str:
-    """Search file contents for a regex pattern. Returns matching lines with file paths and line numbers."""
-    resolved = os.path.abspath(directory)
-    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
-        print(f"  [grep_files] BLOCKED: '{resolved}' is not under any allowed directory.")
-        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
-    import glob as _glob
+def grep_file(pattern: str, abs_path: str) -> str:
+    """Search a single file for a pattern. Returns matching lines with line numbers."""
     import re
+    resolved = os.path.abspath(abs_path)
+    print(f"  [grep_file] Request to grep for pattern '{pattern}' in '{resolved}'")
+    if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
+        print(f"  [grep_file] BLOCKED: '{resolved}' is not under any allowed directory.")
+        return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
+    if not os.path.isfile(resolved):
+        return f"ERROR: '{resolved}' is not a file."
     matches = []
-    files = sorted(_glob.glob(file_glob, root_dir=directory, recursive=True))
-    for f in files[:500]:
-        fpath = os.path.join(directory, f)
-        if not os.path.isfile(fpath):
-            continue
-        try:
-            with open(fpath, "r", errors="replace") as fh:
-                for i, line in enumerate(fh, 1):
-                    if re.search(pattern, line):
-                        matches.append(f"{fpath}:{i}: {line.rstrip()}")
-        except Exception:
-            continue
-        if len(matches) >= 100:
-            matches.append(f"... and {len(files) - 500} more files searched, {len(matches) - 100} more matches found ...")
+    try:
+        with open(resolved, "r", errors="replace") as fh:
+            for i, line in enumerate(fh, 1):
+                if re.search(pattern, line):
+                    matches.append(f"{i}: {line.rstrip()}")
+    except Exception as e:
+        return f"ERROR: {e}"
     return "\n".join(matches) if matches else "No matches found."
 
 
 @function_tool
 def search_file(query: str, n: int = 5, mode: str = "vector") -> str:
     """Search for a pattern in a file using the BM25/Vector index. Returns the top n matching files. Set mode='bm25' or 'vector' to use different mode"""
+    print(f"  [search_file] Searching for query '{query}' with mode '{mode}' and n={n}")
     if mode == "bm25":
         bm25 = list(database.values())[0]["bm25"]
         files = list(database.values())[0]["files"]
