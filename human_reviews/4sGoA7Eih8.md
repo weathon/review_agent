@@ -1,0 +1,159 @@
+# Unmasking Transformers: A Theoretical Approach to Data Recovery via Attention Weights
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 3, 5, 1, 3
+
+## Abstract
+In the realm of deep learning, transformers have emerged as a dominant architecture, particularly in natural language processing tasks. However, with their widespread adoption, concerns regarding the security and privacy of the data processed by these models have arisen. In this paper, we address a pivotal question: Can the data fed into transformers be recovered using their attention weights and outputs? We introduce a theoretical framework to tackle this problem. Specifically, we present an algorithm that aims to recover the input data $X \in \mathbb{R}^{d \times n}$ from given attention weights $W = QK^\top \in \mathbb{R}^{d \times d}$ and output $B \in \mathbb{R}^{n \times n}$ by minimizing the loss function $L(X)$. This loss function captures the discrepancy between the expected output and the actual output of the transformer. Our findings have significant implications for the Localized Layer-wise Mechanism (LLM), suggesting potential vulnerabilities in the model's design from a security and privacy perspective. This work underscores the importance of understanding and safeguarding the internal workings of transformers to ensure the confidentiality of processed data.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper presents a theoretical approach for reversing input data using attention weights and model outputs. The study explores the mathematical foundations of the attention mechanism to assess if knowing attention weights and model outputs can be used to reconstruct sensitive information from input data. The research aims to enhance our comprehension of this aspect and promote the creation of more secure and reliable transformer models. Ultimately, the paper seeks to contribute to responsible and ethical progress in the field of deep learning.
+
+### Strengths
+1. This paper develops a theoretical approach to reverse input data using attention weights and model outputs. By investigating the mathematical foundations of the attention mechanism, the study explores the potential for reconstructing sensitive information from input data. This investigation can enhance our understanding of this process and support the creation of more secure and dependable transformer models, fostering responsible and ethical advancements in the field of deep learning.
+
+### Weaknesses
+1. The authors do not provide any empirical results to support the effectiveness of the attack method. We respect works that focus on theoretical contributions. However, for the deep learning attack topics, it is better to evaluate the effectiveness of the proposed attack via experiment since it is feasible to do experiments.
+
+2. It is unclear in which scenario the attacker can access the attention weights and the output of the attention layer.
+
+3. This paper does not involve a non-linear activation layer (e.g., ReLU), which is widely applied to transformers into discussion, which should introduce challenges to invert the input perfectly.
+
+### Questions
+Please see the weaknesses.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 2
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The authors propose a new model inversion attack that recovers private training data from attention weights and outputs. Particularly, this paper takes a theoretical approach and shows that, given the trained attention weights and output, the adversary can update the private data X by minimizing the loss function.
+
+### Strengths
+The authors perform a comprehensive theoretical analysis of attention inversion attacks.
+
+### Weaknesses
+The paper has the following weaknesses: 
+- There is no empirical evaluation of the proposed inversion attack method. Although the authors explain that they focus on theoretical analysis, the efficacy of the data recovery method shall be justified with empirical results. There are no quantitative results that can prove the efficacy of attention inversion attacks.  
+- The paper does not discuss the overhead of the proposed attack. Particularly, the computation overhead of recovering data given attention weights and outputs is not clear.
+
+### Questions
+Please consider addressing the weaknesses above.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 3
+
+### Rating
+1: strong reject
+
+### Rating Number
+1
+
+### Confidence
+1: You are unable to assess this paper and have alerted the ACs to seek an opinion from different reviewers.
+
+### Summary
+The paper proposes a theoretical approach for inverting input data using weights and outputs for transformer architecture.
+
+### Strengths
+The question of whether transformer architecture is secure against data reconstruction is important.
+
+### Weaknesses
+I honestly don't quite understand the contribution of this paper. There is no support/evaluation of the "main result" in Section 1.
+
+Presentation of the paper (the arrangement of content in sections) looks a bit unusual.
+
+### Questions
+I don't understand what this paper tries to do.
+
+### Soundness
+1 poor
+
+### Presentation
+1 poor
+
+### Contribution
+1 poor
+
+---
+
+## Human Reviewer 4
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper proposes an algorithm to recover the input data from given attention weights and output by minimizing the loss function capturing the discrepancy between the expected output and the actual output. The proposed method addresses the importance of understanding and safeguarding the transformers' intermediate outputs to protect the input data.
+
+### Strengths
+This paper targets at a timely problem given privacy concerns around transformers and attention mechanisms.
+
+### Weaknesses
+1. Lacks any empirical evaluations to complement the theoretical results.
+
+2. The equations in the paper are not numbered.
+
+3. Some symbols are not explained. For example, in the second equation, what it A1_n?
+
+4. Based on my understanding, the core of this paper is to find an optimal X*=argminL(f_\theta(X),Y). This seems an easy optimization problem which can be done by gradient decent. This paper does not explain what are the challenges of solving this optimization problem and how to overcome these challenges.
+
+5. Given the weight and output, the input can also be found by black-box attacks where a network is constructed to do model inversion. This paper lacks comparing with such black-box attacks.
+
+### Questions
+Please see the weakness
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair

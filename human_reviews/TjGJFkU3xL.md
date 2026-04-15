@@ -1,0 +1,131 @@
+# Doubly Robust Proximal Causal Learning for Continuous Treatments
+
+- Decision: Accept (poster)
+- Scores: 6, 6, 8
+
+## Abstract
+Proximal causal learning is a powerful framework for identifying the causal effect under the existence of unmeasured confounders. Within this framework, the doubly robust (DR) estimator was derived and has shown its effectiveness in estimation, especially when the model assumption is violated. However, the current form of the DR estimator is restricted to binary treatments, while the treatments can be continuous in many real-world applications. The primary obstacle to continuous treatments resides in the delta function present in the original DR estimator, making it infeasible in causal effect estimation and introducing a heavy computational burden in nuisance function estimation. To address these challenges, we propose a kernel-based DR estimator that can well handle continuous treatments for proximal causal learning. Equipped with its smoothness, we show that its oracle form is a consistent approximation of the influence function. Further, we propose a new approach to efficiently solve the nuisance functions. We then provide a comprehensive convergence analysis in terms of the mean square error. We demonstrate the utility of our estimator on synthetic datasets and real-world applications.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The paper presents a kernel-based doubly robust estimator designed for proximal causal learning, particularly adept at handling continuous treatments. The authors demonstrate that this estimator is a consistent approximation of the influence function. They also introduce an innovative method for efficiently resolving nuisance functions. Additionally, the paper includes an in-depth convergence analysis in relation to the mean square error.
+
+The paper proposes a novel and intriguing problem within the proximal causal learning framework.  Despite the motivation not being particularly compelling, the problem itself remains highly intriguing and of considerable importance.
+
+### Strengths
+* The paper is well-structured and flows naturally.
+* This paper proposes an intriguing research topic within proximal causal inference work.
+* Theoretical guarantee is also provided.
+
+### Weaknesses
+* The inference issue seems to be ignored without the analysis of asymptotical distribution for causal effect. 
+
+* The paper’s rationale for the calculation of the influence function appears to be lacking, as it directly selects a specific submodel. It might be more appropriate to refer to the function derived in this paper as the efficient influence function, given that the previous doubly robust estimator for binary treatment is efficient.
+
+* The empirical coverage probability is not given. MSE only contains both bias and variance terms, which may not display the true statistic estimation acuraccy and precision.
+
+### Questions
+The authors have well clarified their setting and their problem is also novel. I only have several comments below.
+
+* It will be more appropriate to call Assumption 3.2 the "latent ignorability" instead of "conditional randomization". 
+* Although one single optimization reduces computational burden, but asymptotical normality of causal effect estimate may not hold using the proposed kernel estimation method. So please make the motivation clear about why this paper does not focus on the inference issue.
+* Why does the projected residual mean squared error make sense? Does it mean \hat{q} is consistent for q0?
+* this paper seems to consider the high-dimensional setting in experiments, what about theoretical properties?
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper introduces a method for proximal causal inference when dealing with continuous treatments. The proposed method is doubly robust in terms of estimating nuisances.
+
+### Strengths
+1. This paper is technically sound and strong. 
+2. The experimental studies are well done. A sufficient amount of empirical evidence for the proposed method is provided.
+
+### Weaknesses
+1. I believe that the statement of Theorem 4.5 is incorrect. More precisely, the influence function of $B(a)$ does not exist, meaning that $B(a)$ is not pathwise differentiable. However, $B(a; P^{\epsilon,h_{bw}})$ is pathwise differentiable, indicating that the influence function does exist. Therefore, to accurately state this, the term "lim" should be removed and the statement should be made with "for any $h_{bw} > 0$".
+2. A practical guide is needed to solve the optimization problem in Equations (8,9) and apply these methods in practice.
+
+### Questions
+1. I believe that the statement of Theorem 4.5 is incorrect. More precisely, the influence function of $B(a)$ does not exist, meaning that $B(a)$ is not pathwise differentiable. However, $B(a; P^{\epsilon,h_{bw}})$ is pathwise differentiable, indicating that the influence function does exist. Therefore, to accurately state this, the term "lim" should be removed and the statement should be made with "for any $h_{bw} > 0$". 
+2. I understand that $q_0$ represents the maximum value for the equation in Lemma 5.1. However, I am unsure about the connection between Lemma 5.1 and Equation (8). In other words, why do we need to minimize the empirical quantity for the equation in Lemma 5.1?
+
+### Soundness
+4 excellent
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This work studies two very important settings in causal inference: continuous treatment & unmeasured confounding. This work introduces a new kernel-based DR estimator designed for continuous treatments, and it presents an efficient approach to solving nuisance functions and demonstrates the estimator's effectiveness through synthetic and real-world data.
+
+### Strengths
+Clear writing & solid theoretical results
+
+### Weaknesses
+The reviewer is not an expert in deep learning for causal inference but would assume there are working targeting the studies setting: causal effect estimation for continuous treatment under potential missing confounders. 
+
+The reviewer understands the page limitation and would recommend a detailed comparison to existing literature in the appendix --- how is this method novel and why this novel kernel modification is necessary to handle the pitfalls in the current literature?
+
+The reviewer would like to raise the score once there are more literature survey on that direction and added numerical experiments: comparing with **SOTA** DL method on **benchmark** datasets in the revision.
+
+A minor comment: will it be better to call section 2 "background" instead of "related works"? And it is not clear to the reviewer why "in this paper" is highlighted in the second paragraph of section 2...
+
+### Questions
+See weakness.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good

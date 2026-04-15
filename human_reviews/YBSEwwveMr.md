@@ -1,0 +1,209 @@
+# Score-Based Multimodal Autoencoders
+
+- Decision: Reject
+- Scores: 3, 6, 6, 8
+
+## Abstract
+Multimodal Variational Autoencoders (VAEs) represent a promising group of generative models that facilitate the construction of a tractable posterior within the latent space, given multiple modalities. Daunhawer et al. (2022) demonstrate that as the number of modalities increases, the generative quality of each modality declines. In this study, we explore an alternative approach to enhance the generative performance of multimodal VAEs by jointly modeling the latent space of unimodal VAEs using score-based models (SBMs). The role of the SBM is to enforce multimodal coherence by learning the correlation among the latent variables. Consequently, our model combines the superior generative quality of unimodal VAEs with coherent integration across different modalities.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The authors propose a new multimodal VAE model consisting of unimodal VAEs and a score-based model that models the joint distribution of unimodal latent variables. They also introduce an energy-based coherence guidance model, which helps to alleviate the problem when the predicted modalities are not aligned with the observed modalities. Experiments are performed on PolyMNIST and CelebAMask datasets.
+
+### Strengths
+- Clearly explained expected properties of a multimodal generative model.
+- Proposed method scales with the number of modalities which is important for multimodal generation.
+- Extensive related work.
+
+### Weaknesses
+- Missing connection and comparison of the methods in the related work section to the proposed method. In what way are SBM-* improving over these methods? I also find that such discussion is missing in the experimental results.
+- No ablation studies on the components of the proposed method. This would also help gaining a more intuitive understanding of the proposed method, which is lacking in the current version.
+- Limited experimental evaluation using only image data. Both PolyMNIST and CelebAMask are image datasets. It would be beneficial to add experiments on text audio modalities as well. 
+- I find the novelty of the method a bit limiting. Given that the experimental results do not report any standard deviations makes it hard to judge the weight of the contribution.
+
+### Questions
+- It has been shown by several works that FID does not provide an adequate evaluation of a generative model (see for example work by Sajjadi et al Assessing Generative Models via Precision and Recall). Are you sure that none of the considered models experience a mode collapse? It would be better to present these results with newer metrics like Improved Precision and Recall [1] or Delaunay Component Analysis [2] below). With the latter, you could also gain more insights into each generated modality by analysing the geometry of their representations. 
+
+[1] Kynkäänniemi et al, Improved Precision and Recall Metric for Assessing Generative Models, NeurIPS 2019
+
+[2] Poklukar et al, Delaunay Component Analysis for Evaluation of Data Representations, ICLR 2022
+
+- When calculating conditional accuracy, do you randomise the observed modalities? For example, in Fig 5, how many times did you repeat this experiment? I believe that without std it is hard to draw conclusions. 
+
+- I do not see the benefits of keeping both SBM-VAE and SBM-RAE in the experiments. First, it is not clear what version is better and why. The authors do not discuss this at all. Second, it hinders the readability of the results.
+
+- I do not fully understand the unconditional coherence evaluation. Do you sample z_1:M, then generate all x_1:M modalities and evaluate their agreement ? In Fig 6 what are ”similar modalities”? Please add some more explanation.
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper proposes a novel multimodal VAE model which addresses the problem of sample quality deterioration as the number of modalities increases, which the previous models are suffering from. The paper proposed to model separate encoder-decoder pipelines and independent posterior distributions for latent variable corresponding to separate modality to improve the generation quality. The author used a Score-based model (SBM) approach to model a joint prior distribution of latent variables for different modalities to achieve coherence among the generated modalities. The authors then performed benchmark on the modified PolyMnist and CelebAMask-HQ dataset.
+
+### Strengths
+The author provides a good summary of existing work in the introduction and provided a clear explanation of the motivation of their approach.
+
+The author was able to provide evidence of improved generative quality in terms of FID scores and qualitative analysis on the two datasets.
+
+The paper provides interesting, and sound use case of SBM to learn a joint latent prior distribution for inference and provide cases for conditional inference with sets of observed modality and unconditional inference when no modality is observed, along with an EBM based guidance to enhance coherence for sampling.
+
+### Weaknesses
+Concerns on the benchmark datasets are too simple, because these datasets have very fixed pattern characteristics, and the modality types are also relatively fixed. Therefore, it might not be sufficient to prove the stability and quality of the proposed method in the case of multi-modal and missing modes.
+
+Details about the specific network structure in the appendix are not clear and dimensions of the latent variables are not clearly stated also.
+
+The evaluation metric for accuracy is not clearly defined.
+
+It is not clear if the generative quality is truly decreasing as the number of modalities increases. This relation is not clear in other models (as the generative quality though less optimal than the SBM approach, their generative quality is largely consistent along the number of modalities).
+
+The coherence of the SBM based model does not show a clear improvement or sometimes performed not as well as previous model (especially in experiment on CelebA-Mask-HQ dataset) in terms of coherence.
+
+The author used a modified PolyMnist dataset but not clearly defined how the new modalities are generated.
+
+### Questions
+Please define the accuracy metric. Or is it a term used interchangeably with metric coherence?
+
+Please specify the dimensions of the latent variables, are those 1D vectors or 2D matrices? How is Unet applied in this case?
+
+The reviewer acknowledges that the generative quality in terms of FID and qualitative analysis shows an improvement, however the coherence is not improving compared to other works. It would be great if the authors could justify why better generative quality is worth sacrificing for less optimal performance for coherence in the context of multimodality learning.
+
+It would be great if the author could provide more on how the modified PolyMnist dataset is generated consider this is a new version of the original dataset.
+
+### Soundness
+3 good
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+5: You are absolutely certain about your assessment. You are very familiar with the related work and checked the math/other details carefully.
+
+### Summary
+To improve over existing multimodal VAEs, the paper proposes to train unimodal VAEs independently, in order to achieve high generative quality, and a score-based model to learn a joint latent space across modalities and achieve semantic coherence.
+
+### Strengths
+- The paper deals with the relevant problem of tackling the current limitations of multimodal VAEs. 
+- Interesting and encouraging results are shown to back up the effectiveness of the proposed approach. In particular, it is encouraging that the performance of the proposed approach can benefit from the presence of more modalities in terms of performance, and does not suffer from the limitations uncovered in recent work [1]. 
+- The comparisons reflect the state-of-the-art in the field, with recent approaches included.
+
+
+[1] Daunhawer I, Sutter TM, Chin-Cheong K, Palumbo E, and Vogt JE. On the limitations of multimodal VAEs. In International Conference on Learning Representations, 2022.
+
+### Weaknesses
+- To me it is unclear why the score-matching model would lead to a coherent shared latent space, and I would appreciate if authors would clarify that. While in the first step of training we have a prior $p(z_{1:M})=\prod \mathcal{N}(0, \sigma I)$, what are the modelling assumptions on the parametric prior $p_{\theta}(z_{1:M})$ in the second step?
+- The comparison with MVTCAE [2] from e.g. Figures 4 and 5 is quite important and should be further commented, with maybe more insights (eg. different $\beta$ values, average performance across modalities for conditional generation, see below) for at least two reasons. First as it does not sub-sample modalities during training, MVTCAE is not subject to the limitations for generative quality uncovered in [1]. Second, MVTCAE and the proposed model are really similar in performance, and from the results it is unclear which one performs better overall (at least in the first experimental setting). 
+- Why reporting only the results on the last modality in e.g. Figure 4? (Even though also results on the first modality are available, in the Appendix).This is only a partial insight on model performance, and results should be averaged across modalities for conditional generation (not modalities used for inference, modalities used for generation) to show performance is consistently good. To back up this point, results on the third modality (Figure 3) indicate that MVTCAE has poor generative quality. However, FIDs in Figure 4 for the last modality indicate otherwise. Hence, it seems that in evaluating model performance, one might want to control for the effect of choice of modality.  
+- Did the authors do an ablation for different values of $\beta$ for the compared models in e.g. Extended PolyMNIST? In the Appendix it is stated that the $\beta$ was chosen using the validation set. How exactly was it chosen? Should it be by looking at the ELBO value on the validation set, one should be careful as likelihood values prove often not to be representative when it comes to performance of multimodal VAEs. For instance, with models that subsample modalities, high likelihoods for conditional reconstruction across modalities can be obtained by producing average-looking samples (since the modality-specific information about the sample to be reconstructed cannot be inferred). I think it would be important to report results for the compared models across $\beta$ values instead of reporting results only for a single value. To back up this point, the conditional generation results from Figure 3 for e.g. MVTCAE seem rather different from what reported original work [2] on PolyMNIST, in which the authors use a much higher $\beta$ value ($\beta=2.5$ I think).  
+- I found many typos and imprecisions in the manuscript, that has margin for improvement in writing quality. 
+
+[1] Daunhawer I, Sutter TM, Chin-Cheong K, Palumbo E, and Vogt JE. On the limitations of multimodal VAEs. In International Conference on Learning Representations, 2022. [2] Hwang HJ, Kim GH, Hong S, and Kim KE. Multi-view representation learning via total correlation objective. In Advances in Neural Information Processing Systems, 2021.
+
+### Questions
+- I would change "alternative" to "novel" in the Abstract. Not really clear what the approach is "alternative" to otherwise. 
+- In the Introduction, I can suggest to make the difference between "Scalability" and "Conditional modality gain" clearer. As I understand it, scalability refers to the fact that a multimodal VAE trained on a given number of modalities should perform at least as well as the same model trained on fewer modalities. On the other hand, conditional modality gain refers to test-time conditional generation performance improving when more modalities are given for inference.  I would suggest to make a clearer distinction in the text between the two concepts. 
+
+For questions and suggestions to the authors, see also "Weaknesses" section.
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+In this study, the researchers introduce a multimodal modeling framework that utilizes distinct encoder-decoder pairs for each type of data input. They devise a method to learn a shared prior for the latent variables that represent different modalities, in order to understand the interconnections between them. Each modality's training is optimized through the maximization of its Evidence Lower Bound (ELBO). The latent variables for each modality are then independently generated using the unimodal encoders. These variables are jointly modeled using a denoising score-matching technique. Additionally, the latent variables are trained to be consistent with each other through a noise-contrastive approach, and the gradient of the noise-contrastive model is used to adjust the scores for latent variables that are not observed.
+
+Using their proposed method, the authors demonstrate that the Frechet Inception Distance (FID) score of the created outputs remains stable, even as the number of modalities grows. Moreover, the congruence between the modalities, measured by how accurately the class label of the anticipated modality can be predicted, is enhanced when the model includes a mechanism for coherence guidance.
+
+### Strengths
+1) The paper is well-written and easy to read.
+
+2) The primary novelty of the paper stems from its simplicity. While the previous papers have been focussed on modeling all the modalities together, this paper decomposes the problem into two independent aspects
+ - Learn latent variables for each modality individually
+ - Learn a joint distribution over the latent variables.
+This is reminiscent of Dall-E [1] where a separate discrete VAE is learned for images followed by a mapping from the text to the latent variables. In [2], a separate VAE is learned for each modality while simultaneously minimizing the KL divergence between the latent variables. However, none of these approaches can be extended directly to more than 2 modalities. 
+
+This paper is most reminiscent of the MMVAE+ paper that learns unimodal as well as cross-modal features. 
+
+3) The results in this paper (particularly, the idea of learning latent variables independently) can be significant for the multimodal community.
+
+
+[1] Ramesh, Aditya, et al. "Zero-shot text-to-image generation." International Conference on Machine Learning. PMLR, 2021.
+[2] Pandey, Gaurav, and Ambedkar Dukkipati. "Variational methods for conditional multimodal deep learning." 2017 international joint conference on neural networks (IJCNN). IEEE, 2017.
+
+### Weaknesses
+1) The proposed approach assumes that all the modalities are present during training. It can't be used for training with missing modalities, unlike other joint learning-based approaches. However, in my opinion, this is not  a major concern
+2) Since the latent variables for each modality are learned independently, they can be highly misaligned. Perhaps, the authors must consider incorporating information from coherence-guided EBM while training the latent variables.
+3) Equation (5) doesn't make much sense since z_u is present in the LHS while also getting marginalized in RHS.
+
+### Questions
+None
+
+### Soundness
+3 good
+
+### Presentation
+4 excellent
+
+### Contribution
+3 good

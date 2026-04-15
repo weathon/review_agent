@@ -18,7 +18,7 @@ os.environ["OPENAI_DEFAULT_MODEL"] = "z-ai/glm-5.1"
 HARSH_MODEL = "gpt-5.4"
 SCORER_MODEL = "gpt-5.4-mini" 
 MODEL_FIND_HUMAN = None
-MERGER_MODEL = "gpt-5.4"
+MERGER_MODEL = "z-ai/glm-5.1"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_export_api_key
 

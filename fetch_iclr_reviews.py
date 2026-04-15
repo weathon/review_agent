@@ -34,7 +34,7 @@ def main():
     existing_papers_dir = Path(__file__).parent / "iclr2025" / "papers"
     balanced = "--balanced" in sys.argv
     seed = 42
-    n_samples = None
+    n_samples = 7000
 
     if "--year" in sys.argv:
         year_index = sys.argv.index("--year")
@@ -182,9 +182,15 @@ def main():
             if not reviews:
                 skipped_count += 1
                 continue
+            numeric_scores = [review["rating_number"] for review in reviews if "rating_number" in review]
 
-            if "Withdrawn" in venue_value and not decision:
-                raise RuntimeError(f"Missing decision for withdrawn paper {note.id}")
+            if "Withdrawn" in venue_value and not decision and len(numeric_scores) > 0:
+                # raise RuntimeError(f"Missing decision for withdrawn paper {note.id}")
+                decision = "Withdrawn (Treated as Reject)"
+                print(f"Warning: Paper {note.id} is marked as Withdrawn but has no decision field, treating as Withdrawn.")
+            if len(numeric_scores) < 0:
+                raise RuntimeError(f"No numeric ratings found for paper {note.id}")
+            # Withdrawn treated as reject
             if "Withdrawn" not in venue_value and not decision:
                 raise RuntimeError(f"Missing decision for paper {note.id}")
 
@@ -192,7 +198,6 @@ def main():
                 skipped_existing_count += 1
                 continue
 
-            numeric_scores = [review["rating_number"] for review in reviews if "rating_number" in review]
             if not numeric_scores:
                 raise RuntimeError(f"Could not parse any numeric ratings for paper {note.id}")
 

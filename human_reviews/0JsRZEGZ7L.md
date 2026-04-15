@@ -1,0 +1,141 @@
+# From Latent Graph to Latent Topology Inference: Differentiable Cell Complex Module
+
+- Decision: Accept (poster)
+- Scores: 8, 8, 8
+
+## Abstract
+Latent Graph Inference (LGI) relaxed the reliance of Graph Neural Networks (GNNs) on a given graph topology by dynamically learning it. However, most of LGI methods assume to have a (noisy, incomplete, improvable, ...) input graph to rewire and can solely learn regular graph topologies. In the wake of the success of  Topological Deep Learning (TDL), we study Latent Topology Inference (LTI) for learning higher-order cell complexes (with sparse and not regular topology) describing multi-way interactions between data points. To this aim, we introduce the Differentiable Cell Complex Module (DCM), a novel learnable function that computes cell probabilities in the complex to improve the downstream task. We show how to integrate DCM with cell complex message-passing networks layers and train it in an end-to-end fashion, thanks to a two-step inference procedure that avoids an exhaustive search across all possible cells in the input, thus maintaining scalability. Our model is tested on several homophilic and heterophilic graph datasets and it is shown to outperform other state-of-the-art techniques, offering significant improvements especially in cases where an input graph is not provided.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The authors introduce a novel Latent Topology Inference (LTI) method that enables the learning of non-regular topologies based on their novel Differentiable Cell Complex Module (DCM). DCM is designed to compute cell probabilities within the complex, thus enhancing downstream tasks. They show how to integrate DCM with cell complex message-passing network layers and train it in an end-to-end fashion, offering significant improvements, especially in cases where an input graph is not provided. The paper demonstrates the effectiveness of the proposed approach on both homophilic and heterophilic graph datasets.
+
+### Strengths
+- The novel $\alpha$-DGM demonstrates remarkable efficacy in characterizing the 1-skeleton of the latent cell complex.
+- The paper substantiates its claims with extensive experimental results, both in the main body and the appendix, providing a thorough evaluation of the proposed method.
+- The "Limitations" section is thoughtfully composed, addressing potential constraints and challenges of the approach.
+
+### Weaknesses
+- Section 3.1 initially introduces the $\alpha$-DGM; however, the subsequent description within this section appears to be inconsistent with the concept of $\alpha$-DGM.
+- Section 3 would benefit from a reorganization to enhance clarity and coherence. Its current form significantly hinders the understanding of the proposed method. Please reorganize it for readers to follow the description.
+- Notably, there is no dedicated "Reproducibility Statement" section in the paper, which hinders providing clear instructions for reproducing the results. The inclusion of such a section would enhance the paper's accessibility and reproducibility.
+
+### Questions
+- Same as I stated in the section of weakness, on of my major concerns it the organization of Section 3. More efforts are needed in this part. The following few questions might help the authors to refine the section.
+- In the paragraph above 'Remark 2', the layer normalization $\mathcal{LN}$ is employed. If I understand correctly, $\mathcal{LN}$ actually works on vectors of similarities. Thus is it really precise to call it as layer normalization?
+- In the same paragraph, the threshold of assigning an edge is set as $0$. Is there any ablation study on the selection of this threshold?
+- In the same paragraph, what is 'parameter $\alpha$'? Is it mentioned before?
+- In Eqn. (5), how to get $\mathcal{B}(\sigma_i^1)$?
+- Similarly, in Eqn. (9),  how to get $\mathcal{CB}(\sigma_i^0)$?
+- As shown in Table 2, the performance of DCM is higher without an initial graph than with an initial graph. What could be the possible reason behind this observation?
+- How to modify the proposed method to make it work for directed complexes?
+
+I will raise my score if my concerns are correctly addressed.
+
+### Soundness
+3 good
+
+### Presentation
+2 fair
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 2
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper proposes a method to learn "latent topology" in ML tasks, extending Latent Graph Inference. The idea is to learn a cell complex during training. Their method extends the Differentiable Graph Module (DGM) (Kazi 2022) to Diff. Cell Module (DCM). They also use $\alpha$-maxent instead of gumball softmax. As I understand it, the procedure involves: 
+1. Get auxiliary node features $x_{0,aux}= \nu (x_{0,in})$ from inputs $x_{0,in}$, (via GNN, if a graph is given, or MLP otherwise).
+2. Use $\alpha$-maxent to infer a graph (1-simplex). 
+3. Build higher order cells (e.g. faces, volumes etc) using message passing (MP) on the inferred lower-order cells (e.g. edges) 
+4. Do MP for inference using cell complex conv nets (CCCN). 
+
+In the paper, they mostly only discuss up to 2-simplexes, with the Polygon Inference Module (PIM), and not higher simplexes.  
+
+They conduct a set of experiments on the usual graph benchmarks and show superior performance against a few baselines, including DGM. Most notably, they point out that most graph based methods (if the graph is similarity based) do not perform well on heterophilic datasets. They find that their method (using 2-simplexes) usually outperforms other methods.
+
+### Strengths
+1. The idea of inferring cell complexes is a nice and natural extension of learning graphs. 
+2. Although the number of higher-order cells can grow and quickly become intractable, they seem to use methods that makes this inference manageable (Appendix B and sec. 3.3). 
+3. It outperforms others on heterophilic datasets (Table 2)
+4. Extensive tests and ablation studies.  
+5. Well-written with detailed appendix and discussion of limitations
+
+### Weaknesses
+1. In PIM, eq (6) restricts the types of polygons that can be inferred (see questions)
+2. Limiting PIM to small polygons may fail to capture long-range dependencies
+3. When a graph is given, the experiments are inconclusive. I appreciate reporting the negative results. But a discussion of the failure cases would be beneficial.
+
+### Questions
+1. How efficient is PIM in practice? How does the training time compare with DGM or other baselines? I know you discuss the time complexity in App B, but I'm curious about the wall-clock time. 
+2. For eq (6), is there a reasoning saying higher order correlations would be weaker, e.g. randomness of $x_{1,int}$? In principle, you could also consider any contraction, including products of all three $ x(i),x(j),x(v)$. 
+3. Table 1, with graph, in about half of the cases GCN outperforms all higher order methods. Any intuition on why? When should we expect higher topology to matter?   
+4. Is the "sim" function cosine similarity?
+
+### Soundness
+4 excellent
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+2: You are willing to defend your assessment, but it is quite likely that you did not understand the central parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper deals with the learning of high-order cell complexes with sparse and not regular graph topology.
+
+The key is to introduce a learnable function that computes cell probabilities in the complex and integrate with cell complex message-passing network layers in a scalable way. The model achieved improve test accuracy in both homophilic and heterophilic graph node classification benchmarks. However, the improvements seem incremental.
+
+### Strengths
+The key is to introduce a learnable function that computes cell probabilities in the complex and integrate with cell complex message-passing network layers in a scalable way. The model achieved improve test accuracy in both homophilic and heterophilic graph node classification benchmarks.
+
+### Weaknesses
+In empirical studies, the improvements on accuracy seem incremental.
+
+### Questions
+What is the time efficiency of DCM, comparing with the baselines?
+
+### Soundness
+2 fair
+
+### Presentation
+3 good
+
+### Contribution
+3 good

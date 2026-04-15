@@ -1,0 +1,145 @@
+# Brain2Music: Reconstructing Music from Human Brain Activity
+
+- Decision: Reject
+- Scores: 3, 3, 8
+
+## Abstract
+The process of reconstructing experiences from human brain activity offers a unique lens into how the brain interprets and represents the world. In this paper, we introduce a method for reconstructing music from brain activity, captured using functional magnetic resonance imaging (fMRI). Our approach uses either music retrieval or the MusicLM music generation model conditioned on embeddings derived from fMRI data. The generated music resembles the musical stimuli that human subjects experienced, with respect to semantic properties like genre, instrumentation, and mood. We investigate the relationship between different components of MusicLM and brain activity through a voxel-wise encoding modeling analysis. Furthermore, we discuss which brain regions represent information derived from purely textual descriptions of music stimuli. We provide supplementary material including examples of the reconstructed music at https://f2mu.github.io
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+5: You are absolutely certain about your assessment. You are very familiar with the related work and checked the math/other details carefully.
+
+### Summary
+This paper proposed a framework named BRAIN2MUSIC that maps fMRI data to music waveforms. BRAIN2MUSIC is based on pre-trained models MuLan and MusicLM. MuLan is a text/music embedding model with two encoders. MusicLM is a conditional music generation model. The authors align the fMRI representation with MuLan embeddings and use the embedding as conditions for music generation. The mapping between MuLan representation and fMRI is done by applying linear regression. In addition, the authors utilized a publicly available dataset music genre neuroimaging dataset to verify the performance of the proposed BRAIN2MUSIC.
+
+### Strengths
+This paper is well organized with a clear presentation.
+
+### Weaknesses
+* a) The main drawback of this work is that the conclusion drawn is not persuasive by adopting powerful pre-trained models and the limited data size of the dataset utilized in this work. Mulan is a music text embedding model that's pre-trained on a large amount of music/text data. Similarly, MusicLM is a powerful conditional music generation model pre-trained on large amounts of data. Say we randomly sample embeddings from the hidden state space of Mulan and use them as a condition to guide MusicLM; we get a piece of 'meaningful' music. By meaningful, I mean it sounds like music, not noise. Now, linearly mapping fMRI to the embedding space of Mulan to generate music does not necessarily show the correspondence between fMRI and music but the powerful representation ability of Mulan and the generation ability of MusicLM. I also carefully listened to the demos given. This confirmed my thought that the generated or reconstructed music sounds like real music but is not very similar to the stimulus music. This is also verified by the low correlation results demonstrated in Table 1. It would also be interesting to see the correlation result of only using the mean vector or random vectors to reconstruct the music.
+
+* b) No visualization results of the embeddings from fMRI to Mulan are given. Ideally, the embeddings $\hat{T}$ on the test set should show a clustering effect.
+
+* c) Given the small size of the dataset, a K-fold evaluation should be adopted rather than a fixed test set with only 60 data points.
+
+* d) No comparisons are conducted w.r.t other works. Especially seq2seq approaches, meaning directly predicting music waveform using fMRI. Thus, it is hard to evaluate the solidness of this work.
+
+### Questions
+See weakness.
+
+### Soundness
+2 fair
+
+### Presentation
+4 excellent
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 2
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The authors apply decoding and encoding analyses to fMRI responses to music using recently developed Transformer-based music generation models. 
+
+For decoding analyses, they learn a linear weighting of voxel activity that best maps onto the embeddings from different components of the MusicLM model. They then either select a clip that best matched the predicted embedding from a corpus (FMA) or they use the generation capacity of the model to generate a waveform. They show above chance ability to decode the model features, with the highest identification accuracy for the music embedding of MuLan. They report that they can better recover semantic properties, such as genres, instruments, and moods using the generative approach. 
+
+For the encoding analyses, they learn a linear map from different features of the MusicLM model to voxel data. They report that voxels are similarly well predicted by the w2v-BERT-avg and MuLan. They show that the encoding model predictions are better for the music variant of MuLan compared with the text variant consistent with better decoding. They also perform PCA on the weights from the learned encoding model and plot the stimulus and voxel embeddings.
+
+### Strengths
+Exploring whether modern transformer-based music models can improve encoding and decoding models in the brain is a good idea. There has been a lot of progress in this area and would be interesting to know whether these models learn representations that mirror the brain to any extent.
+
+Leveraging the generative aspects of these models for the purpose of decoding is also potentially interesting. There could be methodological value and future scientific insights gained from developing improved decoding models for music.
+
+### Weaknesses
+The analyses are fairly preliminary and there are currently no clear neuroscience insights. 
+
+There are no comparisons against standard acoustic models used in the auditory neuroscience literature. For example, it is unclear whether the decoding model performs better at identification compared with the standard spectrotemporal modulation transfer model tested in Zakai. There is also no comparison against other DNN audio models such as wav2vec2.0 or HuBERT which have shown promising prediction accuracy in auditory cortex (the relation between w2v-BERT-avg and these prior models is unclear). 
+
+There are no perceptual experiments done to evaluate the quality of the reconstructions.
+
+There is no serious investigation of how encoding and decoding results might vary across the auditory hierarchy. 
+
+There is no investigation of how performance might vary across different layers of the network in the case of the encoding models.
+
+For encoding models there are no attempts to estimate the unique contribution of different models by comparing the performance of individual models against combined models. This is important as the features from different models are highly correlated. Thus a text-based model might predict auditory responses due to correlated features rather than a genuine response to text. As a consequence, the scatter plots showing correlated predictions is not surprising or particularly informative. 
+
+The statistical approach used to compute p-values does not seem appropriate, since it assumes the samples are independent and Gaussian distributed. They could use a permutation test across stimuli as an alternative. 
+
+Some of evaluation metrics were unclear to me (see questions below).
+
+### Questions
+I found some of metrics difficult to understand. For Figure 1A, isn’t the identification accuracy based on the latent embeddings? How is this based on the reconstructions? Can you spell out exactly what was done to compute this figure. 
+
+For Figure 1B and 1C, how were the genre, instrument, and mood labels determined? Please also give the equations for how overlap was computed.
+
+### Soundness
+2 fair
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper proposes a Brain to Music pipeline to reconstruct music from fMRI data. More specifically, this pipeline contains two key components: (1) MuLan, a text/music embedding model, and (2) MusicLM, a conditional music generation model. The pipeline first uses fMRI recordings to predict music embeddings by a regularized linear regression; then, it applies the predicted music embeddings as conditions to MusicLM, where the MusicLM could recover or generate the corresponding music. In the experiments, this paper starts from a decoding task by quantitatively evaluating the music reconstruction; then, it illustrates the difference between text-derived and music-derived embeddings by designing an encoding task to predict fMRI recordings. Finally, this paper explores the generalization ability of the proposed pipeline.
+
+### Strengths
+* An interesting and novel topic.
+
+* A clear and detailed writing of the related works and methods.
+
+* A comprehensive experimental section. The authors discuss the proposed pipeline from both the decoding and encoding perspectives, which makes the role of involved components precise.
+
+* A good discussion of the current limitations, e.g., the temporal sampling rate of fMRI may be too slow to collect high-frequency information.
+
+### Weaknesses
+* According to your [demos](https://f2mu.github.io), the presented examples are nearly music clips with a strong rhythm, which may be easy to reconstruct from fMRI. Could you give some instances where the music clips come from a symphony (with a weak rhythm)?
+
+### Questions
+* As the authors mentioned in section 5, the relatively high TR of fMRI is a limitation. Have you explored the retrieval/reconstruction performance of music clips with different frequencies? 
+
+* Are the fMRI recordings able to encode some complex music without a precise rhythm, like a symphony?
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good

@@ -130,7 +130,7 @@ Do evaluate the paper on these axis using language first, do not be afraid to be
 
 ## Score and Decision
 After you finish writing a review, assign a score to the review. 
-Use comparative scoring, check the similar papers found in human reviews, and score this paper relative to those. You can use read_file or summarizer to read these files.
+Use comparative scoring, check the similar papers found in human reviews, and score this paper relative to those. You can use read_file or summarizer to read these files. List the papers you compared and the reasoning.
 
 Do NOT be afraid to give very high (>8) or very low (<4) scores when the
 paper clearly warrants it.

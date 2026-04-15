@@ -1,0 +1,184 @@
+# Graph Generation with  $K^2$-trees
+
+- Decision: Accept (poster)
+- Scores: 5, 5, 8, 8
+
+## Abstract
+Generating graphs from a target distribution is a significant challenge across many domains, including drug discovery and social network analysis. In this work, we introduce a novel graph generation method leveraging $K^2$ representation, originally designed for lossless graph compression. The $K^2$ representation enables compact generation while concurrently capturing an inherent hierarchical structure of a graph. In addition, we make contributions by (1) presenting a sequential $K^2$ representation that incorporates pruning, flattening, and tokenization processes and (2) introducing a Transformer-based architecture designed to generate the sequence by incorporating a specialized tree positional encoding scheme. Finally, we extensively evaluate our algorithm on four general and two molecular graph datasets to confirm its superiority for graph generation.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The paper focuses on generating graphs from a target distribution, which is a vital task in several areas like drug discovery and social network analysis. The paper introduces a new framework termed as "Hierarchical Graph Generation with K^2−Tree" (HGGT). This model (1) uses a K^2−Tree representation, which was originally designed for lossless graph compression, enabling a compact graph representation while also capturing the hierarchical structure of the graph. (2) Incorporates pruning, flattening, and tokenization processes in the K^2−Tree representation. (3) Introduces a Transformer-based architecture, optimized for generating sequences by using a specialized tree positional encoding scheme.
+
+### Strengths
+1. The paper's emphasis on hierarchically capturing graph structures using K^2−Tree is technically sound. Hierarchies are crucial for many real-world graphs, and K^2−Tree, with its inherent structure, naturally offers this advantage.
+
+2. The introduction of pruning, flattening, and tokenization processes aims to achieve a compact representation. This can lead to both storage and computational efficiencies, which are pivotal when dealing with large-scale graph data.
+
+### Weaknesses
+1. I have doubts about the motivation, which is not strong enough to drive the development of such work. 
+
+2. Related work missing, such as [1, 2]
+
+3. The paper doesn't detail the computational resources required, which raises concerns about its practicality for very large graphs.
+
+4. Tokenization can sometimes lead to loss of information, and without details, it's uncertain how this impacts the overall graph representation.
+
+[1] Kong, Lingkai, et al. "Autoregressive Diffusion Model for Graph Generation." (2023).
+
+[2] Chen, Xiaohui, et al. "Efficient and Degree-Guided Graph Generation via Discrete Diffusion Modeling." (2023)
+
+### Questions
+See weakness, I'd like to raise my score if concern is addressed
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 2
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper presents a new graph generative model which capitalizes on the $K^2-$tree representation, a  representation of graphs that is more compact than the adjacency matrix. The $K^2-$tree representation is transformed into a sequence and then a Transformer-based architecture is employed which predicts one token at a time based on the previously generated sequence. The Transformer is also equipped with positional encodings that take into account the structure of the tree. The proposed model is trained on synthetic and real-world datasets. The results indicate that in most cases, the generated graphs better preserve graph properties than the baselines.
+
+### Strengths
+- The proposed model shows strong empirical performance over previous baselines on both synthetic and real-world datasets. Thus, HGGT could be a useful addition to the list of graph generative models.
+
+- The $K^2-$tree representation seems interesting and the proposed model has some novelty. Even though there are previous works that have proposed autoregressive models for graph generation, in my view the main components of HGGT are different from those of previous works.
+
+- The model supports node and edge features, while the results reported in Figure 7 suggest that HGGT is much more efficient than competing models.
+
+### Weaknesses
+- The paper claims that the employed representation is hierarchical, however, I do not fully agree with this claim. In case a hierarchical community structure is present in the graph, a hierarchical representation is supposed to capture this community structure. However, the proposed $K^2-$tree representation would not necessarily capture this (since it depends on the node ordering). On the other hand, the hierarchical clustering algorithm would produce a proper hierarchical representation. I thus think that this claim needs rephrasing to avoid misunderstanding.
+
+- The proposed model is conceptually similar to GRAN [1] which sequentially generates blocks of nodes and associated edges. A detailed discussion of how HGGT differs from GRAN is missing from the paper.
+
+- One of my main concerns with this work is that it is not clearly explained in the paper why the proposed model significantly outperforms the baselines. This is not the first autoregressive model for graph generation, and previous models also came up with different schemes to reduce the time and space complexity (such as BFS ordering and generation of blocks of the adjacency matrix in [2] and [1], respectively). Thus, I would not expect such a significant difference in performance between HGGT and those previous models. I would like the authors to comment on this.
+
+- In Table 2, we can observe that the novelty of the generated molecules is low compared to those of the baselines (mainly on QM9). I would expect the authors to provide some explanation or intuitions about why the proposed model fails to produce novel graphs.
+
+- In section 5.2, it is mentioned that "Each metric is measured between the 10,000 generated samples and the test set". I do not think that this is actually true. If I am not wrong the validity and the uniqueness have nothing to do with the samples of the test set. Furthermore, the Frechet ChemNet Distance and the novelty are commonly computed by comparing the generated samples against those of the training set and not those of the test set.
+
+[1] Liao, R., Li, Y., Song, Y., Wang, S., Hamilton, W. L., Duvenaud, D., Urtasun, R., & Zemel, R. "Efficient graph generation with graph recurrent attention networks". In Proceedings of the 33rd International Conference on Neural Information Processing Systems, pp. 4255-4265, 2019.\
+[2] You, J., Ying, R., Ren, X., Hamilton, W., & Leskovec, J. "Graphrnn: Generating realistic graphs with deep auto-regressive models". Proceedings of the 35th International Conference on Machine Learning, pp. 5708-5717, 2018.
+
+### Questions
+In p.5, why $K^2$ elements are not enough and $K(K + 1)/2$ more elements are added, thus increasing the vocabulary size for each token?
+
+### Soundness
+3 good
+
+### Presentation
+4 excellent
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+In this paper, the authors propose a new graph generative model Hierarchical Graph Generation with $K^2$–Tree (HGGT). $K^2$-tree is a lossless graph representation and the authors compress it by pruning, flattening and tokenizing operations such that it fits to Transformer with $K^2$-tree positional encoding for graph generation. The effectiveness and efficiency of HGGT are evaluated on six datasets.
+
+### Strengths
+(1) The approach of combining $K^2$-tree compressed representation with Transformer is new.
+
+(2) The performance of HGGT is superior to the SOTA baselines on most datasets.
+
+### Weaknesses
+(1) The performance of HGGT (Table 2) is not so satisfactory for molecular graph generation which is probably the most important application of this graph generative model.
+
+(2) It lacks the worst case time complexity analysis for the algorithms.
+
+### Questions
+(1) Why is the performance of HGGT on molecular datasets not so good as that on the generic graph datasets? It seems that HGGT achieves the worst score on three metrics of the two molecular benchmarks (Uniqueness on QM9 and Novelty on both).
+
+(1) What are the time complexities of Algorithms 1-4 and HGGT?
+
+(2) Is the $K^2$-representation still lossless after pruning, flattening and tokenization? I guess yes, but is there a simple proof for this?
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 4
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The paper proposes a novel algorithm to generate graphs based upon $K^2$-tree representation. One of the positive sides of $K^2$-tree representation lays in the fact that it ensures the compactness of the obtained representation without losing the hierarchical information from the nodes and edges in the original graph. After having described how $K^2$-tree representation works, the authors outline the generation algorithm built upon it. Specifically, the algorithm prunes redundant nodes from the representation (e.g., given its symmetrical nature); the, it flattens and tokenizes the pruned $K^2$-tree; finally, it exploits a Transformer architecture to generate the new graph through positional encoding. Results on various graph learning tasks and domains against other state-of-the-art graph generation solutions outline the efficacy of the proposed approach. The evaluation is complemented through an extensive ablation study which further validates the goodness of the algorithm.
+
+### Strengths
++ The paper is well-written and easy-to-follow.
++ The proposed algorithm is simple but effective.
++ The proposed algorithm is also able to generate featured graphs (e.g., molecular structures which come with features on graph edges).
++ The experimental analysis is extensive and supports the efficacy of the proposed solution.
++ The code is released at review time.
+
+### Weaknesses
+- To the best of my knowledge, I cannot see any specific weakness.
+
+### Questions
+* Could it be possible to adopt the proposed graph generation algorithm to create graphs with specific topological properties (e.g., node degree or clustering coefficient)?
+
+**After the rebuttal.** The rebuttal answered all questions.
+
+### Soundness
+3 good
+
+### Presentation
+4 excellent
+
+### Contribution
+3 good

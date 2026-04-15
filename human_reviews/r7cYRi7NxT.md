@@ -1,0 +1,194 @@
+# Hierarchical Side-Tuning for Vision Transformers
+
+- Decision: Reject
+- Scores: 6, 5, 5, 5
+
+## Abstract
+Fine-tuning pre-trained Vision Transformers (ViT) has consistently demonstrated promising performance in the realm of visual recognition. However, adapting large pre-trained models to various tasks poses a significant challenge. This challenge arises from the need for each model to undergo an independent and comprehensive fine-tuning process, leading to substantial computational and memory demands. 
+While recent advancements in Parameter-efficient Transfer Learning (PETL) have demonstrated their ability to achieve superior performance compared to full fine-tuning with a smaller subset of parameter updates, they tend to overlook dense prediction tasks such as object detection and segmentation. In this paper, we introduce Hierarchical Side-Tuning (HST), a novel PETL approach that enables ViT transfer to various downstream tasks effectively. Diverging from existing methods that exclusively fine-tune parameters within input spaces or certain modules connected to the backbone, we tune a lightweight and hierarchical side network (HSN) that leverages intermediate activations extracted from the backbone and generates multi-scale features to make predictions. To validate HST, we conducted extensive experiments encompassing diverse visual tasks, including classification, object detection, instance segmentation, and semantic segmentation. Notably, our method achieves state-of-the-art average Top-1 accuracy of 76.0% on VTAB-1k, all while fine-tuning a mere 0.78M parameters. When applied to object detection tasks on COCO testdev benchmark, HST even surpasses full fine-tuning and obtains better performance with 49.7 box AP and 43.2 mask AP using Cascade Mask R-CNN.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The paper proposes a Parameter Efficient Transfer Learning (PETR) approach Hierachical Side-Tuning (HST) where a backbone network is frozen, and activations are injected into a smaller "side" network. The architecture is targeted mainly at dense prediction tasks (like segmentation), where there is a large gap between PETR and full fine-tuning. 
+
+The approach is relatively simple (a strength), and the results are compelling. The authors evaluate the approach on both dense prediction (COCO) and the classification-style tasks (VTAB), in a reasonably extensive set of evaluations. The experiments are a strong point of the paper. 
+
+Overall I gave this paper a 6, but with some additional experimental validation I would consider increasing my rating.
+
+### Strengths
+### Positioning
+Generally I found this to be a well-presented paper. Easy to follow and well-written.
+
+I agree with the authors that most of the transfer learning literature is aimed at classification or text-based transfer, and PETR for dense prediction is an understudied problem. So I like the setup of the paper.
+
+One advantage of HST is that, similar to other side-tuning approaches like LST and ST, “gradient computation for the trainable parameters does not requrie backpropagation through the large pre-trained backbone model.” The authors don't mention this, but Fig 2 kind of makes this point. 
+
+
+### Experiments:
+
+- Good that the authors included an ablation study on the model components
+- Good experiments and comparisons in VTAB in Table 1
+- Good experiment on multiple architectures using standard learning rate schedules in table 2
+
+### Weaknesses
+### Related work
+The literature review is generally good, but it would be helpful to discuss the relationship to other side-tuning approaches for dense prediction -- e.g. [Side Adapter Network for Open-Vocabulary Semantic Segmentation
+](https://arxiv.org/abs/2302.12242).
+
+### Experiments:
+
+Generally the experiments were well-done, but I think the paper would be stronger with some additional experiments:
+
+- I’d love to see a scaling analysis. E.g. what happens as you scale up the size of the HST network? I.e. compare the performance as you scale up the training data, network size — and compare the performance to analogous settings of LoRA
+- The ablation study on VTAB is well-done, but since the paper positions HST as aimed mainly at dense prediction it would be helpful to see a similar analysis on COCO — or at least the current ablation study broken down over classification/structured/specialized (as in Table 1)
+- The grad-cam visualizations were nice, but were these cherry picked? The results were unsubstantiated with numbers (e.g. object localization via grad-cam) and weren’t really discussed in the paper. I’d either add a discussion or remove the visualizations.
+
+### Questions
+Questions:
+- I am curious how well-tuned were the baselines for LoRA, etc. Were these coped from existing papers, or did these have a similar HP search, compared to HST?
+- For COCO, why use a ResNext and not a ViT/SWIN-based method that performs better? SWIN is hierarchical, or you could use the same linear interp strategy for ViT
+- Why do you think the method outperforms full FT for VTAB, but not as strong for ObjDet/SemSeg? Is this simply a result of COCO being a large dataset? The scaling experiment above might help answer this. 
+- Figure 2: Why is the conv stem necessary? What happens when it is excluded? How is the architecture adapted for classification tasks in VTAB?
+
+### Soundness
+3 good
+
+### Presentation
+4 excellent
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 2
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper is motivated by the observation that current PETL (Parameter-Efficient Transfer Learning) methods cannot compare with fully fine-tuning on dense prediction tasks such as semantic segmentation or object detection.  The paper proposed a new PETL method, called Hierarchical Side-Tuning (HST), which uses a trainable side network that generates multi-scale features and leverages intermediate features from the pre-trained backbone. The paper shows that HST outperforms existing parameter-efficient transfer learning methods on image recognition and dense prediction tasks.
+
+### Strengths
+The motivate is clear. The proposed method is sensible and the experimental results look very promising.
+
+### Weaknesses
+1. This paper is motivated by the observation that current PETL methods cannot compare with fully fine-tuning on dense prediction tasks such as semantic segmentation or object detection, and the proposed side tuning method is targeted at solving this problem. Another related work [1] also proposes a vision transformer adapter for dense prediction tasks. What are the key differences between this work and ViT-adapter, in terms of model architecture, training strategy, etc.?
+
+2. The paper emphasizes the importance of a side network which leverages intermediate activations extracted from the backbone and generates multi-scale features to make predictions. However, the proposed algorithm also incorporates several other designs that share similarity with previous work, for example, adding meta token is similar to VPT [2], and LN-tuning is reminiscent of BitFit [3] which tunes the bias in the network. Although the final results are very promising, it is not clear the improvement comes from the side network or other designs. An apple-to-apple comparison to baselines to show that the side network really matters (no LN tuning, not meta token, etc.) is probably important to support the claim that side network is important for dense prediction.
+
+3. I'm confused by the number of tunable parameters. Table 1 indicates #params is only 0.78M. However, if each side block contains a FFN and they are all tunable, the #params should be way more than 0.78M, since each FFN will contain several millions of parameters.  Why is the reported #param so low?  Please elaborate on how #params is obtained and what is the exact architecture design of side blocks.
+
+[1] Chen, Zhe, et al. "Vision transformer adapter for dense predictions." arXiv preprint arXiv:2205.08534 (2022).
+[2] Jia, Menglin, et al. "Visual prompt tuning." European Conference on Computer Vision. Cham: Springer Nature Switzerland, 2022.
+[3] Zaken, Elad Ben, Shauli Ravfogel, and Yoav Goldberg. "Bitfit: Simple parameter-efficient fine-tuning for transformer-based masked language-models." arXiv preprint arXiv:2106.10199 (2021).
+
+### Questions
+See Weakness.
+
+### Soundness
+2 fair
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 3
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+In this paper, Hierarchical Side-Tuning (HST) is designed for Parameter-efficient Transfer Learning. The HST uses the features from the backbone and generates features for dense prediction with multi-scales. Experiments show HST achieves the SOTA or competitive performance in downstream tasks, like image classification, object detection, and semantic segmentation.
+
+### Strengths
+1. The paper is easy to follow.
+2. The experimental results show significant performance gains for image classification, object detection, and semantic segmentation.
+
+### Weaknesses
+1. Side-adapter network (SAN) has been used for Open-Vocabulary Semantic Segmentation [1], what's the difference between SAN and the proposed HST?
+[1] Side Adapter Network for Open-Vocabulary Semantic Segmentation, CVPR 2023.
+2. How to implement the hierarchical dense prediction in Fig. 2?
+3. It's not convincing of the analysis of "constraining the number of trainable prompts to a few number". Besides, the ablation study shows continuous growth when the number N increases. 
+4. 14.4% (76.0% vs. 65.6%)  --> 10.4%
+
+### Questions
+If it clearly described the novelty of HST compared with SAN, I would change the rating.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 4
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper proposed a novel parameters efficient tuning method, called HST. It adopts a FPN-like strategy to build a lightweight side network as learnable components for fine-tuning. Experiments show that the proposed method outperforms compared methods on various downstream tasks.
+
+### Strengths
+1.	The writing is pretty good and easy to understand.
+2.	The improvements, especially on dense prediction tasks, are obvious.
+
+### Weaknesses
+1.	More implement details, like the d of HSN, are not provided. And as shown in Figure 2, the outputs for dense prediction tasks are from the HST. In my opinion, the channel of outputs is d that is very small. Thus, I'm a bit surprised that inputting such low rank features into the decoder can improve performance. 
+2.	More fair comparison may be needed. The parameters of compared lora/adapter/SSF are less than 50% that of HST. I suggest to add more comparison under the similar learanable parameters.
+
+### Questions
+In general, multi-scale feature enhance is a widely used way for dense prediction tasks. Especially in MAE related works, like ConvMAE and iTPN, this type of multi-scale feature architectures is useful for plain ViTs. Therefore, the improvement in performance did not bring me too many surprises. In addition, compared to lora based methods, the proposed method surely leads to additional computational costs and is not as flexible as other methods. My main concerns are mentioned in the weakness and other questions are as follows:
+1.	Effect of globalT. In the ablation study, globalT shows improvements without GF injection. I would like to know if globalT is still necessary even if GF injection exists.
+2.	In ablation study, weight-sharing does not drop the performance. Does this mean that injecting the features of each block is unnecessary? Or, if we reduce the number of side block in each stage and increase their middle channels to keep the similar parameters. How about this design?
+3.	The effect of metaT is not proved.
+4.	Can the authors provide more discussion about the comparison on Table 1, since the performance is not always the best.
+5.	The performance on much large models, like ViT-L or ViT-H.
+
+### Soundness
+2 fair
+
+### Presentation
+3 good
+
+### Contribution
+3 good

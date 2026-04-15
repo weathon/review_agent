@@ -1,0 +1,227 @@
+# Scalable Lipschitz Estimation for CNNs
+
+- Decision: Reject
+- Scores: 5, 5, 6, 6
+
+## Abstract
+Estimating the Lipschitz constant of deep neural networks is of growing interest as it is useful for informing on generalisability and adversarial robustness. Convolutional neural networks (CNNs) in particular, underpin much of the recent success in computer vision related applications. Existing methods for estimating the Lipschitz constant can be tight but have limited scalability when applied to CNNs. In this work, we propose a novel method to accelerate Lipschitz constant estimation for CNNs. The core idea is to divide a large convolutional block via a joint layer and width-wise partition, into a collection of smaller blocks. We prove an upper-bound on the Lipschitz constant of the larger block in terms of the Lipschitz constants of the smaller blocks. We demonstrate an enhanced scalability and comparable accuracy to existing baselines through a range of experiments.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The paper proposes a new method called dynamic convolutional partitioning (DCP) to improve the scalability of estimating Lipschitz constants for convolutional neural networks (CNNs). Estimating the Lipschitz constant is useful for evaluating the robustness and generalizability of neural networks. Existing methods are either not tight enough or do not scale well to large CNNs. The core idea of DCP is to decompose a large CNN into smaller subnetworks using a joint layer and width-wise partition. The Lipschitz constant of the original network can then be bounded by the Lipschitz constants of the smaller networks. Experiments demonstrate improved scalability over baseline methods. Key factors affecting the accuracy vs scalability tradeoff are also analyzed, including the number and order of subnetworks and the choice of partition sizes.
+
+### Strengths
+Lipschitz estimation for neural networks is an important problem for robustness and generalization. Given that current approaches for estimating the Lipschitz constant do not scale, investigating scalable methods is an important research direction.
+
+### Weaknesses
+The paper has several weaknesses:
+
+- I think the title "Scalable Lipschitz Estimation for CNNs" is overclaiming, while the proposed approach is more scalable than previous ones, the approach hardly scales to medium size convolutional neural networks (CIFAR10, TinyImagenet, ImageNet). Furthermore, to improve the scalability, the authors rely on the bounds of Eq. (3) and Eq. (4), which are known to be very loose. 
+- The authors seem to have missed an important related work [1], which proposes a Lipschitz estimation for the CNN that is independent of the image size and only dependent on the channel size. 
+- The experiments are performed
+	- on random weights and not on trained networks: "All network weights were generated according to the Kaiming distribution".
+	- on very small input sizes, more than twice smaller than MNIST: "[...] by constructing a convolutional block with an input size of 10 × 10 × 1 [...]". I understand that the authors want to evaluate their approach with different channel sizes: "We increased the width by varying c from 1 to 14", but an image size of 10 × 10 × 1 is too small to demonstrate scalability. 
+
+[1] Gramlich et al. Convolutional neural networks as 2-D systems
+
+Other comment:
+I have reviewed the paper on a printed version and all the figures are unreadable, the authors should definitely increase the font of the figures.
+
+### Questions
+Can the authors perform experiments with trained MNIST networks and compare against the approach proposed in [1]?
+
+### Soundness
+2 fair
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 2
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The author study the upper-bound of Lispchitz constant of CNNs. They refine LipSDP by dynamically splitting the layers of the network into smaller blocks that could be handled separately and then gathered together in order to give an upper-bound of the Lispchitz constant of the network. This method is called DCP-LipDSP. Finally, an experimental benchmark highlights some advantages of their approaches.
+
+### Strengths
+The paper proposes a method called DCP-LipDSP that exploits the sparcity in the convolution matrices in order to provide faster upper-bounds for Lipschitz constant of convolutional blocks.
+
+### Weaknesses
+The link given in the paper to access the code does not work for me.
+
+Section 4 is difficult to follow and, in my opinion, lacks many details. See some comments in the Questions below.
+
+The experimental section is weak. In my opinion, it lacks of experiments using trained network for which the behaviour is expected to be really different from randomly generated ones, in particular for its Lipschitz constant. In order to select $N_{max}$, multiple calls to LipSDP are made that are not considered in the time benchmark, this should be discussed.  
+Moreover it is not clear if LipSDP profits from the 20-cores CPU machine and hence if the experimental benchmark is fair.
+
+Bibliography: many references are incomplete: please refer to peer-reviewed articles instead of arXiv when possible.
+
+### Questions
+**Section 3**
+
+Lemma 3.2 is only valid for $R^m$ together with the $L^2$ norm, this should be stated within the theorem assumptions.
+
+**Section 4**
+
+4.1.1 it is not clear what are precisely the functions $f_{i, j}$, and how to practically construct them.  
+It seems that their domain should not be disjoint as it is however stated in Eq. (10). If $ \ell \times k > m_0, n_0$ where $k$ is the size of the kernel of these convolutions, then all $f_{i,j}$ should have domain $X^0$.  
+It seems that this inaccuracy is repeated in the entire paper (e.g. in 4.1.2 Eq. (14)). However this idea may be exploited in order to better constraint the search space for the partitions.
+
+I think a discussion should precise these concerns. And what is the impact of the potential overlap between the layers on the computation time.
+
+**Experiments**
+
+All neural networks considered have weights initialized with the Kaiming distribution, that aim at having gradients of magnitude O(1). We are in a regime that is most likely very different from a trained neural network. Overall I think the paper would be seriously improved if the author were to reproduce the experiments of Lip-SDP and benchmark them with the proposed DCP approach.
+
+Figure 2 (c) provides an interesting illustration of the tradeoff between computation time and the given upper-bound. This behaviour is intuitively expected from Eq (18) and I am surprised that a 5-fold time reduction only decrease the upper-bound by 20%. It would be very interesting to see if the proposed approach could tackle much bigger neural networks where vanilla Lip-SDP would fail.  
+I wonder if these curves could be derived analytically directly from Eq 18 with the assumptions than the weights follow Kaiming.
+
+The only property of CNNs that this paper exploits is that their matrix representation may be sparse under appropriate assumptions. Can this work be generalized to a broader class of neural networks?
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper addresses the problem of estimating the Lipschitz constant of deep neural networks, particularly focusing on convolutional neural networks (CNNs). While existing methods for estimating the Lipschitz constant can be accurate, they lack scalability especially when applied to CNNs. To address this limitation, the paper introduces a novel method to accelerate Lipschitz constant estimation for CNNs. The core idea involves breaking down large convolutional blocks into smaller ones using a joint layer and width-wise partition. The paper proves an upper-bound relationship between the Lipschitz constants of the larger and smaller blocks and demonstrates improved scalability and comparable accuracy through experimental results.
+
+The paper's introduced DCP (dynamic convolutional partition) method can be useful for scaling Lipschitz estimation in deep and wide CNNs. The method is framework-invariant and can be used with several different estimation methods.
+
+### Strengths
+The strengths of the paper are as follows:
+
+1. Novel partition method: The paper introduces a novel method called dynamic convolutional partition (DCP) designed to address the scalability issue in Lipschitz constant estimation for deep and wide convolutional neural networks (CNNs). This method involves dividing large convolutional blocks into smaller ones using a joint layer and width-wise partition. This method also provides a practical solution to a known limitation in Lipschitz estimation.
+
+2. Theoretical Foundation: The paper establishes a theoretical foundation for its method by proving that the Lipschitz constant of a large convolutional block can be upper-bounded by the Lipschitz constants of the smaller blocks. 
+
+3. Empirical Validation: Through several experiments, the paper demonstrates that the DCP method offers enhanced scalability and achieves accuracy comparable to or better than existing baseline methods. This empirical validation showcases the practical utility of the proposed approach.
+
+### Weaknesses
+The method, while novel is not scalable to modern large convolutional neural networks. However, the improvements on top of the existing methods are impressive. 
+
+The paper is missing references to important works on estimating the Lipschitz constants of convolutional layers:
+
+1. Singular Values of Convolution layers
+2. Fantastic Four: Differentiable and Efficient Bounds on Singular Values of Convolution Layers
+
+### Questions
+I believe that a comparison between the bounds computed by the proposed methods and some existing provably 1 Lipschitz neural networks whose Lipschitz constant is well known (such as Lipschitz Convnets, see references below) can be useful in evaluating the effectiveness of the proposed approach.
+
+1. Sorting Out Lipschitz Function Approximation
+2. Skew Orthogonal Convolutions
+3. Orthogonalizing Convolutional Layers with the Cayley Transform
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 4
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper studies how to scale up the Lipschitz constant estimation of CNNs using SDPs and a decomposition technique. The authors prove an upper-bound on the Lipschitz constant of the original CNN in terms of the Lipschitz constants of some smaller blocks. Some experiments are presented to support the theoretical developments.
+
+### Strengths
+1. The topic is quite interesting. Scalability of LipSDP is an important issue.
+
+2. In comparison to using interior point methods for the original LipSDP on CNN, the proposed method is more scalable.
+
+3. The authors carefully discuss how to do the partition to make their method more efficient.
+
+### Weaknesses
+1. The experiments are still on toy examples. Is the proposed approach working for larger networks trained on CIFAR10/100? At least, the proposed method should be better than the matrix product bound for CIFAR?
+
+2. The authors missed several important related work on LipSDP.  Comparisons and discussions of the following works are missing.
+
+[Gramlich2023] Convolutional neural networks as 2-D systems (arXiv)
+
+The above paper extends LipSDP for 2D convolutional networks. Is the proposed approach more scalable than the above paper?
+
+[Araujo2023] A unified algebraic perspective on Lipschitz neural networks (ICLR)
+
+Theorem 4 of the above paper extends LipSDP for residual networks. Is the proposed approach directly applicable to the residual network considered in the above paper? Some remarks are needed.
+
+[Revay2020] Lipschitz bounded equilibrium networks (arXiv)
+
+Theorem 2 of the above paper extends LipSDP for equilibrium networks. Is the proposed approach directly applicable to the equilibrium network considered in the above paper? Some remarks are needed.
+
+### Questions
+1.  Is the proposed approach working for larger networks trained on CIFAR10/100 and can at least outperform the matrix norm product for those tasks?
+
+2. [Gramlich2023] Convolutional neural networks as 2-D systems (arXiv)
+
+The above paper extends LipSDP for 2D convolutional networks. Is the proposed approach more scalable than the above paper?
+
+3. [Araujo2023] A unified algebraic perspective on Lipschitz neural networks (ICLR)
+
+Theorem 4 of the above paper extends LipSDP for residual networks. Is the proposed approach directly applicable to the residual network considered in the above paper? Some remarks are needed.
+
+4. [Revay2020] Lipschitz bounded equilibrium networks (arXiv)
+
+Theorem 2 of the above paper extends LipSDP for equilibrium networks. Is the proposed approach directly applicable to the equilibrium network considered in the above paper? Some remarks are needed.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+2 fair

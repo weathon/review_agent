@@ -1,0 +1,167 @@
+# DART: A Principled Approach to Adversarially Robust Unsupervised Domain Adaptation
+
+- Decision: Reject
+- Scores: 3, 6, 6, 3
+
+## Abstract
+Distribution shifts and adversarial examples are two major challenges for deploying machine learning models. While these challenges have been studied individually, their combination is an important topic that remains relatively under-explored. In this work, we study the problem of adversarial robustness under a common setting of distribution shift – unsupervised domain adaptation (UDA). Specifically, given a labeled source domain $\mathcal{D}_S$ and an unlabeled target domain $\mathcal{D}_T$ with related but different distributions, the goal is to obtain an adversarially robust model for $\mathcal{D}_T$. The absence of target domain labels poses a unique challenge, as conventional adversarial robustness defenses cannot be directly applied to $\mathcal{D}_T$. To address this challenge, we first establish a generalization bound for the adversarial target loss, which consists of (i) terms related to the loss on the data, and (ii) a measure of worst-case domain divergence. Motivated by this bound, we develop a novel unified defense framework called *Divergence Aware adveRsarial Training* (DART), which can be used in conjunction with a variety of standard UDA  methods; e.g., DANN  (Ganin & Lempitsky, 2015). DART is applicable to general threat models, including the popular $\ell_p$-norm model, and does not require heuristic regularizers or architectural changes. We also release DomainRobust: a testbed for evaluating robustness of UDA models to adversarial attacks. DomainRobust consists of 4 multi-domain benchmark datasets (with 46 source-target pairs) and 7 meta-algorithms with a total of 11 variants. Our large-scale experiments demonstrate that on average, DART significantly enhances model robustness on all benchmarks compared to the state of the art, while maintaining competitive standard accuracy. The relative improvement in robustness from DART reaches up to 29.2% on the source-target domain pairs considered.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This work aims to improve the adversarial robustness of UDA methods. The authors first provide an upper bound for the adversarial target error, showing that the target adversarial error can be bounded by the source error and the discrepancy. They further approximate the ideal joint loss and propose a practical bound. The algorithm is then implemented based on the error bound. Some experiments show that the proposed method achieves better adversarial robustness than baselines.
+
+### Strengths
+Considering the target domain lacks labeled data, it is indeed difficult to gain robustness from other domains with domain shift. So, I admit that the authors focus on a challenging and interesting problem.
+
+Besides, the authors implement a testbed for evaluating the robustness under the UDA setting, which is a vital contribution to this field.
+
+### Weaknesses
+After reading this paper, I have some concerns:
+After reading this paper, I have some concerns:
+* My primary concern is that there may be a gap between the theory and the algorithm. Specifically, in order to upper bound and optimize the ideal joint loss, the authors use one of the hypothesis $h\in \mathcal{H}$ to replace the optimal hypothesis $h^*$. I don't think this is appropriate. By the definition of the ideal joint loss, it is the minimal value optimized on $\mathcal{H}$. Hence, given a fixed hypothesis class, this term is fixed. Let's denote the ideal joint loss and its upper bound as $\gamma$ and $\gamma^{+}$ respectively. In the algorithm, the learner aims to minimize the $\gamma^+$. And they explain in Section 3 that it is beneficial to control this term. However, in my opinion, this ideal joint loss is a fixed value and cannot be optimized by minimizing its upper bound. The optimization of this term seems somewhat ridiculous. Although the authors claim in the experiments that optimizing this term is empirically beneficial for robustness, I am inclined to believe that the minimization of the target adversarial error is a heuristic as in prior works, which disproves the authors' claim that their algorithm is theoretically justified.
+* In addition, the algorithm needs to generate pseudo-labels on the target domain, while the theoretical bound involves the adversarial target error, which needs the ground truth labels. The authors don't take the effect of incorrect pseudo-labels into consideration. This is another gap between the theory and the practical algorithm.
+* The optimization process of Eq. (6) in the pseudocode of Algorithm 1 is not clear. In fact, the optimization is complex, involving many steps such as the generation of adversarial examples and the optimization of $f,g$.  It would be better to provide a more clear explanation of the algorithm.
+
+### Questions
+Why does the algorithm achieve the best clean accuracy compared with the baselines in DIGIT datasets? The proposed algorithm involves adversarial training, which is assumed to hurt clean accuracy.
+
+### Soundness
+1 poor
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+In this work, the authors provided an efficient algorithm DART to train a model which is adversarially robust in the target domain. Their method is motivated by an adversarial error bound and does not need to change the framework of DANN. The experiments validate the effectiveness of their method.
+
+### Strengths
+1. This paper is well-written.
+2. The adversarial robustness of the model on target domain is largely improved by the proposed method. And DART does not compromise the standard accuracy. This improvement represents a significant advancement in this research field.
+3. The algorithm can be generally applied based on various prior methods. We only need to change a few codes based on the original frameworks.
+
+### Weaknesses
+I am mainly concerned about the experiments:
+1. More expeiments on various neural networks are encouraged. Will the algorithm still perform well on smaller networks such as ResNet-18, or larger networks such as WideResNet?
+2. More expeiments on Office-31 are encouraged, since this is also an important dataset widely used in UDA setting.
+3. The adversarial perturbation $2/255$ is small. What is the performance of DART under larger perturbation, such as $8/255$?
+
+If the authors can address my questions, I would reconsider the rate.
+
+### Questions
+Please refer to the Weaknesses.
+
+### Soundness
+2 fair
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 3
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+In this work, the authors study the problem of adversarial robustness under distribution shift, i.e., UDA. In order to overcome this problem, they first provide a generalization bound for the adversarial target loss, consisting three terms that can be optimized. Hence, they present a theoretically guaranteed algorithm to improve the adversarial robustness on the target domain. DART significantly improves the robustness on various adaptation tasks.
+
+### Strengths
++ Originality: There are some related works that also try to improve adversarial robustness for UDA setting. However, this work is different from the prior works.
+
++ Quality: This work is theoretically motivated and is more empirically efficient than the baselines.
+
++ Clarity: The writing is clear generally.
+
++ Significance: The adversarial robustness is essential in machine learning, especially for the safety-critical applications.
+
+### Weaknesses
+* The theoretical results lack novelty. It seems that Theory 3.1 is similar to the bound in [1]. The authors only need to replace the standard loss function with the adversarial loss function.
+* The perturbation radius is usually set to $\frac{8}{255}$ or $\frac{16}{255}$. In this work, the authors set the radius to $\frac{2}{255}$. This may not be sufficient to illustrate the efficacy of the proposed method. I noticed that the authors conducted experiments with various radii on the task Photo -> Sketch. However, I think more experiments on other datasets are needed.
+
+[1] A theory of learning from different domains. Shai Ben-David, et al.
+
+### Questions
+* In Table 3, the authors compare the proposed algorthm with AT (tgt,cg). What is the difference between these two methods? Why does DART have better robustness compared to AT (tgt,cg) ?
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 4
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+5: You are absolutely certain about your assessment. You are very familiar with the related work and checked the math/other details carefully.
+
+### Summary
+This paper develops a generalization bound for adversarial target error by incorporating the source loss, worst-case divergence, and the ideal joint loss. This leads to the introduction of a DANN-inspired algorithm aimed at enhancing robustness within the target domain. To validate both the theoretical framework and the effectiveness of the algorithm, a comprehensive set of empirical experiments is conducted.
+
+### Strengths
+This paper provides a novel error bound for the adversarial robustness of unsupervised domain adaptation. Compared to prior works that are heuristic, DART has theoretical support and higher performance.
+
+### Weaknesses
+From a theoretical perspective, the algorithm is more interesting than those heuristic methods. However, when I read the proofs of Theorem 3.1 in Appendix, I find that there are some mistakes which may affect the validity of the theory. At the bottom of page 14, the second equation in the proof is weird. By the definition of $\mathcal{P}(\mathcal{D}_T)$, $\tilde{\mathcal{D}}_T$ is the distribution of the adversarial examples. But in the third line, it is $(x,y)\sim \tilde{\mathcal{D}}_T$ rather than $(\tilde{x},y)\sim \tilde{\mathcal{D}}_T$. Actually I cannot find a suitable way to correct this mistake which prevent me reading the rest of the proof.
+
+Besides, the significance of the proposed testbed DomainRobust is limited. As the authors state, DomainRobust is implemented based on the exist framework DomainBed. As far as I can see, they only need to add the implementation of the adversarial part, such as the PGD attack methods.
+
+### Questions
+None
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+1 poor

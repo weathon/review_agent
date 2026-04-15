@@ -1,0 +1,162 @@
+# Curvature-Informed SGD via General Purpose Lie-Group Preconditioners
+
+- Decision: Reject
+- Scores: 3, 5, 5, 5
+
+## Abstract
+We present a novel approach to accelerate stochastic gradient descent (SGD) by utilizing curvature information obtained from Hessian-vector products or finite differences of parameters and gradients, similar to the BFGS algorithm. Our approach involves two preconditioners: a matrix-free preconditioner and a low-rank approximation preconditioner. We update both preconditioners online using a criterion that is robust to stochastic gradient noise and does not require line search or damping. To preserve the corresponding symmetry or invariance, our preconditioners are constrained to certain connected Lie groups. The Lie group's equi-variance property simplifies the preconditioner fitting process, while its invariance property eliminates the need for damping, which is commonly required in second-order optimizers. As a result, the learning rate for parameter updating and the step size for preconditioner fitting are naturally normalized, and their default values work well in most scenarios. Our proposed approach offers a promising direction for improving the convergence of SGD with low computational overhead. We demonstrate that Preconditioned SGD (PSGD) outperforms SoTA on Vision, NLP, and RL tasks across multiple modern deep-learning architectures.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+In this paper, the authors introduced a general purpose Lie group pre-conditioners for SGD optimization algorithms with application in deep learning problems. They gave som theoretical convergence rate guarantees and empirical showed that the algorithms they proposed outperformed some usual methods in deep learning problems.
+
+### Strengths
+This submission is well-organized with clear language and structures. The authors gave detailed description and some theoretical analysis for the proposed algorithms. They also conduct a lot of numerical experiments on deep learning problems and these empirical results are pretty good compared with some state-of-art optimization methods. The proposed PSGD seems promising when it is applied to the large scale deep learning problems.
+
+### Weaknesses
+However, it seems that this paper has the following weaknesses and problems.
+
+1. First question is that in Proposition 2.1, the authors refer to equation 6. But there is no equation 6 in the main part of the paper. Does the authors refer to the equation 6 in the appendix? Then the authors should put this equation in the main part of the submission.
+
+2. In Corollary 2.1.1 the authors mention the linear convergence rate, but what is the exact or explicit upper bound for this linear convergence rate? The authors should explicitly present this linear convergence rate not just present an asymptotical convergence result.
+
+3. In Corollary 2.1.2, the authors claimed that the algorithm can cover the quadratical convergence rate of Newton's method. However, the inequality in this corollary only shows the linear convergence. Because $\|g_t\| \geq 2\alpha(L(\theta_t) - L(\theta_*))$, we can get that $L(\theta_{t + 1}) - L(\theta_*) \leq (1 - \frac{\alpha^2}{\beta^2})(L(\theta_t) - L(\theta_*))$. However, this is only linear convergence rate. It's not quadratical convergence rate as Newton's method. And the linear convergence rate is even worse than the gradient descent of $1 - \frac{\alpha}{\beta}$
+
+4. There is no overall theorem for the convergence rate of the proposed algorithm. We need a specific detailed theoretical convergence rate of the PSGD to make comparison with other methods.
+
+5. The authors didn't give any theoretical analysis for the step size. They only presented some empirical results for the step size choices.
+
+### Questions
+Please check the weakness.
+
+### Soundness
+3 good
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 2
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper leverage the symmetry of Lie group constraint to simplify the preconditioner fitting process, which eventually accelerate stochastic gradient descent by utilizing curvature information obtained from Hessian vector products or finite differences of parameters and gradients. Experiments shows that the claimed preconditioned SGD outpuerforms sota in different area of artificial intelligence such as computer vision, NLP and RL. This is an interesting submission, different from previous results in literature, current work shows that the proposed approach works well with naturally normalized parameters instead of using damping or line search.
+
+### Strengths
+1. The experiments of this paper is very sufficient and clearly strengths the theoretical claims.
+2. Despite the idea of leveraging symmetry of Lie group in deep learning has been discovered and studied before, the scenarios  of application of simplifying and accelerating SGD is novel.
+
+### Weaknesses
+1. From the presentation of section 2.3, the "Lie group" only refers to orthogonal groups and general linear groups, which is a much more limited case than general Lie groups. 
+2. A brief introduction on Lie groups is needed, at least in appendix, this can be part of section D.1. Since gradient descent on manifold has been mentioned as well, it is necessary to define it formally, especially the form that is used in the Lie groups of this paper.
+3. Same issue happens in experiments. There are much more experiments than a theory oriented paper, but it is hard to follow the whole experiment sections due to current presentation.
+4. Inconsistence of terminology. In sentences, "Theorem" is used but in presentation of the results formally, "Claims" have been used for no reason.
+
+### Questions
+1. In each experiment, what is the specific constraints?
+2. In proposition 2.1, how is the step-size set?
+3. Contribution of theoretical analysis can be stronger, there are sufficently many works on optimization on manifolds, what is the main challenging of this paper compare to other related works? Is that possible to leverage other works including rates to enhence the results of this paper?
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 3
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+5: You are absolutely certain about your assessment. You are very familiar with the related work and checked the math/other details carefully.
+
+### Summary
+This paper suggests a quasi-Newton type method with updates of preconditioner made according to minimum of criterion, which takes into account stochasticity of the gradient. Optimization of preconditioner is performed on the subgroups of general linear group. Considering small and expressible enough subgroups leads to algorithms with moderate computational complexity and fast convergence in practical tasks.
+
+### Strengths
+The methods proposed are indeed practically efficient, and developing the concept of optimizable preconditioners is topical.
+
+### Weaknesses
+Theoretical frameworks is mostly ihnerited from that in Xi-Lin Li's papers, especially one that is titled "PRECONDITIONER ON MATRIX LIE GROUP FOR SGD" and contains the majority of ideas ensuring success of an approach of the paper under review. The constructions of particular subgroups and detailed reasoning of why operations are correct are of interest, but span of proof has been already described in original Lin's paper.
+
+### Questions
+1. Can you provide convergence rate guarantees which do not include conditioning number? The presence of condition number in rate makes rate similar to that of SGD without preconditioning. Taking into account, that purpose of preconditioning is in fact getting rid of conditioning number impact, theory seems to fail (in non-convex case).
+2. Another criterion from Lin's original papers leads to Fisher matrix as an optimal preconditioner. Can you explain why this important case was left outside of the framework you propose? This case is interesting because it has no quasi-Newton property, but is greedy-optimal for quaite natural criterion at the same time. Whithout considering both cases, your approach seems to be just a detalisation of particular case of Lin's approach
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 4
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+In this paper authors work on the preconditioning technique for SGD. They propose two novel preconditioning approaches, based on Lie groups. One preconditioner is Sparse Matrix-Free preconditioner, the other one is Low-Rank Approximation preconditioner. These preconditioners allow SGD to converge linearly, if Hessians eigenvalues are well-bounded, and quadratically, if objective is smooth and strongly convex.
+
+### Strengths
+1. A lot of various numerical experiments
+2. Proposed techniques show superiority over other existing approaches in practice.
+
+### Weaknesses
+1. Unfortunately, since I am not familiar with Lie groups, it is rather hard for me to fully understand the contribution of the work. If you could provide more background on this topic (maybe even in Appendix), it would be very helpful.
+2. It is rather weird to see theoretical convergence results in the Background section. If this is not your result, please provide the citation of the work, where from you have taken this result (and other theorems/corollaries). If this is your result, please move it to other section with results.
+
+### Questions
+Maybe, you could provide any directions for future research?
+
+### Soundness
+3 good
+
+### Presentation
+1 poor
+
+### Contribution
+3 good

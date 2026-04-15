@@ -1,0 +1,194 @@
+# Expert Proximity as Surrogate Rewards for Single Demonstration Imitation Learning
+
+- Decision: Reject
+- Scores: 6, 5, 5, 5
+
+## Abstract
+This study investigates the challenging single-demonstration imitation learning (IL) setting. In this context, the learning agent relies solely on a single expert demonstration and operates in an environment that lacks external reward signals, human feedback, or prior analogous knowledge, as obtaining multiple demonstrations or engineering complex reward functions is often infeasible. Given these constraints, the study introduces a methodology termed Transition Discriminator-based IL (TDIL). TDIL aims to augment the density of available reward signals and enhance agent performance by incorporating environmental dynamics. It posits that rather than strictly adhering to a limited expert demonstration, the agent should first aim to reach states proximal to expert behavior. The study introduces a surrogate reward function, approximated by a transition discriminator, to facilitate this process. TDIL demonstrates promise in addressing the sparse-reward problem common in single-demonstration IL, and stabilizing the learning process of the agent during training. A comprehensive set of experiments across multiple benchmarks validate the effectiveness of TDIL over existing IL methods.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The authors tackle the problem of single-demo imitation learning by introducing a reward function that rewards an agent for being at states within a single-step of an expert demonstration. They perform experiments on Mujoco navigation environments and 1 Adroit manipulation environment.
+
+### Strengths
+******************Writing:****************** Overall, the writing was solid and generally clearly explained the method and the equations used to derive the reward function.
+
+****************************Motivation:**************************** The paper is addressing an important problem, that of limited-demonstration (or in their case, single) imitation learning.
+
+******************Novelty:****************** To the best of my knowledge, the method is novel in this problem setting.
+
+************************Experiments:************************ Results are moderately comprehensive and generally demonstrate that the authors’ method, TDIL, outperforms other methods by a decent amount.
+
+### Weaknesses
+**************Method:************** Some discussion is probably missing about how the method, combined with Q-learning, is likely to propagate values from the expert-proximal states to earlier states of the same trajectory.
+
+************************Experiments:************************
+
+- A missing ablation is one that ablates out $B^-_{\text{reversed}}$ as this seemed like an arbitrary choice when presented in Eq.9… i’d be curious to see what the performance without it looks like
+- Since $\beta$ is set to 0 in the main experiments, there should be some ablation study on $\beta$ since it is proposed in the overall rew function of the method.
+- The adroit experiments would also benefit from a comparison against at least another method other than BC for completeness
+
+****************Clarity:****************
+
+- Figure 1(a) is referenced in the intro yet doesn’t appear until page 4. To make the intro easier to read, it should be put earlier in the paper (it’s on page 4) or separated into multiple figures so that the relevant parts of Figure 1 appear when referenced in the intro.
+- There’s some color-coding going on in Figure 1(b)-(d), (f)-(h) but they’re not explained in the figure or caption (presumably gray intensity in (b)-(d) is for the reward but I have no idea what the colors for (f)-(h) mean)
+- Eq 6: In the 3rd line, I had no idea where $T$ came from (was it an MDP time horizon?) until I went back and saw in the preliminaries that the demonstration is assumed to be of length $T$. Would be helpful to specify this again here
+- Generally, the use of lowercase $p(a|s$ to describe a policy is confusing because of the use of $p_0(s_0)$ to describe the initial transition dist. and uppercase $P$ for transition probabilities. I think it would be better to use $\pi(a|s)$ and $\pi^*(a|s)$ to describe policies and optimal policies, respectively.
+- After Eq.6, it would be good to briefly clarify the use of actor-critic RL and TD-learning so that the expectation can safely be ignored.
+
+**************************Minor Issues:**************************
+
+- “that follows” → “that follow” between Eq3 and Eq4
+- “To ensure optimality, the agent is trained with the total reward…” → “ensure” is probably not the right term here as only using $R_{IRL}$ is the only way to ensure optimality
+- Fig2 should perhaps have an arrow pointing back from Step 4 to Step 1
+
+### Questions
+Why are the arrows in figure 1 curved? Are the direction arrows calculated based on the average direction represented by the logits for the discrete actions from the policy? 
+
+Does the assumption of optimality in the construction of $R_{TDIL}$ matter in practice? It makes the equations simpler, but in practice the reward function is more accurate if calculated under the expectation of the current policy.
+
+Is Eq10 used for actual reward calculation for the policy or ********************only model selection********************? Is it even used at all for true model selection in the main experiments or do the authors simply pick the latest checkpoint for all methods?
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 2
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The paper proposes an expert proximity reward to improve the performance of existing Inverse RL and Adversarial IL algorithms. The intuition is based on a heuristic idea that the policy should go towards the expert transition in each step. The proposed algorithm is compared to various recent IRL/AIL algorithms on the Mujoco benchmark and can achieve better performance.
+
+### Strengths
+1. The proposed idea is simple.
+2. The derivation of each step is in general clear.
+
+### Weaknesses
+1. The novelty of the idea. In may existing works, people have discussed method that can try to encourage the agent to go back to the expert distribution such as FIST [1]. Among IRL methods, PWIL and OT[2] also incorporates a dense distance-based reward that encourage the agent to stay close to the expert per-transition. I am wondering why the proposed method is better than these prior approaches.
+
+2. Soundness of the method. If the agent has gone off the expert distribution, the proposed reward function can still degenerate. For example, if the minimal distance from a state $s_t$ to any expert state is 5 steps, the proposed reward $r(s_t, a_t)$ will output 0 no matter what action $a_t$ the policy chooses. Then how could the proposed method guide the policy?
+
+3. Unfair comparison. The proposed method integrates BC in its training. However, it looks like all the baselines the authors compare to does not involve BC in training. This makes the comparison unfair.
+
+4. Sensitivity analysis. The proposed algorithm involve a hyper parameter $\alpha$, but the authors do not discuss the sensitivity of the performance with respect to different alphas.
+
+[1] Hakhamaneshi et al. HIERARCHICAL FEW-SHOT IMITATION WITH SKILL TRANSITION MODELS. NeurIPS 2021.
+[2] Haldar et al. Supercharging Imitation with Regularized Optimal Transport. CoRL 2022.
+
+### Questions
+See weaknesses part.
+
+### Soundness
+2 fair
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 3
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This work focuses on the single-demonstration imitation learning setting. This work highlighted a challenge of single-demonstration imitation, i.e., scarce expert data may result in sparse reward signals. To solve this issue, this work proposes to augment reward signals using a transition discriminator. The resulting algorithm is called transition discriminator-based imitation learning (TDIL).
+
+### Strengths
+1.	This work aims to use a transition discriminator to approximate surrogate rewards to enhance the convergence speed in the single-demonstration IL setting. The transition discriminator is introduced to capture the awareness of the environmental dynamics. The effectiveness of TDIL is evaluated in five MuJoCo tasks.
+
+### Weaknesses
+1.	The presentation of the paper is not easy to follow, and sometimes confusing. For example, what is the difference between the single demonstration and sparse/scarce expert data, which one is the source of the sparse reward issue in single-demonstration imitation learning? 
+
+2.	This work highlighted that the scarce expert data in single-demonstration imitation learning may result in sparse reward signals. However, the motivation example is not convincing. Section 3.1 claimed that the issue of sparse rewards is due to the difference in convergence rates originates from IRL’s particular feature of allocating rewards solely to states that mirror those of the experts. There is no evidence to show the relationship between the convergence speed and sparseness of the rewards. Moreover, there are no statistical results to directly show the sparseness of the IRL’s rewards. 
+
+3.	TDIL aims to use the expert reachability indicator to define a denser surrogate reward function. However, the indicator can only output binary values for state-action pairs, which will result in sparse rewards. It is confusing how such an indicator can be used to define a denser surrogate reward function. A potential explanation in section 3.2 is that the surrogate reward function encourages the agent to navigate to states that are in expert proximity. What is expert proximity?
+
+4.	The transition discriminator is trained in a way that is like contrastive learning. It can capture the transition dynamics because the input data is state transition pairs.  How the awareness of the environmental dynamics can help it output denser rewards is unclear.
+
+### Questions
+1.	See weakness.
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 4
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The authors propose a method for single demonstration imitation learning which learns a discriminator that generates a pseudo reward by rewarding an agent for producing a state in the environment from which entering any state in an expert demonstration is possible. The pseudo reward is used to encourage the learned policy to be able to enter one of the states in the demonstration. The policy is also trained on a BC loss encouraging it to remain within the state distribution of the expert demonstration. The authors test their method on 5 mujoco environments.
+
+### Strengths
+I had the pleasure of reviewing this paper as a submission to an earlier venue and I must congratulate the authors on this improved version. 
+1. The method is principled and intuitive
+2. The paper is well-written and organized.
+3. The problem being addressed is crucial and the analysis includes model selection which is especially useful for deployment in real-world scenarios.
+
+### Weaknesses
+I still think a couple of points need to be improved upon before this is ready to be published:
+1. **Additional experiments on a larger domain set**: Locomotion environments tend to be somewhat easier for RL agents (evidenced by a variety of self-supervised methods learning to walk). I would recommend increasing the scope of the experiments to a robotic manipulation domain which would allow readers to understand the limitations of the work.
+2. **Ablations utilizing high dimensional states**: How does the method perform when utilizing demonstrations from the visual domain? This is necessary for completeness as there are several recent works for instance FISH https://arxiv.org/abs/2303.01497, RoboCLIP https://arxiv.org/pdf/2310.07899.pdf which learn a reward from visual observations from a single demonstration.
+
+### Questions
+I would be happy to increase my score if the authors can resolve the above questions.
+
+### Soundness
+2 fair
+
+### Presentation
+3 good
+
+### Contribution
+3 good

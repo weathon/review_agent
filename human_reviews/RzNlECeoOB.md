@@ -1,0 +1,147 @@
+# $t^3$-Variational Autoencoder: Learning Heavy-tailed Data with Student's t and Power Divergence
+
+- Decision: Accept (poster)
+- Scores: 8, 6, 8
+
+## Abstract
+The variational autoencoder (VAE) typically employs a standard normal prior as a regularizer for the probabilistic latent encoder. However, the Gaussian tail often decays too quickly to effectively accommodate the encoded points, failing to preserve crucial structures hidden in the data. In this paper, we explore the use of heavy-tailed models to combat over-regularization. Drawing upon insights from information geometry, we propose $t^3$VAE, a modified VAE framework that incorporates Student's t-distributions for the prior, encoder, and decoder. This results in a joint model distribution of a power form which we argue can better fit real-world datasets. We derive a new objective by reformulating the evidence lower bound as joint optimization of KL divergence between two statistical manifolds and replacing with $\gamma$-power divergence, a natural alternative for power families. $t^3$VAE demonstrates superior generation of low-density regions when trained on heavy-tailed synthetic data. Furthermore, we show that $t^3$VAE significantly outperforms other models on CelebA and imbalanced CIFAR-100 datasets.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+In this paper, the authors introduce a novel VAE-like generative model ($t^3$VAE) in which the underlying distributions (for the prior, encoder, and decoder) are assumed to be (multivariate) Student's t. This idea leads to a better approximation of heavy-tailed densities, which is confirmed by experiments on both synthetic and real-world datasets. The presented (solid) theoretical justification stems from viewing classical VAE as a joint minimization process between two statistical manifolds and relies on replacing the KL divergence with the $\gamma$-power divergence.
+
+### Strengths
+(1) The idea behind $t^3$VAE (although somewhat natural) seems original and significant since it allows us to overcome (to some extent) the limitations of classical VAE.
+
+(2) The proposed solution has (as the authors show) a solid theoretical background.
+
+(3) The experimental results prove the superiority of $t^3$VAE over the state-of-the-art.
+
+### Weaknesses
+(1) The authors claim that their idea is extendable to hierarchical models. Although there is a theoretical justification for this in the appendix, the paper would benefit from corresponding experimental studies.
+
+(2) Minor comments:
+
+p. 2, l. 10 from bottom: the authors probably wanted to write "likelihood" (instead of "log-likelihood"),
+
+p. 7, Tab. 3: $t^3$VAE $\to$ $t^3$VAE ($\nu=10$),
+
+p. 9, l. 12: I suggest not to use the phrase "scores highest" (as in the case of FID "lower is better").
+
+### Questions
+(1) Have you considered providing experimental results for hierarchical architectures?
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The authors address the limitation of the standard Variational Autoencoder (VAE) that employs a Gaussian prior which sometimes fails to capture the intricate structures in data due to its fast-decaying tails. They propose a novel framework by leveraging the heavy-tailed nature of the Student's t-distributions for the prior, encoder, and decoder. They argue that this new formulation can better fit real-world datasets.  Empirical results suggest that t3VAE performs better in modeling low-density regions, and yields superior performance on the CelebA and imbalanced CIFAR-100 datasets.
+
+### Strengths
+- The use of Student's t-distributions as an alternative to the Gaussian prior in VAEs seem a fresh perspective. The heavy-tailed nature can indeed address some of the shortcomings of the standard Gaussian prior.
+
+- The modification of the evidence lower bound to incorporate γ-power divergence might seem appropriate given the nature of the power families.
+
+- Demonstrated superior performance on benchmark datasets, particularly on imbalanced/ longtailed version of CIFAR-100, which is a testament to the proposed model's robustness.
+
+### Weaknesses
+- The transition from Eq(5) to Eq(19) is not straightforward for me. While intuitively, adopting the γ-power divergence to the KL-divergence might seem appropriate, a central question arises: Does the γ-power divergence between the two manifolds still lead to the ELBO? This needs to be addressed for better clarity.
+
+- Given that both t3VAE and the Student-t VAE integrate the Student's t-distribution into the VAE framework, a more granular comparison in the related work section would be enlightening. Highlighting the distinct features and advantages of t3VAE over the Student-t VAE would give readers a clearer understanding of its contributions.
+
+-  I noticed that the hierarchical variants of the model weren't evaluated in the experimental section. Such an evaluation might provide insights into the model's performance in different configurations. I'd be keen to see these results.
+
+- Incorporating the Student's t-distributions inherently increases the model's complexity. This can potentially introduce challenges in training and optimization. I recommend the authors delve into these potential challenges, discussing potential remedies and considerations for practitioners aiming to implement t3VAE.
+
+### Questions
+See Weakness.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 3
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The authors develop a new variational autoencoder designed for heavy-tailed data by changing the prior, encoder, and decoder from Gaussian distributions to t-distributions, and the KL divergence to power divergence. The authors draw upon the EM perspective of VAEs developed by Han et al., 2021 to formulate a joint minimization objective, and use ideas from information geometry to tie together the exponent in the power divergence with the degrees of freedom in the t-distributions. The degrees of freedom hyperparameter is shown to affect the degree of regularization in the model. The model formulation is also described in terms of a Bayesian point of view. Four experiments are conducted comparing the performance of the proposed model with a selection of other competing VAEs: the first involving a univariate synthetic dataset (reporting histograms and MMD test p-values), the second involving a bivariate synthetic dataset (reporting MMD test p-values), the third involving the CelebA image dataset (reporting FID scores), and the fourth involving the CIFAR100-LT image dataset (reporting FID scores). In all cases, the model is shown to vastly outperform competing methods. All arguments are supported with ample theoretical derivations in the supplementary material.
+
+### Strengths
+- An interesting and important extension on the VAE framework to meaningfully deal with heavy-tailed data.
+- A broad investigation and discussion into the underlying concepts, providing an excellent derivation of the method, and a good amount of detail extending into the appendices. 
+- Hyperparameters and model choices are thought out and well-justified. The authors could have simply attached a few of the underlying ideas together without much thought, but have chosen to go the extra mile. 
+- Model is shown to be highly effective compared to competitors, even on reasonably challenging image datasets where VAEs do not typically do well.
+- Very well-written paper; no grammatical issues or typos that I could detect.
+
+### Weaknesses
+- Reporting p-values is not exactly ideal, especially when metrics are available. 
+- No general summary to assist with implementation.
+- No examples conducted on datasets where heavy tails are known to be especially relevant (e.g. economic datasets).
+- No discussion of, or comparisons to, similar developments in the normalizing flow literature (e.g. [1] and [2]).
+
+[1] Jaini, P., Kobyzev, I., Yu, Y., & Brubaker, M. (2020). Tails of Lipschitz triangular flows. In International Conference on Machine Learning (pp. 4673-4681). PMLR.
+
+[2] Liang, F., Mahoney, M., & Hodgkinson, L. (2022). Fat–Tailed Variational Inference with Anisotropic Tail Adaptive Flows. In International Conference on Machine Learning (pp. 13257-13270). PMLR.
+
+### Questions
+- Is the gamma-power divergence not the same as the Renyi divergence (up to constants)? How do they differ?
+- Can you provide an algorithm environment to show how this should be implemented at a glance? I appreciate the presentation and the derivation of the model, but any reader looking to quickly implement it is likely to have trouble if they do not thoroughly read the paper. 
+- What do the MMD values themselves look like? These might be more useful to report than the p-values.
+- Since you know the densities explicitly in the synthetic tests, you could use KSD instead of MMD, as this will have much improved statistical power. Have you tried this?
+- Have you tried the model on any real datasets other than image sets?
+- Do you know how the model compares with other normalizing flow models incorporating t-distributions?
+
+### Soundness
+4 excellent
+
+### Presentation
+3 good
+
+### Contribution
+3 good
