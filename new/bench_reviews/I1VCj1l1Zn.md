@@ -1,82 +1,89 @@
-Now let me search for calibration papers.Now I have enough information. Let me write the comprehensive final review.
+Now I have sufficient information from the paper to write the consolidated review. Let me verify the key numerical claims before writing.
+
+**Verification notes from reading the paper:**
+
+1. **"92.34% accuracy" inconsistency claim (Human Finder):** The four backbone averages from Table 1 are 89.89%, 92.89%, 90.65%, 95.93%. Their mean = (89.89+92.89+90.65+95.93)/4 = **92.34%**. The claim is *correct*. The Human Finder reviewer was wrong.
+
+2. **"1.24x slower than single LoRA" inconsistency (Spark reviewer):** Section 3.3 claims 1.24x; Section 4.2 claims 18.19% average increase. From Table 4 subscripts (computed directly as DLP/LoRA ratio): -2.61%, +12%, +52.38%, +11% → average = 18.19%, or 1.18x. The 1.24x in Section 3.3 appears to be the average DLP-LoRA ratio over the *basic* backbone ((1.12+1.12+1.60+1.11)/4 = 1.2375), not over single LoRA. There is a minor internal inconsistency.
+
+3. **TopChat regression (LLaMA-3 8B):** Table 2 confirms: LoRA BLEU=35.95 → DLP-LoRA BLEU=29.58, ROUGE-L 33.52 → 27.80. Confirmed regression, not discussed.
+
+4. **Fusion ablation:** Paper never compares top-p fusion vs. top-1 dispatch. Confirmed absence.
+
+5. **Composite baselines:** Table 3 only compares DLP-LoRA (26 specialized LoRAs + router) against basic backbone and a single r=64 LoRA on composite-26. No oracle routing or top-1 dispatch baseline. Confirmed.
+
+6. **Table 7 (dynamic LoRA comparison):** Only reports decoding latency and memory — no accuracy or BLEU/ROUGE metrics. And is conducted on a **different** 7-task ShareGPT setup, not the main 26-task benchmark. Confirmed.
 
 ---
 
 ## Summary
 
-DLP-LoRA proposes a sentence-level dynamic LoRA fusion method using a lightweight external mini-MLP classifier (5M parameters) to route among a bank of task-specific LoRA adapters via top-p sampling. The method avoids per-token gating overhead by making routing decisions once per sentence and exploits parallel CUDA GEMM operations for multi-LoRA computation. Evaluations span 26 tasks (17 MCQ + 9 QA) across four LLM backbones, showing performance close to single-task LoRA at roughly 1.24× its inference overhead, and large gains over a basic backbone and a single jointly-trained LoRA in composite task settings.
+DLP-LoRA proposes a 5M-parameter mini-MLP classifier that, at sentence boundaries, selects and fuses multiple task-specific LoRA adapters using top-*p* sampling, replacing per-token MoE routing with a single sentence-level decision. The method is evaluated on 26 tasks (17 MCQ + 9 QA) across four LLM backbones, claiming near-single-LoRA task performance at approximately 1.18× the inference cost of a single LoRA, and large gains over unadapted baselines in composite multi-task settings. The paper frames its core novelty as **dynamic LoRA fusion**, but the experiments do not isolate this from simpler dispatch strategies.
 
 ---
 
 ## Claims and Support
 
-**Claim 1: Sentence-level routing via mini-MLP is sufficient because within-sentence token routing is unnecessary.**
-- *Status: Assumed, not demonstrated on own tasks.* The paper cites prior work (Xu et al., 2024; Lin et al., 2024b; Muqeeth et al., 2024) for this observation but provides no direct evidence on its own 26-task suite. No token-level assignment analysis, no comparison to a token-level router on the same tasks. This is the methodological foundation of the paper and it is taken on faith.
-
-**Claim 2: DLP-LoRA achieves performance comparable to single-task LoRA across 26 tasks and 4 backbones.**
-- *Status: Supported (weakly positive framing overstated).* Table 1 shows DLP-LoRA consistently 0–0.94% below single LoRA on MCQ averages. Table 2 shows mixed QA results, occasionally above, occasionally below. The paper's own numbers support "close to but slightly below on average," which is a reasonable result; the abstract framing of "matches or exceeds" is somewhat overstated.
-
-**Claim 3: DLP-LoRA significantly improves multi-task composite performance.**
-- *Status: Partially supported, but against a weak baseline.* Table 3 shows large gains over basic backbone and a single r=64 LoRA trained on all 26 tasks. The single combined LoRA is a known-weak baseline. No comparison against contemporaneous dynamic routing methods in the composite setting. The gains therefore show "specialist LoRAs + classifier > one shared LoRA," which is unsurprising, not that DLP-LoRA's fusion mechanism is an advance.
-
-**Claim 4: Dynamic fusion (not just hard task routing) contributes to performance.**
-- *Status: Undemonstrated.* There is no ablation comparing: (a) hard top-1 routing, (b) oracle task-ID routing, (c) random fusion, (d) varying top-p. The paper never isolates the contribution of multi-LoRA fusion from simple task classification. The case study is anecdotal.
-
-**Claim 5: DLP-LoRA is more efficient than token-level MoE/gating alternatives.**
-- *Status: Partially supported for latency; unfair quality-matched comparison.* Table 7 shows clear latency and memory advantages over MOLA, PESC, MoRAL, LoRA-Switch. However, Table 7 uses a different setup (7 LoRAs, ShareGPT) from the main evaluation, and no task-quality scores are reported for any baseline in that comparison. A method cannot claim efficiency superiority without demonstrating quality parity. The paper does disclose in footnote 1 that the LoRA-Switch assumption is a lower bound, which shows transparency.
-
-**Claim 6: Qwen-2 1.5B + DLP-LoRA outperforms LLaMA-2 13B (unadapted).**
-- *Status: Empirically supported but scientifically uninformative.* An adapted small model with 26 task-specific LoRAs vs. a much larger unadapted base model is not a meaningful scientific comparison. It demonstrates that task adaptation matters.
+| Claim | Support |
+|---|---|
+| DLP-LoRA achieves 92.34% average MCQ accuracy | ✅ Confirmed: mean of four backbone averages from Table 1 = 92.34% |
+| Sentence-level routing is sufficient (tokens in same sentence share task) | ⚠️ Assumed from prior work; not validated on this paper's 26-task setup |
+| DLP-LoRA ≈ single-task LoRA performance | ✅ Well-supported; average relative differences –0.94% to –0.00% (MCQ), ±~1% (QA) |
+| DLP-LoRA significantly improves over composite-task baselines | ⚠️ Partially supported; gains are real but baselines are weak (single r=64 LoRA vs. 26 specialized LoRAs + router) |
+| Inference cost <2× single LoRA | ✅ Confirmed at 1.18× on average (18.19%); minor internal inconsistency with "1.24×" in Section 3.3 (which is ratio vs. basic backbone, not LoRA) |
+| Dynamic *fusion* drives the gains over simple dispatch | ❌ No ablation against top-1 dispatch; impossible to determine from results |
+| DLP-LoRA outperforms token-level MoE in efficiency | ✅ Table 7 supports, but on a *different* 7-task setup, not the main 26-task benchmark |
+| Smaller adapted model (Qwen-2 1.5B + DLP-LoRA) outperforms larger unadapted model (LLaMA-2 13B) | ✅ Numerically confirmed in Table 5, but the comparison is unadapted vs. adapted—informative as a practical data point, not a method comparison |
 
 ---
 
 ## Strengths
 
-- **Genuinely lightweight and fast plugin.** Table 4 shows the mini-MLP variant adds only ~18.19% overhead over single LoRA on average, and Table 6 shows the ratio stays below 2× even with 100 LoRAs. This is a concrete and reproducible engineering result that distinguishes the approach from prior methods with much heavier routing overhead (Table 7: MOLA at 10.54×, PESC at 3.54×).
+- **Concrete and reproducible efficiency gains at scale:** Table 4 shows mini-MLP DLP-LoRA averages only 18.19% overhead over single LoRA, and Table 6 demonstrates the ratio stays below 2× even at 100 LoRAs (1.83×) while LoRA parameters remain <0.1% of LLaMA-3 8B. This is a verifiable, practically useful result that distinguishes the paper from prior token-level MoE methods.
 
-- **Multi-backbone breadth.** Evaluating across Qwen-2 1.5B, Qwen-2 7B, LLaMA-2 7B, and LLaMA-3 8B — with results averaged over 10 runs — is a systematic effort that many multi-LoRA papers skip. Performance within ~0.35% of individually fine-tuned single LoRAs across this range confirms robustness of the approach.
+- **Broad empirical validation maintaining near-single-LoRA quality:** Tables 1–2 consistently show average relative performance within –1% of individually trained single LoRAs across 26 diverse tasks and four LLM backbones (1.5B–8B parameters). This breadth of validation, without cherry-picking, is stronger than typical narrow evaluations in this space.
 
-- **Scalability data at 50 and 100 LoRAs.** Table 6 provides a concrete scaling curve for inference time, which is practically relevant and rare in papers of this type.
+- **Lightweight and modular plugin design:** The 5M-parameter mini-MLP trains in under 10 minutes, achieves 98.45% task classification accuracy, and is architecturally independent of the LLM backbone—enabling task additions without modifying any trained LoRA modules. This practical property is clearly demonstrated.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*(None that fully invalidate the basic methodology; the method is functional and the efficiency results are real.)*
+
+*No single weakness rises to the "not even a paper" threshold; the system works and results are real.*
 
 ### Major
 
-- **No task-performance comparison against the very methods it claims to outperform.** Table 7 compares only latency and memory against MOLA, PESC, MoRAL, and LoRA-Switch — never accuracy, BLEU, or ROUGE. This is the central evaluative gap. An efficiency-quality trade-off cannot be assessed without measuring both legs on the same tasks. A method can be fast because it does less or because it is smarter; the paper never establishes which is true relative to its competitors. This undermines the core positioning of the paper.
+- **The central novelty—dynamic LoRA *fusion*—is never isolated from simple dispatch.** The paper's primary claim over prior work is top-*p* multi-LoRA *fusion*, yet no ablation compares it against (a) top-1 LoRA selection only, (b) oracle task-ID plus single LoRA, or (c) fixed-*k* selection. The paper never reports the distribution of how many LoRAs are actually selected per input under top-*p*, nor does it analyze whether inputs where more than one LoRA is chosen produce better outputs than single-LoRA dispatch. Without this, the paper establishes that *sentence-level task routing* is effective—but the "fusion" component that differentiates it from simpler dispatch remains unsubstantiated. This matters because the entire novelty framing rests on it.
 
-- **No ablation isolating dynamic fusion from hard task routing.** The paper's headline claim is "dynamic fusion," yet there is no comparison to (a) always selecting the top-1 LoRA (hard routing), (b) oracle routing to the correct task LoRA, or (c) uniform weighting of top-p LoRAs. Without this, the paper cannot support the claim that fusion, rather than classification, drives performance. If top-p almost always selects a single LoRA, then DLP-LoRA is effectively a lightweight task classifier + LoRA loader — a much more modest contribution.
+- **Composite-task evaluation uses a weak, parameter-mismatched baseline.** Table 3 compares DLP-LoRA (26 specialized LoRAs + trained router) against a single r=64 LoRA trained on composite-26 data. These differ in parameter budget, specialization, and training regime simultaneously. Showing that 26 individually specialized adapters beat one shared adapter is expected and does not validate the routing or fusion mechanism. Missing baselines: (1) sentence classifier + top-1 LoRA selection, (2) oracle task-label + corresponding single LoRA, (3) other dynamic dispatch methods on the same 26-task mixture. Without these, the composite-task claim—which is the paper's main practical selling point—is built on weak evidence.
 
-- **Composite-task evaluation uses insufficiently competitive baselines.** Table 3 compares DLP-LoRA against the basic backbone and a single LoRA (r=64) jointly trained on all 26 tasks — a known weak multi-task baseline. No dynamic multi-LoRA baseline is evaluated in the composite setting. The natural comparisons would be: (1) oracle task-ID + load the single correct LoRA; (2) LoRA-Switch or another dynamic method on the same composite benchmark. Without these, Table 3 cannot distinguish DLP-LoRA's value from the trivially true claim that "many specialist LoRAs beat one generic LoRA."
-
-- **No top-p sensitivity analysis.** The top-p threshold controls how many LoRAs are fused per sentence — the paper's central hyperparameter — yet no experiment varies it. The exact value of p used in all experiments is not stated. Readers cannot determine whether the reported results are robust or tuned to a specific p.
+- **No task-performance comparison with other dynamic LoRA methods.** Table 7 compares only inference speed and memory vs. MOLA, PESC, MoRAL, LoRA-Switch—and does so on a *different* 7-task ShareGPT setup, not the main 26-task benchmark. There is no comparison of accuracy or BLEU/ROUGE against any competing dynamic-fusion method. This makes it impossible to evaluate whether DLP-LoRA's efficiency gains come at a task-quality cost relative to state-of-the-art dynamic alternatives.
 
 ### Minor
 
-- **92.34% MCQ headline figure is misleading.** The abstract reports "achieves an average accuracy of 92.34% on multiple-choice datasets" without specifying this is for LLaMA-3 8B only (Table 1). The cross-backbone average is lower. Similarly, the "92.95% relative improvement" is over the *unadapted baseline*, not over dynamic alternatives, which should be made explicit upfront.
+- **Substantial unanalyzed per-task regressions.** Table 2 shows DLP-LoRA drops vs. single LoRA on TopChat (LLaMA-3 8B: BLEU 35.95 → 29.58, ROUGE-L 33.52 → 27.80) and on CNNDM (Qwen-2 7B: BLEU 16.07 → 14.17; LLaMA-2 7B: BLEU 8.02 → 14.31 is actually an improvement, but other cells degrade). These are large regressions on specific tasks—potentially due to LoRA interference during fusion or misclassification—but the paper offers no discussion. Understanding failure modes is important for a method claiming practical deployment viability.
 
-- **Sentence-level routing premise is inherited, not validated.** The method's key justification — that token-level routing is unnecessary within a sentence — is cited from prior work but never verified on the paper's own task suite. This weakens the mechanistic rationale.
+- **Internal inconsistency in reported inference overhead.** Section 3.3 states DLP-LoRA is "on average only 1.24 times slower than single LoRA inference," but Section 4.2 reports 18.19% average increase (≈1.18×). The 1.24 figure is actually the mean ratio over the *basic* backbone, not over single LoRA (since some backbone/LoRA ratios are 1.00×). This conflation overstates the overhead and should be corrected.
 
-- **Classification accuracy of 98.45% reported without per-task breakdown or held-out analysis.** The routing accuracy is central to the method's integrity, but is reported as a single aggregate figure. There is no analysis of which tasks are confused or how misclassifications affect generation quality.
+- **Table 5's cross-model comparison is framed too strongly.** Comparing Qwen-2 1.5B + DLP-LoRA against *unadapted* LLaMA-2 13B is a practical data point, but not a method comparison. The section heading "Can a Smaller LLM with DLP-LoRA Outperform a Larger LLM Backbone?" implies a general capability claim; the evidence only shows an adapted small model beats an unadapted large model on in-distribution tasks—unsurprising given that single-task LoRA already dramatically improves over the basic backbone.
 
-- **Efficiency comparison setup differs from the main evaluation.** Table 7 uses 7 LoRAs on ShareGPT (following LoRA-Switch's setup), while the main evaluation uses 26 tasks on domain-specific benchmarks. This is disclosed but limits the interpretability of the efficiency claims in the context of the main results.
+- **Top-*p* threshold is a core hyperparameter with no sensitivity analysis.** The paper's central mechanism relies on a top-*p* threshold that determines how many LoRAs are fused, yet the chosen value is never stated, and no sweep over *p* ∈ {0.5, 0.7, 0.9, 0.95, 1.0} is provided. Readers cannot assess whether the reported performance is stable or brittle.
 
 ### Trivial
 
-- Eq. 4–5 notation is ambiguous: I_p appears to be a set of probability values, but Softmax is then applied to re-normalize them. The mechanism is likely correct (select above-threshold, renormalize) but could be stated more precisely.
+- **Minor numerical inconsistency in the "1.24×" claim** (see Minor section above). Easy to fix with a single sentence.
 
 ---
 
 ## Nice-to-Haves
 
-- Analyze how often top-p selects exactly one LoRA vs. multiple LoRAs per task, to quantify when genuine fusion occurs and characterize which task types benefit from it.
-- Provide a concrete experiment on adding a new (27th) task: retraining time for the mini-MLP, and whether prior task routing is disrupted.
-- Report standard deviations across the 10 runs in Tables 1–3, given that observed differences (e.g., DLP-LoRA vs. single LoRA at sub-1%) are small enough that noise matters for interpretation.
-- Empirically evaluate behavior on genuinely mixed-task inputs (e.g., a math word problem in a non-English language) that require cross-domain reasoning within one sentence.
+- Provide a distribution plot of how many LoRAs are selected per input under the chosen top-*p* threshold, to show whether fusion produces variable-cardinality selection in practice.
+- Provide a failure-case study (companion to Figure 3) where the classifier misroutes and analyze whether performance degrades gracefully.
+- Evaluate robustness when input does not belong to any trained task (out-of-distribution / new task at inference time).
+- Add ablation comparing top-*p* fusion with top-1 selection to establish the empirical value of multi-LoRA fusion specifically.
+- Report memory consumption at 50/100 LoRAs alongside inference-time ratios in Table 6.
 
 ---
 
@@ -84,52 +91,63 @@ DLP-LoRA proposes a sentence-level dynamic LoRA fusion method using a lightweigh
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **"Smaller backbone vs. larger backbone" as a scientific contribution (Harsh Critic Claim 7):** The claim that comparing Qwen-2 1.5B + DLP-LoRA against unadapted LLaMA-2 13B is a meaningful scientific result was correctly identified. However, this is moved to Minor rather than removed entirely; it's kept as a framing issue rather than a standalone weakness.
+- **Human Finder (W4): "92.34% accuracy inconsistency."** The reviewer claims the 92.34% figure does not correspond to any backbone's average. This is **factually incorrect**: (89.89 + 92.89 + 90.65 + 95.93) / 4 = 92.34 exactly. Removed.
 
-- **Mathematical inconsistency in Softmax(I_p) (Harsh Critic):** After reading Eq. 4–5, the design is plausible: I_p contains the raw probability values that exceed the threshold p, and Softmax re-normalizes them as fusion weights. This is a legitimate (if under-described) design, not a methodological error. This is moved to Trivial notation clarity.
+- **Human Finder (W5): "Unfair comparison in Table 5 is a straw-man."** This was retained as a Minor weakness above (Table 5 framing is overstated), but the claim that it constitutes a methodological flaw is weakened: the paper explicitly frames this as "can a smaller adapted model outperform a larger unadapted model," which is a legitimate practical question. The comparison is informative, just not a strong *method* comparison.
 
-- **Efficiency comparison Table 7 as "completely unfair" (Harsh Critic):** The paper actually discloses in footnote 1 that the LoRA-Switch comparison is a conservative lower bound. The concern is real but the severity is overstated; moved to Minor.
+- **Neutral/Harsh Reviewer: "Missing related works" / requests to add more related work discussion.** Per the hard rules, removed.
 
-- **"Reproducibility of exact top-p value" as a major weakness:** Per hard rules, this is a hyperparameter/implementation detail that is moved to Nice-to-Haves rather than kept as a substantive weakness.
+- **Harsh Reviewer: Reproducibility concerns (undisclosed hyperparameters, training details, single GTX 2080Ti).** These are nitpicks about implementation details not material to the scientific claims; removed.
+
+- **Neutral Reviewer (W6) and Harsh Reviewer: Lack of OOD evaluation (new tasks not in training set).** Kept as Nice-to-Have only—this is outside the paper's stated scope and is not a standard evaluation in this literature for a systems-efficiency contribution.
+
+- **Harsh Reviewer: "Equation (6) does not clearly specify the fused forward computation."** Equation (6) is dense but readable as a batched weighted sum; this is a presentation nitpick, not a methodological error. Removed.
+
+- **Harsh Reviewer: "Section 2 background—generic LoRA merging property does not carry over."** This is minor conceptual background prose; not a substantive flaw in the methodology. Removed.
+
+- **Spark Reviewer: "Comparison with a single LoRA of equivalent total parameter budget."** This is a reasonable baseline but demanding a parameter-matched single LoRA trained on composite-26 is beyond the standard in this literature, where per-task specialization vs. shared adapters is itself the research question. Softened to Nice-to-Have.
 
 ---
 
 ## Novel Insights
 
-The most genuinely interesting structural observation — raised across all reviewers but not fully explored — is whether DLP-LoRA is actually doing fusion or classification. The paper shows a 98.45% task-classification accuracy while achieving performance within 0.35% of single-task LoRAs; this strongly suggests the classifier is doing near-perfect task identification and the "fusion" component may be near-vacuous in practice. If true, the paper's real contribution is: *a standalone, ultralight classifier (5M parameters, <10 min to train) is sufficient to automate LoRA selection for a large task bank at negligible overhead* — an arguably cleaner and more honest framing than "dynamic multi-LoRA fusion." The authors should run the hard-routing ablation; if the gap is zero, the paper should be reframed, which would actually make it a stronger and more honest contribution.
+The reviewers, taken together, surface one genuinely important observation beyond what the paper acknowledges: **the method's empirical contribution cannot be cleanly attributed to dynamic fusion as opposed to sentence-level task identification and dispatch.** The paper reports that 98.45% of sentences are classified correctly, meaning most gains plausibly arise from accurate routing to the correct single LoRA, not from the multi-LoRA weighted blending. The top-*p* mechanism could in principle reduce to top-1 in practice if the classifier's probability mass concentrates on a single task (the case study in Figure 3 shows probabilities of 50.5% and 49.5%—a near-tie, not a clear multi-task signal). This distinction matters not just as an ablation gap but as a conceptual claim: if the gains are from routing accuracy, DLP-LoRA's contribution is an efficient sentence-level classifier for LoRA dispatch; if from fusion, the mechanism itself is novel. The paper does not differentiate these, and the reviewers collectively identify this as the most important open question.
 
 ---
 
 ## Suggestions
 
-1. **Add task-accuracy comparisons against at least LoRA-Switch and one MoE LoRA baseline (e.g., PESC or MoRAL) on the same 26-task composite setup.** This is the single most important experiment missing.
-2. **Run the top-1 hard routing ablation.** Compare DLP-LoRA (top-p) vs. DLP-LoRA (top-1, always load only the highest-probability LoRA) on all tables. This validates or refutes the fusion claim.
-3. **State and sweep the top-p threshold.** Report p and show a table/figure of performance and average LoRAs selected across p ∈ {0.5, 0.7, 0.8, 0.9, 0.95}.
-4. **Reframe Table 5** as an application result ("LoRA adapters enable much smaller models to punch above their weight") rather than a headline result about DLP-LoRA's superiority over larger models.
-5. **Clarify the 92.34% and 92.95% figures in the abstract** with proper conditioning on backbone and comparison target.
+1. **Add a top-1 dispatch ablation as the primary missing experiment.** Run DLP-LoRA with exactly one LoRA selected (argmax routing, no fusion) vs. top-*p* fusion on Tables 1–3. This single experiment would either validate fusion as a genuine mechanism or reframe the contribution honestly as efficient dispatch.
+
+2. **Fix the 1.24× vs. 1.18× inconsistency in Sections 3.3 and 4.2.** State clearly whether 1.24× is relative to the basic backbone or to single LoRA, and be consistent.
+
+3. **Add one stronger composite-task baseline:** at minimum, "sentence classifier → top-1 matching LoRA" vs. DLP-LoRA's top-*p* fusion in Table 3. This would cost little and substantially strengthen or clarify the composite-task claim.
+
+4. **Discuss and investigate the large TopChat / CNNDM regressions.** Even a brief analysis of whether these correlate with classifier errors or task-LoRA interference would improve scientific credibility.
+
+5. **State the top-*p* value used and provide a brief two-row sensitivity table** (*p* = 0.9 vs. 0.95 vs. 1.0) to justify the design choice.
+
+6. **Reframe Table 5** as a practical deployment comparison (adapted small vs. unadapted large), not a method comparison, and tone down the section heading accordingly.
 
 ---
 
 ## Score and Decision
 
-**Calibration:**
+**Originality:** Moderate. Sentence-level routing for LoRA dispatch is not new (Polytropon, Flix are acknowledged), but the specific combination of an off-the-shelf mini-MLP plugin, top-*p* adaptive fusion, and parallel GEMM acceleration is a practical refinement. The novelty claim around *fusion* specifically is unvalidated.
 
-- **LoRAHub** (Reject, avg. 5.3): A LoRA composition paper with missing task-performance baselines and unclear scope. DLP-LoRA has similar or larger gaps (no performance comparison with any dynamic alternative), but a broader empirical evaluation.
-- **ELREA** (Accept Poster, avg. 5.8): An accepted multi-expert LoRA paper with missing baseline comparisons noted but acceptable experimental scope. ELREA has a more novel routing mechanism (gradient clustering). DLP-LoRA is methodologically simpler and has the larger missing-baseline gap.
-- **MeteoRA** (Accept Poster, avg. 6.2 per Human Finder): The primary competitor cited in the paper. MeteoRA provides multi-baseline comparison including performance numbers. DLP-LoRA does not meet this bar.
-- **MORE** (Reject, avg. 4.0): A weak LoRA method with marginal performance and thin experiments. DLP-LoRA is better executed but shares the missing-comparison problem in a more fundamental way.
+**Importance of research question:** High. Efficient multi-task LoRA deployment at inference time is a genuine practical problem as LoRA libraries grow.
 
-**Assessment:** DLP-LoRA is a real, functional engineering contribution with genuine efficiency results and a broad empirical evaluation. However, the central scientific claim — that dynamic multi-LoRA *fusion* is beneficial — is unvalidated due to the missing hard-routing ablation. The composite-task evaluation relies on weak baselines, and the paper never compares task quality against any of the dynamic baselines it claims to outperform. This places it below LoRAHub (rejected) in terms of comparative rigor, even though the overall experimental scope is broader. The paper sits below the threshold for ICLR acceptance in its current form.
+**Claims well-supported:** Partially. The efficiency and near-single-LoRA quality claims are well-supported. The composite-task superiority and dynamic-fusion novelty claims are not.
 
-- **Novelty:** Incremental. Sentence-level routing has prior art (Polytropon, Flix); the main contribution is an efficient external classifier.
-- **Technical soundness:** Partially sound. The efficiency mechanism is well-described; the fusion mechanism is underspecified and unablated.
-- **Empirical support:** Adequate for the efficiency claim; insufficient for the fusion and multi-task adaptation claims.
-- **Significance:** Moderate practical value if the engineering contribution is correctly scoped.
-- **Clarity:** Reasonable overall; abstract overstates some results.
+**Soundness of experiments:** Moderate. Broad task and backbone coverage is a strength; absence of the key fusion ablation, weak composite baselines, and the different-setup efficiency comparison with dynamic baselines are real gaps.
 
-**Final Score: 4.0**
+**Clarity:** Good overall. The minor internal inconsistency in timing numbers is the main writing issue.
 
-Compared to LoRAHub (rejected, ~5.3 avg.) which at least evaluates on the tasks it claims to address, DLP-LoRA's failure to compare task quality against any dynamic competitor is a more fundamental gap — pushing it below that threshold. Compared to MORE (rejected, ~4.0 avg.) which has thin experiments and marginal performance, DLP-LoRA is more carefully executed but has equivalent evaluative gaps in the critical multi-LoRA comparison dimension.
+**Value to community:** Moderate-positive. The efficient dispatch idea is useful; the unvalidated fusion claim overstates novelty.
 
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+The paper is a functional, practical contribution with an honest efficiency story, but its central novelty—dynamic multi-LoRA *fusion*—is not empirically distinguished from the simpler and more modest contribution of efficient sentence-level task dispatch. Combined with weak composite-task baselines and the absence of performance comparisons against dynamic LoRA baselines, the experimental case is incomplete. A significant revision addressing the fusion vs. dispatch ablation and strengthening the composite baseline would substantially improve the paper.
+
+**Score: 4.5**
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

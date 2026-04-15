@@ -35,15 +35,14 @@ their existence and could be making things up.
 implementation details, or large artifacts impractical to include in a submission
 (e.g., complete training logs).
 
-- REMOVE strengths that are generic or would apply to any paper.
-Examples: "the paper is well-written," "the topic is important," "the experiments are extensive."
-A strength must identify something specific this paper does well that most papers in the area do not.
 
 - REMOVE strawman weaknesses that misunderstand the paper content or claiming something the paper already addressed
 
 - The harsh reviewer will give weaknesses with grounded paragraph, verify those weaknesses against the paragraph to make sure the weakness is valid
 
 - FUNDAMENTAL ISSUES: If any weakness is severe enough to undermine the paper's core claims or it is simpilly "not even a paper", it overrides all strengths. The overall assessment must reflect this severity rather than averaging strengths and weaknesses or softening the judgment with "could be strong with revisions."
+
+- Similarly, if the paper made real contributions do not reject just because it has some weaknesses - every paper has some. 
 
 - Re-verify the claims and supports from harsh reviewer and correct them comparing to the text. 
 
@@ -114,7 +113,7 @@ verified list from harsh reviewer, about if each claim is supported.
 
 ## Removed Points
 Include something like this "These points are flagged to be removed, treat them with caution"
-Strength or Weaknesses that are removed keep the details of the S/W just in case they are useful 
+Weaknesses that are removed keep the details of the S/W just in case they are useful 
 
 ## Novel Insights
 One paragraph synthesizing genuinely novel observations.
