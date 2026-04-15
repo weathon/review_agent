@@ -129,37 +129,21 @@ Do evaluate the paper on these axis using language first, do not be afraid to be
 - clarity 
 
 ## Score and Decision
-After you finish writing a review, assign a score to the review. 
+After you finish writing a review, assign a score using self-consistency calibration.
 
-Use comparative scoring to calibrate your final score. You have access to human reviews of other papers through the review finder and search/grep tools. Search tool supports both bm25 and vector search.
+You have access to your own past reviews via `search_review`. These are reviews you produced for other papers in the same run — same scale, same criteria, same format. Use `read_file` to read them in full once you have candidate filenames.
 
 Your calibration process:
 
-1. **Topic-based anchors**: Use the review finder to retrieve papers with similar topics. Note their human scores.
+1. **Retrieve past reviews**: Use `search_review` with a few short general queries (e.g. the paper's topic area) to pull a handful of past reviews. Do not try to match weakness or strength patterns — just get a sample of what you have reviewed before.
 
-2. **Quality-based anchors**: This is critical. Do NOT only search by topic. Search for papers that share similar strength/weakness patterns with the paper under review:
-   - If this paper has strong empirical results but overclaims, search for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
-   - If this paper has a novel framing but weak baselines, search for reviews mentioning "novel framing" "missing baselines" and note those scores.
+2. **Holistic comparison**: Read each retrieved past review and ask one question: **"Is the paper I am now reviewing better or worse overall than that paper?"** Do not compare point-by-point. Judge the overall package — how compelling is the contribution, how solid is the execution, how serious are the problems — and form a relative ordering.
 
-3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale:
-   - Search for reviews of papers that were scored ~7+ by humans. Read what made them strong.
-   - Search for reviews of papers that were scored ~3 or below by humans. Read what made them weak.
-   - Compare the paper under review against BOTH ends, not just the middle.
+3. **Score by relative rank**: Place this paper in the ordering. If it is clearly better than a paper you gave 6.0, it should score above 6.0. If it is clearly worse than a paper you gave 5.0, it should score below 5.0. Maintain consistent relative ordering across the run — do not compress scores into 4–6.
 
-   Examples: if reviewing a paper about privacy attacks on face recognition, search for:
-   - "privacy attack face recognition strong paper" → find high-scored papers in the same area
-   - "privacy attack face recognition weak paper" → find low-scored papers in the same area
-   - "face recognition evaluation paper high score" → broaden to related topics at the high end
-   - "privacy evaluation rejected" → find low-end anchors with similar flaws
+If no past reviews exist yet (first paper in a run), rely solely on your training knowledge of ICLR standards.
 
-   If no papers are found with the same topic, you can use more general queries. 
-
-4. **Score relative to anchors**: Your final score should be positioned relative to the retrieved examples. If retrieved papers with similar strengths got 7s from humans, and papers with similar weaknesses got 3s, use that range. Do not compress everything into 4-6.
-
-When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
-
-
-You can use read_file or summarizer to read these files. List the papers you compared and the reasoning.
+When reporting your score, list which past review files you compared against and state simply whether this paper is above, below, or between them.
 
 If the FUNDAMENTAL ISSUES was triggered on top, rate the paper low accordingly. 
 

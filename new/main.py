@@ -5,6 +5,7 @@ import json
 import random
 import re
 import logging
+import shutil
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -127,14 +128,19 @@ NOTE: This paper was extracted from PDF by an automated parser. There may be for
 
 # ── Core pipeline ────────────────────────────────────────────────────
 
-async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
+async def run_pipeline(paper_path: str, skip_scoring: bool = False, reviews_dir: str | None = None) -> dict:
     paper_path_abs = os.path.abspath(paper_path)
+    paper_filename = Path(paper_path_abs).stem + ".md"
+    if reviews_dir is None:
+        reviews_dir = str(Path(__file__).parent / "bench_reviews")
+    Path(reviews_dir).mkdir(exist_ok=True)
+
     with open(paper_path, "r") as f:
         paper_content = f.read()
     paper_content = paper_content
 
     review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
-    
+
     find_human_prompt = (
         f"Human reviews directory: {HUMAN_REVIEW_DIR}\n\n"
         f"--- PAPER CONTENT START ---\n{paper_content}\n--- PAPER CONTENT END ---\n"
@@ -171,7 +177,10 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
             f"picky — cross-check everything against the actual paper before including it."
         )
         paper_dir = str(Path(paper_path_abs).parent)
-        merged_review = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir)
+        merged_review = await run_merger_claude_sdk(
+            _MERGER_SDK_MODEL, merger_prompt, paper_dir,
+            reviews_dir=reviews_dir, paper_filename=paper_filename,
+        )
     else:
         merger_prompt = (
             f"Here is the paper being reviewed (extracted from PDF — formatting "
@@ -260,7 +269,7 @@ def match_label(match: bool | None) -> str:
     return "YES" if match else "NO"
 
 
-async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: bool, callback):
+async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: bool, callback, reviews_dir: str | None = None):
     """Run pipeline on a list of papers with CONCURRENCY concurrent tasks."""
     sem = asyncio.Semaphore(CONCURRENCY)
 
@@ -270,7 +279,7 @@ async def process_papers(papers: list[dict], papers_dir: Path, skip_scoring: boo
         print(f"\n[{i}/{len(papers)}] {paper_info.get('title', pid)} (avg={paper_info['avg_score']:.1f})")
         async with sem:
             try:
-                result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring)
+                result = await run_pipeline(str(paper_path), skip_scoring=skip_scoring, reviews_dir=reviews_dir)
             except Exception as e:
                 raise RuntimeError(f"[{pid}] pipeline failed: {e}") from e
             if result is None:
@@ -310,7 +319,12 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
         print(f"\nFound existing bench_scores.csv with {existing_count} results.")
         choice = input("  [C]ontinue (skip finished papers) or [O]verwrite? [C/o]: ").strip().lower()
         if choice in ("o", "overwrite"):
-            print("  Overwriting existing results.\n")
+            print("  Overwriting existing results.")
+            # Clear the reviews dir and its embedding DB so the first run starts fresh
+            if reviews_dir.exists():
+                shutil.rmtree(reviews_dir)
+            reviews_dir.mkdir()
+            print("  Cleared bench_reviews/.\n")
         else:
             finished = set(existing_df["paper_id"].astype(str))
             print(f"  Continuing — will skip {len(finished)} already-finished papers.\n")
@@ -349,7 +363,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
     if not samples:
         print("Nothing to run."); return
     print(f"Running {len(samples)} benchmark papers (concurrency={CONCURRENCY}) ...")
-    await process_papers(samples, papers_dir, skip_scoring=False, callback=on_complete)
+    await process_papers(samples, papers_dir, skip_scoring=False, callback=on_complete, reviews_dir=str(reviews_dir))
 
     scored = [r for r in results if r["pred_score"] != -1]
     if scored:
