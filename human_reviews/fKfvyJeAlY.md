@@ -1,0 +1,183 @@
+# LeRaC: Learning Rate Curriculum
+
+- Decision: Reject
+- Scores: 6, 5, 5, 5
+
+## Abstract
+Most curriculum learning methods require an approach to sort the data samples by difficulty, which is often cumbersome to perform. In this work, we propose a novel curriculum learning approach termed Learning Rate Curriculum (LeRaC), which leverages the use of a different learning rate for each layer of a neural network to create a data-free curriculum during the initial training epochs. More specifically, LeRaC assigns higher learning rates to neural layers closer to the input, gradually decreasing the learning rates as the layers are placed farther away from the input. The learning rates increase at various paces during the first training iterations, until they all reach the same value. From this point on, the neural model is trained as usual. This creates a model-level curriculum learning strategy that does not require sorting the examples by difficulty and is compatible with any neural network, generating higher performance levels regardless of the architecture. We conduct comprehensive experiments on 10 data sets from the computer vision (CIFAR-10, CIFAR-100, Tiny ImageNet, ImageNet-200, PASCAL VOC), language (BoolQ, QNLI, RTE) and audio (ESC-50, CREMA-D) domains, considering various convolutional (ResNet-18, Wide-ResNet-50, DenseNet-121, YOLOv5), recurrent (LSTM) and transformer (CvT, BERT, SepTr) architectures. We compare our approach with the conventional training regime, as well as with Curriculum by Smoothing (CBS), a state-of-the-art data-free curriculum learning approach. Unlike CBS, our performance improvements over the standard training regime are consistent across all data sets and models. Furthermore, we significantly surpass CBS in terms of training time (there is no additional cost over the standard training regime for LeRaC). Our code is freely available at: http//github.com/link.hidden.for.review.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+2: You are willing to defend your assessment, but it is quite likely that you did not understand the central parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper introduces a novel approach to curriculum learning in deep neural networks. Curriculum learning is a technique where the learning process is guided by the order in which training samples are presented, typically starting with easier examples and progressively moving to more difficult ones. Traditional curriculum learning methods require sorting data by difficulty, which can be cumbersome. In contrast, LeRaC proposes a data-free curriculum learning strategy that dynamically adjusts the learning rates for different layers of a neural network during initial training epochs. Specifically, it assigns higher learning rates to layers closer to the input, gradually reducing them as layers move away from the input. The learning rates converge to a uniform value, and the model is then trained as usual. This approach is tested across various domains (computer vision, language, and audio) and architectures, outperforming traditional training and a state-of-the-art data-free curriculum learning approach called Curriculum by Smoothing.
+
+### Strengths
+- This paper is written in a clear and easily comprehensible manner, making it easy for readers to follow.
+- LeRaC introduces a unique approach to curriculum learning by dynamically adjusting learning rates for different layers. This eliminates the need for sorting data by difficulty and simplifies the training process.
+
+### Weaknesses
+see Question.
+
+### Questions
+- In Figure 2, the authors present a straightforward example illustrating the relationship between shallow and deep features. This example is intuitive and easy to grasp; however, there are some points open for discussion. For instance, the statement "as the information in $x$ is lost" might not necessarily hold when utilizing random convolutional kernels or random transformations, as seen in the popular diffusion model's noise injection process. Therefore, I suggest rephrasing this part.
+
+- Regarding the example mentioned earlier, I believe the network's representation should be considered holistically. Is it meaningful to discuss the representations of individual layers separately? Will merely increasing the learning rate for shallow layer parameters lead to faster convergence of shallow network parameters? The first theorem seems insufficient to address this issue.
+
+- In Equation (9), the author mentions, "we empirically observed that an exponential scheduler is better." It would be beneficial for the author to provide an insightful explanation as to why the exponential scheduler is superior to linear or logarithmic schedulers. Are there any other potentially better scheduling methods, such as cosine learning rate variations?
+
+- The author should provide clarification on the aforementioned points. Once these issues are addressed, I will assess these clarifications in conjunction with feedback from other reviewers to determine whether I should reconsider my evaluation.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 2
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The paper proposes to gradually change learning rate (LR) for each layer of a neural network during optimization iterations. This "data-free" curriculum learning scheme is based on the noisy amplification by cascaded neural net architecture including CNN, RNN and transformers. The proposed method has been evaluated with many datasets across modalities -- images, text and audio.
+
+### Strengths
+- The proposed method is based on a good intuition of noise amplified when the layer is close to semantic information.
+- Simple idea that performs quite well.
+
+### Weaknesses
+- Marginal empirical gain. As shown in the Table 2 and 3, most of the gain over CBS, which is the direct competitors, is less than 1 or 2%.
+- Method is too simple without intuitive ground that it should work better than others. Although the analysis is intuitively sensible, the simplicity of the method brings marginal performance gain over the direct competitor CBS, even with the quite thorough ablation study with different range of values. 
+  - As authors mentioned, the empirically chosen exponential based method may not be the best choice or the intuition of noise amplification may not be a serious problem. Given the results, it is difficult to judge the main reason for the unsatisfactory performance.
+
+### Questions
+- Can you elaborate why the proposed layer-wise LR learns better than the previous work?
+- Contrast the difference of the proposed method to the existing CBS.
+- How much of empirical significance is there for choosing exponential based method?
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 3
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper proposes a learning rate curriculum (LeRaC) approach for the effective training of deep networks. Specifically, LeRaC assigns higher learning rates to neural layers closer to the inputs, gradually decreasing the learning rates as the layers are placed farther away
+from the inputs. The learning rates increase at various paces during the first training iterations, until they all reach the same value. Empirical results on top of images, language, and audio are provided. LeRaC outperforms CBS.
+
+### Strengths
+1. The proposed method is simple and easy to implement.
+2. The experiments in the paper are extensive.
+
+### Weaknesses
+1. My major concern lies on that, it is difficult to understand why LeRaC is effective. The motivation is questionable. The paper says that a random parameter initialization results in a propagation of noise. It seems that this issue can be well addressed with the widely-used standard warm-up strategy. LeRaC seems to be only an incremental contribution on top of the most common case. 
+
+2. More  theoretical analysis on the effectiveness of LeRaC will make this paper more convincing.
+
+3. The results on full-ImageNet are absent, which I think is necessary.
+
+4. The authors may consider citing [*1-*4] and comparing with them.
+
+[*1] Zhou, Tianyi, and Jeff Bilmes. "Minimax curriculum learning: Machine teaching with desirable difficulties and scheduled diversity." International conference on learning representations. 2018.
+
+[*2] Zhou, Tianyi, Shengjie Wang, and Jeffrey Bilmes. "Curriculum learning by dynamic instance hardness." Advances in Neural Information Processing Systems 33 (2020): 8602-8613.
+
+[*3] Dogan, Ürün, et al. "Label-similarity curriculum learning." Computer Vision–ECCV 2020: 16th European Conference, Glasgow, UK, August 23–28, 2020, Proceedings, Part XXIX 16. Springer International Publishing, 2020.
+
+[*4] Wang, Yulin, et al. "Efficienttrain: Exploring generalized curriculum learning for training visual backbones." Proceedings of the IEEE/CVF International Conference on Computer Vision. 2023.
+
+
+
+**Post-rebuttal**
+
+Thank you for the response from the reviewers. Although some of my concerns are solved, I'm still leaning towards rejection. However, I'm happy to raise my score to "5: marginally below the acceptance threshold".
+
+My major concern that remains unsolved is that, personally, I think a more comprehensive evaluation on full-ImageNet is necessary for the current deep learning community to accept such an "empirical-oriented"  method.
+
+### Questions
+See weaknesses.
+
+### Soundness
+3 good
+
+### Presentation
+2 fair
+
+### Contribution
+1 poor
+
+---
+
+## Human Reviewer 4
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+A per-layer learning rate schedule that assigns a higher learning rate for initial layers in the initial epochs then equalises the learning rate among all layers throughout the remaining learning process.
+
+### Strengths
+- Formulating Curriculum Learning as a learning rate scheduling problem is not a contribution of this paper but the exposition provided here presents a good argument for this.
+- It is empirically shown that LeRaC achieves better performance than baselines over a wide range of architectures and tasks.
+- The paper was clear and easy to follow albeit attempted to over-complicate matters in certain areas (e.g., the first 2-3 paragraphs of Section 3).
+
+### Weaknesses
+- While the experiments focus on architectures and tasks and some ablation studies, no analysis is provided to empirically demonstrate the claims in the paper. For example, no learning curves were presented in the paper (some learning curves were presented in the supplementary material but only compared to CBS) and similarly, no activation maps (some presented in the supplementary material but only compared to conventional training). A convincing argument must be presented that does not only focus on the final performance but demonstrates properties of the learning process compared against a number of learning rates, schedules, baselines.
+- The interplay between this learning rate scheduler and initialisation/optimisers has not been studied.
+
+### Questions
+- Can the improvement in learning dynamics be demonstrated empirically in a wide variety of settings as critiqued above?
+- How does LeRaC interface with different initialisers/optimisers?
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+2 fair

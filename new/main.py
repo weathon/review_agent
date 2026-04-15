@@ -18,7 +18,7 @@ dotenv.load_dotenv()
 import os
 os.environ["OPENAI_DEFAULT_MODEL"] = "z-ai/glm-5.1"
 HARSH_MODEL = "gpt-5.4"
-MERGER_MODEL = "claude-sonnet-4.6"
+MERGER_MODEL = "claude_sdk:claude-sonnet-4.6"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_export_api_key
 
@@ -84,7 +84,7 @@ def load_prompts(path):
 # ── Agent definitions ────────────────────────────────────────────────
 summarizer = Agent(
     name="Summarizer",
-    instructions="You are a subagent that summarizes files or answers questions about them. Read the file using read_file_full, then respond. You are only able to do specific files, deny other requests.",
+    instructions="You are a subagent that summarizes files or answers questions about them. Read the file using read_file_full, then respond. You are only able to do specific files, deny other requests. If there is no file path given, return the error message.",
     tools=[read_file_full],
 )
 
@@ -94,10 +94,17 @@ _tool_agents = [read_file, summarizer.as_tool(
 
 harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=HARSH_MODEL)
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"))
-merger = Agent(name="Merger", instructions=load_prompts("merger.md"), model=MERGER_MODEL, tools=_tool_agents)
+human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents)
+
+
+if MERGER_MODEL.startswith("claude_sdk:"):
+    merger = None  # Claude SDK merger — created per-call in run_pipeline
+    _MERGER_SDK_MODEL = MERGER_MODEL[len("claude_sdk:"):]
+else:
+    merger = Agent(name="Merger", instructions=load_prompts("merger.md"), model=MERGER_MODEL, tools=_tool_agents)
+    _MERGER_SDK_MODEL = None
 spark = Agent(name="Spark", instructions=load_prompts("spark_finder.md"))
 
-human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents)
 # scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents, model=SCORER_MODEL)
 
 
@@ -143,18 +150,33 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False) -> dict:
             return None
 
     labeled = [f"### {a.name}\n{out}" for (a, _), out in zip(agents_and_prompts, responses)]
-    merger_prompt = (
-        f"Here is the paper being reviewed (extracted from PDF — formatting "
-        f"artifacts are parser issues, not paper problems):\n\n"
-        f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
-        f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
-        f"Now produce the final consolidated review following your instructions. "
-        f"Remember: many of the harsh critic's points may be nonsensical or overly "
-        f"picky — cross-check everything against the actual paper before including it."
-    )
+
 
     print("  Phase 2: Merger ...")
-    merged_review = await run_agent_with_retry(merger, merger_prompt) 
+    if _MERGER_SDK_MODEL is not None:
+        from claude_merger import run_merger_claude_sdk
+        merger_prompt = (
+            f"Here is the paper being reviewed (extracted from PDF — formatting "
+            f"artifacts are parser issues, not paper problems):\n\n"
+            f"Paper path: {paper_path_abs}, read it in chunks.\n\n"
+            f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
+            f"Now produce the final consolidated review following your instructions. "
+            f"Remember: many of the harsh critic's points may be nonsensical or overly "
+            f"picky — cross-check everything against the actual paper before including it."
+        )
+        paper_dir = str(Path(paper_path_abs).parent)
+        merged_review = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir)
+    else:
+        merger_prompt = (
+            f"Here is the paper being reviewed (extracted from PDF — formatting "
+            f"artifacts are parser issues, not paper problems):\n\n"
+            f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
+            f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
+            f"Now produce the final consolidated review following your instructions. "
+            f"Remember: many of the harsh critic's points may be nonsensical or overly "
+            f"picky — cross-check everything against the actual paper before including it."
+        )
+        merged_review = await run_agent_with_retry(merger, merger_prompt)
     scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
     decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"
 

@@ -1,0 +1,189 @@
+# Invariant Attention: Provable Clustering Under Transformations
+
+- Decision: Reject
+- Scores: 6, 3, 3, 5
+
+## Abstract
+Attention mechanisms play a crucial role in state-of-the-art vision architectures, enabling them to rapidly identify relationships between distant image patches. Conventional attention mechanisms do not incorporate other structural properties of images, such as invariance to geometric transformations, instead learning these properties from data. In this paper, we introduce a novel mechanism, Invariant Attention, which, like standard attention, captures image similarity, but with the additional guarantee of being agnostic to geometric transformations. We provide theoretical assurance and empirical verification that invariant attention is far more successful than standard kernel attention on multi-class, transformed vision data, and illustrate its potential to correctly cluster transformed data with intra-class variation.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The paper presents invariant attention that can cluster images invariant to geometric transformations. It introduces an invariant kernel that computes the maximum similarity between two images after optimizing over transformations. This allows computing meaningful attention weights between transformed images. In addition, the paper presents a theoretical foundation for the approach, demonstrating its efficacy through some simple experiments.
+
+### Strengths
+1. A new attention mechanism that incorporates invariance properties.
+2. The paper provides a solid theoretical foundation for the properties of invariant attention with proof.
+3. While the concept of invariance is not a new idea, it remains crucial for the transformer architecture.
+
+### Weaknesses
+1. While the paper presents mathematical formulations specific to its method, it's not immediately clear how this approach can be adapted or generalized to ViT or other transformer architectures.
+2. The proposed method is still based on dynamic kernels [1, 2, 3]. Why the kernels based on averaging are better than previous attempts?
+3. Current empirical validation is limited - more quantitative experiments ($e.g.,$ overall accuracy over MNIST) would strengthen the claims. In addition,  more qualitative results on complex image datasets ($e.g.,$ CIFAR100) or the impact of downstream tasks would be useful.
+4. (Minor) There are numerous instances of "??", likely due to the separate submission of the main text and supplementary material. Also, there are some typos ($e.g.,$ in theorem 4.1, " invariant attention"). The authors should proofread carefully.
+
+
+[1] Spatial Transformer Networks. 
+
+[2] LocalViT: Bringing Locality to Vision Transformers.
+
+[3] Learning from Few Samples: Transformation-Invariant SVMs with Composition and Locality at Multiple Scales.
+
+### Questions
+Please see the weaknesses.
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 2
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+The paper proposes a method for calculating attention between images (or image patches), which is invariant to some pre-defined set of transformations. The attention mechanism itself is formulated as kernel attention, and the kernel is constructed to be invariant to a set of transformations. The paper states that iteratively applying their attention mechanism clusters the provided samples into their invariant means, and provides some theoretical guarantees of convergence of this procedure. Authors claim that their findings could help build novel, data-efficient, invariant attention mechanisms implemented into modern vision Transformer networks.
+
+### Strengths
+The proposed method has a nice clustering quality, in which it tends to cluster similar images together. This feature is proved theoretically and empirically. However, the proof is questionable.
+
+### Weaknesses
+The paper is very poorly written and looks raw. Apart from the large number of typos, and repetitions (which I will list separately), there are some major issues with the statements themselves.
+
+1. The problem of the paper is not clear to me. What are the problems where the Invariant Attention is needed? Will it increase the overall data efficiency of ViT-type models? How is the clustering property helpful in this case?
+2. There are no proofs of the theorems and claims, and not even a sketch of the proof or an idea is provided. Though the authors claim to put it in the appendix, it is not possible right now to review the correctness. The definition of “infimal convex combination reach”, which is an important part of the theory, is not provided even on an intuitive level.
+3. At the same time, there is a lot of redundancy. Some almost self-evident claims are explained in long, like the fact that the invariant mean is indeed invariant under image transformations, which is evident from its close form. 
+4. It is not clearly stated which transformations are admissible. Authors claim that their method works for any transformation set, but provide theoretical guarantees only in the case of the T=SE(2). At the same time, they state that Invariant Attention enforces invariance under unknown transformations of the domain, which is clearly misleading, and the transformation set should be known beforehand to construct the kernel.
+5. The optimization procedure for finding invariant mean is not fully described. How are the transformation vectors \tau_i parametrized in each experiment? Exactly, what parameters are we optimizing, and how? It would be nice to have a clearly described algorithm in the form of pseudo-code or something like that. Also, no information about the time complexity or needed resources is provided in the experiment part.
+6. Not a learnable algorithm. Though the authors claim that they are currently working at implementing learnable weights inside Invariant Attention, its real applicability to modern visual transformer models in the presented form is questionable. It requires running an optimization procedure for each attention head and each pair of image patches only to calculate the kernel weights. This is also dependent on the dimension and complexity of the transformation set and will require training separate models for different symmetry groups. The issue is not addressed in the paper.
+7. Novelty. The kernel attention mechanism was earlier introduced by (Tsai et. al., 2019), and the kernel used in the calculations was described by (Liu et.al, 2021), so the only novel part is in the theoretical results of the paper, which are not significant enough. It is no wonder that we will identify clusters in the data when the data itself is composed of the groups of samples varied through transformations, and we seek to find these exact transformations to match two samples. 
+
+The typos:
+
+1. Page 5: “(distance given by (??))”, “This is described in detail in the appendix section ??”, “As illustrated in Figure ??, we have that”. Also, $\phi(\mu)$ is not defined beforehand here.
+2. Page 6: “The definitions and its motivations are found in appendix section ??”, “and is found in Appendix Section ??”
+3. The $\beta$ in theorem 4.1 is not defined.
+4. Page 7: “We see that at the end of 50 iterations, we have an meaningful invariant mean!”
+5. Page 8: The subtitle “Figure 4: Invariant weights and invariant means of” is not complete. Also, the same for Figure 5.
+6. Page 9: there are 2 almost exact paragraphs on the Invariant Point Attention
+
+### Questions
+1. Could you describe possible applications of the Invariant Attention for real-world data?
+2. Your results (Theorem 3.1) are formulated for SE(2) explicitly. How is that transferable to other groups of transformations?
+3. What kind of structural properties are preserved or exploited by Invariant Attention? How will it help in prediction? May invariance to transformations actually harm the prediction quality, when the focus is on orientation, for example? Like classifying the right arrow and left arrow, for example.
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 3
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The paper proposes an addition to self-attention that is invariant to various transformations. Mainly, while self-attention is based on the similarity between two entities, the proposed method is based on the maximum similarity between transformed samples. Essentially, the framework proposes replacing $k(x,y)$ with $max_{T_1,T_2} k(T_1(x),T_2(y))$. This way, any transformation $T$ applied to samples $x,y$ does not influence the similarity. Additional non-linearities or learnable parameters are ignored. Two results are proved: 1. The proposed invariant attention results in a unique solution (up to transformation) 2. The procedure converges.
+
+### Strengths
+Strong Points:
+
+- The invariance of machine learning models is an important topic, useful for generalization and sample efficiency.
+- The method seems technically correct.
+
+### Weaknesses
+Weak Points:
+
+- There are no details on how to obtain the optimal transformations from 2.6. How to obtain these transformations is crucial. Without an efficient way to obtain them, the proposed method cannot be applied in practice.
+
+- The method does not involve actual feature learning. It's hard to argue the importance of the method for machine learning methods when there is no actual representation learning happening.
+
+- The experiments are extremely simple: 6 transformations of the same image or 10 MNIST samples. These might be good for a first step to see that the method/implementation is sound, but more validations are needed for a novel machine learning method.
+
+- “Invariant Attention, enforces invariance under unknown transformations of the domain by optimizing over these transformations” How general are the transformations that Invarian Attention can optimize over? What kind of transformations can be optimized in practice?
+
+### Questions
+Typo? It seems like equation 3.1 needs two indices, one for sample $v_i$ and one for transformation $\tau_j$. Also, the number of samples and number of transformations should be different.
+
+Minor: There are some broken references. E.g “distance given by (??))”
+
+### Soundness
+2 fair
+
+### Presentation
+1 poor
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 4
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper presents a new attention mechanism called invariant attention. The paper shows that the proposed attention has theoretical guarantees and can be applied to solve image clustering problems.
+
+### Strengths
+-This paper aims to improve the attention mechanism, which is the foundation in the widely used transformer architecture.
+
+-This paper provides extensive theoretical analysis for the proposed attention mechanism.
+
+### Weaknesses
+-The experiments are not sufficient to support the claims. First, there is no comparison with previous works in the experimental section. Second, there is no quantitative result. Without those, I cannot judge the if the proposed technic is useful or not and the significance of the proposed method.
+
+### Questions
+-I cannot find the theoretical proof that shows that "the Invariant Attention is far more successful than standard kernel attention". I might miss this part because I am not an expert in theoretical ML.
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair

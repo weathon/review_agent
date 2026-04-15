@@ -1,0 +1,180 @@
+# TransNeXt: Aggregating Diverse Attentions in One Vision Model
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 5, 5, 5, 3
+
+## Abstract
+In the design of previous Vision Transformers (ViTs), different token mixers were often alternately stacked to balance the visual model’s aggregation of global and local information, or to combine the characteristics of convolution with attention mechanism. In this paper, we propose Aggregated Attention, which is a biomimetic design-based token mixer enabling each token to have fine-grained attention to its nearest neighbor features and coarse-grained attention to global features in terms of spatial information aggregation. Furthermore, we incorporate learnable tokens that interact with conventional queries and keys, which further diversifies the generation of affinity matrices beyond merely relying on the similarity between queries and keys. All of these improvements can be achieved within a single attention layer, eliminating the need for alternately stacking different token mixers.
+Additionally, we propose Convolutional GLU, a channel mixer that bridges the gap between GLU and SE mechanism, which empowers each token to have channel attention based on its nearest neighbor image features, enhancing local modeling capability and model robustness. We combine aggregated attention and convolutional GLU to create a new visual backbone called TransNeXt. Extensive experiments demonstrate that our TransNeXt achieves state-of-the-art performance across multiple model sizes. At a resolution of $224^2$, TransNeXt-Tiny attains an ImageNet accuracy of 84.0\%, surpassing ConvNeXt-B with 69\% fewer parameters. Our TransNeXt-Base achieves an ImageNet accuracy of 86.2\% and an ImageNet-A accuracy of 61.6\% at a resolution of $384^2$, a COCO object detection mAP of 57.1, and an ADE20K semantic segmentation mIoU of 54.7.
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+5: You are absolutely certain about your assessment. You are very familiar with the related work and checked the math/other details carefully.
+
+### Summary
+This paper presents TransNeXt, a novel biomimetic design-based token mixer that combines fine-grained attention to neighboring tokens and coarse-grained attention to global features, taking into account spatial information aggregation. The proposed method incorporates learnable tokens that interact with conventional queries and keys, enabling the generation of affinity matrices that go beyond relying solely on the similarity between queries and keys. Additionally, the paper introduces Convolutional GLU, a channel mixer that bridges the gap between GLU and SE mechanisms, facilitating channel attention based on neighboring features.
+
+To evaluate the effectiveness of the proposed method, experiments were conducted on various benchmark datasets. These include ImageNet for image classification tasks, COCO for object detection tasks, and ADE20K for semantic segmentation tasks. The results of these experiments demonstrate the efficacy of the proposed method in achieving state-of-the-art performance across these different tasks.
+
+### Strengths
+1. The paper is commendably well-written, effectively presenting its ideas in a clear and coherent manner. The proposed framework is explained in a manner that facilitates easy comprehension for readers.
+
+2. The incorporation of pixel-focused attention, which encompasses both fine-grained local attention and coarse-grained global attention while engaging in competition, is a notable aspect of the research. Furthermore, the integration of query embedding and positional attention mechanisms within the pixel-focused attention framework enhances the generation of affinity matrices. This diversification of the affinity matrix generation process moves beyond a sole reliance on query-key similarity, enabling the aggregation of multiple attention mechanisms within a single attention layer.
+
+3. An additional contribution of the paper is the introduction of Convolutional GLU as a novel channel mixer. This component bridges the gap between GLU and SE mechanisms, facilitating channel attention based on neighboring features. The incorporation of Convolutional GLU adds a valuable element to the proposed method.
+
+4. The effectiveness of the proposed method is demonstrated through comprehensive experiments conducted on various benchmarks, including image classification, object detection, and semantic segmentation tasks. The obtained results showcase the state-of-the-art performance achieved across these diverse tasks, further validating the efficacy of the proposed approach.
+
+### Weaknesses
+1. It is important to note that the combination of local attention and global attention mechanisms, as well as the incorporation of competition between different grained attention, have been explored in previous works on architecture design. These mechanisms are not novel and have been utilized in the context of related research. It is crucial to acknowledge the existing literature and the contributions made by previous studies in these areas.
+
+[1] Jiang et al.Dual Path Transformer with Partition Attention, in Arxiv 2023.
+
+2. While providing the theoretical complexity of the proposed Aggregated Attention is informative, it is indeed crucial to consider latency comparisons as well. Latency does not always correlate directly with model parameters and FLOPs (floating-point operations per second). Therefore, it is essential to conduct comparisons with different methods on the same device to assess the real-world performance in terms of latency. This empirical evaluation would provide valuable insights into the practical efficiency of the proposed method and enable a more comprehensive assessment of its performance.
+
+3. While this paper offers an in-depth examination of each element within the Aggregated Attention model, it appears to primarily combine existing technologies to enhance performance. Could you kindly summarize the three principal components of the proposed Aggregated Attention model?
+
+### Questions
+The running speed of the proposed method in terms of efficiency is an important aspect to consider. It would be valuable to compare the efficiency of the proposed method with related works to assess its performance in this regard. By conducting a comparative analysis, we can gain insights into how the proposed method fares in terms of running speed and efficiency when compared to existing approaches in the field.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 2
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+5: You are absolutely certain about your assessment. You are very familiar with the related work and checked the math/other details carefully.
+
+### Summary
+In this paper, the authors introduce modifications to the Vision Transformers (ViTs) design, chiefly, the Aggregated Attention mechanism and the Convolutional Gated Linear Unit (GLU). The Aggregated Attention is biomimetic and facilitates each token to attend to both nearest neighbor features and global features finely and coarsely, respectively. It harmoniously integrates multiple attention mechanisms within a single layer, eradicating the necessity for alternating stacking of various token mixers. This novel attention mechanism also imbues the model with the richness of pixel-focused attention and relative positional bias, improving the models' ability to aggregate essential spatial information and enhance their translational equivariance. The paper also proposes a Convolutional GLU, a novel channel mixer adept for image-related tasks, which bridges the gap between the conventional GLU and Squeeze-and-Excitation (SE) mechanisms. It leverages local feature-based channel attention, bolstering the model's robustness and local modeling capabilities. This architecture exhibits commendable performance, standing at the pinnacle across multiple model sizes.
+
+### Strengths
+The proposed Length-scaled cosine attention improves existing attention mechanisms by enhancing extrapolation capabilities, enabling models to adeptly manage and interpret multi-scale image inputs, fostering better adaptability and effectiveness in processing diverse image sizes and scales.
+
+### Weaknesses
+1. Novelty is limited as the method proposed, where queries attend to both fine-grained and coarse-grained information simultaneously, has been extensively studied previously [1,2].
+2. More ablation studies are needed. In Table 4, step 5, the paper only reports performance gains of PFA over SRA. Since PFA is central to this paper, it would be insightful to see if replacing SRA with Cross-Shaped Window Self-Attention from CSWin[3], Focal Self-attention[1], or Shunted Attention[4] would yield higher performance.
+
+[1] Yang, J., Li, C., Zhang, P., Dai, X., Xiao, B., Yuan, L., & Gao, J. (2021). Focal attention for long-range interactions in vision transformers. Advances in Neural Information Processing Systems, 34, 30008-30022.
+[2] Chen, M., Lin, M., Li, K., Shen, Y., Wu, Y., Chao, F., & Ji, R. (2023, June). Cf-vit: A general coarse-to-fine method for vision transformer. In Proceedings of the AAAI Conference on Artificial Intelligence (Vol. 37, No. 6, pp. 7042-7052). 
+[3] Dong, X., Bao, J., Chen, D., Zhang, W., Yu, N., Yuan, L., ... & Guo, B. (2022). Cswin transformer: A general vision transformer backbone with cross-shaped windows. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (pp. 12124-12134).
+[4] Ren, S., Zhou, D., He, S., Feng, J., & Wang, X. (2022). Shunted self-attention via multi-scale token aggregation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (pp. 10853-10862).
+
+### Questions
+Please refer weakness
+
+### Soundness
+3 good
+
+### Presentation
+4 excellent
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 3
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The author introduces a novel attention mechanism, pixel-focused attention (PFA), inspired by biomimetic design principles. This mechanism effectively captures both fine-grained local and coarse-grained global features, eliminating the need for alternately stacking token mixers or incorporating convolution in attention operations, as commonly done in existing methods. Building upon PFA, the author introduces enhanced modules, such as Conv-GLU, Learnable LKV, QLV, and others, to establish the new ViT backbone, TransNeXt, tailored for visual tasks. The effectiveness of TransNeXt is substantiated through comprehensive experiments.
+
+### Strengths
+- The paper is technically sound;
+- The representation of the paper is good;
+- The experiments conducted are comprehensive and fully validate the effectiveness of the proposed method.
+
+### Weaknesses
+My primary reservation regarding the acceptance of this paper pertains to its limited novelty. As depicted in Table 11, many of the modules or concepts presented in the paper have previously been explored in existing research. For instance, the approach to fine-grained local features and coarse-grained global features rooted in biological visual design has been introduced by Focal-Transformer. The non-QKV strategy has already been employed in works like Involution and VOLO. Additionally, the ConvGLU module seems to be a marginal enhancement to the existing blocks illustrated in Figure 3. While I recognize that there might be subtle, optimized implementation details unique to this paper, the overarching narrative gives the impression that TransNeXt is primarily an assembly of modules sourced from other research papers.
+
+### Questions
+See weakness part.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 4
+
+### Rating
+3: reject, not good enough
+
+### Rating Number
+3
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+This paper proposes a novel attention mechanism, several new components, and a transformer architecture. The motivation for the attention mechanism is combining global perception with local recognition. Reasonable results are reported.
+
+### Strengths
+1. Some of the proposed components are novel, including PFA and Activate and Pool.
+
+2. Though some other proposed structures are nothing interesting, they work well (e.g., ConvGLU).
+
+### Weaknesses
+1. Some claims are inappropriate or wrong
+
+1.1 [it attains a box mAP of 55.1 using the DINO detection head, outperforming ConvNeXt-L ...] They are not comparable. ConvNeXt used UPerNet.
+
+1.2 [This is the first token mixer that simultaneously satisfies fine-grained perception near the focus, coarse-grained global perception at a distance, and pixel-wise translational equivariance] Very large (larger than 51x51) and sparse convolution is exactly a token mixer with such properties so it is inappropriate to claim the proposed token mixer as the first. The magnitudes of outer parameters of a very large convolution kernel are small and sparse while the central parameters are dense. Please refer to the paper of [SLaK].
+
+1.3 [More elegant design] Compared to what? Is adding a depthwise 3x3 elegant?
+
+2. I seriously doubt the efficiency of the proposed structure. It is too complicated and the implementation of PFA may require naive indexing operations, which are extremely inefficient. The actual throughput and latency test results and the comparisons with other competitors are missing, which is unacceptable.
+
+3. I admit PFA is novel but do not take Aggregated Attention as a significant contribution since Aggregated Attention = PFA + query embedding + positional attention, and the latter two are common practices.
+
+In summary, I recommend rejecting this paper because it reads like yet another customized attention (which is neither simple nor efficient) plus some common practices borrowed from other works. And though the results on ImageNet-1K look promising, no results with larger models nor bigger data are reported.
+
+### Questions
+It is claimed that the proposed pixel-focused attention "possesses visual priors comparable to convolution." So why not just use convolution? Discussions and comparisons are missing.
+
+### Soundness
+3 good
+
+### Presentation
+3 good
+
+### Contribution
+1 poor

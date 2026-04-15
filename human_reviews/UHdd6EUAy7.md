@@ -1,0 +1,209 @@
+# Noise-Aware Algorithm for Heterogeneous Differentially Private Federated Learning
+
+- Decision: Withdrawn (Treated as Reject)
+- Scores: 8, 6, 5, 5
+
+## Abstract
+Federated Learning (FL) is a useful paradigm for learning models from the data distributed among some clients. High utility and rigorous data privacy guaranties are among the main goals of an FL system. Previous works have tried to achieve the latter by ensuring differential privacy (DP) while performing federated training. In real systems, there is often heterogeneity in the privacy requirements of various
+clients, and the existing DPFL works either assume uniform requirements or propose methods relying on a trusted server. Furthermore, in real FL systems, there is also heterogeneity in memory/computing power across clients’ devices, which has not been addressed in existing DPFL algorithms. Having these two sources of heterogeneity, straightforward solutions, e.g., meeting the privacy requirements of the most privacy-sensitive client or removing the clients with low memory budgets will lead to lower utility and fairness problems, due to high DP noise and/or data loss. In this work, we propose Robust-HDP to achieve high utility in the presence of an untrusted server, while addressing both the privacy and memory heterogeneity across clients. Our main idea is to efficiently estimate the noise in each client model update and assign their aggregation weights accordingly. Noise-aware aggregation of Robust-HDP without sharing clients privacy preferences with the server, results in the improvement of utility, privacy and convergence speed, while meeting the heterogeneous privacy/memory requirements of all clients. Extensive experimental results on multiple benchmark datasets and our convergence analysis confirm the effectiveness of Robust-HDP in improving system utility and convergence speed
+
+## Human Reviews
+
+## Human Reviewer 1
+
+### Rating
+8: accept, good paper
+
+### Rating Number
+8
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper proposes a novel aggregation method, Robust-HDP, for local differential privacy (LDP) in federated learning (FL) to attain better utility and convergence with heterogeneous clients. More specifically, Robust-HDP can handle different privacy requirements on different clients and assign the best aggregation weights for clients with different noisy levels of LDP. Theoretical and empirical results verify the effectiveness of Robust-HDP.
+
+### Strengths
+This work tries to address a practical and important issue in LDP that heterogeneous hardware and privacy requirements may significantly impact the utility and convergence of federated learning. The proposed Robust-HDP can handle the different noise levels in the uploaded models from different clients and assign the optimal weights to these models. The advantages are:
+
+1.	Robust-HDP can evaluate the noise level by robust PCA without accessing the privacy requirements of each client, which leads to better privacy protection. The experimental results show that the evaluation method is accurate.
+
+2.	Privacy and convergence are guaranteed by the theoretical analysis, while extensive experiments reveal the effectiveness of Robust-HDP.
+
+3.	The paper is organized in a logical way, by justifying each design in the methodology with both theoretical analysis and empirical evaluation. This makes the paper comprehensible and solid.
+
+### Weaknesses
+Some possible points to further improve this paper are:
+
+1.	A client with a larger dataset will have larger $E_i$ and thus higher noise. In this case, this client may be assigned a smaller weight $w_i$, which may violate the fairness requirements and lead to a biased global model. Though this paper is mainly focusing on privacy, fairness issues can be discussed.
+
+2.	The experimental results shown in the body part are mainly on MNIST and FMNIST. Since CIFAR10 is more difficult and closer to a realistic setting, it would be preferable to show the ablation study results on CIFAR10 in the body. Also, the results of CIFAR10 seem to be lost in the Appendix.
+
+### Questions
+1.	I do not find how the data heterogeneity is simulated in the experiments. Could you provide more information about this part?
+
+2.	Since the server can find the noise added to each local model update in $S$, the server can eliminate the noise from the model and get the noise-free results of the local model update. Does it violate the privacy requirements in LDP?
+
+### Soundness
+4 excellent
+
+### Presentation
+4 excellent
+
+### Contribution
+4 excellent
+
+---
+
+## Human Reviewer 2
+
+### Rating
+6: marginally above the acceptance threshold
+
+### Rating Number
+6
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper is about using DP in conjunction with FL (DPFL). The key insight is that if we heterogeneity in DP (via different privacy requirements) and heterogeneity in FL (with different types of devices, with different amounts of memory), approaches that deal with only one of these types of heterogeneity are sub-optimal when both occur simultaneously. 
+
+This paper introduces a new algorithm that considers both of these concerns simultaneously, using a robust PCA like approach.
+
+### Strengths
+1. Identifies a problem that is important to solve.
+
+2. Presents an interesting solution
+
+3. The simulation results are convincing, albeit only for small models.
+
+### Weaknesses
+1. Presentation is poor, with quite a few formatting errors --- please address these.
+
+2. I don't really see anything too meaningful in the theoretical results. The idea that the procedure converges is good, but the result is too much of a mess to really interpret. Can this be cleaned up?
+
+3. There are no simulation results where the two types of heterogeneity are homogeneous. I would like to see these, and see if your algorithm is outperformed in these cases
+
+4. Simulations are on MNIST, CFAR10 size datasets/models. Time and time again, we have seen that insights at this scale are not generalizable. I would like to see at least one example on a bigger model, even if it is just fine tuning.
+
+### Questions
+1. An interesting question is incentives. Does your approach lead users to lie about their memory constraints to get free extra privacy? It seems to me that this might be the case. Some suggested references for this include 
+
+[1] Fallah, Alireza, et al. "Optimal and differentially private data acquisition: Central and local mechanisms." Operations Research (2023).
+
+[2] Donahue, Kate, and Jon Kleinberg. "Model-sharing games: Analyzing federated learning under voluntary participation." Proceedings of the AAAI Conference on Artificial Intelligence. Vol. 35. No. 6. 2021.
+
+[3] Kang, Justin, Ramtin Pedarsani, and Kannan Ramchandran. "The Fair Value of Data Under Heterogeneous Privacy Constraints." arXiv preprint arXiv:2301.13336 (2023).
+
+[4] Karimireddy, Sai Praneeth, Wenshuo Guo, and Michael I. Jordan. "Mechanisms that incentivize data sharing in federated learning." arXiv preprint arXiv:2207.04557 (2022).
+
+I would also like to see some additional simulations:
+
+2. Simulations where $\epsilon_i$ and $b_i$ are the same for all $i$, to see if existing approaches win, and explain why
+
+3. Larger scale models in simulations
+
+### Soundness
+3 good
+
+### Presentation
+2 fair
+
+### Contribution
+3 good
+
+---
+
+## Human Reviewer 3
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+
+### Summary
+This paper studies federated learning with differential privacy guarantees. In particular, it focuses on the challenging problem where each client has different privacy budget and they may not want to share this information. The Robust-HDP algorithm is proposed, which features robust PCA in the aggregation step. Both theoretical and empirical evidence are provided.
+
+### Strengths
+The problem under consideration is of great importance and well motivated in the paper. The writing is clear and empirical results are promising.
+
+### Weaknesses
+In my view, the main novelty of this paper is the use of RPCA in the aggregation step. Its main purpose is to allow the (untrusted) server to estimate the optimal weights without the knowledge of $(\epsilon_i,\delta_i)$. However, I have a few concerns: 
+
+1. The result stated in Lemma 1 seems to be independent of the use of RPCA. The bound in Lemma 1 only depends on $r$ and $\alpha_j$. Does the use of RPCA lead to explicit forms of these parameters? 
+2. I can understand that the matrix $M$ can be deposed into a low rank signal component $L$ and a noise component $S$, but why should one believes that $S$ is sparse?
+3. The authors also mention that $\sigma_j^2 \gg 1$. Could the author further clarify this point? I don't quite understand the sentence in the parentheses "it is the noise power..." and the terms in (3) and (5) both look like $o(1)$ to me, at least when $N_i$ is large.
+
+### Questions
+In addtion to the above, I believe a definition of Var is needed as I don't see how it maps from a vector to a scalar (e.g.\ in (3) and (5)).
+
+### Soundness
+2 fair
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair
+
+---
+
+## Human Reviewer 4
+
+### Rating
+5: marginally below the acceptance threshold
+
+### Rating Number
+5
+
+### Confidence
+4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+
+### Summary
+The paper proposes a method for weighting client updates in differentially private (DP) federated learning (FL), where the clients can have differing local DP guarantees. The main idea is to have the server estimate the total noise level of each client update via robust PCA, and weight the clients in federated averaging accordingly, giving more weight to clients with less noisy updates. The authors then show experimentally that their weighting method improves model utility compared to existing alternatives in the presence of heterogeneous noise levels on the clients (differing DP guarantees, different subsampling fractions).
+
+### Strengths
+* While there are existing works proposing to weight client updates according to heterogeneous privacy preferences, using estimated noise values directly instead of e.g. simply epsilon values seems like a good idea.
+
+* The authors show convergence results under some assumptions.
+
+* The paper is mostly fairly easy to read.
+
+* An effective way for optimising weights in fedavg to improve utility is an important research direction.
+
+### Weaknesses
+* As the authors note, as the proposed method involves the server running robust PCA on the model updates, it can only scale via approximating the proposed method. It is not clear from the theory or from the provided empirical results how feasible the approximation approach actually is (in terms of approximation quality vs compute).
+
+* E.g. end of Sec.3.2: having the clients keep their noise addison mechanisms as well as epsilon budget secret (which is one of the main assumptions used to motivate the mechanism-oblivious noise estimation method) is very much not standard in DP. I do not find the argument all that convincing: since the standard DP guarantees assume that the privacy budget is open information, ideally I would very much think that a rational client would simply add enough noise to be comfortable with the amount of information it is sharing, instead of using less noise than they are actually okay with and trying to keep the privacy budget secret to get some unquantifiable amount of extra privacy.
+
+* Parts of the presented theory, e.g., long analysis of the connection between noise level and batch size seem quite disconnected from the actually proposed method: as far as I see, using robust PCA and then weight the updates according to the estimated noise level does not actually rely on the batch size analysis in any significant way beyond getting some motivation for having differing noise levels on the clients.
+
+### Questions
+1) Sec.1, : on clients having to use small batch size due to memory constraints: I would think that using simple grad accumulation alleviates the memory problem, and from Fig1 one could think that quite modest increase in batch sizes suffice to reduce the noise level significantly. Is there some specific reason why this would not work for the case you consider? Somehow framing the discussion around client memory limitations seems a bit weird.
+
+2) Sec.3.3: "all the clients are training the same shared model on more or less similar data distributions". How sensitive the rank of M is for client heterogeneity?
+
+
+3) In eq.3: any reasoning about when the final approximation is good?
+
+4) Please mention the neighbourhood relation explicitly in defining DP.
+
+#### Minor comments/typos etc (no need to comment)
+
+* Sec.4.2, RQ1; Fig.2 caption have some broken references.
+
+* Eq.(3): is Var element-wise variance? Please mention to avoid some confusion, also the notation changes somewhat confusingly between text and appendix, e.q. p vs d for dimensionality
+
+### Soundness
+3 good
+
+### Presentation
+2 fair
+
+### Contribution
+2 fair

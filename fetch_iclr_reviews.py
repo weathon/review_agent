@@ -34,7 +34,7 @@ def main():
     existing_papers_dir = Path(__file__).parent / "iclr2025" / "papers"
     balanced = "--balanced" in sys.argv
     seed = 42
-    n_samples = 7000
+    n_samples = None
 
     if "--year" in sys.argv:
         year_index = sys.argv.index("--year")
