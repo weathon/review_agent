@@ -103,18 +103,44 @@ def paired_bootstrap_pvalue(values):
     return float(min(1.0, 2 * min(non_positive, non_negative)))
 
 
-def ai_vs_one_vs_rest(df, gt_score_cols, confidence=0.95, n_boot=5000, seed=0):
-    """Compare AI vs human one-vs-rest with paired paper-level bootstrap."""
-    pred = df["pred_score"].to_numpy(dtype=float)
-    gt_avg = df["gt_avg_score"].to_numpy(dtype=float)
+def build_one_vs_rest_arrays_by_paper(df, gt_score_cols):
+    pred = []
+    gt_avg = []
+    rest_means = []
+    heldout_scores = []
 
-    one_vs_rest = one_vs_rest_baseline(df, gt_score_cols)
-    if one_vs_rest is None:
+    for _, row in df.iterrows():
+        human = np.asarray([float(row[c]) for c in gt_score_cols if pd.notna(row[c])], dtype=float)
+        if len(human) < 2:
+            continue
+        pred.append(float(row["pred_score"]))
+        gt_avg.append(float(row["gt_avg_score"]))
+        rest_means.append(np.asarray([(human.sum() - score) / (len(human) - 1) for score in human], dtype=float))
+        heldout_scores.append(human.copy())
+
+    if len(pred) < 2:
         return None
 
-    rest_means = np.asarray(one_vs_rest["rest_means"], dtype=float)
-    heldout_scores = np.asarray(one_vs_rest["heldout_scores"], dtype=float)
-    n_human = len(rest_means)
+    return {
+        "pred": np.asarray(pred, dtype=float),
+        "gt_avg": np.asarray(gt_avg, dtype=float),
+        "rest_means_by_paper": rest_means,
+        "heldout_scores_by_paper": heldout_scores,
+    }
+
+
+def ai_vs_one_vs_rest(df, gt_score_cols, confidence=0.95, n_boot=2000, seed=0):
+    """Compare AI vs human one-vs-rest with paired paper-level bootstrap."""
+    paired_inputs = build_one_vs_rest_arrays_by_paper(df, gt_score_cols)
+    if paired_inputs is None:
+        return None
+
+    pred = paired_inputs["pred"]
+    gt_avg = paired_inputs["gt_avg"]
+    rest_means_by_paper = paired_inputs["rest_means_by_paper"]
+    heldout_scores_by_paper = paired_inputs["heldout_scores_by_paper"]
+    rest_means = np.concatenate(rest_means_by_paper)
+    heldout_scores = np.concatenate(heldout_scores_by_paper)
 
     ai_spearman = float(stats.spearmanr(pred, gt_avg).statistic)
     human_spearman = float(stats.spearmanr(rest_means, heldout_scores).statistic)
@@ -135,16 +161,11 @@ def ai_vs_one_vs_rest(df, gt_score_cols, confidence=0.95, n_boot=5000, seed=0):
     rng = np.random.default_rng(seed)
 
     for _ in range(n_boot):
-        sample_idx = rng.integers(0, len(df), len(df))
-        boot_df = df.iloc[sample_idx].reset_index(drop=True)
-        boot_pred = boot_df["pred_score"].to_numpy(dtype=float)
-        boot_gt_avg = boot_df["gt_avg_score"].to_numpy(dtype=float)
-        boot_human = one_vs_rest_baseline(boot_df, gt_score_cols)
-        if boot_human is None:
-            raise RuntimeError("paired bootstrap produced a sample without enough human one-vs-rest pairs")
-
-        boot_rest_means = np.asarray(boot_human["rest_means"], dtype=float)
-        boot_heldout_scores = np.asarray(boot_human["heldout_scores"], dtype=float)
+        sample_idx = rng.integers(0, len(pred), len(pred))
+        boot_pred = pred[sample_idx]
+        boot_gt_avg = gt_avg[sample_idx]
+        boot_rest_means = np.concatenate([rest_means_by_paper[idx] for idx in sample_idx])
+        boot_heldout_scores = np.concatenate([heldout_scores_by_paper[idx] for idx in sample_idx])
         boot_ai_fit = stats.linregress(boot_gt_avg, boot_pred)
         boot_human_fit = stats.linregress(boot_heldout_scores, boot_rest_means)
 
