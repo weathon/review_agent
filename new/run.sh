@@ -1,1 +1,8 @@
-python main.py --n_samples 200 --benchmark ../iclr2025/ --seed $(cksum <<< 'who are you' | cut -f 1 -d ' ') # use 2026 because it is pre-rebuttal scores
+export OPENAI_DEFAULT_MODEL="z-ai/glm-5.1"
+export HARSH_MODEL="gpt-5.4"
+export HUMAN_FINDER="ollama:glm-5.1:cloud"
+export MERGER_MODEL="gpt-5.4"
+export OUTPUT_CSV="bench_scores.csv" 
+export MERGE_LOG="pipeline_whole.log"
+ollama serve & 
+python main.py --n_samples 500 --benchmark ../iclr2025/ --seed $(cksum <<< 'who are you' | cut -f 1 -d ' ') # use 2026 because it is pre-rebuttal scores

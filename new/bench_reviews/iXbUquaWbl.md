@@ -1,114 +1,100 @@
-Now let me search for calibration papers to help score this paper.Now I have enough context to write the final consolidated review. Let me synthesize everything.
-
----
-
 ## Summary
-
-This paper proposes end-to-end learnable Gaussian Mixture Priors (GMPs) for diffusion-based variational samplers, addressing three identified challenges: poor exploration (C1), large discretization errors due to prior-target mismatch (C2), and mode collapse from reverse-KL optimization (C3). The authors derive the necessary adaptations for four different diffusion samplers (DIS, MCD, CMCD, DBS) and additionally propose an Iterative Model Refinement (IMR) strategy that progressively adds mixture components during training to help mode discovery. Experiments span synthetic targets (Funnel, Fashion) and six real-world Bayesian inference benchmarks.
-
----
+This paper proposes end-to-end learning of Gaussian and Gaussian-mixture priors for diffusion-based samplers targeting unnormalized densities, and shows how to incorporate such learnable priors into several existing sampler families (DIS, MCD, CMCD, DBS). It also introduces an iterative model refinement (IMR) heuristic that progressively adds mixture components, with experiments suggesting that learned mixture priors can substantially improve support matching and coverage in several settings.
 
 ## Strengths
-
-- **Broad applicability and systematic comparison.** The GMP framework is instantiated across four distinct diffusion samplers (DIS, MCD, CMCD, DBS) with structured comparisons across fixed, learned-Gaussian, and learned-mixture priors. This multi-method coverage substantially strengthens the evidence for generalizability.
-
-- **Proposition 1 and DDS extension.** The derivation connecting the stationary distribution of a general SDE drift to an arbitrary target prior (Proposition 1) is a non-trivial and elegant contribution that enables plug-in replacement of the Gaussian OU prior in denoising diffusion samplers with a learned GMP.
-
-- **Strong Funnel results.** On the Funnel benchmark, GMP dramatically outperforms its GP counterpart across all metrics (e.g., MCD-GMP ELBO = −0.059 vs. MCD-GP ELBO = −0.724; DIS-GMP Sinkhorn = 100.09 vs. DIS-GP = 107.46), and GMP-augmented methods outperform competing methods such as CRAFT and FAB on most metrics. This is compelling evidence of a real contribution.
-
-- **Honest and informative Fashion experiment.** The paper honestly reports the tension between ELBO and sample coverage on the multimodal Fashion target (Section 6.2, Figure 4), acknowledges that ELBO is "not well-suited" for multimodal targets, and quantifies coverage separately via Sinkhorn distance and EMC. This transparency is commendable.
-
-- **Practical IMR strategy.** Progressively adding mixture components during training with a purpose-built initialization heuristic (Eq. 22) is a meaningful practical contribution, and the visualization of per-component mode specialization in Figure 4 validates the idea qualitatively and quantitatively (DIS-GMP+IMR: EMC = 0.780 vs. DIS-GMP: 0.012).
-
-- **Ablation study.** Figure 5 provides a thorough ablation over K and N, demonstrating consistent trends in ESS and giving practitioners calibrated guidance.
-
----
+- **Addresses a real bottleneck in diffusion-based VI samplers.** The paper identifies a plausible and important weakness of fixed simple priors in sampling-from-energy settings—poor support match, difficult transport, and reverse-KL-induced mode seeking—and proposes a natural fix via learnable priors, especially Gaussian mixtures. This is a meaningful problem for the probabilistic sampling community.
+- **Methodologically fairly general.** The paper does not present a one-off trick for a single sampler; it shows how end-to-end prior learning can be incorporated into multiple diffusion-based samplers (DIS, MCD, CMCD, DBS), and Section 4 gives a coherent treatment of what must change when the prior is learned.
+- **The empirical scope is broad by the standards of this niche.** The paper compares 4 diffusion samplers, fixed vs learned Gaussian vs learned Gaussian-mixture priors, and includes both synthetic and real-world targets with several metrics (ELBO, ESS, \(\Delta \log Z\), Sinkhorn). This is a serious experimental effort.
+- **Some results are genuinely compelling.** On Funnel, the GMP variants materially improve ESS and often improve ELBO/\(\Delta \log Z\) over their fixed-prior counterparts; the visualizations also support the claim that mixture priors adapt to target support better than a single Gaussian. On the real-world table, learning the prior often helps substantially over the fixed-prior version, and GMP is usually at least slightly better than GP.
+- **The paper is generally clear about an important tradeoff on multimodal targets.** In Section 6.2, the authors explicitly note that on Fashion, ELBO and \(\Delta \log Z\) can favor single-mode fits and may not align with mode coverage. That discussion is useful and honest, even though it also limits the headline claim.
 
 ## Weaknesses
 
-### Fatal
-*(None. The paper is a real contribution with genuine results.)*
+###: Fatal
+None.
 
-### Major
+### Major:
+- **The paper overclaims “consistent” or “superior” improvements relative to the evidence.**  
+  This criticism is supported by the tables. The abstract says the method shows “significant performance improvements across a diverse range of real-world and synthetic benchmark problems,” and the conclusion says experiments “consistently demonstrated the superior performance.” The empirical picture is stronger than a minor tweak paper, but not that strong.  
+  - In **Table 2**, the best proposed methods are competitive and often excellent, but **FAB matches or beats them on some tasks**, and GP-to-GMP gains are sometimes extremely small.  
+  - In **Figure 3 (Funnel)**, GMP variants are strong on ESS and competitive overall, but **FAB has the best \(\Delta \log \mathcal Z\)**.  
+  - In **Figure 4 (Fashion)**, the story becomes explicitly metric-dependent: **DIS-GP is much better than DIS-GMP and DIS-GMP+IMR on ELBO/\(\Delta \log Z\)**, while **DIS-GMP+IMR is much better on coverage-oriented metrics**.  
+  So the real claim supported by the paper is closer to: *learned mixture priors can significantly help diffusion samplers, especially for support coverage and multimodal exploration, but improvements are task- and metric-dependent*. That is still a worthwhile contribution, but weaker than the current framing.
 
-- **GMP alone does not prevent mode collapse on the key multimodal benchmark; only GMP+IMR does.** This directly undercuts the paper's C3 claim. On Fashion, DIS-GMP (without IMR) achieves EMC = 0.012 and Sinkhorn = 1703, which is *worse* than DIS-GP (EMC = 0.007, Sinkhorn = 1671) and far worse than DIS-GMP+IMR (EMC = 0.780, Sinkhorn = 214). The paper itself states in Section 6.2: "the absence of IMR leads to mode collapse across all methods." The benefit for mode coverage therefore comes from the IMR+MALA procedure rather than from learned GMPs per se. The paper's framing — that GMPs address C3 — is consequently overstated. The accurate claim is that GMPs *combined with* IMR improve mode discovery; standalone GMP learning does not prevent reverse-KL mode collapse in challenging high-dimensional multimodal settings.
+- **The evaluation supports tradeoffs across objectives more than a single unified notion of “better sampling.”**  
+  This is not merely a presentation nitpick. The paper uses ELBO, \(\Delta \log Z\), ESS, Sinkhorn, and EMC, but these metrics are not interchangeable, and the authors themselves state in Section 6.2 that on multimodal Fashion, “these performance criteria are not well-suited” and “tend to favor models that fit a single mode perfectly.” That admission is reasonable, but it means the paper cannot simultaneously rely on ELBO as a broad cross-task headline metric and then dismiss it on the task most directly tied to the claimed mode-collapse benefit.  
+  The experiments therefore support a more nuanced conclusion: GMP/IMR can improve **coverage-oriented** behavior, sometimes at the expense of the optimized ELBO-like objectives. That is interesting, but it weakens the central framing that the method broadly improves diffusion-based sampling in a unified sense.
 
-- **Abstract's "without requiring additional target evaluations" claim is misleading.** The IMR procedure, which is responsible for the most dramatic empirical gains, relies on MALA to generate candidate samples (Section 6.2), which does require evaluations of the unnormalized target ρ(x). The paper acknowledges this cost is "comparable to a single gradient step," but this is still an additional evaluation not incurred in the baseline training loop, and the claim in the abstract is unqualified. This creates a mismatch between the marketed contribution and the actual method.
+- **IMR is under-validated as a general contribution.**  
+  IMR is presented as a novel strategy in Section 5, but the empirical support is narrow: it is tested only with **DIS**, on a single task (**Fashion**), and its success depends on externally generated candidate samples from **MALA** plus an initialization scheme designed to roughly cover the target support. The paper does explain this setup, but that still leaves a real concern: the strong mode-coverage result may rely substantially on candidate quality and initialization rather than the refinement mechanism itself.  
+  Moreover, Eq. (22) is explicitly a heuristic, and there is no comparison against simpler component-addition heuristics. As written, IMR looks promising, but the paper does not yet establish it as a robust, generally effective method across samplers or problem classes.
 
-- **GMP gains over GP on real-world tasks (Table 2) are often marginal.** The improvement from GP → GMP on most real-world benchmarks is small compared to the improvement from fixed prior → GP (e.g., MCD: −1399 → MCD-GP: −585.35 → MCD-GMP: −585.28 on Credit; DBS-GP: −73.437 → DBS-GMP: −73.418 on Seeds). While consistent, these tiny deltas may not reflect meaningful practical gains, and the paper's framing of "significant performance improvements" is too strong for these results taken in isolation.
+- **The claim in the abstract that improvements come “without requiring additional target evaluations” is too strong once IMR is considered.**  
+  For the core learned-prior idea, this is mostly fair relative to the base diffusion training. However, the paper’s IMR experiment explicitly uses **MALA to generate candidate samples** (Section 6.2), which requires target-gradient evaluations. Since IMR is part of the paper’s proposed contribution and is highlighted in the abstract, the “without additional target evaluations” statement is overstated unless carefully limited to the GMP prior-learning mechanism alone.
 
 ### Minor
+- **The paper does not sufficiently disentangle the benefit of learning a prior at all from the specific benefit of using a mixture prior.**  
+  The experiments do compare fixed prior vs GP vs GMP, which is good, and learning the prior clearly helps. But on many real-world tasks in Table 2, the extra gain from **GP to GMP** is quite small compared with the gain from **fixed prior to GP**. The discussion sometimes blurs these two effects. A more careful interpretation would distinguish “learning the prior matters a lot” from “using a mixture instead of a single Gaussian matters modestly on many tasks, and more strongly on some multimodal/support-mismatch cases.”
 
-- **No computational cost analysis.** Evaluating a K-component Gaussian mixture at every SDE step (required for DIS/DBS to compute ∇ log p₀^φ) incurs real overhead proportional to K. Neither wall-clock training times nor scaling behavior with K and d are reported. This information is important for practitioners evaluating the method's practical viability.
+- **Computational cost/scaling is insufficiently analyzed.**  
+  This is a substantive omission, not a reproducibility nitpick. Mixture priors introduce extra parameters and extra density evaluations at each step; IMR also adds overhead through candidate generation and repeated refinement. The paper argues that GMPs are efficient to evaluate, especially with diagonal covariances, but does not report wall-clock or budget-matched comparisons. Without this, it is hard to assess whether gains come from a better inductive bias or simply from investing more modeling/optimization complexity.
 
-- **Sensitivity to K selection and GMP initialization not characterized.** The paper uses K = 10 throughout, initialized with zero mean and unit variance. There is no discussion of how sensitive results are to this choice, whether K = 10 is sufficient for targets with more modes, or how the method behaves with a mismatched K.
+- **The claimed mechanism for C2 (reduced transport complexity / fewer diffusion steps) is only indirectly supported.**  
+  The motivation is plausible, and Figure 5 studies \(K\) and \(N\), but the paper does not really isolate whether support adaptation itself reduces the required number of steps, versus gains from extra expressivity or compute. This does not invalidate the method, but it leaves one of the three motivating claims less directly established than C1/C3.
 
-- **Learning of δt lacks analysis.** The paper proposes learning the discretization step size δt jointly with the prior parameters as a proxy for unknown relaxation time (Section 4.1). Since this affects both the dynamics and the horizon T = Nδt, there is no analysis of whether learned δt leads to unstable discretizations or how it interacts with prior complexity. Given C2 is listed as a primary motivation, this gap is notable.
-
-- **The ELBO/Sinkhorn trade-off in Fashion is noted but not deeply analyzed.** DIS-GMP+IMR achieves far better coverage (EMC = 0.780) but substantially worse ELBO (−62.5 vs. −24.7 for DIS-GP). The paper attributes this to ELBO being a poor metric for multimodal targets, which is reasonable, but the magnitude of the ELBO degradation and its source (more complex control functions across wider support) warrant closer examination.
+- **The Fashion results suggest GMP alone is not sufficient to solve mode collapse.**  
+  This is visible in Figure 4: **DIS-GMP without IMR** still performs poorly on EMC and Sinkhorn, while **DIS-GMP+IMR** is the version that achieves strong coverage. So the narrative in Section 1/5 that GMPs themselves address C3 should be softened: the evidence indicates that **GMP + appropriate component initialization/refinement** addresses mode coverage much more convincingly than GMP by itself.
 
 ### Trivial
-
-- The claim that "all experiments are conducted under identical settings" (Section 6) is imprecise given that IMR introduces MALA candidate generation, which is absent in other conditions.
-
----
+- The practical choice of \(K=10\) is not very well motivated, though Figure 5 helps somewhat.
+- The paper could give clearer guidance on when to prefer GP vs GMP in practice.
 
 ## Nice-to-Haves
-
-- **Visualization of learned dynamics.** Since the paper claims GMPs simplify diffusion dynamics (C2), visualizing the diffusion trajectories or score norms under GMP vs. Gaussian priors would strengthen this claim beyond the conceptual Figure 1.
-- **Ablation of the IMR heuristic (Eq. 22) against simpler alternatives.** It is not clear whether the specific ELBO-based selection criterion in Eq. 22 outperforms simpler alternatives (e.g., k-means on MALA samples, random initialization). Testing this would validate whether the proposed heuristic is the key ingredient.
-- **Characterization of when GMP helps substantially over GP.** A structured analysis of the conditions (target multimodality, dimension, prior-target mismatch) under which GMP provides substantial vs. marginal gains beyond GP would be directly useful for practitioners.
-- **Sensitivity of IMR to MALA chain quality.** The IMR effectiveness depends on the quality of MALA candidate samples. An ablation varying MALA chain length or mixing quality would clarify how robust IMR is in practice.
-
----
+- Add a **budget-matched compute analysis** (training time / sampling time / target-gradient evaluations), especially for GP/GMP and IMR.
+- Add an ablation isolating whether, in the DIS setting, some gains come from **learning \(\delta t\)** versus learning the prior family itself.
+- Evaluate IMR on at least one additional sampler or one additional multimodal target, and compare Eq. (22) against simpler initialization heuristics.
+- Provide more explicit guidance on choosing the number of components \(K\) and when GMP is worth the added complexity over GP.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged for removal; treat them with caution.*
-
-- **Human Finder: "Insufficient comparison with related mixture-based approaches (Guo et al. 2023; Zach et al. 2023)."** Per the hard rules, we do not raise missing related work comparisons as we cannot verify the existence of such papers.
-
-- **Spark: "Comparison with alternative flexible prior families (normalizing flow priors, mixture-of-students-t)."** This amounts to requesting experiments outside the paper's stated scope. The paper explicitly scopes to GMPs and provides clear reasoning for this choice (closed-form evaluation, small parameter count, differentiability). Demanding flow-based priors goes beyond the paper's scope.
-
-- **Spark/Harsh Critic: Reproducibility concerns about hyperparameter disclosure and training logs.** These are standard nitpicks removed per the hard rules.
-
-- **Neutral Reviewer: Standard deviations of ±0.000 on Sonar for DBS-GMP.** This is a formatting artifact of table rounding (the values are ±0.000 when printed to three decimals), not an indication of numerical precision problems or insufficient seeds. The paper states four seeds are used throughout.
-
-- **Harsh Critic: The Proposition 1 guarantee is asymptotic and only holds for T→∞.** The paper explicitly acknowledges this (Section 4.1: "only guaranteed as T→∞") and addresses it by learning δt. Criticizing a result the paper already acknowledges is a strawman.
-
----
+- **“Need comparison to other expressive prior families / missing related work.”**  
+  Removed under the instruction not to rely on unverifiable external related-work demands. The paper already motivates GMPs pragmatically (tractable density and gradient evaluation, small parameter count, easy integration), which is enough for evaluation.
+- **Pure complaints about formatting/caption inconsistencies in the PDF extraction.**  
+  Removed because the user explicitly said formatting artifacts are parser issues, not paper problems.
+- **Strong novelty attacks based on prior GMM-in-diffusion generative-model papers.**  
+  We should not over-index on external similarity claims here. The present paper is specifically about diffusion-based sampling from unnormalized targets and end-to-end prior learning in that setting; the overlap concern is not sufficiently verifiable from the paper alone to make it a main weakness.
 
 ## Novel Insights
-
-The most genuinely novel observation, not adequately highlighted by the paper itself, is the **explicit empirical dissociation between ELBO optimization and mode coverage** in diffusion-based samplers. The Fashion results make clear that a method (DIS-GP) can achieve excellent ELBO and log-Z estimation while catastrophically failing at multimodal coverage (EMC = 0.007), while a method (DIS-GMP+IMR) with worse ELBO can achieve dramatically better coverage (EMC = 0.780). This suggests that ELBO is an unreliable proxy for the quality of the learned sampling distribution when the target is multimodal — a finding of broad relevance to the diffusion-sampler community that goes beyond the paper's stated contributions.
-
----
+The most interesting synthesis is that the paper’s results reveal an important fault line in evaluating diffusion-based samplers for unnormalized targets: objectives tied to reverse-KL/path-space ELBO can systematically disagree with distributional coverage metrics on multimodal problems. In that sense, the paper is strongest not as evidence of blanket superiority of GMPs, but as evidence that **prior expressivity and support placement meaningfully alter which aspects of sampling quality are improved**—normalizer estimation, ESS, and mode coverage need not move together. This is a valuable insight for the area, and the paper would be stronger if it embraced that message rather than flattening it into a universal-improvement narrative.
 
 ## Suggestions
-
-1. **Reframe the C3 claim more carefully.** The paper should state that GMP+IMR (not GMP alone) addresses mode collapse. The abstract and introduction should clarify that the mode-coverage improvements require the IMR procedure, which uses MALA candidate scoring.
-
-2. **Report wall-clock times for fixed vs. GP vs. GMP variants.** Even a simple table showing training time as a function of K would give practitioners the information they need to assess whether GMP's gains justify its overhead.
-
-3. **Add a three-way ablation table for Fashion.** Separately report DIS, DIS-GP, DIS-GMP (no IMR), DIS+IMR (with single Gaussian), and DIS-GMP+IMR to disentangle the contributions of (a) learned prior, (b) mixture structure, and (c) iterative refinement.
-
-4. **Temper the conclusion.** "Consistently demonstrated the superior performance" overstates results where GP often accounts for most of the improvement and FAB is competitive or better on several metrics.
-
----
+- Reframe the main claim to emphasize **metric- and task-dependent gains**, especially strong benefits for support matching and mode coverage, rather than universal superiority.
+- Separate the empirical conclusions for **learned GP** and **learned GMP** more carefully; quantify where mixtures help substantially versus marginally.
+- Clarify in the abstract/conclusion that **IMR uses external candidate generation** and therefore should not be included under “no additional target evaluations” unless that statement is narrowed.
+- Strengthen IMR with at least one additional experiment or heuristic comparison.
+- Add a compute-budget analysis so readers can judge practical value.
+- Consider making the paper’s broader message about the **mismatch between ELBO-like objectives and multimodal coverage** more explicit; this is arguably one of the most interesting outcomes of the study.
 
 ## Score and Decision
+**Assessment across axes:**  
+- **Originality:** good. End-to-end learned priors for diffusion-based sampling, generalized across several sampler families, is a meaningful and nontrivial contribution.  
+- **Importance of the question:** high. Prior mismatch is a real issue in diffusion-based samplers for unnormalized densities.  
+- **Support for claims:** moderate. The evidence supports usefulness and competitiveness, but not the strongest headline claims.  
+- **Soundness of experiments:** good overall breadth, but interpretation is overextended and IMR validation is narrow.  
+- **Clarity:** generally good; the paper is readable and the motivation is clear.  
+- **Value to the community:** moderate-to-high, especially for researchers working on diffusion-based VI/sampling.
 
-**Calibration anchors:**
-- *Transport meets Variational Inference: CMCD* (PP1rudnxiW): Accept Poster, avg ≈ 7.2. That paper offered a principled theoretical framework and strong experiments; it is a stronger theoretical contribution but the empirical delta over baselines is comparable to this paper.
-- *Improved sampling via learned diffusions* (h4pNROsO06): Accept Poster, avg ≈ 6.5. Comparable in scope — unified framework + new loss — with similar depth of experiments.
-- *ELBOing Stein* (2rBLbNJwBm): Accept Poster, avg ≈ 6.5. Mixture-based VI with competitive experiments; similar scope and similar marginal gains on standard benchmarks.
-- *Structured Diffusion Models with Mixture of Gaussians as Prior* (ZqM9mZkrRB): Reject, avg ≈ 4.5. The human finder identifies this as directly related and rejected; the paper under review is clearly stronger with a broader framework, more rigorous experiments, and the IMR contribution.
+**Calibration papers consulted:**  
+- **Improved sampling via learned diffusions** (scores 6,6,6,8; accepted poster): that paper appears stronger in aligning theory, claims, and empirical evidence across the board. The current submission is somewhat below it because the empirical story is more mixed and the paper overclaims relative to its own results.  
+- **Diffusion Generative Flow Samplers** (scores 8,8,8,6; accepted poster): clearly stronger than the current paper in terms of convincing improvements and overall polish. The present paper is below this anchor.  
+- **NETS** (scores 8,6,6,5; rejected): that paper had meaningful contributions but concerns around evaluation scale/cost and practicality. The current paper is somewhat better aligned and more coherent than that rejected borderline case, but still has nontrivial overclaim/validation issues.  
+- **Structured Diffusion Models with Mixture of Gaussians as Prior Distribution** (scores 3,5,5,5; rejected): the current paper is substantially stronger than this lower anchor because it is better motivated, more general in scope, and experimentally much stronger.
 
-The paper under review is a genuine, complete contribution — cleaner than the rejected GMM-prior paper, with better experiments. It is roughly on par with the accepted poster papers (CMCD, ELBOing Stein) in terms of contribution level. The main drag factors are the overstated C3 narrative, marginal real-world GP→GMP gains, and the absence of compute analysis. It is not a breakthrough, but it is a solid, practical, honest contribution to the diffusion-sampler literature.
+Relative to these anchors, this paper looks **borderline positive but not clearly strong**: better than weak/reject examples, but below cleaner poster accepts in the area because the main empirical narrative is overstated and IMR is not fully established.
 
-**Final Score: 6.0 — Marginally above acceptance threshold.**
-
-**Rationale:** The paper introduces a sensible, broadly applicable method with one genuinely strong benchmark result (Funnel), an interesting practical strategy (IMR), and an honest high-dimensional multimodal experiment. The weaknesses are real but do not invalidate the core contributions. The paper is weaker than the strongest accepted posters in this area but clearly stronger than rejected work on the same topic.
+**Final score: 6.0**  
+**Decision: Accept**
 
 MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

@@ -1,144 +1,91 @@
-Now let me look at the calibration papers mentioned by the human finder reviewer.Now I have enough information to write the consolidated review. Let me verify one specific point about the user study caption vs. data:Now I have all the information needed to write the consolidated review. Let me compile it.
-
----
-
 ## Summary
-
-This paper presents Pyramidal Flow Matching, a unified video generative modeling framework that reformulates the denoising trajectory as a piecewise pyramid of stages, with each successive stage operating at a higher spatial resolution and only the final stage running at full resolution. A single DiT is trained end-to-end across all stages with a shared flow matching objective. A temporal pyramid additionally compresses the autoregressive history condition, reducing tokens dramatically. The combination yields a training cost of 20.7k A100 GPU hours for a 10-second, 768p, 24 FPS video model—substantially more efficient than comparable open-source systems—while achieving a VBench quality score of 84.74, surpassing several commercial models on that sub-metric.
-
----
+This paper proposes **Pyramidal Flow Matching (PFM)** for efficient video generation: instead of denoising at full spatial resolution throughout the whole trajectory, it decomposes generation into cross-resolution pyramid stages and trains them **jointly in a single DiT** via a unified flow-matching objective. It further combines this with an **autoregressive temporal pyramid** that compresses historical context, and reports strong 768p/24fps results with relatively modest training cost for this scale.
 
 ## Strengths
-
-- **Novel and non-trivial formulation of unified multi-stage flow matching.** The renoising derivation at stage boundaries (Sec. 3.2.2, Eqs. 12–15) is mathematically grounded: it derives the corrective noise covariance needed to preserve path continuity across a resolution jump, elevating the contribution well above a simple architectural trick. The choice γ = −1/3 to maximally preserve signals while decorrelating upsampled pixels is a thoughtful design decision.
-
-- **Substantial and verifiable efficiency gains.** The token count reduction from 119,040 to ≤15,360 tokens for a 10-second video is a straightforward consequence of the pyramid math and is not in dispute. The 20.7k A100 GPU training hours figure is concrete and competitive.
-
-- **Strong visual quality results.** The model achieves VBench quality score 84.74, outperforming Gen-3 Alpha (84.11), CogVideoX-5B (82.75), and all public-data baselines. Motion smoothness (99.12 on VBench) and EvalCrafter visual quality (67.94) are among the best reported for open-data models.
-
-- **Clean, practical implementation.** Using a standard MM-DiT backbone, packed batching (Patch n' Pack), and full-sequence attention (enabled by the token savings), the method requires no exotic architecture changes and supports both text-to-video and image-to-video inference natively.
-
-- **Open-source release.** Code and models are released, which has real practical value for the community.
-
----
+- **Conceptually novel and well-motivated formulation.** The paper’s core observation—that very early denoising steps are noisy enough that full-resolution computation is wasteful—is compelling, and the proposed response is not just a standard cascade. The paper explicitly formulates a **piecewise cross-resolution flow** (Sec. 3.2, Eq. 6–11) and trains all stages in **one unified model**, which is a meaningful departure from multi-model cascades.
+- **Single-model end-to-end training is a real contribution.** The claimed advantage over cascaded approaches is supported by the method design itself: unlike standard cascade pipelines, the pyramid stages share parameters and are optimized by a single objective. This is a practically important systems contribution even independent of absolute benchmark rank.
+- **Strong empirical performance among public-data/open models.** On VBench and EvalCrafter, the method is clearly competitive and in several dimensions strong: e.g., VBench **quality score 84.74** and **motion smoothness 99.12**, and it outperforms the listed public-data baselines overall. For a 2B MM-DiT trained on public data, this is a solid result.
+- **The paper tackles an important problem.** Efficiency is a central bottleneck for video generation, and a method that reduces training burden while retaining high output resolution and frame rate is valuable to the community.
+- **The technical mechanism is more than heuristic.** The renoising transition mechanism in Sec. 3.2.2 is mathematically motivated, and the paper makes a genuine effort to preserve continuity across pyramid stages rather than simply upsample-and-continue in an ad hoc way.
+- **Clarity is generally good.** The paper is readable, the figures are helpful, and the method is communicated better than many large-scale generative systems papers.
 
 ## Weaknesses
 
-### Fatal
-*None. The core efficiency and visual quality claims are real and supported.*
+###: Fatal
+None.
 
----
-
-### Major
-
-**1. Semantic quality is notably weaker than several baselines, and the explanation is unverified.**
-VBench Semantic Score: 69.62 for this paper, versus CogVideoX-5B (77.04), T2V-Turbo (74.76), Open-Sora 1.2 (73.39), and VideoCrafter2 (73.42)—the proposed model ranks last among all VBench entries in Table 1 on this metric. Similarly, EvalCrafter Text-Video Alignment is 57.01, versus LaVie (68.49) and VideoCrafter2 (63.16). The paper attributes this to "coarse-grained synthetic captions" in training, which is a plausible hypothesis, but no controlled experiment tests it (e.g., ablating caption quality, or reporting VBench semantic sub-scores to identify specific failure modes). This is not a fatal flaw—the paper clearly scopes its contribution toward efficiency and visual quality—but the claim of being "highly competitive" in the abstract overstates the text-video alignment results. The contribution bulletin appropriately qualifies this as "competitive performance among video generative models trained on public datasets," but the broader framing around quality needs to be tempered.
-
-**2. The user study caption directly contradicts the reported data.**
-Figure 4's caption states: *"In all cases, 'Ours' shows a higher preference percentage than the baselines."* But the reported numbers show the method loses in: Semantic preference vs. CogVideoX-2B (42.1%), Semantic preference vs. CogVideoX-5B (38.6%), and Motion preference vs. Kling (32.5%)—all below 50%. This is a factual error in the paper. The data tells a nuanced story (strong on aesthetics, weaker on semantics vs. strong competitors) that is more honest and still interesting, but the current caption misrepresents results.
-
-**3. No ablation of the renoising scheme, which is the paper's primary theoretical contribution.**
-The renoising derivation at stage boundaries (Eq. 15) is presented as a principled design, yet there is no experiment comparing: (a) no renoising (direct upsampling without correction), (b) i.i.d. Gaussian noise at jump points, and (c) the proposed correlated renoising. If the scheme makes no practical difference, the theoretical framework is unnecessarily complex; if it matters, that needs to be shown. This is the single most consequential missing ablation.
-
-**4. The temporal pyramid ablation is qualitative only for a core contribution.**
-Figure 8 compares "full-seq" vs. "pyramid" for the temporal pyramid qualitatively. For a contribution claimed to be a primary pillar of the method—and the main source of further token reduction—a quantitative evaluation (e.g., FID, VBench metrics, or at least frame-level quality metrics) under the same compute budget is needed. The paper appropriately notes this is "due to limited space" and defers to Appendix C.2, but the appendix appears not to contain a numeric temporal pyramid ablation.
-
----
+### Major:
+- **The efficiency story is not cleanly isolated between the two main sources of savings: spatial pyramidal flow vs. autoregressive compressed-history generation.**  
+  This is the paper’s most important weakness. The paper’s headline contribution is “pyramidal flow matching,” but the system-level efficiency gains come from **both** (i) the spatial pyramid in the denoising trajectory and (ii) the temporal autoregressive pyramid in Sec. 3.3. Section 4.2 compares against “full-sequence diffusion” and attributes large token/compute reductions to the proposed framework, but that comparison bundles together a different generation paradigm with the pyramid design. As written, the paper does not adequately disentangle how much of the gain comes from the **cross-resolution flow formulation itself** versus the move to **autoregressive generation with compressed context**. That weakens the causal support for the central claim.
+- **The compute/accounting discussion is inconsistent and at points overstated.**  
+  Several efficiency claims do not line up cleanly across sections. For example, Sec. 3.2 says spatial pyramid reduces cost by “nearly \(1/K\)” under uniform stage partitioning, Sec. 3.3 discusses token reduction up to \(1/4^K\), while Sec. 4.2 states the method uses “approximately \(TN/4^K\) tokens” and \(T^2N^2/16^K\) computations “even for the final pyramid stage.” Since the final stage is explicitly said to operate at full resolution, that wording is at least imprecise and likely misleading. For a paper centered on efficiency, the compute decomposition should be much more rigorous: per-stage token counts, average training compute over sampled stages, and separate accounting for spatial vs. temporal savings.
+- **The experimental evidence does not fully validate the claimed advantage over cascaded pipelines or simpler compute-reduction alternatives.**  
+  The paper argues that unified pyramidal flow improves over cascaded multi-model systems, but there is no **compute-matched internal cascade baseline** trained under comparable data/compute. Likewise, there is no comparison to simpler token-reduction baselines that would test whether the pyramid structure itself matters beyond just “use fewer tokens.” The external benchmark comparisons show competitiveness, but they do not isolate the specific benefit of the proposed algorithmic choice.
+- **The key stage-transition mechanism (renoising for continuity) is insufficiently validated experimentally.**  
+  Sec. 3.2.2 is one of the most distinctive parts of the paper, yet the paper provides essentially no direct evidence that the specific renoising law in Eq. 13–15 matters relative to simpler alternatives. There is also no explicit empirical study of transition artifacts or continuity failures at jump points. Since this mechanism is central to the “unified flow across resolutions” claim, it deserves direct ablation.
 
 ### Minor
-
-**5. Number of pyramid stages K is fixed at 3 without ablation.**
-Section 4.1 states "The number of pyramid stages is set to 3 in all the experiments" without justification or sensitivity analysis. The efficiency-quality tradeoff as K varies (K=1 is full-resolution, K=2,3,4 increasingly compress early stages) is a natural experiment that would validate the design choice and help practitioners tune the method.
-
-**6. The efficiency comparison to Open-Sora 1.2 confounds hardware, data, and duration.**
-The paper compares 20.7k A100 GPU hours (this paper, 241 frames, WebVid-scale data) to 4.8k Ascend + 37.8k H100 hours (Open-Sora 1.2, 97 frames). Ascend-to-A100 conversion, different video length targets, and different datasets make this an approximate directional comparison at best. The statement "consuming more than two times the computation" is approximately correct in aggregate terms, but the paper should be more careful about this comparison.
-
-**7. VAE trained from scratch; reconstruction quality unreported.**
-The paper uses a 3D VAE trained from scratch on WebVid-10M. This is an entire component whose quality could bottleneck generation regardless of the flow matching design, but there is no reconstruction quality evaluation (PSNR/SSIM/LPIPS). This complicates the attribution of generation quality (or lack thereof on semantics) to the flow matching algorithm itself.
-
----
+- **Semantic alignment is a noticeable weakness in the reported results.**  
+  The paper openly acknowledges lower semantic performance, and the numbers bear this out: on VBench, the semantic score (**69.62**) trails strong baselines such as CogVideoX-5B (**77.04**) and T2V-Turbo (**74.76**); on EvalCrafter, text-video alignment is also relatively weak (**57.01**). The authors attribute this to coarse synthetic captions, which is plausible, but currently this remains an explanation rather than evidence-backed analysis.
+- **Temporal-pyramid evaluation is too light for such an important component.**  
+  The spatial pyramid gets at least a quantitative image-side convergence plot, but the temporal pyramid ablation in Fig. 8 is qualitative only. Given that temporal compression is central to the efficiency story, the paper should include quantitative video metrics and preferably a length-vs-quality analysis.
+- **Limited analysis of autoregressive degradation over longer horizons.**  
+  The paper claims support for 5-second and up to 10-second generation, but it does not quantify how quality drifts with video length or repeated autoregressive rollout. That matters because the temporal pyramid compresses old context aggressively, and this could impact long-horizon coherence.
+- **Some practical design choices are under-analyzed.**  
+  The number of stages \(K=3\), the stage partitioning, endpoint coupling in Eq. 9–10, and the history-noise strategy are all important knobs, but they are not meaningfully analyzed in the main paper.
 
 ### Trivial
-
-**8. The spatial pyramid ablation (Fig. 7) is on text-to-image, not video.**
-This is acceptable as an early-stage validation (the paper is transparent about this), but it means the spatial pyramid's contribution to video quality specifically is supported only by the full model performance, not an isolated ablation.
-
----
+- **The renoising derivation is clearest for nearest-neighbor upsampling, while the text sometimes mentions nearest or bilinear resampling.**  
+  This is not a fatal inconsistency, but the paper should be more explicit about which operator is used in practice where the continuity argument is meant to apply directly.
 
 ## Nice-to-Haves
-
-- **Compute-matched convergence curves:** Figure 7 plots FID vs. training steps. Since the pyramid processes fewer tokens per step, the fair comparison would plot FID vs. total FLOPs or wall-clock time. The current curve likely undersells the advantage (pyramid is faster per step), but clarifying this would make the convergence claim precise.
-
-- **Long-horizon quality evaluation:** The paper supports up to 10-second generation, but VBench evaluation is on 5-second clips. A quantitative comparison of quality metrics at 5s vs. 10s would validate the temporal pyramid's scalability.
-
-- **Intermediate stage visualizations:** Showing the latent content after each pyramid stage (before and after renoising) would directly demonstrate whether stage transitions are smooth and whether the renoising design serves its intended purpose.
-
-- **Discussion of upsampling sensitivity in renoising:** The derivation assumes nearest-neighbor upsampling (Eq. 14) but the paper says "nearest or bilinear resampling" in practice. Noting whether the covariance correction is exact only for nearest-neighbor and approximate for bilinear—and whether this matters empirically—would strengthen the theoretical section.
-
----
+- A compute-matched comparison against a trained cascaded baseline and a simpler low-token baseline would greatly strengthen the paper.
+- A direct ablation of jump-point handling: direct upsample, naive renoise, and the proposed corrective renoise.
+- Quantitative evaluation of 5s vs. 10s generation quality to measure autoregressive drift.
+- More analysis of semantic failures and whether better captions/text conditioning close the gap.
+- Sensitivity analysis over \(K\), stage scheduling, and transition schedules.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged to be removed; treat them with caution.*
-
-**R1 (Harsh Critic): "The main empirical claim is not supported because there is no comparison against a unified full-resolution autoregressive DiT at matched compute."**
-*Reason for removal:* The paper does compare against "standard flow matching" for images (Fig. 7) and "full-sequence diffusion" for videos (Fig. 8) with matched training data, token counts per batch, and model architecture. Demanding an additional matched-compute cascaded baseline is reasonable as a nice-to-have but is outside the paper's stated contribution (unified vs. non-unified). The token math and training cost are independently verifiable. The efficiency claim is not fabricated; it is imprecisely framed in the external comparison (see Minor weakness #6), but not fundamentally unsupported.
-
-**R2 (Harsh Critic): "Knowledge sharing between pyramid stages is claimed but never validated."**
-*Reason for removal:* The paper's primary claim is that unified training eliminates the need for separate models—not that "knowledge sharing" is a measurable phenomenon. The ablations confirm that the unified method learns better/faster than the separated baselines, which is the operationalization of knowledge sharing in this context. Demanding activation-level analysis goes beyond what is standard for an empirical systems paper in this community.
-
-**R3 (Harsh Critic): "Abstract/introduction overstate claims."**
-*Reason for partial removal:* The abstract says "high-quality" (supported by VBench Quality Score) and "highly competitive performance" (the contribution section qualifies this correctly). The intro's contrast against cascaded models is conceptual but not misleading. The headline framing is optimistic but not egregiously wrong given the quality score results. The factual error in the user study caption is a separate, more concrete issue (kept as Major weakness #2).
-
-**R4 (Spark): "No compute-matched comparison (same FLOPs rather than same steps)."**
-*Reason for downgrade to Nice-to-Have:* The ablation uses the same number of tokens per batch, which is the relevant unit for measuring training efficiency in sequence-model settings. The paper is clear about comparing "same computational resources" per batch. This is a legitimate refinement but not a fundamental flaw.
-
-**R5 (Human Finder): "Novelty concerns regarding flow matching extensions vs. Matryoshka/f-DM."**
-*Reason for removal:* Per meta-review policy, we do not raise missing related works. The paper's technical contribution—continuous piecewise flow matching with a mathematically derived renoising correction at stage boundaries—is meaningfully different from architectural solutions (NestedUNet) or separate-stage cascade training. The distinction is clear enough without external references.
-
----
+- **Concerns about release status / existence / verifiability of cited systems, datasets, or models.** Removed per policy.
+- **Pure reproducibility nitpicks about omitted hyperparameters or artifact details.** The paper already gives substantial implementation detail for this genre, and such concerns are not central here.
+- **Claims that external comparisons are unfair because the authors used higher resolution/FPS than baselines.** This actually cuts in favor of the baselines rather than the authors, so it should not be used as a weakness under the provided rules.
+- **Requests for unrelated baselines or missing related works not verifiable from the paper.** Removed.
+- **Criticism of lacking VAE reconstruction metrics as a major flaw.** The paper does use a 3D VAE trained from scratch, but the submission’s central claim is about the generative framework rather than VAE design. Better VAE characterization would help, but its absence does not directly undermine the main claim enough to keep as a substantive weakness here.
 
 ## Novel Insights
-
-The paper's most genuinely novel contribution is the derived renoising correction at pyramid stage boundaries: rather than treating the jump between resolution stages as an ad-hoc transition (as in cascade super-resolution pipelines), the authors derive the covariance structure of the corrective noise needed to preserve the probability path's continuity (Eq. 14–15). The result—a blockwise-correlated Gaussian noise that decorrelates the spatially replicated content introduced by nearest-neighbor upsampling—is a clean example of turning a mathematical constraint into a practical inference procedure. The choice γ = −1/3 as the maximally signal-preserving feasible value (the lower bound for positive semidefiniteness) is elegant and suggests the derivation is tight. Whether this correction actually matters empirically remains unshown (see weakness #3), but the theoretical grounding is the cleanest part of the paper.
-
----
+The most important synthesis is that this paper is best understood not as a pure “new flow-matching objective” paper nor as a pure “efficient video system” paper, but as a **hybrid algorithm-systems submission** whose gains come from a combination of spatial multiresolution denoising and temporally compressed autoregressive conditioning. That hybrid design is exactly why the paper is interesting—but also why the evidence is slightly misaligned with the claim. The method appears genuinely useful and technically nontrivial, yet the current evaluation over-attributes system-level savings to pyramidal flow matching alone. In other words, the paper likely has a real contribution, but its strongest claim should be reframed from “PFM alone yields the efficiency gains” to “the unified pyramidal framework enables a strong quality/efficiency tradeoff.”
 
 ## Suggestions
-
-1. **Run the renoising ablation.** Test at minimum three conditions: (a) no jump correction (direct upsampling only), (b) i.i.d. Gaussian noise at each stage boundary, (c) the proposed correlated renoising (Eq. 15). Report FID or VBench quality scores. This is the most important missing experiment.
-
-2. **Correct the user study caption.** The caption "In all cases, 'Ours' shows a higher preference percentage than the baselines" is factually wrong. Report the actual preference rates honestly and frame the finding more carefully (e.g., "strong aesthetic and motion preference over open-source models; semantic preference is mixed against stronger commercial/larger-scale baselines").
-
-3. **Add a quantitative temporal pyramid ablation.** Even a lightweight experiment—e.g., comparing VBench quality on a held-out eval set at early convergence—would substantiate the efficiency claim for this pillar.
-
-4. **Ablate K (number of pyramid stages).** A simple plot of VBench quality vs. training FLOPs for K = 1, 2, 3 would validate the design choice and be useful to practitioners.
-
-5. **Report VAE reconstruction quality.** A simple PSNR/LPIPS evaluation on a held-out video set would clarify whether the semantic gap is more plausibly a VAE issue or a captioning/training issue.
-
----
+- Add a **compute-matched internal baseline suite**: full-resolution flow matching, cascaded multi-model baseline, and a simple token-reduction baseline.
+- Provide a **rigorous compute table** with per-stage token counts, sampling frequencies, effective average training FLOPs, and separate spatial vs. temporal savings.
+- Add a **jump-point ablation** directly testing the renoising mechanism in Eq. 13–15.
+- Quantify **quality vs. generated length** for 5s, 10s, and longer rollouts to assess autoregressive drift.
+- Strengthen the discussion of **semantic alignment**, ideally with failure cases or an experiment showing caption quality is indeed the bottleneck.
+- Include a brief sensitivity study over **number of pyramid stages** and **stage partition schedule**.
 
 ## Score and Decision
+This is a **good but not flawless** paper.  
+- **Originality:** strong; the unified cross-resolution flow framing is genuinely interesting.  
+- **Importance:** high; training efficiency for high-quality video generation is a valuable problem.  
+- **Claims support:** moderate; the method works, but the evidence does not fully isolate the source of gains and some efficiency claims are imprecisely quantified.  
+- **Experimental soundness:** moderate-to-strong overall, but missing the most important matched baselines and key mechanism ablations.  
+- **Clarity:** good.  
+- **Community value:** high, especially if the code/models are available as stated.
 
-**Calibration:**
+### Calibration
+I calibrated against several human-reviewed papers:
+- **Pyramid Attention Broadcast** (`hDBrQ4DApF.md`, Accept Poster, scores 8/8/6/6): a strong efficiency paper with thorough ablations and clear acceleration evidence. The current paper is similarly important and compelling, but **less thoroughly validated** on its central efficiency mechanism, so I place it **below** this anchor.
+- **Matryoshka Diffusion Models** (`tOzCcDdH9O.md`, Accept poster, scores 5/6/8/6): another multiresolution generative modeling paper that was accepted despite some evaluation gaps. The current paper has a similarly interesting multiscale idea and strong practical ambition; I view it as **comparable or slightly stronger** on practical video impact, though with its own evidence gaps.
+- **MarDini** (`YJwnlplKQ7.md`, Reject, scores 5/6/5/6): a paper with interesting architecture but insufficient ablations/compute-matched support. The current paper is **better supported and more convincing** than this reject anchor because it has stronger external benchmark results and a clearer core contribution.
+- **CogVideoX** (`LQzN6TRFg9.md`, Accept Poster, scores 6/6/8/8/6): a strong large-scale video generation system paper with strong empirical validation. The current paper is **weaker** than this level due to less comprehensive evidence around its claimed mechanism.
+- **LaVie** (`p09XyFxZkc.md`, Reject, scores 5/5/6/6): rejected partly for limited technical novelty and insufficient support. This paper is **clearly above** LaVie because its central formulation is more novel and the open-data benchmark results are stronger.
 
-- *Matryoshka Diffusion Models* (tOzCcDdH9O.md): Scores 5, 6, 8, 6 → Accept (poster). Similar multi-resolution unified diffusion concept, weaker quantitative results (FID 3× worse than SotA on ImageNet), missing video evaluation. This paper is substantially stronger—larger scale, better and more complete evaluation, cleaner formulation, real efficiency gains.
+Overall, this paper lands in the **borderline-to-positive accept** range: stronger than rejected “interesting but under-validated” papers, but not as airtight as the best accepted systems papers. I therefore assign:
 
-- *CMD (Efficient Video Diffusion)* (dQVtTdsvZH.md): Scores 6, 8, 8, 6 → Accept (poster). Comparable setting (efficient video diffusion), strong technical novelty and FVD gains. This paper is comparable in contribution scope; CMD was more clearly better on the quality metric it targeted, but this paper covers a harder (longer, higher-resolution) generation problem with a more principled formulation.
+**Score: 6.5 / 10**  
+**Decision: Accept**
 
-- *ARLON* (8pusxkLEQO.md): Scores 6, 8, 6, 5 → Accept (poster). Similar DiT + autoregressive setting for long video generation. ARLON had more mixed VBench results across metrics; this paper is stronger on visual quality but weaker on semantics.
-
-**Assessment:** This paper is at least as strong as CMD and ARLON, which received average scores of ~7 from human reviewers. The primary concerns—missing renoising ablation, qualitative-only temporal pyramid validation, and the user study caption error—are real but do not undermine the core efficiency and visual quality contribution. The semantic gap is acknowledged by the authors and is likely an addressable data/captioning issue. The method is technically sound, practically impactful, and clearly novel. A score of **6.5** is appropriate: above the marginal acceptance bar and comparable to strong poster papers in the same area.
-
-**Axes:**
-- *Originality*: High — the piecewise flow with mathematically derived renoising is novel
-- *Importance*: High — training efficiency for high-resolution long video is a real bottleneck
-- *Claims vs. support*: Moderate — efficiency and visual quality are well-supported; semantic claims are overclaimed; user study caption is erroneous
-- *Experimental soundness*: Moderate — key ablations (renoising, K) are missing
-- *Clarity*: Good overall, with one factual error in user study framing
-- *Value to community*: High — open-sourced, practically efficient, strong quality baseline
-
-**Decision: Accept (Poster)**
-
-MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL SCORE: <pineapple>6.5</pineapple>  
 MY FINAL DECISION: <orange>Accept</orange>

@@ -1,107 +1,80 @@
-Now let me read some of the referenced human review files for calibration.## Summary
-HMoRA is a parameter-efficient fine-tuning method for LLMs that integrates Mixture-of-Experts with LoRA in a hierarchical manner. Its two main technical contributions are: (1) a **hierarchical hybrid routing** scheme that smoothly interpolates between token-level and task-level routing as a function of layer depth (shallow layers favor token routing, deep layers favor task routing), and (2) a **Constrained Generalized Jensen-Shannon (CGJS) auxiliary loss** that simultaneously promotes routing certainty (low per-sample entropy) and load balance (high mean-distribution entropy). Trained on Flan v2 and evaluated on seven multiple-choice NLP benchmarks using Qwen2 1.5B, the method is claimed to outperform full fine-tuning with only 3.9% of the trainable parameters.
-
----
+## Summary
+This paper proposes HMoRA, a PEFT method that combines mixtures of LoRA experts with a hierarchical hybrid router: shallow layers rely more on token-level routing while deeper layers rely more on task-level routing. It also introduces an entropy/GJS-inspired auxiliary loss intended to improve routing certainty while maintaining load balance, and reports gains over LoRA-style baselines and modest gains over full fine-tuning on multi-task multiple-choice benchmarks.
 
 ## Strengths
-
-- **Well-motivated hierarchical routing.** The design decision to increase the weight of task-level routing with layer depth is grounded in the empirically well-established finding that shallow LLM layers encode syntactic/token-level features while deeper layers encode semantic/task-level features (Geva et al., 2021). This is a principled and non-trivial instantiation of that insight into a routing schedule.
-
-- **Novel CGJS auxiliary loss.** The CGJS formulation is technically sound: it separates the "balance" objective (maximizing entropy of the mean distribution) from the "certainty" objective (minimizing mean individual entropy) using clamped constraints, avoiding the destructive interference that straight GJS optimization causes. Figure 3 provides direct empirical evidence that standard load-balancing loss (L_bc) reduces certainty while CGJS maintains balance *and* increases certainty. Table 1 confirms +0.82 to +0.85 average accuracy gains from applying CGJS.
-
-- **System-level results are competitive.** Table 2 shows HMoRA w/o LW achieves 64.16 average accuracy vs. 63.15 for full fine-tuning and 63.02 for MoLoRA, while using only 6.31% and 3.82% trainable parameters respectively. Compared to all LoRA-MoE baselines tested, HMoRA is consistently best.
-
-- **Practical lightweight variants.** The router-sharing and hydra-LoRA designs (Figure 2c) reduce both parameters (1.61% → 1.21%) and training time (~37%), providing practical flexibility for deployment.
-
-- **Unseen-task differentiation is partially demonstrated.** Figure 4's t-SNE comparison clearly shows that without CGJS, MMLU tasks form an undifferentiated blob, while with CGJS they separate into meaningful clusters. The quantitative metric (42/57 subtasks differentiated vs. 0 without any loss and 7 with L_bc) supports the claim that the auxiliary loss induces task-separable routing behavior.
-
----
+- **Clear and well-motivated method design.** The paper identifies three concrete limitations in prior MoE+PEFT work—uniform routing granularity across layers, weak generalization of task-level routing, and the certainty/balance tradeoff in routing—and proposes corresponding mechanisms: hierarchical token/task routing (Eq. 7–8), a task encoder for task representations (Eq. 6), and the CGJS-style auxiliary loss (Eq. 11–12).
+- **The auxiliary loss is intuitive and better supported than many other claims.** Section 3.3 gives a clean entropy-based motivation: maximize entropy of the batch-averaged routing distribution for balance while reducing per-sample entropy for decisiveness. Table 1 shows consistent improvements from adding `L_aux` for both soft and top-k routing, and Figure 3 aligns with the intended certainty/balance effect.
+- **Reasonable baseline suite for the stated setup.** The paper compares against Full FT, LoRA at two ranks, and several relevant mixture-of-LoRA baselines (MoLoRA, MixLoRA, HydraLoRA). Within this experimental setting, HMoRA is competitive and often best in average score.
+- **Parameter-efficiency is meaningful in the reported setting.** The lightweight version uses 3.9% trainable parameters and still slightly exceeds full fine-tuning on average in Table 2. Even if the margin is modest, this is still a practically relevant result.
+- **The paper is generally readable and experimentally structured.** Routing-method comparison, baseline comparison, and ablation sections are logically organized, and the method description is sufficiently concrete to follow.
 
 ## Weaknesses
 
-### Fatal
-*(None identified — the paper makes real contributions and the core system-level results are not invalidated by the weaknesses below.)*
+###: Fatal
+- None.
 
-### Major
-
-- **Missing ablation isolating the hierarchical routing mechanism.** The central claimed novelty is the *hierarchical* α^(l) schedule — that shallow layers should emphasize token routing and deep layers should emphasize task routing. Yet the ablation study never compares **fixed-α hybrid routing** (uniform mixing across all layers) versus the hierarchical schedule of Eq. 8. The paper only reports in Appendix E.5 that "increasing α^(l) with l generally leads to better performance," but this does not quantify the gain from hierarchical scheduling relative to simply using a non-zero fixed α. Without a direct comparison of (a) token-only, (b) task-only, (c) uniform-α hybrid, and (d) hierarchical-α hybrid, the paper cannot establish that the *hierarchy* — not merely the combination of the two routing types — is responsible for the gains. This is the paper's headline architectural contribution and it lacks the ablation to support it.
-
-- **Unseen-task generalization claim is overstated relative to the evidence.** The paper repeatedly claims (Abstract, Section 1, Section 3.3, Section 4.3) that the task router "generalizes to unseen tasks." However, the only evaluation of unseen-task routing is on MMLU subtasks — while MMLU itself is not in Flan v2, Flan v2 explicitly covers "natural language inference, question answering, translation, and sentiment analysis" (Section 4), highly overlapping with MMLU's subject areas. The t-SNE and differentiation statistics show that CGJS induces cleaner clustering on *similar-distribution* held-out tasks, not genuinely novel domains. The paper offers no evaluation on tasks from categorically different domains or formats (e.g., code generation, structured prediction, dialogue) where the "generalization" claim would be non-trivial. Appendix D (theoretical clustering derivation) is not included in the reviewed text, so the mechanistic claim rests on empirical visualization alone.
-
-- **No variance reported despite 5-run repetitions; margins are small.** Section 4 explicitly states "each experiment is repeated 5 times, and we report the mean." Yet Tables 1–3 report no standard deviations, confidence intervals, or significance tests. The headline advantage over full fine-tuning is ~1 point average accuracy (64.16 vs. 63.15), and several per-benchmark differences are below 0.5 points. Without variance, it is impossible to determine whether these differences are statistically meaningful. Given that the authors already ran 5 seeds, adding variance estimates is essentially zero-cost and its omission substantially weakens confidence in the claimed superiority.
+### Major:
+- **The headline claim that HMoRA “outperforms full fine-tuning” is somewhat overstated relative to the evidence.** In Table 2, the gain over Full FT is modest: 63.88 vs 63.15 for HMoRA w LW and 64.16 vs 63.15 for HMoRA w/o LW. The paper states that each experiment is repeated 5 times and reports only the mean, but no standard deviations/confidence intervals are shown. Given the small margins, the lack of dispersion estimates matters for judging whether the improvement is robust rather than noise.
+- **The evidence for the unseen-task generalization / unsupervised task differentiation claim is weaker than the wording suggests.** The paper repeatedly claims that the auxiliary loss lets the task router “differentiate tasks in an unsupervised manner and generalize to unseen tasks.” What is shown in the main text is: Figure 4 t-SNE plots on selected MMLU tasks, Table 3 showing a drop when removing the task-router auxiliary loss, and a brief statement that 42/57 MMLU subtasks are “differentiated” in Appendix E.8. This is suggestive, but not enough to fully establish the strong causal claim. In particular, the main text does not operationally define “differentiate” or provide a direct held-out-task generalization evaluation beyond clustering-style evidence on unseen benchmark subtasks.
+- **The paper does not cleanly isolate the contribution of hierarchical routing itself.** This is the core architectural idea, but the main tables do not sharply disentangle it from the auxiliary loss and the broader HMoRA design. Section 4.1 uses only token-level routing. Table 2 evaluates the full system with top-2 routing, auxiliary loss, hierarchical routing, and sometimes lightweight variants combined. Section 4.3 summarizes appendix ablations for `epsilon` and `mu`, but the main body does not include a direct comparison against a strong non-hierarchical hybrid baseline with fixed mixing across layers. As a result, the central claim that the layerwise hierarchy is specifically responsible for the gains remains only partially substantiated.
+- **Parameter-matched fairness is incomplete for the strongest variant.** HMoRA w/o LW achieves the best results, but uses 6.31% trainable parameters, compared with 4.78% for LoRA r=64 and about 3.2–4.0% for the mixture baselines. Since added adaptation budget can itself improve results, a tighter parameter-matched comparison would make the claimed advantage more convincing.
 
 ### Minor
-
-- **Evaluation restricted to multiple-choice benchmarks.** All seven evaluation benchmarks (MMLU, MMLU-Pro, ARC-E/C, OpenBookQA, SWAG, CommonsenseQA) use multiple-choice format. The model was trained on Flan v2, which covers generation, translation, summarization, and other formats. The paper claims general "multi-task" capability, but provides no evidence on generative or open-ended tasks. This limits the scope of conclusions that can be drawn.
-
-- **Small model scale limits generalizability.** Experiments are conducted exclusively on Qwen2 1.5B and LLaMA 3.2 1B. At these scales, the relative effectiveness of token vs. task routing and of expert specialization may differ substantially from 7B+ models, where task diversity is richer and MoE dynamics are known to change. The claim that HMoRA is an effective LLM fine-tuning strategy would be substantially stronger with at least one 7B-scale experiment.
-
-- **Task encoder computational overhead underreported.** The TaskEncoder (a Transformer encoder processing the full input sequence per batch) introduces inference overhead not captured by the "trainable parameter percentage" metric. Figure 2c shows training time for lightweight variants only; there is no wall-clock comparison of the full HMoRA system against baselines at inference time. For a PEFT paper that emphasizes efficiency, this omission is notable.
-
-- **The soft combination of g_task and g_token lacks justification.** Equation 7 linearly mixes the two gate distributions. The two routers are trained with different loss terms (CGJS applied to both, but the task router also receives the unseen-task differentiation signal), so their output scales and calibrations may differ. The paper does not discuss whether direct linear mixing is well-calibrated, nor compare against normalizing the combined distribution.
+- **Evaluation scope is narrower than the paper’s broad framing.** The paper is framed as making “LLMs more effective” for multi-task NLP, but the reported evaluation suite in the main text is entirely multiple-choice / classification-style benchmarks (MMLU, MMLU-Pro, ARC, OpenBookQA, SWAG, CommonsenseQA). This is enough to support claims about that setting, but not broader claims about general LLM effectiveness across open-ended generation tasks.
+- **Model-scale evidence is limited.** The main text centers on Qwen2 1.5B, with LLaMA 3.2 1B results deferred to the appendix. This is not a flaw in itself, but it weakens claims about generality and scalability of the routing dynamics.
+- **Inference/serving overhead is not analyzed in enough depth.** The method introduces routed LoRA experts and a task encoder. The paper reports training-time/parameter comparisons for lightweight designs (Figure 2c), but does not provide a fuller latency/memory analysis at inference time, which is relevant for a PEFT method motivated partly by efficiency and practicality.
+- **The method introduces several hyperparameters whose robustness is only partially explored.** The paper discusses ablations for some settings (e.g., `gamma_c`, `epsilon`, `mu`) mostly in the appendix, but the overall sensitivity of the full method is still somewhat unclear.
+- **The main text does not compare CGJS directly against unconstrained GJS, despite claiming the constrained form is necessary.** Section 3.3 states that directly optimizing GJS reduced performance and motivated CGJS, but the main paper does not show that comparison quantitatively.
 
 ### Trivial
-
-- The α^(l) formula (Eq. 8) involves two hyperparameters (ε, μ) that, combined with CGJS's (γ_b, γ_c) and λ, yield five new hyperparameters. Ablation on μ shows insensitivity; a simplified linear schedule would improve usability.
-
----
+- **Some key methodological details are pushed to appendices.** For example, routing implementation details, hierarchical schedule ablations, lightweight design studies, and the unseen-task differentiation metric are largely outside the main text. This does not invalidate the paper, but it makes the central evidence harder to assess from the main body alone.
 
 ## Nice-to-Haves
-
-- **Expert-activation analysis by layer.** Visualizing which experts are activated for syntactic vs. semantic inputs at shallow vs. deep layers would directly verify the presumed specialization behavior that motivates the hierarchical design.
-- **Hard-switch ablation.** Comparing the soft α interpolation (Eq. 7) against a binary depth-threshold switch (token-only in first L/2 layers, task-only in last L/2) would empirically justify the soft parameterization.
-- **Per-task breakdown of accuracy.** Showing per-task improvements would clarify whether gains are broad-based or driven by a subset of benchmarks.
-- **Validation on at least one generative task** (e.g., GSM8K or XSum) to widen the empirical scope.
-
----
+- Add a direct **hierarchical vs. flat hybrid routing** ablation with matched capacity/training budget.
+- Report **mean ± std** across the 5 runs already performed, especially for Table 1 and Table 2.
+- Include a more direct **held-out task-family evaluation** to support the unseen-task generalization claim.
+- Add **inference latency and memory** comparisons against LoRA and MoE-LoRA baselines.
+- Provide **per-task or per-expert specialization analysis**, e.g., expert activation heatmaps across layers and tasks.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged to be removed; treat them with caution.*
-
-- **[Harsh Critic, Issue 1 — Full FT comparison unfairness]** The harsh reviewer claims that full FT under a 10k-step budget is "not a fair oracle baseline." However, evaluating PEFT methods against full fine-tuning under a fixed training budget is the standard practice in the PEFT literature (LoRA, MixLoRA, HydraLoRA all do the same). The point of PEFT is precisely that it achieves good performance under constrained budgets. The comparison is appropriate; the concern reduces to the missing variance issue, which is already captured as a Major weakness. The "structural" framing — that HMoRA's outperformance of full FT is an artifact of the budget — is speculative without evidence that full FT would surpass HMoRA under a longer budget.
-
-- **[Harsh Critic — Gate value commensurateness]** The claim that g_task and g_token are not "commensurate or calibrated enough to be mixed directly" is a theoretical concern but is speculative without empirical evidence of miscalibration. Both are softmax outputs over the same e=8 experts, making the concern plausible but not demonstrated.
-
----
+- **“The paper should compare against missing related methods.”** Removed per instruction not to speculate about missing related work.
+- **Pure formatting/style complaints.** Not included.
+- **Criticism that task-level routing is not really task-level because it is derived from the input only.** The paper is explicit that task routing is based on sentence/task representations from the input via a task encoder, and this is a valid design choice rather than a flaw.
+- **Complaints about omitted low-level routing details in the main text.** The paper explicitly states “A detailed explanation of routing methods is provided in Appendix A,” so this is not a substantive weakness by itself.
+- **Any criticism doubting the existence, release, or verifiability of cited models/datasets/benchmarks.** Removed by rule.
 
 ## Novel Insights
-
-The CGJS auxiliary loss is a technically interesting contribution that separates two objectives typically conflated in load-balancing losses: global balance (high entropy of the mean distribution) and individual certainty (low entropy of each sample's distribution). The constrained formulation — using floor/ceiling thresholds on the two entropy terms rather than direct maximization/minimization — avoids over-regularization and preserves model flexibility. This is a generalizable technique beyond the HMoRA architecture: it could be applied to any soft MoE system where expert specialization is desired without collapsing all traffic to a small set of experts. The observation that this same loss induces unsupervised task clustering in the routing space (Figure 4) — effectively acting as a contrastive pressure even without explicit task labels — is a noteworthy emergent behavior that connects routing regularization to representation learning.
-
----
+The paper is strongest when read not as a broad demonstration that hierarchical routing solves general multi-task PEFT, but as evidence for a narrower and interesting point: **routing regularization seems to matter at least as much as routing granularity**. Table 1 and Table 3 suggest that a substantial part of HMoRA’s gains may come from making routers more decisive and structured, especially for the task router, while the hierarchical schedule itself is less cleanly isolated. In other words, the paper likely contains two contributions of unequal maturity: the auxiliary loss is comparatively well supported, whereas the hierarchical layerwise routing story remains plausible but not yet decisively demonstrated.
 
 ## Suggestions
-
-1. **Add the non-hierarchical hybrid ablation** (fixed uniform α across all layers) to the main paper. This single experiment directly validates the hierarchical claim that is central to the paper's novelty.
-2. **Report standard deviations** in Tables 1–3, since 5 runs are already done. This immediately addresses the significance concern on small margins.
-3. **Add at least one generative benchmark** (e.g., GSM8K or TriviaQA open) to broaden the empirical coverage.
-4. **Qualify the "unseen task generalization" claim** to "unseen tasks from similar domains" and evaluate on at least one categorically different task format to substantiate or limit the generalization claim.
-5. **Report inference latency** of the task encoder relative to baselines, not only training time, to fully substantiate the efficiency claim.
-
----
+- Add a **fixed-α hybrid routing baseline** and compare it directly to the proposed increasing-α schedule.
+- Report **standard deviations** for all main tables, since 5 runs were already performed.
+- Make the unseen-task claim more precise by defining the “differentiation” metric in the main text and adding a more direct held-out-task experiment.
+- Provide a **parameter-matched LoRA baseline** closer to HMoRA w/o LW’s trainable budget.
+- Quantify **inference-time overhead** from the task encoder and routed LoRA experts.
+- Tone down broad claims such as “makes LLMs more effective” and “outperforms full fine-tuning” to better match the actual empirical scope.
 
 ## Score and Decision
+**Assessment by axis:**  
+- **Originality:** Moderate. The combination of hierarchical token/task routing with a certainty-balance auxiliary loss is a meaningful incremental contribution.  
+- **Importance:** Moderate. Efficient multi-task PEFT for LLMs is an important problem.  
+- **Claims supported?:** Partially. The routing-loss improvements are supported, but the broader claims about unseen-task generalization and hierarchical routing are stronger than the evidence.  
+- **Experimental soundness:** Reasonable but incomplete. Baselines are relevant, yet key isolation experiments and uncertainty reporting are missing.  
+- **Clarity:** Good overall.  
+- **Value to the community:** Positive, especially for researchers on MoE+PEFT, though the paper would benefit from tighter claim calibration.
 
-**Calibration:**
+**Calibration against retrieved human-reviewed anchors:**  
+- Compared with **EvDeiLv7qc** (“Pushing Mixture of Experts to the Limit”), which received scores **6,5,8,8** and was accepted: that paper seems somewhat stronger empirically and more thoroughly validated relative to its claims. HMoRA is in a similar topic area and is competitive, but here the main claim-to-evidence gap is larger.  
+- Compared with **IDJUscOjM3** (Self-MoE), which received **6,6,6,6**: HMoRA feels roughly in this range—interesting idea, useful experiments, but with nontrivial scope/validation limitations.  
+- Compared with **LWvgajBmNH** (MoRE), which received **3,3,5,5** and was rejected: HMoRA is clearly stronger than this lower anchor because it has better motivation, stronger baseline coverage, and a more convincing empirical core.  
+- Compared with **eWNEqdH0vk** (RMoE), which received **8,6,3,6**: like RMoE, HMoRA suffers from limited scale and modest gains, but HMoRA’s empirical package is a bit more complete for its intended fine-tuning setting.
 
-| Paper | Topic | Decision | Avg Score |
-|---|---|---|---|
-| ReMoE (4D0f16Vwc3) | Differentiable MoE routing | Accept | ~6.6 |
-| LRR (eWNEqdH0vk) | Layerwise recurrent routing | Accept | ~5.75 |
-| Tight Clusters / AC Router (Pu3c0209cx) | Routing via clustering theory | Accept | ~7.0 |
-| PERFT (PPjpGTPG5K) | MoE+LoRA PEFT | Reject | ~5.3 |
-| Glider (0gVatTOgEv) | Hierarchical global+local routing | Reject | ~4.0 |
+Overall, this paper looks **borderline but slightly above reject**: a solid incremental systems/PEFT paper with a real contribution, but not one whose strongest claims are fully nailed down.
 
-**Positioning:** HMoRA is above PERFT (which lacked external comparisons and clear motivation) and well above Glider (which had confused objectives). It is comparable to LRR, which was accepted despite small-scale experiments. However, unlike LRR (which provided clean, well-isolated empirical evidence for its core mechanism), HMoRA lacks the critical ablation isolating hierarchical routing from the rest of the system. The overstated unseen-task generalization claim and missing variance further reduce confidence. The paper lands between LRR (accepted) and PERFT (rejected) — at the borderline. The contributions are real (CGJS loss is novel and validated, system results are solid), but the core architectural claim is undersubstantiated and the evaluation is narrow. Score: **5.0** — borderline reject.
+**Final score: 6.0 / 10**  
+**Decision: Weak Accept**
 
-**Axis-by-axis:**
-- **Originality:** Moderate. Hierarchical routing is novel in the PEFT context; CGJS loss is technically interesting.
-- **Importance of research question:** High. Multi-task PEFT is practically important.
-- **Claims well supported:** Weak. The headline claim about outperforming full FT lacks variance; the hierarchical routing mechanism lacks direct ablation; unseen-task generalization is overstated.
-- **Soundness of experiments:** Moderate. Solid comparison against MoE-LoRA baselines; gaps in hierarchical ablation and variance.
-- **Clarity:** Good overall; method is reasonably well-explained.
-- **Value to research community:** Moderate. CGJS loss is a potentially reusable component; results on small models are encouraging but not conclusive.
-
-MY FINAL SCORE: <pineapple>5.0</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>

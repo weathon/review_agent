@@ -1,112 +1,79 @@
-Now let me look at the human review calibration papers to better anchor the score.Now I have sufficient context to write the final consolidated review. Let me verify one more key claim about the dynamics model training requirements:---
-
 ## Summary
-
-Residual-MPPI proposes an online planning algorithm for customizing continuous-control policies at execution time by integrating Residual Q-Learning (RQL) into the MPPI framework. The core idea is to treat the log-likelihood of a prior policy as a reward surrogate for the unknown original task reward, enabling planning over an augmented objective without retraining the policy. The method is evaluated on four MuJoCo environments and on the champion-level racing agent GT Sophy 1.0 in Gran Turismo Sport (GTS), where it successfully customizes the policy toward safer route selection with significantly fewer laps of data than RL-based alternatives.
-
----
+This paper proposes Residual-MPPI, an online planning method for continuous-control policy customization that uses a prior policy’s log-likelihood together with an add-on reward inside MPPI. The goal is to adapt a deployed policy to new requirements without retraining the policy itself, and the paper demonstrates this on MuJoCo tasks and, notably, on customizing GT Sophy 1.0 in Gran Turismo Sport for safer route selection.
 
 ## Strengths
-
-- **Practically significant problem with principled formulation.** Policy customization without access to the original reward function or policy retraining is a real deployment need, and the RQL reduction to an augmented MDP with log π as a reward is theoretically grounded and conceptually elegant.
-- **Comprehensive, privileged baselines.** Guided-MPPI and Valued-MPPI have access to the original reward/value function (information unavailable to Residual-MPPI), making their inclusion genuinely strong baselines. The fact that Residual-MPPI outperforms them establishes a meaningful contribution.
-- **Compelling GTS demonstration.** Customizing GT Sophy 1.0 with only ~2,000 laps of dynamics training (vs. ~80,000 for Residual-SAC to converge) is a striking data-efficiency result on a realistic, high-fidelity simulator. Guided-MPPI and Greedy-MPPI fail entirely in this environment, directly validating the necessity of the log π term where it matters most.
-- **Sample efficiency claim is well-supported.** The comparison against Residual-SAC at equivalent data budgets (200K steps vs. 4M steps) clearly establishes the advantage of the planning-based approach in low-data regimes.
-- **Theoretical foundation is present and honest about its limits.** Proposition 1 explicitly states its assumptions (γ=1, infinite-variance Gaussian), and the text uses "suggests" and "approximates" appropriately rather than claiming exactness.
-
----
+- **Addresses a practically important problem with a clean formulation.** The paper targets online customization of deployed continuous-control policies under new requirements, which is a meaningful robotics/autonomy problem where full retraining is often impractical.
+- **The core method is simple and operationally appealing.** Using the prior policy both as a sampler/initializer and via a `log π` reward term is a natural way to preserve prior behavior while optimizing add-on objectives.
+- **Good empirical scope, especially the GTS case study.** Beyond standard MuJoCo tasks, the paper demonstrates customization of GT Sophy 1.0 in a challenging racing simulator, which is a substantially more compelling test than toy continuous-control alone.
+- **Baseline design is generally thoughtful.** The paper includes prior policy, multiple MPPI variants, and RL baselines, including privileged variants with access to reward/value information, which helps isolate what the `log π` term contributes.
+- **Evidence for strong interaction efficiency relative to RL fine-tuning.** In both MuJoCo and GTS, Residual-MPPI appears much more interaction-efficient than Residual-SAC, especially in the racing setup where Residual-SAC needs vastly more data to become viable.
 
 ## Weaknesses
 
-### Fatal
-*None. The paper makes a real, non-trivial contribution and the core mechanism works.*
+###: Fatal
+- None. The paper is a real contribution with meaningful experiments; the main issues are overclaiming and incomplete analysis rather than a collapse of the entire contribution.
 
-### Major
-
-- **Residual-MPPI is statistically indistinguishable from Greedy-MPPI in 3 of 4 MuJoCo environments.** From Table 1: HalfCheetah (1936.2±109.3 vs 1939.9±134.7), Swimmer (−60.0±5.2 vs −58.9±5.4), Hopper (7363.0±254.9 vs 7367.0±199.4) are all within overlapping standard deviations. Only Ant shows a clear win (6846.7 vs 6104.2), with the paper's own explanation being that the add-on reward there (y-axis velocity) is genuinely orthogonal to the basic reward. The paper argues the log π term is "the key factor" and "necessity," but 3 of 4 tasks fail to demonstrate this. The MuJoCo add-on tasks (joint angle penalty, height bonus) appear insufficiently challenging to reveal the difference. The GTS result does validate the log π term decisively, but the MuJoCo results undercut the broad narrative about its necessity. The paper should either redesign the MuJoCo tasks to be more discriminating, or more honestly qualify the scope of the MuJoCo claim.
-
-- **No wall-clock inference timing reported for GTS.** The paper's central practical claim is online, deployment-time customization. MPPI with a neural dynamics model requires many parallel rollouts per control step at a fixed frequency in GTS. The absence of any latency or computation-time analysis leaves the "online" feasibility claim unvalidated. For a real-time control setting like racing, this is not optional information.
+### Major:
+- **The theoretical justification is materially weaker than the paper’s rhetoric suggests.** In Sec. 3.1, Proposition 1 connects MPPI to a maximum-entropy policy only under restrictive conditions: deterministic dynamics, `γ = 1`, terminal value `V*`, and effectively uniform action-sequence sampling via “Gaussian noise with infinite variance.” The actual method in Algorithm 1 and Eq. (6) uses finite covariance, discounted rewards, learned dynamics, and no terminal soft value. So the paper does **not** really establish that the implemented Residual-MPPI is a principled solver for the augmented MDP in the same strong sense claimed; rather, it provides motivation for a heuristic approximation. This matters because the paper repeatedly frames the method as theoretically grounded, even calling the `log π` incorporation “theoretically sound.”
+- **The main-text algorithm appears incorrect/incomplete as written.** In Algorithm 1, line 13 defines a normalizer `η`, but line 15 defines the sample weights without using it, and line 18 then updates the action sequence with apparently unnormalized weights. If this is just a transcription mistake, it is still a substantive one because it affects understanding and reproducibility of the core update rule.
+- **The empirical claims of broad superiority are overstated relative to Table 1.** The MuJoCo results support that Residual-MPPI is competitive and sometimes clearly better, but not that it consistently “outperforms” Greedy-MPPI or is the “ideal choice.” In HalfCheetah, Swimmer, and Hopper, Residual-MPPI is effectively tied with Greedy-MPPI on total reward; the clearest gap is Ant. Likewise, Valued-MPPI is competitive on preserving the basic task. The paper’s discussion in Sec. 4.2 is stronger than what the numbers justify.
+- **No computational/runtime analysis is provided for an online planner.** Since the method is explicitly positioned as an online execution-time customization approach built on sampling-based MPPI, omitting wall-clock cost, planning frequency, or real-time feasibility is a significant omission. This is especially important for the GTS setting, where practical deployability is part of the appeal.
+- **Dependence on dynamics-model quality is central but insufficiently characterized.** The paper acknowledges this in Sec. 3.2 and Sec. 7, but there is no systematic analysis of how model error affects customization quality, when zero-shot breaks down, or how much few-shot fine-tuning recovers. Given that the method requires a learned/plausible dynamics model, this is a key practical limitation.
 
 ### Minor
-
-- **Theory-practice gap acknowledged but underdiscussed.** Proposition 1 holds under γ=1 and infinite Gaussian variance (effectively a uniform prior). Algorithm 1 uses γ < 1 and a finite-variance Gaussian. The paper handles this appropriately in Sec. 3.1 ("suggests" and "approximates"), but the GTS section then characterizes the log π term as "theoretically sound" without re-qualifying the approximation. A brief sentence acknowledging the residual approximation gap in the algorithm would improve precision.
-
-- **Small evaluation sample in GTS.** Table 2 reports mean ± std over only 30 laps in a high-variance domain. Off-course steps (4.43±2.39 for few-shot, 9.03±3.33 for zero-shot) have high relative variance, and more laps would strengthen confidence in these values.
-
-- **Abstract understates the dynamics model requirement.** The abstract states the method requires "access to the prior action distribution alone," but the method also requires a usable dynamics model, which in GTS required approximately 2,000 laps of training data. The contribution is genuinely about avoiding *policy retraining* (not all learning), and the abstract should be updated to say so precisely.
-
-- **Residual-SAC framing in GTS is subjective.** The paper describes Residual-SAC (0.87 off-course steps) as "overly conservative" while accepting Residual-MPPI (4.43–9.03 off-course steps) as "safe enough." No target threshold for off-course safety is defined, making this a qualitative judgment rather than an objective evaluation. The paper should either define a safety specification or present this as a Pareto tradeoff between lap time and constraint violation.
-
-- **Dynamics model quality not ablated.** The zero-shot variant's quality is directly bounded by how good the offline dynamics model is, yet there is no experiment showing how performance degrades with reduced model data or increased prediction error. This is relevant to the zero-shot claim and is a missing experiment.
+- **The evaluation only partially matches the paper’s broader “retain prior properties” framing.** In practice, retention is evaluated mostly through basic-task reward in MuJoCo and lap time in GTS. That is reasonable, but narrower than the paper’s wording about preserving the prior policy’s “properties.” Some direct behavioral similarity analysis would have made this claim better supported.
+- **The abstract/introduction somewhat overstate plug-and-play simplicity.** The abstract says customization is possible “given access to the prior action distribution alone,” but the method section clearly also requires a dynamics model (`F` in Algorithm 1), and in practice the paper relies on learned dynamics and sometimes online fine-tuning. Similarly, the claim that the method “eliminates the need for additional policy training” is true for the policy, but not for the dynamics model.
+- **Sensitivity of key hyperparameters is underexplored in the main paper.** The balance parameter `ω'` is central to the customization trade-off, yet there is no substantive main-text analysis of how to set it. The same applies, to a lesser extent, to planning horizon, sample count, and temperature.
+- **Few-shot evidence is incomplete across domains.** The paper discusses both zero-shot and few-shot Residual-MPPI, but the main MuJoCo table reports zero-shot only, while GTS highlights few-shot improvement. A more complete matrix would better support the few-shot story.
 
 ### Trivial
-
-- The paper refers to Residual-SAC and Fulltask-SAC as "upper bounds" when they operate in different data regimes and optimize different objectives; "reference points" is a more accurate label.
-
----
+- **Some explanatory claims could be phrased more carefully.** For example, the discussion that `log π` “serves as a proxy of the prior policy’s Q-function” is directionally intuitive under maximum-entropy assumptions, but stronger than what the paper itself rigorously establishes.
 
 ## Nice-to-Haves
-
-- **Trade-off curves as ω' varies** — A sweep of the prior-vs-add-on weight would reveal whether customization is smooth and controllable, which is essential for practical deployment guidance.
-- **More discriminating MuJoCo tasks** — Tasks with structurally orthogonal objectives (like Ant) better demonstrate the method's unique value; replacing some of the near-aligned add-on tasks (joint angle, height) would sharpen the narrative.
-- **Multimodality analysis** — If the prior policy captures multimodal behavior, it would be informative to show whether Residual-MPPI preserves or collapses those modes during customization.
-
----
+- A direct study of when Greedy-MPPI is sufficient versus when the `log π` term becomes crucial would sharpen the practical takeaway, especially since the benefit is dramatic in Ant/GTS but modest in several MuJoCo tasks.
+- More diagnostics in GTS—e.g., where remaining off-course steps occur on the track, or segment-wise failure analysis—would better illuminate the method’s remaining limitations.
+- A behavioral closeness metric to the prior policy, beyond reward proxies, would better align evaluation with the paper’s customization framing.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged to be removed — treat them with caution.*
-
-- **Harsh Critic: "Algorithm 1, line 15 uses 1/λ instead of the normalization constant η."** The critic themselves acknowledge this "may be a parser or truncation issue." Given the hard rule on formatting/notation artifacts from parser issues, this is removed.
-
-- **Harsh Critic: "ω(Ek) in Eq. (4) doesn't look like a normalized importance weight."** This is a presentation-level notation concern. The standard MPPI weighting is well-established in the literature; the paper's notation is a compact variant. Removed as a formatting/presentation nitpick.
-
-- **Harsh Critic: "Full-MPPI is a strawman."** Full-MPPI's failure in continuous control without any policy prior is not trivially expected from the problem setup; it validates that the prior policy guidance is necessary. This is not an unfair comparison that advantages the authors — it is a meaningful ablation. The asymmetry (Full-MPPI loses to Residual-MPPI) is intentional and informative. Removed per hard rule.
-
-- **Human Finder: "Missing comparison with offline-to-online RL baselines (Cal-QL, RLPD, IQL)."** These methods require task-specific training and are not applicable to the zero/few-shot online customization setting the paper targets. Comparing against them would require additional reward access the paper explicitly scopes out. Removed as out-of-scope.
-
-- **Human Finder: "Comparison with TD-MPC2 or DreamerV3 for policy adaptation."** As the paper notes in Sec. 6, these methods require knowledge of the basic reward function and cannot be directly applied to the customization setting. Removed as misunderstanding of scope.
-
----
+- **Complaints about omitted baselines/related work.** Several reviewer comments ask for comparisons to additional methods (e.g., TD-MPC2, MBPO-style methods, other model-based planners). Per instruction, I do not treat missing related works as a weakness here.
+- **Criticism that some GTS baselines are unavailable because of access constraints.** The paper explicitly states in Sec. 5.1 that for GT Sophy they only have access to the policy network, so Valued-MPPI cannot be run. This is not a valid weakness in itself.
+- **Generic sim-to-real criticism.** The paper already discusses sim-to-real limitations in Sec. 7. Asking it to solve real-world transfer is outside the stated scope; at most this is a future direction, not a core flaw.
+- **Claim that “zero-shot” is invalid because a dynamics model is trained.** The paper’s usage is clearly “zero-shot policy customization” / no customization-time policy training, not no prior learning of any component. The terminology could be clarified, but the criticism in its strong form would be misleading.
+- **Strong criticism of deterministic-dynamics assumptions as invalidating the paper.** Proposition 1 indeed assumes deterministic transitions, but the paper uses this as a limited theoretical bridge and then demonstrates the method empirically with learned models. This weakens the theory claim, but does not by itself invalidate the empirical paper.
 
 ## Novel Insights
-
-The synthesis across reviews points to a genuinely useful methodological insight: the log π term in Residual-MPPI is not just a regularizer (as Greedy-MPPI implicitly treats it by sampling from π) but an explicit reward signal that encodes long-horizon information about the original task. The difference between sampling from a prior and *evaluating* the prior's log-likelihood at each trajectory step is subtle but consequential — sampling from π provides implicit regularization that is direction-agnostic when the add-on reward is aligned with the prior task, but breaks down when they are orthogonal or structurally conflicting. The GTS failure of Greedy-MPPI is arguably the paper's clearest proof of this: route selection requires the planner to prefer trajectories that are globally competitive, not just locally not-off-course. The log π term provides the Q-value-like long-range signal that Greedy-MPPI lacks. This distinction between sampling-based and evaluation-based use of the prior is the paper's most insightful contribution and deserves more emphasis.
-
----
+The most important synthesis is that this is best viewed as a **strong empirical systems/planning paper with a weaker-than-advertised theory wrapper**. The practical contribution is real: using the prior policy as both sampling prior and objective proxy enables an effective customization mechanism, and the GTS demonstration is genuinely impressive. But the paper would be substantially stronger if it framed Residual-MPPI as a motivated approximation to the augmented-MDP objective rather than as a near-direct theoretically justified solver. The gap between what the experiments establish (“useful, scalable, interaction-efficient customization”) and what the theory language implies (“principled solution of the augmented MDP”) is the central issue.
 
 ## Suggestions
-
-1. **Redesign or augment 2–3 MuJoCo tasks to have structurally orthogonal objectives** (like Ant). This directly strengthens the core claim about log π being necessary and removes the ambiguity created by the 3/4 ties.
-2. **Report wall-clock time per control step for GTS** (both with and without GPU batching for MPPI rollouts). This validates the "online" claim concretely.
-3. **Replace "given access to the prior action distribution alone"** in the abstract with "given only access to the prior policy (without knowledge of the original reward or task parameters)" — accurate and still a strong selling point.
-4. **Add a dynamics model quality sweep** (training data from 200 to 4000 steps) in appendix or main paper to show robustness of the zero-shot variant.
-5. **Define a safety threshold** for GTS off-course steps and present the Residual-SAC comparison as a Pareto tradeoff rather than labeling one policy "too conservative."
-
----
+- Recast the theoretical claims more modestly: explicitly state that Proposition 1 is a motivating bridge under restrictive assumptions, while the implemented Residual-MPPI is an approximation.
+- Fix Algorithm 1 in the main paper so the weight normalization is unambiguous and matches the implementation exactly.
+- Add a runtime/planning-cost analysis for MuJoCo and GTS, including per-step inference/planning latency.
+- Add a focused sensitivity analysis for `ω'`, since it is central to the behavior trade-off and practical usability.
+- Temper empirical language in Sec. 4.2 from “outperforms/ideal choice” to “competitive and clearly advantageous in settings where preserving prior behavior matters over long horizons.”
+- Include a more direct analysis of dynamics-model quality, ideally by varying training data or comparing zero-shot vs few-shot in a controlled MuJoCo setting.
+- Add a behavioral-retention metric or visualization to support the stated goal of preserving prior-policy properties, not only reward trade-offs.
 
 ## Score and Decision
+**Assessment by axis:**  
+- **Originality:** Moderate. The integration of RQL-style customization with MPPI is natural rather than conceptually radical, but still meaningful.  
+- **Importance:** High. Online customization of deployed control policies is valuable for robotics/autonomy.  
+- **Claims support:** Mixed. The empirical utility is supported; the stronger theory and superiority claims are not fully supported.  
+- **Experimental soundness:** Good overall, with a standout GTS demonstration, but missing runtime and deeper model-quality analysis.  
+- **Clarity:** Generally clear, though Algorithm 1 has a concerning specification issue and some claims are overstated.  
+- **Community value:** Solid. The GTS case study and practical framing make this useful to the robotics/planning community.
 
-**Calibration:**
+**Calibration against retrieved human-reviewed papers:**  
+- Compared to **M³PC** (`/home/wg25r/review_agent/human_reviews/inOwd7hZC1.md`, accepted, scores 6/8/8/6), this paper is similar in having a practically appealing MPC-style idea and good experiments, but weaker on completeness because it lacks runtime analysis and overstates its theory more. So I place it somewhat below that acceptance level.  
+- Compared to **Off-Road Autonomous Driving via Planner Guided Policy Optimization** (`/home/wg25r/review_agent/human_reviews/uaKBM9sGEm.md`, rejected, scores 6/3/1/6), this paper is stronger: the method is cleaner, the empirical evidence is more convincing, and the GTS showcase is better aligned with the stated contribution.  
+- Compared to **Equivariant TD-MPC** (`/home/wg25r/review_agent/human_reviews/vl3F3s8OMg.md`, rejected, scores 3/3/6/5), this paper is again stronger empirically and clearer in practical value, though it shares some theory-to-practice mismatch issues.  
+- Compared to **Q-Adapter** (`/home/wg25r/review_agent/human_reviews/WLSrq1254E.md`, accepted with uniform 6s), this paper feels in a similar broad quality band: meaningful contribution with clear practical value, but not a slam-dunk due to missing analyses and some overclaiming.
 
-| Paper | Topic | Human Scores | Decision |
-|---|---|---|---|
-| MWHIIWrWWu (MPC² hierarchical control) | MPPI for complex control | 5, 6, 8, 6 (avg ~6.3) | Accept Poster |
-| e5jGTEiJMT (Policy Decorator) | Residual policy adaptation | 8, 5, 8 (avg ~7) | Accept Poster |
-| JZCxlrwjZ8 (ADM dynamics model) | Dynamics model learning | 5, 5, 6, 8 (avg ~6) | Accept Poster |
-| i7jAYFYDcM (BMPC) | MPC + policy learning | 6, 8, 8, 6 (avg ~7) | Accept Poster |
+Overall, I view this as **borderline but slightly below accept**: a good and useful paper whose practical contribution is real, but whose theory framing and evaluation claims need tightening.
 
-This paper is positioned comparably to or slightly above JZCxlrwjZ8/MWHIIWrWWu in terms of experimental impact (the GTS demo significantly exceeds any of the calibration papers in real-world ambition), but its MuJoCo results have the 3/4 Greedy-MPPI tie weakness that is more concerning than the issues in e5jGTEiJMT or i7jAYFYDcM. The key differentiator is that GTS unambiguously demonstrates the method's value, and the sample-efficiency claim is strongly supported. On balance, I place this at 6.0 — firmly in Accept Poster territory, with real but non-fatal weaknesses.
+**Score: 5.5 / 10**  
+**Decision: Reject**
 
-**Axis Evaluation:**
-- *Originality:* Good — combining RQL with MPPI for black-box policy customization is a meaningful step not directly replicated by prior work
-- *Importance of research question:* High — online deployment customization without retraining is a genuine practical need
-- *Claims supported:* Partially — GTS results strongly support the method, MuJoCo support is weaker than claimed
-- *Soundness of experiments:* Moderate — strong baselines, but GTS evaluation is small (30 laps) and inference cost is unreported
-- *Clarity of writing:* Good overall, with some abstract overclaiming
-- *Value to community:* Solid — both the GTS application and the planning framework for black-box policy customization are useful contributions
-
-**Final Score: 6.0 (Weak Accept / Accept Poster)**
-
-MY FINAL SCORE: <pineapple>6.0</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

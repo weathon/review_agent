@@ -1,118 +1,72 @@
-Now let me search for calibration papers.Now let me search for a few more calibration papers with similar themes (empirical negative results, ablation studies on LLMs for MT).Now I have all the information I need. Let me produce the consolidated review.
-
----
-
 ## Summary
-
-This paper investigates the source of translation performance in *Machine Translation from One Book* (MTOB), specifically asking whether LLMs learn to translate Kalamang (and other low-resource languages) from grammatical explanations or from the parallel examples embedded in grammar books. Through a carefully designed ablation that manually filters grammar books into parallel (BOOK_para) and non-parallel explanatory (BOOK_non-para) subsets, the authors demonstrate that almost all MT gains stem from parallel examples. They further show that fine-tuning NLLB-1.3B on the parallel data matches the expensive long-context Gemini setup, and introduce a typological feature prompt that achieves leading results on linguistically-appropriate tasks (grammaticality judgment and IGT prediction).
-
----
+This paper revisits the claim that long-context LLMs can learn translation for extremely low-resource languages from a grammar book, and asks what in the book is actually useful. Its core contribution is a clean ablation separating parallel examples from non-parallel grammatical exposition, showing across Kalamang, Nepali, and Guarani that the translation gains come mainly from the parallel material, while grammatical prose contributes little for MT; it also shows that small MT fine-tuning is competitive and explores typological prompting on more grammar-aligned tasks.
 
 ## Strengths
-
-- **Central ablation is exactly the right one and is cleanly executed.** Manually filtering BOOK_para vs. BOOK_non-para directly tests the headline question. Table 2 is unambiguous: BOOK_p matches or outperforms BOOK_all in most settings, while BOOK_¬p alone plummets by 7–8 CHRf++ points relative to BOOK_p. This is the paper's load-bearing result and it is clearly supported.
-
-- **Statistical analysis strengthens the core claim.** The regression of CHRf++ on test-set type coverage (Figure 2) is significant in both directions (p < 0.005, F-test; significant Pearson correlations), and all prompt settings fall within the 95% confidence interval of the regression line. Crucially, total token count is *not* a significant predictor (p = 0.997), isolating vocabulary coverage as the operative variable rather than sheer prompt length.
-
-- **NLLB comparison makes the conclusion practically actionable.** Table 4 shows fine-tuned NLLB-1.3B achieves CHRf++ competitive with Gemini given the same parallel data (34.2 vs. 26.6 eng→kgv; 28.6 vs. 33.1 kgv→eng), in a fraction of the time and cost. This is a genuine practical takeaway for the XLR MT community: standard MT fine-tuning with extracted parallel sentences suffices.
-
-- **Use of CHRf++ over CHRf is both principled and important.** The paper correctly addresses a methodological weakness flagged in prior reviews of MTOB. Using CHRf++ incorporates word order and aligns with XLR MT evaluation norms.
-
-- **Constructive positive contribution beyond the critique.** The paper does not stop at negation—it identifies where grammar *does* help (grammaticality judgment and IGT prediction) and introduces typological feature prompting, which consistently performs best on these linguistically-motivated tasks. This provides a nuanced, actionable message: task-appropriate data matters.
-
-- **Generalization to Nepali and Guaraní.** Table 3 consistently shows BOOK_¬p and BOOK_all hurt performance relative to 0-SHOT for seen low-resource languages (up to −7 CHRf++), while BOOK_p has a neutral or small positive effect. This extends the negative finding beyond a single unseen language.
-
----
+- **The central ablation is exactly the right experiment and is well executed.** Splitting grammar books into `BOOK_para` and `BOOK_non-para` directly tests the paper’s main question rather than accepting the appealing “learn from a grammar book” narrative at face value. The Kalamang results are especially compelling: `BOOK_non-para` is far worse than `BOOK_para`, and `BOOK_all` is only marginally better than `BOOK_para` despite using far more context.
+- **The paper makes a substantive and important negative result.** For translation, the evidence supports the narrower claim that long-context prompting benefits primarily from parallel examples and bilingual lexical content, not prose grammatical explanations. This is an important correction to prior interpretation and practically useful for XLR MT.
+- **The NMT comparison materially strengthens the paper.** Table 4 shows that fine-tuning NLLB on extracted parallel data is competitive with or better than Gemini prompting on the same data, which turns the paper from a prompt-analysis exercise into a stronger methodological statement about what practitioners should do.
+- **The work goes beyond criticism and asks where grammar actually helps.** The shift to grammaticality judgment and IGT prediction is thoughtful and aligned with the nature of grammar books. Even if the positive results there are modest, the paper is stronger for testing a more appropriate use case for grammatical knowledge.
+- **The paper is generally clear and well argued.** The experimental setup, motivation, and limitations are mostly easy to follow, and the authors are appropriately explicit in several places about what their results do and do not show.
 
 ## Weaknesses
+###: Fatal
 
-### Fatal
-*None.*
-
-### Major
-
-- **The regression supporting the core claim is built on approximately 12–15 data points.** Figure 2 is based on the set of distinct prompt configurations tested with Gemini, which is a small sample for a regression model making significance claims. While the F-test is reported as p < 0.005, regression with this few observations is sensitive to leverage from individual points. Bootstrapped confidence intervals or permutation tests would substantially strengthen this analysis, which is central to the paper's argument that grammar explanations add *no statistically significant advantage* beyond vocabulary coverage.
-
-- **The positive typological prompting claim is overstated relative to the evidence.** The abstract claims typological prompting "achieves leading results" on grammaticality judgment and IGT prediction, and §5 headlines this as a firm positive finding. However:
-  - In Figure 1, TYP + BOOK_p beats BOOK_p by 2%, 0%, and 3% on the three judgment settings (65% vs. 63%; 76% vs. 76%; 83% vs. 80%).
-  - In Table 5, TYP + BOOK_para beats BOOK_para by only 0.7 morpheme accuracy (46.1 vs. 45.4) and is *worse* on word accuracy and CHRf++.
-  - No variance estimates, confidence intervals, or significance tests are reported for these tasks, despite the paper using significance language ("leading results").
-  - These differences are plausibly within measurement noise given the 100-example and 97-example test sets used. The positive claim should be softened to an encouraging trend rather than an established finding.
+### Major:
+- **The broad resource-allocation recommendation is stronger than the evidence supports.** The paper repeatedly concludes that XLR MT data collection is “best focused on parallel data over linguistic description.” The experiments strongly support this for the tested *prompting paradigm* and settings, especially Kalamang, but the empirical basis is still limited: one truly unseen-language case (`kgv`) with a 100-example test set, plus two seen low-resource languages (`npi`, `gug`) where 0-shot competence is already substantial in some directions. This supports a narrower conclusion about long-context prompting with raw grammar books much more cleanly than a general prescription for multilingual XLR MT resource prioritization.
+- **The positive claim that typology helps on linguistic tasks is only modestly supported.** The improvements over the strongest non-typology prompt are small: in Figure 1, `TYP + BOOK_p` is only a few points above `BOOK_p`, and in Table 5 it improves morpheme accuracy from 45.4 to 46.1 over `BOOK_para`. The paper sometimes frames this as “leading” performance or as strong evidence that LLMs can exploit grammar for relevant tasks; that is directionally fair, but the evidence is relatively thin for a strong positive claim.
+- **The vocabulary-coverage regression is somewhat overinterpreted.** Section 5.1 shows a meaningful correlation between test-set type coverage and CHRf++ across prompt settings, but the causal language goes too far when claiming performance is “directly modelled” by coverage and that explanations provide no significant advantage beyond it. The prompt settings vary in more than vocabulary coverage: structure, glosses, retrieval characteristics, and example format also differ. The regression is useful supporting analysis, but it does not by itself explain away any possible contribution of grammatical information.
+- **The Kalamang test set is still small for some of the paper’s finer-grained claims.** The paper improves over the prior 50-example directional setup by combining to 100 examples, but this is still limited for reading much into sub-point CHRf++ differences or into strong generalization claims. This matters especially where the paper contrasts small margins such as explanation-added vs. parallel-only settings.
 
 ### Minor
-
-- **The 100-example Kalamang test set is small for drawing robust conclusions.** While a clear improvement over MTOB's 50 examples, a 100-example test set means reported CHRf++ differences of ~1–2 points carry substantial uncertainty. This is particularly relevant for the comparisons between BOOK_all and BOOK_para, where the margin (e.g., 34.4 vs. 30.8 eng→kgv for Gemini) is somewhat narrow. The paper acknowledges this indirectly but does not provide bootstrapped confidence intervals.
-
-- **The Gemini-ft underperformance is relegated to an appendix without satisfying analysis.** The observation that fine-tuned Gemini underperforms NLLB and in-context Gemini by 6–12 CHRf++ is interesting and somewhat contradicts common expectations. Attributing this to Gemini being "already extensively instruction-tuned" is speculative and deserves at least brief empirical probing.
-
-- **The grammaticality judgment task has an unverified validity assumption.** As the authors acknowledge (§3.4), local word swaps and shuffles may not always produce ungrammatical sentences in Kalamang. This limits how strongly Figure 1 can be read as evidence of grammatical knowledge acquisition—surface-level anomaly detection could partially drive performance. The limitation is appropriately disclosed but means the positive result must be taken with caution.
+- **The grammaticality judgment task is only a proxy and has limited interpretability.** The paper explicitly acknowledges: “we cannot guarantee all corruptions are ungrammatical.” That is a reasonable caveat, but it does limit how strongly Figure 1 can be interpreted as evidence of grammar acquisition rather than sensitivity to sentence perturbations.
+- **Some conclusions rely on single-run API prompting without uncertainty estimates on the relevant task comparisons.** This is not a fatal reproducibility complaint, and single-run reporting is common, but it weakens confidence in very small gains on the linguistic tasks and in close prompt comparisons, particularly on the 97-example IGT test set.
+- **The paper does not fully disentangle whether grammar is unhelpful for MT, or whether raw descriptive book format is a poor interface for LLMs.** The typology prompt partly addresses this, but because it is a high-level structured summary rather than extracted rules from the book, the paper more securely shows that *raw grammar-book prose* is ineffective for translation than that grammatical content in any presentation would be.
 
 ### Trivial
 
-- The Nepali and Guaraní settings are qualitatively different from Kalamang (the models likely have prior knowledge of these languages; 0-SHOT is already high for npi). The paper appropriately hedges when discussing these as "seen low-resource" languages, but the introduction could make this asymmetry more prominent rather than grouping these findings equally with the Kalamang result.
-
----
-
 ## Nice-to-Haves
-
-- **Test the extremely low parallel data regime (10–50 examples + grammar).** The paper tests grammar alongside 1,200+ parallel examples. In the truly data-starved scenario (≤50 examples), grammar explanations might matter more. This is the most consequential missing experiment for the generality of the "grammar doesn't help MT" conclusion.
-
-- **Ablate which typological features drive the linguistic task improvements.** The TYP prompt is tested only as a complete block. Knowing whether word order, case marking, or tense features are the primary contributors would make the positive result much more interpretable and actionable.
-
-- **Test with a pedagogical grammar book** (one designed for language learning rather than linguistic description). The kgv grammar is a descriptive theoretical text; a pedagogical grammar might provide clearer LLM-exploitable structure. The paper mentions this limitation but does not test it.
-
-- **Scale analysis for parallel data.** Reporting how MT performance scales with 100 / 500 / 1,000 parallel examples vs. grammar book size would make the practical recommendations more actionable for data collection efforts.
-
-- **Per-phenomenon error analysis.** Aggregate CHRf++ could mask that grammar explanations help with specific morphological or word-order phenomena even when overall scores do not improve. A small-scale breakdown would enrich the analysis.
-
----
+- A more explicit cost comparison between long-context Gemini prompting and NLLB fine-tuning would strengthen the practical takeaway that fine-tuning is cheaper.
+- A small targeted error analysis comparing `BOOK_all`, `BOOK_para`, and `BOOK_non-para` could reveal whether grammatical prose changes error types even when it does not improve overall CHRf++.
+- Testing one additional long-context model or a compressed/structured grammar-summary variant would help separate “grammar content does not help MT” from “this presentation of grammar does not help MT.”
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged to be removed; treat them with caution. They were raised in the input reviews but do not survive verification against the paper or the hard/soft rules.*
-
-- **"Gemini API dependency limits reproducibility"** (Neutral Reviewer, Weakness 3): The paper explicitly justifies using Gemini-1.5-Flash due to context-length requirements (1M token window), also uses open-weight Llama-3.1-8B for comparison where context allows, and discloses all settings. This is a standard reproducibility concern rooted in the use of a closed API and falls under the removable nitpick category. The model exists and is accessible.
-
-- **"Cross-language generalization claim is overstated"** (Harsh Critic, Concern 2): The paper does not claim Nepali and Guaraní support the same mechanistic conclusions as Kalamang. It explicitly states the npi effect sizes are smaller, attributes this to prior model competence, and limits the claim to generalizing the *negative* finding ("no evidence that LLMs can effectively exploit grammatical explanations for translation"). The framing in the paper is consistent with the evidence.
-
-- **"Request for human evaluation beyond the appendix analysis"** (Neutral Reviewer, Suggestion 4): The paper notes the infeasibility of engaging proficient Kalamang speakers in a footnote, which is a legitimate constraint. Demanding human evaluation for XLR translation is non-standard and outside the paper's scope given this constraint.
-
----
+- **Claims about model/tool/dataset existence or release status.** Per instruction, any concern implying cited resources may not exist or are not verifiable is removed.
+- **Pure reproducibility complaints rooted in Gemini being API-only.** The paper clearly states the model choice and context-window rationale. While single-model reliance is a legitimate scope/generalization weakness, doubting reproducibility because the model is API-only is not an acceptable core criticism here.
+- **Formatting issues around the duplicated `Book_p` label in the extracted Figure 1/table text.** The user explicitly noted PDF extraction artifacts; this is not a paper flaw.
+- **Complaints that the paper lacks NMT baselines.** This would be factually wrong: the paper includes NLLB fine-tuning and Llama fine-tuning, and Table 4 is one of its strengths.
+- **Claims that evaluation is invalid because there is no human evaluation.** The paper explicitly states why Kalamang human evaluation is infeasible and uses CHRf++ for that reason; this is a limitation, but not a standalone fatal methodological flaw.
 
 ## Novel Insights
-
-The paper's most genuinely novel observation is that the apparent strength of grammar-book-prompted LLMs for XLR translation can be almost entirely accounted for by the *vocabulary coverage* of the parallel examples embedded in the book—not by any exploitation of the grammatical explanations. The regression in Figure 2 operationalizes this sharply: all prompt configurations, including those with full grammar books, sit on the same linear relationship between type coverage and CHRf++, meaning the explanatory text adds no measurable signal once coverage is controlled. The secondary insight—that the *form* of grammatical knowledge matters more than its *presence* (typological features help linguistic tasks; raw prose explanations do not help translation)—opens a productive direction for thinking about what kinds of linguistic resources are actually useful to LLMs in different task settings.
-
----
+The paper’s strongest contribution is not merely that grammar books help less than expected, but that it cleanly separates *resource content* from *resource packaging*. The evidence suggests that for MT, long-context LLM prompting behaves more like retrieval over parallel exemplars than like induced learning from linguistic exposition; the same paper resource becomes useful or useless depending on whether it is represented as aligned examples, glossed triples, or prose. That framing is more valuable than the narrower benchmark dispute, because it points toward a broader lesson for XLR NLP: the key question is not whether a language has a grammar book, but whether its information can be transformed into task-aligned supervision.
 
 ## Suggestions
-
-1. Add bootstrapped confidence intervals to the CHRf++ scores in Table 2, and a permutation test or bootstrap-based significance test to the regression in Figure 2. With ~12 data points, additional robustness checks are essential for the paper's central statistical claim.
-2. Soften the abstract and §5 framing of the typological prompting positive results (e.g., "promising preliminary evidence" rather than "achieves leading results") until significance can be established.
-3. Add a brief experiment or discussion on the low-parallel-data regime—even showing 0-SHOT + TYP vs. 10-SHOT + TYP would partially address this.
-4. Move the Gemini fine-tuning failure (currently appendix) into the main text with at least one attempted explanation beyond speculation about instruction tuning.
-
----
+- Narrow the main conclusion from a general recommendation about XLR MT data collection to a claim about the tested prompting paradigm: raw grammar-book prose is much less effective than extracted parallel examples for MT.
+- Soften the positive typology claims to reflect that the gains on grammaticality judgment and IGT are promising but small.
+- Rephrase Section 5.1 so the regression is presented as supporting descriptive evidence rather than a causal explanation that rules out any contribution from grammatical information.
+- Add uncertainty estimates or bootstrap confidence intervals for the close comparisons, especially on the 100-example Kalamang MT test set and the 97-example IGT test set.
+- Clarify more explicitly that the grammaticality task is a proxy perturbation test rather than a validated benchmark of Kalamang grammatical competence.
+- If space permits, include one structured-grammar condition (e.g., compressed rules or extracted paradigms) to better isolate whether the issue is grammatical content or book format.
 
 ## Score and Decision
+**Originality:** High. The ablation of grammar-book content into parallel vs. non-parallel material is a genuinely useful and novel experimental intervention.  
+**Importance of research question:** High. The paper addresses an influential and practically relevant claim about XLR translation and resource usage.  
+**Whether the claims are well supported:** Mixed but overall good. The core negative MT claim is well supported; the broader policy conclusion and the positive typology story are somewhat overstated.  
+**Soundness of experiments:** Good overall. The design is thoughtful and the NMT baseline is important, though some analyses are overinterpreted and the smallest gains are underpowered.  
+**Clarity of writing:** Good to very good.  
+**Value to the research community:** High, especially as a corrective to overclaiming about grammar books for XLR MT.
 
-**Calibration against anchor papers:**
+**Calibration against human-reviewed papers:**  
+- Compared with **MTOB** (`tbVWug9f2h.md`, scores 6/8/8, accepted spotlight), this paper is less benchmark-creating and less broadly ambitious, but more incisive in causal analysis and stronger in its ablation logic. It is not as obviously high-upside as MTOB, but it is methodologically sharper on the specific question it asks.  
+- Compared with **Mufu** (`0eMsrRMmCw.md`, scores 6/6/8, accept poster), this paper feels similar in overall quality: both have meaningful low-resource MT contributions and practical takeaways, but also limits in breadth and some overstatement.  
+- Compared with **IntGrad MT** (`SmxM4POTBk.md`, scores 6/3/8/6/3, reject), this submission is stronger because its baselines are more appropriate, its core claim is cleaner, and its practical message is better grounded.  
+- Compared with **ASROB** (`sjvz40tazX.md`, scores 8/3/5/6, reject), this paper is stronger and more self-contained: it has a sharper central experiment and a clearer main takeaway, even if its generalization is still limited.
 
-- **MTOB** (tbVWug9f2h.md): Scores 6, 8, 8 → accepted as spotlight. This is the paper being directly critiqued. MTOB introduced the benchmark; the paper under review delivers the ablation MTOB's reviewers explicitly asked for (CHRf++, NMT baseline, disentangling signal sources). The present paper is methodologically cleaner on the ablation but less novel as a standalone contribution.
+Overall, this paper is above the reject-range anchors because it has a real, well-supported central result and useful practical implications, but below strong-accept papers because it overextends its conclusions and its positive auxiliary claims are modest.
 
-- **ASROB** (sjvz40tazX.md): Scores 8, 3, 5, 6 → rejected. ASROB extended MTOB to speech with limited additional insight. The paper under review is substantively different: it directly challenges MTOB's core claim with a principled ablation and new analysis, rather than merely extending the task modality.
+**Score: 7.0**  
+**Decision: Accept**
 
-- The paper's weaknesses (small test set, regression on ~12 points, overclaimed typology results) are comparable to what MTOB's 6-scoring reviewer flagged (narrow modelling, insufficient interpretable evaluation), but the paper actually addresses several of those concerns (NMT baseline, CHRf++). The two weaknesses that remain unaddressed (small-sample regression, inflated positive claim) push back toward the lower end of acceptability.
-
-**Assessment by axis:**
-- *Originality*: Moderate — the ablation idea is straightforward but necessary and has not been done before for this benchmark.
-- *Importance of research question*: High — directly tests whether a spotlight paper's central claim holds.
-- *Claims well-supported*: MT negative claim: yes, strongly. Typology positive claim: weakly.
-- *Soundness of experiments*: Good, but the regression sample size is a concern.
-- *Clarity of writing*: Good — well-organized, honest about limitations.
-- *Value to the research community*: Meaningful — the practical implication (parallel data > grammar text for XLR MT; NLLB fine-tuning competes) is actionable.
-
-**Final score: 6.5** — positioned below MTOB's average (~7.3) because it is an analysis paper rather than a benchmark creator, and because the positive claim is overclaimed; but comfortably above ASROB's median because the central negative finding is rigorous, practically important, and well-executed.
-
-MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL SCORE: <pineapple>7.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

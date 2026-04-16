@@ -1,119 +1,90 @@
-Now let me read the calibration papers referenced by the Human Finder reviewer.Now let me look at the specific anomaly in Table 2 more carefully and check related review papers for final calibration.---
-
 ## Summary
-BlackDAN is a black-box jailbreak attack framework that applies NSGA-II multi-objective evolutionary optimization to generate prompts that simultaneously maximize attack success and semantic consistency with the harmful query. The paper argues that prior single-objective methods produce off-topic or easily detectable jailbreaks, and proposes Pareto-dominance-based selection over two fitness functions (llama_guard_2 unsafe-token probability and all-MiniLM-L6-v2 cosine similarity). Experiments span 9+ open-source LLMs and two multimodal LLMs, with an additional embedding-space analysis supporting a "Rank Boundary Hypothesis."
-
----
+This paper proposes **BlackDAN**, a black-box jailbreak framework that uses **NSGA-II** to optimize jailbreak prompts under multiple objectives, primarily unsafe-response likelihood and semantic consistency with the harmful query. The paper’s main empirical message is that adding a second objective beyond nominal attack success can improve jailbreak effectiveness across several LLMs and multimodal LLMs, but the submission overstates what is actually implemented and validated.
 
 ## Strengths
-
-- **Well-motivated multi-objective formulation.** The paper correctly identifies a real gap: optimizing solely for ASR can produce off-topic jailbreaks with low practical value. Figure 1's 2×2 grid concisely illustrates this failure mode and the motivation for simultaneously optimizing harmfulness and semantic consistency is compelling.
-
-- **Broad empirical coverage.** The paper evaluates across 9+ LLMs and two multimodal LLMs (LLaVA variants), and includes both self-attack and transfer settings. Table 2 adds a secondary GPT-4 judge metric alongside keyword-ASR. Results on open-source models are consistently strong (e.g., 95.4% ASR on Llama2-7b, 97.5% on Vicuna-7b in Table 2).
-
-- **Embedding space analysis.** Figures 5–6 use a different embedding model (bge-large-en-v1.5, not the fitness proxy) for visualization, which is methodologically careful. The PCA/UMAP analysis with SVM decision boundaries and Fréchet mean/Tangent PCA are genuinely novel visualizations of the solution space.
-
-- **Time efficiency.** Approximately 2 minutes per sample vs. 12–15 minutes for white-box/gray-box methods (Table 1) is a practical advantage worth highlighting.
-
----
+- **Well-motivated problem framing:** The paper correctly identifies a real limitation in jailbreak evaluation: optimizing only for nominal success can produce refusals, irrelevant outputs, or otherwise impractical attacks. Elevating **semantic consistency** as an explicit optimization target is a meaningful contribution, and Section 3 does concretely define a second fitness function \(f_2\) based on response-query similarity.
+- **Reasonable use of multi-objective search:** Using **NSGA-II** for prompt search is a plausible and interpretable design choice. The paper clearly explains dominance and crowding-distance selection, and the evolutionary framework is naturally compatible with trading off multiple objectives rather than collapsing everything into a single scalar reward.
+- **Broad empirical coverage:** The paper evaluates on multiple text LLMs and includes multimodal experiments on MM-SafetyBench, which is broader than many narrower jailbreak papers. If the protocol were stronger, this breadth could make the study useful to the community.
+- **Some effort toward analysis beyond leaderboard numbers:** The embedding-space visualizations in Figures 5–6 are at least an attempt to understand how Pareto ranks relate to prompt/response structure, rather than presenting only attack rates.
 
 ## Weaknesses
 
-### Fatal
-*None that fully invalidates the paper's existence as a contribution, but the combination of Major issues below materially undermines the headline claims.*
+###: Fatal
 
-### Major
-
-1. **Stealthiness is claimed as a core contribution but is never measured.** The abstract, introduction, conclusion, and contribution list all list stealthiness/detectability as a key objective. However, no stealthiness metric (perplexity, safety-filter detection rate, query-pattern analysis, or human detectability) is reported anywhere in the paper. The method section (Section 3.1) defines only two fitness functions—harmfulness and semantic consistency—with stealthiness conspicuously absent. This is not a minor gap: stealthiness is listed as one of three pillars of the paper's claim, and its complete absence from evaluation means that a central contribution is asserted but unsubstantiated.
-
-2. **Figure 2 lists six objectives; Section 3.1 operationalizes only two.** Figure 2's caption explicitly names "Harmfulness, Semantic Consistency, Conversion, Diversity, Length of text, Number of steps" as optimization objectives, but the entire methodology section defines only two fitness functions (f1 and f2). This inconsistency raises genuine concern about whether the paper delivers what it advertises. Neither Conversion, Diversity, Length, nor Steps are defined, measured, or discussed in the main text.
-
-3. **Keyword-based ASR is a weak primary metric, and the GPT-4 metric reveals a critical failure on GPT-4.** The keyword-based ASR (Section 4.1) counts a response as a successful jailbreak if it does not contain one of a fixed set of refusal phrases. This can count safe paraphrases, generic redirections, or differently-worded refusals as successes. The GPT-4 judge metric is more reliable but is only used in Table 2. Crucially, on GPT-4—the most safety-aligned model in the evaluation—BlackDAN achieves only **28.0% GPT4-Metric**, which is *lower* than PAIR's **30.0%**. The paper's text nevertheless claims "BlackDAN still significantly surpasses other methods like DeepInception and PAIR on GPT-4"—a claim that is false for the more rigorous metric. This discrepancy is never discussed.
-
-4. **No ablation isolating the multi-objective contribution.** The central claim is that MO beats SO because of multi-objective optimization. Section 5.2 (SO) and Figure 3's MO row provide a comparison, but there is no controlled ablation matching compute budget, population size, initialization, and iterations with only the objective count varying. The SO baselines in Figure 3 are cross-model transfers at various budgets; the MO row may benefit from more total optimization effort. Without a budget-matched SO-vs-MO ablation using the same NSGA-II infrastructure, the gains cannot be attributed to multi-objective design rather than other differences.
-
-5. **Semantic consistency is never numerically compared across methods.** The paper's key motivation is that single-objective methods produce semantically inconsistent responses. Yet no semantic consistency scores (actual f2 values) are reported for BlackDAN or any baseline. The paper's title includes "contextual" jailbreaking, but there is no numerical evidence that BlackDAN produces more contextually relevant responses than, say, PAIR or DeepInception.
+### Major:
+- **The paper’s headline “multi-objective including stealthiness” claim is not actually supported by the implemented method or evaluation.**  
+  The abstract and introduction repeatedly claim optimization over **ASR, stealthiness/detectability, and semantic relevance**, and the conclusion again says the method includes “ASR, stealthiness, and semantic consistency.” However, Section 3.1 defines only **two** fitness functions:  
+  1. unsafe token probability via Llama Guard 2, and  
+  2. semantic consistency via MiniLM cosine similarity.  
+  No stealthiness objective is formalized, and Section 4 defines only keyword-ASR and a GPT-4 judge metric. Figure 2 mentions additional objectives such as “conversion,” “diversity,” “length of text,” and “number of steps,” but these are not mathematically specified or empirically studied. So the paper demonstrates at most a **two-objective proxy optimization**, not the broader stealthy multi-objective framework it advertises.
+- **The primary evaluation metric is too weak to support the paper’s strongest claims about effective jailbreaking.**  
+  Section 4.1 defines keyword-based ASR as success whenever the output omits a list of refusal phrases like “I’m sorry” or “I cannot.” This does **not** ensure the model actually produced harmful assistance. A non-refusal response can still be irrelevant, evasive, hedged, or only weakly aligned to the harmful request. This matters especially here because the method explicitly optimizes semantic similarity, so responses that paraphrase or loosely echo the harmful query may be counted as successes without genuinely providing actionable harmful content. The GPT-4-based metric is a better complement, but it is secondary, not reported everywhere, and the success threshold \(g \ge 5\) is not convincingly justified.
+- **The superiority claims over prior methods are not adequately supported by controlled comparisons.**  
+  Table 1 mixes **white-box, gray-box, and black-box** methods, which operate under different assumptions. That can still be informative descriptively, but it is not enough to support a clean “outperforms prior methods” claim. The paper does not clearly state whether baselines were rerun under matched prompts, budgets, query counts, judges, datasets, and target model versions, or whether some numbers came from incompatible prior protocols. Table 2 is stronger, but even there the experimental controls remain under-described, with no variance estimates, no run counts, and little budget information. Given how sensitive jailbreak results are to judges and prompting details, this weakens the central empirical conclusion.
+- **The “Rank Boundary Hypothesis” / interpretability narrative is substantially underdeveloped relative to the claims.**  
+  The contributions section claims a “Rank Boundary Hypothesis” with better differentiation between toxic and non-toxic prompts, and the introduction says the paper will “verify and analyze” prompt boundaries. But the method section never formalizes this hypothesis in a testable way, and the evidence is limited to post hoc embedding visualizations. Figures 5 and 6 may be suggestive, but they do not establish that these boundaries are meaningful, causal, or useful for jailbreak generation. As written, the interpretability and boundary claims are speculative and much stronger than the evidence warrants.
 
 ### Minor
-
-- **No variance or statistical significance reporting.** All results are single-point estimates across a stochastic evolutionary algorithm. Given that NSGA-II involves random initialization, crossover, and mutation, run-to-run variance matters. This is especially concerning for close comparisons (e.g., BlackDAN 28.0% vs PAIR 30.0% on GPT-4 GPT4-Metric).
-
-- **The Rank Boundary Hypothesis lacks quantitative validation.** Figures 5–6 show visually separated clusters in embedding space for best vs. worst Pareto ranks. These visualizations are interesting, but no quantitative measure (silhouette score, rank classification accuracy, statistical cluster separation test) is reported. The "hypothesis" framing implies empirical rigor that is not delivered.
-
-- **Key NSGA-II hyperparameters absent from the main paper.** Population size, number of generations, crossover/mutation rates, and selection criteria are not reported in Section 5.1. Since sensitivity to these parameters is standard concern for evolutionary methods, this is a meaningful omission even if the appendix contains more detail.
-
-- **Coarse genetic operators without analysis.** Crossover by random sentence swapping can break syntactic coherence; mutation by WordNet synonym replacement is very conservative. No analysis is given of failure modes, repair mechanisms, or how operator choices affect diversity or convergence.
+- **The optimization/evaluation alignment is not clearly validated.**  
+  The method optimizes proxy objectives from **Llama Guard 2** and **MiniLM**, but the final evaluation uses **keyword ASR** and sometimes **GPT-4 judgment**. The paper does not analyze how well the optimized proxies correlate with the final success criteria, leaving uncertainty about whether the optimization is truly targeting what the evaluation claims to measure.
+- **The evolutionary algorithm is under-specified for a stochastic black-box attack setting.**  
+  Important details such as population size, number of generations, mutation/crossover rates, stopping criteria, initialization details, and especially **query budget** are not given in the main text. Since this is a query-based black-box attack, query efficiency is a substantive issue rather than a mere implementation nitpick.
+- **No ablation cleanly isolates the value of the multi-objective design itself.**  
+  The paper compares against prior methods and does show a “single-objective” discussion, but there is no careful same-framework ablation holding the optimizer fixed while varying only the objectives. As a result, it remains unclear how much of the gain comes from NSGA-II / search design versus the added semantic objective.
+- **The genetic operators are simplistic and insufficiently justified.**  
+  Section 3.3 uses random sentence swapping for crossover and synonym replacement for mutation. These are plausible baseline operators, but the paper does not show that they are effective, nor which components matter. Given that prompt jailbreaks can be fragile, stronger empirical justification is needed.
+- **Multimodal setup is not described in enough detail.**  
+  The paper claims extension to multimodal jailbreaks and reports Figure 4, but it does not explain clearly how images are incorporated into the optimization loop, whether the attack is text-only prompt evolution over fixed images, or how multimodal harmfulness is judged.
 
 ### Trivial
-- The GPT-4 threshold choice (g ≥ 5) is the natural midpoint of the 1–10 scale and is standard in the literature; criticism of this threshold is not warranted.
-
----
+- **Writing and presentation are sometimes internally inconsistent.**  
+  Some sections conflate objectives (ASR, harmfulness, stealthiness), and the explanation around figures/tables is occasionally confusing. This is not just style: it contributes to uncertainty about what exactly was optimized and evaluated.
 
 ## Nice-to-Haves
-
-- Show the actual Pareto front scatter (f1 vs f2) to demonstrate trade-off structure.
-- Compare against alternative MOEAs (MOEA/D, SPEA2) to justify NSGA-II specifically.
-- Evaluate on frontier safety-aligned models (GPT-4o, Claude) where safety tuning is strongest.
-- Add a sensitivity analysis to proxy model choice (different safety classifiers, different sentence embedders).
-- Include a discussion of defensive implications—how the Pareto-rank structure could inform robustness improvements.
-
----
+- Add a true **stealthiness/detectability** evaluation, since stealthiness is a core claimed contribution.
+- Include **Pareto-front plots** and trade-off analyses to make the multi-objective story concrete.
+- Report **variance across runs** and sensitivity to NSGA-II hyperparameters.
+- Provide qualitative **same-query SO vs. MO examples** showing that the multi-objective version is more semantically aligned, not merely higher-scoring under proxy metrics.
+- Expand the discussion of **defensive implications** and safer red-teaming framing for a safety-oriented venue.
 
 ## Removed Points
-*These points are flagged to be removed; treat them with caution.*
+These points are flagged to be removed, treat them with caution.
 
-- **Harsh Critic: "proxy objectives are weakly connected to the paper's stated goals"** — Using llama_guard_2 for safety scoring and sentence cosine similarity for semantic consistency are standard, reasonable choices in this setting. Flagging them as fatally invalid without stronger argument goes too far. Kept as a minor concern (proxy validation) rather than a structural problem.
-
-- **Harsh Critic: "experimental protocol under-specified enough that reported gains are not interpretable"** — Overstated as a structural criticism. The paper does report time (∼2 min/sample) and covers many models. The hyperparameter gap is a real minor issue, not a fatal structural one.
-
-- **Harsh Critic: "crossover and mutation operators are too weakly specified for publication"** — Sentence-swap crossover and WordNet synonym mutation are described and cited (NLTK/Bird). They are coarse but functional; this is a minor weakness, not a fatal one.
-
-- **Harsh Critic / Neutral: "GPT-4 threshold ≥5 is arbitrary"** — The midpoint of a 1–10 scale is an entirely standard and natural threshold. This is not a meaningful criticism.
-
-- **Neutral / Harsh Critic: Missing related works / comparison with more recent black-box methods** — Per review policy, comparisons to potentially non-existent external work cannot be demanded without sources; removed.
-
-- **Neutral: Ethical considerations / responsible disclosure are insufficient** — While thinness of ethics discussion is a reasonable comment, it does not bear on technical validity and is standard for venue norms in security/adversarial ML.
-
-- **Human Finder: Reproducibility concerns (code release, detailed instructions)** — Per hard rules, reproducibility nitpicks about releasing code or training logs are removed.
-
----
+- **“Missing related work” complaints.** Removed per instruction. While some reviewers requested more baselines or more prior methods, I do not frame this as a related-work omission.
+- **Pure reproducibility nitpicks about appendix placement or omitted trivial details.** I retained only the omissions that materially affect soundness in a stochastic black-box setting (e.g., query budget, generations, population size). Pure “algorithm is in appendix” complaints were not kept as standalone weaknesses.
+- **Criticism that baseline comparison is unfair simply because settings differ and the asymmetry may favor baselines.** I kept only the valid concern that the paper uses mixed settings to support superiority claims without enough protocol detail. I did not keep a generic “comparison is unfair” complaint.
+- **Any complaint questioning existence/release/availability of cited models, tools, or datasets.** Not applicable and removed by rule.
+- **A claimed contradiction that Table 2 disproves the paper’s superiority because GPT-4 GPT4-Metric is 28.0 vs PAIR 30.0.** This point is factually valid for that cell, but the paper’s stronger issue is broader overclaiming and loose evaluation. I therefore did not elevate this isolated number as a central criticism; it is better treated as one symptom of overclaiming rather than a standalone decisive flaw.
 
 ## Novel Insights
-
-The most genuinely novel observation—surfaced most clearly by the Spark reviewer and confirmed against the paper text—is the **internal inconsistency between Figure 2 and the method**: the paper advertises and visualizes six optimization objectives (Harmfulness, Semantic Consistency, Conversion, Diversity, Length, Steps) but implements only two fitness functions. This is not merely a presentation gap; it signals that the framework's claimed extensibility has not been validated beyond two objectives. A second insight: the stark divergence between keyword-ASR and GPT4-Metric on GPT-4 (71.4% vs. 28.0%) is an empirically interesting finding that actually *undercuts* the paper's universal claim but would be highly informative to the community if analyzed honestly—strong safety alignment compresses the ASR gap far more on the rigorous metric than the keyword metric suggests, implying that keyword-ASR systematically overstates jailbreak effectiveness on safer models.
-
----
+The strongest synthesis here is that the paper’s core idea is **better than its evidentiary framing**. There is a genuinely worthwhile contribution in treating jailbreak generation as a trade-off problem between harmful compliance and semantic relevance, and NSGA-II is a sensible mechanism for exploring that trade-off. However, the submission repeatedly markets itself as a broader framework for stealthiness, interpretability, and rank-boundary analysis without ever closing the loop from objective definition to rigorous measurement. In other words, the paper’s likely publishable nucleus is a **two-objective black-box jailbreak search method**, while much of the surrounding narrative—stealthiness, prompt boundaries, interpretability—currently reads as aspirational rather than demonstrated.
 
 ## Suggestions
-
-1. **Measure and report stealthiness directly** (e.g., perplexity-based detection rate, llama_guard detection on outputs) and reconcile Figure 2's six objectives with the two implemented fitness functions.
-2. **Report actual semantic consistency scores (f2 values) for all baselines** alongside ASR—this directly supports the paper's core motivation.
-3. **Add a budget-matched SO vs. MO ablation** using the same NSGA-II algorithm with one vs. two objectives, same population size and iteration count.
-4. **Discuss and analyze the GPT-4 GPT4-Metric failure** honestly: PAIR outperforms BlackDAN (30.0% vs. 28.0%) under the rigorous judge metric. Either explain why or revise the universality claims.
-5. **Add variance reporting** across multiple runs for at least the key Table 2 results.
-6. **Quantify the Rank Boundary Hypothesis** with silhouette score or rank-classification accuracy.
-
----
+- **Narrow the claims to what is actually shown.** If the paper only optimizes unsafe-score and semantic consistency, say so explicitly and stop claiming demonstrated stealthiness unless it is measured.
+- **Replace or substantially supplement keyword-ASR.** Use a stronger harmful-compliance evaluation throughout, ideally with judged harmfulness tied to the specific query and clearer threshold justification.
+- **Run a same-framework ablation:** BlackDAN with only harmfulness proxy vs. BlackDAN with harmfulness + semantic consistency, keeping optimizer, initialization, and budget fixed.
+- **Report budgets and stochasticity details:** population size, generations, mutation/crossover rates, query counts to target and judge models, and results over multiple runs.
+- **Formalize the Rank Boundary Hypothesis** and test it quantitatively if it is to remain a contribution; otherwise, present Figures 5–6 as exploratory analysis rather than validated theory.
+- **Clarify multimodal optimization** with a precise description of how images, prompts, and judges interact.
 
 ## Score and Decision
+**Originality:** Moderate. The combination of NSGA-II with jailbreak objectives is a reasonable and somewhat novel framing, though the components themselves are standard.  
+**Importance:** High. Better evaluation and optimization of jailbreaks is important for red-teaming and safety.  
+**Claims support:** Weak-to-moderate. The paper overclaims stealthiness, interpretability, and boundary analysis relative to what is implemented and measured.  
+**Experimental soundness:** Moderate at best. Breadth is good, but metrics, controls, and protocol detail are not strong enough for the claimed superiority.  
+**Clarity:** Mixed. The high-level idea is understandable, but the paper is internally inconsistent about its objectives and conclusions.  
+**Community value:** Potentially useful if reframed more narrowly and evaluated more rigorously.
 
-**Calibration:**
+For calibration, I compared this paper against:
+- **AutoDAN** (`/home/wg25r/review_agent/human_reviews/ZuZujQ9LJV.md`, scores 5/10/5/5, reject): that paper also drew concern about weak ASR measurement and incomplete evaluation, but some reviewers saw a clearer technical contribution. BlackDAN is similar in spirit and suffers from the same metric issue, with additional overclaiming about stealthiness and interpretability.
+- **AutoDAN (poster accept)** (`/home/wg25r/review_agent/human_reviews/7Jwpw4qKkb.md`, scores 6/8/6/8): the accepted version appears to have stronger evidence directly tied to its stealthiness claim, including defense-oriented evaluation. BlackDAN is below this anchor because it claims stealthiness without actually evaluating it.
+- **JAILJUDGE** (`/home/wg25r/review_agent/human_reviews/cLYvhd0pDY.md`, reject): like that paper, this submission has a meaningful problem setting but insufficiently convincing empirical support for its broad claims.
+- **AutoDAN-Turbo** (`/home/wg25r/review_agent/human_reviews/bhK7U37VW8.md`, accept spotlight): far stronger empirical support and more convincing performance/novelty than the present paper.
 
-- **GnBBSlUb0S** (multi-objective NSGA-II black-box attack on dialogue generation — closest structural analog): Rejected, scores 5, 1, 5, 6, 6 (avg ≈ 4.6). That paper similarly lacked ablation, had limited evaluation scope, and was criticized for adapting an established framework without sufficient new technical contribution.
-- **QXCjvHnDmu** (GA-based black-box jailbreak, single-objective): Rejected, all 5s (avg = 5.0). Criticized for insufficient query budget reporting, missing closed-source experiments, and no ablation.
-- **r42tSSCHPh** (Catastrophic Jailbreak via generation exploitation): Accepted spotlight, scores 8, 8, 6, 6 (avg ≈ 7.0). Strong for simplicity, thorough evaluation, and novel insight—a higher bar.
+Overall, this paper contains a plausible and potentially useful idea, but the current submission overclaims beyond its demonstrated evidence and does not meet the bar for acceptance in this form.
 
-**Positioning:** BlackDAN is broader than GnBBSlUb0S (more models, multimodal, has a secondary judge metric) but suffers from more serious internal inconsistencies (stealthiness unmeasured, Figure 2 vs. method mismatch, GPT-4 overclaim). It is weaker than QXCjvHnDmu on evaluation rigor despite having more experiments. The combination of (a) a claimed contribution that is entirely unevaluated (stealthiness), (b) a Figure 2 advertising objectives the paper never implements, (c) an explicit overclaim on GPT-4 contradicted by the paper's own Table 2, and (d) no numerical evidence for the semantic consistency claim places this paper below the rejection threshold of comparable work.
-
-**Axes summary:**
-- *Originality*: Moderate — applying NSGA-II to jailbreaking with explicit Pareto trade-off is a reasonable extension of prior evolutionary jailbreak work.
-- *Importance*: Moderate — the research question (multi-objective jailbreak quality) is real and relevant.
-- *Claims supported*: Weak — the stealthiness and semantic consistency claims lack numerical support; GPT-4 results contradict the headline claim.
-- *Soundness of experiments*: Weak — no ablation, no variance, keyword-ASR primary metric, Figure 2 inconsistency.
-- *Clarity of writing*: Fair — clear in structure but inconsistent between Figure 2 and method section.
-- *Value to community*: Low-to-moderate — the framework is interesting but delivers less than advertised.
-
-**Final Score: 4.5 — Reject**
+**Score: 4.5 / 10**  
+**Decision: Reject**
 
 MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

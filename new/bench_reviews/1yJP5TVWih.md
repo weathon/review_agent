@@ -1,97 +1,89 @@
-Now let me read the referenced human reviews for calibration:Now I have enough information to produce the final consolidated review. Let me synthesize everything.---
-
 ## Summary
-
-This paper extends the theory of rank collapse from transformers to State Space Models (SSMs) by leveraging the unified sequence-model framework of Ali et al. (2024) and Dao & Gu (2024). The authors introduce *lambda-skip connections*—a parameterized generalization of standard skip connections—and derive sufficient conditions on λ under which a lower bound on the rank-collapse metric is guaranteed not to vanish over a finite depth. They also show that without skip connections, selective SSMs exhibit exponential (and under certain conditions doubly-exponential) rank collapse, and they provide an empirical finding that gating mechanisms also help prevent rank collapse in Mamba-style architectures.
-
----
+This paper studies rank collapse in sequence models through a unified framework covering both transformers and SSMs, and proposes a parametrized residual pathway, the lambda-skip connection, as a mechanism to mitigate it. Its main technical contribution is a lower bound on the rank-collapse metric under conditions on \(\lambda\), together with analyses of collapse in ablated settings and experiments probing skip strength and gating in transformer/Mamba-style architectures.
 
 ## Strengths
-
-- **Genuine novelty: first rank-collapse study for SSMs.** Prior work (Dong et al., Wu et al.) covered transformers; this is the first paper to formally extend the analysis to LTI SSMs and selective SSMs using the O = MV unifying template.
-- **General sufficient condition (Theorem 4.1).** The lower-bound result applies to any architecture expressible in the unified form of Eq. 6, covering transformers, LTI SSMs, and selective SSMs in a single theorem. The LayerNorm normalization decouples C_M from the specific input, making the condition architecturally interpretable.
-- **Novel empirical connection between gating and rank collapse.** Figure 3 and Section 5.2 demonstrate—apparently for the first time—that gating mechanisms (originally designed for memory) also serve to prevent rank collapse in Mamba-2. This is a practically useful observation even if the theory does not yet cover it.
-- **Tightness result (Proposition 4.3.2).** The paper shows that without additional assumptions, the lower bound cannot be improved, providing an honest account of what can and cannot be proven within this framework.
-- **Collapse results for selective SSMs without skip connections (Theorem 4.3 and Appendix A.9/A.10).** The derivation adapts Wu et al. (2024a) to the selective SSM setting and explains why doubly-exponential collapse occurs (input-dependent M^(k) introduces a quadratic dependence on the input norm).
-
----
+- The paper tackles an important and timely problem. Rank collapse has become a meaningful theoretical and practical concern, and extending the discussion beyond transformers to SSMs is a worthwhile objective.
+- The unified formulation in Section 3 is conceptually useful: expressing both attention and SSM blocks through \(O^{(k)} = M^{(k)}V^{(k)}\) gives the work a coherent cross-architecture lens rather than treating transformers and SSMs as unrelated cases.
+- The paper does provide a nontrivial theoretical result in Theorem 4.1: a sufficient condition on \(\lambda\) yielding a layerwise lower bound on \(\mu(Y^{(K)})\). This is accompanied by additional analysis rather than a single isolated theorem.
+- The necessity-oriented discussion is more substantive than usual for papers of this kind: the manuscript includes collapse results in ablated settings, constructive examples where some \(\lambda\) still lead to collapse, and a tightness discussion via Proposition 4.3.2.
+- The empirical observation that gating mechanisms correlate with avoiding rank collapse in Mamba-2-style models is interesting and potentially valuable, even though the current evidence is not yet fully conclusive for causal practical claims.
+- The paper is generally clear about at least some of its limitations, especially the omission of gating from the theoretical treatment and the conservativeness of the sufficient condition.
 
 ## Weaknesses
 
-### Fatal
-*None triggered.*
+###: Fatal
 
-### Major
-
-- **Abstract/title overclaim vs. what Theorem 4.1 actually proves.** The paper defines rank collapse as an *infinite-depth* convergence to rank-1 (Sec. 3.1) and the abstract claims "a general guarantee to prevent rank collapse." However, Theorem 4.1 delivers only a finite-depth lower bound: μ(Y^(K))² ≥ aᴷ μ(Y^(0))². For Mamba specifically, Remark 4.1 acknowledges that a < 1 is the *only* feasible choice, meaning the bound still decays exponentially with depth. The practical argument in Remark 4.1 (a = 0.9999, K = 64 → aᴷ ≈ 0.993) is reasonable, but it is a heuristic mitigation, not a proof of prevention in the sense defined. The contributions section correctly scopes the result to "the finite layers setting," so the result itself is sound — but the title and abstract consistently claim more than the theorem delivers. This mismatch should be corrected for honesty and reproducibility.
-
-- **Theory omits gating, yet experiments show gating is the dominant mechanism for Mamba.** Section 3 explicitly states "we ignore [gating] in the theoretical part of this paper for simplicity," but Section 5.2 shows that, in the fully pretrained Mamba-2 model, gating is the component primarily responsible for maintaining the rank-collapse metric near 1.0. The λ-skip experiments in Section 5.1 are conducted on a *gating-free* version of the model, which is an ablated and off-distribution architecture. The theory thus characterizes a simplified system, while the dominant effect in the real architecture is entirely outside its scope. The limitations section acknowledges this, but the framing that the paper provides "a unifying theory for transformers and SSMs" is overstated given that gating—standard in every deployed Mamba variant—is excluded.
-
-- **Mixed Table 1 results and ambiguous practical conclusion.** The paper concludes that "learning λ does not affect the performance and even outperforms the models with fixed λ in some cases." However, Table 1 shows several notable degradations: Mamba-2 on Image LRA drops from 42.28 to 38.92, Transformer on MQAR drops from 99.6 to 98.9, and Linear Transformer on Image drops from 34.10 to 32.80. On a 2-task, 4-model table with no variance estimates, these cannot be dismissed as noise. The claim that learnable λ is safe or beneficial is not convincingly supported.
+### Major:
+- **The central “prevention” claim is overstated relative to what Theorem 4.1 actually proves.**  
+  The theorem is a finite-depth lower bound, not a blanket architectural guarantee that rank collapse is eliminated. It requires an explicit input condition, \(\mu(Y^{(0)})^2 \ge b\), where \(b\) itself depends on \(K\), \(\lambda\), and model constants. Moreover, the theorem only guarantees \(\mu(Y^{(K)})^2 \ge a^K \mu(Y^{(0)})^2\). In the paper’s own Remark 4.1, for the important Mamba case, “the only possible choice for the collapse rate is \(a<1\),” which still permits exponential decay with depth. So while the theorem is meaningful, statements such as “guarantee prevention of rank collapse” and “rank collapse does not occur” are too strong unless carefully qualified as finite-depth, input-conditioned, and architecture-constant-dependent.
+- **The theoretical treatment of SSMs omits a central component of the practical architecture—gating—creating a real theory/practice gap.**  
+  Section 3.1 explicitly says gating is ignored in theory “for simplicity,” yet Section 5.2 later argues empirically that gating plays a crucial role in preventing rank collapse. Since gating is not incidental in Mamba-style architectures, the paper’s broad SSM-facing claims are weaker than presented: the analysis is about an ablated/simplified SSM block, not the full architecture practitioners actually use. The authors do acknowledge this in the limitations, which is good, but it remains a substantive limitation of the paper’s claimed generality.
+- **The empirical evidence does not adequately support the stronger practical narrative that lambda-skip connections are a useful architectural intervention in trained real systems.**  
+  The main probing experiments modify pretrained models at inference time: e.g., Section 5.1 uses a pretrained Mamba-2, removes gating, inserts additive skip connections with various \(\lambda\), and measures \(\mu\) on Wikipedia excerpts. This is informative as a diagnostic probe of the mechanism, but it is not strong evidence that the proposed architecture is beneficial when actually trained as such. Likewise, the gating ablations in Section 5.2 show that removing gating or LayerNorm from a pretrained model changes \(\mu\), but that is confounded by the fact that the model was trained with those components. Table 1 is the only training-based evidence, yet it reports task accuracy rather than rank-collapse dynamics and gives mixed results.
+- **The practical usefulness of the main bound is limited by its conservativeness and input dependence.**  
+  The paper itself states in Section 5.1 that “our condition on \(\lambda\) in Theorem 4.1 is too conservative, in practice much lower values of \(\lambda\) are good enough.” This is an honest admission, but it also means the main theorem currently offers weak guidance for choosing \(\lambda\) in practice. The dependence of \(b\) on \(1/a^K\) also makes the input condition harder to interpret or verify as depth grows.
 
 ### Minor
-
-- **The input threshold condition μ(Y^(0))² ≥ b (Theorem 4.1) is depth-dependent and never analyzed in practice.** The threshold b depends on K, λ, C_M, and S. There is no discussion of whether this condition is typically satisfied for realistic inputs or trained weights, or how it fails. The paper implicitly assumes it is fine, but it constitutes a hidden premise of the main result.
-
-- **Section 4.2's framing of "necessity" is misleading.** The section explicitly says it does not provide a formal necessary condition, yet the heading asks whether lambda-skip is "necessary" and the section proceeds with ablations and hand-constructed counterexamples. What is shown is: (a) collapse can occur without skip connections, and (b) collapse can occur for specific λ values in particular systems. Neither establishes a necessary condition. The heading should be reworded to reflect what is actually proven.
-
-- **The sufficient-condition bound is acknowledged as too conservative without quantification.** The paper notes in Section 5.1 that "our condition on λ in Theorem 4.1 is too conservative, in practice much lower values of λ are good enough." However, there is no analysis of *how* conservative—the empirically effective threshold versus the theoretical threshold—leaving practitioners unable to use the theorem for guidance on λ selection.
+- **The experimental evaluation is narrow for the scope of the practical claims.**  
+  Table 1 includes only two tasks, and the results are mixed rather than consistently favorable. For example, variable \(\lambda\) slightly helps some settings but hurts others, including Mamba-2 on LRA Image. This does not negate the theoretical contribution, but it does weaken claims of broad practical benefit.
+- **The necessity framing in Section 4.2 is somewhat stronger than what is actually established.**  
+  To the paper’s credit, it explicitly says it does not provide a formal necessary condition. Still, the section title and surrounding narrative can leave a stronger impression than warranted, because the evidence consists of imported transformer results, restricted SSM results, and hand-crafted examples rather than a genuine necessity theorem.
+- **The theoretical setup uses a simplified LayerNorm model, while the experiments involve practical architectures with more complex normalization behavior.**  
+  This simplification is not unreasonable for analysis, but it should be framed more carefully when making claims about real architectures.
 
 ### Trivial
-
-- The simplified LayerNorm (Eq. 4, omitting the bias/shift term) follows Wu et al. (2024a) and is appropriate for theoretical tractability.
-
----
+- The notation around Eq. (6) is a bit awkward, with layer indexing shifted relative to the earlier per-layer definitions, which mildly hurts readability. This is not a substantive flaw.
 
 ## Nice-to-Haves
-
-- **Report learned λ values across layers in Table 1 experiments.** This would reveal whether the model naturally satisfies or violates the theoretical condition, bridging the theory-practice gap identified as a weakness.
-- **Train models from scratch with fixed λ values** at various settings to validate that the rank-collapse control translates to stable or improved training dynamics, not just inference-time proxy metrics.
-- **Provide at least a qualitative/conservative bound that incorporates gating**, even if only for a scalar gating multiplier. Even a coarse result would significantly strengthen the Mamba-specific claims.
-- **Show the empirical λ threshold for rank collapse vs. the theoretical threshold as a function of depth**, to make the conservativeness concrete rather than anecdotal.
-- **Add confidence intervals/multiple seeds to Table 1** (differences on some tasks are <1%).
-
----
+- Include training-time measurements of rank collapse, gradient norms, and loss stability for models trained with different fixed/learned \(\lambda\), to connect the theory more directly to optimization behavior.
+- Report the learned \(\lambda\) values in the variable-\(\lambda\) experiments and compare them to the theoretical sufficient condition.
+- Quantify the gap between the theorem’s lower bound and the empirical \(\mu\) curves to make the conservativeness of the theory more precise.
+- Extend the theory to include gating, even under a simplified multiplicative model, since that is the most relevant missing architectural component for SSMs.
+- Clarify more explicitly when the input condition \(\mu(Y^{(0)})^2 \ge b\) is expected to hold in practice.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged to be removed; treat them with caution.*
-
-1. **Harsh critic, Issue 3 framing as fatal ("experimental evidence is not suitable to validate")**. The use of post-hoc perturbation of pretrained models to study rank-collapse behavior is consistent with methodology in Dong et al. (2023) and Wu et al. (2024a), which this paper explicitly follows. The criticism that it "cannot support causal conclusions" is a methodological standard not uniformly applied in this subfield — this is a limitation, not a fatal flaw.
-
-2. **Harsh critic, claim that the paper should be rejected because a < 1 in the Mamba case**. Remark 4.1 directly addresses this, showing that a = 0.9999 over K = 64 layers gives a^K ≈ 0.993. This is a practical and transparent resolution. The claim that this "leap is not justified" ignores the explicit quantitative argument provided in the paper.
-
-3. **Harsh critic, characterizing Section 5.2 as undermining the theoretical framework entirely**. The paper explicitly frames gating as a separate, empirically studied phenomenon outside the theoretical scope (see Sec. 3 footnote and limitations). The theory and empirical findings are presented in complementary roles, not as contradicting each other.
-
----
+- **“Lambda-skip connections are not novel because parametrized skip connections existed before.”**  
+  Removed as a core weakness. The paper does not really claim the architectural primitive itself is wholly novel; its claim is the rank-collapse analysis and guarantee around that mechanism. This is better treated as scope clarification than a substantive criticism.
+- **Strong criticism of missing variance/confidence intervals or more exhaustive reproducibility details for Table 1.**  
+  Removed. These are not central flaws here, and such requests are not essential for assessing the paper’s main claims.
+- **Any criticism doubting the existence/availability of cited models such as Mamba-2 or benchmarks used in the paper.**  
+  Removed per instruction.
+- **Overly strong complaint that Eq. (6) indexing is “wrong.”**  
+  Removed. The indexing is awkward but interpretable; this is a readability issue, not a factual or fatal flaw.
 
 ## Novel Insights
-
-The most genuinely novel observation from the combined reviews is the tension between the paper's strongest empirical finding and its theoretical contribution: the gating mechanism—not λ-skip connections—appears to be the primary rank-collapse-prevention mechanism in the dominant real Mamba-2 architecture, but gating is entirely excluded from the theoretical analysis. This creates a productive research gap: a theory that covers the lambda-skip mechanism is presented, while the empirical observation that gating is at least as important (Figure 3) is noted. The paper is essentially motivating the next theoretical step (incorporating gating into the rank-collapse framework) through its own experiments, even if it does not achieve it. The tightness result (Proposition 4.3.2) is also underemphasized — it establishes that no general lower bound can do better without additional structural assumptions, which is a hard boundary result useful for future work.
-
----
+The paper’s most interesting underlying tension is that its strongest practical empirical observation is about gating in Mamba-style models, while its strongest theory is about lambda-weighted additive skips in architectures where gating is omitted. That mismatch suggests the deeper scientific contribution may not yet be “lambda-skip connections prevent rank collapse” so much as “rank collapse in modern sequence models is governed by identity-preserving pathways more broadly, with additive residuals and multiplicative gating playing partially analogous roles.” If developed explicitly, that broader framing could unify the paper’s theory and experiments much better than the current presentation.
 
 ## Suggestions
-
-1. **Revise the abstract and title** to accurately reflect the finite-depth scope of Theorem 4.1 and to distinguish "slows/bounds rank collapse over practical depths" from "prevents rank collapse."
-2. **Quantify the conservativeness gap** in Section 5.1 by plotting the theoretical λ threshold from Eq. 7 against the empirically measured threshold across multiple architectures and depths.
-3. **Restructure Section 4.2** to clearly distinguish "collapse occurs when skip connection is entirely removed" from "lambda-skip is necessary," and rename the section accordingly.
-4. **Investigate learned λ values** from Table 1 experiments and evaluate whether they satisfy Eq. 7 — this would validate or refute the practical relevance of the theorem.
-5. **Address Table 1 instabilities**: add multiple seeds or variance estimates, and analyze why Mamba-2 on Image LRA degrades with learnable λ.
-
----
+- Reframe the main claim more precisely: say Theorem 4.1 gives a **finite-depth sufficient condition for avoiding severe collapse** or maintaining a nonvanishing lower bound, rather than a general unconditional prevention guarantee.
+- Tighten the theorem if possible, or at minimum analyze the conservativeness gap quantitatively and explain how practitioners should use the result despite that gap.
+- Add training-based experiments that measure both rank-collapse metrics and downstream optimization behavior for models actually trained with fixed or learned \(\lambda\).
+- Incorporate gating into the theoretical framework, even if only under simplifying assumptions.
+- Discuss mixed results in Table 1 directly rather than leaving them uninterpreted.
+- Report learned \(\lambda\) values and layerwise trends to show whether practice aligns with the theory.
 
 ## Score and Decision
+**Assessment by axis:**  
+- **Originality:** Moderate to good. Extending rank-collapse analysis to SSMs and studying lambda-weighted skips in this context is a real contribution, even if parametrized residuals themselves are not new.  
+- **Importance:** Good. Rank collapse is a meaningful problem, and a unified transformer/SSM view is valuable.  
+- **Claims support:** Mixed. The core theorem exists, but the presentation overclaims relative to the actual conditions and guarantees. Practical claims are under-supported.  
+- **Experimental soundness:** Moderate to weak for practical conclusions. The probing experiments are suggestive but not decisive, and the training-based validation is limited.  
+- **Clarity:** Fairly good overall, though some claims should be more carefully stated.  
+- **Value to the community:** Moderate. The paper has useful ideas and some interesting evidence, but it falls short of fully convincing support for its headline claims.
 
-**Calibration:**
+**Calibration against retrieved human reviews:**  
+I compared this paper primarily against:
+- **X6xzYP2cMk, “Mind the Gap: a Spectral Analysis of Rank Collapse and Signal Propagation in Transformers”** (scores 5,5,6,3; reject): another theory-heavy rank-collapse paper whose scope was limited relative to practical architectures. The current paper is somewhat stronger because it broadens to SSMs and includes more cross-architecture synthesis, but it has a similar theory/practice mismatch.
+- **hgjpO0H0id, “On the interplay between learning and memory in deep state space models”** (scores 3,3,6; reject): another SSM theory paper criticized for limited applicability to practical models. The current submission is stronger and more relevant, but still shares the gap between simplified analysis and practical architectures.
+- **cxKLRM3KhC, “Residual Connections Harm Generative Representation Learning”** (scores 6,5,5,6; reject): related in spirit because it studies modified residual pathways with practical claims that require strong empirical support. The present paper has stronger theoretical substance but weaker direct practical validation.
+- On the positive side, I also considered accepted theory-oriented papers like **KlxK4ncqWZ** and **wYxOMEzpkl**, which earned accepts because their claims and evidence were better aligned. This paper does not reach that level of evidential closure.
 
-- *pymXpl4qvi* (SSM bottleneck paper, accepted, 6/6/6/6): Analyzes SSM limitations theoretically and empirically, with practical mitigation. Accepted partly because it identified SSM issues first. The paper under review is comparably novel but has weaker practical validation (conservative bounds, mixed Table 1).
-- *X6xzYP2cMk* (rank collapse in transformers, rejected, 5/5/6/3): Analysis limited to the first layer only; no general result. The paper under review is strictly stronger in theoretical scope (all depths, both architectures).
-- *cxKLRM3KhC* (residual connection weighting, rejected, 6/5/5/6): Related idea of parameterizing skip connections, rejected due to lack of systematic λ guidance and mixed results. The paper under review has similar issues in Table 1.
+Overall, this submission is **interesting and nontrivial**, but the combination of overclaimed headline guarantees, omission of gating from the theory, and limited practical validation keeps it below the acceptance bar for me.
 
-**Positioning**: This paper is above X6xzYP2cMk (rejected, ~4.8 average) in scope and rigor. It sits below pymXpl4qvi (accepted, 6.0 average) in practical impact and experiment quality. The conservative bounds, gating exclusion, and mixed Table 1 results prevent a clear accept, but the novelty (first SSM rank-collapse study, general sufficient condition, gating finding) prevents a clear reject. The abstract/title overclaiming is the most fixable issue.
+**Score: 4.5 / 10**  
+**Decision: Reject**
 
-**Score: 5.0** — Borderline/weak reject. The paper contains real and novel contributions but overclaims in the abstract, underdelivers on practical validation, and leaves its most important empirical finding (gating) outside the theoretical scope.
-
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

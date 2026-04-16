@@ -1,113 +1,78 @@
-Now let me search for calibration papers to properly score this work.Now I have enough to write the consolidated review. Let me verify the specific ablation table and key numerical claims one more time.Now I have enough information to write a complete, well-calibrated final review.
-
----
-
 ## Summary
-
-This paper proposes a generalizable dynamic radiance field framework that synthesizes novel views from monocular video at test time without any per-scene optimization, fine-tuning, or external priors (depth, semantic masks). The core technical contributions are: (1) a contracted ego-triplane representation for unbounded dynamic scenes, (2) a 4D-aware transformer with temporal-aware view attention, axis-attention, and plane-attention modules to aggregate temporal image features into the triplane, and (3) a temporal-based 3D constraint that enforces multiview consistency during training. The model is trained self-supervised on large-scale monocular video datasets and is evaluated on NVIDIA Dynamic Scenes and RealEstate10K as unseen benchmarks.
-
----
+This paper proposes a feed-forward framework for dynamic novel view synthesis from monocular video without test-time scene optimization. The core design combines a contracted triplane scene representation with a 4D-aware transformer that aggregates temporal image features, plus a temporal-based 3D training constraint, and is trained self-supervised on large-scale monocular video.
 
 ## Strengths
-
-- **Genuine novelty in problem setting.** This is a legitimately first-of-its-kind approach: a fully generalizable (no test-time optimization, no depth priors, no semantic masks) dynamic novel view synthesis model trained self-supervised on monocular videos. Compared to PGDVS† (which requires ZoeDepth depth priors) and MonoNeRF (which requires scene-specific fine-tuning), this is a substantively harder setting.
-
-- **Meaningful gains in the dynamic area over generalizable baselines.** On NVIDIA Dynamic Scenes, the method achieves PSNR 18.64 on dynamic areas vs. 15.93 for PGDVS† and 15.40 for MonoNeRF — a ~3 dB improvement, and this without any external priors. The fact that the method outperforms depth-prior-equipped PGDVS† makes the comparison even more favorable.
-
-- **Broad training and evaluation.** Training spans EPIC Fields, Plenoptic Video, and nuScenes; evaluation tests on NVIDIA Dynamic Scenes and RealEstate10K as unseen domains. The cross-dataset transfer is a stronger test of generalization than scene-adapted methods.
-
-- **Reasonable architecture design.** The contracted triplane from Mip-NeRF 360 for unbounded scene representation, combined with camera-feature conditioning via adaLN, addresses the scale ambiguity that comes from training on heterogeneous video datasets.
-
----
+- The paper tackles an important and genuinely difficult problem: generalized dynamic scene synthesis from monocular video without per-scene optimization. This is a meaningful direction for scalable 4D scene understanding and rendering.
+- The architecture is technically coherent. The combination of contracted triplanes for unbounded scenes with temporal-aware view attention, axis attention, and plane attention is a reasonable and well-motivated design for aggregating monocular video evidence into an explicit 3D representation.
+- The strongest empirical point is on NVIDIA Dynamic Scenes against generalized baselines: in Table 1, the method improves substantially over generalized PGDVS† and MonoNeRF on LPIPS and on dynamic-area PSNR, while not using external priors such as depth or semantic masks. That is a real result and should be credited.
+- The dynamic/static breakdown in Table 1 is useful and more informative than only reporting whole-image averages.
+- The paper is fairly clear at the module level, and the ablation table, while incomplete, does provide some evidence that the temporal-based 3D constraint and the image-encoder self-attention matter.
 
 ## Weaknesses
 
-### Fatal
-*(None — the core contribution is real and supported by experiments, even if the presentation overstates certain aspects.)*
+###: Fatal
+- The central “egocentric view” framing is conceptually overstated and weakly supported by the method as written. Section 3.2.1 explicitly says: “egocentric view is only a modeling approach… For each video frame, we use camera center as world origin. Thus, under ego-view modeling, all videos can be taken as egocentric videos.” This means the method is not exploiting a distinctive property of first-person data; it is largely a camera-centric coordinate choice. Since the title, abstract, and introduction repeatedly position “egocentric/first-person view” as the key novelty and motivation for generalization, this framing materially overclaims what is actually introduced.
 
-### Major
-
-- **Inflated abstract claim: "top results in novel view synthesis on dynamic scene datasets."** The method is best *among generalizable methods only*. Scene-specific approaches (DynIBaR: 29.08 dB full-image; NSFF: 29.35 dB) remain ~7 dB ahead. The abstract sentence as written implies state-of-the-art overall. The paper itself acknowledges the gap in the results section, but the abstract needs to be corrected to say "top results among generalizable methods" to avoid misleading readers.
-
-- **Inaccurate "on par" claim for RealEstate10K (Table 2).** The paper says the model performs "on par" with MINE across all settings. However, Table 2 shows at n=5: PSNR 25.73 vs. 28.39 (−2.66 dB), SSIM 0.823 vs. 0.897 (−0.07). The method only leads clearly on LPIPS. Claiming parity based on one metric while being substantially below on two others overstates the result; the paper should acknowledge the trade-off explicitly rather than calling it a general match. This is material because the RealEstate10K experiment is cited as a pillar of generalization evidence.
-
-- **The "egocentric" framing is overstated as a contribution.** Sec. 3.2.1 explicitly states: "for each video frame, we use camera center as world origin. Thus, under ego-view modeling, all videos can be taken as egocentric videos." By this definition, any coordinate-normalized monocular video method is "egocentric." Camera-relative coordinate centering is common practice in generalizable NeRFs. The paper's actual novelty lies in the contracted triplane + 4D-aware transformer + self-supervised training pipeline — not in the coordinate framing per se. The paper overclaims by repeatedly positioning egocentricity as the conceptual foundation when it is primarily a design choice. This weakens the paper's narrative.
+### Major:
+- The empirical evidence supports a narrower claim than the paper makes. The abstract says the model “achieves top results in novel view synthesis on dynamic scene datasets” and demonstrates “strong understanding of 4D physical world,” but Table 1 does not support an unqualified “top results” claim: the method remains well below scene-specific methods on full-image PSNR/SSIM, and even against generalized PGDVS† it loses on full-image SSIM (0.706 vs 0.814) and static-area SSIM (0.724 vs 0.854). The fairest takeaway is competitive generalized performance with especially strong LPIPS and dynamic-region gains, not broad superiority.
+- Part of the quantitative evaluation is mismatched to the paper’s headline dynamic-scene claim. In Table 2 on RealEstate10K, the setup “replicate[s] the reference frame six times as source images,” making this effectively a static/single-image novel-view setting rather than a dynamic-monocular-video test of the paper’s main claim. Moreover, the method is worse than MINE on SSIM/PSNR across all reported settings and only better on LPIPS. This is still useful as transfer evidence, but it is not strong support for “generalizable dynamic radiance field” as advertised.
+- The qualitative “generalization” results on datasets without target-view ground truth are not sufficient evidence for synthesis accuracy. Section 4.1.2 states: “For datasets lacking annotations, like DAVIS datasets, we generate novel views by randomly adjusting camera angles and positions.” Such examples can show plausibility, but without ground-truth views or another objective criterion they cannot validate correctness, dynamic understanding, or quantitative generalization quality. The paper leans on these visuals too heavily for its broad claims.
+- The ablation study is incomplete relative to the claimed contributions, and some outcomes undercut the narrative. Table 3 omits ablations of axis-attention, the temporal-conditioning mechanism itself, camera features/adaLN, and simpler triplane update alternatives. More importantly, several results are internally awkward: removing LPIPS loss improves PSNR/SSIM markedly; removing plane-attention improves full-image PSNR/SSIM; removing distortion loss improves SSIM/LPIPS. The paper gives partial explanations, but the current ablation suite does not convincingly isolate which proposed components are responsible for the main gains.
+- The “generalizability” claims blur together different notions: cross-scene generalization within a benchmark, cross-dataset transfer, and qualitative transfer to arbitrary pose perturbations. The paper trains on EPIC, Plenoptic, and nuScenes-train, then evaluates on a mix of unseen scenes and unseen datasets, but the claims are not carefully separated. This makes the main message stronger rhetorically than the actual evidence warrants.
 
 ### Minor
-
-- **No ablation for the axis-attention module.** The 4D-aware transformer is presented as having three core components: temporal-aware view attention, axis-attention, and plane-attention (Sec. 3.2.2). Table 3 ablates temporal-based 3D constraint, self-attention in the encoder, plane-attention, and various losses — but not axis-attention. Since axis-attention is one of the three stated core components, its omission from ablations is a gap.
-
-- **Semantic linear probing compared only to random initialization.** The "semantic learning" emergent capability (Sec. 4.3) is validated by linear probing on ImageNet categories against a random-init baseline. Any network trained on natural video will beat random initialization, so this comparison provides minimal evidence that the model has learned semantically meaningful representations as a *world model*. The paper is honest that this is preliminary, but presenting it as evidence of a "potential path to build visual intelligence" overstates what a random-init comparison can establish.
-
-- **Ablations conducted at 128×72 resolution; main results at 512×288.** The ablation study states it uses images at 128×72 due to compute constraints. It is unknown whether the relative contributions of each module transfer to the full resolution. This is a common limitation, but should be acknowledged rather than ignored.
+- The ablations are only run at \(128\times72\), whereas the main reported results are at \(512\times288\). Because resolution can materially affect renderer behavior and module importance, it is unclear whether the ablation conclusions transfer to the main setting.
+- The “emergent capabilities” section is interesting but not yet strong evidence. Geometry learning is shown only through qualitative depth maps, and the authors themselves acknowledge artifacts. Semantic learning is evaluated only against a random-initialized encoder on selected ImageNet categories; this is too weak to substantiate a strong representation-learning claim.
+- Some methodological details remain underspecified in the main paper, including the exact implementation of time conditioning in Eq. (2), how temporally distant target frames are selected for the temporal-based 3D constraint, and the concrete contents of the flattened “4-by-4 camera intrinsic matrix,” which is unconventional terminology and could be clarified.
 
 ### Trivial
-
-- **The temporal-based 3D constraint description has a small ambiguity.** Sec. 3.4 says "we select two frames that are S frames apart as the target views" where S is also the sequence length. The sampling protocol could be stated more precisely (e.g., using separate notation for the temporal gap).
-
----
+- None.
 
 ## Nice-to-Haves
-
-- **Inference time and peak memory.** Given that a key practical advantage of the feed-forward model over optimization-based methods is speed, reporting inference time (ms per scene) and GPU memory at test time would help practitioners assess the actual efficiency benefit.
-
-- **Quantitative evaluation on EPIC Fields.** The paper lists EPIC Fields as training data, but it is the only truly egocentric dataset in the paper's ecosystem. If a subset can be held out for evaluation, reporting numbers would directly validate the "egocentric view" framing that the paper is built around.
-
-- **Failure case analysis.** Given the ~7 dB gap to scene-specific methods, a qualitative failure analysis (e.g., fast motion, large viewpoint shifts, thin structures) would help readers understand the method's current limits and guide future work.
-
-- **Temporal consistency visualization.** Since the method models 4D scenes, showing rendered video sequences (or per-frame metrics over time) would demonstrate whether the triplane representation is temporally stable or exhibits flickering.
-
----
+- Report at least one key ablation at the main evaluation resolution.
+- Add a more careful discussion of the large SSIM gap relative to PGDVS† on NVIDIA, since the current text emphasizes wins selectively.
+- Provide runtime/inference cost reporting, since the no-test-time-optimization story has practical implications.
+- Show failure cases and, ideally, short rendered video sequences to assess temporal coherence directly.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points were flagged for removal — treat with caution, as they either reflect reviewer misreadings or violate the review rules.*
-
-- **[Harsh Critic #2 — Unfair comparison with PGDVS†]** The critic argues that comparing against PGDVS† (which uses ZoeDepth depth priors) is unfair because that baseline is "outside its intended usage." But the asymmetry favors the *baseline*, not the paper: PGDVS† has more information (depth priors) yet is still outperformed. Under the rule that "REMOVE unfair comparison criticism when asymmetry favors the baseline and not the author's method," this is removed. The comparison actually makes the paper's result *stronger*, not weaker.
-
-- **[Harsh Critic — DAVIS qualitative without GT]** The critic says DAVIS results "should not be used as substantive evidence of correctness." But the paper explicitly labels these as qualitative/generalization demonstrations, never claims them as quantitative evidence. This is appropriate usage.
-
-- **[Harsh Critic — Narrow claim that "object-centric vs ego-centric" is not demonstrated empirically]** While the theoretical argument is not directly proven by ablation, this is a framing choice common in papers proposing new problem setups; demanding an explicit ablation over problem formulations is outside standard paper scope.
-
-- **[Spark — Comparison with PixelSplat/MuRF/GeoNeRF]** Removed per the rule not to raise missing related works without external sources to confirm their existence or comparability under the paper's setting.
-
----
+- **Requests for missing related work / newer baselines by name.** Per instruction, I do not include complaints about omitted related work because I cannot verify external coverage exhaustively.
+- **Confidence intervals / variance reporting.** This is not clearly standard-critical here and is better treated as a nice-to-have rather than a substantive weakness.
+- **Pure reproducibility nitpicks about omitted implementation details.** While some method description points could be clearer, I did not elevate missing low-level hyperparameter details into core weaknesses.
+- **Any criticism doubting the existence, availability, or release status of cited models/datasets/tools.** Such concerns are excluded by rule.
+- **Claims that comparisons are unfair because the authors compare against scene-specific methods while being generalized.** The paper is allowed to compare against stronger baselines; this asymmetry does not count against it.
 
 ## Novel Insights
-
-The most genuinely novel observation that emerges from the cross-reviewer discussion is this: the paper demonstrates that a single self-supervised training run on heterogeneous monocular video can produce a model that, despite using *fewer* inputs at test time than any competitor (no depth, no masks, no scene optimization), achieves better LPIPS scores than depth-prior-equipped generalizable methods and approaches well-trained single-image methods on static scenes. This suggests that large-scale monocular video contains enough implicit geometric and temporal signal to learn a meaningful 4D scene prior — a result with significance for the field even if the current reconstruction quality lags behind scene-specific methods by a significant margin. The observation that the model's encoder learns transport-related semantic categories (buses, trains) by being trained on street-view and driving video — without any semantic supervision — is a genuine emergent result worth building on.
-
----
+The most important synthesis across the reviews and the paper text is that this submission’s real contribution is substantially better than its framing. There is a genuine technical contribution here: a prior-free, feed-forward dynamic view synthesis system that is competitive against generalized baselines on a hard dynamic benchmark. However, the paper packages that contribution inside a much larger conceptual story—“egocentric/first-person” world modeling and broad “4D physical world understanding”—that the method and experiments do not really justify. Put differently, the main risk is not that the system is empty, but that the paper misidentifies where its true novelty lies. Reframing it as a camera-centric generalized dynamic radiance-field method for monocular video would make the technical contribution look more credible and better aligned with the evidence.
 
 ## Suggestions
-
-1. **Fix the abstract.** Replace "top results in novel view synthesis on dynamic scene datasets" with "top results among fully generalizable methods on dynamic scene datasets." This is accurate and still a meaningful claim.
-
-2. **Fix the RealEstate10K claim.** Replace "performs on par" with an honest description: "achieves substantially better LPIPS but lower PSNR and SSIM" and discuss the trade-off.
-
-3. **Reframe the "egocentric" contribution.** Reposition egocentricity as a design principle (camera-centric coordinate system) with implications for unbounded scene handling, not as the primary novelty. Lead with the generalizable, prior-free, self-supervised training approach as the headline contribution.
-
-4. **Add axis-attention ablation.** Even a simplified version at low resolution would close the gap in the ablation story.
-
-5. **Strengthen the semantic probing baseline.** Compare against a frozen pre-trained image encoder (e.g., ResNet or ViT trained on ImageNet) rather than random initialization to show whether the world-model training adds semantic value beyond standard visual pretraining.
-
----
+- Reframe the contribution away from “egocentric/first-person view” as a core novelty and toward a camera-centric coordinate parameterization for generalized monocular dynamic scene synthesis.
+- Tone down claims such as “top results,” “strong understanding of 4D physical world,” and “potential path to build visual intelligence” unless supported by stronger evidence.
+- Separate claims about:
+  - cross-scene generalization within a dataset,
+  - cross-dataset transfer,
+  - and qualitative out-of-trajectory rendering.
+  These are not the same and should not be merged under one broad “generalizability” claim.
+- Strengthen the ablation study by directly testing axis-attention, temporal conditioning, camera features/adaLN, and at least one higher-resolution setting.
+- Recast the DAVIS/nuScenes/RealEstate qualitative or transfer examples as demonstrations/visualizations rather than evidence of correctness when no ground truth is available.
+- Strengthen or soften the emergent capability claims: either add quantitative depth and stronger probing baselines, or present these as preliminary observations rather than substantive conclusions.
 
 ## Score and Decision
+**Assessment on key axes:**  
+- **Originality:** Moderate. The specific architecture is novel enough, but the “egocentric” conceptual framing is weaker than advertised.  
+- **Importance:** High problem importance. Generalized dynamic NVS from monocular video is a valuable target.  
+- **Support for claims:** Mixed. There is real evidence for a narrower claim, but several headline claims are overstated.  
+- **Experimental soundness:** Moderate. The NVIDIA result is meaningful, but the overall evaluation suite is not fully aligned with the broad claims, and the ablations are incomplete.  
+- **Clarity:** Reasonably clear technically, but conceptually misleading in how it frames “egocentric” and “generalizability.”  
+- **Community value:** Moderate. Even with weaknesses, a prior-free generalized dynamic synthesis result is useful, but the current paper needs sharper positioning.
 
-**Calibration:**
+**Calibration against human review anchors:**  
+- I compared this paper primarily against **QuVlUn4T2G (Pseudo-Generalized Dynamic View Synthesis from a Video)**, which was accepted with scores **8, 8, 3, 8**. That paper appears to have had a very thorough evaluation for its setting and was judged as an important first step despite imperfect quality. The current submission is similar in ambition and has a real contribution, but its framing/evidence mismatch is more severe: the “egocentric” premise is not well-founded, and a significant portion of the evaluation does not cleanly support the headline claim. So I place this paper **below** QuVlUn4T2G.
+- As a lower-end anchor, I considered rejected papers with strong overclaim / weak validation patterns such as **AAjCYWXC5I** and **SIojR1ruNQ**. This submission is clearly **above** those, because it does have a concrete technical method and one genuinely strong benchmark result against generalized baselines.
+- Relative to accepted middle-tier papers like **zDJf7fvdid (NVS-Solver, all 6s)**, I view this paper as somewhat less well-supported because of the conceptual overreach and evaluation mismatch, even though the problem is strong.
 
-- **QuVlUn4T2G (PGDVS, Accept poster, avg ~6.9):** The closest topical neighbor — a pseudo-generalizable dynamic NVS approach. That paper was praised for careful experimental design and honest acknowledgment of limits. The current paper is more technically ambitious (fully trained model, no test-time optimization at all) but has more presentation and evaluation honesty issues. It should score in a similar range or slightly below.
+Overall, this lands for me in the **borderline-reject** range: there is a real contribution, but the current paper overstates its conceptual novelty and empirical support too substantially for acceptance in its present form.
 
-- **EmerNeRF (Accept poster, avg ~7.0):** Self-supervised emergent decomposition in driving scenes, similarly claims emergent geometry and semantics, but validates these more rigorously and has cleaner ablations. The current paper is somewhat below EmerNeRF in experimental rigor.
-
-- **DyST (Accept spotlight, avg ~6.7):** Dynamic scene transformers from monocular video. Clean contribution, well-evaluated. The current paper is at a similar conceptual ambition level but with weaker experimental honesty.
-
-- **ylgg2RE7ub (Rejected, avg ~4):** Monocular dynamic Gaussian splatting with limited evaluation and artifacts. The current paper is substantially better — it has a cleaner technical story, broader evaluation, and meaningful numeric improvement over baselines.
-
-The paper's core contribution is real and addresses a meaningful problem. However, the inflated abstract claim, inaccurate "on par" assertion on RealEstate10K, and the misleading "egocentric" framing as a primary novelty constitute honest presentation failures that require revision. These do not invalidate the technical contribution but do lower the current submission's quality relative to the calibration anchors. The work is borderline — genuinely interesting but not quite ready.
-
-**Score: 5.0**
-
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

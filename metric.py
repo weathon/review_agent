@@ -54,80 +54,100 @@ def linear_regression_with_ci(x, y, confidence=0.95):
     }
 
 
-def bootstrap_metric_ci(x, y, metric_fn, confidence=0.95, n_bootstrap=5000, seed=42):
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    rng = np.random.default_rng(seed)
-    values = []
-
-    for _ in range(n_bootstrap):
-        indices = rng.integers(0, len(x), size=len(x))
-        x_sample = x[indices]
-        y_sample = y[indices]
-        if np.all(x_sample == x_sample[0]) or np.all(y_sample == y_sample[0]):
-            continue
-        values.append(metric_fn(x_sample, y_sample))
-
-    if not values:
-        raise RuntimeError("Bootstrap CI failed because every resample was degenerate.")
-
-    alpha = 1 - confidence
-    lower = float(np.quantile(values, alpha / 2))
-    upper = float(np.quantile(values, 1 - alpha / 2))
-    return lower, upper
+def spearman_ci(r, n, confidence=0.95):
+    """Fisher z-transform CI for Spearman correlation."""
+    z = np.arctanh(np.clip(r, -0.9999, 0.9999))
+    se = 1.0 / np.sqrt(n - 3)
+    z_crit = stats.norm.ppf((1 + confidence) / 2)
+    return (float(np.tanh(z - z_crit * se)), float(np.tanh(z + z_crit * se)))
 
 
-def bootstrap_ai_vs_one_vs_rest(df, gt_score_cols, confidence=0.95, n_bootstrap=5000, seed=42):
-    rng = np.random.default_rng(seed)
-    spearman_diffs = []
-    pearson_diffs = []
+def pearson_ci(r, n, confidence=0.95):
+    """Fisher z-transform CI for Pearson correlation."""
+    z = np.arctanh(np.clip(r, -0.9999, 0.9999))
+    se = 1.0 / np.sqrt(n - 3)
+    z_crit = stats.norm.ppf((1 + confidence) / 2)
+    return (float(np.tanh(z - z_crit * se)), float(np.tanh(z + z_crit * se)))
 
-    for _ in range(n_bootstrap):
-        indices = rng.integers(0, len(df), size=len(df))
-        sample = df.iloc[indices]
 
-        pred = sample["pred_score"].to_numpy(dtype=float)
-        gt_avg = sample["gt_avg_score"].to_numpy(dtype=float)
-        if np.all(pred == pred[0]) or np.all(gt_avg == gt_avg[0]):
-            continue
+def mae_ci(errors, confidence=0.95):
+    """t-distribution CI for MAE (CLT-based)."""
+    n = len(errors)
+    mean = np.mean(errors)
+    se = stats.sem(errors)
+    t_crit = stats.t.ppf((1 + confidence) / 2, n - 1)
+    return (float(mean - t_crit * se), float(mean + t_crit * se))
 
-        one_vs_rest = one_vs_rest_baseline(sample, gt_score_cols)
-        if one_vs_rest is None:
-            continue
 
-        rest_means = np.asarray(one_vs_rest["rest_means"], dtype=float)
-        heldout_scores = np.asarray(one_vs_rest["heldout_scores"], dtype=float)
-        if np.all(rest_means == rest_means[0]) or np.all(heldout_scores == heldout_scores[0]):
-            continue
+def auroc_ci(auroc, n_pos, n_neg, confidence=0.95):
+    """Hanley-McNeil formula CI for AUROC."""
+    q1 = auroc / (2 - auroc)
+    q2 = 2 * auroc ** 2 / (1 + auroc)
+    var = (auroc * (1 - auroc) + (n_pos - 1) * (q1 - auroc ** 2) + (n_neg - 1) * (q2 - auroc ** 2)) / (n_pos * n_neg)
+    se = np.sqrt(var)
+    z_crit = stats.norm.ppf((1 + confidence) / 2)
+    return (float(np.clip(auroc - z_crit * se, 0, 1)), float(np.clip(auroc + z_crit * se, 0, 1)))
 
-        ai_spearman = float(stats.spearmanr(pred, gt_avg).statistic)
-        human_spearman = float(stats.spearmanr(rest_means, heldout_scores).statistic)
-        ai_pearson = float(stats.pearsonr(pred, gt_avg).statistic)
-        human_pearson = float(stats.pearsonr(rest_means, heldout_scores).statistic)
-        spearman_diffs.append(ai_spearman - human_spearman)
-        pearson_diffs.append(ai_pearson - human_pearson)
 
-    if not spearman_diffs or not pearson_diffs:
-        raise RuntimeError("Bootstrap AI-vs-human comparison failed because every resample was degenerate.")
+def corr_diff_ci(r1, r2, n1, n2, confidence=0.95):
+    """Zou (2007) asymmetric CI for the difference between two independent Pearson/Spearman correlations."""
+    z1 = np.arctanh(np.clip(r1, -0.9999, 0.9999))
+    z2 = np.arctanh(np.clip(r2, -0.9999, 0.9999))
+    z_crit = stats.norm.ppf((1 + confidence) / 2)
+    se1 = 1.0 / np.sqrt(n1 - 3)
+    se2 = 1.0 / np.sqrt(n2 - 3)
+    diff_z = z1 - z2
+    margin = z_crit * np.sqrt(se1 ** 2 + se2 ** 2)
+    lo = np.tanh(diff_z - margin)
+    hi = np.tanh(diff_z + margin)
+    return (float(lo), float(hi))
 
-    alpha = 1 - confidence
-    spearman_diffs = np.asarray(spearman_diffs, dtype=float)
-    pearson_diffs = np.asarray(pearson_diffs, dtype=float)
+
+def ai_vs_one_vs_rest(df, gt_score_cols, confidence=0.95):
+    """Compare AI vs human one-vs-rest using analytic CIs (Zou 2007 for correlation diff)."""
+    pred = df["pred_score"].to_numpy(dtype=float)
+    gt_avg = df["gt_avg_score"].to_numpy(dtype=float)
+    n_ai = len(pred)
+
+    one_vs_rest = one_vs_rest_baseline(df, gt_score_cols)
+    if one_vs_rest is None:
+        return None
+
+    rest_means = np.asarray(one_vs_rest["rest_means"], dtype=float)
+    heldout_scores = np.asarray(one_vs_rest["heldout_scores"], dtype=float)
+    n_human = len(rest_means)
+
+    ai_spearman = float(stats.spearmanr(pred, gt_avg).statistic)
+    human_spearman = float(stats.spearmanr(rest_means, heldout_scores).statistic)
+    ai_pearson = float(stats.pearsonr(pred, gt_avg).statistic)
+    human_pearson = float(stats.pearsonr(rest_means, heldout_scores).statistic)
+
+    spearman_diff = ai_spearman - human_spearman
+    pearson_diff = ai_pearson - human_pearson
+
+    spearman_ci_val = corr_diff_ci(ai_spearman, human_spearman, n_ai, n_human, confidence)
+    pearson_ci_val = corr_diff_ci(ai_pearson, human_pearson, n_ai, n_human, confidence)
+
+    # Two-sided p-value: test H0: rho_AI == rho_human using z-test on Fisher-transformed difference
+    z_ai_sp = np.arctanh(np.clip(ai_spearman, -0.9999, 0.9999))
+    z_hu_sp = np.arctanh(np.clip(human_spearman, -0.9999, 0.9999))
+    se_sp = np.sqrt(1 / (n_ai - 3) + 1 / (n_human - 3))
+    z_stat_sp = (z_ai_sp - z_hu_sp) / se_sp
+    p_spearman = float(2 * stats.norm.sf(abs(z_stat_sp)))
+
+    z_ai_pe = np.arctanh(np.clip(ai_pearson, -0.9999, 0.9999))
+    z_hu_pe = np.arctanh(np.clip(human_pearson, -0.9999, 0.9999))
+    se_pe = np.sqrt(1 / (n_ai - 3) + 1 / (n_human - 3))
+    z_stat_pe = (z_ai_pe - z_hu_pe) / se_pe
+    p_pearson = float(2 * stats.norm.sf(abs(z_stat_pe)))
 
     return {
-        "n_bootstrap": int(len(spearman_diffs)),
-        "spearman_diff": float(np.mean(spearman_diffs)),
-        "spearman_ci": (
-            float(np.quantile(spearman_diffs, alpha / 2)),
-            float(np.quantile(spearman_diffs, 1 - alpha / 2)),
-        ),
-        "spearman_p_greater": float((np.sum(spearman_diffs <= 0) + 1) / (len(spearman_diffs) + 1)),
-        "pearson_diff": float(np.mean(pearson_diffs)),
-        "pearson_ci": (
-            float(np.quantile(pearson_diffs, alpha / 2)),
-            float(np.quantile(pearson_diffs, 1 - alpha / 2)),
-        ),
-        "pearson_p_greater": float((np.sum(pearson_diffs <= 0) + 1) / (len(pearson_diffs) + 1)),
+        "spearman_diff": spearman_diff,
+        "spearman_ci": spearman_ci_val,
+        "spearman_p": p_spearman,
+        "pearson_diff": pearson_diff,
+        "pearson_ci": pearson_ci_val,
+        "pearson_p": p_pearson,
     }
 
 
@@ -218,24 +238,25 @@ def analyze_and_plot(path):
     pred = df["pred_score"].values
     gt_avg = df["gt_avg_score"].values
     pred_rounded = np.array([round_to_scale(x) for x in pred])
+    n = len(pred)
 
     sp_raw, sp_raw_p = stats.spearmanr(pred, gt_avg)
     pe_raw, pe_raw_p = stats.pearsonr(pred, gt_avg)
     sp_rnd, sp_rnd_p = stats.spearmanr(pred_rounded, gt_avg)
-    sp_raw_ci = bootstrap_metric_ci(pred, gt_avg, lambda a, b: stats.spearmanr(a, b).statistic)
-    pe_raw_ci = bootstrap_metric_ci(pred, gt_avg, lambda a, b: stats.pearsonr(a, b).statistic)
-    sp_rnd_ci = bootstrap_metric_ci(pred_rounded, gt_avg, lambda a, b: stats.spearmanr(a, b).statistic)
-    mae_raw = np.mean(np.abs(pred - gt_avg))
-    mae_rounded = np.mean(np.abs(pred_rounded - gt_avg))
-    mae_raw_ci = bootstrap_metric_ci(pred, gt_avg, lambda a, b: np.mean(np.abs(a - b)))
-    mae_rounded_ci = bootstrap_metric_ci(pred_rounded, gt_avg, lambda a, b: np.mean(np.abs(a - b)))
+    sp_raw_ci = spearman_ci(sp_raw, n)
+    pe_raw_ci = pearson_ci(pe_raw, n)
+    sp_rnd_ci = spearman_ci(sp_rnd, n)
+    mae_raw = float(np.mean(np.abs(pred - gt_avg)))
+    mae_rounded = float(np.mean(np.abs(pred_rounded - gt_avg)))
+    mae_raw_ci = mae_ci(np.abs(pred - gt_avg))
+    mae_rounded_ci = mae_ci(np.abs(pred_rounded - gt_avg))
     bias_raw = np.mean(pred - gt_avg)
     raw_regression = linear_regression_with_ci(gt_avg, pred)
     one_vs_rest = one_vs_rest_baseline(df, gt_score_cols)
     split_half = split_half_baseline(df, gt_score_cols)
-    ai_vs_one_vs_rest = None
+    ai_vs_human = None
     if one_vs_rest is not None:
-        ai_vs_one_vs_rest = bootstrap_ai_vs_one_vs_rest(df, gt_score_cols)
+        ai_vs_human = ai_vs_one_vs_rest(df, gt_score_cols)
 
     # Bin-based MAE summaries using GT score bins: [0,2), [2,4), [4,6), [6,8), [8,10]
     bin_edges = [0, 2, 4, 6, 8, 10.01]
@@ -341,16 +362,16 @@ def analyze_and_plot(path):
         print(f"    Spearman:            {one_vs_rest['spearman']:.4f}")
         print(f"    Pearson:             {one_vs_rest['pearson']:.4f}")
         print(f"    MAE:                 {one_vs_rest['mae']:.4f}")
-        print(f"    AI > human bootstrap test ({ai_vs_one_vs_rest['n_bootstrap']} resamples):")
+        print(f"    AI vs human (Zou 2007 CI, Fisher z-test):")
         print(
-            f"      Spearman Δ:        {ai_vs_one_vs_rest['spearman_diff']:+.4f}  "
-            f"(95% CI {ai_vs_one_vs_rest['spearman_ci'][0]:+.4f}, {ai_vs_one_vs_rest['spearman_ci'][1]:+.4f}; "
-            f"p={ai_vs_one_vs_rest['spearman_p_greater']:.4f})"
+            f"      Spearman Δ:        {ai_vs_human['spearman_diff']:+.4f}  "
+            f"(95% CI {ai_vs_human['spearman_ci'][0]:+.4f}, {ai_vs_human['spearman_ci'][1]:+.4f}; "
+            f"p={ai_vs_human['spearman_p']:.4f})"
         )
         print(
-            f"      Pearson Δ:         {ai_vs_one_vs_rest['pearson_diff']:+.4f}  "
-            f"(95% CI {ai_vs_one_vs_rest['pearson_ci'][0]:+.4f}, {ai_vs_one_vs_rest['pearson_ci'][1]:+.4f}; "
-            f"p={ai_vs_one_vs_rest['pearson_p_greater']:.4f})"
+            f"      Pearson Δ:         {ai_vs_human['pearson_diff']:+.4f}  "
+            f"(95% CI {ai_vs_human['pearson_ci'][0]:+.4f}, {ai_vs_human['pearson_ci'][1]:+.4f}; "
+            f"p={ai_vs_human['pearson_p']:.4f})"
         )
     if split_half is not None:
         print(f"  {'─'*45}")
@@ -382,11 +403,7 @@ def analyze_and_plot(path):
     n_pos, n_neg = gt_binary.sum(), len(gt_binary) - gt_binary.sum()
     if n_pos > 0 and n_neg > 0:
         auroc = roc_auc_score(gt_binary, pred)
-        auroc_ci = bootstrap_metric_ci(
-            gt_binary,
-            pred,
-            lambda y_true, y_score: roc_auc_score(y_true, y_score),
-        )
+        auroc_ci_val = auroc_ci(auroc, n_pos, n_neg)
         fpr, tpr, thresholds = roc_curve(gt_binary, pred)
         # Human baseline AUROC: use individual reviewer scores (not the average)
         # Each individual score is an independent prediction of the paper's accept/reject label
@@ -404,24 +421,20 @@ def analyze_and_plot(path):
         n_indiv_neg = len(human_indiv_labels) - n_indiv_pos
         if n_indiv_pos > 0 and n_indiv_neg > 0:
             human_auroc = roc_auc_score(human_indiv_labels, human_indiv_scores)
-            human_auroc_ci = bootstrap_metric_ci(
-                human_indiv_labels,
-                human_indiv_scores,
-                lambda y_true, y_score: roc_auc_score(y_true, y_score),
-            )
+            human_auroc_ci_val = auroc_ci(human_auroc, n_indiv_pos, n_indiv_neg)
             human_fpr, human_tpr, _ = roc_curve(human_indiv_labels, human_indiv_scores)
         else:
             human_auroc = None
-            human_auroc_ci = None
+            human_auroc_ci_val = None
             human_fpr, human_tpr = None, None
         print(
             f"  AUROC (score→A/R):     {auroc:.4f}  "
-            f"(95% CI {auroc_ci[0]:.4f}, {auroc_ci[1]:.4f})"
+            f"(95% CI {auroc_ci_val[0]:.4f}, {auroc_ci_val[1]:.4f})"
         )
         if human_auroc is not None:
             print(
                 f"  AUROC (human indiv):   {human_auroc:.4f}  "
-                f"(95% CI {human_auroc_ci[0]:.4f}, {human_auroc_ci[1]:.4f}; "
+                f"(95% CI {human_auroc_ci_val[0]:.4f}, {human_auroc_ci_val[1]:.4f}; "
                 f"{len(human_indiv_scores)} individual scores)"
             )
         # Find optimal threshold (Youden's J)
@@ -436,10 +449,10 @@ def analyze_and_plot(path):
         print(f"  AUPRC (score→A/R):     {auprc:.4f}  (baseline={baseline_rate:.4f})")
     else:
         auroc = None
-        auroc_ci = None
+        auroc_ci_val = None
         auprc = None
         human_auroc = None
-        human_auroc_ci = None
+        human_auroc_ci_val = None
         fpr, tpr = None, None
         human_fpr, human_tpr = None, None
         print(f"  AUROC/AUPRC: N/A (only one class present: {n_pos} Accept, {n_neg} Reject)")
@@ -536,7 +549,7 @@ def analyze_and_plot(path):
             tpr,
             color="#3498db",
             lw=2,
-            label=f"Agent (AUROC={auroc:.3f} [{auroc_ci[0]:.3f}, {auroc_ci[1]:.3f}])",
+            label=f"Agent (AUROC={auroc:.3f} [{auroc_ci_val[0]:.3f}, {auroc_ci_val[1]:.3f}])",
         )
         ax3.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")
         ax3.scatter([fpr[best_idx]], [tpr[best_idx]], color="#e74c3c", s=100, zorder=5,
@@ -606,7 +619,7 @@ def analyze_and_plot(path):
             lw=2.5,
             label=(
                 f"Human Indiv (AUROC={human_auroc:.3f} "
-                f"[{human_auroc_ci[0]:.3f}, {human_auroc_ci[1]:.3f}])"
+                f"[{human_auroc_ci_val[0]:.3f}, {human_auroc_ci_val[1]:.3f}])"
             ),
         )
         ax6.plot([0, 1], [0, 1], "k--", alpha=0.3, label="Random (0.500)")

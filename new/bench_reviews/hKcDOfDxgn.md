@@ -1,118 +1,78 @@
-Now let me read some calibration papers from the human reviews database.Now I have enough information to produce the final consolidated review. Let me synthesize all reviewer inputs against what the paper actually says.## Summary
-
-This paper proposes a modular RL agent with a Hippocampal Formation (HF) module and a Prefrontal Cortex (PFC) module connected by a reward-gated information passage. The authors claim that two abstract conditions—replay serving reward maximization and replay involving HF–PFC communication—are *sufficient* for "naturally emerging" brain-like replay, and they validate by reproducing replay distribution shifts from a rodent navigation experiment (Igata et al., 2021) and analyzing the information carried by replay via decoding and manifold techniques.
-
----
+## Summary
+This paper proposes a modular RL agent with a hippocampal-formation-like recurrent world model (HF), a prefrontal-like recurrent policy/value module (PFC), and a reward-triggered communication channel between them. In a small navigation task adapted from a rodent experiment, the agent exhibits replay-like latent sequences during reward pauses, partially matches qualitative trends from the animal data, and ablations suggest the HF→PFC message helps the agent adapt to a relocated reward via hidden-state updates.
 
 ## Strengths
-
-- **Biologically grounded behavioral target**: The model reproduces specific, quantitatively checkable phenomena from Igata et al.—namely, the redistribution of replay toward shortcut paths (S-C2) before behavioral adoption. This is a concrete and non-trivial validation target, not just generic learning improvement.
-
-- **Creative mechanistic analyses**: The "stop-and-scan" probing paradigm, the Gaussian Naïve Bayes decoding of context/action from hidden states (Figure 4A/B), and the PCA manifold analysis (Figure 5) are genuinely creative tools for studying how recurrent agents adapt through state dynamics rather than weight changes. The finding that context and action-plan information is incrementally updated during replay is an interesting mechanistic insight.
-
-- **Directional finding about HF→PFC asymmetry**: The ablation showing performance collapses only when HF→PFC signals are disrupted (not PFC→HF), which aligns with neurophysiological observations about HF leading PFC in phase-lock during task encoding (Figure 3A). This is a non-obvious and biologically meaningful finding.
-
-- **Coherent modular design with biological motivation**: The architecture's separation of world model (HF) and policy (PFC) with a gated communication channel reflects real anatomical organization, and the analysis of what each module contributes is clean and interpretable.
-
----
+- **Interesting cross-disciplinary question and clear high-level framing.** The paper tackles a meaningful gap between neuroscience accounts of replay emergence and RL accounts of replay function, asking whether replay-like dynamics can arise in a task-optimized modular agent rather than being inserted as an explicit replay buffer.
+- **The modular HF/PFC architecture is conceptually interpretable.** The split between a recurrent predictive/memory module and a recurrent decision module makes the proposed mechanism easy to inspect, and the paper leverages this with decoder, value-map, and manifold analyses.
+- **Ablations do identify a real dependence on HF→PFC communication in this architecture.** In Sec. 3.2, replacing HF→PFC messages with noise/zeros hurts performance, multi-step communication outperforms one-step communication, and masking more replay steps monotonically degrades reward. These are useful internal controls for the authors’ specific model.
+- **The paper includes richer-than-usual mechanistic probes.** Decoding reward location and future action from hidden states, the “stop and scan” value-map analysis, and the PCA/manifold visualizations provide a coherent descriptive picture of how internal state changes after reward relocation.
+- **The biological comparison is at least grounded in a concrete experimental paradigm.** The paper does not make an entirely free-form analogy; it adapts a specific task from Igata et al. (2021) and compares the evolution of replay distributions against that experiment.
 
 ## Weaknesses
 
-### Fatal
-*(None that fully invalidates the paper's core observations, but the combination of Major issues significantly undermines the headline claims.)*
+###: Fatal
 
-### Major
-
-- **"Natural emergence" framing is architecturally misleading.** The paper's abstract and introduction claim the model "avoids complex assumptions" and enables replay to "emerge naturally." However, the critical mechanisms are hard-coded by design: `I_replay` in Equations (2) and (4) explicitly gates the HF–PFC information passage open *only* at reward receipt, normal inputs are shut off, and communication is activated in a predetermined trigger window. The HF module is also pre-trained and frozen before policy learning begins. The neutral and harsh reviewers are both correct that what emerges is the *content* of replay—not the *structure*. The paper should be re-framed as showing that given these structural biases, replay content self-organizes to be functionally useful; the current framing actively misleads the reader about how much is designed versus discovered.
-
-- **Shuffle result (Figure 3D) directly contradicts the "sequential replay" narrative.** The paper defines replay as a *sequence* (Section 3.1, Figure 2D) and emphasizes trajectory continuity as a key property. Yet Figure 3D shows that shuffling the order of replay messages "barely affects performance," and the paper itself concludes "the information may be sent in the form of independent packages rather than a whole sequence." This is a direct self-contradiction that the paper acknowledges but does not resolve. If order is unimportant, the mechanism is closer to a broadcast state update than a sequential trajectory—which materially weakens both the neuroscience-facing claim (biological replay is characterized by its temporal order) and the paper's own framing.
-
-- **No comparison to standard RL baselines or equivalently-parametrized alternatives.** The ablations test only internal variants of the proposed model (noise replacement, step masking, shuffle). There is no comparison against: (a) standard PPO with an experience replay buffer, (b) a Dyna-style model-based agent, or (c) a monolithic RNN with equal total parameters communicating continuously or at reward times without the sequential rollout. The claim that emergent replay provides a functional advantage therefore rests entirely on intra-model ablations. This is a significant evidential gap for a paper making functional claims about replay utility.
-
-- **Evaluation limited to a single 5×5 grid world; generalizability unestablished.** All empirical results are from one tiny, discrete, fully structured environment. The authors' claim that two abstract "conditions" are *sufficient* for naturally emerging replay implies some generality, but the paper provides no evidence beyond this specific toy setting. It is unknown whether the manifold-bridging mechanism, the sequential HF→PFC communication, or the biological correspondence would persist in larger environments, continuous spaces, partial observability, or different reward structures.
-
-- **Misuse of the word "prove" throughout.** The abstract states "We *prove* that replay generated in this way helps complete the task," and Section 3 repeats "This *proves*..." for what are ablation observations on a single small environment with limited statistical reporting. This is not proof in any mathematical or statistical sense. The word should be replaced with "show" or "demonstrate empirically" throughout.
+### Major:
+- **The central claim that replay “emerges naturally” is overstated given the amount of hand-designed structure.** The paper explicitly hard-codes when replay can occur and when HF/PFC communication is allowed: “the information passage remains closed during movement … and opens when the agent receives a reward” (Methods), operationalized by the replay indicator in Eqs. 2 and 4. In addition, HF and the encoder are pretrained on location/reward prediction and then frozen before policy learning. This is not replay emerging from generic task optimization alone; it is replay-like dynamics arising under substantial architectural and training scaffolding. A more accurate claim would be emergence under specific inductive biases.
+- **The paper overclaims about “learning” and “exploration efficiency”; the demonstrated benefit is primarily test-time hidden-state adaptation with frozen weights.** The Methods state: “Then the weights of the Encoder and HF are frozen… We conduct the following analysis with all model weights fixed.” Sec. 3.1 further emphasizes that after reward relocation the agent adapts “without adjusting the network parameters, and simply by modifying the hidden states of the RNNs.” Thus the evidence supports that HF→PFC communication aids online inference/memory update in this architecture, not that replay improves RL training or learning in the broader sense used throughout the abstract, intro, and discussion.
+- **Evidence for the paper’s general conclusions is too narrow.** All main claims rest on one highly tailored \(5\times5\) gridworld with reward-triggered stopping that directly matches the manually gated replay design. That is enough for a proof-of-concept, but not for the stronger claims about “conditions” for replay emergence or practical utility for RL. There is no evidence across alternative tasks, larger environments, or settings without reward-triggered pauses.
+- **The biological reproduction claim is only qualitative/descriptive.** The core biological comparison is the visual similarity between Fig. 2C and Fig. 2E after assigning replay trajectories to four hand-defined path segments. This is suggestive, but not rigorous enough to support the abstract’s claim that the model “reproduces key phenomena observed in biological agents” in a strong sense. There is no quantitative similarity metric, no comparison against plausible alternative architectures, and no mechanistic test distinguishing genuine biological correspondence from matching a coarse aggregate trend.
+- **The pretraining/freeze pipeline is a substantial confound for the claimed “sufficient conditions.”** HF is pretrained to predict next location and reward history, then frozen while PFC is trained with PPO. This makes it difficult to attribute replay-like sequences to the two proposed conditions per se, rather than to representational content injected by the pretraining objective and preserved by freezing. As written, the paper shows one implementation works, not that the named conditions are sufficient in any meaningful general sense.
+- **The paper lacks comparisons to natural alternative agent designs that would test whether replay is the right explanation.** The main evidence comes from internal ablations. But the stronger RL-side claims would need at least some comparison to conventional recurrent agents, world-model agents without reward-gated replay, or architectures with direct latent communication that are not interpreted as replay. Without such baselines, it remains unclear whether the phenomenon is special or simply one instance of useful latent-state communication.
 
 ### Minor
-
-- **Limited statistical rigor in ablation reporting.** While Figure 2A shows explicit p-values (p < 0.001), the ablation bar charts in Figure 3 lack error bars and significance markers in many conditions. Given the small environment and the paper's causal framing, variance across seeds and explicit statistical tests are needed to support the comparative claims.
-
-- **Biological comparison is qualitative and selective.** The comparison of Figure 2C (animal data) vs. Figure 2E (model) is qualitative. The paper highlights two matching trends but does not address visible discrepancies (e.g., S-C1 and C1-G proportions differ substantially between model and animal across time points). A systematic quantitative fit measure would better support the "closely mirrors" claim.
-
-- **HF frozen during RL training limits the "end-to-end task optimization" claim.** The paper characterizes its approach as a "task-optimized paradigm," but substantial structure is baked in during the pre-training phase and then frozen. The HF's world model cannot adapt to new reward structures online. This limits the scope of the claim that replay is jointly discovered by end-to-end optimization.
-
-- **Decoding analyses support correlational, not causal, claims.** The Gaussian Naïve Bayes decoder results (Figure 4A/B) are interesting, but improved decodability of reward location/action from hidden states only shows that information is present—not that replay *mechanistically causes* the context update, as the paper claims. This distinction is meaningful given the paper's causal language.
+- **The shuffle result weakens the sequential replay interpretation and is not adequately resolved.** Sec. 3.2 reports that shuffling message order “only slightly” affects performance, while masking more steps hurts monotonically. That makes the mechanism look less like an order-sensitive “virtual trajectory” and more like a set of informative latent packets. The paper notes this possibility, but it is important enough that the framing of biological replay as a meaningful sequence should be softened or tested more carefully.
+- **Some claims use unnecessarily strong language such as “prove” and “sufficient.”** For example, the abstract says “We prove that replay generated in this way helps complete the task,” and Sec. 3.1 says the results “prove that the conditions proposed in 1 are sufficient to generate replay.” The paper is empirical and architectural; it does not establish proof in the formal sense, and the evidence does not justify sufficiency beyond this specific implementation.
+- **The decoder and manifold analyses are informative but not decisive about mechanism.** Showing that reward location or future action is decodable from hidden states demonstrates information presence, not necessarily that replay as such is the mechanism of use. Likewise, the PCA “orbit/bridge” narrative is intuitive, but mostly redescribes the hidden-state transition rather than isolating a falsifiable mechanism.
+- **Statistical reporting is limited.** Several plots are presented without clear uncertainty estimates, seed counts, or formal statistical comparisons for the central model-to-biology and decoding/manifold claims. This does not invalidate the work, but it reduces confidence in the robustness of the reported trends.
 
 ### Trivial
-
-- The 70% AEV threshold for defining subspace dimension (Section 3.4) is arbitrary, and conclusions about replay "bridging contexts" are somewhat threshold-dependent. The robustness to this choice is not reported.
-
----
+- **Clarity could improve around scope and terminology.** In particular, the paper would benefit from distinguishing more carefully among replay emergence, online adaptation, learning, and biological plausibility.
 
 ## Nice-to-Haves
-
-- Show actual decoded spatial replay trajectories overlaid on the grid map. The paper claims continuous replay trajectories emerge (Figure 2D distance distribution), but the clearest demonstration would be showing individual replay events as paths. This is the most natural validation of the "trajectory-like" interpretation.
-
-- Investigate the shuffle result (Figure 3D) more deeply: characterize what information each replay step independently carries, and discuss whether the unimportance of order is consistent with biological replay theories that emphasize temporal structure (forward/reverse replay).
-
-- Test whether replay-like behavior emerges when the HF is also trained jointly with the PFC end-to-end (without the pre-train/freeze pipeline). This would directly test whether the "task optimization" framing holds when all parameters are jointly optimized.
-
-- Overlay replay trajectories on the PCA manifold (Figure 5). The current figure shows movement trajectories only; overlaying replay would directly test whether replay "bridges contexts" as claimed, rather than relying on the subspace dimension analysis alone.
-
----
+- Test the architecture on at least one larger or structurally different environment to determine whether replay-like dynamics persist beyond the single tailored task.
+- Add a variant where the HF-PFC passage is always open, randomly opened, or allowed during movement, to better isolate which hand-designed gating choices are essential.
+- Compare against a recurrent RL baseline or a world-model agent with latent communication but no replay interpretation.
+- Quantify the model-vs-animal similarity in Fig. 2 rather than relying on visual comparison alone.
+- Probe what each replay step carries and whether order matters in harder tasks, to reconcile the shuffle result with the sequential replay framing.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged for removal — treat them with caution.*
-
-- **[Harsh Critic] Cross-entropy formula reversal**: The critic notes `-sum G_hat(s) log G(s)` may be reversed. The critic itself acknowledges "This may be a parser artifact." Given the paper's extracted-from-PDF format, this is not a reliable criticism to include.
-
-- **[Harsh Critic] Biological implausibility of HF-PFC segregation during movement**: The harsh critic raises this as a concern, but the paper directly and explicitly addresses it in Section 4.1: "We acknowledge that this highlights a limitation of our model's fidelity to realistic biological settings... Allowing the two modules to communicate during movement might add unnecessary details less relevant to the problem we want to analyze." The paper's acknowledgment is reasonable, and the critique is therefore moot.
-
-- **[Harsh Critic] Hidden-state persistence confounded with distribution shift (training regime)**: The claim that adaptation at test time is merely an artifact of training with randomized reward locations is overstated. The ablation in Figure 3A (replacing HF→PFC signals with noise collapses performance) does partially isolate the replay pathway as meaningful beyond generic recurrent state dynamics. The concern has some validity in terms of baseline comparisons but is not a standalone defeater of the results.
-
-- **[Harsh Critic] "Stop and scan" off-policy interpretation**: The critic argues that probing PFC value estimates under random exploration post-replay is ambiguous. This is a valid methodological note, but the resulting value maps (Figure 4C-E) show the qualitatively expected shift from C1 to C2, and the technique is explicitly framed as a probing method, not a direct policy evaluation. This is a minor analytical caveat, not a substantive weakness.
-
----
+- **Missing related work.** Some reviewers requested additional citations or discussed other papers. Per instructions, I do not include missing-related-work criticisms.
+- **Pure formatting/style issues.** Minor wording, figure transparency, parser artifacts, and similar presentation nitpicks were removed.
+- **Generic demands for more implementation details or reproducibility minutiae.** Requests for extra hyperparameter/log-level detail were not treated as substantive weaknesses here.
+- **Any criticism doubting the existence or availability of cited systems/references.** None should be considered valid.
 
 ## Novel Insights
-
-The most genuinely novel observation that merits follow-up is the **directional asymmetry in the replay communication channel**: the ablation showing that only HF→PFC disruption (not PFC→HF) degrades performance (Figure 3A) is an independently interesting finding that aligns with specific neurophysiological data on phase relationships. This suggests a useful asymmetric architectural prior for future neuroscience-inspired RL models. The finding that replay appears to function as parallel state broadcasting rather than sequential trajectory unrolling (Figure 3D) is also novel—even though it creates tension with the paper's framing, it opens a productive question about whether biological "replay sequences" might similarly be decodable as independent information packets rather than purely ordered trajectories.
-
----
+The most important synthesis across the reviews and the paper text is that the work is better understood as a **model of reward-gated latent-state communication enabling rapid context reconfiguration**, rather than a strong demonstration that replay itself naturally emerges and improves RL learning in general. The strongest evidence in the paper is for a particular *functional role of multi-step HF→PFC message passing at test time*; the weakest part is the rhetorical elevation of this mechanism into broad claims about natural emergence, sufficiency of two conditions, and replay-driven learning. Reframing the contribution this way would make the paper more credible and, in fact, more scientifically useful.
 
 ## Suggestions
-
-1. **Reframe the abstract and introduction**: Drop "emerges naturally" and "avoids complex assumptions" in favor of "given structural biases X and Y, replay content self-organizes to be functionally useful." This is defensible and honest.
-
-2. **Directly address the shuffle contradiction**: Section 3.2 needs a dedicated analysis of why order is unimportant despite claiming sequential trajectories. Does this mean biological temporal structure matters for reasons not captured here? This is worth a paragraph of explicit discussion.
-
-3. **Add at least one standard RL baseline**: Even a basic comparison to PPO with a circular replay buffer on the same 5×5 task would ground the functional utility claim.
-
-4. **Replace "prove" with "demonstrate" or "show" throughout.**
-
-5. **Report variance and at minimum standard deviations** across seeds for all ablation bar charts in Figure 3.
-
----
+- Reframe the core claim more conservatively: from “replay naturally emerges” to “replay-like dynamics emerge under a modular, reward-gated HF/PFC architecture with predictive pretraining.”
+- Distinguish clearly between **test-time hidden-state adaptation** and **weight-based learning** throughout the abstract, introduction, and discussion.
+- Add experiments that directly test the necessity of the hand-coded replay gate and the HF pretraining/freeze choice.
+- Include at least one broader baseline and one broader environment to support the RL-facing claims.
+- Quantify the biological comparison and temper claims of reproducing biological phenomena unless such metrics are added.
+- Investigate the shuffle result more deeply; if order is largely unnecessary, revise the interpretation away from strongly sequential replay.
 
 ## Score and Decision
+**Assessment by axis:**  
+- **Originality:** Moderately original framing; the neuroscience/RL bridge is interesting, though the actual mechanism is heavily scaffolded.  
+- **Importance of question:** High; replay emergence and function are important questions.  
+- **Support for claims:** Limited relative to the paper’s strongest claims. The evidence supports a narrower contribution than the paper advertises.  
+- **Soundness of experiments:** Reasonable as a proof-of-concept with useful ablations, but too narrow and under-controlled for the general claims.  
+- **Clarity of writing:** Generally understandable, though rhetorically overstated and sometimes imprecise in its use of “prove,” “sufficient,” and “learning.”  
+- **Value to the community:** Moderate for computational neuroscience as an exploratory model; limited for ML/RL in its current form.
 
-**Calibration:**
-- *RVrINT6MT7* (sufficient conditions for offline reactivation, formal proofs, accepted poster): scores 6, 6, 6, 5. That paper provided *mathematical* proofs and worked on canonical neuroscience tasks with rigorous theory. The current paper has weaker claims and only empirical ablations, placing it below this anchor.
-- *9Qfja4ZQW0* (multi-region hippocampal model, rejected): scores 5, 5, 8, 3, 3. Similar scope, similar issues with limited generalization and missing baselines. The current paper's analyses are more creative and the biological comparison is more specific, but similar fundamental limitations apply.
-- *agPpmEgf8C* (predictive auxiliary objectives in RL, accepted oral): scores 8, 8, 8. Much broader evaluation, rigorous experimental design, and more careful claim calibration. The current paper is substantially weaker.
+**Calibration against human-reviewed anchors:**  
+- Compared with **RVrINT6MT7** (“Sufficient conditions for offline reactivation in recurrent neural networks,” scores 6/6/6/5, accepted poster), this paper is **weaker** because that work offered a clearer theoretical contribution tied directly to its core emergence claim, whereas the current paper’s emergence claim is undermined by explicit architectural gating and pretraining/freeze scaffolding.  
+- Compared with **agPpmEgf8C** (scores 8/8/8, accept oral), this paper is **well below** that standard in breadth, rigor, and calibration of claims to evidence.  
+- Compared with **cH4VTcCVYs** (scores 5/5/5, reject), this paper is **similar in overall profile**: interesting idea and some conceptual appeal, but basic tasks, limited baselines, and ambiguous contribution relative to its framing.  
+- Compared with **9Qfja4ZQW0** (mixed 5/5/8/3/3, reject), this paper also lands in a **mixed-but-below-threshold** range: interesting neuroscience-inspired architecture and some biological resemblance, but oversimplification, narrow evidence, and weak support for broad conclusions.
 
-**Assessment:**
-The paper occupies a genuinely interesting intersection and contains several creative analytical tools. However, the flagship framing ("natural emergence," "avoiding hard-coded design," "proving" functional utility) is substantially undermined by: (1) the hard-coded gating architecture, (2) the self-undermining shuffle result left unresolved, (3) no standard baselines, and (4) exclusive evaluation on a single toy environment. These are not marginal presentation concerns—they directly affect whether the paper's central claims are credible.
+Given those anchors, this submission feels closest to the **5-range reject** papers rather than the **6-range marginal accept** papers, because the main issue is not just incompleteness but a mismatch between what is shown and what is claimed.
 
-The paper is comparable to or slightly above the rejected *9Qfja4ZQW0*, but falls materially below the accepted *RVrINT6MT7* in rigor and below *agPpmEgf8C* in scope and execution. A score of **4.5** is appropriate—below the acceptance threshold, reflecting real contributions but significant overclaiming and evidential gaps that need substantial revision.
-
-**Originality**: Moderate — the HF-PFC modular replay architecture is novel in its specific construction, but the broader idea of world-model + policy communication is established.
-**Importance**: Moderate — the research question (when and why does replay emerge) is important for both AI and neuroscience.
-**Support for claims**: Weak — overclaims "natural emergence" and "proof," shuffle result is self-contradictory, baselines are absent.
-**Soundness of experiments**: Fair — internally consistent ablations, creative analyses, but limited scope and statistical reporting.
-**Clarity**: Fair — writing is clear but misleading in key places due to framing overclaims.
-**Value to community**: Moderate — the decoding and manifold analysis tools are genuinely useful contributions even if the central claims are overstated.
+**Final score: 4.5 / 10 — Reject**
 
 MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

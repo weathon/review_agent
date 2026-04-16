@@ -1,126 +1,117 @@
-Good, I've read the full paper. Now let me search for calibration papers to assign a proper score.Now I have enough information to produce the final consolidated review. Let me compile it.
-
----
-
 ## Summary
-
-MetaUrban is a compositional simulation platform targeting AI-driven urban micromobility—a genuine gap between indoor household simulators (Habitat, AI2-THOR) and road-driving simulators (CARLA, MetaDrive). The platform procedurally generates urban scenes via three key modules: Hierarchical Layout Generation (street blocks → functional zones → object placement → terrain), Scalable Obstacle Retrieval (VLM-based open-vocabulary search from Objaverse/Objaverse-XL grounded on worldwide urban data), and Cohabitant Populating (ORCA+Push-and-Rotate trajectory planning for 1,100 rigged human models plus VRUs and mobile machines). On top of this, the authors construct MetaUrban-12K (12,800 training + 1,000 test scenes), benchmark seven baseline methods across RL, Safe RL, Offline RL, and IL on PointNav and SocialNav tasks, and conduct cross-machine and ablation studies. Code and data are released.
-
----
+This paper introduces **MetaUrban**, a simulator and benchmark platform for **urban micromobility** research, targeting a meaningful gap between indoor embodied-AI simulators and autonomous-driving simulators. Its main contributions are a compositional urban scene generator, a large urban obstacle asset pipeline, populated pedestrian/VRU dynamics, a 12.8k-scene dataset, and pilot PointNav/SocialNav benchmarks with multiple RL/IL baselines plus a cross-machine study.
 
 ## Strengths
-
-- **Fills a genuine, well-motivated gap.** The distinction between indoor embodied AI (room scale, household objects) and autonomous driving (roadway-centric) leaves urban micromobility—sidewalks, plazas, e-wheelchairs, delivery bots—essentially unaddressed. The paper makes a compelling case for this niche with concrete real-world motivators (Fig. 2).
-
-- **Technically substantive pipeline.** The three modules are each well-reasoned: the sidewalk functional-zone decomposition is grounded in the Global Street Design Guide; the VLM-retrieval pipeline (1,215 description items → 10,000 obstacles) is a creative, scalable approach for populating realistic urban scenes; the ORCA+P&R integration addresses a known deadlock failure mode of pure social-force models.
-
-- **Comprehensive benchmark across method families.** Seven baselines spanning four paradigms (RL, Safe RL, Offline RL, IL) evaluated on two tasks with three metrics (SR, SPL/SNS, CC) is a respectable benchmark sweep for a platform paper. Results are non-trivial (best SR 66%/34%), indicating genuine task difficulty.
-
-- **Cross-machine evaluation is a distinctive contribution.** The platform's ability to swap mobile machine specifications (wheelchair, mobility scooter, COCO variants) and observe policy-learning consequences is not found in comparable simulators and has real practical value for robot designers.
-
-- **Ablation studies show useful signals.** The scaling curve (SR from 12% at 5 scenes to 46% at 1,000 scenes, Fig. 6b), density degradation (Fig. 6c/d), and generalizability pretraining results (Fig. 6a, 49% on unseen) collectively provide meaningful characterization of the platform's properties.
-
-- **Public release of code and data.** Essential for community adoption and reproducibility.
-
----
+- **Targets an important and underexplored problem setting.** The paper makes a convincing case that sidewalks, plazas, curbs, cluttered urban spaces, and mixed pedestrian/VRU interaction are poorly served by existing indoor or vehicle-centric simulators. This is a worthwhile benchmark/domain contribution.
+- **The simulator design is coherent and substantial.** The decomposition into **hierarchical layout generation**, **scalable obstacle retrieval**, and **cohabitant populating** is clear and technically plausible. The platform appears materially richer than a simple navigation benchmark: functional sidewalk zones, terrains, clutter, pedestrians, VRUs, and multiple mobile-machine embodiments are all modeled.
+- **The asset and dynamics scale is impressive.** The paper describes **10,000 obstacles**, **1,100 rigged human models**, and **2,314 movements**, along with multiple machine types. Even discounting some claim inflation, this is still a substantial engineering contribution for the community.
+- **The benchmark tasks are sensible pilot tasks.** PointNav and SocialNav are reasonable first tasks for this domain, and Table 1 does show that the problems are nontrivial: best test SR is only **66%** for PointNav and **36%** for SocialNav.
+- **Cross-machine evaluation is an interesting differentiator.** Section 4.2 goes beyond a single embodiment and shows that policy performance changes meaningfully with machine parameters such as speed and steering limits. That is a useful angle for a micromobility platform.
+- **The paper is generally clear and easy to follow.** The motivation, simulator structure, and experimental setup are laid out cleanly. Despite the breadth of the system, the high-level ideas are understandable.
 
 ## Weaknesses
 
-### Fatal
-*(None. The platform contribution is real and its experimental evidence, while imperfect, is not fabricated or contradicted.)*
+###: Fatal
+None.
 
-### Major
+### Major:
+- **The paper overclaims what its experiments establish about “improving generalizability and safety.”**  
+  This is the core issue. The paper repeatedly makes causal claims that specific simulator modules are “critical” for generalizability/safety, e.g. Section 1 attributes hierarchical generation and obstacle retrieval to generalizability and cohabitant populating to safety; the conclusion states that these environments “can significantly improve the generalizability and safety.” But the experiments do not isolate those causal effects.  
+  - Table 1 mainly shows that several algorithms achieve some performance on MetaUrban test/unseen splits.  
+  - Figure 6(a,b) shows that **more training data** and **pretraining** help.  
+  - Figure 6(c,d) shows that higher density makes tasks harder.  
+  None of these cleanly demonstrate that the **compositional design itself**, as opposed to simply having more procedurally generated data, is what improves generalization or safety. There is no controlled comparison against a simpler/non-compositional generator, reduced object diversity, or reduced dynamics. This does not negate the value of the simulator, but it materially weakens the paper’s headline empirical claims.
 
-- **Safety metric is too narrow to support the "safety" framing.** CC is defined as crash frequency to obstacles or environmental agents—a collision counter. The paper frames MetaUrban as fostering "safe and trustworthy embodied AI" and calls the cohabitant/traffic-rule design "critical for enhancing safety" (Abstract, Sec. 1, Sec. 3.3, Conclusion). But CC does not measure near-miss statistics, discomfort to pedestrians, rule violations (e.g., ignoring traffic lights or speed limits), failure under rare but dangerous events, or unsafe speed profiles. Moreover, ORCA+P&R produces orderly, deadlock-free pedestrian dynamics, which may reduce rather than stress-test genuine safety-critical interactions. The current evaluation framework is insufficient to support the headline safety claim. This is the most important framing issue in the paper.
+- **For a datasets/benchmarks paper, the benchmark validation is somewhat thin and should be framed more explicitly as an initial pilot benchmark rather than a mature benchmark suite.**  
+  The paper includes seven standard baselines across RL, safe RL, offline RL, and IL, which is useful, but the evidence is still limited for a benchmark paper:
+  - the main benchmark in Section 4.1 is run on **one machine** despite the platform emphasizing heterogeneous micromobility;
+  - there are no variance estimates or repeated-run statistics;
+  - some anomalous numbers are left uninterpreted, such as IQL’s unseen SocialNav cost of **3.05**;
+  - the paper does not discuss whether tuning effort was comparable across methods.  
+  This does not make the benchmark invalid, but it makes the current benchmark contribution feel more like a **strong pilot suite** than a thoroughly validated community benchmark.
 
-- **No component-level ablation across the three core modules.** The paper's central argument is that three modules—Hierarchical Layout Generation, Scalable Obstacle Retrieval, and Cohabitant Populating—jointly improve generalizability and safety. Yet there is no ablation isolating each module's contribution. For example: does VLM-based retrieval matter over a simpler object pool? Does terrain generation affect policy generalization? Does ORCA+P&R improve agent safety compared to simpler dynamics? Without this, the claim that "these three modules are critical" is plausible but unverified.
+- **The cross-machine study supports only a modest claim, not the broader practical claim about design guidance for deployment.**  
+  Section 4.2 is interesting, but the evidence is narrower than the abstract/introduction suggest. Table 2 uses PPO only and studies a small set of manually chosen parameter settings. The results support the claim that **policy performance in simulation is sensitive to mechanical parameters**. They do **not** yet justify stronger claims that MetaUrban can meaningfully guide pre-deployment mechanical design decisions in a trustworthy way across tasks, policies, terrains, and reward choices. The current wording should be toned down accordingly.
 
-- **Terrain generation is highlighted as a key differentiator but never experimentally validated.** Terrain diversity (slopes, steps, stairs, ramps, rough surfaces) is introduced as a unique challenge of micromobility (Sec. 1, Fig. 2), and Wave Function Collapse is described in Sec. 3.1 as the basis of terrain generation. Yet no experiment tests how terrain complexity affects policy performance, cross-machine behavior, or generalization. The terrain system appears in descriptions and figures but plays no measurable role in any reported result.
-
-- **Experiments rely exclusively on LiDAR-based observations.** All benchmarks use LiDAR signals + agent state + navigation info. Real urban micromobility machines commonly rely on RGB/depth cameras. The paper does not evaluate any vision-based policy, leaving the platform's visual fidelity untested and the benchmark's relevance to the broader embodied AI (and sim-to-real) community substantially limited.
+- **The unseen evaluation demonstrates within-platform generalization, not broader real-world generalization.**  
+  The paper sometimes speaks broadly about generalizability for AI-driven micromobility, but the train/test/unseen splits are all generated from the same overall simulator pipeline. So the evidence is about **distribution shift within MetaUrban**, not about generalization to real urban environments or even to different simulation families. This matters because the claims are sometimes written more broadly than the experiments warrant.
 
 ### Minor
+- **Safety is evaluated rather narrowly relative to the paper’s framing.**  
+  The paper emphasizes safety as a central value proposition, but the main quantitative safety signal is **Cumulative Cost (CC)** from collisions/proximity. That is a reasonable start, yet for urban micromobility it is narrower than the paper’s framing suggests. The paper itself mentions traffic rules in Section 3.3, but the main evaluation does not report rule violations, near-miss structure beyond cost, or other socially relevant failure modes.
 
-- **Cross-machine analysis does not fully isolate individual mechanical parameters.** Table 2 compares machines that differ simultaneously in max speed, max steering, engine force, and implicitly morphology/kinematics. The COCO variants (mod-1: reduced speed; mod-2: reduced steering) do isolate two parameters, but comparisons across wheelchair, mobility scooter, and COCO base remain confounded. The conclusion that "results could assist designers in finding improved mechanical structures" (Sec. 4.2) is appropriate as a qualitative observation but overstates what the current design (without independent parameter sweeps) can demonstrate.
+- **Trajectory realism for cohabitants is not validated.**  
+  Section 3.3 uses ORCA plus Push-and-Rotate and traffic rules to generate trajectories. This is plausible as an engineering choice, but the paper does not validate whether these trajectories resemble realistic pedestrian/VRU behavior versus simply generating collision-free motion. Since SocialNav and safety claims depend on these dynamics, some realism analysis would strengthen the paper.
 
-- **Generalizability ablation conflates data scale and distribution.** Fig. 6a Setting-2 vs. Setting-3 compares training on 12,800 MetaUrban-train scenes vs. 1,000 MetaUrban-finetune scenes. The paper attributes the performance drop in Setting-3 to "underfitting of insufficient and complex fine-tuning data," but scale (12,800 vs. 1,000 scenes) and distribution (in-distribution vs. unseen-distribution) are co-varying. The experiment as designed cannot separate these effects.
+- **Important benchmark ingredients are underspecified in the main text.**  
+  For offline RL and IL, the paper says it uses “the demonstration data provided in MetaUrban-12K,” but the main text does not characterize who generated those demonstrations, their quality, or coverage. Likewise, the object retrieval pipeline is described only at a high level in the main paper, with limited discussion of thresholding, deduplication, or asset quality control.
 
-- **No variance reporting in benchmark tables.** Table 1 and Table 2 report single-run point estimates without standard deviations or confidence intervals. For RL in procedurally generated environments, seed variance can be substantial. Without variance reporting, relative differences between similar methods (e.g., PPO vs. PPO-Lag at 66% vs. 60%) are not fully reliable for method-level conclusions.
+- **Terrain is positioned as a key challenge but is not quantitatively foregrounded in the main paper.**  
+  The introduction and simulator section emphasize multifarious terrains as a defining challenge of micromobility, yet the main experimental section gives little direct quantitative evidence about terrain effects, instead deferring relevant details to the appendix.
 
-- **ORCA pedestrian dynamics may not capture realistic social behavior.** ORCA is non-cooperative and purely reactive; P&R resolves deadlocks algorithmically. Real pedestrians exhibit group navigation, sudden stops, phone distraction, anticipation of right-of-way, and culture-dependent movement norms. The paper notes ORCA's non-cooperativeness but does not discuss whether the resulting crowd dynamics are diverse or behaviorally hard enough to stress-test social navigation policies. This matters most for SocialNav, where a core task is learning socially compliant behavior.
+- **Some results that deserve interpretation are left unexplained.**  
+  For example, IQL’s SocialNav unseen cost is unusually high (3.05), and some safe-RL tradeoffs/unseen behavior would benefit from analysis. This is not a fatal issue, but more interpretation would make the benchmark more informative.
+
+- **There is mild setup ambiguity in Section 4.2.**  
+  The text describes a “static obstacle avoidance task,” yet the intersection setting is also described as having “dense interactions with pedestrians.” That makes it harder to disentangle whether Table 2 isolates mechanics alone or mechanics plus social dynamics.
 
 ### Trivial
-
-- **SNS and CC metrics are not fully unpacked for a benchmark paper's audience.** Given that SNS and CC are less standard than SR/SPL, a brief discussion of what a "good" CC or SNS value implies would strengthen the reader's ability to interpret the results.
-
----
+- A minor reference typo/setup looseness: Section 4.2 says it follows the setting of PointNav in “Section 1,” which is almost certainly meant to refer to Section 4.1.
 
 ## Nice-to-Haves
-
-- **Sim-to-real transfer analysis.** Even a preliminary qualitative discussion of the expected domain gap (visual appearance, physics fidelity, pedestrian behavior realism) between MetaUrban and real urban environments would substantially strengthen the paper's case for practical deployment utility. A single real-world pilot experiment, if feasible, would be very compelling.
-
-- **At least one RGB/depth camera baseline.** Including one vision-based policy result would both validate the visual rendering pipeline and make the benchmark relevant to vision-based embodied AI researchers.
-
-- **Independent parameter sweeps for mechanical structure analysis.** Sweeping one parameter (e.g., max speed) while holding others constant in Table 2 would transform the current descriptive analysis into actionable design guidance.
-
-- **Failure mode analysis for SocialNav.** SocialNav achieves only 34% best SR but the paper does not explain *why* agents fail—collision with pedestrians, getting stuck, poor long-horizon planning? Even a qualitative breakdown would guide future work.
-
-- **Terrain effect experiment.** A controlled comparison (flat terrain vs. varied terrain) for any of the tested machine types would directly validate the terrain system's contribution to training difficulty and generalization.
-
----
+- Add a controlled ablation comparing the full compositional generator against a simpler non-compositional/randomized generator to directly support the generalization claim.
+- Include repeated runs or uncertainty estimates for benchmark numbers.
+- Add at least one vision-based baseline to exploit the simulator’s visual richness, since current benchmarks use LiDAR/state/navigation vectors.
+- Provide a short failure-mode analysis breaking errors down by obstacle clutter, terrain, dynamic agents, and long-horizon planning.
+- Quantify the unseen split more clearly: what changes across train/test/unseen in layouts, objects, and dynamics?
+- Summarize terrain-specific experiments in the main paper rather than only in the appendix.
+- Report simulator throughput/efficiency, since practical training cost matters for a platform paper.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged to be removed; treat them with caution.*
+- **Sim-to-real transfer is unaddressed / no real-world deployment experiment.**  
+  Removed as a main weakness because this is outside the paper’s demonstrated scope. The paper is a simulator/benchmark contribution and does not explicitly claim to prove sim-to-real transfer. It motivates real-world relevance, but the core contribution is the platform and benchmark itself. A sim-to-real discussion would help, but its absence should not be treated as a central flaw here.
 
-- **Harsh Critic — "Infinite scenes and generalizability claim is not established at all":** This was overstate. The paper does show (Fig. 6a,b) that training on more compositionally diverse scenes improves unseen-environment performance. The fair criticism is the absence of component ablations, not that the evidence is completely absent. The broader overclaiming concern is retained in weakened form under "component-level ablation" and "safety metric" weaknesses above.
+- **Legged robots are mentioned but not benchmarked.**  
+  Weakened/removed as a core criticism. The paper clearly states the main benchmark is on a wheeled machine and explicitly notes in footnote 3 that other machines can be evaluated through the provided interface and navigation-locomotion framework. It would be nice to add a legged result, but the current pilot tasks are reasonably scoped.
 
-- **Harsh Critic — "The simulator appears to be the first for micromobility—this is rhetorical rather than operationalized":** The paper does provide a detailed comparison table (Appendix B.6) across scale, sensor, and features, and the gap between indoor/driving simulators and urban micromobility is well-documented. No missing-reference concerns can be raised here without external sources.
+- **“Infinite scenes” is unsupported because the paper does not quantify the number of distinct scenes.**  
+  Removed as a substantive weakness. Given the procedural compositional generator over layouts, terrains, placements, objects, and dynamics, the claim is reasonably understood as combinatorial/unbounded procedural generation rather than a mathematically exact empirical count. This is rhetoric more than a scientific flaw.
 
-- **Harsh Critic — "Benchmarking too thin due to no error bars — hard to trust comparisons":** Partially retained as a minor weakness, but this is a soft norm in large-scale RL benchmark papers, not a fundamental flaw. Method family trends (RL vs. Safe RL) are robust even without per-seed variance.
+- **Missing comparisons to other simulators on shared tasks.**  
+  Removed as a required weakness. While such comparisons would strengthen the paper, the absence is not by itself disqualifying for a new platform paper, especially since task definitions and embodiments are domain-specific. The paper’s main value is introducing the platform and pilot benchmark.
 
-- **Harsh Critic / Spark — "No comparison against alternative simulators empirically":** Empirically adapting MetaDrive or Habitat for sidewalk navigation would require substantial engineering effort and is outside the scope of a platform introduction paper. This would be a nice-to-have experiment but is not a reasonable bar for acceptance.
-
-- **All reviewers — "Missing related work citations":** Not raised here, as we cannot verify the existence of specific external papers without access to search tools.
-
----
+- **Ethical concerns around asset/source availability or release status.**  
+  Removed per instruction. The paper cites and describes released assets/tools/datasets, so their existence/release should not be questioned.
 
 ## Novel Insights
-
-The most genuinely novel aspect of this work—beyond the platform itself—is the VLM-based open-vocabulary obstacle retrieval pipeline grounded in worldwide urban scene distributions. This approach (combining academic segmentation datasets + GPT-4o analysis of Google Street imagery from 50 countries + urban design handbooks into a 1,215-item description pool, then using BLIP embeddings to retrieve from Objaverse) is a scalable and principled solution to a real problem: large 3D object repositories are domain-agnostic and have uneven quality, making naïve sourcing inappropriate for domain-specific simulators. This pipeline is likely to generalize beyond urban micromobility and could be a methodological contribution in its own right. The cross-machine evaluation framework also surfaces a practically useful and underexplored insight: that mechanical structure (not just algorithm) is a major determinant of both mobility and safety in learned navigation policies, and that seemingly conservative designs (low max speed) can paradoxically improve *both* safety *and* mobility relative to unconstrained designs.
-
----
+The clearest synthesis is that the paper is **better as a platform paper than as a causal empirical paper**. Its strongest contribution is not that it proves a particular simulator design causes better generalization/safety, but that it defines a plausible and practically relevant **problem setting**—urban micromobility—with enough richness in layouts, terrains, clutter, and cohabitants to make current navigation methods struggle. In other words, the real contribution is the **benchmarking substrate and domain framing**, while the main overreach is trying to convert that platform contribution into stronger causal claims than the current ablations support.
 
 ## Suggestions
-
-1. **Reframe and constrain the safety claim.** Replace the headline framing of "safety" with "collision avoidance" or "safe navigation under crowd density." Add 1–2 traffic-rule compliance metrics to justify the safety framing, or explicitly limit it.
-
-2. **Add a 2×2 module ablation.** Even a partial ablation (e.g., with vs. without VLM retrieval; with vs. without terrain variation) on a held-out test set would substantially validate the compositional architecture's individual contributions.
-
-3. **Add a terrain effect experiment.** Train/test with flat-terrain-only vs. full terrain generation on at least one machine type and report the SR delta.
-
-4. **Add at least one camera-based observation baseline.** This would expand benchmark relevance and validate visual rendering quality.
-
-5. **Report standard deviations across seeds** for the key results in Table 1. Even 3 seeds would strengthen the comparative claims.
-
-6. **Independent parameter sweeps in Table 2.** For the COCO family, extend the current mod-1 and mod-2 comparisons into a small factorial design.
-
----
+- Reframe the main claims more conservatively: emphasize that MetaUrban provides a rich urban micromobility platform and **initial evidence** that compositional diversity is useful, rather than claiming demonstrated causal improvements in generalizability and safety.
+- Add one decisive ablation: compare the full compositional generator against a simpler randomized or less-structured scene generator with matched dataset size.
+- Strengthen the benchmark paper aspect with repeated runs, uncertainty estimates, and brief interpretation of anomalous results.
+- Clarify the unseen split explicitly in terms of what is held out.
+- Expand the main-paper analysis of terrain and cohabitant dynamics, since these are marketed as key distinguishing features.
+- Tone down the practical deployment/design-guidance claims from Section 4.2 unless additional evidence is added.
 
 ## Score and Decision
+**Evaluation across axes:**  
+- **Originality:** High. Urban micromobility is a meaningful and relatively neglected niche between indoor embodied AI and driving simulation.  
+- **Importance:** High. The problem setting is timely and valuable to the community.  
+- **Claims support:** Moderate. The platform contribution is supported; the stronger causal claims about generalizability/safety are not fully established.  
+- **Experimental soundness:** Moderate. Useful pilot benchmarks and ablations, but limited as a mature benchmark validation.  
+- **Clarity:** Good.  
+- **Community value:** Good to high, especially if released and maintained.
 
-**Calibration:**
+**Calibration against human-reviewed anchors:**  
+- Compared to **Habitat 3.0** (`4znwzG92CE`, scores 8/6/6, accepted), this paper has a similarly strong platform motivation and clear system design, but materially weaker empirical substantiation of its strongest claims and less mature benchmark validation. So it should score **below** Habitat 3.0.  
+- Compared to weaker rejected simulator/platform papers such as **EmbodiedCity** (`y15LAM4u0A`, scores 5/3/3/3, reject) and **UnrealCV Zoo** (`vQ1y086Kn2`, scores 6/3/5/6, reject), MetaUrban is **stronger in problem definition and platform coherence**, and its experimental evidence is more meaningful than papers that mainly showcase environments without a focused benchmark story. So it should score **above the low-reject range** of 3–5.  
+- Compared to **UMAP** (`uYzJvP8HGl`, mixed 3/8/6/3/8/6, reject), MetaUrban shares a common pattern: interesting platform, but ambiguity about whether it is a benchmark, a simulator, or evidence for broader claims. MetaUrban is somewhat better focused than UMAP, but still has overclaiming and benchmark-validation limitations.  
+- Relative to these anchors, this paper lands in the **borderline-to-weak-accept range**, but I lean **reject** because the paper’s strongest empirical claims are not actually established by controlled evidence, and this matters for a datasets/benchmarks submission.
 
-- **EmbodiedCity** (city embodied AI platform, Reject, 5/3/3/3 avg ≈ 3.5): Much weaker than MetaUrban—limited technical depth, poor evaluation metrics, minimal baselines, single static city.
-- **Habitat 3.0** (embodied AI simulator, Accept poster, 8/6/6 avg ≈ 6.7): More mature evaluation, human-in-the-loop validation, more careful metric design, but similarly no sim-to-real; MetaUrban is at comparable technical depth for its subfield but with weaker experimental rigor.
-- **Virtual Community** (social world simulator, Withdrawn/Reject, 5/5/3/5 avg ≈ 4.5): Similar scalability and compositional claims but weaker empirical backing; MetaUrban is clearly stronger in this regard.
-- **HASARD** (safe RL benchmark, Accept poster, 5/5/5/8 avg ≈ 5.75): A comparable benchmark paper with mixed scores.
-
-**Assessment:** MetaUrban sits clearly above EmbodiedCity and Virtual Community in technical depth and evaluation comprehensiveness. It is below Habitat 3.0 due to weaker experimental rigor (no vision-based obs, no sim-to-real discussion, no component ablations, no error bars, unsafe "safety" framing). The platform contribution is genuine—urban micromobility is an underserved niche, the pipeline is technically sound, the 12K dataset and 7-baseline benchmark is a meaningful community contribution, and the release is real. The weaknesses are substantive but concentrated in overclaiming and evaluation gaps rather than fundamental conceptual or implementation errors.
-
-**Score: 5.5 — Borderline Accept**
-
-The paper is a legitimate platform contribution to an underserved area with a thoughtful pipeline and public release, but needs revision to tighten its safety/generalizability claims, add terrain and component ablations, and expand the observation modality support before the empirical narrative fully matches the platform's stated ambitions.
+**Final score: 5.5 / 10 — Weak Reject**
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+MY FINAL DECISION: <orange>Reject</orange>

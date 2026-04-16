@@ -12,15 +12,16 @@ from tools import read_file, read_file_full, grep_file, search_file  # glob_file
 import weave
 weave.init("openai-agents")
 
-from agents import Agent, Runner, function_tool
+from agents import Agent, OpenAIChatCompletionsModel, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
 import os
-os.environ["OPENAI_DEFAULT_MODEL"] = "z-ai/glm-5.1"
-HARSH_MODEL = "gpt-5.4" 
-HUMAN_FINDER = "kimi-k2.5"
-# MERGER_MODEL = "gpt-5.4" 
-MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
+os.environ["OPENAI_DEFAULT_MODEL"] = os.getenv("OPENAI_DEFAULT_MODEL", "z-ai/glm-5.1")
+HARSH_MODEL = os.environ.get("HARSH_MODEL", "gpt-5.4")
+# HUMAN_FINDER = "kimi-k2.5"
+HUMAN_FINDER = os.environ.get("HUMAN_FINDER", "ollama:glm-5.1:cloud")
+MERGER_MODEL = os.environ.get("MERGER_MODEL", "gpt-5.4")
+# MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
 # MERGER_MODEL = "claude-sonnet-4.6"
 from openai import AsyncOpenAI
 from agents import set_default_openai_client, set_tracing_export_api_key
@@ -50,7 +51,7 @@ MAX_RETRIES = 5
 RETRY_DELAY = 10
 
 
-async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
+async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> tuple[str, object]:
     agent_name = agent.name
     print(f"  [{agent_name}] starting ...")
     for attempt in range(1, MAX_RETRIES + 1):
@@ -64,7 +65,7 @@ async def run_agent_with_retry(agent, prompt: str, max_turns: int = 30) -> str:
                     continue
                 raise RuntimeError(f"[{agent_name}] empty response after {MAX_RETRIES} attempts")
             print(f"  [{agent_name}] done")
-            return output
+            return output, result.context_wrapper.usage
         except Exception as e:
             if attempt < MAX_RETRIES:
                 wait = RETRY_DELAY * attempt
@@ -138,8 +139,13 @@ _tool_agents = [read_file, search_file, grep_file]
     # tool_name="summarization", tool_description="Summarizing or answering questions about a specific file given **its absolute path** and question.",
 harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=HARSH_MODEL)
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"))
-human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=HUMAN_FINDER)
-
+if not HUMAN_FINDER.startswith("ollama:"):
+    human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=HUMAN_FINDER)
+else:
+    model = HUMAN_FINDER.replace("ollama:", "")
+    client = AsyncOpenAI(api_key="ollama", base_url="http://localhost:11434/v1/")
+    model = OpenAIChatCompletionsModel(model=model, openai_client=client)
+    human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=model)
 
 if MERGER_MODEL.startswith("claude_sdk:"):
     merger = None  # Claude SDK merger — created per-call in run_pipeline
@@ -193,7 +199,12 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             print(f"  🔥ERROR: {paper_path} — agent '{a.name}' raised {type(r).__name__}: {r}")
             return None
 
-    labeled = [f"### {a.name}\n{out}" for (a, _), out in zip(agents_and_prompts, responses)]
+    agent_usages = {}
+    outputs = []
+    for (a, _), (out, usage) in zip(agents_and_prompts, responses):
+        outputs.append(out)
+        agent_usages[a.name] = usage
+    labeled = [f"### {a.name}\n{out}" for (a, _), out in zip(agents_and_prompts, outputs)]
 
 
     print("  Phase 2: Merger ...")
@@ -210,6 +221,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         )
         paper_dir = str(Path(paper_path_abs).parent)
         merged_review = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir, no_cal=no_cal)
+        agent_usages["Merger"] = None
     else:
         _merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=no_cal)
         _merger_tools = [read_file, grep_file] if no_cal else _tool_agents
@@ -223,15 +235,32 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             f"Remember: many of the harsh critic's points may be nonsensical or overly "
             f"picky — cross-check everything against the actual paper before including it."
         )
-        merged_review = await run_agent_with_retry(_merger, merger_prompt)
+        merged_review, merger_usage = await run_agent_with_retry(_merger, merger_prompt)
+        agent_usages["Merger"] = merger_usage
     scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
     decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"
 
-    log_path = Path(__file__).parent / "pipeline.log"
+    total_input = total_output = total_tokens = 0
+    token_lines = []
+    for agent_name, usage in agent_usages.items():
+        if usage is None:
+            token_lines.append(f"  {agent_name}: N/A (claude_sdk path)")
+        else:
+            token_lines.append(
+                f"  {agent_name}: input={usage.input_tokens} output={usage.output_tokens} total={usage.total_tokens} requests={usage.requests}"
+            )
+            total_input += usage.input_tokens
+            total_output += usage.output_tokens
+            total_tokens += usage.total_tokens
+    token_lines.append(f"  TOTAL: input={total_input} output={total_output} total={total_tokens}")
+
+    log_path = Path(__file__).parent / os.environ.get("MERGE_LOG", "pipeline.log")
     with open(log_path, "a") as log_f:
         log_f.write(f"\n{'='*60}\n")
         log_f.write(f"Paper: {paper_path}\n")
         log_f.write(f"Timestamp: {__import__('datetime').datetime.now().isoformat()}\n")
+        log_f.write(f"\n--- Token Usage ---\n" + "\n".join(token_lines) + "\n")
+        log_f.write(f"\n--- Merged Inputs ---\n\n{chr(10).join(labeled)}\n")
         log_f.write(f"\n--- Merged Review ---\n{merged_review}\n")
         log_f.write(f"\n--- Scorer Output ---\n{scorer_output}\n")
         log_f.write(f"\n--- Decision ---\n{decision}\n")
@@ -338,7 +367,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
         print(f"Random sample: {len(samples)} papers")
 
     out_dir = Path(__file__).parent
-    csv_path = out_dir / "bench_scores.csv"
+    csv_path = out_dir / os.getenv("OUTPUT_CSV", "bench_scores.csv")
     reviews_dir = out_dir / "bench_reviews"
     reviews_dir.mkdir(exist_ok=True)
 
@@ -348,7 +377,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
         import pandas as pd
         existing_df = pd.read_csv(csv_path)
         existing_count = len(existing_df)
-        print(f"\nFound existing bench_scores.csv with {existing_count} results.")
+        print(f"\nFound existing {csv_path} with {existing_count} results.")
         choice = input("  [C]ontinue (skip finished papers) or [O]verwrite? [C/o]: ").strip().lower()
         if choice in ("o", "overwrite"):
             for review_file in reviews_dir.iterdir():

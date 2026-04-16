@@ -1,145 +1,90 @@
-Now let me check the calibration papers for scoring.Now let me check one more calibration paper for scoring reference.Now I have enough information to produce the final consolidated review. Let me synthesize all the reviewer inputs against the actual paper content.
-
----
-
 ## Summary
-R-Sparse introduces a training-free activation sparsity method for LLM inference that decomposes each linear layer's computation into a sparse component (selecting high-magnitude input channels) and a low-rank component (offline SVD of the weight matrix). Unlike prior approaches that target output activation sparsity in MLP blocks only (CATS, GRIFFIN), R-Sparse applies to all linear layers in both attention and MLP blocks, achieving 50% model-level sparsity with demonstrably better accuracy than training-free baselines, and up to 43% generation speedup via a custom Triton kernel.
-
----
+This paper proposes **R-Sparse**, a training-free inference method for modern LLMs that combines **input-activation sparsification** with a **low-rank residual path** derived from offline SVD of the weights. The main contribution is a practical way to push activation-style sparsity beyond prior training-free methods, including into attention layers, with strong empirical gains over prior training-free baselines and meaningful end-to-end speedups with a custom kernel.
 
 ## Strengths
-
-- **Novel technical contribution**: The combination of input-channel sparsity and SVD-based low-rank approximation is a well-motivated and technically sound hybrid. Prior training-free methods (CATS, GRIFFIN) only applied output sparsity to MLP blocks; R-Sparse generalizes to all linear layers, unlocking higher model-level sparsity without retraining.
-
-- **Substantial empirical advantage over baselines**: Table 1 and Figure 5 show consistent ~18% average accuracy gains over CATS and GRIFFIN at matched model-level sparsity across all three model families. This is not a marginal improvement—the gap is large and reproducible.
-
-- **Ablation validates hybrid design**: Table 3 demonstrates that the hybrid sparse+low-rank combination outperforms pure sparsity and pure low-rank decomposition, directly validating the core design choice.
-
-- **Adaptive recipe via evolutionary search**: Table 4 confirms that the layer-wise ρ search yields up to 2.6% additional accuracy over uniform allocation, and the per-layer importance heatmaps (Figure 3) provide intuitive motivation showing that different layers indeed have different sparsity/rank characteristics.
-
-- **Quantization compatibility**: Table 2 shows R-Sparse is compatible with GPTQ 4-bit quantization, demonstrating a practical path to stacking efficiency techniques.
-
-- **Practical, accessible approach**: No retraining required, ~1 hour of search overhead, and code is publicly available.
-
----
+- **Addresses an important and practical problem well:** training-free efficient inference for non-ReLU LLMs is highly relevant, and the paper directly targets the main failure modes of prior activation sparsity methods: reliance on ReLU-like activations, active-channel prediction, and limited achievable sparsity.
+- **Core idea is meaningful and reasonably novel in this context:** the combination of magnitude-based **input-channel sparsity** with a **low-rank residual approximation** is a sensible and useful reframing relative to prior output-side activation sparsity. The method avoids the need to predict active output channels and extends naturally to both attention and MLP layers.
+- **Empirical results against the stated training-free baselines are strong:** across Llama-2-7B, Llama-3-8B, and Mistral-7B, R-Sparse clearly outperforms CATS and GRIFFIN at matched model-level sparsity budgets in Table 1. This is the paper’s best-supported claim, and it is a meaningful contribution.
+- **The method works across multiple model families and task types:** the paper evaluates on three model families and reports results on commonsense reasoning, language modeling, and summarization, which is a better breadth than many papers in this area.
+- **Ablations support the core decomposition choice:** Table 3 shows that the combined method is better than pure sparsity or pure low-rank approximation alone, which helps validate that the method is not merely an arbitrary hybrid.
+- **Practical speedups are demonstrated, not just proxy savings:** Figure 6 reports real end-to-end generation speed improvements with a custom Triton kernel, and Table 2 shows compatibility with INT4 quantization, both of which strengthen practical relevance.
 
 ## Weaknesses
+###: Fatal
+- None.
 
-### Fatal
-*(None — the paper's core contribution stands.)*
-
----
-
-### Major
-
-- **Conclusion overclaims "without any performance loss"**: The Conclusion explicitly states "achieving 50% model-level sparsity without any performance loss," but Table 1 shows consistent average drops for all three models — Llama-2-7B: 65.88→64.06 (−1.82), Llama-3-8B: 69.44→66.20 (−3.24), Mistral-7B: 69.89→68.39 (−1.50). On individual tasks, degradation can be significant (e.g., Llama-3-8B ARC-C: 50.51→44.71). Section 4.2 uses more measured language ("minimal degradation"), but the abstract and conclusion assert "comparable performance" in absolute terms without qualification. This is a meaningful gap between what is claimed and what is shown, particularly for Llama-3-8B. The paper would be more credible if framed as a strong quality-efficiency tradeoff point rather than near-lossless compression.
-
-- **Efficiency evaluation is too narrow to substantiate deployment claims**: The paper repeatedly motivates the work via edge deployment and on-device inference, and the abstract highlights "43% end-to-end efficient improvements." However, Section 4.3 measures speedup only on a single A6000 GPU, in FP32 precision, using just 5 prompts, at one sparsity setting (50%), against an unoptimized HuggingFace dense baseline. No memory footprint measurements are reported despite memory I/O being the core motivation. There is no prefill vs. decode breakdown, no variance across runs, and no evaluation on any edge or low-precision hardware despite that being a core stated motivation. The speedup is likely real, but the evidence does not justify the breadth of deployment claims made throughout the paper.
-
-- **Evaluation limited to 7B/8B scale**: All experiments use Llama-2-7B, Llama-3-8B, and Mistral-7B. The directly comparable prior training-free work (TEAL) evaluated models from 7B to 70B. Whether the sparsity/rank patterns and the searched recipes from the evolutionary algorithm generalize to larger models (13B, 70B) is entirely unknown. For a paper claiming broad applicability across advanced LLMs, this is a significant gap.
-
----
+### Major:
+- **The paper overstates how close it is to dense performance at 50% model-level sparsity.**  
+  The strongest version of the claim is not fully supported by the results as presented. Table 1 shows noticeable drops from dense to R-Sparse@50% for all three model families, e.g. Llama-2-7B **65.88 → 64.06**, Llama-3-8B **69.44 → 66.20**, and Mistral-7B **69.89 → 68.39** on the eight-task average. So “better tradeoff than prior training-free baselines” is strongly supported, but language like the conclusion’s **“without any performance loss”** is too strong. “Comparable” is arguable for some settings, but the paper should calibrate this claim more carefully, especially for Llama-3.
+- **The searched sparsification recipe is validated only weakly and may be overfit to a tiny proxy set.**  
+  Section 3.5 states that the layerwise sparse/rank ratios are searched by minimizing perplexity on **16 randomly selected samples from the C4 training set**. The same small calibration source also underlies the motivational analyses and the uniform recipe choice. Since the adaptive recipe is explicitly claimed as one source of the gains in Section 4.2, the lack of robustness analysis across different calibration samples/seeds weakens confidence that the searched recipe captures stable layerwise structure rather than fitting a tiny proxy corpus.
+- **The efficiency section does not compare wall-clock speed against the main sparse baselines.**  
+  Figure 6 only compares **dense vs. R-Sparse**, even though the main baselines are also inference-time sparsity methods. Thus the paper demonstrates that R-Sparse can be accelerated effectively with a custom implementation, but it does **not** establish whether its practical latency/throughput is better than CATS or GRIFFIN under matched software/hardware conditions. For a deployment-oriented paper, this missing comparison is important.
+- **The exposition from Motivation Case I to the final method is not fully coherent.**  
+  Section 3.2 argues that the non-sparse components can be viewed as a few data-dependent bias terms, and even says, “**We will show later how these data-dependent biases can be converted into static biases**.” But the later method does not literally derive static biases; instead it moves to an SVD-based low-rank residual approximation. The underlying intuition is plausible, and Section 3.3 partly bridges it by showing a low-rank structure in the span of these biases, but the presentation overpromises a tighter derivation than the paper actually provides.
 
 ### Minor
-
-- **Loose conceptual bridge between motivation (Section 3.2) and method (Section 3.4)**: Section 3.2 builds intuition around approximating non-sparse components as "a few bias terms." Section 3.4 then pivots to an SVD-based low-rank approximation without explicit justification for why SVD is preferable to the bias formulation. A one-paragraph bridge explaining why offline SVD is used in practice (e.g., computational efficiency, no need for dynamic bias computation) would significantly improve the paper's narrative coherence.
-
-- **Small calibration set for evolutionary search, no robustness check**: The evolutionary search objective is average perplexity over only 16 C4 samples. While using small calibration sets is standard in training-free compression (e.g., GPTQ, SparseGPT), the paper provides no analysis of recipe sensitivity to calibration set choice, seed, or domain. Given the paper emphasizes ten diverse tasks, it would strengthen confidence if the authors showed at least that the searched recipes are stable across different random seeds or calibration domains.
-
-- **Visualization in Figure 3 uses independently sorted axes**: The heatmap's axes (input channels and SVD indices) are sorted independently for visualization purposes. The paper correctly notes this is for better visualization, but one should be clear that the actual implementation selects high-magnitude input channels by their original indices and the top SVD components by singular value rank — not by the sorted visualization indices. This is clarified in the paper but could be more explicit.
-
-- **Limited task diversity**: Benchmarks consist exclusively of commonsense QA, language modeling perplexity, and XSUM summarization. More demanding tasks — mathematical reasoning, code generation, instruction-following, long-context — are absent. Prior training-free sparsity work (e.g., TEAL) showed that degradation patterns can differ substantially across task types. The claim of "ten diverse tasks" is accurate, but the diversity within the commonsense QA family is limited.
-
----
+- **Some implementation-critical details are underspecified.**  
+  In Section 3.4, the threshold \(t(s)\) is defined as the \(s\)-th percentile of \(X\), but it is not stated clearly enough whether this is computed per token, per batch, or via some pre-estimated layerwise statistic during actual decoding. Since runtime efficiency depends on this, the paper should specify it more concretely.
+- **The rule for selecting the low-rank components is not operationally precise enough.**  
+  The paper says it selects the most important \(r\) components based on the estimated scores in Figure 3, but Figure 3 sorts rows and columns independently for visualization. That figure therefore cannot itself define a deployment-time selection rule. The actual criterion used to choose retained SVD components should be stated explicitly.
+- **Adaptive-search evidence is somewhat narrow.**  
+  Table 4 supports that the searched recipe beats a uniform one, but only on four tasks and without variance across search seeds or calibration subsets. This does not invalidate the result, but it makes the adaptive-search contribution less convincing than the main method itself.
+- **Storage / memory characterization is incomplete.**  
+  Section 3.4 gives a memory-I/O expression, but the paper does not clearly quantify the extra storage footprint of the low-rank factors \(A_r, B_r\) or discuss deployment implications of carrying both sparse-path weights and low-rank components.
 
 ### Trivial
-
-- The perplexity-based search objective targets a proxy metric (C4 perplexity) while evaluation is primarily on commonsense accuracy. This mismatch is noted but under-discussed.
-
----
+- **Layerwise analysis would improve interpretability.**  
+  The paper notes that layers differ in their rank-aware sparsity behavior, but does not provide much detail on how the learned sparse/low-rank balance differs between attention vs. MLP or early vs. middle vs. late layers.
 
 ## Nice-to-Haves
-
-- **Open-ended generation quality evaluation**: Adding LLM-judge or human evaluation on free-form text generation (code, reasoning, creative writing) would better validate the claim that quality is preserved beyond benchmark accuracy.
-
-- **Compare to retrained methods on a Pareto basis**: Even if training-based methods (Q-Sparse, ReluLLaMA) are out of scope, a single table showing the accuracy-vs-compute-budget Pareto frontier would contextualize R-Sparse's value proposition for practitioners.
-
-- **Edge device evaluation**: Even a preliminary test on a representative edge SoC or a measurement of peak memory reduction would connect the hardware motivation more concretely to the claims.
-
-- **Show layer-wise ρ distributions**: Visualizing the optimal sparse-vs-low-rank ratio per layer across model families would be a valuable scientific contribution that directly validates the evolutionary search's utility and reveals structural insights.
-
----
+- Report exact WikiText-2 and XSUM numbers in tables, not only plots, to better support the “ten tasks” summary claims.
+- Add wall-clock comparisons against CATS/GRIFFIN under the same implementation environment.
+- Show robustness of the searched recipe across different calibration subsets/seeds.
+- Visualize the searched per-layer \(\rho\) values to clarify what the adaptive procedure is actually learning.
+- Benchmark speed in more realistic deployment precisions/settings beyond the reported FP32 setup and, ideally, with the adaptive recipe used for the main accuracy results.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-> *These points are flagged to be removed; treat them with caution.*
-
-**R1 (Harsh Critic / Spark): "Threshold computation t(s) is circular / undermines prediction-free claim"**
-— **Removed**. During decoding, the input X for a single token is a fully computed activation vector that is already resident in memory before the linear layer is applied. Computing its s-th percentile threshold is an O(n) or O(n log n) operation on a known vector — this is not "prediction" in the sense used by output-sparsity methods. Output sparsity methods must predict *which output channels will be active before computing X·W^T*, which requires a separate predictor network. R-Sparse's approach of thresholding a vector you already have is categorically different and cheaper. This criticism is a misunderstanding of the method.
-
-**R2 (Human Finder): "Unfair comparison to training-free ReLUfication (a strawman)"**
-— **Removed**. ReLUfication without training is included specifically to show the baseline accuracy of that approach. The paper is transparent about this. Comparing against retrained ReLUfication or Q-Sparse would favor the trained baselines and make R-Sparse look worse, not better. This is a case where asymmetry benefits the baseline — per policy, such comparisons need not be demanded of the authors.
-
-**R3 (Human Finder/Spark): "Missing comparison to ASVD, SVD-LLM, and similar low-rank methods"**
-— **Removed**. Under the meta-reviewer policy, I cannot confirm the existence and scope of specific external methods without access to their papers, and demanding missing related work comparisons risks fabricating requirements. The paper positions R-Sparse against training-free activation sparsity methods, which is a coherent and justified scope.
-
-**R4 (Harsh Critic): "The paper does not explain \bar{X} in the R-Sparse formula"**
-— **Removed**. From context and the formula structure, $\bar{X}$ is simply the original (unsparsified) input X, used so that the low-rank branch compensates for the residual of the sparsified channels. This is clearly implied by the decomposition $Y = Y_s + Y_r$ where $Y_r$ captures the non-sparse portion. The notation is standard and not a genuine ambiguity.
-
-**R5 (Neutral Reviewer): "Performance on ARC-C drops 43.43→40.78 for Llama-2-7B, 'comparable performance might be optimistic'"**
-— **Weakened to the Major weakness above** rather than treated as a separate weak point. The overclaiming issue is real but is already the primary Major weakness.
-
-**R6 (Spark): "No analysis of prefill stage overhead"**
-— **Removed as an independent criticism**. Section 3.1 explicitly states: *"In the following, we focus primarily on the decoding phase."* The paper is transparent that the method targets the decode-stage bottleneck. Criticizing the absence of prefill analysis for a method that explicitly scopes itself to decode is scope creep.
-
----
+- **Complaint about unfair comparison because R-Sparse sparsifies attention+MLP while CATS/GRIFFIN sparsify only MLP.**  
+  Removed because this asymmetry favors the baselines, not the proposed method: R-Sparse is tackling a harder, broader setting, so this is not a valid fairness criticism under the review rules.
+- **Criticism about missing related work / concurrent work comparisons.**  
+  Removed because missing-related-work complaints are disallowed here without external verification.
+- **Pure reproducibility nitpicks about search hyperparameters or trivial implementation omissions.**  
+  Kept only the parts that materially affect the method’s interpretation (threshold computation and selection rule); generic “more hyperparameters needed” complaints were removed.
+- **Claims questioning existence, release status, or verifiability of cited systems/benchmarks/models.**  
+  Removed by rule.
+- **Broad requests to evaluate many additional domains/models (e.g., larger models, long-context, code/math) as if required for acceptance.**  
+  These would strengthen the paper, but the current scope is already reasonable for a systems/compression paper; they are nice-to-have rather than core flaws.
 
 ## Novel Insights
-
-The most insightful observation across all three reviews is the **conceptual unification of input-channel sparsity and low-rank SVD** as complementary operations targeting the same structural property of the score matrix S_{i,j}. Prior work treats activation sparsity and low-rank decomposition as competing compression paradigms. R-Sparse correctly identifies that they address different parts of S's distribution — sparse selection captures the high-magnitude input channels, while the top SVD components capture the low-rank residual — and that their combination covers the "lower-right" concentration region that neither technique alone handles well. This framing has implications beyond this paper: it suggests that any layer-level compression method implicitly makes choices about which region of S to approximate, and that principled hybrid selection could be applied to other compression settings. A secondary insight from the paper is the empirical observation (Figure 3) that initial and final layers are harder to compress via either sparsity or low-rank, aligning with findings from weight pruning literature — this cross-method consistency is valuable signal for future work on non-uniform compression.
-
----
+The paper’s strongest contribution is not really the absolute “50% sparsity with no loss” headline, which the evidence does not fully support, but a more precise and interesting point: **input-side activation sparsification becomes substantially more competitive when paired with a lightweight low-rank residual path and applied to both attention and MLP layers**. In other words, the paper’s real advance is less “activation sparsity alone works much better than expected” and more “activation sparsity should be treated as one component in a sparse-plus-low-rank decomposition of inference, not as a standalone masking trick.” That framing better matches both the evidence and the practical gains.
 
 ## Suggestions
-
-1. **Recalibrate the abstract and conclusion**: Replace "without any performance loss" and "comparable performance" with accurate quantitative language (e.g., "average accuracy drop of 1.5–3.2% at 50% model-level sparsity, compared to 18–22% drops for comparable training-free baselines").
-
-2. **Expand efficiency evaluation**: Report peak GPU memory usage, separate prefill/decode latency, and add FP16 kernel evaluation. Even a single measurement on one of the models at FP16 would substantially strengthen the deployment narrative.
-
-3. **Validate at larger scale (at least 13B)**: Run the method on Llama-2-13B or Llama-3-70B to check whether the sparsity/rank recipe patterns and quality claims hold beyond 7–8B.
-
-4. **Provide calibration robustness analysis**: Run the evolutionary search with different 16-sample draws (e.g., 5 random seeds) and report the variance in searched ρ values and final accuracy, to establish that the recipes are stable rather than overfit to one tiny calibration set.
-
-5. **Clarify the motivation→method bridge in Section 3.2→3.4**: Add a brief paragraph explaining why the bias-term motivation (Case I) naturally leads to an SVD formulation (Case II) rather than a dynamic bias computation, and why offline SVD is the preferred practical instantiation.
-
-6. **Visualize layer-wise ρ distributions**: A heatmap showing the optimal sparse-vs-low-rank ratio per layer type (q/k/v/o/up/gate/down) and position (early/middle/late) would be an informative and low-cost addition to the ablation section.
-
----
+- Tone down the headline claims and replace “without any performance loss” with a more accurate statement centered on **better accuracy/efficiency tradeoffs than prior training-free baselines**.
+- Clarify exactly how \(t(s)\) is computed at inference time and quantify any overhead from threshold computation.
+- Explicitly define the rule for selecting retained SVD components instead of referring informally to Figure 3.
+- Add robustness analysis for the evolutionary search: different calibration subsets, random seeds, and perhaps transfer across tasks.
+- Include wall-clock throughput/latency comparisons against CATS and GRIFFIN with matched implementations if practical.
+- Report full numerical results for WikiText-2 and XSUM in tables and include more direct aggregate summaries across all reported tasks.
+- Add a compact layerwise analysis of the learned sparse-vs-low-rank allocation, especially attention vs. MLP and early vs. late layers.
 
 ## Score and Decision
+**Assessment across axes:**  
+- **Originality:** moderate-to-good; the ingredients are familiar, but the input-sparsity + low-rank residual combination for training-free LLM inference is a useful and nontrivial synthesis.  
+- **Importance:** high; efficient inference for modern non-ReLU LLMs is an important problem.  
+- **Claims support:** mixed; the core comparative claim against training-free baselines is well supported, but the dense-comparability claim is overstated.  
+- **Experimental soundness:** good overall, but weakened by limited validation of the searched recipe and by missing head-to-head speed comparisons with sparse baselines.  
+- **Clarity:** generally good, though the motivation-to-method bridge is looser than it should be.  
+- **Community value:** solid; this is likely useful for researchers and practitioners working on training-free LLM compression/inference.
 
-**Calibration anchors:**
+**Calibration against human-reviewed anchors:**  
+- Compared to **TEAL** (`dGVZwyq5tV.md`, scores 8/8/8/6, Accept Spotlight), this paper is somewhat weaker: TEAL appears stronger in claim calibration and breadth of evidence, especially around practical throughput and broader scale, while R-Sparse has a nice hybrid idea but leaves more ambiguity around dense-level preservation and recipe robustness.  
+- Compared to **ASVD** (`HyPofygOCT.md`, scores 6/8/6/5, overall Reject), R-Sparse is stronger on practical evaluation and direct deployment relevance, especially because it shows end-to-end speedups and stronger comparisons to training-free baselines in its target setting.  
+- Compared to lower-end sparse/low-rank papers like **Targeted Low-rank Refinement** (`s6Q7aVZWIn.md`, 5/5/3/5, rejected/withdrawn), R-Sparse is clearly stronger: it has a more compelling problem setup, better experiments, and more practical value.
 
-| Paper | Topic | Scores | Decision |
-|---|---|---|---|
-| TEAL (dGVZwyq5tV) | Training-free activation sparsity, Llama-2/3 + Mistral 7B–70B, wall-clock speedup, no training | 8, 8, 8, 6 | **Accept (Spotlight)** |
-| Q-Sparse (cit3SNnZ6Q) | Sparsely activated LLMs with training, scaling laws | 6, 5, 3, 5 | **Reject** |
-| EvoPress (kWtP5ZOErR) | Evolutionary search for dynamic LLM compression | 3, 6, 8, 8 | **Reject** |
+Overall, this lands **below the strongest accepted papers in this subarea, but above the borderline/reject low-rank compression papers**. I therefore view it as a **borderline accept / weak accept** rather than a clear accept or reject.
 
-**Positioning vs. anchors:**
-
-TEAL is the most directly comparable paper (same topic, same models, same training-free setting, accepted as spotlight at ~avg 7.5). R-Sparse has **genuine novelty over TEAL** — the SVD hybridization is a real technical contribution that TEAL lacks, and R-Sparse's advantage over CATS/GRIFFIN is large and clearly demonstrated. However, R-Sparse falls short of TEAL's execution quality in three areas: (1) scale evaluation covers only 7B/8B vs. TEAL's 7B–70B, (2) efficiency evidence is substantially narrower (FP32-only, no memory measurements, no FP16 kernels), and (3) the overclaiming in conclusion/abstract is more significant than TEAL's measured presentation. Q-Sparse (rejected, avg ~5) required training and had methodology issues; R-Sparse is clearly above that bar. The paper sits comfortably above the reject threshold but below spotlight quality. A score of **6.0** reflects a genuine contribution with execution gaps that are fixable but currently material.
-
-**Evaluation axes:**
-
-- *Originality*: Good — the hybrid input-sparsity + SVD framing is novel and well-motivated.
-- *Importance of research question*: High — training-free LLM inference acceleration is a pressing problem.
-- *Claims vs. evidence*: Moderate — core relative claims are well-supported; absolute "no performance loss" claims are not.
-- *Soundness of experiments*: Moderate — accuracy experiments are thorough; efficiency experiments are thin.
-- *Clarity of writing*: Good — paper is generally well-written; the motivation–method bridge is loose.
-- *Value to the research community*: Good — the hybrid framework and the layer-wise ρ search are contributions worth building on.
-
-**Final Score: 6.0**
-
-MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL SCORE: <pineapple>6.5</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

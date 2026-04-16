@@ -1,107 +1,79 @@
-Now let me read the human review files for calibration:Now I have enough information to produce the final consolidated review. Let me synthesize.
-
----
-
 ## Summary
-
-MARINE is a training-free, API-free framework for mitigating object hallucinations in Large Vision-Language Models (LVLMs) at inference time. It uses an ensemble of off-the-shelf object detectors (DETR + RAM++) to extract image-grounded object lists, converts them into a text guidance prompt, and then interpolates next-token logits between the guided and unguided runs via a classifier-free guidance-inspired formulation. The method is evaluated on five LVLMs across CHAIR, POPE, GPT-4V-aided evaluation, and standard captioning metrics, showing consistent hallucination reduction with low added latency.
-
----
+This paper proposes MARINE, a training-free inference-time method for reducing object hallucination in LVLMs by extracting object cues from external vision models (DETR and RAM++) and using them as textual guidance in a classifier-free-guidance-style decoding scheme. Across five LVLMs and standard object-hallucination benchmarks (CHAIR and POPE), the empirical results are generally strong, showing sizable reductions in hallucination and favorable latency relative to several prior mitigation methods.
 
 ## Strengths
-
-- **Practical value and efficiency.** MARINE is training-free, requires no GPT API calls, and according to Table 5 adds only ×1.98 latency over greedy decoding — the lowest overhead among all reported baselines (LURE: ×6.84, OPERA: ×7.0). This is a genuine deployment advantage.
-- **Comprehensive multi-model evaluation.** Results are reported across five distinct LVLM architectures (LLaVA, LLaVA-v1.5, MiniGPT-v2, mPLUG-Owl2, InstructBLIP) and multiple benchmarks (CHAIR on MSCOCO-500, POPE adversarial on three datasets, GPT-4V-aided eval, radar charts for standard captioning metrics). The breadth exceeds most comparable papers in this space.
-- **Ensemble guidance is well-motivated and ablated.** Table 6 demonstrates that combining DETR and RAM++ reliably outperforms using either individually, and Table 7 validates intersection over union for precision. These ablations provide clear, non-trivial support for the ensemble design.
-- **Strong POPE results.** MARINE achieves mean adversarial POPE accuracy of 79.9% versus the next-best method (Woodpecker) at 78.8%, while also substantially reducing the "yes" bias from ~67% toward 51%, which addresses a known failure mode in LVLMs.
-- **CHAIR improvements are substantial.** Average CHAIR_S/I improvements (8.4/3.7 for MARINE vs. 10.6/5.5 for OPERA, 10.1/4.8 for VCD) represent meaningful, consistent gains across architectures.
-
----
+- **Addresses an important practical problem with a simple, deployable idea.** Object hallucination is a major failure mode in LVLMs, and MARINE tackles it without retraining the target LVLM. The basic recipe—use image-grounded detectors/taggers to provide object-level guidance, then combine guided and unguided logits at inference time—is easy to understand and broadly applicable.
+- **Strong empirical gains on the paper’s main target metrics.** On average over five LVLMs, Table 1 shows improved CHAIR scores and Table 2 shows the best average POPE accuracy/F1 among the listed baselines. These gains are not merely cosmetic; on several models/datasets the improvements are substantial.
+- **Good model coverage for the main hallucination evaluations.** The paper tests on five LVLMs (LLaVA, LLaVA-v1.5, MiniGPTv2, mPLUG-Owl2, InstructBLIP), which is stronger than many contemporaneous hallucination-mitigation papers that evaluate on only one or two.
+- **Useful ablations on multi-source guidance.** Table 6 supports that combining DETR and RAM++ helps versus either alone, and Table 7 usefully probes intersection vs. union aggregation. Including the oracle variant MARINE-Truth is also informative, as it reveals the headroom available with better guidance.
+- **Reasonable efficiency story for the evaluated setup.** Table 5 suggests that, for LLaVA-7B, MARINE incurs about 2x decoding overhead, which is materially better than some stronger-cost baselines such as OPERA and LURE as reported here.
 
 ## Weaknesses
 
-### Fatal
-*None identified. No single issue rises to the level of invalidating the core empirical contribution.*
+###: Fatal
+None.
 
-### Major
-
-- **Missing prompt-augmentation baseline — the central mechanistic claim is unverified.** The paper frames its contribution around the CFG-inspired logit interpolation formulation (Eq. 4.2). However, the paper never tests the simplest ablation: prepending the intersection-detected object list to the input prompt without any logit manipulation. Without this control, it is impossible to know whether the hallucination gains come from (a) the CFG-style logit weighting, or (b) the external object information alone injected as text. This is not a peripheral concern — if plain prompt augmentation explains the gains, the core CFG framing is incidental rather than contributory. This ablation is standard in comparable decoding-based papers.
-
-- **MARINE-Truth inconsistency is unexplained.** Table 1 shows MARINE-Truth (oracle object list) achieves *worse* CHAIR_S than MARINE on two of five architectures: LLaVA (19.6 vs. 17.8) and MiniGPT-v2 (12.6 vs. 11.8). Since MARINE-Truth represents an oracle upper bound, this is counterintuitive. The paper says "MARINE's performance closely approximates that of its ground-truth counterpart," which is misleading when MARINE actually outperforms it on hallucination metrics in some cases. This precision-recall interplay — longer oracle lists push the model to mention more objects and paradoxically introduce more hallucination — is not analyzed. The 13-point recall gap (MARINE: 44.5 vs MARINE-Truth: 57.5) also shows the vision toolbox discards substantial correct object information, making it a meaningful bottleneck.
-
-- **Recall trade-off is under-analyzed.** LURE achieves average recall of 55.2 vs. MARINE's 44.5 (a 10.7-point gap). MARINE reduces CHAIR partly by being more conservative — the intersection strategy suppresses objects not confirmed by both detectors, systematically excluding detector-missed objects. The paper includes recall as a metric and acknowledges LURE's higher recall, but does not explicitly quantify or discuss what fraction of the CHAIR gain is attributable to suppressed mentions versus genuine hallucination correction. This precision-recall trade-off is central to understanding what MARINE actually does.
+### Major:
+- **The paper overclaims preservation of general task quality and detailedness relative to the evidence shown.** The abstract claims MARINE reduces hallucinations “while maintaining the detailedness of LVLMs’ generations,” and Section 5.2 says it maintains overall performance on broader tasks. But the supporting evidence is limited: Table 3 covers only **two** models on **90 QA examples** and **50 caption examples**, and one reported detailedness score slightly decreases (LLaVA captioning: 4.39 → 4.36). Figure 2 is only a radar plot for two models and does not provide the level of quantitative support needed for a broad cross-model “no trade-off” claim. The paper supports “strong hallucination reduction with some evidence of limited quality preservation,” not the stronger blanket claim.
+- **The mechanism is only partially isolated: it is unclear how much of the gain comes from CFG-style logit interpolation versus simply injecting detector text into the prompt.** MARINE combines several components at once: external detectors/taggers, object-to-text conversion, a fixed prompt template (“focusing on the visible objects in this image:”), aggregation by intersection, and logit interpolation between guided and unguided branches. The ablations study detector combinations, aggregation strategy, and guidance strength, but they do **not** include a crucial control such as “append the aggregated object list as a normal prompt without MARINE guidance” or a simpler prompt-only baseline. Without this, the paper does not convincingly establish that the proposed decoding formulation itself is responsible for the gains, rather than the extra grounded text alone.
+- **Some key results are less uniformly positive than the narrative suggests, especially on MiniGPTv2 and on recall/detail trade-offs.** In Table 1, MARINE is not uniformly best across all models/metrics: for MiniGPTv2, its CHAIR\_S (11.8) is worse than Greedy (8.2), Woodpecker (7.5), VCD (6.8), and OPERA (9.2), though recall is higher. This is important because it suggests MARINE may induce a different precision/recall or verbosity trade-off depending on the base LVLM. Similarly, LURE has much higher average recall than MARINE (55.2 vs. 44.5), showing MARINE’s stronger hallucination suppression may come with meaningful conservatism. The paper should discuss these trade-offs directly rather than repeatedly framing the method as consistently superior.
+- **Dependence on the external guidance models is real, but failure analysis is thin.** The paper’s own oracle gap shows this clearly: MARINE-Truth improves recall substantially over MARINE (Table 1 average recall 57.5 vs. 44.5), indicating that guidance quality is a major bottleneck. Yet the paper offers little systematic analysis of cases where DETR/RAM++ are incomplete or wrong and MARINE correspondingly suppresses correct content or inherits detector bias. Given that the method’s core contribution is to trust external object guidance, this missing error analysis matters.
 
 ### Minor
-
-- **Table inconsistency for MiniGPTv2.** In Table 1, the paper bolds MARINE's MiniGPTv2 results (C_S=11.8, C_I=4.9) as best, but VCD has C_S=6.8 (also bolded) and C_I=3.9 (underlined). MARINE's C_S=11.8 > VCD's 6.8, making MARINE's bolding incorrect. This appears to be a formatting error where the entire MARINE row was bolded indiscriminately. While average metrics still favor MARINE, this undermines confidence in the table's accuracy.
-
-- **Guidance strength ablation restricted to 2 of 5 models.** Figure 3 studies γ sensitivity only for LLaVA and mPLUG-Owl2, while the paper claims universality across five LVLMs. The paper recommends γ∈(0.3, 0.7) based on these two models, but provides no evidence that this transfers to the other three architectures. The fixed γ=0.7 for all models and tasks lacks principled justification beyond this limited study.
-
-- **Weak evidence for "maintaining detailedness."** Table 3 shows LLaVA image captioning detailedness drops from 4.39±0.29 to 4.36±0.17 — within error bars, so not significantly degraded, but also not positive. The "maintaining detailedness" claim relies on 50 images (GPT-4V judge) across two models only. The radar charts in Figure 2 are informative but cover only LLaVA and mPLUG-Owl2, and no significance analysis is reported. The claim holds tentatively but is not strongly established.
-
-- **LURE cross-architecture application underdocumented.** The paper describes LURE as having "fine-tuned a MiniGPT4 model to rectify object hallucinations," yet Table 1 reports LURE numbers for all five architectures (including LLaVA and InstructBLIP). The mechanism by which a MiniGPT4-correction model is applied to non-MiniGPT4 outputs is not explained. The scores being uniformly worse than Greedy suggest LURE's post-correction model generates longer outputs regardless of the input source, and the "LURE with Cutoff" baseline was needed to make this fair. This should be described explicitly.
-
-- **Logit notation imprecision in Algorithm 1.** Lines 7 and 9 write `ℓ_uncond = log p_θ(x_uncond^(t))`, where the argument is the full input sequence — this notation suggests sequence log-probability rather than a next-token logit distribution. Lines 10–11 then combine these and sample a token from them, which only makes sense if they are next-token logit vectors. The intent is clear from context, but the notation is formally imprecise and could mislead reproducers.
+- **The “API-free / low-overhead” framing is somewhat imprecise because a central aggregation component is underspecified in the method description.** Section 4.1 says aggregation “can be done by the language model … or rule based algorithm,” and Algorithm 1 leaves this as a generic `Aggr.` function. The experiments later appear to use intersection/union-style rule-based aggregation (Table 7), which is compatible with the API-free claim, but the main method description should make the evaluated implementation explicit rather than presenting an open-ended aggregation mechanism.
+- **The theoretical exposition is sloppier than it should be.** In Section 4.2, the presentation mixes token-level and sequence-level notation in the logit-space formula, making the math less careful than the implementation likely is. This does not invalidate the method, but it weakens the clarity and rigor of the formulation.
+- **The claim that MARINE addresses the “root causes” of hallucination is overstated.** The paper provides a useful inference-time mitigation strategy, but it does not actually establish causality about hallucination origins beyond plausible motivation. The wording should be softened to reflect mitigation rather than explanation of root causes.
+- **Guidance-strength analysis is limited.** Figure 3 studies only two models and only CHAIR/recall, yet the paper recommends a global range of \(\gamma \in (0.3, 0.7)\) and uses a fixed value across all tasks/models. This is acceptable for a practical method, but the robustness claim is broader than the evidence.
+- **Latency claims are only partially substantiated.** Table 5 reports latency on LLaVA-7B only. That is a useful point measurement, but not enough to fully justify broad claims about “lowest computational overhead” across the whole evaluated setting.
 
 ### Trivial
-
-- The logit equation in Sec. 4.2 uses `y` on the right-hand side where `y_t` was intended (token vs. sequence), which is a minor typographic inconsistency.
-
----
+- The statement in Section 4.2 that \(\gamma=1\) produces generation “entirely based on the control” is imprecise: the conditional branch still includes the original visual tokens and task prompt, not only control text.
 
 ## Nice-to-Haves
-
-- **Explore γ > 1 (extrapolation mode).** Standard CFG uses γ > 1 to amplify conditional-unconditional differences. The paper argues for γ∈(0,1) to balance instruction-following, but provides no results for γ > 1 to confirm extrapolation leads to degenerate outputs. Including even a brief γ > 1 experiment would strengthen the theoretical framing.
-- **Failure case analysis.** Only success examples are shown (Figure 4). Cases where the intersection step causes the model to omit a true object (because neither DETR nor RAM++ detected it) would give a more balanced picture of the method's behavior.
-- **Logit distribution visualization.** Showing how top-k token probability shifts before and after guidance for hallucinated vs. correct object tokens would provide mechanistic insight beyond the qualitative examples.
-- **Attribute and relation hallucination benchmarks.** The method by design targets object-level hallucination. The limitations section briefly acknowledges this; empirical confirmation on a relation-hallucination benchmark (e.g., MMHal-Bench) would be a natural extension.
-
----
+- Add a prompt-only control: append the detector-derived object text to the prompt and decode normally, to isolate the value of the CFG-style interpolation.
+- Provide failure-case analysis where DETR/RAM++ miss or falsely predict objects, and show how often MARINE harms an otherwise correct answer.
+- Expand quality-preservation evaluation to more than two models and provide direct quantitative tables instead of only radar plots.
+- Analyze generation length/verbosity changes, since reductions in hallucination can sometimes come from more conservative outputs.
+- Include broader sensitivity analysis of \(\gamma\) across all five LVLMs.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged to be removed — treat them with caution.*
-
-**Harsh Critic Point 2 (CFG formulation is "mathematically incoherent"):** After verifying against the paper, the logit interpolation is internally consistent. γ=0 correctly recovers the unguided branch; γ=1 correctly recovers the guided branch from the logit equation. The choice of γ∈(0,1) rather than γ>1 is explicitly discussed and motivated. The algorithm notation imprecision (sequence vs. token probability notation) is a notational issue, not fundamental mathematical incoherence. This has been retained only as a minor notation point above.
-
-**Harsh Critic Point on "superiority over fine-tuning methods being invalid":** MARINE does beat LURE on CHAIR_S and CHAIR_I across all 5 architectures by a large margin. Even if LURE's cross-architecture application is underdocumented, the comparison is directionally valid since LURE functions as a post-correction module that takes any LVLM output and rewrites it. The headline claim holds. The undocumented methodology is retained only as a minor documentation weakness.
-
-**Neutral Reviewer: Architecture-specific assumptions limiting generalizability (Reviewer citing Q-Former / resampler architectures):** The five tested architectures (LLaVA, LLaVA-v1.5, MiniGPT-v2, mPLUG-Owl2, InstructBLIP) already provide meaningful generalizability evidence. Demanding evaluation on Q-Former architectures not included in the paper's scope is outside stated scope.
-
-**Human Finder: Domain compatibility of DETR/RAM++ outside COCO:** The paper evaluates on POPE using A-OKVQA and GQA in addition to MSCOCO, and results generalize. Demanding evaluation on medical or artistic domains is outside the scope of this submission.
-
----
+- **Concerns about whether cited models/baselines/benchmarks are available or verifiable.** Per instruction, these are removed.
+- **Missing related work / requests to cite additional methods.** Removed because external completeness cannot be verified here.
+- **Complaints about omitted trivial implementation details or generic reproducibility nitpicks.** The paper gives the main hyperparameters and evaluated setup; such points are not core weaknesses here.
+- **Criticism that baseline asymmetry is unfair when it favors the baseline.** For example, LURE being specialized or not broadly transferable does not weaken MARINE’s positive result; if anything, asymmetry favoring baselines is acceptable.
+- **Pure style/formatting issues.** Parser artifacts and minor writing issues are not substantive grounds.
+- **Claim that the method is not actually API-free because the paper allows an LLM-based aggregator.** The evaluated paper explicitly defines “API-free” as “elimination of any need for API calls to OpenAI,” and the experiments appear to use rule-based intersection/union aggregation. So the strong version of this criticism is not supported by the paper text; the remaining valid concern is only that the aggregation implementation should be described more concretely.
 
 ## Novel Insights
-
-The most genuinely novel observation surfaced by the reviewers (particularly Spark) is the **MARINE-Truth paradox**: using oracle-correct object guidance actually *increases* hallucination on CHAIR_S relative to the imprecise vision toolbox for LLaVA and MiniGPTv2. This suggests the intersection-based guidance works not just because it is more accurate, but because it is *sparser* — a shorter, consensus-filtered object list forces the model to generate shorter, more precise descriptions, while a complete oracle list may push verbose generation that creates new hallucination opportunities. This precision-recall-verbosity interplay has implications for the design of all object-guidance-based hallucination mitigation methods and deserves explicit analysis.
-
----
+The most interesting synthesis is that this paper is stronger as an **engineering paper about object-level hallucination mitigation** than as a broader claim about preserving general LVLM utility. The empirical evidence is good enough to support a practical message—external object grounding plus guided decoding can substantially reduce object hallucination across several LVLMs—but the paper’s rhetoric repeatedly stretches beyond that into claims about “root causes,” maintained detailedness, and broad utility preservation that are not equally well supported. In other words, the central contribution is useful and likely publishable, but it should be framed more narrowly and more honestly.
 
 ## Suggestions
-
-1. **Add a prompt-only control:** Test guidance where the detected object list is simply prepended to the user prompt as a prefix (no logit manipulation). This is the single most important missing experiment and directly validates the CFG contribution.
-2. **Explain and analyze the MARINE vs. MARINE-Truth reversal** in CHAIR_S for LLaVA and MiniGPTv2 — this is the most scientifically interesting finding in the paper and is currently unexplained.
-3. **Fix the MiniGPTv2 bolding error** in Table 1.
-4. **Expand the γ ablation** to all five LVLM architectures or at minimum show variance across models to justify the universal γ=0.7 recommendation.
-5. **Explicitly document the LURE cross-architecture setup** (one paragraph suffices) to clarify whether the MiniGPT4 correction model processes outputs from other LVLMs, and acknowledge the resulting limitation.
-
----
+- Explicitly add a **prompt-only baseline** using the same aggregated object text without logit interpolation.
+- Discuss the **MiniGPTv2 anomaly** and other non-uniform cases instead of summarizing results as uniformly superior.
+- Provide a **failure analysis** tied to detector/tagger errors; the MARINE vs. MARINE-Truth gap makes this especially important.
+- Soften claims from “maintains detailedness / overall performance” to a narrower statement unless stronger evidence is added.
+- Clarify in the main paper that the evaluated aggregator is **rule-based intersection/union**, and give the exact textual form of the guidance prompt.
+- Tighten the mathematical exposition in Section 4.2 to consistently use token-level next-step logits/probabilities.
+- Report more direct quantitative quality metrics across more models if the paper wants to maintain its broader utility claims.
 
 ## Score and Decision
+**Assessment on the main axes:**  
+- **Originality:** Moderate. The individual ingredients are not new, but their combination into a simple, training-free object-grounded guidance scheme for LVLM decoding is useful and reasonably distinct.  
+- **Importance:** High. Object hallucination in LVLMs is a real and active problem.  
+- **Support for claims:** Mixed. The core claim about reducing object hallucination is well supported; the broader claims about maintained detailedness and general task quality are not.  
+- **Soundness of experiments:** Good for the main object-hallucination target, but with notable gaps in mechanism isolation and trade-off analysis.  
+- **Clarity:** Generally clear at the high level, though the method description and math could be tighter.  
+- **Value to the community:** Good. Even with limitations, this is a practical mitigation strategy with strong empirical utility.
 
-**Calibration:**
-- **LURE** (oZDJKTlOUe.md): Accept (Poster), scores 6/8/6/5 (avg ~6.3). Directly comparable scope (hallucination mitigation for LVLMs), comparable eval breadth. MARINE has stronger multi-model coverage but weaker ablation completeness.
-- **Ensemble Decoding** (ziw5bzg2NO.md): Accept (Poster), scores 6/6/6/6. Training-free decoding-based hallucination method. Similar strengths (good empirical results, multi-model) and similar weaknesses (missing ablations, limited theoretical grounding). Very close match to MARINE.
-- **VDGD** (3PRvlT8b1R.md): Accept (Poster), scores 8/6/6/6. Stronger theoretical analysis and novel benchmark, but also has structural weaknesses similar to MARINE.
-- **Visual Evidence Prompting** (xh3XUaB8M9.md): Reject, scores 5/6/6/5. Conceptually similar (external vision models provide guidance to LVLMs) but with weaker evaluation (3 models, fewer benchmarks, less latency analysis). MARINE clearly exceeds this paper.
-- **VTI** (LBl7Hez0fF.md): Accept (Spotlight), scores 6/8/8. Stronger theoretical foundation, better ablation completeness. MARINE is below this level.
+**Calibration against human-reviewed anchors:**  
+- Compared with **LURE** (`oZDJKTlOUe`, accept poster; scores 6/8/6/5), this paper has similarly practical value and broad empirical coverage, but less convincing support for its broader claims about quality preservation. I place it in a similar but slightly more cautious range.  
+- Compared with **Visual Evidence Prompting** (`xh3XUaB8M9`, reject; scores 5/6/6/5), MARINE is empirically stronger: more models, more standardized benchmarks, better ablations, and a clearer method. So it should score above that reject line.  
+- Compared with **PATCH** (`ZPTHI3X9y8`, mixed 5/8/5/6, overall reject), MARINE is less methodologically ambitious but also cleaner and more plug-and-play; its evidence for practical gains is somewhat stronger.  
+- Compared with stronger accepted papers like **VTI** (`LBl7Hez0fF`, accept spotlight; 6/8/8) and **Modular Attribution and Intervention** (`Bjq4W7P2Us`, accept poster; 8/8/6/6), MARINE feels less complete scientifically: weaker mechanism validation, weaker broader-task evidence, and more overclaiming. Thus it should score below those stronger accepts.
 
-**Assessment:** MARINE sits squarely in the Ensemble Decoding tier: strong multi-model empirical results, practical contribution, but with a meaningful missing ablation (prompt-only baseline) and minor table inconsistencies. Compared to Visual Evidence Prompting (rejected, ~5.5), MARINE is clearly better in experimental coverage and rigor. Compared to Ensemble Decoding (accepted at 6), the papers are nearly equivalent in profile. The missing prompt-only ablation is more critical here than in ED, since the CFG framing is more central to MARINE's claimed novelty.
+Overall, this paper is **above clear reject** because the core empirical contribution is real and useful, but **below strong accept** because the paper overstates what it has demonstrated and leaves important analysis gaps. My calibrated recommendation is a **weak accept / borderline accept**.
 
-**Final Score: 5.5 (Borderline Reject)**
-
-The paper makes a genuine, practical contribution that the community would benefit from, and the empirical results are credible. However, the inability to separate the benefit of the external detection signal from the benefit of the CFG logit formulation is a substantive methodological gap given that the formulation is part of the core contribution. Combined with the unexplained MARINE-Truth paradox and the table inconsistency, the paper falls just short of the acceptance bar in its current form. It is a strong revision candidate.
-
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>

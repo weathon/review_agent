@@ -1,120 +1,75 @@
-Now let me look at the calibration papers to score the paper:Now I have enough information to write the consolidated review. Let me verify one specific claim from the harsh critic about the estimator notation.---
-
 ## Summary
-
-This paper studies offline Reinforcement Learning in Regular Decision Processes (RDPs) and proposes two algorithmic improvements over the prior state-of-the-art RegORL. First, a novel **language metric** $L_X$ grounded in the dot-depth hierarchy of formal languages is introduced, replacing the $L_\infty^p$-based statistical test in state-merging algorithms and provably yielding exponentially better distinguishability on structured instances (e.g., T-maze). Second, a **Count-Min-Sketch (CMS)** variant alleviates memory requirements without changing statistical complexity. PAC sample complexity bounds are derived for both methods, and experiments across five POMDP/RDP domains validate the computational properties of the language metric.
-
----
+This paper studies offline RL in episodic Regular Decision Processes (RDPs), a structured non-Markovian setting where history dependence is captured by a finite automaton. Its main contribution is a new language-based metric for comparing suffix-trace distributions inside state-merging RDP learners, yielding PAC identification bounds that can replace the unfavorable \(L_\infty^p\)-distinguishability dependence of prior work with a more refined \(L_X\)-distinguishability; on some instances such as T-maze, this gives an exponential improvement in the relevant distinguishability term. A second contribution uses Count-Min-Sketch to reduce memory costs for storing empirical counts.
 
 ## Strengths
-
-- **Compelling separation theorem (Theorem 1):** The paper rigorously proves that in the T-maze family, $L_\infty^\ell$-distinguishability is $\mathcal{O}(2^{-N})$ while $L_{\mathcal{X}_{2,1}}$-distinguishability is $\Omega(1)$, demonstrating an exponential gain. This is a concrete and non-trivial result that motivates the entire framework.
-
-- **Elegant unifying formalism:** Definition 2 unifies $L_1$, $L_\infty$, $L_1^p$, and $L_\infty^p$ within a single language-metric framework. The two-dimensional hierarchy $\mathcal{X}_{i,j}$ (varying atomic pattern granularity and sequential composition depth) is principled and provides a well-motivated interpolation between statistical power and computational cost.
-
-- **Honest disclosure of corrected prior work:** The paper identifies a mistake in Cipollone et al. (2023) introducing an additional $\sqrt{H}/\mu_0$ factor in sample complexity, affecting both old and new bounds (Section 4.2). This is a valuable correction and reflects scientific integrity.
-
-- **Experiments demonstrating computational advantage:** Figure 2 clearly shows exponential vs. linear scaling of runtime and automaton size in the T-maze as corridor length increases, directly validating the theoretical prediction. Table 1 shows the language metric consistently produces smaller automata and better policies than both CMS and FlexFringe on the harder domains.
-
----
+- **Clear and nontrivial theoretical insight on why prior distinguishability bounds are too pessimistic.** The paper does more than tweak constants: it identifies a real pathology of prior \(L_\infty\)-style testing and formalizes it in Theorem 1, showing a family of RDPs where \(L_\infty\)-distinguishability is \(\mathcal O(2^{-N})\) while the proposed language-based distinguishability remains \(\Omega(1)\). The T-maze example makes this concrete and compelling.
+- **Original language-metric construction with a meaningful hierarchy.** The introduction of \(L_X\) and the hierarchy \(\mathcal X_{i,j}\), built from basic trace patterns and the \(C_k^\ell\) operator, is the paper’s most novel idea. It gives a principled interpolation between very local tests and richer pattern-based tests, rather than treating traces only as atomic suffixes.
+- **Theoretical results are substantive and not merely qualitative.** Theorem 3 gives a PAC bound for ADACT-H using the language metric with dependence \(\tilde{\mathcal O}\!\left(\frac{C_{\mathbf R}^*\log(1/\delta)\log |\mathcal X|}{d_m^*\mu_0^2}\right)\), and the discussion correctly notes that when \(j\) is constant, \(\log |\mathcal X_{i,j}|\) can stay small even as horizon grows. This is a real improvement over the prior support-size-driven dependence when the language family is well chosen.
+- **Good transparency about limitations of prior analysis and the authors’ own bounds.** The paper explicitly states that its new analysis uncovers an error in Cipollone et al. (2023) and that both the prior and corrected sample complexities incur an additional factor. That sort of correction is valuable to the community.
+- **Experiments are aligned with the paper’s motivating example for computational scaling.** Figure 2 does support the claim that the language-metric variant scales much better than the \(L_\infty\)-style suffix-based implementation on T-maze-like domains, and Table 1 suggests the approach can produce better downstream policies than the compared alternatives on several benchmark tasks.
 
 ## Weaknesses
 
-### Fatal
-*None identified.*
+###: Fatal
+- None.
 
-### Major
-
-- **Abstract and introduction overstate the theoretical result.** The abstract says "our algorithm is proven to be more sample efficient than existing results," but Theorem 3 replaces $\mu_0^{-2}$ (where $\mu_0$ is $L_\infty^p$-distinguishability) with $\mu_0^{-2} \log |\mathcal{X}|$ (where $\mu_0$ is $L_X$-distinguishability). This is a **parameter substitution**, not a uniform dominance result. The improvement is genuine in structured instances (T-maze), but there is no theorem stating that $L_X$-sample complexity is generally smaller than RegORL's corrected complexity. The claim should be scoped to "on instances admitting low-complexity languages."
-
-- **No direct comparison with RegORL in experiments.** The paper's entire motivation is improving upon RegORL/ADACT-H, yet the sole empirical baseline is FlexFringe—a different algorithm class without the same theoretical guarantees. Comparing runtime, automaton size, and reward against ADACT-H using $L_\infty^p$ under matched datasets is essential to empirically validate the claimed improvement.
-
-- **No sample-complexity study.** The core theoretical contribution concerns PAC sample complexity, yet all experiments use a fixed $K = 100$ episodes. There is no curve of policy quality or model recovery accuracy as a function of dataset size, making it impossible to empirically verify the exponential improvement in $H$ that the paper claims. This is the most important missing experiment.
-
-- **The $\sqrt{H}/\mu_0$ correction is under-integrated.** The paper mentions at line 214 that a mistake in Cipollone et al. (2023) was uncovered, adding a $\sqrt{H}/\mu_0$ multiplicative factor to both old and new bounds. However, the paper never explicitly states what the mistake was, whether the corrected RegORL bound is still dominated by the new bound in the T-maze instance, or how this propagates through the comparative claims in the introduction. This correction directly affects the credibility of the headline comparison and needs explicit treatment.
-
-- **Assumption 1 is not operationalizable.** The algorithm requires $\mathcal{X}_{i,j}$ as input and assumes $L_{\mathcal{X}_{i,j}}$-distinguishability $\mu_0 > 0$, but the paper provides no principle for selecting $(i,j)$ from data. In all experiments, $\mathcal{X}_{3,1}$ is used without justification. Since the improvement depends entirely on choosing a language class that increases distinguishability, the absence of a model-selection procedure leaves a significant gap between theory and deployable algorithm.
+### Major:
+- **The paper is framed as an offline RL advance, but the main new theorems stated in the paper are model-identification guarantees, not end-to-end near-optimal policy guarantees.** Section 2.3 defines the offline RL objective as outputting an \(\varepsilon\)-optimal policy, but Theorems 2 and 3 state that ADACT-H “returns the minimal RDP.” Section 3 says these methods “can be incorporated” into RegORL, but the main text does not state a full theorem translating the new identification result into a final \(\varepsilon\)-optimal policy guarantee for the proposed variants. This does not invalidate the technical contribution, but it does make the title/abstract framing somewhat stronger than what is directly established in the visible main text.
+- **The empirical section does not validate the headline sample-efficiency claim.** The abstract and introduction emphasize improved sample efficiency, and Theorem 3 is the core theoretical sample-complexity result. However, Section 5 reports automaton size, return, and runtime for a fixed data regime, and Figure 2 varies corridor length with fixed \(K=100\) episodes. There are no learning curves versus dataset size and no empirical study of how many samples are needed to reach near-optimal return. For a theory-forward paper this is not fatal, but it does mean the experimental evidence mainly supports computational scaling and policy quality on small tasks, not empirical sample efficiency.
+- **The choice of language family \(\mathcal X_{i,j}\) is central yet underdeveloped algorithmically.** The theory requires Assumption 1: the chosen family must yield \(L_{\mathcal X_{i,j}}\)-distinguishability at least \(\mu_0>0\). But the paper gives no adaptive procedure, selection rule, or practical diagnostic for choosing \(i,j\) in an unknown environment. Since too small a family may fail to distinguish states and too large a family increases complexity, this is a genuine practical gap.
+- **The overall sample complexity may still be poor because of the \(1/d_m^*\) term.** The discussion after Theorem 3 correctly acknowledges this: “The constant \(1/d_m^*\) depends exponentially on \(H\) if there exists an RDP state that is very hard to reach.” Thus, the paper resolves one important exponential dependence—through \(\mu_0\)—but does not eliminate all routes to exponential sample complexity. The exponential improvement claim is therefore conditional, not universal.
 
 ### Minor
-
-- **The $1/d_m^*$ term can be exponentially large.** The paper notes briefly (after Theorem 3) that $1/d_m^*$ "depends exponentially on $H$ if there exists an RDP state that is very hard to reach" and that it "can be much smaller for structured RDPs." However, no characterization is given of which RDPs avoid this exponential dependence, and no analysis shows whether the T-maze improvement in $1/\mu_0$ is not cancelled by a large $1/d_m^*$. This deserves more than a brief remark.
-
-- **CMS is strictly worse empirically but receives equal billing.** CMS failed to complete on Mini-hall, was substantially slower in all domains, and produced larger automata than the language metric in most cases (Table 1). The paper acknowledges this but does not demote CMS's billing accordingly. Clarifying that CMS's contribution is primarily memory-theoretic—with no practical performance advantage over the language metric—would sharpen the narrative.
-
-- **Estimator notation in Section 4.1 is ambiguous.** The estimator $\hat{p}_1 := \sum_{e \in \mathcal{Z}_1} \mathbb{I}(e \in \mathcal{X}_{i,j})/|\mathcal{Z}_1|$ appears to test trace membership in a set of languages rather than in a specific language $X \in \mathcal{X}_{i,j}$. Theorem 3's statistical test is correctly stated as $L_X(\mathcal{Z}_1, \mathcal{Z}_2) = \max_{X \in \mathcal{X}} |\hat{p}_1(X) - \hat{p}_2(X)|$, so the issue is presentation: the estimator should be defined per-language $X$.
-
-- **No ablation over hierarchy parameters $(i, j)$.** Only $\mathcal{X}_{3,1}$ is evaluated. Given the two-dimensional hierarchy is the paper's central construction, understanding how performance and automaton quality change with $(i, j)$ is necessary to characterize the hierarchy's behavior.
+- **The empirical baseline story is weaker than ideal for the paper’s stated claims.** The paper’s theoretical advance is relative to prior \(L_\infty^p\)-based RDP learning, yet experiments compare primarily against FlexFringe and the CMS variant. Figure 2 compares CMS vs. language metric, which is useful for showing computational scaling, but an explicit comparison to the original exact \(L_\infty^p\)-based ADACT-H/RegORL implementation would have better matched the paper’s main claim.
+- **The CMS contribution is clearly less impactful than the language-metric contribution.** This is visible in both theory and experiments. Theorem 2 largely preserves the original distinguishability dependence, and the experiments show CMS remains slow because it still iterates over suffixes. CMS is a reasonable memory-saving add-on, but the paper currently presents it almost on equal footing with the more important language-metric result.
+- **Some key formal definitions in the main text are harder to parse than they need to be.** In particular, the transition from the abstract operator \(C_k^\ell\) to the concrete hierarchy \(\mathcal X_{i,j}\) is dense, and the estimator paragraph near the end of Section 4.1 is imprecise: \(\hat p_1 := \sum_{e \in \mathcal Z_1}\mathbb I(e \in \mathcal X_{i,j})/|\mathcal Z_1|\) is not well-typed as written because \(\mathcal X_{i,j}\) is a set of languages, not a single event. The intended meaning is recoverable, but this is exactly the point where the statistical test should be most concrete.
+- **Some claims should be phrased more carefully.** For example, the conclusion says the language-restricted approach “removes the dependency on \(L_\infty^p\)-distinguishability,” but more precisely it replaces that dependence with a different distinguishability notion, \(L_X\)-distinguishability. That is still a strong result, just not quite the same as removing distinguishability assumptions altogether.
 
 ### Trivial
-
-- The paper's claim that the methods "can be directly applied to any algorithm that performs such statistical tests" (Section 3) is supported only for ADACT-H and ADACT-H-A. The scope of applicability to other state-merging algorithms should be stated more carefully.
-
----
+- **A small ambiguity appears in Theorem 2’s definition of \(d_m^*\).** The theorem writes \(d_m^* = \min_{u,a,o} d_t^*(u,a,o)\), leaving \(t\) free in the displayed definition. This is likely shorthand or a presentation slip rather than a conceptual flaw, but it should be fixed in the final version.
 
 ## Nice-to-Haves
-
-- **Experiments in regimes where the language metric offers no advantage** (i.e., where $L_X$-distinguishability ≈ $L_\infty^p$-distinguishability). This would establish that the method degrades gracefully rather than catastrophically when the structural assumption fails.
-
-- **An adaptive hierarchy-selection heuristic**, e.g., starting from $\mathcal{X}_{1,1}$ and increasing $(i,j)$ until the test detects a split. Even a heuristic without full theoretical backing would substantially improve usability.
-
-- **Explicit runtime analysis of the $L_X$ test.** The paper claims tractability versus $L_\infty^p$ due to $|\mathcal{X}_{i,j}| = \mathcal{O}((AOR)^j)$, but this can still be large for broader action/observation spaces. A brief complexity statement would clarify the regime where the language metric is practically tractable.
-
----
+- Add dataset-size curves showing return or exact reconstruction quality as a function of number of episodes; this would directly connect the theory to empirical sample efficiency.
+- Include an ablation over hierarchy choices \((i,j)\), especially since the paper uses \(\mathcal X_{3,1}\) throughout experiments.
+- State explicitly in the main text the end-to-end offline RL guarantee obtained when plugging the new state-merging tests into RegORL, if this is indeed available in the appendix or follows straightforwardly from prior results.
+- Provide a short computational-cost discussion for evaluating \(L_X\) tests in practice, not only their statistical benefit.
 
 ## Removed Points
+These points are flagged to be removed, treat them with caution.
 
-*These points are flagged for removal; treat them with caution.*
-
-- **Harsh Critic — Comparison with deep RL baselines:** Removed. This is a PAC-theoretic paper for structured non-Markovian environments; deep RL (CQL, IQL, etc.) operates under entirely different assumptions and provides no formal guarantees in the RDP setting. Requesting such a comparison is scope creep.
-
-- **Spark — "Scaling experiments beyond H≈15":** Removed. The paper explicitly states at line 257: "We also extend this experiment by increasing N up to 100, observing the same trend for our language-based approach." The concern is already addressed in the paper.
-
-- **Harsh Critic — Notation inconsistencies in Definition 1/Example 2:** Removed. The reviewer notes these are "likely extraction artifacts." The definition and example are internally consistent when read carefully (strings of length 10 using $C_1^0$ with an alphabet of 3 letters produce 10-letter strings; the subscript convention is $C_k^\ell$ where $\ell$ is the total length and $k$ the number of inserted patterns). No genuine error.
-
-- **Neutral Reviewer — CMS computational complexity not analyzed:** Removed as a standalone weakness. The paper's CMS contribution is primarily about memory (the statistical test is unchanged from $L_\infty^p$), and the memory reduction is analyzed via the CMS literature. The runtime performance is accurately reported in experiments.
-
-- **Neutral/Harsh — Notation heavy, high barrier to entry:** Removed as a pure style concern. The formalism is standard in the automata-learning literature and required to state the theorems precisely.
-
----
+- **“The experiments are too weak because they do not compare against the original exact ADACT-H, only against CMS/FlexFringe.”** This is directionally fair as a *minor* limitation, but it should not be overstated into an unfair-comparison criticism. The absence of the exact baseline is not evidence of cherry-picking, and the current comparisons still provide useful computational evidence.
+- **“The paper’s experimental evidence effectively validates the theoretical sample-complexity claim.”** This positive reviewer claim is too strong. The experiments validate scaling/runtime/model-size behavior and some downstream return, but not sample complexity per se.
+- **Any criticism implying the paper should also solve cyclic RDPs.** The paper explicitly scopes itself to episodic acyclic RDPs and even says extending to cycles is future work; criticizing it for not addressing that broader setting would be scope creep rather than a core flaw.
+- **Pure formatting/parser issues.** The extracted PDF has artifacts, and minor notational glitches should not be inflated beyond the few places where they genuinely obstruct understanding.
 
 ## Novel Insights
-
-The most genuinely novel observation in this work—and one that goes beyond simply replacing one test with another—is that the *structure of the sample space itself* (traces as strings over AO/R) can be exploited to define a metric hierarchy tied to the complexity of regular languages. The dot-depth hierarchy, a classical construct in formal language theory entirely outside the RL literature, turns out to be precisely the right tool to interpolate between the statistically powerful but computationally intractable $L_1$ and the tractable but statistically weak $L_\infty$. The T-maze construction (Theorem 1) is not just a toy counterexample; it reveals that the fundamental obstacle in horizon-dependent sample complexity is not the length of traces per se, but the *granularity* of the test events used to distinguish distributions over traces. This insight—that patterns (languages) rather than individual strings are the right unit of comparison for state-merging in RDPs—is likely to be transferable to other automata-learning and sequence-model-learning contexts.
-
----
+The paper’s most interesting broader implication is that in non-Markovian offline RL, the right statistical object may not be the full suffix distribution nor individual trace probabilities, but a task-structured family of languages that captures semantically relevant trace events. This reframes representation learning in RDPs as choosing the right event algebra for state distinguishability. That perspective is more general than the specific hierarchy proposed here and may be the most lasting conceptual contribution: it suggests that sample efficiency can improve not by better generic density estimation over histories, but by designing structured tests that preserve only behaviorally relevant temporal regularities.
 
 ## Suggestions
-
-1. **Explicitly show the corrected RegORL complexity** side-by-side with Theorem 3 in the main text. Compute both bounds for the T-maze instance and verify numerically that the new bound is smaller after the correction.
-2. **Add an experiment varying dataset size** (e.g., $K \in \{20, 50, 100, 200, 500\}$ episodes) in the T-maze and at least one other domain, plotting reward or state-recovery accuracy vs. $K$. This is the most impactful missing experiment.
-3. **Compare against ADACT-H with $L_\infty^p$** (the direct predecessor) on the same datasets. Even a single domain (T-maze) at matched $K$ would substantiate the sample efficiency claim empirically.
-4. **Scope the abstract:** Replace "our algorithm is proven to be more sample efficient than existing results" with language acknowledging the instance-specific nature of the improvement.
-5. **Discuss the relationship between $\mu_0$ and $d_m^*$** in the T-maze: show explicitly that $1/d_m^*$ does not grow exponentially in this instance so that the exponential improvement is not spurious.
-
----
+- State an explicit theorem in the main text that connects minimal-RDP recovery with \(\varepsilon\)-optimal offline RL for the proposed variants, or soften the framing from “offline RL” to “RDP model learning for offline RL.”
+- Add empirical curves versus dataset size \(K\), ideally on T-maze and one or two other domains, to substantiate the practical meaning of the sample-complexity improvement.
+- Include an ablation over \(\mathcal X_{i,j}\) and discuss practical selection of \(i,j\), even if only heuristic.
+- Reframe CMS as a secondary engineering contribution unless stronger practical evidence can be shown.
+- Rewrite the estimator/test-statistic paragraph in Section 4.1 so that the empirical estimate of \(p(X)\) for each \(X\in\mathcal X\) is formally clear.
+- Clarify when the remaining \(1/d_m^*\) factor is benign versus when it dominates, so readers do not overgeneralize the exponential-improvement claim.
 
 ## Score and Decision
+**Assessment on the main axes:**  
+- **Originality:** high. The language-metric formulation and hierarchy are genuinely novel.  
+- **Importance:** good. Offline RL in structured non-Markovian settings is important, and the paper addresses a real bottleneck in prior RDP theory.  
+- **Claims support:** mixed. The theory supports an improved identification sample bound under the new distinguishability notion, but the offline-RL framing and empirical “validated efficiency” language are somewhat stronger than what is directly demonstrated.  
+- **Experimental soundness:** adequate but limited. The experiments support computational scaling and some downstream return quality, but not the central sample-efficiency claim.  
+- **Clarity:** moderate. The main ideas are strong, but parts of the formalism are dense and one key estimator definition is not clearly written.  
+- **Value to the community:** solid, especially for researchers at the intersection of RL, automata learning, and non-Markovian sequential decision-making.
 
-**Calibration:**
+**Calibration against human-reviewed anchors:**  
+- Compared with **/home/wg25r/review_agent/human_reviews/B5kAfAC7hO.md** (scores 5,5,6; reject): this paper has a sharper and more compelling core theoretical insight, but similarly suffers from some presentation density and limited empirical support for broad claims. I view the current submission as somewhat stronger than that reject anchor.  
+- Compared with **/home/wg25r/review_agent/human_reviews/GnOLWS4Llt.md** (scores 5,5,5; accept poster): both are theory-forward offline RL under partial observability/history dependence with limited empirical validation. The present paper has a crisper theoretical novelty than that anchor, but also a similar mismatch between broad framing and the exact experimental evidence.  
+- Compared with **/home/wg25r/review_agent/human_reviews/jId5PXbBbX.md** (scores 6,5,6,8; accept poster): that paper earned acceptance due to strong theoretical novelty despite some concerns about computational interpretation and lack of experiments. This submission feels somewhat below that level because the offline-RL framing is more indirect and the empirical section does not fully support the central headline claim, but it is in the same general quality band.  
+- Compared with **/home/wg25r/review_agent/human_reviews/U6Qulbv2qT.md** (scores 6,6,8,6,8; accept poster): that accepted theory paper also had concerns about terseness and computational aspects, but was judged to make a strong enough conceptual/theoretical contribution. The present paper is somewhat narrower and less fully rounded empirically, so I place it lower.  
+- Compared with **/home/wg25r/review_agent/human_reviews/67t4ikhlvP.md** (mixed 5,8,1,1; reject): this paper is substantially more coherent and technically grounded, with a clearer central contribution and fewer foundational concerns.
 
-| Paper | Decision | Scores | Reason for Comparison |
-|---|---|---|---|
-| `GnOLWS4Llt.md` | Accept (poster) | 5,5,5 | Offline RL with observation histories; similar setting, weaker theory |
-| `1hsVvgW0rU.md` | Accept (poster) | 6,6,6,6 | PAC learning in POMDPs, comparable theoretical style |
-| `txD9llAYn9.md` | Accept (poster) | 6,8,8,6 | Horizon-free bounds in RL; comparable theory quality |
-| `CIcMuee69B.md` | Reject | 6,5,5,3,3 | Automata learning paper, weaker contribution, rejected |
-| `9pW2J49flQ.md` | Accept (oral) | 8,8,8,8 | LTL+RL with strong experiments; stronger overall contribution |
+Overall, this is **a good but not fully polished theory paper**: the main idea is strong and worthy of attention, but the framing should be tightened and the empirical validation better aligned with the headline sample-efficiency claim. I land slightly above the bar.
 
-**Assessment:** The paper's core theoretical idea—the language metric and Theorem 1—is more novel and concrete than `GnOLWS4Llt.md` (5,5,5) and comparable in depth to `1hsVvgW0rU.md` (6,6,6,6). The formal construction is clean, the separation theorem is compelling, and the identification of the corrected prior-work bound is a meaningful contribution. However, the experimental gaps (no RegORL comparison, no sample complexity curves) and the under-discussed correction to prior work place it below the cleaner papers at score 6. The major weaknesses are real and revision-relevant, but they are not fundamental flaws that invalidate the contributions. The FUNDAMENTAL ISSUES override is not triggered.
-
-**Final score: 5.5** — Borderline, leaning toward weak accept pending the missing experiments and revised framing. This is above `GnOLWS4Llt.md` (poor experiments, 5,5,5) and below the cleanest posters at 6,6,6,6 given the uncorrected experimental and framing gaps.
-
-**Originality:** High — the application of the dot-depth hierarchy to RDP learning is novel.
-**Importance:** Moderate — addresses a concrete bottleneck in a well-defined sub-problem; primarily relevant to the automata-theoretic RL community.
-**Claim support:** Moderate — Theorem 1 is well-supported; the overall "more sample efficient" headline claim is overstated.
-**Experimental soundness:** Weak — demonstrates computational advantages but not statistical efficiency.
-**Clarity:** Good — well-written with clear notation; some under-specification in estimator definitions.
-**Community value:** Moderate-to-high — the language-metric formalism is likely to inform future work on non-Markovian RL.
-
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL SCORE: <pineapple>6.5</pineapple>  
+MY FINAL DECISION: <orange>Accept</orange>
