@@ -90,6 +90,7 @@ def auroc_ci(auroc, n_pos, n_neg, confidence=0.95):
 
 
 def paired_bootstrap_ci(values, confidence=0.95):
+    values = np.asarray(values, dtype=float)
     alpha = 1 - confidence
     return (
         float(np.quantile(values, alpha / 2)),
@@ -98,6 +99,7 @@ def paired_bootstrap_ci(values, confidence=0.95):
 
 
 def paired_bootstrap_pvalue(values):
+    values = np.asarray(values, dtype=float)
     non_positive = np.mean(values <= 0)
     non_negative = np.mean(values >= 0)
     return float(min(1.0, 2 * min(non_positive, non_negative)))
