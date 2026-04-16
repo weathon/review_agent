@@ -15,6 +15,9 @@ dotenv.load_dotenv()
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
 
+with open("prompts/timeline.md", "r") as f:
+    timeline = f.read().replace("{{CURRENT_DATE}}", __import__("time").strftime("%Y-%m-%d"))
+
 # ── Build indexes (mirrors tools.py) ──────────────────────────────────
 _bm25_db: dict = {}
 _or_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
@@ -218,6 +221,7 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
     )
     cal_instruction = CAL_INSTRUCTION_WITHOUT if no_cal else CAL_INSTRUCTION_WITH
     system_prompt = system_prompt.replace("{{CALIBRATION_INSTRUCTION}}", cal_instruction)
+    system_prompt = system_prompt + "\n\n" + timeline
 
     mcp_server = _make_merger_mcp_server(paper_dir, no_cal=no_cal)
 
