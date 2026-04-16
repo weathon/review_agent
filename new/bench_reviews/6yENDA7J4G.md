@@ -1,87 +1,102 @@
-Now I have enough context from the calibration papers. Let me produce the consolidated review.
+Now I have all the information I need to write a thorough, calibrated review.
 
 ## Summary
 
-This paper proposes a "foundation model" approach for Mixed Integer Linear Programming (MILP) learning, introducing *MILP-Evolve*, an LLM-based evolutionary pipeline that generates diverse MILP problem classes from seed templates. Three separate models are trained—on integrality gap prediction, learning to branch, and language-MILP contrastive alignment—using data from MILP-Evolve. Experiments demonstrate improved generalization on held-out MILP-Evolve classes and transfer learning gains on MIPLIB benchmarks compared to baselines trained on fewer classes.
+This paper proposes a foundation model training approach for Mixed Integer Linear Programming (MILP) by training GNN-based models on diverse MILP problem classes generated via MILP-Evolve, an LLM-based evolutionary data generation pipeline. MILP-Evolve applies structured prompt operators to seed MILP classes to produce over a thousand new problem classes. The paper evaluates on three tasks—integrality gap prediction, learning to branch, and a novel language-MILP contrastive alignment—demonstrating improved generalization to held-out synthetic classes and transfer to MIPLIB benchmarks.
 
 ## Strengths
 
-- **Novel and creative data generation pipeline**: MILP-Evolve is a genuinely interesting idea—using LLMs with structured evolutionary operators (add, crossover, mutate, delete, new) to generate diverse MILP classes from seed templates addresses a real data scarcity problem. The modular code representation and prompting strategy is carefully designed (Sec. 3, Fig. 2-3).
+- **MILP-Evolve is a creative and genuinely novel data generation pipeline.** Using LLMs with structured evolutionary operators (add, crossover, mutate, delete constraints/variables) to generate *new MILP classes* rather than just instances within a class is a significant conceptual advance over prior instance-augmentation methods (VAE, parameter search). The t-SNE visualization (Figure 1b) qualitatively demonstrates expanded coverage of the problem space, and the pipeline design (modular class representation with Data/Optimization/Parameters functions, 10 prompt operator types) is well thought out.
 
-- **Important empirical insight—diversity over quantity**: Figure 4 provides clear evidence that increasing the number of training classes matters substantially more than increasing instances per class. This is a practically significant finding for the MILP learning community.
+- **Important insight: class diversity matters more than instance quantity.** Figure 4 provides clear experimental evidence that increasing the number of training classes while holding total instances constant improves performance, whereas reducing classes while maintaining instance count hurts performance. This is a valuable finding for the field that informs future data collection strategies.
 
-- **Multi-task breadth**: Evaluating on three distinct tasks (integrality gap prediction, learning to branch, language-MILP alignment) makes the empirical case broader and more convincing than typical single-task MILP papers.
+- **Consistent out-of-domain improvements across three tasks.** Table 1 shows substantial gains on the held-out MILP-Evolve test set: 5.8× correlation improvement for IG prediction (0.10→0.58), 1.42× improvement in instances solved for branching (49.59%→70.90%), and 1.92× improvement for 4-way language alignment (37.21%→70.54%). These are not marginal improvements.
 
-- **Transfer learning to MIPLIB is positive**: Tables 2 and 3 show that MILP-Evolve pretraining consistently improves fine-tuned performance on MIPLIB (both on unseen seed classes and the established benchmark), with faster convergence (Fig. 5). This is a real and meaningful result.
+- **Positive transfer learning to MIPLIB.** Tables 2–3 and Figure 5 demonstrate that pretraining on MILP-Evolve data leads to better fine-tuning performance on MIPLIB and faster convergence, including on unseen seed classes. This provides evidence that the generated data captures useful structural diversity beyond the synthetic universe.
 
-- **New task formulation**: The language-MILP contrastive learning task is a thoughtful contribution that addresses interpretability and accessibility of MILP instances, and the CLIP-inspired design is well-motivated.
+- **Novel task introduction (Language-MILP alignment).** The contrastive learning task mapping MILP instances to natural language descriptions is a novel and well-motivated formulation that could serve as a practical stepping stone toward MILP interpretability and text-conditioned optimization.
 
 ## Weaknesses
 
-### Major:
+### Major
 
-- **"Foundation model" framing is significantly overstated**: The title, abstract, and introduction frame this as a "foundation model for MILP," yet three separate models are trained for three separate tasks. No multi-task or cross-task transfer is demonstrated. The paper itself acknowledges this in the conclusion ("we still train separate models for each learning task"), but the framing throughout far exceeds what is delivered. In the ML literature, "foundation model" implies a single model with broad capabilities; what is demonstrated here is multi-class learning within individual tasks. This overclaim matters because it sets expectations the paper cannot meet.
+- **The "foundation model" framing significantly overclaims what the paper delivers.** The title, abstract, and introduction consistently frame this as progress toward "foundation models for MILP," drawing analogies to CLIP/GPT/BERT. In reality, the paper trains **three separate task-specific models** for three separate tasks. A foundation model, by standard definition, is a single model that serves as a base for multiple downstream tasks via fine-tuning or prompting. The authors acknowledge this in the conclusion ("we acknowledge that this work still trains separate models for each learning task"), but this concession is at odds with the much stronger framing throughout the paper. The actual contribution—multi-class training with diverse synthetic data—is meaningful but narrower than the framing suggests. This matters because it shapes reader expectations about generality, reuse, and the nature of the advance.
 
-- **Limited validation of MILP-Evolve data quality and structural diversity**: All empirical claims are conditional on MILP-Evolve generating classes that are structurally diverse and realistic. The only diversity evidence is: (1) a t-SNE of code embeddings (Fig. 1b), which measures lexical/code-level variation not polyhedral or combinatorial diversity, and (2) the count of "more than a thousand" classes. There is no analysis of: what fraction of generated classes are filtered out and why; whether evolved classes represent genuinely distinct optimization structures vs. trivial variants of seed templates; the distribution of problem sizes, integrality ratios, or constraint structures; or how the generated distribution relates to real-world MILP collections. Since every performance claim is evaluated within this synthetic ecosystem first, and MIPLIB results are fine-tuned, the lack of structural characterization is a significant gap.
+- **MILP-Evolve class diversity is claimed but poorly validated.** The paper's core premise is that MILP-Evolve produces genuinely diverse and non-redundant problem classes. However, the only quantitative evidence is a t-SNE of code embeddings (Figure 1b), which is a weak proxy for mathematical structural diversity. There is no analysis of structural properties across generated classes (e.g., distributions of constraint matrix sparsity, variable-to-constraint ratios, integrality gap distributions, constraint types, or presence of specific modeling constructs like Big-M, SOS, or symmetry breaking). Without such analysis, it is possible that many of the "1,000+" classes are near-duplicates with trivial syntactic variations, and the performance gains come from modest variation around a handful of archetypes rather than from learning broadly useful representations. The lack of generation yield statistics (how many LLM attempts failed, how many classes were filtered out) also limits assessment of scalability.
 
-- **Real-world evaluation is limited and gains are modest**: The most practically important task—learning to branch—is omitted on MIPLIB entirely (only 13 suitable instances). For the two MIPLIB tasks that are evaluated, improvements over Seed+Param are incremental: IG deviation drops from 23.30% to 21.56% and correlation improves from 0.54 to 0.59; language alignment 10-way accuracy improves from ~71-73% to 75.57%. These are meaningful but modest, not the dramatic improvements suggested by the abstract ("significant improvements on unseen problems, including MIPLIB benchmarks"). The headline numbers in Fig. 1a (5.8× correlation improvement, 1.92× accuracy improvement) are on the authors' own MILP-Evolve held-out set, where baselines trained on Seed perform near-zero correlation—suggesting an extreme distribution shift rather than a fair comparison.
+- **Evaluation on real-world (MIPLIB) data is incomplete for the most practically important task.** Learning to branch—the task most directly tied to solver acceleration—is entirely omitted from MIPLIB evaluation because only 13 instances met the 20–300s solve time criterion. While the authors acknowledge this limitation, the branching task is arguably the most impactful for real-world MILP solving, and its absence from the primary real-world benchmark weakens claims of practical impact. Alternative evaluation protocols (e.g., node count reduction, evaluating on all solvable instances regardless of time, or using different solve time bounds) could have been explored rather than dropping the task entirely.
 
-- **Baseline comparison is somewhat tautological**: Seed, Seed+Param, and Seed+VAE are instance-augmentation methods that by design cannot generate new *classes*. When testing on MILP-Evolve classes that are deliberately diverse and far from seeds, these baselines will naturally underperform—because they never saw anything structurally similar. The core claim "class diversity matters" is supported within MILP-Evolve (Fig. 4), but never compared against non-LLM sources of class diversity (e.g., hand-curated diverse problem sets, random structural perturbations). The superiority of LLM-generated diversity over simpler alternatives is assumed rather than demonstrated.
+- **Baseline comparisons conflate data diversity with architecture and scale.** The headline comparisons in Tables 1–3 compare "Ours" (trained on diverse MILP-Evolve data) against Seed, Seed+Param, and Seed+VAE baselines. While these are sensible data-oriented baselines, they do not isolate the effect of *data diversity* from other factors. Specifically: (1) the total number of training instances differs across conditions (MILP-Evolve has more classes and potentially more instances); (2) the attention mechanism is only evaluated for the "Ours" condition for IG and alignment tasks but not consistently across all baselines; (3) there is no comparison where a model with the same architecture and training budget is trained on an equally large set of conventional MILP instances (e.g., a scaled-up set of classical benchmark problems). The ablation in Figure 4 (varying classes within MILP-Evolve) partially addresses this, but it only shows that diversity within the LLM-generated distribution is beneficial—it does not show that LLM-generated diversity is superior to scaled conventional diversity.
 
-### Minor:
+### Minor
 
-- **Circularity in language-MILP alignment**: The natural language descriptions used for contrastive learning are generated by the same LLM (GPT-4o) that generates the MILP classes. This raises questions about whether the model learns semantically meaningful alignment or matches LLM-specific description patterns. No human-annotated validation is provided.
+- **Attention mechanism analysis is thin.** The paper states that incorporating attention "improves performance, especially for transfer learning to the MIPLIB dataset" but provides no deeper analysis—no attention visualization, no ablation on subsampling ratios or number of heads, and no explanation of *why* attention specifically helps transfer. The improvement from "Ours - Attn." to "Ours" in Table 1a (deviation 20.82%→20.14%) is modest, while the Table 1b language alignment improvement is negligible (70.41%→70.54% for 4-way). The stronger transfer claim for MIPLIB is not directly supported by a matched architecture comparison.
 
-- **Methodological opacity**: Key details about filtering rates, parameter search specifics, LLM generation costs, and the distribution of problem sizes across evolved classes are deferred to appendices or omitted. These matter because filtering and parameter tuning shape the difficulty distribution of generated instances, which directly affects downstream metrics.
+- **Language-MILP task evaluation is narrow.** The 4-way and 10-way classification accuracy metrics are relatively simple retrieval tasks that do not fully assess alignment quality. The practical utility of this task is asserted ("lowers the entry barrier for non-experts") but not demonstrated—there is no user study, no retrieval evaluation beyond small candidate pools, and no analysis of what the embeddings capture. The descriptions used for alignment appear to be synthetically generated (since MILP-Evolve generates both instances and their descriptions), which further limits claims about real-world interpretability.
 
-- **Attention mechanism contribution is modest**: The paper claims the attention layer "significantly boosts performance" (Sec. 5.2), but the actual gains are small (IG correlation 0.57→0.58; 10-way accuracy 52.76→54.17%).
+### Trivial
 
-### Trivial:
-
-- The integrality gap formula in Sec. 2.2.1 defines  $g^*(x) = \frac{z_{ILP}^* - z_{LP}^0}{|z_{LP}^0|}$ , which can yield negative values for minimization problems where LP is tighter than ILP relaxation; this is a minor definitional quirk worth noting but not a serious issue.
+- None significant beyond the minor points above.
 
 ## Nice-to-Haves
 
-- Comparison against per-class specialized models on their respective domains to show whether multi-class training approaches specialist performance, or alternatively an explicit analysis of the tradeoff.
-- Evaluation on additional MILP benchmarks beyond MIPLIB, or construction of a harder branching benchmark.
-- Reporting MILP-Evolve generation costs (API calls, filtering pass rates, compute budget) to help practitioners assess feasibility.
-- Analysis of which structural properties of MIPLIB instances enable or hinder transfer.
+- A single unified model handling all three tasks (or at least a demonstration that shared representations benefit multi-task learning) would genuinely support the foundation model framing.
+
+- More detailed structural analysis of MILP-Evolve classes (constraint types, sparsity patterns, integrality gap distributions, Big-M usage) to validate genuine diversity beyond syntactic variation.
+
+- Performance stratified by problem category or evolutionary depth on the held-out test set, to reveal where the model succeeds versus fails and whether evolutionary depth correlates with generalization difficulty.
+
+- Comparison with Huang et al. (2024), the concurrent multi-class MILP work mentioned in the paper, to directly benchmark against the most relevant prior approach.
+
+- Reporting of MILP-Evolve generation yield (number of LLM calls, rejection rates at each filter stage, and approximate API cost) to help practitioners assess feasibility and scalability.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed; treat them with caution.
 
-- **GPT-4o availability/reproducibility concern**: Reviews questioned reliance on GPT-4o and unreported costs. Per my instructions, I do not flag cited models as unavailable; however, the opacity about generation costs and filtering rates is a legitimate methodological concern and has been retained above in minor weaknesses.
+- **Claim that GPT-4o or other models/tools are not independently verifiable.** The paper cites GPT-4o as the LLM used in MILP-Evolve; by our review rules, we treat cited tools as existing and available.
 
-- **Missing comparison with Huang et al. (2024)**: Reviews suggested comparing with this concurrent multi-class MILP work. Per my instructions, I do not mention missing related works since I cannot verify its content.
+- **Demand for comparison against task-specific SOTA baselines (e.g., Gasse et al. 2019 per-class models).** This is an unfair comparison demand that would test a different claim. The paper's contribution is about multi-class generalization, not beating per-class specialized models. A "foundation model" is expected to trade off per-class performance for breadth.
 
-- **Formatting and presentation nitpicks**: Minor presentation issues removed as trivial formatting concerns.
+- **Demand for confidence intervals/variance estimates.** For large-scale benchmark evaluations in this community, single-run evaluation following established protocols (e.g., Gasse et al.) is the norm. Requesting confidence intervals for these experiments is a nice-to-have rather than a core flaw.
 
-- **Demand for theoretical proofs**: Some reviews requested theoretical justification for generalization. This is an empirical systems paper; theoretical guarantees would be nice-to-have but are not community-standard.
+- **Request for GAT/GraphSAGE architecture comparisons.** The GCN-with-attention architecture follows established precedent in MILP learning (Gasse et al., 2019; Scavuzzo et al., 2022). Requesting alternative GNN architectures is a generic suggestion not tied to a specific weakness in the paper's claims.
 
-- **No in-domain baseline showing Seed models actually learn something**: The harsh critic noted that Seed baselines achieve ~0 correlation, suggesting they might be underfitting rather than just mis-specified. This is an interesting diagnostic but doesn't invalidate the main comparison since Seed models are tested on a genuinely different distribution.
+- **Concern about "contamination" between MILP-Evolve and MIPLIB via LLM pretraining.** This is speculative and not supported by evidence. MILP-Evolve generates MILP classes via structured code evolution, not by retrieving specific instances. There is no mechanism established by which GPT-4o's pretraining would cause generated classes to resemble specific MIPLIB instances in a way that invalidates the transfer experiments.
+
+- **Demand for the paper to compare against "any alternative large MILP corpus" in transfer experiments.** This asks the paper to evaluate against a benchmark that, as the paper documents, does not exist in the literature (existing datasets lack diversity and volume, which is precisely the problem MILP-Evolve addresses).
+
+- **Concern about LLM data contamination inflating transfer results.** Without specific evidence that generated classes reproduce or closely approximate particular MIPLIB instances, this remains speculation and is not a grounded criticism.
 
 ## Novel Insights
 
-The finding that class diversity dominates instance quantity (Fig. 4) is the most actionable insight of the paper, and it has implications beyond MILP: for combinatorial optimization broadly, investing in covering more problem structures may yield larger returns than generating more instances of the same structures. This pattern—reminiscent of the "coverage vs. density" tradeoff in language model pretraining data—suggests that foundation-model-like scaling in structured domains may require fundamentally different data strategies than in unstructured domains.
+The most genuinely novel insight in this paper is that *class-level diversity matters substantially more than instance-level quantity* for multi-class MILP learning (Figure 4). This has direct implications for how the ML-for-MILP community should prioritize data collection efforts: investing in generating diverse problem structures rather than scaling existing benchmarks with more instances per class. The LLM-based evolutionary approach to generating *new problem classes* (rather than just new instances) is also a methodological innovation that could influence data generation practices in combinatorial optimization more broadly.
 
 ## Suggestions
 
-- Reframe the contribution as "towards foundation models" rather than claiming a foundation model approach—be explicit that this is single-task, multi-class learning and that multi-task unification remains future work.
-- Add structural statistics of generated classes (problem size distributions, constraint density, integrality ratios, filtering pass rates) to validate that MILP-Evolve produces optimization-meaningful diversity.
-- On MIPLIB, report both zero-shot and fine-tuned results to distinguish pretraining benefit from fine-tuning necessity.
+- **Reframe the contribution honestly.** Replace "towards foundation models" framing with language about "multi-class pretraining with diverse synthetic data" or "diversity-driven training for generalizable MILP learning." This would align the paper's claims with its actual contributions and avoid the gap between aspirational framing and delivered results.
 
-## Calibration and Score Rationale
+- **Add structural diversity analysis of MILP-Evolve classes.** Report distributions of key MILP structural properties (constraint-to-variable ratios, sparsity patterns, integrality gap ranges, presence of Big-M constraints) across generated classes. This would substantiate the diversity claim far more convincingly than a t-SNE of code embeddings.
 
-I compared this paper against:
-- **GOAL** (generalist CO model, Accept Poster, scores 5-8): Actually trained a single model across multiple CO problems. This paper trains separate per-task models, making a weaker "foundation model" claim but with a stronger data generation contribution.
-- **RouteFinder** (foundation model for VRP, Reject, scores 5-6): Similar overclaim pattern with "foundation model" framing. Rejected due to incremental improvements and incomplete evaluation.
-- **DIG-MILP** (MILP instance generation, Reject, scores 3-3): Much weaker methodology in the same domain.
-- **Evo-Step** (LLM evolutionary data gen for OR, Reject, scores 5-6): Similar LLM-based data generation concept, rejected for unclear contributions.
+- **Explore branching evaluation on MIPLIB with alternative metrics.** Report node count reduction, primal bound improvement, or other solver-agnostic metrics even for instances with extreme solve times, rather than omitting the task entirely.
 
-This paper is stronger than DIG-MILP and Evo-Step due to genuine empirical breadth and a creative pipeline, but weaker than GOAL (which delivers a unified model). It shares RouteFinder's overclaim problem. The MILP-Evolve contribution is real and interesting, but the evaluation has significant gaps (no branching on real benchmarks, modest MIPLIB gains, tautological baselines). The overclaim of "foundation model" is a meaningful weakness that affects how the contribution should be assessed.
+- **Report generation statistics.** Number of LLM calls, filter rejection rates at each stage, and total API cost would help practitioners assess the feasibility of adopting MILP-Evolve.
 
-Score: **5.5** — The MILP-Evolve pipeline and the diversity-over-quantity finding are genuine contributions, but the overstated framing, limited structural validation of generated data, and modest real-world benchmark improvements prevent a higher score. The paper opens a valuable research direction but does not yet deliver on its claimed scope.
+## Score and Decision
+
+**Calibration comparison:**
+
+- **Foundation Models for Boolean Logic (qeY25DwmKO)**: Score 6/8/3/5 (avg ~5.5), rejected. Similar conceptual framing (GNN foundation model for a logic/optimization domain, multi-task pretraining), but weaker in data diversity (only 3-SAT instances with 100 variables) and evaluation. Our paper is significantly stronger: more diverse data generation, three tasks, transfer to MIPLIB, and meaningful scaling experiments.
+
+- **GOAL (z2z9suDRjw)**: Score 5/6/8/6 (avg ~6.25), accepted as poster. Generalist CO model with shared backbone + task-specific adapters, evaluated on multiple routing/scheduling problems. Similar novelty in framing, comparable empirical results. Our paper has a creative data generation contribution but lacks the unified model that GOAL provides.
+
+- **Multi-Task VRP (DKfcxPxunu)**: Score 6/6/8/3 (avg ~5.75), rejected. Multi-task learning for VRPs with zero-shot generalization claims. Weaker methodological novelty than our paper and similar overclaiming issues about "unified" approaches without delivering a truly unified model.
+
+- **Geometric GNN Pre-Training (4S2L519nIX)**: Score 6/8/6/6 (avg ~6.5), accepted as poster. Empirical study of GNN pretraining with scaling analysis and zero-shot transfer. Solid empirical contribution without methodological breakthroughs.
+
+Our paper occupies a space between the rejected "Foundation Models for Boolean Logic" (weaker) and the accepted "GOAL" (stronger). The creative data generation pipeline (MILP-Evolve) and the diversity-over-quantity insight are genuine contributions. However, the overclaimed foundation model framing (three separate models, not one), the incomplete MIPLIB evaluation for branching, the insufficient validation of generated class diversity, and the baseline confounds are substantial weaknesses that cannot be fully mitigated by the interesting contributions. The paper is more honest about its limitations in the conclusion, but the main text oversells.
+
+Overall assessment: **Originality is moderate-high (MILP-Evolve is creative), importance of research question is high (MILP generalization is a real bottleneck), claims are partially supported (empirical results are strong on synthetic data but the framing overclaims), experiments are sound but with significant gaps (no branching on MIPLIB, limited diversity validation), clarity is good.**
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -53,10 +53,10 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
         print(f"  [read_file] 🔥BLOCKED: '{resolved}' is not under any allowed directory.")
         return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
-    if ("/papers/" in abs_path or abs_path.endswith("_paper.md")) and end_line == 0:
+    if ("/papers/" in resolved or resolved.endswith("_paper.md")) and end_line == 0:
         print(f"  [read_file] 🔥BLOCKED: Full read of '{resolved}' is not allowed. Use grep_files first to find relevant sections.")
         return "ERROR: Full paper reads blocked. Use grep_files first, then read_file with start_line/end_line."
-    with open(abs_path, "r") as f:
+    with open(resolved, "r") as f:
         lines = f.readlines()
     selected = lines[max(0, start_line - 1):end_line if end_line > 0 else len(lines)]
     return "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))

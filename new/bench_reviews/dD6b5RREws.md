@@ -1,88 +1,74 @@
+Now I have a good understanding of the calibration papers. Let me now synthesize the final review.
+
 ## Summary
 
-This paper re-examines the bootstrap rate (BR) hyperparameter in Random Forests, exploring values greater than 1.0 (sampling more observations than the training set size). Across 36 datasets and 18 RF configurations with BR values from 0.2 to 5.0, the authors find that BR > 1 often yields better accuracy than standard BR ≤ 1, contradicting prior work by Martínez-Muñoz & Suárez (2010). They further investigate what determines the optimal BR, conclude it is more a dataset property than a configuration one, and build a binary classifier (81.88%–88.81% accuracy) predicting whether the optimal BR exceeds 1.
+This paper re-examines the bootstrap rate (BR) hyperparameter in random forests, demonstrating through experiments on 36 datasets and 18 RF configurations that BR values greater than 1.0 can yield better classification accuracy than the standard BR ≤ 1. The authors show that the optimal BR is primarily a dataset property rather than an RF configuration property, and develop a binary classifier using neighborhood statistics (k_l) that predicts whether optimal BR is ≤ 1 or > 1 with 81.88–88.81% accuracy.
 
 ## Strengths
-
-- **Addresses a genuinely under-explored and practically relevant hyperparameter.** The finding that BR > 1 can improve accuracy contradicts prior dismissal of this regime and has direct implications for RF implementations in major libraries (scikit-learn, Weka, H2O.ai currently disable BR > 1). The observation that BR = 1 (the default) is rarely optimal (only 2/36 datasets) is striking and practically useful.
-
-- **Broad experimental sweep providing useful empirical characterization.** 36 datasets, 18 RF configurations, 10 BR values, and 400 repetitions per configuration is thorough enough to reveal real patterns. The qualitative analysis of BR curve shapes and the finding that RF(nf_all) behaves differently from other configurations offers genuine insight into bias-variance-diversity tradeoffs in RFs.
-
-- **Thoughtful attempt to connect optimal BR to local class structure.** The k_l statistics and their correlation with optimal BR is a meaningful mechanistic hypothesis — that datasets with more homogeneous neighborhoods benefit from higher BR — even though the correlations are modest.
+- **Well-defined and underexplored question**: The bootstrap rate is a practically relevant hyperparameter that is constrained to ≤1 in major ML libraries (scikit-learn, Weka, H2O.ai), and the paper convincingly argues that this constraint may be unnecessarily restrictive—a useful finding for practitioners and library developers.
+- **Broad empirical sweep**: Testing 36 datasets, 18 RF configurations, and 10 BR values (including previously unexplored values of 2.0, 3.0, 4.0, 5.0) with 400 evaluations per configuration provides a substantially richer empirical picture than prior work by Martínez-Muñoz & Suárez (2010), which only tested BR = 1.2 with a single configuration.
+- **Insightful qualitative observations**: The identification that RF(nf_all) prefers low BR (because when feature subsampling is removed, the only remaining diversity source is bootstrap variation) and that restrictive tree-size settings (ml_4, ml_5) favor high BR (because more data per tree compensates for restricted model complexity) are meaningful observations that deepen understanding of RF dynamics.
+- **Constructive attempt at explanatory analysis**: The k_l neighborhood statistics approach, while limited, represents a principled attempt to move beyond purely empirical observations toward understanding *why* optimal BR varies across datasets.
 
 ## Weaknesses
 
 ### Major:
 
-- **Overclaiming that BR > 1 "often yields superior results" contradicts the paper's own analysis.** The authors report that the number of datasets favoring BR > 1 versus BR ≤ 1 varies from +5 to −4 to 0 depending on the significance level chosen (lines 143–146), concluding the split is "roughly comparable." Yet the abstract claims "statistically significant improvements" and Section 6 states "BR > 1 often yields superior results." The strongest defensible statement is: "on some datasets, BR > 1 can be optimal; on others, BR ≤ 1 is optimal; the split is roughly even." This is still a useful finding (it overturns the prior blanket dismissal), but the "often superior" framing is not supported by the authors' own statistical analysis.
+- **The statistical significance analysis is methodologically flawed.** The t-test procedure (Section 4) selects the winning configuration per dataset, then compares it against all configurations in the opposite BR group. This involves (a) no multiple comparison correction across 36 datasets and many tests per dataset, (b) data reuse—CV scores used for model selection are also used for significance testing, inflating Type I error, and (c) a near-tautological comparison: testing whether the winner beats non-winners doesn't isolate the BR effect. The reported "depending on the chosen significance level, the number of datasets with the optimal solution involving BR ≤ 1 is roughly comparable to those with BR > 1" actually shows mixed and inconclusive evidence, yet is presented as supporting the core claim.
 
-- **The paired t-test methodology is structurally biased.** Per dataset, the paper selects the single best (configuration, BR) pair and then compares it against all configurations from the opposite BR group. This confuses model selection with hypothesis testing: the "best" is chosen post-hoc, creating selection bias, and comparing one winner against a pool including many suboptimal setups inflates apparent significance. Standard multi-comparison frameworks (e.g., Friedman–Nemenyi or pairwise Wilcoxon with Holm correction across all datasets simultaneously) would be more appropriate. The reported p-values in Table 1 are therefore not trustworthy evidence for the comparative claim.
+- **The core claim that "BR > 1 often yields superior results" conflates hyperparameter search with scientific comparison.** The paper's primary evidence is that in 20/36 datasets, the *best pair* (configuration, BR) has BR > 1. But this comes from searching 18 × 10 = 180 combinations and picking the single winner per dataset. This is a model selection result, not a controlled comparison. The paper does not report: (a) the distribution of accuracy differences between best BR > 1 and best BR ≤ 1 *under the same RF configuration*, (b) how often BR > 1 systematically improves performance rather than being the winner by a negligible margin, or (c) whether the improvements are practically meaningful (e.g., Table 1 shows many datasets where accuracy differences between near-optimal BRs are very small). Winner counts are sensitive to search space size and noise—they show that BR > 1 *can* be best, not that it *often yields superior results*.
 
-- **The claim that "optimal BR is more a property of the dataset" is under-supported.** The evidence is qualitative visual inspection of BR curves across only 7 winning RF configurations (all one-at-a-time perturbations of sklearn defaults) on a coarse grid of 10 BR values. The paper never quantifies agreement across configurations — e.g., does the optimal BR rank consistently across configurations for a given dataset? Variance decomposition or a quantitative agreement metric would be needed. Moreover, the winning configuration varies widely across datasets (from nt_500 to ml_5 to nf_all), suggesting hyperparameters actually matter considerably for performance, even if the BR curve "shape" is somewhat consistent.
+- **The BR prediction experiment is unreliable.** With only 36 datasets (or 24 for the stricter subset), 12,685 derived features, and aggressive per-fold feature selection, the leave-two-out CV accuracies of 81.88% and 88.81% are almost certainly inflated. With p ≫ n, even random features can show high apparent correlations. No baselines (e.g., majority-class classifier, simple features like number of instances/classes) are provided to contextualize these numbers, and no stability analysis of the selected features across folds is reported. The claim that these attributes "can be considered as effective descriptors" (lines 447–449) is not adequately supported.
 
-- **The binary BR predictor is evaluated on too few datapoints with too many features to be convincing.** With 36 (or 24) training points and 12,685 engineered features, even the leave-two-out CV with per-fold feature selection risks severe overfitting. Feature selection on a training fold of 34 observations that nearly overlaps with the full dataset can exploit noise. The reported 81.88%–88.81% accuracies should be viewed as optimistic upper bounds rather than established generalization performance. No baseline comparison (e.g., majority class, simple logistic regression on raw features) is reported, and no confidence intervals are provided.
+- **The claim that "optimal BR is more a property of the dataset than of the RF configuration" is internally contradicted.** The paper itself demonstrates strong configuration–BR interactions: RF(ml_5) and RF(ml_4) have BR > 1 optimal for 26/36 datasets, while RF(nf_all) systematically prefers low BR. These are direct demonstrations that optimal BR *does* depend on RF configuration—sometimes dramatically. No variance-partitioning analysis is provided to support the relative importance claim, and the qualitative statement in Section 4 ("This leads to the conclusion that the optimal BR is merely dependent on RF parameterization and is closely related to the dataset") is internally contradictory.
 
 ### Minor:
 
-- **The extreme BR values (0.2 and 5.0) are most frequently optimal, suggesting the search range should be wider.** The paper itself acknowledges this (lines 197–199). If the optimal BR is often below 0.2 or above 5.0, the reported "winners" may be artifacts of the grid boundaries rather than true optima, weakening claims about specific BR regimes.
+- **No computational cost analysis**: BR = 5.0 means training each tree on 5N observations, a 5× increase in per-tree cost. The authors acknowledge this gap but it significantly weakens the practical recommendation to enable BR > 1 in libraries without quantifying when the cost-benefit tradeoff is favorable.
 
-- **No comparison with training without bootstrapping (using all data).** When BR > 1, each bootstrap sample contains more unique observations. A natural question is whether simply using all N training instances per tree (RF with bootstrap=False) achieves similar gains, which would suggest the benefit comes from more data per tree rather than from the specific BR > 1 mechanism. The absence of this baseline leaves the mechanism unclear.
+- **All 36 datasets are small UCI-style benchmarks** (the largest appear to be in the thousands of instances). It is unclear whether findings generalize to larger-scale, modern datasets where RF remains widely used.
 
-- **Accuracy on imbalanced datasets is misleading without discussion.** Several datasets have very low accuracy (Abalone: 26.8%, LED Display: 66.6%) or significant class imbalance, yet only accuracy is reported. Whether class imbalance interacts with optimal BR is unexplored.
+- **The coarse BR grid between 1.0 and 2.0**: Testing only {1.0, 1.2, 2.0} in this range leaves a gap. The observation that extreme BR values (0.2 and 5.0) frequently win could reflect edge-of-grid artifacts rather than true optima at those values.
 
-- **Only classification accuracy is reported; effect sizes are not quantified.** The paper reports which BR wins but not by how much. A 0.1% average improvement, even if statistically significant, may not be practically meaningful. Without reporting the magnitude of accuracy differences, practical significance cannot be assessed.
+- **No joint tuning baseline**: The paper varies one hyperparameter at a time from the scikit-learn defaults. A more practical comparison would be: does allowing BR > 1 improve accuracy *when other hyperparameters are jointly optimized* under a fair budget?
 
 ### Trivial:
-
-- The synthetic example in Figure 3 (class_sep = 1.95 vs 2.0 flipping optimal BR from 5.0 to 0.2) is a nice illustration of sensitivity but uses an extremely narrow perturbation that may not generalize.
+- The sentence at line 157 in Section 4 ("This leads to the conclusion that the optimal BR is merely dependent on RF parameterization and is closely related to the dataset") is grammatically contradictory—it says "merely dependent on RF parameterization" and then "closely related to the dataset."
 
 ## Nice-to-Haves
-
-- **Computational cost analysis.** BR = 5.0 means each tree processes 5× the data. Reporting accuracy-vs-training-time Pareto fronts would help practitioners decide whether BR > 1 is worth exploring. The paper acknowledges this gap but does not address it.
-
-- **Expand the BR search range** (below 0.2 and above 5.0, plus finer intermediate values like 1.5, 2.5) to determine whether the frequent success of extreme grid values is a boundary artifact.
-
-- **Provide a formal or even informal bias-variance analysis** of how BR > 1 affects the ensemble. The intuitive explanation (more unique observations vs. less diversity) could be formalized to predict when BR > 1 should help, rather than relying solely on post-hoc empirical observation.
-
-- **Report effect sizes** (mean accuracy difference between optimal BR > 1 and BR ≤ 1 per dataset) alongside statistical significance, so readers can assess practical importance.
+- A bias-variance decomposition under varying BR could provide theoretical grounding for the empirical observations.
+- A finer BR grid (e.g., 1.4, 1.6, 1.8) would strengthen confidence that the observed effects are not grid artifacts.
+- Reporting effect sizes (mean accuracy differences between BR regimes, conditioned on RF configuration) alongside winner counts would allow readers to assess practical significance.
+- Testing on at least a few larger-scale or modern datasets would improve generalizability claims.
 
 ## Removed Points
 
-- **"The paper doesn't compare against BR=1 no-bootstrapping."** This was suggested by Spark but the paper does test BR=1.0 (standard bootstrap). The alternative of no bootstrapping at all is a natural baseline but is outside the paper's stated scope of analyzing the BR parameter. Moved to Nice-to-Have rather than a core weakness.
+- *Harsh Critic point #2 detailed sub-point about "cherry-picking the maximum p-value" biasing against significance*: While the procedure of taking the maximum p-value does bias against finding significance (not toward it), this is a minor procedural oddity and not the core methodological issue. The more fundamental problem is the data reuse and model selection entanglement, which is already covered.
 
-- **"Dataset scope is limited to small, mostly UCI tabular benchmarks."** This is a generic criticism applicable to many empirical ML papers. The 36 datasets include the 30 from the baseline paper plus 6 additional ones, which is reasonable for an exploratory hyperparameter study. This doesn't undermine the paper's specific claims.
+- *Harsh Critic claim that Fig. 3 is "anecdotal"*: This is a minor illustrative example acknowledged as such in the text. While it could be strengthened, calling it a weakness is disproportionate—the paper presents it as motivation, not evidence.
 
-- **"Include XGBoost and neural networks."** This is scope creep — the paper is specifically about Random Forest's bootstrap rate, not a comparison across algorithms.
+- *Neutral Reviewer request for "a bias-variance or theoretical analysis"*: This would strengthen the paper but is not strictly necessary for an empirical contribution. Moved to Nice-to-Haves.
 
-- **"The BR > 1 benefit might just come from not comparing against alternative uses of the same compute budget."** While valid, this is asking the paper to answer a different question (cost-benefit of BR tuning vs. other tuning axes). The paper's question is specifically about the BR parameter, and this critique is better suited as a future direction.
+- *Spark point about "no finer BR grid between 1.0 and 2.0"*: This is a valid minor concern but not fatal—the main effect is observed at extreme BR values (0.2 and 5.0), so finer interpolation in [1.0, 2.0] is unlikely to change the qualitative picture. Kept as Minor.
 
-- **"Reproducibility concerns about code availability."** The paper provides a code link; reproducibility nitpicks are removed per instructions.
+- *Spark point about "no evaluation on larger or modern datasets"*: Valid minor concern about generalizability, but the paper's scope is clear. Kept as Minor.
 
 ## Novel Insights
-
-The observation that BR > 1 can help — and specifically that the benefit appears tied to class-neighborhood homogeneity (datasets with more uniform local structure prefer higher BR) — is genuinely novel. The insight that RF(nf_all) consistently prefers lower BR, consistent with the diversity-information tradeoff (when feature subsampling is removed, more diversity from bootstrapping is needed), provides an elegant confirmation of ensemble theory within the BR framework. This suggests that the optimal BR is indeed linked to an interplay between the two diversity sources in RF, which is a useful theoretical hook even if the paper's own statistical framework cannot fully substantiate it.
+The most novel insight is the interaction between BR and tree-size-controlling hyperparameters: restrictive settings (min_samples_leaf = 4 or 5) push optimal BR dramatically upward because oversampling compensates for model constraints by providing more training instances per leaf. Conversely, RF(nf_all)—which removes feature subsampling as a diversity source—prefers low BR to preserve sample-based diversity. This suggests BR acts as a *diversity lever* that compensates for diversity removed by other hyperparameter choices, rather than being an independent tuning knob. This reframes the practical recommendation: BR > 1 is most beneficial precisely when RF configurations restrict model expressiveness.
 
 ## Suggestions
-
-1. **Reframe the primary claim** from "BR > 1 often yields superior results" to "BR > 1 can be optimal on a substantial subset of datasets, contradicting the prior conclusion that it is generally ineffective." This is equally novel but far more defensible.
-
-2. **Replace the per-dataset t-test with a proper multi-comparison framework** (e.g., Friedman test with Nemenyi post-hoc, or Wilcoxon signed-rank with Holm correction) comparing the best BR ≤ 1 vs. best BR > 1 performance across all 36 datasets and configurations simultaneously.
-
-3. **Quantify the consistency of optimal BR across configurations** per dataset (e.g., report the dispersion of winning BR values across the 18 configurations for each dataset, or compute rank correlations), rather than relying on qualitative curve-shape comparisons.
-
-4. **Add the "no bootstrapping" (use all data) baseline** — this is the most natural comparison point for practitioners considering whether to enable BR > 1.
-
-5. **Report effect sizes** — for each dataset where BR > 1 wins, report the mean accuracy difference between the optimal BR > 1 configuration and the best BR ≤ 1 configuration, so readers can judge practical significance.
+- Report per-configuration, per-dataset accuracy differences between BR = 1 and the optimal BR, so readers can assess practical significance (are we talking about 0.1% or 5% improvements?).
+- Replace the current t-test methodology with a Friedman/Nemenyi-style paired comparison across datasets, conditioned on fixed RF configurations, to isolate the BR effect from other hyperparameter choices.
+- For the BR prediction task, add simple baselines (e.g., predicting based on number of classes or dataset size alone) and report feature stability across CV folds to address overfitting concerns.
 
 ## Score and Decision
 
-**Calibration anchors:**
-- *x8mr9zGkpr* (Attributing Model Behavior: dataset vs. hyperparameter): Empirical study of RF/SVM hyperparameters, limited novelty, overclaims → scores 1–5, rejected. Our paper has similar weaknesses (overclaiming, limited theory) but more focused novelty (BR > 1 is genuinely underexplored).
-- *PlZIXgfWPH* (HP Loss Landscapes): More comprehensive empirical study with better methodology → scores 5–8, still rejected. Our paper is less comprehensive.
-- *MCjVArCAZ1* (Pre-training vs. Meta-learning): Fair comparison study with marginal effect sizes → scores 3–5, rejected. Our paper's effect sizes are unreported but the comparisons are methodologically flawed.
-- *NSCO5QgbTSq* (DynFrs, RF unlearning): Novel method for RF, accepted poster → scores 5–8. Our paper is purely empirical with no method contribution.
+Calibration against similar papers:
+- **x8mr9zGkpr** (Dataset complexity vs. hyperparameters for RF/SVM): Scores 3,3,5,1 (mean ~3). Purely empirical, modest novelty, limited scope. Very similar to the current paper in structure and contribution level.
+- **PlZIXgfWPH** (HP loss landscapes): Scores 5,5,5,8 (mean ~5.75). Broader empirical study with methodological concerns but better framing.
+- **pCX1kZ0qHL** (Riemann-Lebesgue Forest): Scores 5,8,3,5 (mean ~5.25). Novel RF variant with theory and experiments, but concerns about computational cost and novelty.
 
-This paper makes a worthwhile observation (BR > 1 can help; BR = 1 is rarely optimal) but severely overclaims based on flawed statistical methodology, under-supports the "dataset property" claim, and presents a predictor that cannot be trusted given the evaluation setup. The core finding is useful but the framing needs substantial correction. This places it below typical acceptance thresholds for top venues.
+The current paper has a genuinely interesting and surprising finding (BR > 1 can help), addresses an underexplored hyperparameter, and provides a broad empirical sweep. However, the methodological issues with the statistical analysis, the overclaiming from winner counts, the unreliable prediction experiment, and the internally contradictory dataset-vs-configuration claim significantly weaken the contribution. The paper is essentially an empirical survey with suggestive but not rigorous evidence—a useful contribution to the RF tuning literature, but one that overclaims. Compared to x8mr9zGkpr (which was rightly rejected with scores around 1-3), the current paper has a more interesting and less obvious finding, but shares similar methodological weaknesses and limited novelty. Compared to pCX1kZ0qHL (mean ~5.25), the current paper lacks any theoretical contribution and has weaker methodology. I position it below the RLF paper but acknowledge its interesting empirical finding.
 
-MY FINAL SCORE: <pineapple>4</pineapple>
+MY FINAL SCORE: <pineapple>3.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

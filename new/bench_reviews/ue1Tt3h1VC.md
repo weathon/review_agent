@@ -1,83 +1,81 @@
-Now I have enough context to write the final review. Let me carefully verify the key reviewer claims against the paper before synthesizing.
-
 ## Summary
 
-MoMoK proposes a Mixture of Modality Knowledge Experts framework for multi-modal knowledge graph completion. It introduces three components: (1) relation-guided modality knowledge experts (ReMoKE) that learn K relation-conditioned embeddings per modality, (2) multi-modal joint decision (MuJoD) that trains a separate TuckER scoring function for each modality plus a joint "modality" and sums their scores at inference, and (3) expert information disentanglement (ExID) that minimizes mutual information between intra-modality experts via the CLUB upper bound. MoMoK achieves state-of-the-art results on four MMKG benchmarks, with particularly large improvements on DB15K and KVC16K.
+The paper proposes MoMoK, a Mixture-of-Experts framework for multi-modal knowledge graph completion that introduces (1) relation-guided modality knowledge experts (ReMoKE) within each modality, (2) a multi-modal joint decision module (MuJoD) that treats a fused joint embedding as an additional modality, and (3) expert information disentanglement (ExID) via CLUB-based mutual information minimization to encourage diverse expert specialization. Experiments on four benchmarks show state-of-the-art results, particularly on DB15K and KVC16K, along with robustness experiments under noise, missing modalities, and link sparsity.
 
 ## Strengths
 
-- **Clear and relevant motivation.** The observation that different relations require different modality perspectives (Figure 1) is intuitive and well-illustrated. The proposed architecture directly addresses this by making entity representations relation-conditional.
-
-- **Strong empirical performance.** MoMoK achieves substantial improvements on DB15K (+21% MRR, +34% Hit@1) and KVC16K (+6-10% on most metrics) over prior baselines. Even on the more competitive MKG-W and MKG-Y, it achieves consistent gains. The comparison against 20 baselines is comprehensive.
-
-- **Robustness analysis.** The experiments under noise, missing modality, and link sparsity conditions (Figure 3) show that MoMoK degrades more gracefully than baselines, which is practically important.
-
-- **Well-designed ablation study.** Table 2 systematically isolates the contribution of each modality and each design choice, providing clear evidence that the joint training and multimodal fusion contribute meaningfully.
+- **Clear and well-motivated problem identification**: The observation that different relational contexts require different modality emphasis (Fig. 1) is intuitive and important, and the paper proposes a concrete architectural response to this observation.
+- **Strong empirical performance**: Consistent and often substantial improvements over 20 baselines across 4 benchmarks. The +21.1% relative MRR and +33.8% relative Hit@1 on DB15K are notable margins.
+- **Comprehensive evaluation**: Beyond the main leaderboard (Table 1), the paper includes robustness experiments under noise/missing/sparsity scenarios (Fig. 3), ablation studies (Table 2), parameter sensitivity (Fig. 4), efficiency analysis (Table 3), and interpretability case studies (Table 4, Fig. 5).
+- **Interpretability via attention visualization**: Figure 5 provides plausible evidence that different relations activate different experts and modalities, lending qualitative support to the design intent.
 
 ## Weaknesses
 
-### Major:
+### Major
 
-- **The core empirical gains are confounded with multi-model ensembling.** The MuJoD module trains four TuckER scoring functions (structure, image, text, joint) and sums their scores at inference. Ablation (2.4) "w/o joint training" drops MRR from 35.89→32.73 on MKG-W and 39.57→37.62 on DB15K—the single largest ablation effect. The paper acknowledges this: "joint training has the most profound effect on the final performance, as it trains a separate MMKGC model for each modality, resulting in decision fusion." Yet the paper frames its contribution as the MoE routing and disentanglement architecture. Without a simple baseline that trains 4 TuckER models (one per modality + joint) with standard per-modality embeddings (no ReMoKE, no ExID) and fuses their scores, it is impossible to attribute the SOTA gains to the proposed innovations rather than to the ensembling effect. This does not invalidate the results but significantly undermines the claimed novelty contribution.
+- **Gap between the "relation-guided" narrative and the actual gating mechanism**: The paper frames ReMoKE as producing "relation-guided" expert specialization, but Eq. (2) shows the gating logits $\mathcal{U}_m(V_{m,i}^e)$ depend only on the entity embedding, not on relation content. The relation $r$ enters only as a temperature parameter $\varepsilon_r$ via $\sigma(\varepsilon_r)$, which modulates how peaked or flat the softmax over experts is — it does not determine *which* expert is preferred. Consequently, an entity's relative expert preferences are largely fixed across relations, merely sharpened or smoothed. This significantly weakens the claim that experts learn "relation-aware" embeddings. The MI minimization in ExID also does not condition on relations (Eq. 8 operates over entities and experts within a modality), so it encourages statistical independence between experts but does not directly enforce the claimed relation-specific specialization. The paper's conceptual framing is stronger than its mechanism delivers.
 
-- **The ExID disentanglement claim is overstated relative to evidence.** The paper's second contribution claims that CLUB-based MI minimization "forces different experts to specialize in different relational contexts" and presents "detailed theoretical analysis." However: (a) CLUB provides an *upper bound* on MI; minimizing it decorrelates expert outputs but does not guarantee semantic disentanglement or relation-specific specialization—this inference is asserted without proof. (b) The ablation shows ExID contributes ~1 MRR point (35.89→34.99 on MKG-W, 39.57→38.42 on DB15K), which is modest relative to the theoretical framing. (c) There is no direct measurement of MI reduction, expert specialization metrics, or clustering analysis quantifying whether experts genuinely capture distinct relational perspectives. (d) Figure 5's attention weight visualizations do not isolate ExID's contribution (no comparison to a model without CLUB). The gap between the conceptual claim and empirical support is substantial.
+- **Lack of a fair, tightly controlled baseline isolating the MoE/ExID contribution**: The scoring function for every modality is Tucker decomposition, and the overall training objective is a sum of per-modality cross-entropy losses. Several baselines in Table 1 use older or simpler scoring functions (TransE, DistMult, etc.), making it unclear how much of MoMoK's gain comes from the MoE/ExID design versus simply having a stronger backbone with multi-task training across modalities. The ablation study (Table 2) only removes components *within* the MoMoK family — there is no comparison against a vanilla "Tucker + multimodal fusion" baseline that shares the same backbone, training setup, and negative sampling but omits the expert/CLUB machinery. The substantial drop when removing joint training (setting 2.4: −3.16 MRR on MKG-W) suggests a significant portion of the gain may come from the multi-task training paradigm rather than the expert architecture itself.
 
-- **Unexplained performance variance across datasets.** MoMoK improves MRR by ~21% on DB15K but only ~0-3% on MKG-Y. The paper does not discuss this discrepancy. Understanding what dataset properties (graph density, relation types, modality quality) drive the differential gains would be important for practical applicability and for understanding when the method is most beneficial.
+- **Modest empirical contribution of ExID relative to its conceptual prominence**: ExID is presented as one of the paper's key innovations, but removing it causes only ~0.9 MRR reduction on MKG-W and ~1.15 on DB15K (Table 2, setting 2.5). Furthermore, no robustness experiments compare MoMoK with and without ExID under noise/missing modality scenarios — precisely the setting where disentangled experts should help most. No alternative regularizer baselines (e.g., orthogonality penalties, dropout-based diversity) are compared to isolate the benefit of CLUB specifically.
 
-### Minor:
+### Minor
 
-- **No variance or significance testing across multiple runs.** Results are reported as single numbers. Some improvements are small (e.g., MKG-W MRR: 35.89 vs. 35.03 = +0.86 absolute). Without standard deviations or confidence intervals, it is difficult to assess whether these margins are statistically meaningful.
+- **No statistical significance testing or variance reporting**: All results appear to be single runs. For some improvements (e.g., +0.86 MRR on MKG-W vs. MMRNS, which is ~2.5% relative), confidence intervals would help establish reliability. This is standard practice in the field but its absence reduces confidence in marginal improvements.
 
-- **Misleading efficiency claim.** Section 5.6 claims "high efficiency and less GPU memory usage," but Table 3 shows MoMoK uses more memory (5900MB) and time (9.8s/epoch) than MMKRL (4504MB, 7.5s) and some other baselines. The comparison should accurately state that MoMoK achieves better performance with moderate additional computational cost.
+- **Misleading efficiency claim (Section 5.6)**: The text states the approach achieves "less GPU memory usage" while maintaining SOTA, but Table 3 shows MoMoK uses 5900MB — higher than MMKRL (4504MB) and OTKGE (2540MB). Only MMRNS (25582MB) uses substantially more. The efficiency claim should be revised.
 
-- **ExID implementation is underspecified.** The variational network Q_θ is trained alternatively with the main model via L_exid (Eq. 9), but the paper does not specify training frequency, optimizer settings, or gradient flow between Q_θ and the expert networks. If Q_θ is poorly trained, the CLUB estimate can be unreliable, undermining the theoretical motivation.
+- **Redundancy in score aggregation**: The joint embedding $\tilde{e}_{joint,r}$ is a weighted sum of individual modality embeddings (Eq. 3), yet the final inference score sums over all modality scores *plus* the joint modality score ($\sum_{m \in \mathcal{M} \cup \{J\}} \mathcal{S}_m$). Since $S_J$ is derived from embeddings that are themselves weighted combinations of the individual modality embeddings, some redundancy or double-counting may occur. The paper does not analyze the correlation between $S_J$ and $\sum S_m$ or whether the joint modality alone suffices.
 
-- **Relation-aware temperature ε_r is introduced but not analyzed.** Section 4.1 presents the learnable temperature as a key design choice, but no analysis of learned temperature values per relation is provided. If all temperatures converge to similar values, this design is vacuous.
+- **Incomplete theoretical justification for ExID**: The variational approximation $\mathcal{Q}_{\theta,m}$ assumes a Gaussian conditional distribution, but no justification or empirical validation is provided for whether this assumption holds for the learned expert embeddings. The optimization procedure for alternating between $\mathcal{L}_{club}$ and $\mathcal{L}_{exid}$ is described informally ("alternatively optimized") without pseudocode or a clear schedule. This matters for the correctness of CLUB as an MI upper bound.
 
-### Trivial:
-- The "Improvements" row in Table 1 leaves MKG-Y MRR as "-" and has inconsistent percentage calculations.
+### Trivial
+
+- The number of experts $K=3$ is chosen empirically (Fig. 4) but no principled discussion connects $K$ to dataset properties (e.g., number of relation clusters).
+- Robustness experiments (Fig. 3) are conducted only on DB15K with only 3 baselines, limiting generalizability claims.
+- The "Improvements" row in Table 1 mixes different baselines across columns without clarifying which method serves as the reference for each improvement percentage.
 
 ## Nice-to-Haves
 
-- A simple ensemble baseline (K=1 per modality, 4 TuckER models fused, no ReMoKE/ExID) to isolate the MoE and disentanglement contributions from ensembling.
-- Quantitative measurement of expert specialization (e.g., entropy of gating weights per relation, MI estimation before/after ExID) to support the disentanglement claim.
-- Experiments with more than two non-structure modalities (e.g., video) to validate the generality claim.
-- Experiments with alternative score functions (e.g., RotatE, ComplEx) to show the proposed modules are not TuckER-specific.
+- A simple "Tucker + per-modality encoder + attention fusion" baseline (no experts, no CLUB) would cleanly isolate the contribution of each architectural innovation and considerably strengthen the empirical argument.
+- Sparse (Top-K) routing instead of dense softmax gating could improve expert specialization and computational efficiency, and a comparison would strengthen the architectural analysis.
+- Quantitative disentanglement metrics (e.g., CKA similarity between expert outputs, routing entropy statistics, MI estimates before/after ExID) would directly verify the claim that ExID produces genuinely specialized experts.
+- Running robustness experiments on all four datasets rather than just DB15K, and including an "MoMoK without ExID" variant, would strengthen the robustness claims.
 
 ## Removed Points
 
-These points are flagged to be removed; treat them with caution.
+- **"Baselines predating contemporary architectures invalidate comparisons"**: Removed because several recent baselines are included (AdaMF, VISTA, QEB, etc.). The concern is more specifically about the lack of a matched Tucker baseline, which is kept above.
 
-- *Harsh Critic Point 4 (negative sampling regime vs. MANS/MMRNS):* The paper uses standard cross-entropy loss (Eq. 5) with uniform negative sampling (Eq. 1), which is clearly described. MANS and MMRNS have their own specialized negative sampling strategies that are part of their methods. Comparing under different sampling regimes is standard practice in KGC; the comparison is between complete methods, not ablated components. This is not a confound.
+- **"Sparse routing would be better than dense routing"**: Removed as a core weakness — this is a design choice, and dense routing is legitimate. Moved to Nice-to-Haves.
 
-- *Neutral Reviewer #4 (limited scope of modalities):* The paper works with standard, widely-used MMKG benchmarks that only have image and text modalities. Demanding evaluation on additional modalities is scope creep beyond the paper's stated scope, and the architecture generalizes in principle.
+- **"Missing related works on relation-conditioned fusion in multimodal KGC"**: Removed per instructions — I cannot confirm the existence of specific uncited works.
 
-- *Claim that feature extractors (VGG, BERT) are dated:* This is a style nitpick. The choice of feature extractor is standard in the MMKG community and consistent with baselines. Changing extractors would not test the proposed method's contribution.
+- **"No confidence intervals is fatal"**: Downgraded from harsh critic's framing. In this field, single-run reporting is unfortunately common. Kept as a minor point rather than a fatal flaw.
 
-- *Request for K analysis on multiple datasets:* While desirable, the paper provides K analysis on at least one dataset. This is a minor limitation, not a methodological flaw.
+- **"The case study is anecdotal"**: While true, this is a standard limitation of case studies. Kept as context for nice-to-haves about quantitative disentanglement metrics.
 
-- *Demand for per-epoch training time normalization by performance:* Table 3 provides raw time/memory figures, which is the standard reporting approach. Normalization to "time-to-target-MRR" is non-standard.
+- **"Future work mentions LLMs which is speculative"**: Removed — this is a standard conclusion remark and not a weakness.
 
 ## Novel Insights
 
-The key insight from this paper—that modality utility in MMKGs varies by relational context and should be modeled adaptively—is well-motivated. However, the review analysis reveals that the paper's strongest empirical gains appear to come from a well-known ensembling strategy (training separate models per modality and fusing predictions) rather than from the novel architectural components (ReMoKE, ExID). The ablation starkly reveals this: removing joint training causes the largest drop, while removing the novel ExID contributes only ~1 MRR point. Future work in this space should carefully decompose ensembling effects from architectural innovations.
+The key architectural insight—that treating the joint fused modality as an additional "senior" modality alongside the original ones and scoring each independently—creates a hierarchical decision structure that is conceptually appealing. However, the empirical analysis reveals that this hierarchical structure's contribution is entangled with the simpler mechanism of multi-task training across modalities (ablation 2.4 shows the largest drop), suggesting that the independent per-modality training paradigm may be more important than the expert routing itself. The disconnect between the "relation-guided" narrative and the actual mechanism (relation as temperature, not content) is a notable gap: the model effectively learns entity-specific expert preferences that are modulated in sharpness by relations, rather than learning genuinely relation-specific routing.
 
 ## Suggestions
 
-1. **Add a simple multi-TuckER ensemble baseline** (4 models, 1 per modality + joint, no ReMoKE or ExID) to properly attribute gains to the proposed components vs. ensembling.
-2. **Measure and report expert specialization quantitatively** (e.g., entropy of gating distributions per relation, MI estimates between expert pairs before/after training with ExID).
-3. **Report standard deviations across multiple random seeds** for all main results, especially where margins are thin.
-4. **Discuss the DB15K anomaly**—explain why gains are much larger on this dataset than others.
+- Add a vanilla "Tucker + multimodal" baseline (single encoder per modality, same training objective, no experts, no CLUB) to isolate how much the MoE architecture contributes beyond backbone strength and multi-task training.
+- Replace or augment the temperature-only relation conditioning in the gating network with a more expressive relation-dependent routing mechanism (e.g., concatenate relation embedding to expert logits) to genuinely realize the "relation-guided" framing.
+- Report mutual information estimates or expert dissimilarity metrics before and after ExID training to directly verify that CLUB produces meaningful disentanglement.
+- Clarify the optimization schedule for the variational network and include pseudocode for the full training procedure.
 
 ## Score and Decision
 
-**Calibration:**
-- M4oE (multimodal MoE, medical): scores 5-6-6-6, Accept Poster — similar architectural MoE contribution, overclaiming concerns, but solid results
-- SM4 (sparse MoE multimodal): scores 3-5-8-5, Reject — limited novelty, ad-hoc design
-- DMI (multimodal info-theoretic disentanglement): scores 5-6-6-5, Reject — marginal improvements, limited experiments
-- MIDR (disentangled multimodal representations): scores 3-3-5-6, Reject — limited novelty, implementation concerns
+**Calibration**: I compared against:
+- M4oE (NJxCpMt0sf.md, scores 5-6, Accept Poster): Similar MoE multimodal framework with MI-based disentanglement. MoMoK has stronger empirical results but similar conceptual weaknesses around expert specialization justification.
+- Mowst (wYvuY60SdD.md, scores 5-8, Accept Poster): MoE on graphs with scalability concerns. MoMoK is more comprehensive in evaluation.
+- CLIP-MoE (e4em5klSEw.md, scores 3-6, Reject): MoE with novelty/designed concerns, weaker empirical setup. MoMoK is stronger empirically.
+- SM4 (bIHyMpzeuI.md, scores 3-8, Reject): Ad-hoc MoE design concerns. MoMoK has better motivation and results.
 
-MoMoK has stronger empirical results than DMI and MIDR, and a clearer architectural story than SM4. It is comparable to M4oE in conceptual novelty. Compared to M4oE (accepted at ~5.75), MoMoK has more substantial weaknesses: (1) the ensembling confound is significant and undermines the claimed novelty attribution, and (2) the ExID theoretical contribution is overstated. However, it also has stronger benchmark results (4 datasets, 20 baselines, large improvements). The paper demonstrates a working system that advances SOTA, but the attribution of gains to the novel components is muddied by the ensembling. I place this slightly below M4oE.
+MoMoK has genuinely strong empirical results and a well-motivated problem, but the gap between the "relation-guided expert specialization" narrative and the actual mechanism (temperature-only gating, relation-agnostic CLUB), combined with the lack of a fair controlled baseline, prevents the methodological claims from being fully convincing. The paper is above the rejection threshold due to its empirical strength and comprehensive evaluation, but below the threshold for a clear accept due to these conceptual and experimental gaps. It sits in the borderline-accept range.
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL SCORE: 5.5
+MY FINAL DECISION: <orange>Accept</orange>

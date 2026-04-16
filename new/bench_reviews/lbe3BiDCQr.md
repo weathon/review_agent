@@ -1,79 +1,76 @@
+Now I have enough context to write the final review. Let me synthesize all the inputs carefully.
+
 ## Summary
 
-CHECKEMBED proposes using answer-level embeddings (via models like GPT Text Embedding Large) to verify LLM responses to open-ended tasks, replacing token/sentence-level comparison methods. The pipeline samples k LLM responses, embeds each as a single vector, and computes pairwise cosine similarities to assess "stability" of answers and similarity to ground truth. The paper demonstrates advantages in semantic discrimination between paraphrases and contrasting passages, competitive correlation with hallucination scores on WikiBio, and large runtime improvements over BERTScore and SelfCheckGPT.
+CHECKEMBED proposes using answer-level embeddings (e.g., from GPT Text Embedding Large) to verify LLM outputs for open-ended tasks like summarization and term extraction, replacing token- and sentence-level comparison with whole-answer embedding similarity. The method prompts the LLM multiple times, embeds each full response, and compares the resulting embeddings pairwise (and optionally against a ground-truth) using cosine similarity, producing heatmaps and summary statistics to drive accept/reject decisions. The key claimed advantage is a combination of scalability (30–300× faster than BERTScore/SelfCheckGPT) and improved semantic discrimination for open-ended tasks.
 
 ## Strengths
 
-- **Simple and practical core idea.** Using whole-answer embeddings rather than token-level comparisons is a clean, intuitive, and easily deployable approach. The pipeline (Figure 2) is straightforward to implement.
-- **Strong empirical demonstration of semantic similarity discrimination (§4.1).** Violin plots show CHECKEMBED cleanly separates semantically similar from different passages across multiple LLM generators and embedding models, with little overlap—something BERTScore and SelfCheckGPT-BERT struggle with.
-- **Meaningful runtime advantages.** The 30×–300× speedups over BERTScore/SelfCheckGPT (§4.5, Figure 7) are empirically demonstrated and practically significant for industrial applications.
-- **Comprehensive embedding model comparison.** Testing six embedding backends (GPT, SFR, E5, GTE, STE400, STE1.5) and three LLM generators provides useful practical guidance. The ablation on sample size k (§4.6) is also informative.
-- **Competitive WikiBio results (§4.3).** CHECKEMBED achieves the best Spearman correlation (76.2) and is competitive on Pearson, providing concrete evidence that answer-level embeddings can track hallucination severity on a standard benchmark.
+- **Significant speed and scalability advantage.** The theoretical analysis (Sec. 3) and runtime experiments (Sec. 4.5, Fig. 7) clearly demonstrate that answer-level comparison reduces computational cost from O(k²s²t²) to O(k²), with empirical speedups of 30–300×. This is a genuine and well-supported practical benefit.
+
+- **Effective coarse semantic separation.** The "similar vs. different" experiments (Sec. 4.1, Fig. 3) convincingly show that answer-level embeddings separate meaning from surface form more cleanly than BERTScore and SelfCheckGPT (BERT) for passages with divergent meaning but similar wording, and vice versa. The separation is visually clear and consistent across models.
+
+- **Competitive results on WikiBio benchmark.** On the only standardized benchmark, CHECKEMBED with the GTE model achieves 76.2 Spearman correlation, matching or exceeding SelfCheckGPT (NLI) at 73.8, while being 30× faster (Table 1). This provides a reproducible quantitative anchor.
+
+- **Practical pipeline design.** The heatmap + summary statistics framework is well-structured for deployment, and the ablation on number of samples (Sec. 4.6, Fig. 8) provides useful practical guidance (stabilization around 6–8 samples).
 
 ## Weaknesses
 
 ### Major:
 
-- **The central claim of "verification of LLM solutions" and "assessing truthfulness" is not validated.** The paper repeatedly claims to verify *correctness* and *truthfulness* (Abstract: "metrics for assessing the truthfulness of the LLM answers"; §4.2: "whenever CHECKEMBED has very high confidence…there is high likelihood that these replies are close to the corresponding GT"). However, the experiments largely demonstrate *semantic similarity*, not factual correctness. The core assumption that embedding stability ≈ truthfulness is never tested against its most critical failure mode: an LLM that confidently and consistently hallucinates the same wrong answer would produce high similarity and "high confidence" under CHECKEMBED, yielding a false positive. The paper does not discuss or evaluate this scenario, which fundamentally undermines the claimed contribution of "effective verification."
+- **Conflation of semantic similarity with "truthfulness verification."** The paper repeatedly frames CHECKEMBED as a method for "verifying LLM solutions" and assessing "truthfulness" and "hallucination risk" (Abstract: "metrics for assessing the truthfulness of the LLM answers"; Sec. 2: "hallucination risk is low"; Sec. 4.2: "high likelihood that these replies are close to the corresponding GT"). However, the method fundamentally measures *semantic consensus* among multiple LLM samples—high embedding similarity means the model gives consistent answers, not that those answers are factually correct. LLMs can confidently and consistently produce the same hallucination (e.g., widely-shared misconceptions), which CHECKEMBED would flag as "high quality." This is a structural mismatch between what the method measures and what the paper claims it delivers. The paper never probes scenarios where high stability coincides with incorrectness.
 
-- **The legal document evaluation (§4.2) is purely qualitative with no task-specific correctness metrics.** Figure 4 shows two heatmap examples but no aggregate quantitative results across multiple documents. There is no precision/recall over extracted terms, no F1 against normalized definitions, and no ROC/AUC analysis linking similarity thresholds to actual correctness. The ground truth is a single human-authored text, and "verification" is measured as embedding similarity to this one phrasing—not whether the correct terms were actually extracted. For a core claimed use case ("real-world document analysis tasks"), this is insufficient.
+- **Weak evaluation on the primary claimed use case (open-ended tasks).** The paper positions CHECKEMBED as *specifically* useful for open-ended tasks like legal term extraction and document summarization. Yet the evaluation for these tasks (Sec. 4.2) consists of two hand-picked heatmap examples with qualitative commentary—no aggregate metrics (precision, recall, F1, correlation), no ROC/PR curves, and no systematic threshold calibration. The only quantitative benchmark (WikiBio, Sec. 4.3) evaluates *sentence-level hallucination detection*, which is the exact setting the paper argues existing methods were already designed for. This creates a concerning gap: the main motivation is performance on open-ended tasks, but the rigorous evaluation is limited to the setting the paper says is already well-served.
 
-- **Fine-grained hallucination detection is weak (§4.4).** The paper acknowledges CHECKEMBED "maintains high scores even with errors" and that performance only degrades noticeably beyond 5 introduced errors. For the paper's own motivation—legal term extraction where a single wrong definition could be critical—this insensitivity to small factual errors is a serious limitation that contradicts the headline claim of "effective verification." The paper also concedes that "BERTScore and SelfCheckGPT" show similar trends in this domain, undermining the claimed superiority for hallucination detection.
+- **Fine-grained hallucination sensitivity results undermine core claims.** The experiments in Sec. 4.4 (Figs. 5–6) directly show that CHECKEMBED "maintains high scores even with errors" and discrimination "only starts to be distinctive beyond 5 errors." For a verification metric, insensitivity to 1–5 factual errors is a serious limitation, particularly in the claimed domains (legal, scientific). The paper frames this positively ("CHECKEMBED is able to recognize when samples contain no errors"), but this only shows it can distinguish GT from *obviously perturbed* versions—not that it can catch realistic fine-grained hallucinations that matter in practice.
 
-- **Missing important baselines.** The paper compares only against BERTScore and SelfCheckGPT variants, explicitly dismissing UniEval, G-Eval, MIND, and BARTScore. Most critically, there is no comparison against LLM-as-a-judge approaches (e.g., using GPT-4 to rate or verify answers), which are a widely adopted and direct competitor for verifying open-ended LLM outputs. The methodological scope—comparing only against token/sentence-level metrics and claiming superiority for "open-ended tasks"—leaves the competitive landscape incompletely evaluated.
+- **Missing relevant baselines.** The paper compares only to BERTScore and SelfCheckGPT variants. Notably absent are: (1) LLM-as-a-judge approaches (now a standard baseline for evaluating open-ended LLM outputs), and (2) embedding-based uncertainty methods like EigenScore/INSIDE, which is a directly comparable approach that also uses embedding-space consistency. The paper explicitly excludes BARTScore, UniEval, and G-Eval because their "focus differs from hallucination detection," but CHECKEMBED itself is not a direct hallucination detector either—it's a semantic consensus measure—making this exclusion somewhat circular.
 
 ### Minor:
 
-- **Incremental novelty.** The core idea—replacing SelfCheckGPT's sentence-level comparisons with answer-level embeddings—is a straightforward architectural modification. The stability sampling mechanism is directly inherited from SelfCheckGPT; the embedding-based comparison is a well-known technique. While the paper demonstrates practical benefits, the conceptual contribution is modest.
+- **Chunking strategy is underspecified.** The paper mentions (Sec. 4.2) splitting long documents into chunks, but never details the chunking algorithm, aggregation strategy across chunks, or how chunk boundaries affect performance. This is a critical implementation detail for the primary use case.
 
-- **Heuristic thresholds lack rigorous calibration.** The suggested rule (mean > 0.9, std < 0.05, §4.2) appears derived from visual inspection of a small number of examples. No systematic threshold analysis, ROC curves, or precision/recall tradeoffs are provided, making it unclear how to deploy CHECKEMBED as a decision engine with controlled error rates.
+- **Thresholds for the "decision engine" are ad hoc.** The paper proposes thresholds like mean > 0.9, std < 0.05 (Sec. 4.2) without any calibration study, ROC analysis, or sensitivity analysis across tasks and models. It's unclear whether these thresholds generalize beyond the two legal examples shown.
 
-- **Answer-level embedding compression may lose information for long documents.** The paper acknowledges chunking long documents (§4.2) but provides no analysis of how chunk boundaries, chunk sizes, or chunk-level score aggregation affect verification quality—directly relevant to the scalability claims.
-
-- **Compressed dynamic range of scores.** The paper notes CHECKEMBED gives "relatively high scores to different passages"—often higher than BERTScore scores for similar passages (§4.1). This compressed dynamic range makes absolute threshold-setting difficult and task-dependent, yet is not systematically analyzed.
+- **Novelty is incremental.** The core method—embed multiple responses, compute pairwise cosine similarity, aggregate into a stability score—is essentially SelfCheckGPT's framework with answer-level embeddings substituting for sentence-level comparisons. The WikiBio results are consistent with this: performance parity with SelfCheckGPT (NLI) on Pearson correlation (73.6 vs. 74.1), with gains mainly in Spearman and speed.
 
 ### Trivial:
 
-- **Complexity analysis in §3 simplifies embedding computation costs.** Treating embedding comparison as O(1) and not accounting for the cost of running large decoder-only embedding models (e.g., 7B-parameter models) overstates the "fundamental" advantage, though the empirical runtime measurements in §4.5 partially address this.
+- The paper notes that CHECKEMBED gives "relatively high scores to *different* passages" (Sec. 4.1, acknowledging anisotropy of embedding spaces) but doesn't address whether this affects the reliability of absolute thresholds.
 
 ## Nice-to-Haves
 
-- Comparison against LLM-as-a-judge as a baseline, since it directly competes on the same task.
-- Quantitative evaluation on the legal term extraction task with task-specific metrics (precision, recall, F1 over extracted terms), not just embedding similarity to GT text.
-- Analysis of the "consistent hallucination" failure mode: how often do LLMs produce stable-but-wrong answers in practice, and how does this affect CHECKEMBED's reliability?
-- ROC/AUC curves for hallucination detection at various thresholds, replacing the qualitative violin plots with quantitative discriminative power metrics.
-- Analysis of how embedding quality and answer length affect verification accuracy, to characterize when answer-level compression becomes lossy.
+- An end-to-end evaluation on the legal term extraction task with systematic metrics (e.g., term-level F1 against ground truth, or correlation of CHECKEMBED stability scores with answer correctness), not just heatmap visualizations.
+- A comparison against LLM-as-a-judge, which is arguably the most natural baseline for evaluating open-ended outputs.
+- An honest discussion reframing CHECKEMBED as a *stability/consensus heuristic* rather than a "verification" or "truthfulness" method, with explicit characterization of failure modes (consistent hallucinations, embedding model biases, negation insensitivity).
+- ROC/PR curves showing how well CHECKEMBED's summary statistics predict answer correctness at various thresholds on datasets with ground-truth labels.
 
 ## Removed Points
 
-These points are flagged to be removed; treat them with caution.
-
-- **"Computational cost of k LLM calls is underacknowledged."** The paper explicitly discusses the tradeoff: "k introduces a tradeoff: more responses (higher k) means more compute time and cost… but also a better check of correctness" (§2) and shows performance saturates at k≈8 (§4.6). This cost is acknowledged.
-- **"Insufficient baselines because UniEval/G-Eval/MIND are excluded."** The paper provides a reasoned explanation in §5 for why these baselines have different focuses. While the exclusion of LLM-as-judge is a valid concern (kept above), the specific exclusions are justified by scope differences.
-- **"Evaluation dataset is self-generated/artificial."** While §4.1 and §4.4 use synthetic data, the paper also includes WikiBio (a standard benchmark) and real legal documents. The synthetic data supplements but does not wholly replace natural evaluation.
-- **"Formatting/style nitpicks about the paper."** Removed per rules.
-- **"Scalability analysis doesn't account for embedding model size."** While true in the asymptotic analysis, §4.5 provides empirical wall-clock comparisons that do account for model size in practice.
+- **Reproducibility concerns about datasets or models.** The paper cites WikiBio as a benchmark and uses standard models—these exist and are available. Removed per hard rules.
+- **Demands for additional benchmarks outside scope (e.g., TruthfulQA, SQuAD, code generation, creative writing).** The paper scopes itself to document analysis tasks; demanding evaluation on completely different task types is scope creep.
+- **Formatting and style nitpicks.** Removed per hard rules.
+- **Overly broad "missing related work" complaints.** The paper's related work section is substantial; I cannot verify whether specific uncited works exist. Removed per hard rules.
+- **Complaint that baselines were not "adapted" to open-ended settings (e.g., chunk-level BERTScore).** This would weaken the baselines in the authors' favor, which the hard rules say not to penalize; moreover, the paper's argument that token-level methods scale poorly is precisely its motivation.
 
 ## Novel Insights
 
-The paper's most interesting empirical finding is the explicit demonstration that answer-level embeddings can cleanly separate semantically similar from semantically different passages where token-level metrics fail (Figure 1 and §4.1). This highlights a genuine capability gap in BERTScore/SelfCheckGPT for open-ended tasks where paraphrasing is common. However, the paper's conflation of this semantic similarity capability with a claim of "truthfulness verification" remains the central intellectual gap—the evidence shows CHECKEMBED is a good semantic similarity tool, not yet a verified hallucination detector.
+The most interesting underexplored finding in the paper is the tension revealed by its own experiments: CHECKEMBED excels at *coarse* semantic separation (distinguishing texts with fundamentally different meaning) but is *insensitive* to fine-grained factual deviations (1–5 errors). This suggests an important but unarticulated design space: answer-level embeddings are best suited as a fast *coarse filter* for stability assessment, and should be explicitly composed with a second-stage fact-level checker when precision matters. The paper would be substantially stronger if it honestly positioned CHECKEMBED in this role rather than claiming it as a general verification method.
 
 ## Suggestions
 
-1. **Reframe claims from "verification/truthfulness" to "semantic consistency checking."** The paper would be much stronger if claims were precisely scoped: CHECKEMBED verifies that LLM answers are semantically consistent with each other and with ground-truth phrasing. Whether this constitutes "truthfulness" must be explicitly argued and tested, not assumed.
-2. **Add a consistent-hallucination stress test.** Craft prompts where LLMs are known to confidently produce the same hallucinated answer, and show whether CHECKEMBED correctly flags these as low-quality or incorrectly endorses them.
-3. **Provide quantitative task-level evaluation on the legal extraction task** (e.g., term-level precision/recall against the expert GT), rather than only embedding similarity heatmaps.
-4. **Add LLM-as-a-judge as a baseline** for at least one task, since it is the most natural alternative for open-ended answer verification.
+- **Reframe the contribution:** Present CHECKEMBED as a fast, scalable *stability heuristic* for open-ended LLM outputs, not a "verification" or "truthfulness" method. Acknowledge that high stability ≠ correctness and that fine-grained hallucinations are outside its detection capability. This honest framing would actually strengthen the paper by making the claims match the evidence.
+- **Add a proper quantitative evaluation on the legal extraction task:** compute precision/recall/F1 of extracted terms against human ground truth, and correlate CHECKEMBED stability scores with these task-level metrics. Even 20–30 documents with systematic scoring would be far more convincing than two heatmaps.
+- **Include LLM-as-judge as a baseline:** prompt GPT-4 to rate answer quality on the same tasks and compare cost/accuracy tradeoffs. This is the most natural alternative for open-ended evaluation.
 
 ## Score and Decision
 
-**Calibration papers compared against:**
+**Calibration:**
+- SEU paper (N4mb3MBV6J): embedding-based UQ with pairwise cosine similarity, scored 6/5/6 (mean ~5.7), rejected. Similar core idea but with an additional amortized contribution.
+- INSIDE/EigenScore (Zj12nzlQbz): embedding-based hallucination detection using internal states, scored 8/6/6/6 (mean ~6.5), accepted poster. Stronger novelty and evaluation.
+- Semantic clustering for hallucination detection (GXzwq6waYb): scored 3/3/3/8 (mean ~4.25), withdrawn/rejected. Very limited novelty.
 
-- **GXzwq6waYb** (Semantic clustering for hallucination detection): Very similar approach—embedding-based semantic clustering for hallucination detection. Scored 3,3,3,8 → rejected/withdrawn. Criticized for limited novelty and missing baselines. CHECKEMBED is comparable in novelty but has better empirical coverage and runtime analysis.
-- **N4mb3MBV6J** (Embedding-based UQ for LLMs): Nearly identical core idea—average pairwise cosine similarity of embeddings for uncertainty estimation. Scored 6,5,6 → rejected. Criticized that the core method (pairwise cosine similarity) has limited novelty, and that embedding-based consistency is a straightforward extension of semantic entropy. CHECKEMBED shares this fundamental novelty concern.
-- **EwRxk3Ho1V** (Beyond Cosine Similarity benchmark): Scored 3,6,3,5 → rejected. Criticized for overclaiming about cosine similarity's capabilities and lack of strong baselines. Similar overclaiming pattern.
+CHECKEMBED shares more with the SEU and semantic clustering papers in terms of incremental novelty of the core idea (pairwise embedding similarity). It has genuine practical strengths (speed, scalability, clean pipeline) but significantly overclaims what the method achieves ("verification," "truthfulness") relative to what the evidence supports (stability/consensus heuristic with confirmed insensitivity to fine-grained errors). The evaluation gap on the primary motivation (open-ended tasks) and the fine-grained hallucination insensitivity are substantive weaknesses that undermine the core framing. This places it below SEU (which was more honestly scoped) and below INSIDE (which had stronger novelty), but above the semantic clustering paper (which had essentially no novelty).
 
-CHECKEMBED sits above the lowest-scoring calibration papers (which had essentially no empirical validation or clearly flawed methodology) but below papers that scored 6+ (which had more rigorous evaluation or genuinely novel methodology). The main factors holding the score down are: (1) incremental novelty, (2) unvalidated core claim of truthfulness verification (showing semantic similarity instead), (3) qualitative-only evaluation on the primary use case, and (4) missing LLM-as-judge baseline. The practical contribution—fast, simple answer-level similarity pipeline with demonstrated runtime benefits—is real but insufficiently validated for the claims made.
-
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

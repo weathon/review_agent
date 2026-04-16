@@ -1,194 +1,243 @@
-The paper content is already provided in the user message. Let me verify the key claims.
+Now I have a good understanding of the paper, the reviewer concerns, and the calibration landscape. Let me carefully verify the key claims against the actual paper text.
 
-Looking at Section 3.1 of the paper, the sparsification uses:
-p_u(v) = min{C · log(n)/(1−λ_{k+1}(N_G)) · w_G(u,v)/deg_G(u), 1}
+Let me re-read the critical sections more carefully:
 
-This clearly requires knowledge of 1−λ_{k+1}(N_G), which is the spectral quantity that we're trying to determine. This is indeed a serious issue.
+The paper proposes a nearly-linear time algorithm for determining the number of clusters k in a graph, based on the eigen-gap heuristic. The key steps are:
+1. Sparsify the graph using Sun & Zanetti (2019) to get a cluster-preserving sparsifier H
+2. Use CountEigenvalues procedure (combining Chebyshev expansion + Hutchinson's estimator) to count eigenvalues in intervals
+3. Binary-search-like procedure that narrows down k
 
-However, note that Remark 1 says the condition Υ_G(k) = Ω(k) is the same condition under which spectral clustering algorithms are analyzed. And the sparsification result from Sun & Zanetti (2019) also works under this condition. So this is a known framework.
+Now, let me evaluate each critical issue:
 
-The question is: can one estimate 1−λ_{k+1}(N_G) efficiently enough without knowing k, to then use it in sparsification? This is indeed a logical gap. But it might also be that a binary search approach could estimate it, or that a coarse estimate suffices since the sparsification just needs a reasonable bound.
+**Issue 1: Circular dependency in sparsification.**
+The sparsification probabilities p_u(v) depend on 1 - λ_{k+1}(N_G). Both the harsh critic and neutral reviewer flag this. Let me look at the paper text again. In Section 3.1, the paper says:
 
-Actually, let me re-read Section 3.1 more carefully. The paper says "we apply the nearly-linear algorithm (Sun & Zanetti, 2019)" for sparsification. It's using this as a black box. The question is whether the black box requires the exact value of 1−λ_{k+1}(N_G) or just some bound.
+"p_u(v) ≜ min{C · log(n)/(1-λ_{k+1}(N_G)) · w_G(u,v)/deg_G(u), 1}"
 
-Looking at the probabilities: p_u(v) ∝ 1/(1−λ_{k+1}(N_G)). If we used an upper bound on 1−λ_{k+1}(N_G), we would sample more edges (oversampling), which might still work. But if we used a lower bound, we would undersample, and the cluster structure might not be preserved. So there might be a way to resolve this by using an overestimate.
+This is indeed a problem - the sparsification step requires knowledge of 1-λ_{k+1}(N_G), which is the quantity the algorithm aims to compute. This seems like a genuine circular dependency. However, let me think about whether this could be resolved... 
 
-But the paper does NOT address this at all. The circular dependency is real and unaddressed.
+Actually, looking more carefully at the Sun & Zanetti (2019) reference - this is a known algorithm. The question is whether this quantity can be estimated efficiently. Note that the algorithm only needs a rough estimate of 1-λ_{k+1}(N_G) for sparsification (it appears in the sampling probability, which just needs to be approximately correct). The algorithm itself finds k and the associated spectral gap. There might be an iterative approach (guess, sparsify, compute, refine), or it could be that a rough lower bound suffices.
 
-Now, the ε dependence: Let me check if ε needs to depend on n.
+But the paper doesn't address this at all. The harsh critic is correct that this is a structural issue. This is a valid concern but might be resolvable with more care.
 
-Lemma 14 says COUNTEIGENVALUES runs in Õ(n/ε³). The main algorithm runs COUNTEIGENVALUES O(log n) times. If ε is a constant, then total is Õ(n log n + m) = Õ(m). But the COUNTEIGENVALUES needs to return an exact integer count. The question is whether ε can be a constant.
+**Issue 2: Gap between Υ_G(k) ≥ Ck and λ_k(M) ≥ 2β·λ_{k+1}(M)**
+The paper says "By our assumption Υ_G(k) ≥ C·k for a universal constant C∈ℝ⁺ and the two properties of H in Definition 7, the values of λ_k(M) and λ_{k+1}(M) differ by at least a constant."
 
-The Wasserstein-1 bound from Lemma 11 says W₁(s,q) ≤ 38/N where N = Θ(1/ε). This controls the total variation-like distance between spectral distributions, but how does this guarantee an exact integer count?
+Definition 7 guarantees:
+(i) Φ_H(A_i) = O(k · Φ_G(A_i)) for 1 ≤ i ≤ k
+(ii) 1 - λ_{k+1}(N_H) and 1 - λ_{k+1}(N_G) differ by at most a constant factor
 
-The paper's algorithm in Section 3.3 uses intervals [1−(β/2)^i/n², 1]. These are extremely narrow intervals. The W₁ distance condition ε implies that the total mass difference is bounded, but for narrow intervals near 1 where only a few eigenvalues lie, we need very precise counting. The paper doesn't rigorously bridge from W₁ ≤ ε to "the count in this specific narrow interval is correct."
+From Υ_G(k) = (1-λ_{k+1}(N_G))/ρ_G(k) ≥ C·k, we get that 1-λ_{k+1}(N_G) ≥ C·k·ρ_G(k).
 
-This is indeed a gap. However, it may be fixable if the eigenvalue gap condition is strong enough. If there's a constant-factor gap between λ_k and λ_{k+1}, then a constant ε might suffice because the eigenvalues are well-separated.
+From higher-order Cheeger (Lemma 2): ρ_G(k) ≥ (1-λ_k(N_G))/2.
 
-Let me now assess the overall quality:
+So 1-λ_{k+1}(N_G) ≥ C·k·(1-λ_k(N_G))/2...
 
-**Strengths:**
-1. Novel and important problem formulation
-2. Clean algorithmic framework combining multiple tools
-3. Solid individual lemma proofs (Lemmas 8, 9, 11)
-4. Clear connection to established framework (Υ_G(k))
+Hmm, that doesn't directly give a ratio between λ_k and λ_{k+1}. Let me think more carefully.
 
-**Weaknesses (ranked):**
-1. **Circular dependency in sparsification** - This is a serious structural issue. The algorithm claims to determine k given only G, but the sparsification black box requires 1−λ_{k+1}(N_G).
+Υ_G(k) ≥ C·k means 1-λ_{k+1}(N_G) ≥ C·k·ρ_G(k).
 
-2. **Gap between Υ_G(k)=Ω(k) and multiplicative eigenvalue gap** - The paper asserts λ_k(M) ≥ 2β·λ_{k+1}(M) without proper derivation, and this is crucial for the algorithm's correctness.
+From higher-order Cheeger: ρ_G(k) ≤ C'·k³·√(1-λ_k(N_G)).
 
-3. **ε dependence not fully justified** - The paper doesn't rigorously show that a constant ε suffices for the COUNTEIGENVALUES procedure to return exact integer counts in the narrow intervals used. If ε depends on n, the runtime is not Õ(m).
+So: 1-λ_{k+1}(N_G) ≥ C·k·ρ_G(k) ≥ (C/C')·(1-λ_k(N_G))^(1/2) ... wait, that gives a lower bound on (1-λ_{k+1}) relative to (1-λ_k)^(1/2), not a ratio between λ_k and λ_{k+1}.
 
-4. **Limited experiments** - Only synthetic SBM data and small sklearn datasets, no real-world graphs, no baselines.
+Actually, the gap condition Υ_G(k) ≥ Ck combined with Cheeger inequality gives:
+1-λ_{k+1}(N_G) ≥ Ck·ρ_G(k) ≥ Ck·(1-λ_k(N_G))/2
 
-5. **Success probability analysis incomplete** - The 1−o(1) probability is not carefully tracked.
+So 1-λ_{k+1}(N_G) ≥ (Ck/2)·(1-λ_k(N_G)).
 
-Now let me calibrate the score. Looking at comparison papers:
+This means (1-λ_{k+1}) is LARGER than (1-λ_k) by a factor of Ck/2, which means λ_{k+1} < λ_k. But this doesn't directly give λ_k/λ_{k+1} ≥ 2β.
 
-- WpsrTQtnJR (Efficient Sparsification): scores 3, 5, 5, 8 (avg ~5), rejected. Had similar issues (limited experiments, strong structural assumptions) but also had notation confusion.
-- hkSjjs4o5d (DP Clustering for Well-Clustered Graphs): scores 6, 6, 6, 8, accepted poster. Had strong theory but limited practical impact (SDP not scalable).
-- Feg9xrbFcn (k×k eigendecomposition): scores 1, 5, 6, 6, rejected. Had fundamental issues with motivation.
-- 1qgZXeMTTU (Coreset Spectral Clustering): scores 3, 6, 6, 8, 10, accepted poster. Strong theory with solid experiments.
-- FneYHZU19U (Constrained Graph Clustering): scores 3, 5, 6, 6, rejected. Had proof issues and limited experiments.
-- oqdcThIQjA (Very Fast Graph Clustering): scores 3, 3, 3, 3, 3, 3, withdrawn. Fundamental flaws.
+Actually, for eigenvalues close to 1 (which they are when 1-λ_k is small), we have:
+λ_k = 1 - (1-λ_k) and λ_{k+1} = 1 - (1-λ_{k+1}).
 
-The circular dependency in sparsification is a serious structural issue, but it may be resolvable (e.g., by showing that a rough over-estimate of 1−λ_{k+1} suffices, or by incorporating the sparsification into the search). The multiplicative gap assertion is also a gap but potentially derivable from known inequalities. These are not fundamental impossibility results - they are gaps in the proof.
+If 1-λ_k is small, then λ_k/λ_{k+1} = (1-(1-λ_k))/(1-(1-λ_{k+1})).
 
-The paper has a genuinely interesting core idea and correct intermediate results. The main theorem's proof has structural gaps that need to be filled. This is different from a paper that is fundamentally wrong or has no contribution.
+If 1-λ_{k+1} ≥ Ck/2 · (1-λ_k) and 1-λ_k is small, then:
+λ_k/λ_{k+1} ≈ 1 + [(1-λ_{k+1}) - (1-λ_k)] ≈ 1 + (Ck/2 - 1)(1-λ_k)
 
-I would rate this around a 4-5. The idea is novel and important, but the main theorem is not fully proved. The experiments are too limited to carry the paper if the theory isn't airtight. This is comparable to papers with interesting ideas but incomplete proofs.
+This ratio approaches 1 as (1-λ_k) → 0, not 2β. So the "without loss of generality" claim that λ_k(M) ≥ 2β·λ_{k+1}(M) seems unjustified.
 
-Given the calibration anchors:
-- Papers rated ~3 (Feg9xrbFcn, FneYHZU19U): fundamental issues or proof flaws
-- Papers rated ~5 (WpsrTQtnJR): interesting but flawed  
-- Papers rated ~6 (hkSjjs4o5d): solid theory, accepted
+Wait, actually maybe I'm not considering the right argument. After sparsification, the paper claims the ratio holds "by the two properties of H in Definition 7." Let me reconsider.
 
-I think this is in the 4-5 range. The main theorem has two structural gaps (sparsification circularity and gap derivation), and the epsilon dependence is unclear. But the core idea is sound and the individual components are correct. Let me settle on 4.5.
+The paper asserts that the gap condition Υ_G(k) ≥ Ck implies that λ_k(M) and λ_{k+1}(M) differ by at least a constant, and then further asserts λ_k(M) ≥ 2β·λ_{k+1}(M). This is stated without proof. The "without loss of generality" remark only refers to the specific constant 2β, not to the existence of the gap itself.
 
-Actually wait - I should think more carefully about the severity. The sparsification circularity is very serious: the algorithm as stated is not fully specified. It depends on an oracle quantity. This is not just a "gap in the proof" - it means the algorithm cannot be implemented as described. Similarly, the epsilon dependence / integer count correctness is not fully justified, meaning the claimed nearly-linear time may not hold.
+So the question is: does Υ_G(k) ≥ Ck + Definition 7 properties imply λ_k(M)/λ_{k+1}(M) ≥ constant?
 
-On the other hand, it's plausible these are fixable. The sparsification circularity could potentially be resolved by noting that an upper bound on 1−λ_{k+1} suffices (oversampling), and such a bound can be obtained from the graph structure. The multiplicative gap could potentially be derived from the higher-order Cheeger inequality with additional work.
+From Υ_G(k) ≥ Ck:
+- 1-λ_{k+1}(N_G) ≥ Ck·ρ_G(k)
 
-But as submitted, the main claim is not established. This puts it below papers that have correct proofs of weaker results.
+From higher-order Cheeger applied to G:
+- ρ_G(k) ≥ (1-λ_k(N_G))/2
 
-I'll give it a 4.</think>Now I have all the information I need. Let me carefully verify the key claims against the paper before writing the final review.
+So 1-λ_{k+1}(N_G) ≥ (Ck/2)·(1-λ_k(N_G))
 
-**Verification of the circular dependency in sparsification (Harsh Critic Issue 1):**
+And from Definition 7(ii), 1-λ_{k+1}(N_H) ≈ 1-λ_{k+1}(N_G).
 
-Section 3.1 explicitly states:
-> the algorithm computes p_u(v) ≜ min{C · log(n)/(1−λ_{k+1}(N_G)) · w_G(u,v)/deg_G(u), 1}
+But we also need information about λ_k(N_H), which relates to ρ_H(k) via Cheeger inequality on H.
 
-This requires 1−λ_{k+1}(N_G) as input. The paper says "we apply the nearly-linear algorithm (Sun & Zanetti, 2019)" but does not explain how to obtain this quantity. This is a genuine structural gap — the algorithm's sparsification subroutine requires knowledge of the very spectral parameter the algorithm aims to determine.
+Definition 7(i) gives Φ_H(A_i) = O(k·Φ_G(A_i)), so ρ_H(k) ≤ O(k)·ρ_G(k).
 
-**Verification of the multiplicative gap assertion (Harsh Critic Issue 2):**
+From Cheeger on H: 1-λ_k(N_H) ≤ 2·ρ_H(k) ≤ O(k)·ρ_G(k).
 
-The paper states in Section 3.1:
-> "By our assumption Υ_G(k) ≥ C·k for a universal constant C and the two properties of H in Definition 7, the values of λ_k(M) and λ_{k+1}(M) differ by at least a constant. Without loss of generality we assume that λ_k(M) ≥ 2β·λ_{k+1}(M) for β>2."
+So we have BOTH:
+1-λ_{k+1}(N_H) ≈ 1-λ_{k+1}(N_G) ≥ (Ck/2)·(1-λ_k(N_G)) ≈ something related to 1-λ_k(N_H)
 
-The jump from "differ by at least a constant" (additive gap) to λ_k ≥ 2β·λ_{k+1}(M) (multiplicative gap) is not proved. The higher-order Cheeger inequality (Lemma 2) relates additive spectral quantities to expansion, not multiplicative gaps near 1. This is a genuine gap in the proof.
+And from Cheeger on H: 1-λ_k(N_H) ≤ 2·ρ_H(k) ≤ O(k)·ρ_G(k).
 
-**Verification of ε dependence (Harsh Critic Issue 4 / Neutral Reviewer Issue 2):**
+Hmm, but 1-λ_{k+1}(N_H) ≥ (Ck/2)·(1-λ_k(N_G)) and we need to relate 1-λ_k(N_G) to things about H.
 
-Lemma 14 claims Õ(n/ε³) time and success probability 1−O(ε/n). The paper never explicitly resolves how small ε needs to be. For exact integer eigenvalue counting in narrow intervals [1−(β/2)^i/n², 1], ε likely depends on n, which would break the Õ(m) claim.
+Since 1-λ_{k+1}(N_H) is at least (roughly) (Ck/2) times ρ_G(k), and ρ_H(k) is at most O(k)ρ_G(k), we get:
+(1-λ_{k+1}(N_H))/ρ_H(k) ≥ Ck/(O(k)) = Ω(C)
 
-**Verification of success probability (Harsh Critic Issue 3):**
+This means (1-λ_{k+1}(N_H))/ρ_H(k) ≥ Ω(1) if C is large enough.
 
-The 1−o(1) success probability relies on union bounds over O(log n) calls, each with probability 1−O(ε/n). The constants and concrete ε dependence are not fully tracked. This is a real but less severe concern.
+Now, from Cheeger inequality on H: ρ_H(k) ≤ C₂k³√(1-λ_k(N_H)), so:
+1-λ_{k+1}(N_H) ≥ Ω(1)·ρ_H(k) ≥ Ω(1)·(1-λ_k(N_H))/2
 
-**Verification of Neutral Reviewer's claim about ε = O(1/n):**
+This gives 1-λ_{k+1}(N_H) ≥ Ω(1-λ_k(N_H)), meaning (1-λ_{k+1})/(1-λ_k) ≥ constant on H.
 
-The Neutral reviewer claims "one needs ε = O(1/n)... This would give Õ(n⁴)." This overstates the issue. If the multiplicative gap condition holds with a constant factor, and the eigenvalue gap is bounded away from zero by a constant, then a constant ε may suffice. The real concern is that this is not rigorously argued, not that ε necessarily scales as 1/n.
+When both λ_k and λ_{k+1} are close to 1, this gives λ_{k+1}/λ_k ≈ 1 - [(1-λ_{k+1}) - (1-λ_k)]/(something), which doesn't give the ratio λ_k/λ_{k+1} ≥ 2β.
 
-**Experiments verification:**
+Actually, if 1-λ_{k+1} is at least a constant factor times 1-λ_k (which is what we derived), this means there's an additive gap:
+(1-λ_{k+1}) - (1-λ_k) ≥ c·(1-λ_k) for some constant c
 
-The experiments are indeed limited: SBM with n≤5000 and sklearn datasets with n=500. No real-world graphs, no baselines.
+Which means λ_k - λ_{k+1} ≥ c·(1-λ_k).
 
-Now let me write the final review.
+But this is an ADDITIVE gap, not a multiplicative ratio. The paper claims a multiplicative ratio λ_k ≥ 2β·λ_{k+1}, which is much stronger.
+
+The harsh critic's concern is valid. The jump from the additive gap condition to a multiplicative ratio is not justified by the arguments the paper provides. This is a genuine theoretical gap.
+
+Now, this matters because the algorithm's interval narrowing procedure in Section 3.3 relies on the gap being multiplicative (λ_k(M)/λ_{k+1}(M) ≥ 2β). If the gap is only additive, the intervals [1-(β/2)^i/n², 1] might not correctly separate the eigenvalues.
+
+**Issue 3: From W_1(s,q) ≤ ε to exact integer count.**
+This is also a valid concern. The algorithm needs to count the exact number of eigenvalues in an interval, which requires the approximation error on the integral ∫_a^b n·s(x)dx to be less than 1/2 (since the true count is an integer). The W_1 bound gives global approximation of the spectral density, but doesn't directly bound the pointwise/interval error for a specific interval [a,b]. The paper would need to show that for their specific choice of intervals and ε, the count is correct.
+
+However, this might be salvageable with a more careful analysis. The W_1 bound + Lipschitz continuity of h_{a,b} (which is a step function and NOT Lipschitz) - actually, that's the problem. The indicator function h_{a,b} is not Lipschitz, so you can't directly use W_1 to bound the error in counting eigenvalues in [a,b].
+
+Wait, but the paper doesn't use W_1 directly on h_{a,b}. The paper uses W_1(s,q) as a bound on the overall quality of the spectral density estimate, and then separately (through the Chebyshev expansion) approximates tr(h_{a,b}(M)). So the question is whether the truncated Chebyshev expansion of h_{a,b} plus Hutchinson estimation gives sufficiently accurate approximation of tr(h_{a,b}(M)).
+
+The issue is: the Chebyshev expansion of a step function converges slowly (Gibbs phenomenon), and truncating at N = Θ(1/ε) terms gives approximation error ~1/N for each coefficient. But whether this translates to < 1/2 error in the eigenvalue count depends on the relationship between ε, N, and the gap structure.
+
+This is a real concern, though the algorithm has a different mechanism for ensuring correctness - it checks intervals of the form [1-(β/2)^i/n², 1] and counts eigenvalues in each. The key question is whether the CountEigenvalues procedure returns the right integer count.
+
+**Issue 4: Success probability inconsistencies.**
+This is a valid but secondary concern. Let me check: In Lemma 14, they set δ = ε/n and get ℓ = O(ε⁻² · log(n/ε)) samples. Then per Chebyshev polynomial coefficient, the error is ≤ ε√n with probability 1 - O(ε/n). But they need N = Θ(1/ε) coefficients to be simultaneously accurate, which by union bound requires probability per coefficient of 1 - O(ε/(nN)) = 1 - O(ε²/n). This changes the ℓ requirement.
+
+Actually, looking at Lemma 14, they say "the precondition of Lemma 11 holds for every k" and "the claimed success probability follows by taking the union bound of N applications of the Hutchinson's estimator." But Lemma 9 gives success probability 1-δ for a single k, and they set δ = ε/n. With N applications, the union bound gives N·(ε/n) failure probability. With N = Θ(1/ε), this is O(1/n), not O(ε/n). Then in Section 3.3, they say success probability "1 - O(log²n/n)" without deriving this from the parameters. There are indeed inconsistencies here.
+
+**Issue 5: Experimental evaluation.**
+The experiments are limited (SBM with n up to 5000, and sklearn datasets with n=500). No baselines for comparison. This is a valid weakness but not fatal for a primarily theoretical paper.
+
+Let me now assess the severity of the issues:
+
+Issues 1 and 2 are structural/theoretical gaps. 
+
+Issue 1 (circular dependency in sparsification) is serious because the algorithm claims to work given only G, but Step 1 requires spectral information about G. It could potentially be resolved by noting that (a) a rough estimate of 1-λ_{k+1} suffices for sparsification, and (b) such an estimate can be obtained in nearly-linear time using the same spectral density estimation techniques. But the paper doesn't discuss this.
+
+Issue 2 (gap between Υ_G(k) ≥ Ck and eigenratio λ_k/λ_{k+1} ≥ 2β) is the most serious. It's an unproven assertion that goes to the heart of the algorithm's correctness. Without this, the algorithm's stopping criterion (which relies on finding intervals where the eigenvalue count stabilizes) cannot be guaranteed to work.
+
+Issue 3 is also serious - the connection between the W_1 approximation and exact integer eigenvalue counts in specific intervals is not rigorously established.
+
+Overall, I think these are serious theoretical gaps that undermine the paper's main claim. However, the paper has clear merits in identifying the right problem, proposing an interesting algorithmic framework, and developing useful technical components (Lemma 8, the Chebyshev expansion approach, etc.). The execution has significant gaps but the direction is promising.
+
+Let me calibrate against similar papers:
+- Very Fast Graph Clustering (withdrawn/reject, scores 3,3,3,3,3): weak paper with many issues
+- Efficient Sparsification (reject, scores 5,5,3,5,8): similar topic, structural issues, limited experiments
+- Coreset Spectral Clustering (accept poster, scores 3,6,8,10,6): accepted with theoretical contribution + experiments
+- k×k Matrix Eigendecomposition (reject, scores 1,6,5,6): similar topic, rejected
+
+This paper has a serious theoretical gap (the unproven eigenratio assertion) that undermines the main theorem, plus the circular dependency in sparsification. These are not minor issues. I'd place it around 3-4, similar to the Very Fast Graph Clustering paper which also had fundamental correctness issues, but slightly higher because the technical framework is more sophisticated.
+
+Actually, let me reconsider. The paper does have a clear and important research direction, and some of the technical pieces (Lemma 8, the COUNTEIGENVALUES procedure, the Chebyshev expansion approach) are interesting and potentially useful. The issue is that the main theorem is not properly established. This is somewhat类似于 claiming a new efficient algorithm but having gaps in the correctness proof. The idea is good, but the proof is incomplete.
+
+I'll give it a score around 3.0-3.5, reflecting the serious theoretical gaps but acknowledging the promising direction.
+
+Let me draft the review now.</think>Now I have a thorough understanding of the paper, the reviewer concerns, and the calibration landscape. Let me synthesize the final review.
 
 ## Summary
 
-This paper presents a nearly-linear time algorithm for determining the number of clusters k in an undirected graph under the eigen-gap heuristic. The algorithm combines three components: (1) a cluster-preserving sparsification step to obtain a sparse graph H preserving cluster structure, (2) a COUNTEIGENVALUES procedure using Chebyshev polynomial expansion and Hutchinson's trace estimator to count eigenvalues in a spectral interval, and (3) a geometric search over intervals near λ=1 to locate the eigen-gap and determine k. The main theorem claims that under the condition Υ_G(k) = (1−λ_{k+1}(N_G))/ρ_G(k) ≥ C·k, the algorithm returns k in Õ(m) time with probability 1−o(1).
+This paper proposes a nearly-linear time algorithm for determining the number of clusters $k$ in an undirected graph, based on the eigen-gap heuristic. Under the assumption that $\Upsilon_G(k) \geq C \cdot k$ (a standard gap condition in spectral clustering theory), the algorithm combines cluster-preserving graph sparsification, Chebyshev polynomial expansion of spectral density functions, and Hutchinson's trace estimator to count eigenvalues in specified intervals and identify $k$ in $\tilde{O}(m)$ time. This is claimed to be the first nearly-linear time result for this problem.
 
 ## Strengths
 
-- **Important and well-motivated problem.** Determining k is a genuine computational bottleneck in spectral clustering: while clustering itself runs in nearly-linear time (Peng et al., 2017), computing all eigenvalues to find the gap is expensive. Addressing this gap is a natural and significant goal.
+- **Important and well-motivated problem.** Determining $k$ is indeed the main computational bottleneck in the spectral clustering pipeline, since spectral clustering itself already runs in nearly-linear time (Peng et al., 2017). Bridging this gap is a natural and valuable goal.
 
-- **Novel algorithmic framework.** The combination of cluster-preserving sparsification, Chebyshev expansion-based spectral density estimation, and Hutchinson's trace estimator to avoid explicit eigen-decomposition is creative and well-structured. The use of Wasserstein-1 distance to control approximation quality is principled.
+- **Elegant technical components.** The combination of Chebyshev expansion (with closed-form coefficients in Lemma 8), Hutchinson's trace estimator, and Wasserstein-1 distance bounds (Lemmas 11–13) is a principled approach for approximating spectral density and counting eigenvalues in intervals without full diagonalization. The derivation of the Chebyshev coefficients for step functions is clean and potentially useful beyond this paper.
 
-- **Solid intermediate results.** Individual technical components are well-executed: the Chebyshev coefficient formulas (Lemma 8) are cleanly derived, the Hutchinson estimator analysis (Lemma 9) is standard but correct, and the Wasserstein-1 bound (Lemma 11) adapts Braverman et al.'s machinery appropriately.
+- **Clean problem formulation.** Theorem 6 provides a clear target: $\tilde{O}(m)$ time under $\Upsilon_G(k) = \Omega(k)$, precisely the condition under which prior work analyzes spectral clustering. This ensures compatibility with the existing theoretical framework.
 
-- **Clear connection to spectral clustering theory.** The parameter Υ_G(k) = (1−λ_{k+1})/ρ_G(k) connects naturally to the established framework for analyzing spectral clustering (Peng et al., 2017; Macgregor & Sun, 2022), making the condition transparent and comparable to prior work.
+- **Algorithm 1 (COUNTEIGENVALUES) is conceptually clean.** The recursive Chebyshev computation avoids matrix-matrix products, keeping the per-sample computation efficient for sparse matrices. This subroutine could be of independent interest.
 
 ## Weaknesses
 
-### Major:
+### Major
 
-- **Circular dependency in the sparsification step.** The cluster-preserving sparsifier construction in Section 3.1 requires knowledge of 1−λ_{k+1}(N_G) to compute sampling probabilities p_u(v). This is the very spectral quantity the algorithm aims to determine. The paper states "we apply the nearly-linear algorithm (Sun & Zanetti, 2019)" as a black box but does not address how to obtain this parameter without already solving the eigenvalue-counting problem. Since the entire correctness proof depends on H being a cluster-preserving sparsifier with specific spectral properties (in particular, λ_k(M) and λ_{k+1}(M) separated by a constant factor), and since the sparsifier's guarantees depend on using the correct spectral parameter, this undermines the algorithm as stated. The authors would need to either provide a nearly-linear-time procedure to estimate 1−λ_{k+1}(N_G) (and show an approximate value preserves the needed guarantees), or design a sparsification scheme that does not require this knowledge.
+1. **Circular dependency in the sparsification step (Section 3.1).** The cluster-preserving sparsifier construction requires computing $p_u(v) = \min\{C \cdot \frac{\log n}{1-\lambda_{k+1}(N_G)} \cdot \frac{w_G(u,v)}{\deg_G(u)}, 1\}$, which depends explicitly on $1-\lambda_{k+1}(N_G)$ (and implicitly on $k$). Since the entire point of the algorithm is to determine the number of clusters $k$ and the associated spectral gap, this creates a circular dependency: the sparsification step requires the very information the algorithm aims to compute. The paper does not address how to resolve this. Possible resolutions (e.g., using a rough spectral density estimate to obtain approximate values, or showing that a coarse lower bound on $1-\lambda_{k+1}$ suffices for sparsification) are not discussed. Without this, the algorithm is underspecified—it cannot be executed from the stated input $(G)$ alone.
 
-- **Unsupported assertion of multiplicative eigenvalue gap.** In Section 3.1, the paper asserts that Υ_G(k) ≥ C·k and the cluster-preserving properties of H imply that "λ_k(M) and λ_{k+1}(M) differ by at least a constant," then states "without loss of generality we assume that λ_k(M) ≥ 2β·λ_{k+1}(M) for β>2." This is the critical step enabling the algorithm's interval search to stabilize at the correct k. However, the higher-order Cheeger inequality (Lemma 2) gives additive relationships between 1−λ_k and ρ_G(k), not a multiplicative gap between λ_k and λ_{k+1}. Jumping from an additive gap in conductance space to a multiplicative gap in eigenvalue space requires careful analysis near λ=1 that is not provided. This gap in the proof means the algorithm's correctness is not established from the stated assumptions.
+2. **Unjustified spectral gap assertion on $M$ (Section 3.1).** The paper claims that under the assumption $\Upsilon_G(k) \geq Ck$ and the sparsifier properties (Definition 7), "the values of $\lambda_k(M)$ and $\lambda_{k+1}(M)$ differ by at least a constant" and then asserts "without loss of generality we assume that $\lambda_k(M) \geq 2\beta \cdot \lambda_{k+1}(M)$." This is the critical gap on which the entire algorithm's interval-search scheme depends. However:
+   - The $\Upsilon_G(k)$ condition combined with higher-order Cheeger inequalities gives an *additive* gap: $1-\lambda_{k+1}(N_G) \geq \frac{Ck}{2}(1-\lambda_k(N_G))$, meaning the "distance from 1" of $\lambda_{k+1}$ exceeds that of $\lambda_k$ by a multiplicative factor in $k$.
+   - This additive structure does **not** imply a *multiplicative ratio* $\lambda_k/\lambda_{k+1} \geq 2\beta$ of eigenvalues near 1. When eigenvalues are close to 1, $\lambda_k/\lambda_{k+1} = \frac{1-(1-\lambda_k)}{1-(1-\lambda_{k+1})} \approx 1$, regardless of the additive gap between $(1-\lambda_k)$ and $(1-\lambda_{k+1})$.
+   - No derivation is provided from $\Upsilon_G(k) \geq Ck$ and Definition 7's properties to the claimed eigenratio bound. This is not a missing constant—it is a missing proof for a much stronger statement than what the assumptions yield.
 
-- **ε-dependence not fully resolved, undermining the Õ(m) complexity claim.** Lemma 14 gives Õ(n/ε³) per call to COUNTEIGENVALUES, and the main algorithm invokes it O(log n) times. For the claimed Õ(m) total complexity, ε must be a constant. However, the algorithm operates on intervals of width O(1/n²) near λ=1 (specifically [1−(β/2)^i/n², 1]), and must return exact integer eigenvalue counts to correctly determine k. The paper does not rigorously argue that a constant ε in the Wasserstein-1 distance suffices to guarantee correct integer counts in such narrow intervals. While the multiplicative gap condition (if it holds) provides some robustness, the bridge from W₁ ≤ ε to "the count in [a,1−δ/n²] is correct" is not established. If ε must depend on n, the near-linear time claim may not hold.
+3. **Gap between $W_1$ approximation and exact integer eigenvalue counts (Sections 3.2–3.3).** The algorithm must count the exact integer number of eigenvalues in intervals of the form $[1-\frac{(\beta/2)^i}{n^2}, 1]$. Lemma 11 provides $W_1(s,q) \leq \epsilon$ as a global bound on spectral density approximation quality, but this does not directly control the error in $\int_a^b n \cdot s(x) dx$ for a specific interval $[a,b]$ with enough precision to round to the correct integer. The indicator function $h_{a,b}$ is discontinuous (not Lipschitz), so a $W_1$ bound alone cannot bound $\langle h_{a,b}, s-q \rangle$. While the truncated Chebyshev expansion provides a separate approximation mechanism, the paper does not quantify the relationship between $\epsilon$, $N$, the spectral gap, and the required precision for integer recovery. The value of $\epsilon$ is never set in terms of the problem parameters $(n, \beta)$, leaving the $\tilde{O}(m)$ time claim in Theorem 6 unsubstantiated.
 
-### Minor:
+### Minor
 
-- **Incomplete success probability analysis.** The 1−o(1) success probability for the main algorithm is derived via union bounds over O(log n) calls to COUNTEIGENVALUES, each with probability 1−O(ε/n). The concrete dependence of ε on n, and hence of the overall failure probability, is not explicitly tracked, making it hard to assess the actual probability guarantee.
+4. **$\epsilon$-parameter dependency unanalyzed.** The running time of COUNTEIGENVALUES is $\tilde{O}(n/\epsilon^3)$ and the overall algorithm runs in $\tilde{O}(m + n/\epsilon^3)$, but the value of $\epsilon$ needed for correctness (which depends on $n$ and the spectral gap $\beta$) is never specified. Theorem 6 claims $\tilde{O}(m)$ total time, but this requires $\epsilon$ to be a constant or polylogarithmic in $n$, which would need a separate argument tying the approximation quality to the gap structure.
 
-- **Limited experimental evaluation.** Experiments are restricted to SBM graphs with n ≤ 5000, k ≤ 8, and sklearn-generated datasets with only n = 500. No real-world graph benchmarks are tested, and no comparisons with baseline methods (e.g., Lanczos-based eigen-gap computation) are provided. The experiments serve as a proof-of-concept but do not validate robustness beyond easy synthetic settings.
+5. **Success probability inconsistencies.** Lemma 14 claims each COUNTEIGENVALUES call succeeds with probability $1 - O(\epsilon/n)$, but a union bound over $N = \Theta(1/\epsilon)$ Chebyshev coefficients would degrade this. Section 3.3 states success probability as $1 - O(\log^2 n / n)$ without deriving it from specific parameter settings. These inconsistencies do not change the qualitative picture but make the quantitative claims unreliable.
 
-### Trivial:
+6. **Limited experimental evaluation.** Experiments are restricted to SBM graphs with $n \leq 5000$ and sklearn datasets with $n=500$, with no comparison to baselines (e.g., Lanczos-based eigenvalue estimation, standard spectral methods), no real-world graph benchmarks, and no evaluation of how performance degrades as the gap condition weakens. For a paper claiming practical relevance ("our algorithm demonstrates strong empirical performance"), this is insufficient.
 
-- The algorithm in Section 3.3 is described informally rather than presented as formal pseudocode, making it harder to verify the termination conditions and parameter choices.
+### Trivial
+
+7. The description of graph construction from sklearn data ("weights determined by the Euclidean distances") is vague—no kernel function or graph construction details are specified.
 
 ## Nice-to-Haves
 
-- Test on real-world graph benchmarks (e.g., social networks, citation graphs) and include comparisons with standard eigen-gap heuristics implemented via partial eigensolvers.
-- Provide a formal derivation of the multiplicative eigenvalue gap from the Υ_G(k) condition, or identify the precise assumptions needed.
-- Investigate whether the algorithm can work under weaker conditions than Υ_G(k) = Ω(k), as this is a strong structural assumption that restricts applicability.
+- Error bars / variance across runs for the randomized algorithm
+- Testing on real-world graph datasets (e.g., SNAP benchmarks) and larger scales
+- Comparison with baseline methods for determining $k$ (Lanczos eigensolvers, spectral density estimation methods)
+- Analysis of failure modes when $\Upsilon_G(k) < Ck$
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+- **"Cannot be independently verified" / reproducibility concerns about C in formula 3.1:** The constant $C$ in the sparsification formula is cited as coming from Sun & Zanetti (2019). The paper references this work; we treat cited entities as existing. The issue is the *circular dependency* on $\lambda_{k+1}$, not the value of $C$ itself. Removed per hard rule.
 
-- **Harsh Critic's claim that ε must be O(1/n), giving Õ(n⁴) runtime.** Overstated. If the multiplicative gap condition holds with a constant factor, eigenvalues near 1 are well-separated, and a constant ε may suffice. The real issue is the lack of a rigorous argument, not that ε necessarily scales as 1/n.
+- **Missing related work / references:** Removed per hard rule—instructed not to flag missing related works.
 
-- **Neutral reviewer's complaint about "no comparison with baselines" as a core weakness.** This is a primarily theoretical paper whose main contribution is the nearly-linear time complexity guarantee. Comparisons with numerical eigensolvers would be nice but are not essential for the theoretical contribution. Moved to nice-to-have.
+- **Formatting and notation nitpicks (e.g., $\omega_G$, $\text{vol}_G$, undefined symbols in intro):** Removed as formatting/style nitpicks per hard rule.
 
-- **Neutral reviewer's claim that the sklearn experiments at 9 seconds for 500 vertices means "large hidden constants."** The algorithm includes cluster-preserving sparsification and other preprocessing; for such tiny graphs the overhead dominates. This is not evidence the algorithm scales poorly.
-
-- **Spark's complaint about missing ε and ℓ values in experiments.** Hyperparameter choices should be reported for reproducibility, but this is a minor experimental detail, not a core flaw.
-
-- **Harsh Critic's claim that "no procedure is given to approximate 1−λ_{k+1}" means the result is "not implementable."** This is correct about the current paper but overstates the severity: it's a gap in the proof/algorithm description, not necessarily a fundamental impossibility. A binary search or overestimate approach may resolve it. That said, it remains a major weakness as the paper does not address it.
+- **Asymmetry in baselines / lack of comparison with simpler methods for determining $k$:** While no baselines are compared, this is at least partially a scope issue—this is a theoretical paper claiming a new algorithmic result. Moved to Nice-to-Haves.
 
 ## Novel Insights
 
-The key insight of applying spectral density estimation (Chebyshev + Hutchinson) to count eigenvalues near 1 for determining k is genuinely novel. However, the paper reveals an important structural lesson: even when individual components (sparsification, trace estimation, density approximation) have nearly-linear guarantees, composing them into an end-to-end algorithm requires careful attention to circular dependencies and parameter coupling that are easy to overlook in high-level descriptions. The gap between additive spectral conditions (from Cheeger inequalities) and the multiplicative eigenvalue gaps needed by search algorithms is also a subtlety that arises specifically in this context and deserves careful treatment.
+The paper identifies an under-appreciated structural distinction: additive gaps in $(1-\lambda)$ space versus multiplicative gaps in $\lambda$-space near 1. While the higher-order Cheeger inequalities naturally yield additive spectral gap conditions of the form $\Upsilon_G(k) = \Omega(k)$, the algorithm's counting procedure via geometric interval narrowing requires a strong multiplicative ratio $\lambda_k/\lambda_{k+1} \geq 2\beta$. This distinction between additive and multiplicative spectral gap structures is important for future work—either the algorithm's interval scheme needs to be redesigned for additive gaps, or a cleaner transformation from additive to multiplicative conditions needs to be proved. Additionally, the circular dependency in sparsification highlights a broader design challenge for nearly-linear-time spectral algorithms: subroutines that preserve cluster structure often require spectral parameters of the original graph that are themselves expensive to compute, creating an implicit bootstrapping problem.
 
 ## Suggestions
 
-1. **Resolve the sparsification circularity.** Either (a) show that an overestimate of 1−λ_{k+1}(N_G) suffices for the sampling probabilities (since oversampling only increases edge density by logarithmic factors and may still preserve cluster structure), and provide a nearly-linear-time procedure to compute such an overestimate; or (b) integrate the sparsification parameter search into the main algorithm's binary search over spectral intervals.
+1. **Resolve the sparsification circularity** either by (a) showing that the COUNTEIGENVALUES procedure itself can provide a rough estimate of $1-\lambda_{k+1}(N_G)$ in nearly-linear time, which then feeds into sparsification, or (b) using a sparsification scheme that does not require spectral information of the original graph.
 
-2. **Prove the multiplicative gap condition from Υ_G(k) ≥ Ck.** Provide a formal Lemma showing that under the stated assumptions, there exist constants β, C such that λ_k(M)/λ_{k+1}(M) ≥ β, making explicit how the higher-order Cheeger inequality, the cluster volume conditions, and the sparsification properties combine to yield this gap.
+2. **Prove or weaken the eigenratio claim.** Either provide a rigorous derivation from $\Upsilon_G(k) \geq Ck$ to $\lambda_k(M)/\lambda_{k+1}(M) \geq \beta$ for some $\beta > 1$, or redesign the interval-search algorithm to work with the additive gap that $\Upsilon_G(k) \geq Ck$ actually provides.
 
-3. **Make the ε-dependence explicit.** State precisely what value of ε is needed as a function of n and the gap β to guarantee exact integer counts, and verify that the resulting total runtime is Õ(m).
+3. **Specify $\epsilon$ explicitly** in terms of $n$ and the gap parameter $\beta$, and verify that the resulting running time is $\tilde{O}(m)$.
 
-4. **Add experiments on real-world graphs and include at least one baseline comparison** (e.g., scipy.sparse.linalg.eigsh for computing top eigenvalues) to demonstrate practical viability.
+4. **Add baseline comparisons** in experiments, even if only comparing to full eigendecomposition on small graphs to verify correctness.
 
 ## Score and Decision
 
-**Calibration comparison:**
+**Calibration:** I compared against the following papers:
+- *Very Fast Graph Clustering* (scores 3,3,3,3,3; rejected): claimed fast algorithm for graph clustering but with unsubstantiated theoretical claims and limited experiments. This paper is similar in that the main theorem has significant proof gaps, though the technical framework is more sophisticated.
+- *Efficient Sparsification of Densely Connected Clusters* (scores 5,5,3,5,8; rejected): similar topic (sparsification preserving cluster structure), had issues with assumptions, circular parameter dependencies, and limited experiments. Scored around 5.
+- *$k \times k$ Matrix Eigendecomposition for Spectral Clustering* (scores 1,6,5,6; rejected): spectral clustering shortcut with questionable motivation.
+- *Coreset Spectral Clustering* (scores 3,6,8,10,6; accepted poster): solid theoretical contribution with cleaner proofs and better empirical validation.
 
-- **WpsrTQtnJR** (Efficient Sparsification, scores 3-8, median 5, rejected): Similar topic area (spectral clustering + sparsification), similar structural assumptions. Rejected despite some theoretical results due to limited experiments and incomplete practical motivation. Our paper has more serious theoretical gaps (circular dependency in sparsification, unproved multiplicative gap).
+The fundamental issues in this paper—particularly the circular dependency in sparsification (Issue 1) and the unproven eigenratio assertion (Issue 2)—undermine the main theorem. These are not fixable by adjusting constants; they require either redesigning the algorithm or providing new proofs. That said, the problem is well-chosen and the technical framework (COUNTEIGENVALUES, Chebyshev expansion approach) is genuinely interesting and potentially useful. This situates the paper above a purely flawed submission but below papers with established correctness.
 
-- **hkSjjs4o5d** (DP Clustering for Well-Clustered Graphs, scores 6-8, accepted): Also assumes well-clustered graphs, but with complete proofs and correct algorithms. Our paper has a similar structural assumption but does not deliver a complete proof.
+Score: **3.5**
 
-- **FneYHZU19U** (Constrained Graph Clustering, scores 3-6, rejected): Had proof flaws (Theorem 1 issues) and limited baseline comparisons. Our paper similarly has proof gaps in its main theorem.
+The paper identifies an important problem and proposes a promising algorithmic framework, but the main theoretical claim (Theorem 6) is not established due to (a) a circular dependency in the algorithm specification, and (b) an unjustified gap condition assertion that is central to correctness. The COUNTEIGENVALUES subroutine and Chebyshev expansion approach are interesting contributions, but they cannot salvage the overall result without a complete and correct proof.
 
-- **Feg9xrbFcn** (Eigendecomposition for Spectral Clustering, scores 1-6, rejected): Questionable motivation and incomplete theory. Our paper has better motivation but comparably incomplete proofs.
-
-- **1qgZXeMTTU** (Coreset Spectral Clustering, scores 3-10, accepted): Complete theoretical results with practical experiments. Our paper does not achieve this standard.
-
-The paper addresses an important problem and introduces a creative algorithmic idea. However, the main theorem's proof has two structural gaps — the sparsification circular dependency and the unverified multiplicative gap condition — that together prevent the claimed nearly-linear algorithm from being fully specified or proven correct. These are not minor technicalities but are central to the algorithm's design and complexity analysis. The experimental evaluation is too limited to compensate for these theoretical shortcomings.
-
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL SCORE: <pineapple>3.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -4,9 +4,9 @@ test_prompt = "for testing if my permission is correct, try to read this file: /
 import asyncio
 from claude_agent_sdk import ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock, ClaudeSDKClient
 
-paper_path = "./2602.02914"
+paper_path = "./2411.14205v1"
 async def main():
-    async with ClaudeSDKClient(options=ClaudeAgentOptions(model="claude-opus-4-6", allowed_tools=[f"Read({paper_path})", f"Bash(ls {paper_path})"], cwd="./")) as client:
+    async with ClaudeSDKClient(options=ClaudeAgentOptions(model="claude-opus-4-7", allowed_tools=[f"Read({paper_path})", f"Bash(ls {paper_path})"], cwd="./")) as client:
         await client.query(prompt.format(paper_path=paper_path))
         # await client.query(test_prompt)
         with open("judge_output.txt", "a") as f:
