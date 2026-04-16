@@ -89,25 +89,24 @@ def auroc_ci(auroc, n_pos, n_neg, confidence=0.95):
     return (float(np.clip(auroc - z_crit * se, 0, 1)), float(np.clip(auroc + z_crit * se, 0, 1)))
 
 
-def corr_diff_ci(r1, r2, n1, n2, confidence=0.95):
-    """Zou (2007) asymmetric CI for the difference between two independent Pearson/Spearman correlations."""
-    z1 = np.arctanh(np.clip(r1, -0.9999, 0.9999))
-    z2 = np.arctanh(np.clip(r2, -0.9999, 0.9999))
-    z_crit = stats.norm.ppf((1 + confidence) / 2)
-    se1 = 1.0 / np.sqrt(n1 - 3)
-    se2 = 1.0 / np.sqrt(n2 - 3)
-    diff_z = z1 - z2
-    margin = z_crit * np.sqrt(se1 ** 2 + se2 ** 2)
-    lo = np.tanh(diff_z - margin)
-    hi = np.tanh(diff_z + margin)
-    return (float(lo), float(hi))
+def paired_bootstrap_ci(values, confidence=0.95):
+    alpha = 1 - confidence
+    return (
+        float(np.quantile(values, alpha / 2)),
+        float(np.quantile(values, 1 - alpha / 2)),
+    )
 
 
-def ai_vs_one_vs_rest(df, gt_score_cols, confidence=0.95):
-    """Compare AI vs human one-vs-rest using analytic CIs (Zou 2007 for correlation diff)."""
+def paired_bootstrap_pvalue(values):
+    non_positive = np.mean(values <= 0)
+    non_negative = np.mean(values >= 0)
+    return float(min(1.0, 2 * min(non_positive, non_negative)))
+
+
+def ai_vs_one_vs_rest(df, gt_score_cols, confidence=0.95, n_boot=5000, seed=0):
+    """Compare AI vs human one-vs-rest with paired paper-level bootstrap."""
     pred = df["pred_score"].to_numpy(dtype=float)
     gt_avg = df["gt_avg_score"].to_numpy(dtype=float)
-    n_ai = len(pred)
 
     one_vs_rest = one_vs_rest_baseline(df, gt_score_cols)
     if one_vs_rest is None:
@@ -121,39 +120,70 @@ def ai_vs_one_vs_rest(df, gt_score_cols, confidence=0.95):
     human_spearman = float(stats.spearmanr(rest_means, heldout_scores).statistic)
     ai_pearson = float(stats.pearsonr(pred, gt_avg).statistic)
     human_pearson = float(stats.pearsonr(rest_means, heldout_scores).statistic)
+    ai_mae = float(np.mean(np.abs(pred - gt_avg)))
+    human_mae = float(np.mean(np.abs(rest_means - heldout_scores)))
+    ai_fit = stats.linregress(gt_avg, pred)
+    human_fit = stats.linregress(heldout_scores, rest_means)
 
-    spearman_diff = ai_spearman - human_spearman
-    pearson_diff = ai_pearson - human_pearson
+    delta_samples = {
+        "spearman": [],
+        "pearson": [],
+        "mae": [],
+        "slope": [],
+        "intercept": [],
+    }
+    rng = np.random.default_rng(seed)
 
-    spearman_ci_val = corr_diff_ci(ai_spearman, human_spearman, n_ai, n_human, confidence)
-    pearson_ci_val = corr_diff_ci(ai_pearson, human_pearson, n_ai, n_human, confidence)
+    for _ in range(n_boot):
+        sample_idx = rng.integers(0, len(df), len(df))
+        boot_df = df.iloc[sample_idx].reset_index(drop=True)
+        boot_pred = boot_df["pred_score"].to_numpy(dtype=float)
+        boot_gt_avg = boot_df["gt_avg_score"].to_numpy(dtype=float)
+        boot_human = one_vs_rest_baseline(boot_df, gt_score_cols)
+        if boot_human is None:
+            raise RuntimeError("paired bootstrap produced a sample without enough human one-vs-rest pairs")
 
-    # Two-sided p-value: test H0: rho_AI == rho_human using z-test on Fisher-transformed difference
-    z_ai_sp = np.arctanh(np.clip(ai_spearman, -0.9999, 0.9999))
-    z_hu_sp = np.arctanh(np.clip(human_spearman, -0.9999, 0.9999))
-    se_sp = np.sqrt(1 / (n_ai - 3) + 1 / (n_human - 3))
-    z_stat_sp = (z_ai_sp - z_hu_sp) / se_sp
-    p_spearman = float(2 * stats.norm.sf(abs(z_stat_sp)))
+        boot_rest_means = np.asarray(boot_human["rest_means"], dtype=float)
+        boot_heldout_scores = np.asarray(boot_human["heldout_scores"], dtype=float)
+        boot_ai_fit = stats.linregress(boot_gt_avg, boot_pred)
+        boot_human_fit = stats.linregress(boot_heldout_scores, boot_rest_means)
 
-    z_ai_pe = np.arctanh(np.clip(ai_pearson, -0.9999, 0.9999))
-    z_hu_pe = np.arctanh(np.clip(human_pearson, -0.9999, 0.9999))
-    se_pe = np.sqrt(1 / (n_ai - 3) + 1 / (n_human - 3))
-    z_stat_pe = (z_ai_pe - z_hu_pe) / se_pe
-    p_pearson = float(2 * stats.norm.sf(abs(z_stat_pe)))
+        delta_samples["spearman"].append(
+            float(stats.spearmanr(boot_pred, boot_gt_avg).statistic - stats.spearmanr(boot_rest_means, boot_heldout_scores).statistic)
+        )
+        delta_samples["pearson"].append(
+            float(stats.pearsonr(boot_pred, boot_gt_avg).statistic - stats.pearsonr(boot_rest_means, boot_heldout_scores).statistic)
+        )
+        delta_samples["mae"].append(
+            float(np.mean(np.abs(boot_pred - boot_gt_avg)) - np.mean(np.abs(boot_rest_means - boot_heldout_scores)))
+        )
+        delta_samples["slope"].append(float(boot_ai_fit.slope - boot_human_fit.slope))
+        delta_samples["intercept"].append(float(boot_ai_fit.intercept - boot_human_fit.intercept))
 
     return {
-        "spearman_diff": spearman_diff,
-        "spearman_ci": spearman_ci_val,
-        "spearman_p": p_spearman,
-        "pearson_diff": pearson_diff,
-        "pearson_ci": pearson_ci_val,
-        "pearson_p": p_pearson,
+        "spearman_diff": ai_spearman - human_spearman,
+        "spearman_ci": paired_bootstrap_ci(delta_samples["spearman"], confidence),
+        "spearman_p": paired_bootstrap_pvalue(delta_samples["spearman"]),
+        "pearson_diff": ai_pearson - human_pearson,
+        "pearson_ci": paired_bootstrap_ci(delta_samples["pearson"], confidence),
+        "pearson_p": paired_bootstrap_pvalue(delta_samples["pearson"]),
+        "mae_diff": ai_mae - human_mae,
+        "mae_ci": paired_bootstrap_ci(delta_samples["mae"], confidence),
+        "mae_p": paired_bootstrap_pvalue(delta_samples["mae"]),
+        "slope_diff": float(ai_fit.slope - human_fit.slope),
+        "slope_ci": paired_bootstrap_ci(delta_samples["slope"], confidence),
+        "slope_p": paired_bootstrap_pvalue(delta_samples["slope"]),
+        "intercept_diff": float(ai_fit.intercept - human_fit.intercept),
+        "intercept_ci": paired_bootstrap_ci(delta_samples["intercept"], confidence),
+        "intercept_p": paired_bootstrap_pvalue(delta_samples["intercept"]),
+        "n_boot": n_boot,
     }
 
 
 def split_half_baseline(df, gt_score_cols):
     """Estimate human reliability via all unique split-half partitions per paper."""
     half_a, half_b = [], []
+    paper_decisions = []
 
     for _, row in df.iterrows():
         scores = [float(row[c]) for c in gt_score_cols if pd.notna(row[c])]
@@ -169,6 +199,7 @@ def split_half_baseline(df, gt_score_cols):
             right = [scores[i] for i in indices if i not in combo]
             half_a.append(float(np.mean(left)))
             half_b.append(float(np.mean(right)))
+            paper_decisions.append(row["gt_binary"].strip().lower())
 
     if len(half_a) < 2:
         return None
@@ -186,6 +217,7 @@ def split_half_baseline(df, gt_score_cols):
         "mae": mae,
         "half_a": half_a,
         "half_b": half_b,
+        "paper_decisions": paper_decisions,
     }
 
 
@@ -194,6 +226,7 @@ def one_vs_rest_baseline(df, gt_score_cols):
     rest_means = []
     heldout_scores = []
     paper_pairs = 0
+    paper_decisions = []
 
     for _, row in df.iterrows():
         human = [float(row[c]) for c in gt_score_cols if pd.notna(row[c])]
@@ -206,6 +239,7 @@ def one_vs_rest_baseline(df, gt_score_cols):
                 continue
             rest_means.append(float(np.mean(others)))
             heldout_scores.append(float(heldout))
+            paper_decisions.append(row["gt_binary"].strip().lower())
 
     if len(rest_means) < 2:
         return None
@@ -222,6 +256,7 @@ def one_vs_rest_baseline(df, gt_score_cols):
         "mae": mae,
         "rest_means": rest_means,
         "heldout_scores": heldout_scores,
+        "paper_decisions": paper_decisions,
     }
 
 def analyze_and_plot(path):
@@ -362,7 +397,7 @@ def analyze_and_plot(path):
         print(f"    Spearman:            {one_vs_rest['spearman']:.4f}")
         print(f"    Pearson:             {one_vs_rest['pearson']:.4f}")
         print(f"    MAE:                 {one_vs_rest['mae']:.4f}")
-        print(f"    AI vs human (Zou 2007 CI, Fisher z-test):")
+        print(f"    AI vs human (paired paper bootstrap, n={ai_vs_human['n_boot']}):")
         print(
             f"      Spearman Δ:        {ai_vs_human['spearman_diff']:+.4f}  "
             f"(95% CI {ai_vs_human['spearman_ci'][0]:+.4f}, {ai_vs_human['spearman_ci'][1]:+.4f}; "
@@ -372,6 +407,21 @@ def analyze_and_plot(path):
             f"      Pearson Δ:         {ai_vs_human['pearson_diff']:+.4f}  "
             f"(95% CI {ai_vs_human['pearson_ci'][0]:+.4f}, {ai_vs_human['pearson_ci'][1]:+.4f}; "
             f"p={ai_vs_human['pearson_p']:.4f})"
+        )
+        print(
+            f"      MAE Δ:             {ai_vs_human['mae_diff']:+.4f}  "
+            f"(95% CI {ai_vs_human['mae_ci'][0]:+.4f}, {ai_vs_human['mae_ci'][1]:+.4f}; "
+            f"p={ai_vs_human['mae_p']:.4f})"
+        )
+        print(
+            f"      Slope Δ:           {ai_vs_human['slope_diff']:+.4f}  "
+            f"(95% CI {ai_vs_human['slope_ci'][0]:+.4f}, {ai_vs_human['slope_ci'][1]:+.4f}; "
+            f"p={ai_vs_human['slope_p']:.4f})"
+        )
+        print(
+            f"      Intercept Δ:       {ai_vs_human['intercept_diff']:+.4f}  "
+            f"(95% CI {ai_vs_human['intercept_ci'][0]:+.4f}, {ai_vs_human['intercept_ci'][1]:+.4f}; "
+            f"p={ai_vs_human['intercept_p']:.4f})"
         )
     if split_half is not None:
         print(f"  {'─'*45}")
@@ -514,10 +564,14 @@ def analyze_and_plot(path):
     if one_vs_rest is not None and one_vs_rest.get("rest_means") and one_vs_rest.get("heldout_scores"):
         left = np.array(one_vs_rest["rest_means"])
         right = np.array(one_vs_rest["heldout_scores"])
+        ovr_colors = [
+            "#e74c3c" if decision == "reject" else "#2ecc71"
+            for decision in one_vs_rest["paper_decisions"]
+        ]
         jitter_rng = np.random.default_rng(42)
         left_jit = left + jitter_rng.uniform(-0.35, 0.35, size=len(left))
         right_jit = right + jitter_rng.uniform(-0.35, 0.35, size=len(right))
-        ax2.scatter(left_jit, right_jit, color="#f39c12", s=70, edgecolors="white", linewidth=0.8, alpha=0.9)
+        ax2.scatter(left_jit, right_jit, c=ovr_colors, s=70, edgecolors="white", linewidth=0.8, alpha=0.9)
         mn2, mx2 = min(left.min(), right.min()) - 0.5, max(left.max(), right.max()) + 0.5
         ax2.plot([mn2, mx2], [mn2, mx2], "k--", alpha=0.3)
         if len(left) >= 2:
@@ -534,10 +588,13 @@ def analyze_and_plot(path):
             f"Spearman: {one_vs_rest['spearman']:.3f}\n"
             f"Pearson: {one_vs_rest['pearson']:.3f}\n"
             f"MAE: {one_vs_rest['mae']:.3f}\n"
+            f"Accept pairs: {sum(d == 'accept' for d in one_vs_rest['paper_decisions'])}\n"
+            f"Reject pairs: {sum(d == 'reject' for d in one_vs_rest['paper_decisions'])}\n"
             f"{one_vs_rest['n_pairs']} held-out reviews",
             transform=ax2.transAxes, fontsize=10, va="top",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8)
         )
+        ax2.legend(handles=legend_dots, fontsize=9, loc="lower right")
     else:
         ax2.axis("off")
 
@@ -582,10 +639,14 @@ def analyze_and_plot(path):
     if split_half is not None and split_half.get("half_a"):
         sh_a = np.array(split_half["half_a"])
         sh_b = np.array(split_half["half_b"])
+        split_colors = [
+            "#e74c3c" if decision == "reject" else "#2ecc71"
+            for decision in split_half["paper_decisions"]
+        ]
         jitter_rng = np.random.default_rng(99)
         sh_a_jit = sh_a + jitter_rng.uniform(-0.3, 0.3, size=len(sh_a))
         sh_b_jit = sh_b + jitter_rng.uniform(-0.3, 0.3, size=len(sh_b))
-        ax5.scatter(sh_a_jit, sh_b_jit, color="#8e44ad", s=80, edgecolors="white", linewidth=0.8, alpha=0.85)
+        ax5.scatter(sh_a_jit, sh_b_jit, c=split_colors, s=80, edgecolors="white", linewidth=0.8, alpha=0.85)
         mn5, mx5 = min(sh_a.min(), sh_b.min()) - 0.5, max(sh_a.max(), sh_b.max()) + 0.5
         ax5.plot([mn5, mx5], [mn5, mx5], "k--", alpha=0.3)
         if len(sh_a) >= 2:
@@ -602,10 +663,13 @@ def analyze_and_plot(path):
             f"Spearman: {split_half['spearman']:.3f}\n"
             f"Pearson: {split_half['pearson']:.3f}\n"
             f"MAE: {split_half['mae']:.3f}\n"
+            f"Accept pairs: {sum(d == 'accept' for d in split_half['paper_decisions'])}\n"
+            f"Reject pairs: {sum(d == 'reject' for d in split_half['paper_decisions'])}\n"
             f"{split_half['n_pairs']} exact split pairs",
             transform=ax5.transAxes, fontsize=10, va="top",
             bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.8)
         )
+        ax5.legend(handles=legend_dots, fontsize=9, loc="lower right")
     else:
         ax5.axis("off")
 
