@@ -107,7 +107,7 @@ def grep_file(pattern: str, abs_path: str) -> str:
 
 @function_tool
 def search_file(query: str, n: int, mode: str) -> str:
-    """Search for a pattern in a file using the BM25/Vector index. Returns the top n matching files. Set mode to 'vector' for semantic similarity search or 'bm25' for exact keyword matching."""
+    """Search for a pattern in a file using the BM25/Vector index. Returns the top n matching files. Set mode to 'vector' for semantic similarity search or 'bm25' for keyword matching for specific papers."""
     print(f"  [search_file] Searching for query '{query}' with mode '{mode}' and n={n}")
     if mode == "bm25":
         bm25 = list(database.values())[0]["bm25"]
