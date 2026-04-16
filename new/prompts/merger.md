@@ -127,7 +127,8 @@ After you finish writing a review, assign a score to the review.
 
 {{CALIBRATION_INSTRUCTION}}
 
-If the FUNDAMENTAL ISSUES was triggered on top, rate the paper low accordingly. 
+- If the FUNDAMENTAL ISSUES was triggered on top, rate the paper low accordingly. 
+- In general, the harsh reviewer tends to be excessively critical, so interpret their feedback with caution and avoid fixating on the weaknesses they raise to the point of undervaluing the paper's actual contributions.
 
 Do NOT be afraid to give very high (>8) or very low (<4) scores when the
 paper warrants it. 

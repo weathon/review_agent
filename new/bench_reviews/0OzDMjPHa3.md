@@ -1,87 +1,84 @@
-Now I have sufficient context from calibration papers. Let me synthesize the final review.
-
 ## Summary
 
-This paper presents an algorithm for memory-efficient visualization of pre-trained implicit neural representations (INRs) by using interpolative decomposition (ID) pruning of the INR's weight matrices to guide adaptive mesh refinement (AMR). The core idea is that regions of the domain where the INR admits significant pruning correspond to low-detail areas that can be coarsely meshed, while regions resisting pruning require finer resolution. The method operates solely on the pre-trained INR weights (no training data needed) and is demonstrated on a 2D analytical benchmark, a simulated 3D CT INR, and an experimental 4D CT INR, showing DOF savings particularly when the underlying field has regions of varying detail.
+The paper presents "Pruning AMR," an algorithm for efficiently visualizing pre-trained implicit neural representations (INRs) by constructing an adaptive mesh that concentrates resolution in high-detail regions. The key idea is to use interpolative decomposition (ID) pruning on the INR's weight matrices restricted to subdomains corresponding to mesh elements; elements that can be significantly pruned (suggesting low local variation) are left coarse, while elements that resist pruning are refined. The algorithm iterates until each element's pruned INR meets both an error threshold and a neuron-proportion threshold, producing variable-resolution visualizations with fewer degrees of freedom than uniform discretization.
 
 ## Strengths
 
-- **Well-motivated practical problem**: The gap between INR checkpoint sizes (megabytes) and full uniform discretizations (terabytes) for dynamic micro-CT applications clearly establishes the need. The introduction makes a compelling case that efficient visualization of pre-trained INRs is an open and important problem.
+- **Well-motivated and novel problem formulation.** The paper identifies a real and growing need: pre-trained INRs from dynamic micro-CT can encode ~3.6 TB of volumetric data in a few MB of weights, but visualization requires discrete sampling. The question of how to efficiently visualize a pre-trained INR without training data is clearly articulated and timely.
 
-- **Creative and novel algorithmic idea**: Using weight-matrix pruning as a proxy for local spatial detail to drive AMR is a non-obvious and interesting connection between neural network compression and adaptive meshing. The algorithm (Algorithm 1) is presented clearly and concretely enough for reproduction.
+- **Clean and well-described algorithm.** Algorithm 1 is precisely specified with all inputs, and Tables 1–2 provide hyperparameter descriptions and heuristic values. The mapping from pruning decisions to refinement decisions is logically sound and easy to follow.
 
-- **Honest evaluation of limitations**: The authors explicitly acknowledge that on the experimental CT data (the most realistic case), "Pruning only does marginally better" and that "AMR is only useful for INR visualization if detail is required at a scale for which there are some low-detail regions." This transparency about limitations is valuable.
+- **Theoretically grounded pruning method.** Leveraging the interpolative decomposition (ID) pruning method from Chee et al. (2022) provides a principled foundation with theoretical guarantees, rather than relying on ad hoc heuristics.
 
-- **Appropriate evaluation metrics**: DOF vs. error plots are the standard evaluation framework in the AMR community, and the use of time-varying meshes (Figures 5 and 7) nicely demonstrates the method's ability to adapt to spatially and temporally varying detail.
+- **Honest reporting of limitations.** The authors openly acknowledge that Pruning AMR shows only marginal improvement on the highly-detailed experimental CT data (Figure 3b, Section 4.3), and explicitly discuss conditions under which the method is less beneficial. This transparency strengthens credibility.
 
-- **Works without training data**: A genuine practical advantage—the method only needs the pre-trained INR checkpoint, not the original training data.
+- **4D demonstration.** Figures 5 and 7 show that the mesh adapts across time slices, validating applicability to the time-varying setting central to the motivating application.
 
 ## Weaknesses
 
-### Major
+### Major:
 
-- **Core hypothesis is assumed but not directly validated**: The paper's central claim is that prunability of an INR restricted to a subdomain correlates with low spatial detail in that region. Section 3 states: "the less detailed a function is on a region of the domain, the smaller an INR needs to be to accurately describe the function in that region." This is plausible but never tested directly—there is no experiment measuring the correlation between prunability and, e.g., local gradient magnitude, local variance, or any ground-truth measure of function complexity. While the end-to-end AMR results are consistent with the hypothesis, the possibility that pruning behavior is driven by network architecture artifacts (weight scaling, positional encodings) rather than genuine spatial complexity cannot be ruled out. A controlled experiment even on the 2D benchmark (where the true function is known) correlating pruning ratio with local variation would substantially strengthen the paper.
+- **Core hypothesis lacks formal justification or direct empirical validation.** The algorithm rests on the hypothesis (stated in Section 3) that "the less detailed a function is on a region of the domain, the smaller an INR needs to be to accurately describe the function in that region," i.e., that prunability on a subdomain correlates with local function detail. This is plausible but never formally analyzed or directly tested. A straightforward validation would be to compute ground-truth local variation (e.g., gradient magnitude) on the analytical benchmark and plot it against pruning proportion. Without this, the mechanism linking weight-matrix rank to functional complexity remains speculative, and it is unclear whether the method's partial success is due to the posited mechanism or merely coincidental.
 
-- **Missing natural baselines**: The "Basic AMR" baseline compares the INR against its own bilinear interpolant on the current mesh—a deliberately weak alternative. The natural comparison classes that are missing include: (1) gradient-based AMR using the INR's own gradients (computed via autodiff, trivially available), (2) residual-based AMR where the INR is sampled at subcell quadrature points and refinement is driven by local approximation error, or (3) even simple variance-based refinement. All of these work under the same constraints (INR-only, no training data) and would provide a much stronger baseline than bilinear-interpolant error. The absence of any such comparison makes it difficult to assess whether the pruning mechanism adds value over straightforward alternatives.
+- **Evaluation is narrow with example-specific hyperparameter tuning.** The paper tests on three examples (one 2D analytical, one simulated CT, one experimental CT), and each requires different hyperparameters ($\varepsilon$ ranges from $10^{-3}$ to $10^{-2}$, $P$ from 0.075 to 0.1). No principled strategy for selecting these parameters is given beyond empirical search. The paper provides no sensitivity analysis showing how robust the method is to these choices on a given example, making it difficult for practitioners to deploy the method on new INRs without extensive tuning. On the most realistic example (experimental CT), the improvements are characterized by the authors themselves as "minimal" and "marginal" (Section 4.3), and only 5 iterations are run due to compute constraints, leaving the key claim of scalability unverified.
 
-- **No computational cost analysis**: The method claims "efficiency" and "memory savings," but each iteration requires running ID pruning on every non-converged mesh element—a non-trivial cost involving QR factorizations of layer weight matrices and multiple INR evaluations. The paper itself notes "computation time constraints" prevented running more than 5 iterations on the experimental example. Without wall-clock timing or FLOP counts comparing the total cost of Pruning AMR versus uniform refinement or a simple gradient-based scheme, it is unclear whether DOF savings translate to practical end-to-end efficiency gains.
+- **Baselines are weak and no computational cost analysis is provided.** The only adaptive baseline ("Basic AMR") uses a simple random-sampling error estimator against the bilinear interpolant, which is a fairly naïve approach. More natural competitors—such as gradient-magnitude-based refinement (computing $\nabla$INR is cheap and directly measures local variation)—are absent. Additionally, the paper claims "efficient visualization" and "significant memory savings" but only measures output mesh DOFs, not the computational cost of the pruning process itself. Each iteration requires running ID pruning per element plus INR evaluations, which could be substantially more expensive than simply evaluating the INR densely. For a paper motivated by 4D CT-scale data where computational resources are the bottleneck, this omission is significant.
 
-- **Marginal benefits on the most realistic example**: On the experimental CT INR (Section 4.3), the method shows only marginal improvements over both Uniform and Basic AMR. The authors attribute this to the dataset being detail-rich throughout, but this raises the question of how broadly applicable the method is: if most real-world scientific data has complex detail over much of its domain, the practical advantage may be limited to specific use cases with large smooth regions.
+### Minor:
 
-### Minor
+- **The claim that DOF savings "would only further improve with more iterations"** (Sections 4.2, 4.3) is speculative and unsupported by experiment or scaling argument, particularly since the experimental CT example already shows diminishing returns.
 
-- **Hyperparameter sensitivity with limited guidance**: The method introduces six hyperparameters (T, P, ε, ID_samples, error_samples, max_it). The sensitivity study in Section 4.1 is limited to the 2D example, and the paper acknowledges the best parameters "are specific to the 2D example." The "heuristics" in Tables 1–2 are vague (e.g., "set based on limits of your machine," or "the main hyperparameter to decide how high of resolution you want to see"). A more systematic protocol for parameter selection would improve practicality.
+- **Restricted architecture scope.** The method assumes fully-connected INR layers and does not discuss how it would apply to hash-grid-based (Instant-NGP-style) or other modern architectures where weight matrices are not the primary information carrier. This is acknowledged implicitly but not discussed as a limitation.
 
-- **Asymmetric error_samples between methods**: In the CT experiments, Pruning AMR uses error_samples=32 while Basic AMR uses error_samples=256, but this asymmetry is not justified. Using fewer samples for one method could make its error estimates noisier, and it is unclear if this biases the comparison.
+### Trivial:
 
-- **Overclaiming in abstract/conclusion**: The abstract and conclusion state "significant memory savings," but the most realistic example shows only marginal savings. The framing should better reflect this limitation.
-
-- **Architecture scope limited to fully-connected layers**: The pruning method assumes fully-connected linear layers. The CT INRs use Gaussian random Fourier features, and it is unclear how the method would interact with more modern INR architectures (hash encodings, residual connections, etc.).
-
-### Trivial
-
-- The three forced uniform refinements before AMR begins (Section 4.2) are an arbitrary starting condition that may mask early-stage differences between methods.
+- The "ground truth" comparison uniform mesh in Figure 2 is a fine discretization, not an analytical ground truth. This is minor since the comparison is qualitative.
 
 ## Nice-to-Haves
 
-- A direct validation experiment on the 2D benchmark correlating pruning ratio with local function variation (gradient magnitude of the known analytic function), which would substantiate the core hypothesis.
-- Comparison against a gradient-based or residual-based AMR baseline that also only requires INR evaluations.
-- Wall-clock timing data for each method to assess practical computational trade-offs.
-- Testing on a larger-scale example closer to the motivating 1024³×700 scale, even if at reduced iterations.
-- A sensitivity analysis showing how robust results are to hyperparameter choices, especially T and P.
+- Direct empirical validation of the prunability ↔ detail hypothesis, e.g., a scatter plot of pruning proportion vs. local gradient magnitude on the 2D analytical benchmark where the true function is known.
+- Comparison against a gradient-based or residual-based AMR error indicator to isolate the specific benefit of using pruning vs. a simpler adaptive approach.
+- Wall-clock timing breakdowns (pruning time per element, total pruning time, mesh refinement time) to assess whether the DOF savings justify the computational overhead.
+- Results on additional INR architectures (e.g., SIREN, hash-grid INRs) to demonstrate broader applicability.
 
 ## Removed Points
 
-- **"The paper claims no prior work exists on visualizing pre-trained INRs" (Harsh Critic, Sec. 2.2 discussion)**: The paper actually states "To the best of our knowledge, there is no prior work considering this problem, other than sampling to a uniform grid." This is a reasonable scope statement, and the harsh critic's suggestion that ACORN, scene representation networks, etc. address this specific problem is a misreading—those works train INRs more efficiently, they don't address post-hoc adaptive visualization of a pre-trained INR.
+- **Code availability during review**: The reproducibility concern about code not being released during review is removed per the hard rules against nitpicks about reproducibility and unavailability of artifacts.
 
-- **"Error metric doesn't measure ground truth" (Harsh Critic, Point 3)**: The harsh critic argues the 2D benchmark should measure error against the analytic function rather than the INR. However, the method's goal IS to reconstruct the INR on an adaptive mesh—the INR is the "ground truth" data format. For the CT examples, the INR is the data representation, and there is no separate ground truth. Measuring against the analytic function in the 2D case would test INR training quality, not the AMR algorithm's performance. The current metric is appropriate for the stated goal.
+- **Claim that Basic AMR is disadvantaged by more error_samples**: The harsh critic stated that Basic AMR uses error_samples=256 vs. 32 for Pruning, implying unfair advantage for Pruning. However, using more samples gives Basic a *better* error estimate, which generally helps adaptive methods—not disadvantages them. This criticism is factually incorrect about the direction of the bias.
 
-- **"Method requires unrealistic architectural access" (Harsh Critic, Point 4)**: The paper explicitly states "We assume knowledge of the INR architecture, as would be encoded in a standard checkpoint file"—this is a clear and reasonable assumption. Checkpoint files do contain architecture details and weights. The harsh critic's concern about "black-box inference API" settings is scope creep; the paper is clearly scoped to settings where the checkpoint is available.
+- **Claim that "no prior work" is overstated**: This is removed per the hard rules against requesting missing related works, since we cannot verify whether other related work exists.
 
-- **"Missing related works" (Human Finder, Point 3)**: I cannot verify the existence or relevance of the cited related works without external sources, so this is removed per the rules.
+- **Mention of treating uniform mesh as ground truth as problematic**: The paper's comparison to a fine uniform mesh is standard practice in AMR literature. The caption says "Treating Uniform as 'ground truth'" for qualitative comparison purposes, which is appropriate.
 
-- **"Limited architecture scope" (Human Finder, Point 5)**: This is partially valid but was moved to Minor above with appropriate softening. The paper does test on architectures with Gaussian RFF encodings, not just plain ReLU MLPs.
+- **Concern about what happens when INR(X) is near zero (relative error explosion)**: While potentially valid, this is a standard numerical issue with relative error metrics that is not unique to this method and would be a minor implementation detail.
+
+- **Detailed mesh implementation concerns (anisotropy, hanging nodes in 3D/4D)**: The paper uses MFEM for mesh management, which handles these issues. This is a nitpick about implementation details.
+
+- **Formatting concerns about hyperparameter tables or algorithm presentation**: Removed per formatting nitpick rule.
 
 ## Novel Insights
 
-The key insight of this paper—connecting the prunability of an INR restricted to a spatial subdomain as a proxy for local function complexity—is genuinely creative. However, the paper leaves open a fundamental question of causality: does pruning truly detect spatial detail, or does it detect architectural redundancy patterns that happen to correlate with smooth regions? This distinction matters for generalizability. If the latter, the method may be sensitive to INR architecture choices (width, depth, encoding type) in ways not explored here. The paper also highlights an important practical reality that the broader INR community should confront: many INR checkpoints will need to be visualized without access to the training pipeline, and the current "just sample uniformly" approach is often impractical at scale.
+The paper raises an interesting and underexplored question: given a pre-trained INR as a compressed data format, how can one extract adaptive-resolution information *directly from the weights* without access to training data? The idea of using network prunability on subdomains as a proxy for local functional complexity is creative, even if the current validation leaves the strength of this proxy unclear. The key insight—that a network restricted to a small subdomain may be more compressible, and that this compressibility varies with local detail—is intuitive and worth investigating further, but the paper would be substantially strengthened by directly validating this correlation rather than relying on indirect evidence through final mesh quality.
 
 ## Suggestions
 
-1. **Validate the prunability-detail hypothesis directly**: On the 2D benchmark, compute local gradient magnitude (known from the analytic function) and correlate it with the pruning ratio in each mesh element. A scatter plot would go a long way toward substantiating the core idea.
-
-2. **Add at least one natural baseline**: Implement AMR driven by INR gradient magnitude (via autodiff) or local variance of INR outputs at sampled points. This isolates whether the pruning mechanism adds value over simpler evaluation-based indicators.
-
-3. **Report computational cost**: Include a table of wall-clock times per iteration for each method. This is essential for assessing whether the method's overhead is justified by its DOF savings.
-
-4. **Tone down claims**: Replace "significant memory savings" with something like "memory savings in settings where the field has regions of varying spatial detail," reflecting the experimentally demonstrated scope.
+- **Validate the prunability ↔ detail correlation directly.** On the 2D analytical benchmark, compute the known local variation (since $f(r) = \sin(1/(\alpha + r))$ is available analytically) and plot it against pruning proportion across elements. This single experiment would strongly support or undermine the core hypothesis.
+- **Add a gradient-based AMR baseline.** Computing $\|\nabla \text{INR}(x)\|$ via autodiff or finite differences on each element is cheap and directly measures local variation; this is the most natural competitor for pruning-based refinement.
+- **Report wall-clock times.** Even rough timing comparisons would clarify whether the pruning overhead is justified. If pruning per element is 10× slower than evaluating the INR on a uniform grid of that element, the practical case weakens considerably.
+- **Run more iterations on the experimental CT example** or at least provide a scaling argument for why the gap between methods would widen, since the current results at 5 iterations are marginal.
 
 ## Score and Decision
 
-**Calibration comparison**: 
-- Papers with novel algorithmic ideas but limited experimental validation and weak baselines (mMjSc5fspq - INR rendering, avg ~5.25, rejected; ZWi6RpT4mJ - INR compression, avg ~3.5, withdrawn/rejected) scored in the 3-5 range.
-- Papers with similar weaknesses but slightly stronger methodological grounding (hj9ZuNimRl - neural PDE mesh, avg 6, accepted poster; kMp8zCsXNb - INR efficiency, avg 6.3, accepted poster) scored around 6.
-- This paper has an interesting and novel idea, clear algorithmic description, honest evaluation, but: (1) unvalidated core hypothesis, (2) missing natural baselines, (3) no computational cost analysis, and (4) marginal results on the most realistic example. These are collectively significant weaknesses. The idea itself is valuable enough to warrant further development, but the current evidence doesn't convincingly establish that the pruning-based approach outperforms simpler alternatives.
+**Calibration papers compared against:**
 
-MY FINAL SCORE: 4.5
-MY FINAL DECISION: Reject
+- **ASMR** (INR inference efficiency, kMp8zCsXNb): Scores 5–8, accepted poster. Had novel method, stronger experimental results across multiple settings, but some baseline concerns.
+- **Smooth Real-time INR** (mMjSc5fspq): Scores 3–6, rejected. Had interesting idea but limited demonstrations and weaknesses in validation.
+- **DSF/weight matrix decomposition** (DwiwOcK1B7): Scores 5–8, accepted poster. Had novel methodological contribution but hyperparameter sensitivity concerns.
+- **Better Neural PDE Solvers** (hj9ZuNimRl): Score 6, accepted poster. Good idea, limited experiments, missing runtime analysis.
+- **CoINR** (ZWi6RpT4mJ): Scores 1–5, withdrawn/rejected. Limited experimental validation for INR compression claims.
+
+This paper has a clearly novel and well-motivated problem formulation with a reasonable algorithm, but the validation is narrow, the most realistic example shows only marginal improvement, the core hypothesis is unvalidated, and computational cost is unanalyzed. It is stronger than the rejected CoINR paper because the algorithm is better specified and the problem is more clearly defined, but weaker than accepted papers like ASMR or DSF which had broader experimental support. The marginal results on the realistic example and the weak baselines are significant concerns. The paper sits between the rejected and accepted papers in this calibration set.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
