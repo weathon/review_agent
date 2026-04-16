@@ -1,143 +1,105 @@
+Now I have sufficient information to write the final consolidated review. Let me carefully synthesize all the reviewer inputs, verify claims against the paper, and determine which criticisms are valid.
+
+Key things to verify:
+
+1. **Is TTVD just re-packaged entropy minimization?** The harsh critic claims the VD/CIVD/CIPD framework is just entropy minimization with prototype distances. Let me think about this carefully. Equation 3 defines: soft labels from distance to prototypes, then entropy minimization on those soft labels. The CIVD adds multi-site influence via rotation augmentations, and CIPD adds weights. This IS fundamentally different from standard Tent (which minimizes entropy of the model's own predictions). Here, the entropy is computed over a distance-based soft label rather than the model's direct output. This creates a different loss landscape. The geometric framing is not just window dressing—it changes the actual adaptation objective. However, the core innovation IS relatively incremental in computational terms.
+
+2. **Is the "diagram subtraction" filtering specified?** Looking at Sec 3.3, the paper says "by subtracting the PD from the VD, we can extract a larger region from the resulting differences" and Fig 2(b) shows visual regions. But there's no explicit mathematical definition of what "subtracting diagrams" means in high dimensions, nor a clear algorithm for how samples in these difference regions are identified and filtered. The algorithm is deferred to "Appendix H" (Algorithm 3). This IS a valid criticism.
+
+3. **Power of 7 in Eq 4**: This appears in the paper as $(d(\mu_k^{(\alpha)}, z))^7$ with the exponent being the value "7". However, looking more carefully, the paper says "$\gamma$ is a hyperparameter that controls the scale of the influence" and the expression is $-\text{sign}(\gamma) \sum_\alpha (d(\mu_k^{(\alpha)}, z))^7$. Wait - is 7 actually γ? Let me look more carefully... The equation shows exponent "7" not "γ". This seems like either a typo or an unusual design choice. But actually, γ is defined as a scale parameter with sign(γ), not as the exponent. So exponent being fixed at 7 IS a specific hyperparameter choice that is unexplained.
+
+4. **Source data access**: TTVD requires pre-computed class means from training data. This is a meaningful design constraint that limits applicability compared to methods like Tent/SAR that only need the pre-trained model.
+
+5. **Algorithm notation**: Algorithm 1 updates σ (feature extractor), but the paper says "only the channel-wise affine parameters in normalization layers are updated during TTA" while rest of the model remains unchanged. This IS an inconsistency.
+
+Let me now write the consolidated review.</think>Now I have enough context to write the final review. Let me carefully synthesize everything.
+
 ## Summary
-The paper proposes TTVD, a test-time adaptation (TTA) framework that reinterprets neighbor-based adaptation through Voronoi diagrams in feature space. Building from a basic Voronoi-based entropy loss (VD), it introduces Cluster-induced Voronoi Diagrams (CIVD) to incorporate self-supervised augmentations as multiple “sites” per class, and Cluster-induced Power Diagrams (CIPD) to add weights and a boundary-based filtering heuristic for noisy samples. Evaluations on CIFAR-10-C/100-C, ImageNet-C, and ImageNet-R (via TTAB) show consistent improvements over several existing TTA baselines in both error and calibration.
+
+The paper proposes TTVD, a geometric framework for Test-Time Adaptation that reframes neighbor-based TTA methods through the lens of Voronoi Diagrams. It extends the basic VD in two directions: (1) Cluster-induced Voronoi Diagram (CIVD), which creates multi-site influences via rotation augmentations to unify self-supervision and entropy minimization; and (2) Power Diagram (CIPD), which introduces flexible weighted boundaries to identify and filter noisy samples near decision boundaries. Experiments on CIFAR-10-C, CIFAR-100-C, ImageNet-C, and ImageNet-R show improvements in classification error and ECE over state-of-the-art methods.
 
 ## Strengths
-- **Clear and reasonably principled base objective (VD).** Section 3.1 defines a simple, reproducible loss: a softmax over negative distances to class means with entropy minimization (Eq. 3), updated on the feature extractor only (Algorithm 1). This connects cleanly to a Voronoi partition view and is easy to implement.
-- **Strong empirical performance under a standardized benchmark.** Using TTAB with grid search and oracle/non-oracle reporting, TTVD attains the best error and ECE on CIFAR-10-C, CIFAR-100-C, ImageNet-C, and ImageNet-R (Table 1). The gains on harder settings (e.g., 1.6% error and large ECE reductions on ImageNet-C/-R) are meaningful in the TTA context.
-- **Progressive ablation of geometric variants.** Table 2 systematically compares VD, CIVD, and CIPD on CIFAR-10-C; even the basic VD variant beats prior neighbor-based methods, and each added structure yields further gain (≈5.7% from VD→CIVD, ≈2.2% from CIVD→CIPD).
-- **Thoughtful use of computational geometry concepts.** The link from linear classifiers to power diagrams (Lemma 3.1) is correctly invoked, and the use of CIVD/CIPD extends earlier Voronoi-based work into the TTA setting. The 2D visualizations on MNIST-C (Figs. 1–2) make the geometric intuition accessible.
-- **Broad robustness checks (though mostly in appendix).** The paper examines adaptation curves over time (Fig. 4), robustness to class-mean estimation with subsampled ImageNet data (Table 4), and mentions experiments under varying batch size and label shift (Appendix), supporting the claim that TTVD is reasonably stable in realistic online settings.
+
+- **Novel geometric perspective on TTA**: The paper establishes a principled connection between neighbor-based TTA methods and Voronoi Diagrams, providing a unified geometric interpretation for prototype-based adaptation. This is a fresh conceptual lens that enables structural insights (e.g., identifying boundary samples for filtering) that heuristic methods lack.
+
+- **Progressive and well-motivated framework**: The construction VD → CIVD → CIPD is logically motivated, with each extension addressing a specific limitation—CIVD addresses single-site insufficiency by incorporating multi-source influence through self-supervision, and CIPD addresses noisy sample filtering through flexible boundaries. The ablation study (Table 2) validates each component's contribution (5.7% from CIVD, 2.2% from CIPD over VD on CIFAR-10-C).
+
+- **Strong empirical performance**: TTVD achieves consistent improvements across four benchmarks in both error rate and ECE, including under challenging settings (small batch sizes and label shift in the appendix). The improvements on ECE (3.4–4.3% reductions) suggest meaningful calibration gains, not just accuracy improvements.
+
+- **Standardized evaluation**: The use of TTAB for fair comparison addresses a common concern in TTA literature about inconsistent experimental protocols.
 
 ## Weaknesses
 
-### Fatal
-None. The paper proposes a coherent algorithm with clear base components and solid empirical benefits; there is no evidence of a flaw that invalidates its main empirical claims.
-
 ### Major
-- **Underspecified CIVD/CIPD objectives and “unified” use of self-supervision and entropy minimization.**  
-  CIVD and CIPD are central to the claimed contributions (multi-site influence, unified objective, mitigation of negative transfer), but the exact test-time loss and update rules for these variants are not spelled out in the main text:
-  - For CIVD (Sec. 3.2), the influence function \(F(z, C_k)\) in Eq. (4) and the definition of clusters via rotated augmentations are given, but the corresponding adaptation loss (the analogue of \(\mathcal{L}_{VD}\) in Eq. (3)) is not explicitly written. The text says “similar to Equation 3, the soft label given by CIVD can be calculated from the influence function… The joint label \(\tilde{y}_k^{(\alpha)}\) avoids the negative transfer since the objective is now unified”, but does not show whether they minimize entropy of \(\beta(F(z,C_k))\), average over \(\alpha\), or use some other construction.
-  - For CIPD (Def. 3.4, Eq. (6)), the influence incorporates weights \(v_k\), but the paper does not specify in the main body how \(v_k\) are obtained in practice (fixed from the pretrained linear head via Lemma 3.1, updated during TTA, or something else). Nor is the exact form of the loss given. It is stated only that “we infer and adapt the model accordingly by CIPD (Algorithm 3 in Appendix H) using Equation 6.”
-  - The claim that CIVD “unifies self-supervision and entropy minimization” to avoid negative transfer is not given a concrete mathematical formulation (no explicit joint loss), and the mechanism is not compared to a straightforward multi-task combination of rotation loss + entropy loss.
-  
-  As a result, a reader cannot fully reconstruct what is optimized for CIVD/CIPD at test time or rigorously assess the “unified objective” claim. The empirical ablation (VD→CIVD→CIPD) is thus somewhat opaque: we know performance improves, but we do not know precisely which change in the loss or gradient field is responsible.
 
-- **Power diagram–based noisy sample filtering is conceptually underdefined and not isolated experimentally.**  
-  Section 3.3 attributes CIPD’s advantage to using PD’s flexible boundaries to identify and filter noisy samples via “diagram subtraction”:
-  - The phrase “By subtracting the PD from the VD, we can extract a larger region from the resulting differences…” is not formalized. It is unclear whether samples are filtered based on disagreement between VD and PD cell assignments, set differences of regions, or some other criterion; Fig. 2b is illustrative but not algorithmic.
-  - While Fig. 2a shows high entropy near VD boundaries, there is no rigorous argument that the additional regions flagged by PD–VD subtraction correspond to truly harmful samples rather than simply harder points, nor is there a guarantee they correspond to high-gradient-noise regions.
-  - There is no dedicated ablation that isolates PD-based filtering. Table 2 conflates (i) moving from VD to cluster-based CIVD, and (ii) adding PD-based weights and filtering in CIPD. We never see, for example, CIVD with entropy-based filtering vs CIVD with geometric PD-based filtering under matched filtering rates.
-  
-  Since the narrative repeatedly highlights PD/CIPD as a geometric cure for “noisy samples” and “negative model updates,” the lack of precise definition and targeted experiments substantially weakens that conceptual contribution, even though overall performance gains remain.
+- **The geometric framing, while novel, partially repackages established mechanisms**: At its core, the VD loss (Eq. 3) computes soft labels via a distance-based softmax to class prototypes and minimizes their entropy. This is conceptually close to prototype-based self-training with entropy minimization—the Voronoi framing provides an interpretation but the resulting adaptation objective is a modified distance-based entropy. The CIVD extension adds rotation augmentations to create multi-site prototypes, which is fundamentally an augmentation-based multi-view averaging scheme (not unlike prior multi-view TTA methods), re-described through the influence function lens. While the geometric perspective offers interpretability advantages, the paper's central claim of a "novel framework" based on computational geometry somewhat overstates the methodological departure from existing techniques. The actual TTA algorithm does not exploit geometric properties unique to Voronoi diagrams (e.g., efficient nearest-neighbor queries, boundary computation algorithms, or Delaunay triangulations) in its implementation.
 
-- **Geometric reinterpretation of existing neighbor-based TTA methods is only partially justified.**  
-  The paper states that “the underlying geometric structure of these neighbor-based methods is Voronoi Diagram” and uses this to motivate TTVD as a more advanced geometric framework. However:
-  - The mapping from concrete methods like T3A, TAST, or AdaNPC to an explicit VD or PD partition is not derived; it is asserted at a high level. For instance, T3A’s dynamic update of prototypes and thresholds does not correspond directly to the fixed-site VD in Eq. (2)–(3).
-  - Lemma 3.1 connects linear classifiers to power diagrams, but the interaction between updating only BN affine parameters under \(\mathcal{L}_{VD}\) and the resulting partition of feature space is not made explicit.
-  
-  This does not affect the correctness of TTVD as a new TTA algorithm, but it does mean that the paper overstates the extent to which it provides a unified geometric theory of existing neighbor-based methods.
+- **Access to labeled source data for prototype computation limits applicability**: TTVD explicitly computes class means from training data ("We use the full training set of CIFAR-10, CIFAR-100 to compute the class means for Voronoi sites and 10% of ImageNet for similar calculation"), which requires access to the labeled source dataset. Many TTA methods (Tent, SAR, NOTE) only require the pre-trained model, making TTVD less broadly applicable. While the paper shows robustness to subsampling (Table 4: 59.8%, 59.8%, 59.9% at 10%, 5%, 1%), these results still require some labeled source data and do not include a 0% (no source data) baseline—this would be equivalent to random initialization of prototypes, which is an important reference point.
 
-- **Key mechanistic claims are not empirically tested.**  
-  Beyond aggregate error/ECE improvements, the specific reasons the method is claimed to work are not directly validated:
-  - The “avoiding negative transfer via unified objective” is not evaluated against a naïve joint rotation + entropy loss baseline, nor is any gradient-conflict analysis presented.
-  - The claim about PD-based filtering improving robustness to noisy samples is not backed by experiments that contrast different filtering policies.
-  - The discussion of overfitting/negative model updates in Fig. 4 is somewhat speculative; the curves show TTVD improving and TENT/SAR relatively flat under TTAB-tuned hyperparameters, but they do not directly exhibit the classical overfitting behaviour the introduction describes, nor show TTVD under adverse hyperparameters to demonstrate superior stability.
-  
-  Consequently, the paper is strong as an empirical TTA method but weaker as an explanatory geometric framework.
+- **Noisy sample filtering via Power Diagram is under-specified**: Section 3.3 introduces PD-based filtering via "subtracting the PD from the VD" to identify boundary regions, but this operation is never formally defined for high-dimensional feature spaces. Figure 2(b) provides a 2D visualization on MNIST, but no algorithmic or mathematical specification is given for how this subtraction translates to an actual sample selection rule in $\mathbb{R}^\ell$ (where $\ell$ is 512–2048 in the actual experiments). The paper references "Algorithm 3 in Appendix H" for the complete CIPD procedure, but this critical operational detail is deferred without any explanation in the main text. There is no ablation isolating the PD filtering contribution from the weight-based re-partitioning, so it is unclear whether the 2.2% gain from CIPD over CIVD comes from filtering or from the weighted distance alone.
+
+- **Arbitrary hyperparameter choices without justification or sensitivity analysis**: The influence function in CIVD (Eq. 4) uses an exponent of 7: $F(z,C_k) = -\text{sign}(\gamma)\sum_\alpha d(\mu_k^{(\alpha)}, z)^7$, but no justification is provided for why 7 rather than 2 or another value. Similarly, the temperature τ in Eq. 3 and the CIPD exponent γ in Eq. 6 are critical hyperparameters with no sensitivity analysis. The $\text{sign}(\gamma)$ term in Eq. 4 qualitatively changes the behavior of the influence function (switching between maximization and minimization), but its role is never discussed.
 
 ### Minor
-- **Limited clarity on some implementation choices.**  
-  A few design decisions that plausibly matter are only sketched:
-  - Equation (4) uses distance to the 7th power; \(\gamma\) is described as a “scale” parameter, but why exponent 7 (and the sign convention) is chosen is not justified, nor is any sensitivity analysis shown.
-  - The text says “Similar to Equation 3, the soft label given by CIVD can be calculated from the influence function, incorporating the expanded sites \(\mu_k^{(\alpha)}\)”, but does not state explicitly whether the softmax is over aggregated influences, separate augmented samples, or some pooled structure.
-  - For PD/CIPD, while Lemma 3.1 suggests a way to map from classifier parameters to \((\mu_k, v_k)\), the paper does not specify whether this mapping is actually what is used in the experiments, or whether \(v_k\) remain fixed from pretraining or change during adaptation.
 
-- **Base VD formulation is conceptually closer to known prototype-based TTA/SFDA approaches than acknowledged.**  
-  Equation (3) effectively enforces concentration of features around class means with an entropy-like loss, which is quite similar in spirit to prototype-based pseudo-labeling and feature-clustering methods such as SHOT. The paper mentions SHOT as a baseline but does not situate VD relative to this prior line of work, leaving some novelty on the algorithmic side more incremental than the geometric framing implies.
+- **No error bars or statistical significance**: Tables 1–3 report single numbers without standard deviations or confidence intervals. Given that some improvements are modest (e.g., 0.7% on CIFAR-100-C error), statistical significance is important to establish.
 
-- **Ablations limited to CIFAR-10-C.**  
-  The important VD/CIVD/CIPD decomposition in Table 2 is only reported for CIFAR-10-C. While the main results on other datasets are strong, we do not see whether the relative contributions of CIVD vs CIPD carry over to CIFAR-100-C or ImageNet-C, or whether, for example, CIPD’s gains shrink on higher-resolution and more complex datasets.
+- **Ablation limited to a single dataset**: Table 2 provides the VD → CIVD → CIPD ablation only on CIFAR-10-C. Without corresponding ablations on CIFAR-100-C, ImageNet-C, or ImageNet-R, it is unclear whether the progressive improvements generalize.
 
-- **No statistical variability reported.**  
-  Table 1 and Table 2 present single-point estimates without error bars or confidence intervals. Some reported gains (e.g., ≈0.7% error) are modest, and it is hard to tell how robust they are across runs. This does not affect reproducibility (hyperparameter choices are reasonably described), but it does limit how strongly one can interpret “remarkable improvements.”
+- **Algorithm notation inconsistency**: Algorithm 1 updates the full feature extractor σ via gradient descent, while the paper text states that "only the channel-wise affine parameters in normalization layers are updated during TTA." This discrepancy could confuse readers about the adaptation scope.
 
-- **Computational overhead is not quantified.**  
-  The paper notes that computing class means for ImageNet using 10% of training data takes less than 10 minutes, which is helpful, but there is no discussion of per-batch adaptation cost when using CIVD/CIPD (with multiple augmented sites per class and weighted distance computations), nor wall-clock comparisons to baselines. In practice this might matter for real-time deployment.
+- **Limited baseline comparison among neighbor-based methods**: Table 3 compares TTVD against AdaNPC on just four blur corruption types on ImageNet-C. A broader comparison with recent methods combining self-supervision and entropy minimization (e.g., methods that also unify these objectives) would strengthen the empirical case.
 
 ### Trivial
-- **Scope limitations.**  
-  The method inherently relies on class prototypes and classification heads; it does not directly address non-classification tasks (e.g., detection/segmentation). This is a natural scope choice rather than a flaw, but a short explicit remark would set expectations for applicability.
-- **Some qualitative claims read stronger than warranted.**  
-  Phrases like “avoids negative transfer” or “particularly effective in identifying noisy samples” are somewhat stronger than the evidence provided. Softening these to “helps mitigate” or “appears to improve” would better match the current experiments.
+
+- The visualization in Figure 1 (on MNIST in 2D) is useful for intuition, but the geometric properties of Voronoi diagrams (boundary interpretability, cell structure) are known to degrade in high dimensions. No discussion addresses whether the geometric claims hold in the 512–2048 dimensional spaces where experiments actually run.
 
 ## Nice-to-Haves
-- A clearly written main-text description of the CIVD and CIPD losses and updates (even if full pseudocode remains in the appendix) would substantially improve clarity and perceived rigor.
-- A synthetic or low-dimensional controlled experiment where one can explicitly see CIVD’s multi-site influence rescuing points that a single-site VD misclassifies, and PD-based filtering excluding specific known noisy points, would strengthen the geometric narrative.
-- Basic hyperparameter sensitivity plots (e.g., for temperature \(\tau\) and the influence exponent) would reassure readers that performance is not overly brittle to tuning.
+
+- A simple baseline that applies Tent/SAR directly on prototype distances (without the Voronoi/CIVD/CIPD machinery) would help isolate the geometric contribution from the prototype-distance-based formulation.
+
+- An ablation that compares PD-based filtering vs. entropy-based filtering (all else equal) to directly validate the noisy sample identification claim.
+
+- Computational cost (wall-clock time, memory overhead) comparison against baselines like Tent and SAR, since TTA methods are often deployed in resource-constrained settings.
+
+- Experiments on natural distribution shifts (beyond synthetic corruption benchmarks) and on architectures without BatchNorm (e.g., ViT).
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **“Source-data dependence of class means undermines TTA setting.”**  
-  Some prototype-based TTA reviews worry that needing source data to compute prototypes violates a strict TTA assumption. Here, the paper explicitly uses the full CIFAR training set and 10% of ImageNet to compute class means and clearly states this setup (Sec. 4.1). It also shows robustness to using only 1%–10% of ImageNet data (Table 4). Within this paper’s stated setting (access to training features/prototypes, not raw labels at test time), this is not a correctness issue; it is a design choice. So concerns premised on “no source data can be accessed at all” do not apply and are removed.
-- **“Baseline set is missing more recent methods, invalidating SOTA claims.”**  
-  The harsh concern about missing very latest baselines cannot be verified from the paper text alone (we do not have an external list of all contemporaneous TTA methods), and the paper does compare against a broad, diverse set (neighbor-based, entropy-based, repurposed DA) standardized by TTAB. Without concrete evidence from the paper that an obviously stronger method was ignored, this criticism is speculative and removed.
-- **“Identical numbers in Table 4 suggest sites have no effect at all.”**  
-  Table 4 shows error changing from 59.8 to 59.9 when using less data to estimate class means. While the similarity is noteworthy, interpreting it as proof that prototypes have no effect goes beyond the data. It more reasonably suggests that 1% of ImageNet is sufficient to estimate class means well enough for this method; without further analysis, stronger inferences are unwarranted and removed.
-- **“Generalization to non-classification tasks is required.”**  
-  Some generic concerns about lack of applicability to detection/segmentation exceed the stated scope of the work, which clearly targets classification TTA on CIFAR/ImageNet variants. Demanding broader task support as a weakness would be scope creep, so this is reclassified as a minor scope note rather than a core flaw.
+- **"Geometric framing is just re-interpretation" (Harsh Critic Issue #1, full version)**: While the geometric framing does re-describe some established concepts, stating it as "not a substantive new algorithm" is too reductive. The distance-to-prototype soft labels produce a different loss landscape than standard entropy minimization on model predictions, and CIPD introduces genuinely novel mechanisms (weighted partitioning, diagram-based filtering). The contribution is in the geometric lens enabling new designs, even if some components have simpler descriptions. **Kept a moderated version under Major Weakness #1.**
+
+- **"Questionable exponent in Equation 4 is a typo" (Neutral Reviewer #2)**: The exponent "7" may or may not be a typo, but calling it suspicious without evidence goes beyond what the text supports. It IS unexplained, which is a valid criticism. **Kept as part of Major Weakness #4 (no justification/sensitivity analysis).**
+
+- **"Missing baselines like DeYO, ViDA, CFA" (Spark)**: The paper does include a reasonable set of baselines across four categories (neighbor-based, repurposed DA, self-training, entropy-based). Requesting additional recent methods is reasonable but the paper's baseline set is adequate for its scope. **Moved to Nice-to-Haves.**
+
+- **"No experiment measuring negative transfer avoidance" (Spark)**: The paper makes claims about CIVD unifying self-supervision and entropy to avoid negative transfer but does not directly measure this. This IS a gap in evidence but does not invalidate the method. **Kept as a minor implicit point under Major Weakness #1.**
+
+- **"Reproducibility: Algorithm 3 deferred to appendix" (Spark)**: The CIPD algorithm being in the appendix is a reasonable editorial choice for space; the main text provides the key equations. This is a formatting concern. **Removed.**
+
+- **"Only CNN-based experiments, missing ViT" (Human Finder)**: This is a valid but standard scope extension request; the paper evaluates on the standard TTA benchmarks with the standard architectures used in TTAB. **Moved to Nice-to-Haves.**
 
 ## Novel Insights
-The strongest novel insight is that even a very simple, explicitly geometric distance-to-centroid entropy loss (VD) can already outperform more elaborate neighbor-based TTA methods when tuned fairly under a standardized benchmark, and that adding multi-site influences (via self-supervised augmentations) and weighted partitions (via power diagrams) produces further gains without changing the core optimization paradigm. Nonetheless, while the geometric lens is conceptually appealing, the paper’s current formulation does not yet fully substantiate the stronger ambition of a unified geometric theory of neighbor-based TTA.
+
+The geometric connection between prototype-based TTA classification and Voronoi diagrams is genuinely insightful—it reveals that the decision boundaries in TTA are Voronoi cell boundaries, and that misclassified test samples lying near these boundaries are precisely the ones with high loss and unstable gradients. This provides a structural explanation for why entropy-based filtering (which removes such samples) works, while also showing its limitations: only samples near boundaries can be geometrically identified, and the Power Diagram's weighted boundaries can capture a broader set of potentially noisy samples. The idea of diagram subtraction (even if under-specified) as a concrete geometric procedure for sample selection is a creative direction that could inspire more principled approaches to sample filtering in TTA.
 
 ## Suggestions
-- **Clarify the CIVD/CIPD objectives in the main text.**  
-  Add explicit equations for:
-  - The CIVD-based prediction \(\tilde{y}_k\) (how \(F(z, C_k)\) feeds into a softmax and how the multiple \(\alpha\) are combined), and the exact loss minimized at test time;
-  - The CIPD loss, including how weights \(v_k\) are computed from the pretrained classifier and whether they are fixed or updated.
-  This should be visible without relying on the appendix.
 
-- **Formally define the PD–VD filtering rule and ablate it.**  
-  Specify something like: “we drop samples where the class assigned by VD and CIPD disagree” (or whatever is actually used), and then run an ablation comparing:
-  - CIVD without any filtering,
-  - CIVD with standard entropy-based filtering at a comparable retention rate,
-  - CIVD with the proposed geometric filtering.
-  This would directly test the noisy-sample filtering story.
-
-- **Evaluate CIVD/CIPD contributions on at least one more dataset.**  
-  Extend the VD/CIVD/CIPD ablation beyond CIFAR-10-C to at least CIFAR-100-C or ImageNet-C to show that the decomposition observed in Table 2 is not dataset-specific.
-
-- **Add a simple joint-Objective baseline.**  
-  Implement a baseline that directly minimizes \(\mathcal{L} = \lambda_1 \cdot \text{entropy}(p(y|x)) + \lambda_2 \cdot \text{rotation loss}\) with shared parameters during TTA. Comparing this to CIVD under matched hyperparameters would demonstrate whether the geometric “unification” helps beyond straightforward multi-tasking.
-
-- **Include basic sensitivity and runtime analyses.**  
-  Provide at least one plot showing performance vs. temperature \(\tau\) (and possibly the exponent in Eq. (4)), and a table with adaptation time per 1k test samples for TTVD vs a representative baseline, to document robustness and overhead.
-
-- **Tone down or qualify some mechanistic claims.**  
-  Adjust wording around “avoids negative transfer” and “identifying noisy samples near decision boundaries” to reflect that the current evidence is suggestive but not definitive, or add the experiments above to substantiate them.
-
-### Overall evaluation on key axes
-- **Originality:** Moderate. The base VD loss is close to known prototype-based objectives; the use of CIVD/CIPD for TTA is a reasonably novel transfer of existing geometric structures.
-- **Importance of question:** High. Test-time adaptation under distribution shift on standard robustness benchmarks is a central and active topic.
-- **Support for claims:** Strong for aggregate performance; weaker for the specific mechanistic/geometric claims (unified objectives, noise filtering).
-- **Soundness of experiments:** Generally sound in design and breadth; missing some ablations targeting specific claims and no statistical variability.
-- **Clarity of writing:** Good at a high level and for VD; less clear for CIVD/CIPD implementation and filtering details.
-- **Value to the community:** Good. Even if some conceptual claims are overstated, TTVD as an algorithm and the geometric framing are likely to spur follow-up work.
+- Provide explicit mathematical specification of the PD-VD subtraction operation for sample filtering in high-dimensional spaces, and add an ablation comparing PD-based filtering alone vs. entropy-based filtering to validate this key claim.
+- Add sensitivity analysis for the key hyperparameters (exponent in Eq. 4, γ in Eq. 6, temperature τ), and consider whether the exponent of 7 has any principled justification or if a standard choice (2) would suffice.
+- Include ablations on at least one additional dataset beyond CIFAR-10-C to validate the VD → CIVD → CIPD progression.
+- Clarify the ambiguity in Algorithm 1 regarding which parameters are updated (full feature extractor vs. BN parameters only).
 
 ## Score and Decision
 
-**Calibration references (from provided human reviews):**
-- Prototype-based / Voronoi-like TTA papers with mixed clarity and modest gains (e.g., eXrUdcxfCw.md, LQDJO7txyN.md) received scores mostly in the 5–6 range when contributions were incremental or underspecified.
-- Stronger TTA conceptual papers with well-substantiated mechanisms and solid experiments (e.g., 9w3iw8wDuE.md “Entropy is not Enough for TTA”) received higher scores (6–8).
-- Papers criticized for underspecified objectives and missing mechanistic validation tended to fall near 5.
+**Calibration**: I compared against several TTA papers in the human review corpus:
 
-Relative to these:
-- This paper’s empirical performance is more convincing than many mid-range prototypes papers (better benchmark coverage, calibration metrics, TTAB adherence), pushing it above the weakest of those (3–4 range).
-- However, the underspecification of its main advanced components (CIVD/CIPD) and the lack of targeted tests for central claims keep it below the strongest, more rigorous TTA works (7–8 range).
+- **COME** (Accept Poster, scores 6/6/5/8): Conceptual contribution (conservative entropy minimization) with solid but not breakthrough empirical results. TTVD has comparable empirical gains but a less rigorously validated conceptual contribution.
+- **PROGRAM** (Accept Poster, scores 6/5/6/6/8): Prototype-graph-based pseudo-labeling for TTA with gains over baselines. Similar novelty level (prototype-based approach) and similar empirical scope. TTVD's geometric lens is more novel than PROGRAM's graph-based pseudo-labeling.
+- **DeYO** (Accept Spotlight, scores 8/6/6/8): Strong conceptual contribution (entropy is not enough), empirical improvement on multiple settings, and clear evidence for each claim. TTVD is weaker on this axis.
+- **CTA by Source Prototypes** (Reject, scores 3/5/5/6/5): Very similar approach (using source prototypes for TTA alignment), but with limited novelty, weak empirical gains, and similar concerns about source data access. TTVD is stronger than this but shares the source-data-access limitation.
+- **NGTTA** (Reject, scores 6/5/6/5): Geometry-driven TTA for point clouds. Similar concept of using geometric priors, but with writing/clarity issues and limited validation. TTVD is somewhat stronger empirically but has similar concerns about conceptual overselling.
 
-Balancing strong empirical value against the conceptual/clarity gaps, a **score around 6.0** seems appropriate: a solid paper with meaningful contributions but not yet at the level of clarity and mechanism-substantiation expected for acceptance in a top-tier venue.
+TTVD sits between these anchors: stronger than the rejected prototype CTA method and NGTTA, with a genuinely novel geometric perspective, but with notable gaps in specification (PD filtering), evidence (ablations, statistical significance), and scope (limited baselines, synthetic benchmarks only). The conceptual novelty is real but partially oversold, and the empirical contribution is solid but not overwhelming.
 
-Given the instructions to weigh fundamental issues over averaging, and here there is no fatal flaw—just underspecified but plausibly fixable components—I lean slightly positively but note that a revision would be highly beneficial.
-
-MY FINAL SCORE: <pineapple>6.0</pineapple>  
-MY FINAL DECISION: <orange>Accept</orange>
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

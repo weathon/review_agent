@@ -1,154 +1,81 @@
 ## Summary
 
-The paper studies failure modes of target-directed RL agents that use self-generated intermediate targets, focusing on cases where agents pursue unreachable or unsafe targets. It introduces a taxonomy of “problematic targets” (G.1 nonexistent, G.2 temporarily unreachable) and “delusional” estimator errors (E.0/E.1/E.2), then proposes two hindsight relabeling strategies (“generate” and “pertask”) and hybrid generator/estimator relabeling to expose estimators to such targets. Experiments in a custom MiniGrid-based environment (SSM) with the Skipper method (and additional results in the appendix) suggest that these hybrids reduce certain error metrics and improve OOD generalization.
+This paper introduces "delusions" in target-directed RL agents—systematic false beliefs about target reachability arising from improper coordination between a target generator and estimator. It provides a taxonomy classifying delusions into generator-side types (G.1: nonexistent targets; G.2: temporarily unreachable targets) and estimator-side types (E.0/E.1/E.2 misevaluations), demonstrates these failure modes in a custom MiniGrid environment (SwordShieldMonster), and proposes two new hindsight relabeling strategies ("generate" and "pertask") plus hybrid mixtures that tailor training data for generator vs. estimator, showing reduced delusional behavior and improved OOD generalization for Skipper and LEAP agents.
 
 ## Strengths
 
-- **Clear decomposition of generator vs. estimator roles.**  
-  The paper cleanly abstracts target-directed agents into a generator that proposes targets and an estimator that evaluates them (Sec. 2, Fig. 1). It makes a useful conceptual distinction between hallucinations (bad targets proposed) and delusions (failure to downweight bad targets), which aligns with how many recent planning-based goal-conditioned methods are architected.
+- **Real and under-discussed failure mode identification**: The paper surfaces a genuine problem—target-directed agents systematically misestimate reachability of impossible or temporarily unreachable goals due to biased training distributions. This is a concrete and practically important issue that existing HER and goal-conditioned RL work has not systematically addressed. The distinction between G.1 (permanently unreachable) and G.2 (temporarily unreachable) targets is particularly valuable, as G.2 arises from irreversible dynamics that are common in real settings but rarely analyzed.
 
-- **Intuitive taxonomy of problematic targets and estimator errors.**  
-  The G.1/G.2 categories (invalid/impossible vs. temporarily unreachable targets, Sec. 3.1) and E.0/E.1/E.2 estimator delusions (Sec. 3.2) are well-motivated and concretely exemplified in SSM. The notion of temporary unreachability via irreversible transitions (e.g., sword/shield possession classes) is especially clear. This gives readers a vocabulary to talk about distinct reachability-related errors.
+- **Principled diagnostic evaluation**: Rather than reporting only OOD success rates, the paper traces a causal chain from estimation errors (E.0/E.1/E.2) → delusional behavior frequencies → OOD generalization (Fig. 3). The SSM environment enables ground-truth distance computation and clear delusion classification, making this dissection possible. This is better diagnostic practice than typical RL papers.
 
-- **Environment tailored for diagnosis.**  
-  The SSM environment is designed so that delusions are visible and analyzable: discrete gridworld, clearly defined semantic classes ⟨sword, shield⟩, lava traps that induce terminal states, and guaranteed viable paths. This allows computing exact shortest-path distances and cleanly labeling G.1/G.2/E.1/E.2, which is rare in OOD generalization work and makes the analysis in Fig. 3 interpretable.
+- **The 2-slotted hybrid approach is a useful design insight**: The observation that generators and estimators have conflicting training data needs—generators benefit from clean data, estimators need exposure to problematic targets—and the corresponding suggestion to separate their relabeling processes is simple but principled. This insight extends naturally beyond HER.
 
-- **Concrete, simple mitigation strategies.**  
-  The “generate” strategy (training the estimator using generator-proposed candidate targets) and “pertask” (sampling targets from anywhere in the replay buffer for the same task) are straightforward to implement on top of HER (Sec. 4.1). Their intended roles—“generate” for G.1/E.1 and “pertask” for G.2/E.2—are clearly argued, and Table 1 gives a concise summary of tradeoffs.
-
-- **Hybrid 2-slot relabeling design.**  
-  Separating generator and estimator relabeling distributions (Sec. 4.3) is a good design insight: generators benefit from focusing on useful, reachable targets while estimators benefit from seeing problematic examples. The paper systematically evaluates several hybrids (“F-(E+G)”, “F-(E+P)”, “F-(E+P+G)”) and shows they outperform pure atomic strategies on its metrics (Fig. 3d–h).
-
-- **Empirical evidence of nontrivial improvements.**  
-  On Skipper in SSM, the hybrids reduce certain E.2-related estimation errors and behavior frequencies relative to standard “future”/“episode” HER variants, and achieve noticeably higher aggregated OOD success rates (Fig. 3h). The narrative that “F-(E+P)” and “F-(E+P+G)” better handle temporarily unreachable G.2 targets is supported by the plotted metrics (especially Fig. 3f,g,h).
+- **Concrete empirical gains**: The hybrid strategies (notably F-(E+P+G)) achieve substantially better OOD success rates than any single atomic strategy (Fig. 3h), and the improvement is clearly attributable to reduced delusional behaviors rather than generic sample efficiency.
 
 ## Weaknesses
 
-### Fatal
+### Major:
 
-None. The paper is a real, coherent piece of work with nontrivial contributions; there is no single flaw that completely invalidates the empirical results or makes it “not even a paper.” However, there are structural issues where the framing and strength of claims are not fully supported.
+- **Limited empirical breadth undermines the general applicability claim**: Despite repeated claims of broad applicability ("strategies applicable to general target-directed agents," "adapting beyond HER should be straightforward"), the main paper presents detailed results for only one environment (SSM) and one method (Skipper). Both Skipper and LEAP use explicit distance estimators and HER-based training—architectures where the proposed strategies are straightforwardly implementable. The paper claims "4 sets of experiments align in terms of conclusions" but relegates 3/4 to the appendix. No results on continuous control, high-dimensional observations, or non-HER-based target-directed methods (e.g., Director, model-based planners) are provided. This is a significant gap between the scope of the claims and the scope of the evidence.
 
-### Major
+- **Narrow baseline comparisons for proposed relabeling strategies**: The practical contribution is two new HER sampling strategies and their mixtures, yet the experimental comparison is limited to atomic HER variants (future/episode/pertask/generate) and hand-tuned mixtures. Existing HER mixture strategies from prior work (e.g., the 3-strategy mixtures in Nasiriany et al., 2019; Yang et al., 2021a's similar "generate"-like approach) are discussed in related work but not implemented as baselines. There is also no comparison against alternative approaches to handling unreachable goals (e.g., reachability classifiers, uncertainty-based rejection), which would help establish whether the specific relabeling strategies are necessary rather than any coverage-expanding mechanism being sufficient. The paper acknowledges Yang et al. (2021a) used a "similar" mixture to "generate" but claims the delusion impact was not explored—yet does not compare against that exact mixture as a baseline.
 
-- **Conceptual overreach of the “delusion” framing.**  
-  The core construct of “delusion” is introduced with psychiatric language (“obviously wrong beliefs”, “inability to reject false beliefs”, “belief formation vs belief evaluation systems”), but the operationalization in RL reduces to partitioning estimator approximation error across different subsets of source–target pairs. For example:
-  - E.0 is “misevaluating non-delusional targets”; E.1/E.2 are misevaluations on G.1/G.2 targets (Sec. 3.2). These are simply subsets of the error surface defined by a choice of labeling; there is no formal criterion that distinguishes “ordinary approximation error” from “delusional belief.”
-  - The supposed incoordination between generator and estimator is described qualitatively but is never formalized beyond the fact that some source–target pairs are not sampled for the estimator.
-  - The necessary conditions for addressing delusions (Sec. 3.2: appropriate update rules, training data coverage) are exactly the standard conditions for learning to approximate a value/distance function under distribution shift.
-  
-  The paper’s more modest technical contribution—analyzing how HER relabeling choices bias the estimator’s training distribution over reachable/unreachable pairs and proposing coverage-boosting strategies—stands on its own. But the stronger framing that “delusions” form a qualitatively new class of failure modes with a distinct causal story is not convincingly supported.
+- **Mixture proportions are hand-tuned without sensitivity analysis**: The hybrid strategies use specific ratios (F-(E+G): 50/50; F-(E+P+G): 50/25/25) with no principled justification or sensitivity sweep. If these proportions need careful per-environment tuning, the practical value of the guidelines in Section 7 and the claim of "autonomous" delusion avoidance is weakened. No analysis of performance robustness to mixing ratio changes is provided.
 
-- **Loose causal link between strategies and “delusion” mitigation vs generic approximation gains.**  
-  The metrics used to argue delusion reduction (Sec. 5.2, Fig. 3) confound the specific notion of delusion with general estimator quality:
-  - “E.1/E.2 Estimation Errors” are L1 errors on distances for G.1/G.2 targets, with unreachable targets clipped to a maximum value. There is no threshold or decision-theoretic criterion connecting an error level to behavior that is “delusional” rather than just suboptimal.  
-  - “Non-delusional estimation errors” (Fig. 3d) “include the case of E.0,” blurring the line between delusional and non-delusional error.
-  - “Delusional behavior ratios” (Fig. 3c,g) track frequencies of G.1/G.2 *chosen* targets, but the text only briefly distinguishes candidate ratios vs behavior ratios. The exact conditioning (e.g., chosen given being proposed vs raw frequency) is not clearly spelled out in the main text.
-  
-  As a result, while Fig. 3 shows that hybrids reduce certain error metrics and change behavior frequencies, it is hard to separate:
-  - Improvements truly due to better handling of unreachable/unsafe targets (as per the G.1/G.2/E.1/E.2 taxonomy), versus
-  - Improvements due to broader data diversity and better global distance estimation.
-  
-  The conclusion’s claim that the methods “grant the agents the ability to address delusions autonomously and preemptively avoid delusional behaviors” (Sec. 8) is significantly stronger than what the current evidence justifies; the paper shows useful error reductions in a toy domain, not a general solution to delusional behavior.
+### Minor:
 
-- **Generality and scalability claims go beyond what is demonstrated.**  
-  The paper repeatedly emphasizes that the strategies “should be expected to be applicable generally” and that separating training data for generator and estimator is “straightforward” beyond HER (Sec. 4.1, 4.3, 7). However:
-  - All concrete implementations and experiments are on HER-based, dual-component methods (Skipper, LEAP) in small, fully observable gridworlds with manually designed structure and computable shortest-path distances.
-  - “pertask” relies on sampling arbitrary targets “across the entire memory” (Sec. 4.1.2), which is straightforward in a 12×12 gridworld but could be problematic in high-dimensional state spaces where most random target pairs are essentially irrelevant or unreachable.
-  - “generate” assumes a generator that can be cheaply queried during training and outputs targets in the same representation used by the estimator.
-  
-  Without at least one non-gridworld or higher-dimensional experiment, or a more careful theoretical discussion of when these strategies help vs hurt, the strong generality claims are not substantiated.
+- **The "delusion" framing adds terminology more than analytic precision**: The taxonomy maps cleanly to existing concepts—G.1 corresponds to unreachable states in the MDP, G.2 to reachability conditioned on the current state equivalence class, and E.0/E.1/E.2 to estimation errors over different subsets of source-target pairs. The psychiatric analogy (delusion vs. hallucination) does not yield new formal properties, metrics, or predictions beyond what standard notions of coverage, reachability, and off-policy bias already provide. The taxonomy is descriptively useful, but the framing overstates the conceptual novelty.
 
-- **Missing baseline perspectives and ablations.**  
-  The experimental comparison is almost entirely intra-family: different HER relabeling strategies for Skipper (and LEAP in the appendix). Missing are:
-  - Comparisons to *non*-target-directed goal-conditioned methods (e.g., standard HER-trained UVFA) in the same SSM setting. This would illuminate whether the identified failure modes are genuinely specific to target-directed architectures or are generic.
-  - Simple alternative ways to expose estimators to unreachable/unsafe pairs, especially in SSM where ground-truth reachability and distances are cheap to compute (e.g., synthetic negatives or explicit reachability labels). That could show whether HER-based relabeling is the most natural or efficient solution.
-  - Ablations that hold generator quality fixed across variants more tightly. The paper partially addresses this by focusing on “F-**” variants (Sec. 5.4–5.5), but generator and estimator are still trained jointly under different relabeling distributions, so interactions remain entangled.
+- **Computational cost of "generate" is unquantified**: Section 4.1.1 acknowledges that "generate" requires running the generator at every training step, incurring "additional computational burden, depending on the complexity of target generation processes." No wall-clock time comparison or FLOPs analysis is provided, making it difficult for practitioners to assess the cost-benefit tradeoff.
 
-### Minor
+- **The "pertask" strategy's tradeoffs are empirically underexplored**: Table 1 notes that pertask "can cause extensive G.2 targets if used to train generators" and has "low efficiency in learning close-proximity source-target relationships," and Fig. 3(d) shows F-P has significantly worse short-distance estimation. These downsides are noted but their quantitative impact on the hybrid strategies is not explicitly isolated. Understanding when pertask's benefits outweigh its costs is critical for the practical guidelines in Section 7.
 
-- **Lack of environment diversity in the main text.**  
-  Only Skipper on SSM is shown in detail; three of four experiment sets (including LEAP and a second environment) are in the appendix, summarized briefly in Sec. 5.6. This limits the reader’s ability to assess whether the findings are robust across methods and task structures.
+- **Ground-truth distance computation relies on privileged access unavailable in realistic domains**: The estimation error metrics rely on computing exact shortest-path distances between all state pairs, which is only feasible in small discrete environments. The paper claims general applicability, but its diagnostic tools would not scale to domains where delusions might be most consequential. This mismatch should be explicitly acknowledged.
 
-- **Mixture proportion choices are ad hoc and under-analyzed.**  
-  The hybrids use specific ratios (e.g., 50% episode, 25% pertask, 25% generate for F-(E+P+G)), but the paper provides neither principled selection criteria nor sensitivity analysis. Given that the main gains come from choosing mixtures, robustness to these choices matters for practical utility.
+### Trivial:
 
-- **Terminological density and some confusion.**  
-  The introduction of many labels (G.x, E.x, types of HER, behavior ratios) makes the exposition harder to follow. In particular, the overlap between “non-delusional” errors and E.0 is not crisply delineated in Sec. 5.2 and Fig. 3d.
-
-- **Limited discussion of computational overhead.**  
-  The paper notes that “generate” carries computational cost (Sec. 4.1.1) but does not quantify it (e.g., generator calls per update, wall-clock slowdown). For real-world applications with tight time budgets, this could be important.
-
-### Trivial
-
-- Some figure captions are duplicated and verbose (e.g., Fig. 2 and Fig. 3 have multiple, near-identical captions in the text). This is likely a formatting artifact but contributes to clutter.
+- The psychiatric framing occasionally obscures rather than illuminates—terminology like "belief formation" and "belief evaluation systems" adds overhead without analytical payoff.
 
 ## Nice-to-Haves
 
-- Additional visualizations of the learned distance estimators over the SSM grid (e.g., heatmaps showing ground-truth vs estimated distances for representative targets) to make “false beliefs” more tangible.
-- Case-study trajectories contrasting a baseline and a hybrid agent on the same evaluation task, highlighting exactly where delusional target choices occur and how the hybrid avoids them.
-- A short, explicit discussion of how to approximate G.1/G.2/E.1/E.2 in environments where exact reachability is not computable (e.g., using learned reachability classifiers or uncertainty thresholds).
+- Validation on at least one environment with continuous state space or high-dimensional observations (e.g., robotic manipulation with irreversible state changes) to test whether G.2 delusions arise and whether pertask/general scale.
+- Comparison against an explicit reachability/feasibility classifier as a baseline, to isolate whether the benefit comes from the specific relabeling strategies or from broader data coverage.
+- Ablation or sensitivity analysis on mixture proportions to establish robustness.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution. They generally either misunderstand the paper, overreach beyond what’s reasonable to ask, or are rooted in generic expectations rather than this work’s actual content.
+- **Criticism that the paper overclaims novelty relative to prior work on goal misgeneralization, HER failures, etc.**: The paper does cite Di Langosco et al. (2022), Jafferjee et al. (2020), Zhao et al. (2024), and others in related work, and positions its contribution as identifying *delusions as a systematic subclass* of these failure modes with targeted mitigations. The contribution claim is about the taxonomy and targeted strategies, not about discovering these failures from scratch. Removed as it mischaracterizes the paper's novelty claim.
 
-- **Claim that “delusions” are purely circular redefinitions with no added value beyond standard approximation error.**  
-  While the construct is not fully formalized, the taxonomy of G.1/G.2 and E.0/E.1/E.2 and the explicit focus on target reachability and temporal structure do add some conceptual clarity beyond generic “approximation error.” The weakness has been kept but softened: the paper overclaims conceptual novelty rather than being completely circular.
-- **Implied requirement to test on large-scale benchmarks (e.g., D4RL, robotics) as a condition for any contribution.**  
-  The paper explicitly positions itself as a diagnostic study in controlled environments with full ground-truth access. While broader benchmarks would strengthen the case, their absence does not invalidate the contributions given the stated scope. This concern has been reframed as a limitation on generality rather than a fatal flaw.
-- **Suggestion that the psychiatric analogy is inherently inappropriate.**  
-  The paper uses the analogy for intuition and does not base any technical claims on psychiatric models. Criticizing the analogy as such would be stylistic; the substantive issue is the lack of precise formalization, which is already covered under major weaknesses.
+- **Criticism that safety claims are unsupported because no concrete safety metrics appear in experiments**: The introduction mentions "safety catastrophes" as motivation, and the introduction's E.1 discussion notes "potentially catastrophic if the G.1 targets are beyond safety constraints." The experiments focus on demonstrating the phenomenon and mitigation, not on safety per se. Criticizing the lack of safety metrics is scope creep—the paper's stated scope is identifying and addressing delusions, not benchmarking safety.
+
+- **Criticism that initial state distributions are designed to amplify G.2 risk, making the setting unfair**: The paper is explicit about this design choice (Section 5.1: "This change increases risks of E.2") and it is an appropriate stress test for the proposed methods. A stress test that amplifies the failure mode being studied is standard methodology.
+
+- **Criticism about lack of non-target-directed baselines**: The paper's scope is improving target-directed agents; comparing against non-planning methods (e.g., flat policy) would not address whether the proposed strategies fix delusions within that framework. This is scope creep.
+
+- **Demand for theoretical proofs of convergence**: This is an empirical methods paper studying a failure mode and proposing practical mitigation strategies. Demanding formal convergence guarantees is outside the paper's stated scope and community norms.
 
 ## Novel Insights
 
-None beyond the paper’s own contributions. The reviewers’ concerns largely align with common patterns in HER/goal-conditioned RL work (limited environment diversity, scalability questions, need for more ablations). The most distinctive insight is already present in the paper: that generators and estimators in target-directed agents have conflicting data needs and benefit from decoupled training distributions.
+The distinction between G.1 (permanently nonexistent targets) and G.2 (temporarily unreachable targets) is a genuinely useful categorization that maps onto different training data deficiencies and requires different mitigations. G.2 delusions are particularly insidious because the targets are valid states that the estimator may have correctly learned about from other initial conditions, creating a false sense of competence. The insight that generators and estimators have *conflicting* training data needs—generators should avoid problematic targets, estimators should be exposed to them—and the corresponding 2-slotted approach is a clean architectural principle that transcends the specific HER instantiations.
 
 ## Suggestions
 
-- **Reframe and tighten the conceptual claims.**  
-  Present the main contribution more modestly as: (i) a reachability-focused analysis of target-directed failure modes under HER relabeling, and (ii) practical relabeling strategies and hybrids that improve estimator coverage of problematic targets. Reduce reliance on the psychiatric “delusion” narrative or clearly mark it as an informal analogy.
-
-- **Clarify metrics and behavioral definitions.**  
-  In Sec. 5.2 and the main text, explicitly define:
-  - How “G.1/G.2 candidate ratio” and “behavior ratio” are computed (conditioned on what).
-  - How “non-delusional errors” relate to E.0.
-  - What error ranges actually lead to different target choices in Skipper/LEAP.  
-  This would make the connection between estimator errors and decision-time behavior much clearer.
-
-- **Add at least one more experiment to the main text.**  
-  Promote one of the appendix sets (e.g., LEAP on SSM or Skipper on the second environment) to the main body with a figure analogous to Fig. 3. This would better support claims that the strategies generalize across architectures and environments.
-
-- **Include sensitivity analyses for mixture proportions.**  
-  For one environment/method, vary the mixing ratios for “episode/future/pertask/generate” in a systematic small grid and report OOD performance and key delusion metrics. If performance is robust across a range, this reassures practitioners; if not, it highlights the need for tuning heuristics.
-
-- **Discuss scalability and limitations explicitly.**  
-  Add a subsection in the discussion or conclusion that:
-  - Acknowledges reliance on small, fully observable MDPs with computable distances.
-  - Outlines challenges and potential adaptations for continuous/high-dimensional settings (e.g., approximate reachability via learned models, subsampling in “pertask”).
-  - Clarifies that the current results are diagnostic and do not yet demonstrate gains on large-scale benchmarks.
-
-- **Compare against at least one alternative estimator-augmentation baseline.**  
-  In SSM, where ground-truth distances are known, implement a simple baseline that augments the estimator’s loss with penalties on unreachable or long-distance pairs sampled synthetically, without using HER-style relabeling. Even if it underperforms, this will clarify what is specific about the proposed strategies.
-
-### Evaluation on key axes
-
-- **Originality:** Moderate. The relabeling strategies and hybrid 2-slot training are natural extensions of existing HER ideas, but the systematic reachability-centric analysis and taxonomy are a meaningful conceptual addition within the target-directed RL niche.
-- **Importance of research question:** Moderate to high within goal-conditioned / target-directed RL: unreachable/unsafe intermediate targets are a real concern and interact with OOD generalization and safety.
-- **Support for claims:** Mixed. Empirical support for “these mixtures can improve OOD performance and reduce certain estimator errors” is solid in SSM; support for broader conceptual and generality claims is weaker.
-- **Soundness of experiments:** Reasonable within the chosen setting (20 seeds, well-instrumented metrics), but missing some key baselines and ablations.
-- **Clarity of writing:** Mixed. The high-level story and environment descriptions are clear, but terminology density and overlapping categories can be confusing.
-- **Value to the community:** Moderate. As a diagnostic study of HER and target-directed agents in carefully controlled gridworlds, the paper can help clarify failure modes and inspire better data selection schemes, but its current framing may oversell the concept rather than emphasizing the practical lessons.
+1. **Include at least one additional experiment set in the main text** (e.g., LEAP on SSM), with a clear table summarizing all 4 experiment sets. This would substantiate the "all 4 sets align" claim visible to readers without appendix access.
+2. **Run a simple sensitivity sweep on mixing proportions** (e.g., ±10% around the chosen ratios for F-(E+P+G)) and report whether OOD performance is robust or sensitive.
+3. **Add wall-clock time comparisons** for each strategy variant to quantify the computational overhead of "generate" and the memory cost of "pertask."
+4. **Explicitly acknowledge the scalability limitations** of ground-truth distance computation and state equivalence class identification in the conclusion, and discuss how diagnostics could be approximated in realistic domains.
 
 ## Score and Decision
 
-To calibrate, I compared to several human-reviewed papers:
+**Calibration**: Compared to similar papers in goal-conditioned RL and HER augmentation:
+- *Skipper (Zhao et al.)*: Scores 5-6, accepted as poster. Similar gridworld focus, identified a real failure mode, limited environment diversity.
+- *Bad Habits (Policy Confounding)*: Scores 5-6, rejected. Identified a real problem with toy-environment diagnostics but limited breadth.
+- *HInt (Null Counterfactual)*: Scores 5-8, accepted. HER augmentation with similar scope concerns but stronger theoretical grounding.
+- *Breadth-First Subgoal Exploration*: Scores 5-6, rejected. Grid-world-centric, limited baselines.
 
-- **Skipper (eo9dHwtTFt.md; scores 6,6,5,6)** – Similar domain (MiniGrid-based, target-directed RL with planning), with concerns about scalability and limited domains but judged overall as a solid, above-threshold contribution. The present paper is conceptually related but somewhat less mature empirically (no more complex domains, heavy framing around “delusions” that is not fully nailed down).
-- **Goal-Conditioned RL with Virtual Experiences (OjCWG58ZyY.md; scores 6,5,6,5)** – Another HER-based method with multiple components and limited environment diversity; reviewers saw it as reasonable but not groundbreaking. This paper feels somewhat weaker in empirical breadth and baseline coverage.
-- **Null Counterfactual Factor Interactions (2uPZ4aX1VV.md; scores 8,8,5,6)** – A stronger HER-related paper with both solid theory and more varied experiments; clearly above the current submission’s level.
-- **Bias-Resilient Multi-Step GCRL (llXCyLhOY4.md; scores 3,3,3,3)** – A HER-improvement paper criticized for too many moving parts and insufficient ablations; weaker overall than this submission, which has more coherent diagnostics.
+This paper identifies a genuine, under-examined failure mode and provides principled mitigations, but its empirical evidence is narrow (one environment-method pair in the main text), comparisons are limited within-family, and the conceptual framing overclaims relative to its technical contribution. It sits above the purely diagnostic "Bad Habits" paper (which had weaker mitigations) but below HInt (which had stronger theoretical backing and broader experiments). Roughly comparable to Skipper in contribution level.
 
-Relative to these anchors, this paper sits below Skipper and the better HER-latent works, but clearly above very weak submissions. I therefore place it around the borderline but slightly negative region.
+**Score: 5** — The delusion taxonomy and targeted mitigation strategies are a useful contribution, but the narrow empirical evaluation and limited baseline comparisons prevent strong confidence in the claimed generality. The conceptual novelty is somewhat overstated relative to the technical contribution (two new HER sampling strategies plus mixtures).
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>  
+MY FINAL SCORE: <pineapple>5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -114,7 +114,10 @@ When reporting your score, briefly state which calibration papers you compared a
 You can use read_file to read these files. List the papers you compared and the reasoning.
 
 Let the score distribution follow the actual quality of the paper relative to the calibration examples.
-The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well."""
+The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
+
+There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You can also try to find more papers with extreme scores to see what made a paper really good/bad.
+"""
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
 
