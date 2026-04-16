@@ -20,7 +20,7 @@ os.environ["OPENAI_DEFAULT_MODEL"] = os.getenv("OPENAI_DEFAULT_MODEL", "z-ai/glm
 HARSH_MODEL = os.environ.get("HARSH_MODEL", "gpt-5.4")
 # HUMAN_FINDER = "kimi-k2.5"
 HUMAN_FINDER = os.environ.get("HUMAN_FINDER", "ollama:glm-5.1:cloud")
-MERGER_MODEL = os.environ.get("MERGER_MODEL", "gpt-5.4")
+MERGER_MODEL = os.environ.get("MERGER_MODEL", "ollama:glm-5.1:cloud")
 # MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
 # MERGER_MODEL = "claude-sonnet-4.6"
 from openai import AsyncOpenAI
@@ -137,6 +137,8 @@ def load_prompts(path, paper_access: str = PAPER_ACCESS_INJECTION, no_cal: bool 
 _tool_agents = [read_file, search_file, grep_file] 
 # summarizer.as_tool(
     # tool_name="summarization", tool_description="Summarizing or answering questions about a specific file given **its absolute path** and question.",
+
+    
 harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=HARSH_MODEL)
 neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"))
 if not HUMAN_FINDER.startswith("ollama:"):
@@ -147,12 +149,23 @@ else:
     model = OpenAIChatCompletionsModel(model=model, openai_client=client)
     human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=model)
 
+_NO_CAL = "--no_cal" in __import__("sys").argv
+_merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=_NO_CAL)
+_merger_tools = [read_file, grep_file] if _NO_CAL else _tool_agents
+
 if MERGER_MODEL.startswith("claude_sdk:"):
     merger = None  # Claude SDK merger — created per-call in run_pipeline
     _MERGER_SDK_MODEL = MERGER_MODEL[len("claude_sdk:"):]
-else:
-    merger = Agent(name="Merger", instructions=load_prompts("merger.md"), model=MERGER_MODEL, tools=_tool_agents)
+elif MERGER_MODEL.startswith("ollama:"):
+    merger_model = MERGER_MODEL.replace("ollama:", "")
+    client = AsyncOpenAI(api_key="ollama", base_url="http://localhost:11434/v1/")
+    merger_model = OpenAIChatCompletionsModel(model=merger_model, openai_client=client)
+    merger = Agent(name="Merger", instructions=_merger_instructions, model=merger_model, tools=_merger_tools)
     _MERGER_SDK_MODEL = None
+else:
+    merger = Agent(name="Merger", instructions=_merger_instructions, model=MERGER_MODEL, tools=_merger_tools)
+    _MERGER_SDK_MODEL = None
+     
 spark = Agent(name="Spark", instructions=load_prompts("spark_finder.md"))
 
 # scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents, model=SCORER_MODEL)
@@ -223,9 +236,6 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         merged_review = await run_merger_claude_sdk(_MERGER_SDK_MODEL, merger_prompt, paper_dir, no_cal=no_cal)
         agent_usages["Merger"] = None
     else:
-        _merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=no_cal)
-        _merger_tools = [read_file, grep_file] if no_cal else _tool_agents
-        _merger = Agent(name="Merger", instructions=_merger_instructions, model=MERGER_MODEL, tools=_merger_tools)
         merger_prompt = (
             f"Here is the paper being reviewed (extracted from PDF — formatting "
             f"artifacts are parser issues, not paper problems):\n\n"
@@ -235,7 +245,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
             f"Remember: many of the harsh critic's points may be nonsensical or overly "
             f"picky — cross-check everything against the actual paper before including it."
         )
-        merged_review, merger_usage = await run_agent_with_retry(_merger, merger_prompt)
+        merged_review, merger_usage = await run_agent_with_retry(merger, merger_prompt)
         agent_usages["Merger"] = merger_usage
     scorer_output = float(merged_review.split("<pineapple>")[1].split("</pineapple>")[0]) if "<pineapple>" in merged_review else -1
     decision = (merged_review.split("<orange>")[1].split("</orange>")[0]) if "<orange>" in merged_review else "N/A"

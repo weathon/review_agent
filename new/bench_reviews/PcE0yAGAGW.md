@@ -1,76 +1,230 @@
 ## Summary
-This paper studies few-shot motor imagery EEG classification and proposes FSL-MIC, a relation-network-style architecture combining a 1D convolutional embedding, a self-attention block, and a relation module. The problem is important and practical—reducing subject-specific calibration burden for BCI—but the current paper overstates what its experiments establish, and several methodological details needed to validate the contribution are unclear.
+
+The paper proposes FSL-MIC, an architecture for EEG motor imagery (MI) classification that combines a convolutional embedding module, a self-attention mechanism, and a relation network. The stated goal is to enable “few-shot” classification for unseen subjects using only a small number of labeled support trials, and the method is evaluated on BCI Competition IV 2a, 2b, and a newly collected 64‑channel dataset.
 
 ## Strengths
-- **Addresses an important practical problem.** Reducing calibration for cross-subject MI-BCI is a real bottleneck, and the paper is well-motivated around limited labeled data and subject variability.
-- **Evaluation spans multiple datasets.** The method is tested on BCI 2a, BCI 2b, and an in-house dataset, which is useful for checking that the approach is not tied to a single recording setup.
-- **The few-shot trend is internally consistent.** In Table 1, the proposed RelationNet-attention improves monotonically or near-monotonically as shots increase from 1 to 20 across all three datasets, which is a useful sanity check that the episodic setup is doing something meaningful.
-- **The overall architecture is coherent.** An embedding + attention + relation pipeline is a sensible design for EEG, especially given possible channel dependencies and the need to compare support/query examples across subjects.
-- **The paper is generally readable at a high level.** Despite some ambiguity in protocol details, the motivation, task setup, and empirical trend are understandable.
+
+- **Important and well-motivated application**  
+  The paper addresses cross-subject MI EEG classification with limited per-subject data, a central bottleneck for practical BCIs where long calibration sessions are burdensome, especially for patients with motor impairments (Section 1).
+
+- **Conceptually clear modular design**  
+  The framework decomposes into embedding, attention, and relation modules (Figure 1; Sections 3.1–3.3). This high-level design is easy to follow and well-aligned with the goal of learning subject-invariant representations and cross-subject similarities.
+
+- **Evaluation on three datasets including a new one**  
+  Experiments on BCI 2a, BCI 2b, and a 7‑subject, 64‑channel experimental dataset (Section 4.1) demonstrate that the authors have implemented and tested their system in multiple EEG settings with different channel configurations.
+
+- **Cross-subject test protocol**  
+  The use of leave-one-subject-out cross-validation (9‑fold for the 9‑subject BCI datasets, 7‑fold for the new dataset; Section 4.2) directly evaluates generalization to unseen subjects, which is the right setting for the stated application.
+
+- **Reasonable empirical coverage of K-shot regimes**  
+  The paper systematically reports performance for K ∈ {1, 5, 10, 20} shots (Table 1), showing the expected monotonic improvements in accuracy as K increases for the relation network.
 
 ## Weaknesses
-###: Fatal
-- **The paper’s central empirical framing is not supported by its own results.** The abstract claims the proposed framework “significantly outperforms traditional methods,” and the conclusion makes similarly strong claims, but Table 1 shows the proposed few-shot method is consistently well below the paper’s strongest baseline, CNN-attention-All, on every dataset. For example: BCI 2a: 72.6 vs. 89.1, BCI 2b: 73.2 vs. 86.28, Experimental: 68.2 vs. 81.24. This does not make the work worthless—there may still be a calibration/accuracy tradeoff story—but the current narrative overclaims enough to undermine the core take-away as written.
 
-### Major:
-- **The comparisons do not cleanly establish the intended few-shot adaptation claim.** Section 4.2 evaluates the proposed method with support/query splits on the unseen test subject, while CNN-attention-All is trained on all non-test-subject samples and CNN-attention-Few is trained with 40 samples from the testing subject. These are different adaptation regimes and different target-data budgets. As a result, the experiments do not cleanly answer the most relevant question: whether episodic few-shot learning offers an advantage over alternative low-calibration subject-adaptation strategies under matched target-subject supervision.
-- **The method description is too incomplete for a paper whose main contribution is architectural.** Several details remain underspecified: the exact convolutional stack in the embedding module, precise tensor shapes, how support examples are aggregated into “class-representative vectors,” where and how attention interacts with support vs. query, the episodic sampling protocol, focal-loss hyperparameters, and the formal definition of “DA accuracy.” These are not minor implementation omissions; they make it difficult to assess novelty, verify the claimed mechanism, or reproduce the work.
-- **Claims about interpretability are not substantiated in this paper.** The text emphasizes that attention provides interpretability, but explicitly says broader results across subjects will appear in a future paper, while this paper only includes a representative single-subject example in supplementary material. That is too limited to support interpretability as a meaningful current contribution, especially in a setting where inter-subject variability is central.
-- **Experimental analysis includes causal interpretations not supported by the design.** The paper attributes performance differences across datasets to factors such as neurofeedback and channel count (e.g., BCI 2b being easier because of neurofeedback, BCI 2a benefiting from more channels), but multiple factors change simultaneously across datasets: subjects, protocols, timing, sessions, channel layout, and feedback. Without controlled ablations, these explanations are speculative.
-- **The paper does not adequately validate the specific value of the proposed attention-augmented relation network.** There is no ablation isolating the contribution of attention versus the relation module alone, so it is unclear whether the key claimed architectural ingredient is actually responsible for the reported gains.
+### Fatal
+
+1. **Core “few-shot/meta-learning” claim is not supported by the described protocol or results**
+
+   The paper is framed throughout as a few-shot/meta-learning contribution that “enables rapid adaptation based on minimal training observations” and “minimizes the need for extensive recalibration” (Intro, contributions; Abstract). However, the actual training and evaluation protocol does not implement a convincing few-shot/meta-learning regime:
+
+   - **Training looks like standard cross-subject supervised learning, not episodic meta-learning.**  
+     Section 4.2: “we employed 9-fold and 7-fold cross-validation, training the model with data samples from 8 or 7 subjects and testing on the remaining subjects for each validation episode. … During training, support and query data samples were randomly selected from both the training and validation sets at each iteration.” There is no explicit N‑way K‑shot episodic construction mirroring test conditions; instead, the relation network is trained on large numbers of labeled trials from many subjects.
+
+   - **No explicit adaptation or task-specific update at test time.**  
+     At test time, “20 samples [per class] designated as support and the rest as query data,” and K of these are used in K‑shot experiments. But the paper never describes any parameter adaptation using the support set, nor any task-level optimization; the relation network appears to use the support embeddings directly within a fixed, pre-trained model. This is closer to a learned similarity function trained with conventional supervision than to meta-learning that “rapidly adapts” from few trials.
+
+   - **Comparison setup is misaligned with the few-shot narrative.**  
+     CNN-attention-Few is trained only on 40 samples from the test subject, while RelationNet-attention is trained on thousands of samples from other subjects plus support at test (Section 4.2). This makes RelationNet-attention primarily a cross-subject supervised model with a small amount of test-subject calibration, not a model that learned to “learn from few examples” in the meta-learning sense.
+
+   Combined, the protocol does not substantiate the central claim that this is a few-shot/meta-learning framework that enables rapid per-subject adaptation from a handful of trials. The work is better characterized as an attention-based relation network trained with standard cross-subject supervision plus a limited calibration set. This misalignment between framing and method is a fundamental issue.
+
+2. **Headline performance claims are contradicted by the reported numbers**
+
+   The Abstract and Conclusion claim that the proposed FSL framework “significantly outperforms traditional methods” and “outperforms” prior work (e.g., An et al.), and Section 4.4 states: “our model outperforms it, achieving superior accuracy across all three datasets.” These statements are not supported within the paper:
+
+   - **No numeric comparison to external methods.**  
+     Table 1 compares only three of the authors’ own variants (CNN-attention-All, CNN-attention-Few, RelationNet-attention). There are no reported numbers for An et al. (2020/2023) or any other existing FSL or traditional MI methods, yet superiority is claimed in the text.
+
+   - **Their own best-performing model is not the proposed few-shot method.**  
+     On all three datasets, CNN-attention-All outperforms the proposed RelationNet-attention (even at 20 shots) by a wide margin:
+
+     - BCI 2a: 89.1% ± 0.4 vs 72.6% ± 2.9  
+     - BCI 2b: 86.28% ± 0.8 vs 73.2% ± 6.1  
+     - Experimental: 81.24% ± 1.1 vs 68.2% ± 5.1  
+
+     Thus, the central method (few-shot RelationNet-attention) is not the state-of-the-art within their own study; the non-FSL baseline is clearly stronger.
+
+   - **No “traditional” baselines are present.**  
+     Despite repeated claims about outperforming “traditional methods,” there is no CSP/FBCSP, Riemannian, or even a plain CNN-without-attention baseline reported.
+
+   In its current form, the paper’s main empirical claims (superiority of FSL-MIC vs traditional or prior FSL approaches) are not only unsubstantiated but directly contradicted by Table 1.
+
+### Major
+
+1. **Architecture and training procedure are under-specified to the point of being non-reproducible**
+
+   Several core components are described only at a high level, which prevents reimplementation:
+
+   - **Embedding module (Section 3.1)**  
+     The text states that each channel is processed by “the same convolutional base” to produce a C×E embedding and that E is “100 times smaller than the original samples,” but:
+
+     - The number of convolutional layers, kernel sizes, strides, padding, activation functions, pooling strategy, normalization, and any dropout are not specified.  
+     - It is unclear whether convolutions operate per-channel independently, across channels, or some hybrid (e.g., grouped convolutions).  
+     - “100 times smaller than the original samples” is vague without stating the time-window length and exact mapping from input shape to E.
+
+   - **Self-attention module (Section 3.2)**  
+     They define Q, K, V and S = QKᵀ with S ∈ ℝ^{C×C}, then Softmax, then M = WV and O = tanh(M). But:
+
+     - The dimensionality of Q, K, V (per channel? per time step?) is not given.  
+     - The description “Summing across rows and normalizing these scalars produces a vector of attention scores … used to create a linear combination of all the electrode channel vectors” leaves ambiguous which axes correspond to time vs channels and how temporal structure is preserved.
+
+   - **Relation module (Section 3.3)**  
+     The module “concatenates” support and query features in the channel direction and uses two 1D conv layers (30×1, 15×1), then global average pooling and FC layers with sizes 256 and 100. However:
+
+     - The input shape to this module is not clearly specified.  
+     - For K>1, it is not explained how K support examples per class are aggregated into “class-representative vectors” or whether the relation is computed per-support and then pooled. This is central to any K-shot relation network but left unspecified.
+
+   - **Training details and data augmentation**  
+     The batch size is given as 164, but there is no explanation of how many tasks or pairs this corresponds to. DA is central (they report “DA Accuracy” everywhere, and Section 4.4 emphasizes “dataset-specific DA techniques based on Lashgari et al.”), but the actual augmentation pipeline—types of transforms, magnitudes, when and how applied per dataset—is not described.
+
+   These are not cosmetic omissions; they make it impossible for an experienced reader to reconstruct and verify the method.
+
+2. **Evaluation does not isolate the contributions of attention or relation network**
+
+   The paper’s two architectural highlights are the self-attention mechanism and the relation network. Yet:
+
+   - All reported models incorporate attention (“CNN-attention-All”, “CNN-attention-Few”, “RelationNet-attention”). There is no CNN baseline without attention, and no RelationNet variant without attention.
+   - There is no comparison to simpler metric-based FSL on the same embedding (e.g., prototype averaging with Euclidean distance) to test whether the non-linear relation network actually improves over a straightforward distance-based classifier.
+
+   As a result, we cannot tell whether attention helps at all, or whether the relation network provides any benefit beyond a simpler, potentially more robust metric-learning approach. This directly undercuts the methodological claims.
+
+3. **Interpretability claims via attention are unsubstantiated in this submission**
+
+   Section 3.2 devotes extensive narrative space to interpretability:
+
+   > “we have included a representative example from a single subject in this work to illustrate the model's interpretability. Specifically, in the Supplementary Material, we provide a heatmap of attention scores…”
+
+   And later:
+
+   > “By focusing on a single subject for this demonstration, we aim to provide an initial insight … while recognizing that broader results involving multiple subjects will be presented in subsequent work.”
+
+   In the current submission, there is no figure or quantitative analysis in the main text demonstrating that attention maps correspond to meaningful neurophysiological patterns (e.g., emphasis on C3/C4 during hand MI). The single-subject supplementary heatmap and promise of “subsequent work” are not enough to support interpretability as a substantive contribution.
+
+4. **Scope of evaluation is limited relative to the stated generality**
+
+   The method is presented as generally applicable to N‑way K‑shot setting and even to time-series classification beyond EEG (Conclusion). In practice:
+
+   - All experiments are **2‑way** classification (left vs right hand). BCI 2a’s 4‑class setting (left/right/feet/tongue) is not used, despite being standard in MI literature.  
+   - There is no empirical evidence for N‑way extensions or cross-domain applications (healthcare, finance, autonomous systems are mentioned only speculatively).
+
+   This is not a fatal flaw by itself, but the claims about broad applicability should be substantially tempered.
 
 ### Minor
-- **Novelty appears moderate rather than strong.** The paper combines known ingredients—1D CNN embeddings, self-attention, and relation networks—in a new application setting, but the manuscript does not sharply articulate what is technically new beyond this integration.
-- **There is a substantive inconsistency in the BCI 2a channel description.** Section 4.1.2 says that “to compare our results with previous studies, we focused on the C3, CZ, and C4 electrodes,” yet Section 4.2 describes BCI 2a as having 22 channels in the experiments, and Section 4.3 discusses 22-channel behavior. This inconsistency directly affects interpretation of the setup and should be resolved.
-- **The validation/training protocol is ambiguously described.** Section 4.2 says support and query samples were randomly selected from both training and validation sets at each iteration, which makes the role of validation unclear. The leave-subject-out and per-subject validation split description is also hard to parse for the 7-subject dataset.
-- **The paper only evaluates 2-way classification, while claiming easy extension to N-way K-shot.** That extension may be plausible, but the paper provides no evidence for it; given that BCI 2a is commonly used in richer MI settings, this limits the practical scope of the current evaluation.
-- **“DA accuracy” is reported throughout but never clearly defined.** Since it appears in every result table and in the discussion, it should be formally introduced and explained.
+
+- **“DA Accuracy” is not defined**  
+  Table 1 reports “Accuracy” and “DA Accuracy,” and the text repeatedly discusses “DA accuracy,” but the paper never clearly defines what DA accuracy is or how it differs from standard accuracy. Without a definition and procedural description, these numbers are ambiguous.
+
+- **Hyperparameters for focal loss are missing**  
+  Section 3.3 defines focal loss. However, the actual α and γ used are never specified, and there is no justification for using focal loss (class imbalance is not discussed) or ablation vs standard cross-entropy.
+
+- **Ambiguities in cross-validation description**  
+  Section 4.2 mentions “9-fold and 7-fold cross-validation” and that “each training set included all experiments from a subject except the last one, which served as the validation set,” but does not clearly state how sessions are split for BCI 2a/2b (which have multiple sessions). This leaves uncertainty about potential information leakage across train/validation/test for some configurations.
+
+- **Some over-interpretation of dataset properties**  
+  For example, Section 4.3.1 attributes greater difficulty of BCI 2a solely to the absence of neurofeedback. This may be partially true but is not analyzed or supported by evidence; other factors (e.g., differences in task design or subject variability) may also contribute.
 
 ### Trivial
-- **The attention formulation raises a technical question.** Section 3.2 presents attention as \(S=QK^T\), \(W=\mathrm{Softmax}(S)\), \(M=WV\), without the standard scaling factor. This may be intentional, but if so it should be justified.
+
+- Redundant figure caption text (e.g., Figure 1 and Figure 2 descriptions duplicated) is a minor clarity issue but not scientifically important.
+- Some phrasing suggests future work (“will be presented in our next paper”), which is more appropriate for a discussion of limitations than for supporting current claims.
 
 ## Nice-to-Haves
-- A per-subject breakdown would help reveal whether the method generalizes uniformly or fails on particular subjects.
-- Statistical significance testing would strengthen claims where differences are modest relative to reported standard deviations.
-- A clearer discussion of the practical calibration/accuracy tradeoff would improve the paper substantially; that seems to be the real story here.
-- Some comparison to additional few-shot/meta-learning baselines would help position the method more clearly, though the lack of such comparisons is less important than fixing the overclaiming and protocol clarity issues.
+
+- **Per-subject performance and variability analysis**  
+  Given the focus on cross-subject generalization, reporting per-subject accuracies or at least a distribution across subjects (rather than only means and standard deviations) would clarify how robust the method is; large SDs (e.g., ±7.2% for BCI 2b, 1‑shot) suggest heterogeneous performance.
+
+- **Statistical significance testing**  
+  Many reported differences (e.g., RelationNet 20‑shot vs CNN-attention-Few) have overlapping standard deviations. Basic statistical tests or confidence intervals would help interpret whether any improvements are reliable.
+
+- **Failure case and attention-pattern analysis**  
+  Qualitative analysis of misclassified trials and corresponding attention maps (for multiple subjects) could be informative for the BCI/neuroscience audience.
+
+- **Exploring more realistic calibration protocols**  
+  Experiments that simulate actual online calibration sequences (e.g., using temporal order of trials per subject, or session-wise distribution shifts) would better ground claims about reduced recalibration burden.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **“Unfair comparison because CNN-attention-All uses more data.”** I do not keep this as a standalone fairness complaint against the authors, because the asymmetry here actually favors the baseline, not the proposed method. It is still valid to say the setup does not cleanly answer the intended few-shot question, but not to frame it as an unfair comparison disadvantaging baselines.
-- **Generic criticism about small subject counts alone.** The in-house dataset has 7 subjects and BCI 2a/2b each have 9 subjects, which is indeed limited, but this is common in EEG MI studies and is not by itself enough to invalidate the paper. The more important issue is protocol clarity and claim strength, not simply dataset size.
-- **Pure formatting/parser artifacts.** Duplicated figure captions and numbering artifacts appear in the extracted text, but these are parser issues and not paper weaknesses.
+These points are flagged to be removed or de-emphasized; treat them with caution:
+
+- **“Very small number of subjects across all datasets” as a primary criticism**  
+  BCI 2a/2b inherently have 9 subjects each, and the authors’ own 7‑subject dataset, while not large, is not unusually small for MI EEG research. While larger subject numbers would be beneficial, penalizing the paper heavily for dataset sizes that are standard in this domain would be unfair.
+
+- **Claims that the method is “not even few-shot” because it uses 20 support samples per class in some conditions**  
+  The use of K up to 20 shots in addition to 1, 5, and 10 shots is consistent with common practice in few-shot work. The issue is not the absolute K, but the lack of a proper meta-learning protocol and misalignment between training and testing; that is already captured in the Fatal weakness.
+
+- **Generic criticism that any EEG MI work must include more and larger datasets**  
+  Given the typical cost and difficulty of collecting high-quality MI datasets, the current three-dataset evaluation is reasonable. The main experimental weaknesses are lack of external baselines and mis-specified protocol, not sheer dataset count.
+
+- **Minor stylistic/formatting nitpicks**  
+  Any comments purely about duplicated captions, typography, or referencing style are not substantively relevant and should not influence the decision.
 
 ## Novel Insights
-The most important synthesis is that the paper likely has a potentially publishable **tradeoff** contribution, but not the **performance superiority** contribution it currently claims. Table 1 consistently suggests a specific and narrower message: episodic few-shot learning can recover a meaningful fraction of supervised performance with only a small support set on unseen subjects, but it does not yet match strong supervised cross-subject training. Reframing the paper around this tradeoff—rather than around “significant outperformance”—would make the empirical evidence much more credible and align the contribution with what the experiments actually show.
+
+The most important insight from the reviews, when cross-checked with the paper, is that the current work exemplifies a broader pattern in applied machine learning for neuroscience: strong, practically motivated narratives (few-shot learning, meta-learning, interpretability) can be undermined if the experimental protocol does not faithfully instantiate those paradigms and if baselines are restricted to variants of the authors’ own architecture. Here, the combination of cross-subject supervised training with a relation network is a plausible and potentially useful approach, but without explicit episodic meta-training, adaptation, or rigorous baselines, calling it a “few-shot/meta-learning framework that outperforms traditional methods” overstates what has actually been demonstrated.
 
 ## Suggestions
-- Reframe the paper around **low-calibration cross-subject adaptation** rather than outright superior accuracy.
-- Rewrite the abstract and conclusion so they accurately reflect Table 1.
-- Clarify the full experimental protocol: subject splits, session splits, support/query construction, validation usage, and exact definition of DA accuracy.
-- Add an ablation for the attention module and explain how support examples are aggregated into class representatives.
-- Resolve the BCI 2a channel-count inconsistency.
-- Temper or remove unsupported causal claims about neurofeedback, channel count, faster training, real-time readiness, and broad applicability beyond MI EEG unless directly measured.
-- If possible, include matched low-calibration baselines using the same target-subject label budget.
+
+- **Reposition the work and clarify the learning paradigm.**  
+  Rather than presenting FSL-MIC as a meta-learning method, describe it as a cross-subject relation-based model with limited subject-specific calibration. Explicitly state that the model is trained with cross-subject supervision and uses support examples at test only within a fixed relation module, not via task-specific optimization.
+
+- **Correct and temper empirical claims.**  
+  Remove or soften statements claiming superiority over traditional methods or prior FSL work unless supported by actual comparisons. Acknowledge that CNN-attention-All is the strongest model and discuss FSL-MIC as trading off accuracy for reduced per-subject training, with that trade-off quantified and contextualized.
+
+- **Fully specify the architecture and DA pipeline.**  
+  Add a detailed architectural table for the embedding and relation modules (layers, kernel sizes, strides, activations, normalization, dropout) and a precise description of all data augmentation operations for each dataset. Report focal loss hyperparameters and justify their use.
+
+- **Add stronger baselines and ablations.**  
+  Include: (a) CNN without attention, (b) a simple metric-based FSL baseline (e.g., prototypical networks or nearest-neighbor in the same embedding), and (c) at least one established “traditional” MI method such as CSP/FBCSP+LDA. Ablate attention and relation modules to quantify their contributions.
+
+- **Clarify the few-shot protocol and define DA accuracy.**  
+  Precisely describe how supports and queries are sampled during training and testing, whether model parameters are frozen at test, and how K‑shot is implemented for K>1. Define “DA accuracy,” explain how it is computed, and state whether the same augmentation is applied across all models.
+
+- **Either substantiate or de-emphasize interpretability claims.**  
+  If interpretability via attention is to be a selling point, include main-text attention heatmaps for multiple subjects and relate them to known MI topographies. Otherwise, treat interpretability as a minor, qualitative observation rather than a contribution.
+
+- **Optionally extend to multi-class MI**  
+  If space and time allow, adding 4‑class results on BCI 2a would significantly strengthen the claim that the approach generalizes to N‑way MI classification.
+
+### Evaluation on core axes
+
+- **Originality:** Incremental. The architecture is a straightforward combination of known components (1D CNNs for EEG, channel-wise attention, relation networks) applied to MI.  
+- **Importance of research question:** High. Reducing calibration for MI BCIs is a meaningful and timely goal.  
+- **Support for claims:** Weak for core claims. The protocol and results do not substantiate the few-shot/meta-learning or “outperforms traditional methods” narratives.  
+- **Soundness of experiments:** Mixed. Multi-dataset evaluation is positive, but missing baselines, under-specified methods, and misaligned framing are serious issues.  
+- **Clarity of writing:** Generally readable and well-structured at a high level; however, key technical and experimental details are missing or ambiguous.  
+- **Value to the community:** In its current form, limited. With major revisions (repositioning, fuller specification, baselines, and ablations), it could become a useful empirical study of relation-based cross-subject MI EEG classification.
 
 ## Score and Decision
-**Originality:** moderate; mainly a combination of established components applied to MI EEG.  
-**Importance:** high; calibration reduction in MI-BCI is a worthwhile problem.  
-**Claims support:** weak-to-moderate; the paper overclaims relative to its own results.  
-**Experimental soundness:** moderate at best; multi-dataset evaluation is a plus, but the protocol is not clear enough and does not cleanly validate the key claim.  
-**Clarity:** moderate; high-level story is understandable, but critical methodological details are missing or inconsistent.  
-**Value to the community:** limited in current form, though the underlying direction is useful.
 
-For calibration, I compared this paper primarily against human-reviewed EEG papers with similar patterns:
-- **04RGjODVj3 (HyperEEGNet)** — Reject, scores **3/3/5/1**: similar in being motivated by calibration/generalization in MI EEG, but criticized for limited innovation and weak empirical support.
-- **13PclvlVBa (EEGMamba)** — Reject, scores **3/5/3/6/6**: stronger technical ambition, but still rejected due to evidence/validation gaps.
-- **V5Zn0VVvBE (ST-EEGFormer)** — Reject, scores **6/6/6/6/3**: stronger overall than this submission in scope and representation-learning ambition, yet still rejected.
+### Calibration
 
-Relative to these anchors, this paper sits below the stronger borderline-reject examples because the **main claimed conclusion is directly contradicted by its own table**, and several architectural/protocol details are too vague for confidence. It is somewhat above the weakest papers because it does target a real problem and has a coherent empirical setup across three datasets. That places it in the low reject range.
+For calibration, I compared this paper against:
 
-**Score: 3.5 / 10**  
-**Decision: Reject**
+1. **04RGjODVj3 – “From Rest to Action: Adaptive Weight Generation for Motor Imagery Classification…” (Reject; scores 3,3,5,1)**  
+   Similar domain (EEG MI classification, cross-subject generalization). That paper was rejected partly for limited comparisons and modest empirical support. The current submission has comparable or slightly stronger empirical coverage (three datasets) but suffers from misaligned framing (few-shot/meta-learning) and missing baselines.
 
-MY FINAL SCORE: <pineapple>3.5</pineapple>
+2. **EEGTrans – “Transformer-Driven Generative Models for EEG Synthesis” (Reject; scores around 3–5)**  
+   Another EEG methods paper with interesting ideas but ultimately rejected due to insufficient validation. Compared to EEGTrans, the present paper has a clearer applied target but similarly overstates its contributions relative to what the experiments support.
+
+3. **BrainUICL-like accepted poster (e.g., 6jjAYmppGQ, not fully shown here but referenced in Human Finder)**  
+   Those stronger papers typically provide clearer baselines, more rigorous ablations, and tighter alignment between claims and evidence, and receive scores around 5–8.
+
+Relative to these anchors, the current paper has:
+
+- Solid motivation and multi-dataset evaluation (slightly better than some weak rejects),
+- But serious fundamental issues in how the method is framed (few-shot/meta-learning), under-specification of key details, lack of external baselines, and empirical claims contradicted by its own results.
+
+This places it below borderline-accept posters and in line with weaker rejects. Accordingly:
+
+MY FINAL SCORE: <pineapple>3.5</pineapple>  
 MY FINAL DECISION: <orange>Reject</orange>

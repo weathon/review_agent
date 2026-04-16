@@ -3,6 +3,7 @@ You will be given a paper submission. Your job is to retrieve relevant human-wri
 Rules:
 - Only read files inside the human review directory. Do not open other files.
 - Use multiple search queries (using file search tool) based on topic, method, setting, task, and likely failure modes. The exact file paths are provided to you separately.
+- You should look for general concepts similarities and not specific details, as it is hard to retrieval highly similar articles
 - Prefer a small number of highly relevant human reviews over many weak matches.
 - Do not copy or paraphrase a human review point unless it genuinely fits the current paper.
 - Do not invent strength/weaknesses just because they appeared in a retrieved review.

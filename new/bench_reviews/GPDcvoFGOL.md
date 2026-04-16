@@ -1,83 +1,174 @@
 ## Summary
-This paper proposes a new “second-order lens” for interpreting CLIP MLP neurons by tracing a neuron's contribution through later attention value/output paths into the final CLIP image representation, then decomposing the resulting output-space direction into sparse text directions. Empirically, the paper finds these effects are concentrated in late layers, highly selective across images, and often well-approximated by a dominant direction, and it uses this machinery for two applications: semantic adversarial example generation and zero-shot segmentation.
+
+The paper proposes a “second-order lens” to study CLIP-ViT neurons by tracing their influence through subsequent attention heads to the output, rather than via direct logit lenses or intervention-based indirect effects. The authors empirically characterize these second-order effects (late-layer, sparse, approximately low-rank), then approximate each neuron’s effect by a single direction in CLIP’s joint text–image space and decompose that direction into a sparse combination of text embeddings. They argue this yields polysemantic neuron descriptions, and use these analyses to (i) construct semantic adversarial examples and (ii) perform zero-shot segmentation that improves over prior CLIP-based attribution methods.
 
 ## Strengths
-- **Clear motivation for why standard views are insufficient for CLIP neurons.** The paper convincingly explains that direct effects are negligible for CLIP MLP neurons and that indirect effects are obscured by self-repair; Table 1 supports this with a much larger performance drop from ablating second-order effects than indirect effects, and higher variance captured by the first PC.
-- **Interesting empirical characterization of the proposed quantity.** Figure 3 and Section 3.3 provide meaningful observations: the strongest effects are in moderately late layers, they are sparse/selective across images, and a one-direction approximation preserves downstream accuracy surprisingly well.
-- **Good use of CLIP’s shared text-image space.** Decomposing neuron-associated directions into sparse text representations is a natural and elegant idea in this setting, and Table 2 / Figure 5 provide plausible qualitative evidence that the recovered phrases track salient visual concepts.
-- **The applications are not mere toy demos.** The zero-shot segmentation result is strong enough to be noteworthy: Table 4 beats prior attribution-style baselines across all reported metrics. The adversarial-generation pipeline is also creative and shows nontrivial gains over the included baselines in Table 3.
-- **Strong clarity overall.** The paper is generally well written, well structured, and candid about some limitations in Section 6, which makes the core technical narrative easy to follow.
+
+- **Clear formalization of a nontrivial lens on neurons.**  
+  The paper gives a mathematically explicit definition of the “second-order effect” (Eq. 5) by propagating each neuron’s residual contribution through later attention-value paths into the output, separating input-dependent “attention-weighted activations” from input-independent matrices. This is a concrete and analyzable object that goes beyond first-order logit lenses and naive ablation-based indirect effects.
+
+- **Useful empirical characterization of CLIP’s MLP neurons.**  
+  For CLIP ViT-B/32 (and partially ViT-L/14 in the appendix), the paper shows:
+  - Second-order effects are concentrated in moderately late layers (8–10), via mean-ablation experiments (Fig. 3, “w/o all neurons”).
+  - Individual neurons’ second-order effects matter for only a small subset of images, supported by selective ablation of large-norm vs small-norm effects (Fig. 3, “w/o large norms” vs “w/o small norms”).
+  - Second-order effects of a neuron admit a strong first principal component; using PC#1 plus a bias recovers near-baseline ImageNet accuracy (Fig. 3, “rec. from PC #1”) and explains substantially more variance than indirect effects (Table 1: 48.2% vs 11.0%).
+
+- **Zero-shot segmentation performance is strong and simple.**  
+  The segmentation pipeline—select neurons whose directions \(r_n^l\) align with the text embedding of a class and average their spatial activations—achieves the best reported results on ImageNet-Seg (Table 4), outperforming established attribution methods and the prior TextSpan approach across all metrics (Pixel Acc, mIoU, mAP). Qualitative masks (Fig. 7) indeed look more complete than those from first-order token-based attribution.
+
+- **Ambitious link from mechanistic analysis to adversarial attacks.**  
+  The semantic adversarial pipeline (Sec. 5.1, Fig. 6) is conceptually appealing: it connects neuron-level polysemy, text descriptions, an LLM, and a text-to-image model to generate on-manifold adversarial examples that exploit spuriously shared neuron directions between classes. Quantitatively, the “second order” pipeline outperforms random neurons, an indirect-effect analogue, and a nearest-text baseline on several CIFAR-10 binary tasks (Table 3).
+
+- **Writing and structure are clear.**  
+  The problem motivation (limitations of direct and indirect effects), the derivation of second-order effects, and the transition to applications are all presented in a logically coherent and accessible way. Limitations (e.g., ignoring query/key pathways and neuron–neuron interactions) are explicitly acknowledged in Sec. 6.
 
 ## Weaknesses
-###: Fatal
-- **The paper’s central framing overstates what the proposed “second-order effect” captures.** The text repeatedly describes it as the neuron’s “total contribution to the output, flowing via all the consecutive attention heads” (e.g., Abstract, Section 1, Section 3.2), but the actual quantity in Eq. (5) only propagates through later attention OV/value paths. The paper itself later states in Section 6: “we ignored the effect of neurons on consecutive queries and keys” and “did not analyze the mutual effects between neurons.” This does not make the method invalid, but it does mean the main object is a **restricted path-based proxy**, not the full downstream contribution suggested by the wording. Since the main empirical findings and both applications are built on this quantity, the overclaim matters and should be corrected explicitly.
 
-### Major:
-- **The core interpretability claim is only partially validated.** The main quantitative validation in Section 4 is reconstruction-oriented: the paper shows that sparse text combinations can approximate the neuron-associated direction well enough to preserve ImageNet classification accuracy (Figure 4). That demonstrates that CLIP text embeddings can span useful CLIP-space directions, but it is weaker than showing the selected phrases are faithful descriptions of neuron function. The paper also claims in the introduction that “these concepts correctly track which inputs activate a given neuron,” but the main text does not provide a direct quantitative activation-prediction or retrieval-style evaluation for this claim.
-- **The adversarial-example application is substantially confounded by the external generation pipeline.** The attack uses neuron scores, sparse phrase extraction, an LLM to build prompts, a text-to-image model to generate images, and then manual filtering of failures (“manually remove images that include \(c_2\) objects or do not include \(c_1\) objects”). The included baselines are helpful, so this is not a strawman criticism; however, because so much of the final outcome depends on prompt quality, image generation fidelity, and manual curation, the results in Table 3 do not cleanly isolate how much of the success comes from the proposed neuron interpretation itself. This weakens one of the headline demonstrations.
-- **The segmentation improvement is real but only weakly tied to the specific second-order interpretation.** The segmentation method selects neurons by similarity between \(r_n^l\) and the class text embedding, averages their activation maps, and thresholds the result. Table 4 is promising, but there is no direct ablation against obvious alternatives such as first-order-based neuron directions, simpler neuron-selection heuristics, or matched random/activation-based selections. As written, the section shows a useful CLIP-based segmentation heuristic derived from the learned directions, but it does not fully establish that the gain is specifically due to the second-order lens.
+### Fatal
+
+None. The paper is conceptually ambitious but not fundamentally unsound: the second-order effect is clearly defined, and the empirical claims broadly match the presented evidence. However, several core interpretability claims are overstated or weakly validated.
+
+### Major
+
+- **(1) Overclaiming “total contribution” and functional semantics for a partial pathway.**  
+  By construction, Eq. (5) only traces the flow of a neuron’s output through later MSA **values** into the class token and projection; it holds queries/keys, subsequent MLPs, and layernorm behavior fixed. The paper is explicit about focusing on “flow of information from the neurons through the attention layers” (Sec. 3.2, Fig. 2) and later notes as a limitation:  
+  > “We investigated how the neurons flow through individual consecutive attention *values*, and ignored the effect of neurons on consecutive queries and keys in the attention mechanism. … We leave it for future work.” (Sec. 6)  
+  Despite this, the abstract and main text repeatedly describe \(\phi_n^l(I)\) as “the total contribution to the output, flowing via all the consecutive attention heads” and then treat the resulting direction \(r_n^l\) as “the direction that the neuron writes to in the joint representation space.” This framing elides that:
+  - There are additional causal channels (via Q/K, later MLPs, and normalization-induced coupling) that are not modeled.
+  - The “second-order” lens is therefore one particular linearized pathway, not the neuron’s full functional impact.
+  The paper does not provide empirical evidence that the value-pathway dominates the neuron’s behavioral effect, nor that ignoring the other channels is harmless for their interpretive conclusions. This weakens the causal/mechanistic interpretation of \(\phi_n^l\): it is a useful diagnostic quantity but not fully justified as *the* neuron function.
+
+- **(2) Rank-1 / “one direction per neuron” is supported only indirectly and partially.**  
+  The claim that each neuron’s second-order effect can be captured by a single direction \(r_n^l\) and a scalar coefficient is central: it underpins using PCA, then sparse text decomposition of \(r_n^l\). The evidence, however, is limited:
+  - Task-level: replacing each \(\phi_n^l(I)\) with \(x_n^l(I) r_n^l + b_n^l\) preserves ImageNet accuracy (Fig. 3, “rec. from PC #1”). This shows the rest of the variance is not critical for classification accuracy, but classification is known to be robust to substantial internal perturbations; this does not prove that the neuron’s effect is essentially one-dimensional.
+  - Aggregate variance: Table 1 shows PC#1 explains 48.2% of the variance of second-order effects (vs 11% for indirect effects). While this is a meaningful difference and supports “more low-rank than indirect,” 48% is far from rank-1 in a strong sense. The paper does not report:
+    - Distribution across neurons (some may be far from rank-1).
+    - The nature or potential importance of the remaining ~52% variance.
+  As a result, the strong interpretive narrative—“each neuron writes along a single semantic direction”—is not tightly supported; the evidence shows a useful low-dimensional approximation, not that the rest is negligible or non-semantic.
+
+- **(3) Sparse text decompositions are only weakly validated as faithful neuron descriptions.**  
+  Section 4 argues that sparse decompositions of \(r_n^l\) into text embeddings “describe” neuron functions and reveal polysemanticity. Current evidence is limited:
+  - Quantitatively, Fig. 4 evaluates decompositions only by whether replacing \(r_n^l\) with \(\hat r_n^l\) sustains ImageNet accuracy. This assesses representational coverage of the text dictionary, not whether the *specific sparse combination* chosen for each neuron corresponds to human-meaningful concepts.
+  - The method uses up to 128 text components per neuron. Such large sets are a poor fit to human-level interpretability and allow many plausible linear approximations in a high-dimensional embedding space; recovery of performance with big \(m\) does not guarantee that the identified texts correctly or uniquely capture what the neuron tracks.
+  - Qualitative examples (Table 2, Fig. 5) show some attractive cases where texts match top-activating images, but are cherry-picked and anecdotal. There is no systematic evaluation (automatic or human) of:
+    - How often descriptions are coherent vs nonsensical.
+    - Whether descriptions predict which images a neuron has large second-order effect on.
+    - How polysemy manifests across the neuron population.
+  Without such evaluation, the “automated interpretation of neurons” remains plausible but not convincingly demonstrated; the decompositions could easily be post-hoc rationalizations in a dense embedding space.
+
+- **(4) The adversarial generation evaluation is narrow and heavily confounded.**  
+  While the adversarial pipeline is creative, the current evaluation does not clearly demonstrate that neuron-level interpretability is the critical factor:
+  - Scope and manual filtering: only five CIFAR-10 binary tasks, 100 generated images per task per run, and manual removal of images that do not match the intended semantics (“we manually remove images that include \(c_2\) objects or do not include \(c_1\) objects”). This manual curation blurs how “mass-production” and success rates (Table 3) would look in a fully automatic setting.
+  - Complex generative stack: the pipeline chains words \(W_v\) → LLM → text-to-image model → CLIP classification. Failures can come from any stage. Baselines (“random neurons”, “indirect effect”, “similar words”) differ both in how words are chosen and in how those words interact with the LLM and generator. The higher success of the “second order” pipeline could arise because its word lists happen to be more visually concrete or more easily rendered, not because they uniquely expose true spurious neuron features.
+  - Lack of human/heuristic controls: there is no comparison to simple hand-designed spurious prompts (e.g., adding plausible co-occurring objects or backgrounds) passed through the same LLM+generator stack. That would help isolate whether interpretability adds signal beyond intuitive prompt engineering.
+  Taken together, the current results suggest that the second-order-derived words are *a* reasonably effective way to seed adversarial prompts, but they do not yet substantiate the stronger claim that mechanistic neuron interpretations are driving the attack’s advantage.
+
+- **(5) The segmentation method does not clearly rely on the full interpretability pipeline.**  
+  For zero-shot segmentation, the method uses:
+  - Neuron directions \(r_n^l\) and text embeddings \(M_{\text{text}}(c_i)\) to select top neurons by absolute dot product.
+  - Raw neuron patch activations to form attribution maps.  
+  This already relies on the notion of a neuron-associated direction in joint space, but **not** on the sparse text decomposition. The experiments do not test:
+  - Whether using second-order-based \(r_n^l\) is substantially better than using, e.g., first-order directions, token-level features, or simple correlations with class logits.
+  - Whether performance is sensitive to the number of neurons (fixed at 200), choice of layers (8–10), or selection metric (absolute dot vs signed).
+  Given this, it is unclear how much of the segmentation improvement derives from the second-order lens per se versus more generic late-layer, text-aligned neuron selection. The method is strong empirically, but the link to “interpreting neurons and then using that interpretation” is looser than claimed.
 
 ### Minor
-- **The “approximately rank-1” claim would benefit from more complete analysis.** Table 1 reports that the first PC explains 48.2% of variance for second-order effects, which is meaningful but far from exhaustive. Figure 3 shows that replacing effects with a PC1-based approximation preserves accuracy, which is interesting, but the paper does not explain where the remaining variance goes, nor provide per-neuron or per-layer distributions showing when the rank-1 approximation is strong versus weak.
-- **The selectivity claim is under-specified in the main text.** The paper states that each neuron is significant for “less than 2% of images,” but the operational definition of significance is only indirectly conveyed through ablation on the “100 images with the largest norms” in Figure 3. The intuition is reasonable, but the claim would be stronger with a clearer thresholded definition and sensitivity analysis.
-- **Several important design choices are not systematically ablated.** For example: using layers 8–10 for applications, top-100 neurons for adversarial prompting, top-200 neurons for segmentation, and the threshold of 0.5 for segmentation binarization. These choices are plausible and not unusual for this style of paper, but some sensitivity analysis would help establish robustness.
-- **Ignoring layer normalization in the main derivation is a nontrivial simplification.** The paper acknowledges this in footnote 2 and says Appendix A.6 addresses it. That is acceptable as a derivational simplification, so this is not a fatal flaw, but because the paper’s method depends on linearized path contributions, the main text would benefit from a clearer quantitative reassurance that the simplification does not materially alter the conclusions.
+
+- **Indirect effects comparison is somewhat narrow.**  
+  The paper fairly notes that indirect effects suffer from self-repair (citing McGrath et al., 2023), and Table 1 shows that mean-ablating indirect effects in layer 9 of ViT-B/32 harms accuracy less and has lower PC#1 variance explained than second-order effects. However, the conclusion that indirect effects “fail to capture the neurons’ function” is based on one ablation mode and one model/layer; more nuanced interventions (e.g., causal scrubbing variants) are not explored, so claims about “failure” should be slightly toned down to “less informative under this ablation protocol.”
+
+- **Sparsity (<2% images) is not fully quantified across neurons.**  
+  The paper states:  
+  > “the second-order effect of each individual neuron is significant only for less than 2% of the images”  
+  and supports this with a per-neuron experiment where ablating effects on high-norm vs low-norm images has different impact (Fig. 3 “w/o small norm” vs “w/o large norm”). However, the thresholding and statistics across the full neuron population are not clearly reported (e.g., distribution over neurons of the fraction of images where ablation matters). This makes the “<2%” claim somewhat heuristic.
+
+- **Design choices lack ablation at the application level.**  
+  Choices like:
+  - top-100 neurons in layers 8–10 for adversarial generation,
+  - top-200 neurons for segmentation,
+  - pool constructions (10k vs 30k words vs ∼28k class descriptions),  
+  are only indirectly justified (Fig. 4 for reconstruction accuracy) and not examined for their impact on adversarial success or segmentation performance.
 
 ### Trivial
-- **The segmentation gains over the strongest prior baseline are modest in absolute magnitude.** Table 4 improves over TextSpan from 58.1 to 59.0 mIoU and 84.1 to 84.9 mAP. These are still real gains, but the paper should frame them as incremental rather than dramatic.
-- **The adversarial success rates, while better than the baselines, remain modest in absolute terms for several tasks.** This is enough for a proof-of-concept, but not yet evidence of a broadly reliable “mass production” pipeline.
+
+- The use of “rank-1” language is stronger than the empirical numbers justify. Phrasing such as “approximately low-rank, with a dominant PC” would better match the reported 48.2% variance explained and minimal accuracy drop, without implying near-perfect rank-1 structure.
 
 ## Nice-to-Haves
-- Provide a direct quantitative evaluation of description quality, e.g., whether the recovered phrases predict high-activation images for a neuron better than baselines.
-- Add ablations comparing second-order-based neuron selection against first-order, indirect-effect, activation-only, and random selection for segmentation.
-- Break down failure modes of the adversarial pipeline: prompt-generation failures, image-generation failures, and CLIP-classification failures after successful generation.
-- Report per-neuron/per-layer distributions of variance explained by the first PC, and test whether rank-2/3 approximations materially improve fidelity.
-- Include a brief robustness analysis for key hyperparameters such as number of selected neurons and layer choices.
+
+- A quantitative evaluation of neuron descriptions: for example, given the sparse text set for a neuron, predict which images (from a held-out set) should have large second-order effect, and measure correlation or accuracy. Even a small-scale human study or automatic proxy would greatly strengthen the “automated interpretation” claim.
+- More detailed analysis of how often neurons appear clearly polysemantic vs monosemantic, e.g., by measuring semantic diversity among top-k phrases per neuron or via clustering.
+- Sensitivity analyses for segmentation: vary the number of neurons, the layers included, and the threshold; show if the method is robust or requires careful tuning.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **“The layerwise mean-ablation experiments do not isolate per-neuron importance, so conclusions about individual neurons are invalid.”**  
-  This is too strong. The paper does include neuron-level structure via \( \phi_n^l(I) \), and the layerwise ablations in Section 3.3 are used mainly to characterize where these effects matter globally. It is fair to ask for finer-grained statistics, but not to dismiss the neuron-level conclusions outright.
+These points are flagged to be removed or de-emphasized; treat them with caution, as they either overreach given the paper’s content or reflect misunderstandings.
 
-- **“The paper should compare against sparse autoencoders or additional outside related work.”**  
-  Per instruction, missing-related-work complaints should be removed unless directly verifiable from the paper’s own scope.
+- **“Second-order effect is not a mechanistic object because it ignores layernorm and other components.”**  
+  While it is true that Eq. (5) ignores layernorm in the main derivation, the authors explicitly say:  
+  > “Throughout the paper, we ignore layer-normalization terms to simplify derivations. We address layers-normalization in detail in Appendix A.6.”  
+  and frame their lens as focusing on the value pathway through MSAs. This makes the definition a controlled approximation rather than an unacknowledged flaw. The issue is already captured above as overclaiming “total contribution”; it does not make the construct inherently invalid.
 
-- **“The method should be evaluated on many more datasets/models or on non-CLIP architectures.”**  
-  This is mostly scope creep. Broader validation would strengthen the work, but the paper is explicitly about interpreting CLIP neurons, and it does include at least some appendix evidence beyond the main ViT-B-32 setting.
+- **“Indirect effect comparison is unfair because they did not explore alternative interventions.”**  
+  The harsh version suggests this as a methodological error. The paper never claims to exhaust all possible indirect-effect designs; it compares a standard mean-ablation approach and shows a clear difference (Table 1). Demanding exploration of every causal intervention variant is outside the paper’s scope; the fair criticism is just that the conclusion should be slightly softer, already noted under Minor.
 
-- **Pure reproducibility nitpicks about omitted hyperparameters or release details.**  
-  Not substantive enough for the main review.
+- **“The sparsity (<2% images) claim is unsupported.”**  
+  The paper does run a concrete experiment (selecting images with large vs small \(\|\phi_n^l(I)\|\) norms and ablating) and demonstrates the selective impact (Fig. 3). While the global “each neuron <2%” summary is somewhat compressed, this is not a fatal or clearly incorrect statement; the concern is about precision, already mentioned under Minor.
+
+- **“Zero-shot segmentation is unrelated to the second-order lens.”**  
+  This overstates things: segmentation *does* use the learned neuron directions \(r_n^l\) (which come from second-order effects) to select neurons per class. The valid criticism is that the method does not require the *textual sparse decompositions*, not that it ignores second-order analysis altogether.
 
 ## Novel Insights
-The key synthesis here is that the paper is strongest when read as introducing a **useful restricted path-based interpretability proxy** for CLIP neurons, rather than a complete account of neuron function. Under that interpretation, the empirical findings are quite interesting: late-layer MLP neurons seem to have sparse, image-conditional value-path effects that are much easier to model in CLIP space than either direct effects or indirect ablations. The paper’s main weakness is therefore not that the method fails, but that the framing sometimes upgrades a partial but effective mechanism into a fuller causal account than the evidence supports. If the claims were narrowed and the interpretation quality were validated more directly, the work would look considerably stronger.
+
+The paper’s most genuinely new insight is that, for CLIP ViT image encoders, tracing neuron influence through later attention-value paths yields a signal that is (a) concentrated in late layers, (b) significantly more low-rank than standard indirect effects, and (c) sufficiently structured to support simple, text-aligned segmentation that outperforms more elaborate attribution schemes. This suggests that a relatively narrow slice of the network—the late MLP→MSA-value→class-token path—encodes a surprisingly interpretable and actionable portion of the model’s decision circuitry, even if that slice does not capture the neuron’s full causal role.
 
 ## Suggestions
-- **Tighten the central claim.** Replace “total contribution through later attention heads” with wording that explicitly describes Eq. (5) as a value/OV-path contribution proxy, and discuss its scope earlier, not only in limitations.
-- **Add a direct neuron-description evaluation.** For each neuron, test whether the sparse text decomposition predicts which images yield high second-order norms or high activations better than alternative descriptions or random text.
-- **Strengthen the segmentation section with targeted ablations.** Compare selection by second-order directions against first-order directions, activation magnitude, and random matched neurons.
-- **Disentangle the adversarial pipeline.** Quantify how much of the final success rate is lost at each stage and report results before/after manual filtering.
-- **Report richer statistics for the rank-1 story.** Show the distribution of PC1 explained variance across neurons/layers and examine whether higher-rank approximations improve downstream performance or interpretability.
+
+- Clarify the framing of the second-order lens: explicitly present it as a *value-path-based approximation* to neuron influence, and avoid language like “total contribution.” Briefly discuss why you expect this pathway to be informative (e.g., empirical evidence that late value paths dominate logit movement) and what is plausibly missed by ignoring Q/K and later MLPs.
+- Strengthen rank-1 claims by adding neuron-level statistics:
+  - Distribution over neurons of variance explained by PC#1.
+  - Perhaps 2–3 example neurons where PC#2 also carries substantial, qualitatively distinct structure, to show limitations.
+  Replace “rank-1” phrasing with “strong dominant principal component” where appropriate.
+- Add at least one quantitative evaluation of neuron descriptions:
+  - For a subset of neurons, use their sparse text sets to predict which of a held-out sample of images fall in the neuron’s “high-effect” set, and report correlation/precision.
+  - Alternatively, have annotators judge whether the top descriptions plausibly describe the common content of high-\(\|\phi_n^l(I)\|\) images.
+- For adversarial examples:
+  - Report the proportion of generated images discarded at each manual filtering stage and, if feasible, provide “fully automatic” success rates without manual curation.
+  - Add a control baseline that uses hand-picked plausible spurious cues or random visually concrete words, passed through the same LLM+generator stack, to test whether neuron-derived cues add signal beyond generic prompt engineering.
+- For segmentation:
+  - Provide ablations over number of neurons, layers used, and selection rule (signed vs absolute dot), to better isolate which parts of the design contribute most to performance.
+  - Compare using second-order-based \(r_n^l\) vs simpler alternatives (e.g., first-order effects or class-conditional gradients) as neuron selection features.
+
+On standard conference axes:  
+- **Originality:** High in terms of defining the second-order lens for neurons and linking it to text decompositions and downstream tasks.  
+- **Importance of question:** Moderate-to-high; mechanistic understanding of CLIP and feature-based vulnerabilities is an active and impactful area.  
+- **Support for claims:** Mixed. Empirical characterization and segmentation are solid; the strongest interpretability and causal claims are under-supported.  
+- **Soundness of experiments:** Generally sound but somewhat narrow (single main model; small adversarial evaluation; limited ablations).  
+- **Clarity:** Good overall; technical derivations and experimental setups are understandable.  
+- **Value to community:** Positive, especially as an exploratory mechanistic tool and as an improved segmentation method, but the interpretability narrative should be tempered.
 
 ## Score and Decision
-**Assessment across axes:**  
-- **Originality:** High. The second-order lens is a meaningful and novel extension of prior CLIP interpretability ideas.  
-- **Importance:** Good. Understanding neuron-level mechanisms in CLIP is valuable, and the work targets a genuine blind spot in existing methods.  
-- **Support for claims:** Mixed. The empirical evidence for the proposed proxy is solid, but the strongest interpretability claims and the “total contribution” framing are overstated relative to what is actually computed and validated.  
-- **Experimental soundness:** Reasonably strong but incomplete. Core characterizations are interesting; application evaluations are promising but undercontrolled.  
-- **Clarity:** Strong. The paper is generally clear and well organized.  
-- **Community value:** Positive. Even with caveats, this is a useful interpretability direction for CLIP-style models.
 
-**Calibration against human-reviewed anchors:**  
-- Compared to **TextSpan / “Interpreting CLIP's Image Representation via Text-Based Decomposition”** (/home/wg25r/review_agent/human_reviews/5Ca9sSzuDp.md, all 8s, accepted oral), this submission is somewhat weaker: it has similarly appealing CLIP-space interpretability ideas, but the central object is more restricted than the framing suggests, and the validation of neuron descriptions is less direct.  
-- Compared to **INViTE** (/home/wg25r/review_agent/human_reviews/5iENGLEJKG.md, mixed 5/5/8/3, accepted poster), this paper is stronger in empirical characterization and clearer in technical motivation, though it shares some undercontrolled application evidence.  
-- Compared to **Describe-and-Dissect** (/home/wg25r/review_agent/human_reviews/Rnxam2SRgB.md, 3/6/5/5, rejected), this paper is much stronger: it is more mechanistically grounded, less dependent on a stack of black-box modules for the core method, and provides stronger quantitative analyses.  
-- Compared to **PatchSAE** (/home/wg25r/review_agent/human_reviews/imT03YXlG2.md, 6/6/6/8, accepted poster), this paper feels roughly comparable in overall quality: both are interesting interpretability papers with real contributions and some overreach/under-validation. I place this submission slightly above PatchSAE on clarity and conceptual sharpness, but below TextSpan on completeness and support.
+### Calibration
 
-Overall, this looks like a **borderline-to-moderately positive accept**: a real contribution with notable strengths, but one that should substantially narrow its claims and strengthen validation.
+I compared this paper against several human-reviewed works:
 
-**Score: 6.5 / 10**  
-**Decision: Accept**
+- **5Ca9sSzuDp (“Interpreting CLIP’s Image Representation via Text-Based Decomposition”; scores 8,8,8,8)**  
+  A very strong, tightly validated interpretability paper about CLIP’s attention heads and tokens, with extensive experiments and clearer alignment between decompositions and behavior. The current paper is less mature empirically (narrower evaluations, weaker validation of descriptions).
 
-MY FINAL SCORE: <pineapple>6.5</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+- **imT03YXlG2 (PatchSAE for CLIP; scores 6,6,6,8)**  
+  Uses sparse autoencoders for CLIP features with richer ablations and clearer comparative baselines; still some open questions but overall stronger in methodological robustness than the present paper.
+
+- **Rnxam2SRgB / 01ep65umEr (neuron description methods; scores mostly 5–6, often rejected)**  
+  These share challenges around validating neuron descriptions and avoiding cherry-picked examples. The present paper’s validation is at a similar or slightly better level (due to segmentation and adversarial applications), but still not at the bar of the best-accepted work.
+
+- **JCCPtPDido (jet expansions; scores 5–6, mostly rejected)**  
+  Conceptually interesting expansion of residual computation with questions about approximation faithfulness. The current paper is in a similar category: interesting construct, but key approximation/faithfulness questions not fully answered.
+
+Relative to these anchors, this submission is clearly stronger than the weakest neuron-description papers that received 3–5, because it delivers a solid segmentation method and a well-specified new lens. However, it falls short of the 7–8 range occupied by the best CLIP interpretability and sparse-feature works, mainly because its interpretability and adversarial claims are not yet rigorously substantiated.
+
+A fair calibrated score is **6.0**: promising and valuable, but with significant evidential and framing issues that, in my judgment, keep it below the typical acceptance bar for a top-tier venue this year.
+
+Given that many recent mechanistic interpretability papers with comparable or slightly stronger validation have been rejected or borderline (scores ~5–6), and factoring in the relatively weak adversarial evaluation and overstatements about “total contribution,” my meta-level decision leans to rejection at this stage, with encouragement to resubmit after strengthening the empirical support and tightening claims.
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>  
+MY FINAL DECISION: <orange>Reject</orange>

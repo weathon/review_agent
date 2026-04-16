@@ -1,103 +1,132 @@
 ## Summary
-This paper proposes Wedge and Ring Transformers (WRT), a Transformer+PPO framework for minimizing normalized cut on weighted planar graphs under a specific geometric prior: partitions must be composed of concentric rings plus wedges on the outermost ring around a predefined center. The core technical idea is to transform the graph into line/circle orderings compatible with sequential models, and the paper supplements this with a two-stage RL training scheme, post-refinement, and a limited Cheeger-style analysis on spider-web graphs.
+
+The paper proposes Wedge and Ring Transformers (WRT), a Transformer+PPO-based method for graph partitioning that explicitly constrains partitions to ring and wedge shapes around a chosen center on planar graphs. It introduces polar-coordinate–based graph transformations, a two-stage RL training scheme, and Cheeger-type bounds for ring/wedge partitions on idealized spider-web graphs, and reports strong empirical performance versus METIS, spectral clustering, ClusterNet, and NeuroCUT on synthetic “spider web” graphs and a real traffic network.
 
 ## Strengths
-- **Addresses a clear, application-motivated constrained partitioning problem.** The paper is not merely doing generic NC again; it focuses on NC under a ring/wedge shape prior motivated by road-network traffic simulation, and this specialization is explicit in Sections 1 and 3.
-- **The ring/wedge transformation is a genuinely interesting modeling idea.** Projecting nodes by radial order or angular order to obtain sequential structure for a Transformer is a clever way to encode the constrained search space, and it is more than a superficial architectural swap.
-- **The overall system design is coherent for the stated use case.** The constrained action space, the separation of ring and wedge decisions, the two-stage training heuristic, and the post-refinement stage all fit the application well.
-- **Empirical results are consistently favorable within the tested setting.** In Table 1, WRT outperforms the reported baselines across all three datasets and both partition settings, including the real traffic graphs, suggesting the inductive bias is practically useful.
-- **The paper includes some theoretical motivation rather than being purely heuristic.** Although limited in scope, Proposition 1 attempts to connect the restricted partition family to spectral quantities on spider-web graphs.
+
+- **Clear, application-driven motivation and problem formulation.** The paper identifies a concrete, underexplored setting: when partitions must respect domain-specific shapes (rings/wedges) as in road network simulation. Section 3 formalizes ring and wedge partitions and a ring–wedge partition pipeline (Fig. 2) that matches the traffic-simulation story well.
+
+- **Clever polar-coordinate graph transformations enabling Transformers.** The ring and wedge transformations (Sec. 5.2, Fig. 3) reduce the partition problem to 1D/circular orderings, making it natural to feed into a Transformer while preserving the equivalence of ring/wedge partitions. This is a neat, technically sound idea that cleanly exploits the geometry of the problem.
+
+- **Thoughtful RL and architecture design.**  
+  - The two-stage RL training strategy (Sec. 5.5.1) – train wedges with randomized rings and wedge-only reward, then fix the wedge policy and train rings – directly targets policy interference and sparse-reward issues in this coupled decision problem. This is a nontrivial, well-motivated design.  
+  - Partition Aware MHA (PAMHA, Sec. 5.4, Fig. 4b) uses the precomputed volume matrix and current partition to mask attention to the relevant subgraph, a reasonable and problem-aware modification of standard MHA.  
+  - The integration of dynamic programming for ring partitioning (Sec. 5.3) inside the RL loop is also an interesting hybrid design.
+
+- **Strong quantitative results on the chosen distributions.**  
+  - On all three dataset types (predefined-weight, random-weight, city traffic) and for multiple sizes and partition counts, WRT consistently achieves the lowest normalized cut among the methods tested (Table 1), and shows good transfer across graph sizes (Table 2).  
+  - On the city graphs, WRT also achieves the highest Ringness and Wedgeness (Table 3), aligning performance with the stated shape constraints.
+
+- **Additional theoretical perspective.** Proposition 1 in Sec. 4 establishes Cheeger-type upper bounds for normalized cut under ring and wedge partitions on unweighted spider-web graphs, providing at least some theoretical context for why ring/wedge structures are not pathological with respect to NC.
+
+- **Clarity of exposition for the core method.** The methodology section is generally well written: the environment, transformations, WRT architecture, and training/testing pipeline (Fig. 4) are described clearly enough that a reader familiar with RL and Transformers could plausibly reimplement the approach.
 
 ## Weaknesses
 
-###: Fatal
+### Fatal
 
-### Major:
-- **The empirical comparison does not fully support the broad claim of being a better NC solver, because the method solves a more constrained problem than most baselines.**  
-  The paper’s actual problem is not unconstrained normalized cut, but NC over a narrow family of partitions: “inner rings and wedges on the outermost ring” around a predefined center (Section 3). WRT is designed around this reduced action space, while METIS, spectral clustering, ClusterNet, and NeuroCUT are evaluated as generic partitioners. This does not invalidate the method, but it does mean the strongest claims should be scoped to **shape-constrained NC**, not NC in general. The main text sometimes acknowledges this, but the abstract and introduction overstate the breadth of the conclusion.
+None rise to the level of “not even a paper” or a clear mathematical flaw, but there are structural issues in the empirical evaluation that, in my view, undermine the central comparative claims.
 
-- **The predefined-weight synthetic dataset is partially planted in favor of the target partition family, which weakens the comparative conclusions drawn from it.**  
-  Section 6.1 explicitly says the dataset is generated by first selecting “a valid ring-wedge partition configuration” and then assigning lower weights to crossing edges and higher weights within partitions. That makes recovery of ring-wedge structure an intended property of the benchmark. This is reasonable as a stress test for the target application, but results on this dataset should not be used as evidence of superiority on general NC; they mainly show that WRT is effective when the data align with the assumed partition family.
+### Major
 
-- **A key baseline class is missing: non-learning constrained optimizers over the same ring/wedge parameterization.**  
-  This criticism is valid after checking the paper. The baselines are METIS, spectral clustering, Bruteforce, Random, ClusterNet, and NeuroCUT (Section 6.2), but there is no strong optimizer that searches over the same ring/wedge family without RL/Transformers. Since the action space is heavily structured and low-dimensional relative to arbitrary graph partitions, such a comparison is important to isolate what WRT contributes beyond the inductive bias itself.
+- **Mismatch between constrained task and unconstrained baselines in the main claims.**  
+  The problem is explicitly formulated as *constrained* normalized cut: “we restrict our attention to partitions … where each partition is either ring-shaped or wedge-shaped” (Sec. 3). WRT hard-codes this via its action space and transformations, and all synthetic data is spider-web–like. Yet the headline empirical claim is that WRT “outperforms existing RL-based and traditional methods” on normalized cut (Abstract, Sec. 6.3.1) compared to METIS, spectral clustering, ClusterNet, and NeuroCUT – all run in the **unconstrained** partition space. Those baselines are neither restricted to ring/wedge shapes nor given access to the polar structure.  
 
-- **The theoretical section is only loosely connected to the practical method and experiments.**  
-  Proposition 1 is for **unweighted spider-web graphs** and for pure wedge or pure ring Cheeger constants, whereas the experiments are on **weighted** synthetic and real traffic graphs, and the final method includes mixed ring-then-wedge partitioning, two-stage PPO training, and post-refinement. The paper itself says these bounds are intended as “theoretical justification” for the normalized cut definition and ring-wedge shape, but they do not provide support for the actual weighted setting or the learned algorithm.
+  On such data, WRT’s gains in normalized cut are very plausibly explained by its strong shape prior being aligned with the graph family, rather than by its learning algorithm being intrinsically better at optimizing NC in a fair setting. If the true task is “best NC under ring–wedge constraints,” fair baselines should operate in that same constrained family; if the task is unconstrained NC, WRT’s action space should not be restricted to rings/wedges. As it stands, the evaluation supports a weaker, but accurate, statement: *given graphs strongly shaped like rings/wedges, and if we want ring/wedge partitions, then a model architecturally restricted to ring/wedge partitions does better (both in NC and in ringness/wedgeness) than generic, unconstrained methods.* It does **not** convincingly show that WRT is a superior general normalized-cut optimizer.
 
-- **The method depends critically on a predefined center \(o\), but the paper does not explain how this center is chosen in real traffic graphs or how sensitive performance is to that choice.**  
-  This is a substantive omission because the entire transformation pipeline uses polar coordinates around \(o\) (Section 3, Section 5.2). For real road networks, center selection is not trivial, and even modest changes in \(o\) could change radial/angular ordering and therefore the feasible partitions.
+- **Synthetic “predefined-weight” graphs are tuned to WRT’s inductive bias.**  
+  In Sec. 6.1, Predefined-weight Graphs are generated by first sampling a valid ring–wedge partition, then assigning “lower weights to edges that cross different partitions and higher weights to edges within the same partition.” This directly encodes the ground-truth ring–wedge structure into the weights. WRT is architecturally constrained to this class, and trained on hundreds of thousands of such graphs. Baselines are not informed of this generative model or tailored to it. Unsurprisingly, Table 1 then shows large margins for WRT on this distribution.  
 
-- **The main results do not disentangle how much of the gain comes from the learned policy versus auxiliary search/refinement procedures.**  
-  The final system includes several powerful extras: dynamic programming for ring partition under fixed maximum radius (Section 5.3), a post-refinement stage (Section 5.5.2), and “multiple random sampling” at test time with best-of-samples selection. These may be perfectly legitimate parts of the method, but the paper does not clearly isolate their contribution in the main text, making it hard to assess whether the improvement is driven primarily by WRT itself or by added search budget and refinement.
+  That setup strongly biases the evaluation: the data is constructed so that the optimal partition lies in precisely the family enforced by WRT. The resulting superiority mostly demonstrates “a model whose hypothesis class matches the data generator, trained on that data, beats generic baselines on that distribution,” which is useful, but weaker than the claims made. This limits how much weight can be placed on the predefined-weight results as evidence of algorithmic strength.
+
+- **No strong algorithmic baseline restricted to the same ring–wedge family.**  
+  The key conceptual contribution is the shape-constrained partitioning scheme; however, the only “shape-aware” baselines are described as:
+  - **Bruteforce**: “enumerate possible ring and wedge partitions,” but then the text also says it and Random “do not consider the differences of edge weights, and only do random partitioning” (Sec. 6.3.1), which is contradictory and suggests the brute force baseline is intentionally handicapped.  
+  - **Random**: 10,000 random ring–wedge partitions, also described as ignoring edge weights structurally.  
+
+  There is no well-designed, weight-aware search heuristic over ring–wedge partitions (e.g., DP or greedy over radii/angles) used as a baseline – despite DP being implemented internally in Sec. 5.3. Without at least one strong non-learning baseline in the **same constrained search space** that fully exploits weights, it’s impossible to separate “benefit from shape restriction” from “benefit from having any decent optimizer in that space.” This confounds the claimed contribution of the RL+Transformer machinery.
+
+- **Theoretical section is largely disconnected from the practical method and data.**  
+  Sec. 4 proves Cheeger-type bounds for unweighted spider-web graphs with exact regular structure and a specialized version of NC. WRT operates on **weighted**, often irregular graphs (random weights, real traffic graphs), and there is no indication that the algorithm uses any spectral information or that these theoretical bounds meaningfully predict or constrain WRT’s behavior in practice. The paper asserts that spider-web graphs “give a theoretical justification of the normalized cut definition and the ring-wedge shaped partition,” but there is no bridge from the simplified graph model to the weighted, noisy, and possibly non-ideal real graphs. The result is mathematically fine but feels bolted on rather than supporting the central algorithmic claims.
+
+- **Real-graph setting and shape prior suitability are not convincingly justified.**  
+  The method requires: (i) an underlying planar graph, and (ii) a meaningful center o for ring/wedge construction. In Sec. 6.1, the real dataset is “sub-graphs randomly extracted from a comprehensive city traffic map,” but the paper does not demonstrate that these subgraphs truly resemble spider-web structures, are planar in the graph-theoretic sense, or possess a unique meaningful center. Yet the evaluation emphasizes high Ringness/Wedgeness as inherently positive (Table 3), which by construction favors the inductive bias. There is no analysis of cases where the polar decomposition is a poor fit, nor of sensitivity to the choice of center o. This weakens the claim of robust utility for “real city traffic graphs.”
 
 ### Minor
-- **The custom shape metrics are central but not defined in the main text.**  
-  The paper repeatedly relies on Ringness and Wedgeness (Figure 1, Table 3), yet Section 3 says their definitions are in the Appendix. Since shape control is a central claim, the lack of definitions in the main paper makes those results harder to interpret and assess.
 
-- **The paper does not report uncertainty estimates despite using PPO-based training.**  
-  Tables report averages over 100 graphs, but there are no standard deviations, confidence intervals, or multi-seed summaries. Given the stochasticity of RL, this weakens confidence in small reported margins.
+- **Normalization and Cheeger connection not fully justified.**  
+  The normalized cut is defined as the maximum over partitions (Eq. 2), rather than the more standard sum. This is a legitimate design choice, particularly if one cares about the worst partition in parallel simulation, but the paper does not articulate why max is preferable to sum for the stated use case, nor how this aligns with their Cheeger-like interpretation.
 
-- **Transfer evaluation is less convincing than claimed because learned RL baselines are excluded.**  
-  Table 2 compares WRT mainly against classical methods after stating that methods that “do not support transfer or unable to perform results are excluded.” Since transfer is a claimed advantage of learned methods, the absence of learned competitors limits the strength of that conclusion.
+- **“Fuzzy” rings/wedges are under-specified.**  
+  Sec. 3 mentions allowing some nodes to be swapped to adjacent partitions to reduce NC, with Figure 4(c) (Stage ④) illustrating a local correction, but this is described in prose only. There is no formal constraint on how many nodes can be “fuzzy,” nor a careful analysis of how post-refinement deviates from pure ring/wedge partitions. For a paper whose core appeal is explicit shape control, a more precise treatment of these deviations would help.
 
-- **The scope of the handled partition family is narrower than the prose sometimes suggests.**  
-  The formulation in Section 3 is specifically: multiple inner rings and wedges only on the outermost ring. That is more restricted than a general “ring and wedge shaped partition” problem and should be emphasized more clearly.
+- **Handling of weighted baselines is unclear.**  
+  Sec. 2.2 states that NeuroCUT and ClusterNet “do not handle weighted graphs, making them unsuitable in our scenarios,” yet those same methods are used as baselines on weighted graphs (Table 1) without clear description of how they are adapted. If they ignore weights or only use them as features without objective alignment, their competitive standing is ambiguous. The paper does not appear to misrepresent their results numerically, but the fairness and interpretation of these comparisons are under-explained.
+
+- **Key metric definitions are in the appendix.**  
+  Ringness and Wedgeness are central to the narrative (Fig. 1, Table 3) but defined only in the appendix; readers cannot assess their properties, scale, or robustness from the main text. Bringing at least the core formulas and some intuition into Sec. 3 would improve clarity.
+
+- **Scalability and runtime not discussed.**  
+  Experiments are on fairly modest sizes (e.g., up to 200 nodes per ring; total node counts are not heavily stressed), and there is no reporting of wall-clock time or memory usage versus METIS or spectral clustering. Given that the method combines a Transformer and an O(n²k) DP subroutine, more explicit discussion of scaling to large city-wide graphs would be valuable.
 
 ### Trivial
-- **There is at least one apparent variant-label inconsistency in Section 6.2.**  
-  `WRT_nfw` is described twice with different meanings, which obscures the ablation description, though this is not central to the technical contribution.
+
+- Some typos, minor grammar issues, and repetition in figure captions (e.g., duplicated Figure 4 description) are present but do not affect scientific content.
 
 ## Nice-to-Haves
-- Add runtime and compute-cost comparisons against classical solvers and simpler constrained search methods.
-- Include failure cases or examples on real traffic graphs, not only synthetic-style visualizations.
-- Provide a sensitivity study for center choice and for mismatch between graph geometry and the assumed ring/wedge structure.
-- Expand the ablations in the main text to quantify the effect of two-stage training, post-refinement, and best-of-sampling.
+
+- A sensitivity study for the choice of center o on real graphs, showing how NC and Ringness/Wedgeness vary if the center is perturbed or chosen via different heuristics.
+
+- Visualization of failure modes: examples where WRT’s ring–wedge constraint yields notably worse NC than an unconstrained optimum, to clarify the trade-off between shape control and cut quality.
+
+- Ablation of Partition Aware MHA vs vanilla MHA to quantify how much benefit the structural attention mask contributes.
+
+- Explicit use of the internal ring DP algorithm as a standalone heuristic baseline in the same constrained space, to clarify what RL+Transformer adds on top of DP.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **“Transformers scale more effectively than GNNs” is unsupported.**  
-  This is somewhat true as an overstatement, but without external evidence and without runtime experiments, it is better treated as a nice-to-have request for efficiency evidence rather than a core weakness.
+These points are flagged to be removed; treat them with caution if encountered elsewhere.
 
-- **Pure reproducibility complaints about missing PPO hyperparameters / layer counts / rollout budget.**  
-  The method description is certainly incomplete in places, but per the review policy, missing implementation details of this kind are not by themselves strong reasons to downgrade.
+- **Claims that models/datasets/baselines “do not exist” or are unreleased.** None of the reviewers made these, and under the instructions they would be inappropriate if they had.
 
-- **Claims that comparisons are unfair because baselines are unconstrained while WRT is constrained, in cases where this asymmetry actually favors the baselines.**  
-  Those should not be used as weaknesses under the stated rules. The valid issue is instead the absence of matched constrained baselines, not the mere fact that generic baselines were included.
+- **Criticism asserting that NeuroCUT or ClusterNet “cannot be run” on weighted graphs.** While the paper notes they are not designed for weighted graphs, it *does* provide results for adapted versions; any suggestion that they cannot be used at all would contradict the text and is removed.
 
-- **Any criticism doubting the existence/availability of cited methods or benchmarks.**  
-  Not applicable and removed by rule.
+- **Overly speculative concerns about exact planarity violations (e.g., overpasses making the traffic graph non-planar in a strict sense).** The paper treats its city subgraphs as planar for modeling; unless contradicted internally, questioning that assumption in detail would exceed what can be established from the text alone.
+
+- **Extreme statements that the Cheeger bounds are “wrong” or mathematically invalid.** The paper states the proposition and refers to proofs in the appendix; without seeing the proofs, we cannot declare them incorrect, only note the limited scope and missing connections.
 
 ## Novel Insights
-The paper is best understood not as a general graph-partitioning advance, but as a constrained structured-search method for a specific geometric family of cuts. Under that framing, the most interesting question is not whether WRT beats generic NC solvers, but whether learning is necessary once the ring/wedge parameterization has already imposed a strong low-dimensional prior. This reframing clarifies both the paper’s real contribution and its main missing evidence: the crucial comparison is against strong optimization methods in the same constrained family, not against unconstrained partitioners alone.
+
+The genuinely interesting conceptual move in this paper is to recast a structured graph-partitioning problem into a 1D (ring) or circular (wedge) sequence via polar-coordinate transformations, thereby enabling the use of standard sequence models like Transformers on a combinatorial graph problem with constrained shapes. Combined with a carefully staged RL training scheme to handle coupled ring and wedge decisions, this illustrates a broader pattern: when the application domain implies strong geometric priors, aggressively encoding those into the action space and representation can substantially simplify learning, at the cost of generality. The paper stops short of fully disentangling how much of the observed gain comes from the prior vs the optimizer, but it offers a concrete, well-engineered example of this design philosophy.
 
 ## Suggestions
-- Reframe the claims throughout the abstract, introduction, and conclusion to explicitly state that the method solves **shape-constrained normalized cut**, not general NC.
-- Add at least one strong non-learning baseline that optimizes over the same ring/wedge parameterization, so the benefit of WRT over the inductive bias itself can be measured.
-- Include a center-selection procedure for real traffic graphs and a sensitivity analysis showing robustness to perturbations of \(o\).
-- Move the formal definitions of Ringness and Wedgeness into the main text.
-- Report multi-seed variability or confidence intervals, especially where gains over NeuroCUT/METIS are modest.
-- In the main paper, quantify the contributions of post-refinement, multi-sample test-time search, and the dynamic-programming subroutine.
-- Clarify more explicitly that the theoretical result is only an intuition/partial justification for the restricted unweighted case unless it can be extended.
+
+- **Reframe the core claims to emphasize the constrained setting.** Rather than positioning WRT as a generally superior NC optimizer, explicitly state that it targets *shape-constrained* partitioning on graphs with approximate radial structure, and that its advantage stems from exploiting this prior. This would bring the claims in line with what the experiments actually support.
+
+- **Add at least one strong, weight-aware baseline in the same ring–wedge search space.**  
+  For example, use the dynamic programming scheme from Sec. 5.3 + a simple outer heuristic over radii/angles, or a greedy algorithm, as a separate baseline. Ensure it fully uses edge weights and operates over the same constrained family as WRT. This would greatly clarify the incremental value of RL+Transformer vis-à-vis algorithmic search within the ring–wedge parameterization.
+
+- **Revisit the synthetic data design.** To avoid tautological advantages, consider additional synthetic distributions where the optimal partition is *not* exactly ring–wedge, or where the weights are not constructed from a ground-truth ring–wedge partition. Alternatively, clearly separate “in-distribution” (generator-aligned) and “off-distribution” experiments, and temper claims accordingly.
+
+- **Move definitions and key experimental details into the main text.** Include formulas and some intuition for Ringness/Wedgeness in Sec. 3; summarize the graph size and parameter ranges for the synthetic and city graphs in the main body (not just Table 4 in the appendix). Clarify how NeuroCUT and ClusterNet are adapted to handle weighted graphs.
+
+- **Clarify the role and impact of theory.** Either (a) strengthen the connection between the Cheeger bounds and the algorithm (e.g., show experiments on unweighted spider-web graphs where the empirical NC closely tracks the bounds, or use spectra in some design choice), or (b) present the theory more modestly as a side note limited to an idealized model, without implying it justifies behavior on real weighted graphs.
+
+- **Provide some scalability numbers.** Report runtime and memory usage versus METIS and spectral clustering for the largest graphs you can handle, and discuss how sequence length (number of nodes) affects attention cost and DP overhead. This will help readers assess whether WRT is practical for large-scale traffic simulations.
+
+- **Analyze robustness to center selection.** For the city graphs, show how performance changes if the center is chosen differently (e.g., geometric centroid vs traffic hub vs random) to give practitioners guidance on deploying the method.
 
 ## Score and Decision
-**Originality:** Good. The constrained ring/wedge partition framing and the transformation into sequence form are novel and interesting.  
-**Importance of the research question:** Moderate. It is meaningful for traffic-style applications, but narrower than general graph partitioning.  
-**Whether the claims are well supported:** Mixed to weak. The paper supports that the inductive bias is useful on aligned datasets, but it does not fully support the broader superiority claims.  
-**Soundness of experiments:** Moderate. Results are promising, especially on real traffic graphs, but the planted synthetic data, missing matched constrained baselines, and lack of uncertainty reporting limit how decisive the evidence is.  
-**Clarity of writing:** Moderate. The high-level idea is understandable, but some definitions and experimental details are under-explained.  
-**Value to the research community:** Moderate. This is potentially useful for a specific class of structured partition problems, but the current evaluation does not yet establish it as a strong general advance.
 
-### Calibration
-I calibrated against the following human-reviewed papers:
+For calibration, I compared with:
 
-- **FneYHZU19U** (“Constrained Graph Clustering with Signed Laplacians”, scores 3/5/6/6, Reject): similar because it studies a constrained partitioning/clustering problem with Cheeger-style theory. The current paper is somewhat stronger empirically and more application-driven, but shares the issue that theory is narrower than the practical claims.
-- **CpiJWKFdHN** (“ROS”, scores 5/6/6, Reject): similar because it is a graph cut optimization paper where it is unclear how much gain comes from the learning component versus auxiliary optimization/sampling machinery. This paper has a more distinctive application prior, but similarly lacks decisive isolation of where the performance comes from.
-- **VeFmnRmoaW** (“MetroGNN”, scores 6/5/6/3, Reject): similar due to RL on urban/transport-style graph optimization with concerns about missing uncertainty and practical evaluation gaps. The present paper is more novel in its constrained formulation, but its evidence is also not strong enough for acceptance.
-- **XigBo6nWzL** (“DDRL”, scores 3/5/3/5/5, Reject/Withdrawn): useful as a lower anchor for RL-based combinatorial optimization papers with training overhead and evaluation weaknesses. The current paper is clearly above this lower end because it has a cleaner application story and stronger empirical results.
+- **FneYHZU19U – “Constrained Graph Clustering with Signed Laplacians.”** This paper had nontrivial theory (Cheeger inequality) but weak baseline comparisons and limited practical impact; human scores were around 3–6 with a reject decision. The present paper is somewhat similar: interesting constrained partition setting and some theory, but evaluation and baselines are not fully convincing.
 
-Relative to these anchors, this submission is **better than clearly weak RL-for-CO papers in the 3–4 range**, but still **below the bar of an accept-worthy 6+ paper** because the core empirical case is not yet convincingly aligned with the claimed contribution. The appropriate score is therefore in the **4.5–5.5** band; I place it at **5.0**.
+- **gCSEQIgbWH – RL+GNN for the k-server problem, “Generalist Policy for k-Server Problem.”** This used standard RL+GNN machinery for a new CO setting, with concerns about limited novelty and incomplete ablations; scores were around 3–5 and rejected. Our paper has a somewhat stronger domain story and more careful architecture design (two-stage RL, PAMHA), so I view it as slightly stronger than that anchor.
 
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+- **CpiJWKFdHN – “ROS: GNN-based Max-k-Cut.”** Also in RL/graph CO, with reasonable results but missing baselines and insufficient ablations; scores roughly 5–6 and rejected. Relative to that, this submission has a more specialized, well-motivated constrained setting but more problematic evaluation bias (synthetic generator aligned to model) and lack of fair constrained baselines. I judge it slightly weaker overall in evidential rigor.
+
+Positioning between these, I see this as a **borderline but ultimately below-threshold paper**: interesting idea and solid engineering, but with evaluation that does not yet substantiate the strongest claims and lacks key like-for-like baselines. I therefore lean to a reject with a mid-range score.
+
+MY FINAL SCORE: <pineapple>5.0</pineapple>  
 MY FINAL DECISION: <orange>Reject</orange>

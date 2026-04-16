@@ -42,6 +42,7 @@ implementation details, or large artifacts impractical to include in a submissio
 
 - Similarly, if the paper made real contributions do not reject just because it has some weaknesses - every paper has some. 
 
+- The human finder finds similar weaknesses from other papers, they might not be related to this paper, remove those that are not or barely related. 
 
 ## Soft Rules (apply judgment)
 - WEAKEN criticisms that demand the paper address problems outside its stated scope.

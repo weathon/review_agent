@@ -1,89 +1,117 @@
 ## Summary
-This paper introduces GraphDoc, a large-scale document dataset that augments DocLayNet pages with graph-structured relations between layout elements, and proposes a new graph-based Document Structure Analysis (gDSA) task. It also presents DRGG, a plug-in relation prediction head for document detectors, and reports baseline results on both conventional layout detection and the new graph prediction setting.
+The paper introduces GraphDoc, a large-scale benchmark for graph-based Document Structure Analysis (gDSA) that extends DocLayNet with 4.13M spatial and logical relations across 80K pages. It also proposes DRGG, a relation head added to encoder–decoder detectors to jointly perform Document Layout Analysis (DLA) and predict a document-graph, evaluated with new metrics mR_g and mAP_g.
 
 ## Strengths
-- The paper identifies a real and meaningful gap between standard document layout analysis and richer structural understanding. Modeling relations such as reading order, hierarchy, and references is a sensible extension beyond box detection.
-- GraphDoc is substantial in scale: the paper reports 80K pages, 1.10M instances, and 4.13M relation pairs over 8 relation types, which is materially larger than prior structure-oriented document datasets summarized in Table 1.
-- The task formulation is clear. The distinction between DLA and gDSA, and the decomposition of gDSA into spatial and logical relations, is easy to understand and potentially useful for downstream document understanding work.
-- The paper provides a concrete benchmark setup rather than only a dataset release. Tables 2 and 3 give both aggregate and per-relation results, and the latter is especially helpful because it shows which relations are easy versus genuinely difficult.
-- DRGG appears practically usable as an attachable relation head across multiple detector/backbone combinations, and the paper demonstrates compatibility with DETR, Deformable DETR, DINO, and RoDLA.
+- **Clear and relevant problem formulation.** The paper articulates a concrete gap: existing DLA benchmarks focus on instance detection, whereas real document understanding requires explicit relations (spatial, reading order, hierarchy, references). The task and taxonomy (8 relation types) are clearly defined in Sec. 3.1.3.
+- **Substantial dataset engineering effort.** GraphDoc systematically augments DocLayNet with 4.13M relations over 1.10M instances and 80K pages (Sec. 3.1.5). The relation space (Up/Down/Left/Right + Parent/Child/Sequence/Reference; integration of non-textual elements) is well specified and supported by statistics and visualizations (Fig. 3–4, Table 1).
+- **Reproducible annotation pipeline.** The rule-based annotation system in Sec. 3.1.4 is described step-by-step (OCR + PDF parsing; spatial adjacency from non-overlapping boxes; Recursive X–Y Cut for basic reading order; rule-based hierarchy; reference via text matching). This is useful for others wishing to reconstruct or extend similar graphs.
+- **Conceptually appropriate joint evaluation.** The gDSA metrics (Algorithm 1) explicitly depend on both instance detection and relation prediction via IoU-based matching followed by relation scoring and thresholding. This coupling is well-motivated for documents where relations are only meaningful if detection is correct.
+- **Comprehensive empirical benchmark.** DRGG is evaluated with multiple detectors (DETR, Deformable DETR, DINO, RoDLA) and backbones (ResNet, ResNeXt, Swin, InternImage) on both DLA and gDSA (Table 2), plus per-relation AP analysis (Table 3). This provides useful baselines for future work on this dataset.
 
 ## Weaknesses
 
-###: Fatal
+### Fatal
+None rise to the level of “not a paper” or outright invalidation, but there are serious issues with evidential support and interpretation that, in my judgment, make the work not yet ready for publication as a benchmark + method paper.
 
-### Major:
-- **The dataset’s relational annotations are heavily heuristic, and the paper does not provide enough evidence that these labels are reliable enough to support the benchmark’s central claims.**  
-  This concern is directly supported by Sec. 3.1.4. The annotation pipeline uses OCR/PDF extraction, nearest-neighbor spatial rules, XY-cut-based reading order, rule-based hierarchy construction, and text matching for references. The paper then states only that “**most of the results have been manually verified and refined**,” but gives no quantified manual verification rate, no sampled accuracy audit, no inter-annotator agreement, and no relation-wise quality analysis. For a datasets/benchmarks paper, that is a substantial validity gap: the benchmark is only as sound as its labels. This is especially important because the claimed contribution is not merely scale, but “deeper” structure understanding.
-- **The empirical section does not cleanly isolate the contribution of DRGG.**  
-  Table 2 mostly compares different detector/backbone combinations *with* DRGG. For DLA, the only explicit no-DRGG comparison shown is InternImage+RoDLA without relation head (80.5) versus with DRGG (81.5). There is no parallel no-DRGG comparison for DETR, Deformable DETR, or DINO, and no competing relation-head baseline. As written, the paper does not establish whether gains come from DRGG itself, the stronger detector/backbone combination, joint training, or simply compatibility between the detector and the induced labels. Since DRGG is a named model contribution, this missing isolation matters.
-- **The paper overstates what is demonstrated by the task and experiments.**  
-  The abstract and introduction repeatedly frame the work as enabling “human-like,” “holistic,” or “deeper” document understanding. However, the actual benchmark is page-level box detection plus prediction of 8 edge types on an induced relation graph, and the experiments evaluate only graph recovery on this benchmark. There is no downstream validation showing that the graph representation improves actual document understanding tasks beyond the benchmark itself. The work is still useful as a structured prediction benchmark, but the stronger conceptual claims are not well supported by the presented evidence.
-- **The annotation/evaluation setup likely makes some relations close to trivial, which weakens the informativeness of the aggregate numbers.**  
-  Table 3 shows ~99 AP for Left/Right relations in several settings, while logically more meaningful relations such as Reference are much weaker (best main model: 16.8 AP). Given that Sec. 3.1.4 defines spatial relations by geometric rules and keeps only nearest adjacent boxes, these extremely high scores are unsurprising. This does not invalidate the task, but it does mean that aggregate gDSA performance can overstate progress on the semantically harder parts of the benchmark unless spatial and logical relations are more clearly separated in the discussion.
+### Major
+- **Lack of quantitative validation of relation annotations.**  
+  The central claim is a high-quality relation-graph dataset. Yet Sec. 3.1.4 only states “the most of the results have been manually verified and refined” without any quantitative assessment: no sample size, no inter-annotator agreement, no error rates per relation type, no breakdown of how many relations were corrected. Given that many logical relations (*parent/child/sequence/reference*) are generated by heuristics over OCR text and layout rules, their reliability is unknown. This undermines confidence that the labels reflect true document structure rather than idiosyncrasies of the heuristic pipeline. Since all gDSA results are measured against these labels, the strength of the empirical conclusions is correspondingly limited.
+
+- **Misalignment between semantically framed task and visual-only model.**  
+  gDSA is framed as capturing logical structure such as section hierarchies, reading order, and textual references (Sec. 3.1.3, Fig. 3), and the abstract repeatedly alludes to “deeper comprehension akin to human reading.” However, DRGG (Sec. 3.2, Limitations) operates purely on visual features and positional information. Reference links in particular (e.g., matching “Table 2” in text to the correct table) generally require text semantics that are not modeled here. The paper does acknowledge in Limitations that only visual modality is used, but the main narrative still loosely equates high AP on logical relations with “understanding document structure.” A more modest and accurate interpretation would be: DRGG learns to approximate heuristic relation patterns from visual/layout cues; the current work does not yet demonstrate semantic-level structural understanding.
+
+- **Insufficient quantitative support for claims about DRGG’s architectural benefit.**  
+  DRGG is presented as a novel relation head that also “proves the effectiveness of the gDSA approach for document layout analysis” (contribution list). However:
+  - The only explicit with/without comparison for DLA is InternImage + RoDLA: 80.5 mAP without DRGG vs 81.5 with DRGG (Table 2). This single 1-point gain is not analyzed (no variance, no multiple seeds) and may be within noise.
+  - gDSA performance is reported only for configurations *with* DRGG. There is no baseline that uses the same detections but a simpler relation predictor (e.g., MLP over box coordinates and categories), nor any comparison to “RoDLA + simple relation head” vs “RoDLA + DRGG.”
+  - Many relation types, especially spatial ones, are almost entirely determined by geometry, as evidenced by near-99% AP for *Left*/*Right* in multiple settings (Table 3), indicating that a very simple relation model might suffice.
+  
+  As a result, the paper does not convincingly show that the specific DRGG design (pooling, upsampling, layer aggregation) is necessary or superior to simpler alternatives.
+
+- **Evaluation metrics are under-specified and somewhat opaque.**  
+  Algorithm 1 defines the matching and thresholding procedure but never concretely defines \(f_{\text{mR}}\) and \(f_{\text{mAP}}\). It is unclear whether mAP_g is macro-averaged over relation classes, how multiple relations per pair are handled, and how negatives are enumerated in such a dense candidate space. Without these details, the headline numbers (e.g., 57.6% mAP_g@0.5) are hard to interpret or reproduce exactly. The paper argues that top-k SGG metrics are unsuitable but does not provide an empirical comparison or sensitivity analysis over thresholds beyond a few points (0.5/0.75/0.95).
+
+- **Claims about reading order and hierarchy are not substantiated by dedicated evaluations.**  
+  The introduction and Sec. 3.1 emphasize that GraphDoc enables Reading Order Prediction (ROP) and Hierarchical Structure Analysis (HSA) as sub-tasks. In practice, the only evidence is per-relation AP for *Sequence* and *Parent/Child* within the same gDSA evaluation (Table 3). There is no explicit ROP metric (e.g., order accuracy, Kendall’s tau) or tree-structure evaluation for hierarchy. Thus, the paper does not demonstrate that the proposed graphs or model materially advance those downstream tasks, beyond matching heuristic labels.
 
 ### Minor
-- **The paper is limited to single-page relations, which narrows the scope of the claimed document structure understanding.**  
-  Sec. 3.1.2 explicitly states: “**we will only consider relations within the same page and not those across pages**.” This is a reasonable scoping decision, not a flaw by itself, but it does materially limit applicability to real document structure phenomena such as cross-page reading order or references.
-- **The model is visual-only despite several logical relations being inherently text-dependent.**  
-  This is acknowledged by the authors in the limitations section: “**Our model structure focused only on visual modality input without multi-modality input consideration**.” Given that reference and hierarchy often depend on textual cues, the weak Reference AP is unsurprising. Because the paper itself acknowledges this limitation, this should be viewed as a meaningful but not fatal shortcoming.
-- **Evaluation protocol clarity is incomplete in the main paper.**  
-  Sec. 4.2 says experiments were conducted on GraphDoc “for both training and validation,” but the main text does not clearly describe a held-out test protocol. For a benchmark paper, clearer dataset split and evaluation protocol exposition in the main body would help.
-- **The claimed benefit of gDSA for DLA is modest in the evidence shown.**  
-  The main explicit comparison is RoDLA 80.5 vs. RoDLA+DRGG 81.5. That is a positive result, but relatively small compared with the paper’s broad claim that gDSA improves layout analysis.
+- **Rule-based pipeline limitations are not analyzed.**  
+  The heuristic steps (Sec. 3.1.4) are reasonable—Manhattan/non-Manhattan detection, Recursive X–Y Cut, nearest neighbors for spatial relations—but the paper offers no error analysis or discussion of known failure cases (e.g., complex multi-column layouts, sidebars, footnotes, unusual figure placements). This makes it difficult for users to judge where the dataset is reliable vs. where its labels should be treated with caution.
+
+- **Single-page restriction reduces applicability.**  
+  Relations are only annotated within a page (“we will only consider relations within the same page and not those across pages”, Sec. 3.1.2). Cross-page references and hierarchies are ubiquitous in realistic documents; while the paper notes this in Limitations, it is a substantial constraint on the practical usefulness of GraphDoc for holistic document understanding.
+
+- **DRGG’s “plug-and-play” claim is somewhat overstated.**  
+  In practice, DRGG as described is tightly coupled to decoder query features from encoder–decoder detectors (Sec. 3.2, Fig. 5). It is not immediately applicable to two-stage detectors or to text-centric document models without architectural changes. The paper could be clearer about this scope.
+
+- **Some over-claiming in the narrative.**  
+  Phrases like “gradually deeper comprehension akin to human reading” (Abstract) and “paving the way for intelligent document processing systems” overstate what is demonstrated, especially given the lack of semantic modeling and downstream tasks.
 
 ### Trivial
+- Minor notation and clarity issues: σ in Eq. (4) is not explicitly defined (presumably an activation), and tensor shapes in Sec. 3.2 require careful reading to follow. These are fixable presentation details.
 
 ## Nice-to-Haves
-- Report annotation quality on a manually labeled subset, ideally relation-wise.
-- Separate aggregate metrics for spatial vs. logical relations, or otherwise avoid letting easy geometric relations dominate the headline number.
-- Include a simple geometric/rule-based baseline for relation prediction, especially because parts of the annotation pipeline are themselves geometry-based.
-- Move key ablations from the appendix into the main paper, especially those clarifying which DRGG components matter.
-- Add qualitative predicted-vs-ground-truth graph visualizations and error analysis for Reference / Parent / Child / Sequence relations.
+- Evaluation of downstream tasks that could benefit from the predicted graphs (e.g., document QA, information extraction, table/figure citing resolution) would make the practical value more concrete.
+- A breakdown of mAP_g separately for spatial vs. logical relations (beyond per-relation AP in Table 3) and perhaps a class-balanced metric would clarify how much of the overall score comes from easy spatial edges versus harder logical ones.
+- Even a small-scale human study quantifying annotation correctness per relation type (on a few hundred pages) would greatly strengthen the dataset’s claims.
 
 ## Removed Points
 These points are flagged to be removed, treat them with caution.
 
-- **“The proposed gDSA evaluation metric is not a valid AP-style metric, so the headline numbers are not interpretable.”**  
-  The paper indeed uses a nonstandard thresholded relation metric in Sec. 3.3/Algorithm 1, and the naming could be clearer. However, the paper explicitly defines its own evaluation procedure rather than claiming to use standard object-detection AP unchanged. It is fair to say the metric is unconventional and should be justified more carefully, but the stronger criticism that it is simply invalid is too strong based on the paper alone.
-- **Complaints about missing related work.**  
-  Not included per instruction.
-- **Reproducibility complaints about omitted implementation details in the appendix.**  
-  The paper explicitly points to appendices for model/configuration details; this is not by itself a substantive weakness for the main review.
-- **Claims doubting the existence/availability of cited baselines, datasets, or tools.**  
-  Removed per instruction.
-- **Generic requests for confidence intervals / repeated runs.**  
-  These would be nice, but for this style of benchmark paper they are not a core flaw.
+- **“Dataset may not exist / not yet released / unverifiable.”**  
+  Any concern about the existence or release status of GraphDoc is removed by policy; the paper clearly defines it, so it is assumed to exist.
+
+- **“Overstated novelty relative to potentially missing related work X.”**  
+  Critiques based on missing citations or unmentioned prior systems are not included, since I cannot verify external literature here and might be inventing absences.
+
+- **“Unfair comparison because baselines are weaker than the proposed method in ways that favor the authors.”**  
+  The comparisons here actually often favor strong baselines (e.g., DINO) and use standard detectors/backbones. Any criticism that the authors set up an unfairly easy comparison for themselves is not supported by the text and is set aside.
+
+- **Formatting/style nitpicks (figures repeated in caption text, etc.).**  
+  These are clearly parsing artifacts from PDF extraction and not paper flaws.
 
 ## Novel Insights
-The most important synthesis is that the paper is strongest as a **benchmark proposal for induced page-structure prediction**, not yet as evidence of “human-like” document understanding. The same design choice that gives the work scale and practicality—bootstrapping relations from DocLayNet via rules—also creates its central tension: it makes GraphDoc feasible and large, but leaves the paper needing much stronger validation that the induced graph labels are sufficiently faithful and nontrivial. In other words, the paper’s promise is real, but the current evidence better supports “useful structured benchmark with a reasonable baseline” than the broader semantic framing the authors adopt.
+None beyond the paper’s own contributions. The main conceptual advance is to cast document structure as a multi-relation graph and to provide a concrete, large-scale instantiation of this idea; the reviews above primarily refine how much confidence we can place in its labels and how to interpret the current model’s performance.
 
 ## Suggestions
-- Quantify annotation quality on a manually curated subset, including relation-wise precision/recall or agreement for spatial, sequence, hierarchy, and reference edges.
-- Add at least one simple heuristic/geometric baseline; this is particularly important for interpreting the near-perfect Left/Right scores.
-- Add cleaner ablations isolating DRGG from detector/backbone choice and from multitask training.
-- Reframe the claims more conservatively around structured page understanding rather than human-like document comprehension unless additional downstream evidence is added.
-- Report headline results separately for spatial and logical relation groups.
-- Clarify the dataset split and evaluation protocol in the main paper.
+- **Strengthen dataset validation.**  
+  Perform and report a small but careful human evaluation of relation annotations: random sample of pages, independent human labels for all 8 relation types, confusion matrices, and per-type precision/recall of the heuristic pipeline. Make clear how many pages were “manually verified and refined” and what that process entailed.
+
+- **Clarify and fully specify the metrics.**  
+  Precisely define mR_g and mAP_g (macro vs micro, handling of multiple relations per pair, treatment of negatives) and, if space permits, compare threshold-based evaluation with standard top-k SGG metrics on GraphDoc to empirically support the design choice.
+
+- **Add simpler relation baselines and ablations.**  
+  Implement a coordinate + category MLP relation head using the same detections to quantify how much DRGG adds, especially for nearly deterministic spatial relations. Include ablations of DRGG’s design (e.g., removing pooling/upsampling branches, using only one decoder layer) in the main paper or more prominently summarized from the appendix.
+
+- **Temper claims about semantic understanding and downstream tasks.**  
+  Rephrase claims about “human-like reading” and “reading order/hierarchy” to more clearly distinguish what is currently measured (agreement with heuristic label graphs from visual cues) from future goals involving semantic and multi-page understanding.
+
+- **Outline a clear path to multimodal and multi-page extensions.**  
+  Given that text and multi-page structure are acknowledged limitations, sketch concrete design ideas or small pilot experiments (e.g., adding simple text embeddings; extending annotations across two consecutive pages) to demonstrate feasibility and guide follow-up work.
+
+### Evaluation on axes
+- **Originality:** Moderate. The combination of DocLayNet + relation graphs + specialized metrics is novel in this specific form, though graph-based representations and relation modeling themselves are established ideas.
+- **Importance of research question:** High. Explicit document structure modeling is an important and under-served aspect of document understanding.
+- **Support for claims:** Mixed. The existence and scale of the dataset and the basic behavior of DRGG are well supported; claims about annotation quality, semantic structure understanding, and DLA improvement are not.
+- **Soundness of experiments:** Reasonable for a first benchmark, but missing crucial baselines, ablations, and dataset validation.
+- **Clarity of writing:** Generally clear; task, dataset, and model are understandable despite some dense notation.
+- **Value to the research community:** Potentially substantial as a dataset and benchmark, but contingent on improved validation and more careful framing; the current version is promising but still preliminary.
 
 ## Score and Decision
-**Originality:** Good. The gDSA framing and graph-structured document benchmark are genuinely novel within document layout analysis.  
-**Importance:** Moderately high. Richer structure supervision for documents is a worthwhile problem.  
-**Claims support:** Mixed. The narrower benchmark contribution is supported; the broader “holistic/human-like understanding” claims are not.  
-**Experimental soundness:** Fair but incomplete. The baseline study is useful, but annotation validation and contribution isolation are both lacking.  
-**Clarity:** Generally clear at the task level, though some methodological and evaluation details are underexplained.  
-**Value to the community:** Potentially meaningful if the dataset is released and adopted, but current confidence is reduced by the limited validation of the heuristic labels.
 
-**Calibration against human-reviewed papers:**  
-- Compared against **ADOPD** (`/home/wg25r/review_agent/human_reviews/x1ptaXpOYa.md`, accept poster; scores 8/6/6/6), this paper is weaker because ADOPD’s contribution is a dataset with stronger human-in-the-loop positioning, whereas GraphDoc’s central labels are more heavily heuristic and less validated.  
-- Compared against **Chronicling Germany** (`/home/wg25r/review_agent/human_reviews/wh6pilyz2L.md`, reject; scores 6/6/5/6), this paper is stronger in scale and task ambition, but suffers from a similar annotation-quality-validation concern.  
-- Compared against **DocLayout-YOLO** (`/home/wg25r/review_agent/human_reviews/k0X4m9GAQV.md`, reject/withdrawn; scores 3/6/5/5), this paper is more novel and more valuable because it contributes a new benchmark/task rather than only an incremental method.  
-- Compared against **ADOPD-Instruct** (`/home/wg25r/review_agent/human_reviews/lBlHIQ1psv.md`, reject; scores 5/3/5/5), this paper is somewhat stronger in technical coherence, but still not strong enough empirically for acceptance due to benchmark-validity concerns.
+For calibration, I considered the following human-reviewed papers (paths given by the Human Finder):
 
-Overall, this lands in the **borderline reject to reject** range: clearly more substantial than weak incremental submissions, but not yet convincing enough as a benchmark paper because the reliability of the induced labels and the exact contribution of DRGG are insufficiently established.
+- **kmbU3EdLtS.md** (“Boosting DLA with Graph Multi-modal,” scores: 6,5,5,6 — Reject): A document-layout paper with graph components and decent execution but judged not strong enough, mainly due to limited novelty and evidential gaps.  
+- **wh6pilyz2L.md** (“Chronicling Germany” dataset, scores: 6,6,5,6 — Reject): A dataset paper with solid motivation but concerns over annotation quality and limited validation.  
+- **CI9JMBAsPg.md** (“DocGenome,” scores: 8,6,5,6 — Reject): A richer dataset paper with broad scope and content, but reviewers still found weaknesses in experimental support and positioning.  
+- **c2iT5zBiJd.md** (SGG augmentation, scores mostly 3–5 — Reject): Shows how missing baselines and weak evaluation can pull scores down despite a reasonable idea.
 
-**Score: 4.5 / 10**  
-**Decision: Reject**
+Relative to these:
+- This paper’s idea and scale are comparable to the weaker dataset papers (wh6pilyz2L, CI9JMBAsPg) but with less rigorous annotation validation and more over-claiming about semantics.
+- Its methodological novelty is lower than CI9JMBAsPg; its empirical support is also thinner.
+- It is stronger and more coherent than the lowest-end SGG paper (c2iT5zBiJd), but not at the level where I would argue for acceptance against typical conference standards.
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+Positioning it in this landscape, I judge it around the “interesting but not yet ready” range.
+
+MY FINAL SCORE: <pineapple>5.0</pineapple>  
 MY FINAL DECISION: <orange>Reject</orange>
