@@ -284,11 +284,14 @@ def one_vs_rest_baseline(df, gt_score_cols):
 
 def analyze_and_plot(path):
     df = pd.read_csv(path)
+    # remove -1 lines
+    df = df[df["pred_score"] >= 0]
     gt_score_cols = [c for c in df.columns if c.startswith("gt_score_")]
 
     # Filter out rows where pred_score is missing (ERROR / failed papers)
     n_total = len(df)
     df = df.dropna(subset=["pred_score"])
+    df = df.reset_index(drop=True)
     n_dropped = n_total - len(df)
     if n_dropped > 0:
         print(f"\n  WARNING: Dropped {n_dropped}/{n_total} papers with missing predictions (ERROR rows)")
