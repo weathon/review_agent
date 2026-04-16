@@ -412,7 +412,8 @@ async def run_single_paper(paper_path: str, no_cal: bool = False):
     score = result["scorer_output"]
     if score != -1:
         print(f"\nPredicted score: {score}")
-    with open(os.path.join(Path(__file__).parent, os.path.basename(paper_path).split(".")[0] + f"_review_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"), "w", encoding="utf-8") as f:
+    os.makedirs(os.path.join(Path(__file__).parent, "reviews"), exist_ok=True)
+    with open(os.path.join(Path(__file__).parent, "reviews", os.path.basename(paper_path).split(".")[0] + f"_review_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"), "w", encoding="utf-8") as f:
         f.write(f"# Review of {paper_path}\n\n")
         f.write(result["merged_review"])
         f.write(f"\n\n**Predicted score: {score}**\n" if score != -1 else "") 

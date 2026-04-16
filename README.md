@@ -85,6 +85,9 @@ ScholarPeer采用LLM-as-judge进行side-by-side评估，在Technical Accuracy、
 
 我们提出以审稿意见的有效性作为核心评估维度，同时引入无意义率来惩罚凑数行为。有效性比覆盖率更能反映审稿的实际价值，因为它直接回答了最关键的问题：系统提出的批评是否真实存在于论文中，是否能帮助作者改进。
 
+联网related work可能有数据泄露？
+per-bin校准，ai rated 6 -> human rated 5
+
 ## Quick Start
 
 ```bash

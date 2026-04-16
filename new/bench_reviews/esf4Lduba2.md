@@ -1,40 +1,24 @@
-Now let me read the calibration papers from the human finder to calibrate the score.Now I have enough context. Let me write the final consolidated review.---
-
-## Summary
-
-Foundation-Informed Message Passing (FIMP) is a GNN message-passing framework that repurposes pretrained non-textual foundation models (ViT, scGPT, BrainLM) for graph-based tasks. The core idea is to represent nodes as sequences of feature tokens (aligned with how foundation models tokenize inputs), and to adapt each foundation model's self-attention layers into cross-node attention that generates messages between neighboring nodes. The method is evaluated on spatial transcriptomics, Mapillary image classification, and fMRI reconstruction, demonstrating improved performance over standard GNN baselines.
+Now let me look at the calibration papers to anchor the score properly.Now I have enough context to write the final consolidated review. Let me synthesize the reviewer inputs with my paper verification.Now I have sufficient context. Let me produce the final consolidated review.
 
 ---
 
-## Claims and Support
+## Summary
 
-**Claim 1: FIMP is a general framework that repurposes pretrained non-textual foundation models for graph message passing.**
-**Partially supported.** The framework is clearly described in Sec. 3 and instantiated across three domains. However, the paper never cleanly isolates the contribution of (i) the tokenization scheme, (ii) pretrained embeddings, and (iii) pretrained attention weights. The image ablation (Table 5) is informative and shows architecture value beyond embeddings, but no equivalent ablation exists for transcriptomics or fMRI.
-
-**Claim 2: FIMP outperforms strong graph baselines across diverse domains.**
-**Partially supported.** FIMP-scGPT and FIMP-BrainLM show large gains in their respective domains. However, baselines in bio-domain experiments do not receive equivalent pretrained information. The image ablation shows GPS+ViT embeddings reaches 50% vs. FIMP-ViT 63.2%, confirming the architecture adds value—but this control is absent for transcriptomics and fMRI. Additionally, in Table 2 (cell type classification), FIMP-base underperforms GPS on mouse hippocampus (49.04% vs. 52.89%), undermining blanket architectural superiority claims.
-
-**Claim 3: Gains are not trivially due to model capacity.**
-**Weakly supported.** The argument that using an out-of-domain ViT on gene data underperforms FIMP-base is a very weak capacity control (domain mismatch explains the drop, not capacity). Table 5 is more convincing for this claim in the image domain, but no analogous study exists in other domains.
-
-**Claim 4: FIMP's token-level cross-node attention is novel and distinct from GAT-style attention.**
-**Supported with appropriate scope.** The distinction from node-level scalar attention in GATs is clear and correct. The novelty claim is plausible in the context of the paper's framing (non-textual FM repurposing), though the broader "first method" phrasing is overreaching.
-
-**Claim 5: FIMP demonstrates zero-shot embedding capabilities.**
-**Incorrectly framed.** Section 4.3 explicitly states: "We evaluate the quality of embeddings by training a linear classifier on 75% of the embeddings and predicting labels for the remaining 25%." This is a frozen-encoder linear probing protocol using 400 labeled examples—**not** zero-shot prediction. This mislabeling is applied to one of three headline contributions and is a significant problem with the submission as written.
-
-**Claim 6: FIMP-base alone (learned from scratch) outperforms baseline GNNs.**
-**Mixed.** Table 1: FIMP-base outperforms all baselines on gene expression prediction. Table 3: FIMP-base (+10% over GPS on Mapillary). Table 4: FIMP-base dramatically outperforms baselines on fMRI. But Table 2: FIMP-base underperforms GPS on mouse hippocampus cell type classification (49.04% vs. 52.89%). The claim holds for most settings but has exceptions.
+FIMP (Foundation-Informed Message Passing) proposes a GNN message-passing framework that repurposes pretrained non-textual foundation models (ViT, scGPT, BrainLM) for graph-structured data. The key mechanism treats each graph node as a sequence of feature tokens and computes cross-node attention between token sequences to construct messages; the attention weights ($W_Q, W_K, W_V$) can be initialized from pretrained transformer layers. The method is evaluated across three distinct domains—street-view image classification (Mapillary), spatial transcriptomics (three datasets), and fMRI brain activity reconstruction—demonstrating consistent improvements over standard GNN baselines in fine-tuned and limited zero-shot settings.
 
 ---
 
 ## Strengths
 
-- **Novel, timely problem formulation.** The paper addresses a well-motivated gap: non-textual foundation models are largely underexplored in non-textual graph settings. The idea of aligning GNN tokenization with FM tokenization to enable cross-node attention is conceptually clean and practically motivated.
-- **Broad empirical scope.** Three distinct modalities (images, spatial transcriptomics, fMRI) with multiple datasets per domain provides much stronger evidence than single-domain work.
-- **Large empirical gains.** fMRI reconstruction: FIMP-base achieves R²=0.578 vs. best baseline 0.320 (~80% relative gain). Mapillary: FIMP-ViT achieves 63.2% vs. best GNN baseline 27.4%. These are not marginal improvements.
-- **Informative ablation in image domain.** Table 5 credibly separates the contribution of ViT embeddings from the FIMP architecture: GPS+ViT=50.0% vs. FIMP-ViT=63.2%, showing that the message-passing mechanism adds value beyond pretrained features alone.
-- **Domain-appropriate foundation model comparisons.** Including standalone scGPT, BrainLM, and ViT as baselines (without graph structure) is the right choice and strengthens the argument for graph-structured FIMP over mere embedding-based FMs.
+- **Novel and principled mechanism**: The insight that self-attention over token sequences can be repurposed as cross-node attention for graph message passing is clean, intuitive, and well-motivated. FIMP is the first to systematically leverage non-textual FM attention weights within the GNN message-passing paradigm. Section 3.2–3.3 articulate this contribution clearly.
+
+- **Multi-domain empirical breadth**: The paper validates FIMP across three qualitatively different domains (images, transcriptomics, fMRI) spanning 7 tasks, providing meaningful evidence for generality. This breadth substantially exceeds prior work (e.g., AMPNet, which covered only fMRI and genomics).
+
+- **Strong quantitative results**: Gains are large and consistent—FIMP-base alone beats all GNN baselines (e.g., 38.6% vs. 27.4% GPS on Mapillary; 0.578 vs. 0.320 R² on fMRI); FIMP+FM further improves over FIMP-base in domain-aligned settings. Results are reported over 5 runs.
+
+- **Informative ablation with a genuine negative result**: Table 5 separates foundation model embeddings from the FIMP architecture by providing GNNs with pretrained ViT embeddings as input (GPS+ViT: 50.0% vs. FIMP-ViT: 63.2%). The finding that out-of-domain ViT weights *hurt* performance on transcriptomics (Table 1: FIMP+ViT R²=0.3506 vs. FIMP-base R²=0.3815) is an informative negative result that argues the gains are domain-specific, not merely from increased model capacity.
+
+- **Architectural clarity**: The full algorithm is given as Algorithm 1, and the method described in Section 3.3 makes clear that the entire pretrained transformer layer stack is used (not just individual weight matrices), with cross-attention substituted for self-attention. This is a coherent design choice.
 
 ---
 
@@ -45,32 +29,31 @@ Foundation-Informed Message Passing (FIMP) is a GNN message-passing framework th
 
 ### Major
 
-- **"Zero-shot" claim is factually incorrect.** One of three headline contributions—FIMP's "zero-shot embedding capabilities"—is evaluated using supervised linear probing on 400 labeled training embeddings. Sec. 4.3: "We evaluate the quality of embeddings by training a linear classifier on 75% of the embeddings." This is frozen-encoder linear evaluation, not zero-shot prediction. The term "zero-shot" in the abstract, contribution list, and conclusion misrepresents what was shown. The finding is still interesting (pretrained graph embeddings without graph-specific training), but the framing inflates the claim materially.
+- **Missing BrainLM-alone baseline in Table 4 (fMRI)**: The paper consistently provides standalone foundation-model baselines for images (ViT alone: 56.5%) and transcriptomics (scGPT alone: Table 1–2). However, Table 4 omits a BrainLM-alone baseline entirely, making it impossible to assess how much of the fMRI gain comes from graph structure vs. simply from the pretrained BrainLM encoder. The paper's caption claims a "25.8% improvement over baselines" but the baselines are all classical GNNs—the fair comparison requires knowing where BrainLM alone sits. This is a genuine inconsistency that undermines the central claim specifically in the fMRI domain.
 
-- **Critical ablation missing for bio domains.** The key question—does FIMP benefit from its architecture/attention mechanism, or just from using pretrained features that baseline GNNs don't receive?—is answered only for images (Table 5). For spatial transcriptomics and fMRI, there is no comparison between FIMP-scGPT/FIMP-BrainLM and a standard GNN receiving equivalent pretrained embeddings. Given the strong performances in these domains, this is essential evidence that is absent.
+- **Ablation only on one domain**: The ablation decomposing tokenization vs. architecture vs. pretrained weights (Table 5) is conducted only on Mapillary. Given the paper's broad multi-domain claims, the same style of decomposition is needed at least once for transcriptomics and fMRI, where the source of improvement may be quite different. As it stands, the fMRI gains (the largest in the paper) lack an analogous ablation.
 
-- **FIMP-base does not consistently outperform baselines.** Table 2 (mouse hippocampus cell type classification): FIMP-base = 49.04% accuracy, GPS = 52.89%. FIMP-base is lower than all reported baselines except GCN and GAT. The paper's narrative that FIMP-base is an architectural improvement over existing GNNs is contradicted by this result. The discussion in Sec. 4.3 does not adequately address this inconsistency.
+- **Zero-shot evaluation is mislabeled and overstated**: Section 4.3 and Contribution 3 repeatedly invoke "zero-shot" capabilities. However, the actual evaluation trains a linear classifier on 75% of 400 sampled embeddings (i.e., 300 labeled examples) and tests on 25% (100 examples). This is standard linear probing, not zero-shot classification. The paper's own text acknowledges this implicitly ("We evaluate the quality of embeddings by training a linear classifier on 75% of the embeddings"), yet the abstract claims FIMP "can effectively handle graph-based tasks without task-specific training," which is contradicted by the supervised linear probe. The high variance (±6.269 accuracy on 100 test samples) further limits the strength of this conclusion. The result itself is interesting—pretrained FIMP-ViT reaching ~40% linear-probe accuracy without graph training is notable—but the "zero-shot" framing overstates what was actually shown.
 
 ### Minor
 
-- **Aggregation of token-sequence messages is underspecified.** Algorithm 1 shows `AGGREGATE_{j∈N(i)}(H_{ji}^{(k)})` where `H_{ji}` is a matrix (f × d). Standard permutation-invariant aggregators (sum, mean) must be applied element-wise here. The paper does not explicitly specify this choice, nor whether any structural information across neighbor token sequences is lost in element-wise aggregation.
+- **No parameter count or FLOPs comparison**: FIMP with a 12-layer, 86M-parameter ViT or 12-layer, 54M-parameter scGPT as its message creation module is orders of magnitude larger than GCN, GAT, GIN, or GraphSAGE baselines. The fact that FIMP-base (random init, much smaller) still outperforms all standard GNNs suggests the tokenization scheme and cross-attention architecture are genuinely helpful, but the parameter asymmetry means some reported gains cannot be cleanly attributed to the FM pretraining hypothesis.
 
-- **Scalability not quantified.** The paper mentions Flash Attention and lists improved scalability as future work (Sec. 5), but does not provide a theoretical complexity analysis or wall-clock training time comparisons in the main text. The cross-node attention cost of O(|E|·f²·d) is prohibitive for large-scale graphs or dense feature spaces, and this limits adoption beyond the presented settings.
+- **No formal computational complexity analysis**: Cross-node attention over token sequences has $\mathcal{O}(f^2)$ cost per edge, versus $\mathcal{O}(1)$ or $\mathcal{O}(d)$ for standard GNNs. The paper mentions Flash Attention and acknowledges scalability as future work in the conclusions, but provides no wall-clock or memory comparison in the main body. The evaluated datasets are small (41k cells, 424 brain regions, 100k images), and it is unclear whether FIMP scales beyond these.
 
-- **Out-of-domain ViT ablation for gene data is a weak capacity control.** The argument in Sec. 4.3 that using ViT on gene data underperforms FIMP-base therefore "performance improvements are not trivially caused by increased model capacity" conflates domain mismatch with capacity. An in-domain random-initialized transformer of the same size would be a better control.
+- **COMBINE step ambiguity in Algorithm 1**: Line 28 of Algorithm 1 applies a projection matrix $\mathbf{W}$ after the COMBINE step, but Section 3.1 defines COMBINE as element-wise addition. It is unclear whether this projection is applied per-layer with residual connections or layer normalization, or whether frozen vs. fine-tuned FM layers are used. These details affect reproducibility and performance interpretation.
 
 ### Trivial
 
-- **Inconsistency in "non-textual" claim.** GenePT is described as "GPT-3.5 embeddings of gene function descriptions based on biomedical literature." This slightly muddies the stated "non-textual foundation models" framing. Minor and doesn't affect core results.
+- The Mapillary graph construction (10-mile proximity) may introduce geographic label leakage (neighboring images share country labels), but this is a dataset property, not a paper flaw, and the paper is transparent about how the graph is constructed.
 
 ---
 
 ## Nice-to-Haves
 
-- **Attention map visualizations.** The paper claims cross-node attention captures different interactions than node-level attention, but never visualizes what these cross-node attention matrices look like between neighboring nodes. Are they capturing gene-gene correlations across tissue neighbors? Understanding this would strengthen the biological interpretability story.
-- **Layer-wise transfer analysis.** Does using all K transformer layers of the FM as message creators help vs. fewer layers? Are earlier or later layers more useful? This would support mechanistic understanding of *why* the transfer works.
-- **Frozen vs. finetuned FM weights comparison.** Does keeping FM weights frozen during graph training still yield benefits? Understanding this would help practitioners decide whether expensive finetuning is necessary.
-- **Explanation of the extreme scGPT standalone gap on human heart.** Standalone scGPT gets R²=0.023 on Human Heart, while FIMP-scGPT achieves R²=0.812—a ~35× improvement. This extraordinary gap is not analyzed. It may reflect how scGPT was trained (human, whole-body) and how graph structure captures spatial context the standalone model lacks, but this deserves explicit discussion.
+- **Tokenization-only ablation**: A baseline that uses the same tokenized node representation but replaces cross-attention message creation with mean-pooling or linear projection of neighbor token sequences would more cleanly isolate the role of cross-attention vs. tokenization alone—since FIMP-base already outperforms all GNNs by a wide margin.
+- **Training curve or attention visualization**: A comparison of convergence curves between FIMP-base and FIMP+FM, or attention heatmaps showing cross-node token interactions, would provide mechanistic insight into why domain-aligned pretraining helps.
+- **Evaluation on a standard graph benchmark** (e.g., OGB node classification) would help characterize whether FIMP's advantages extend beyond biological/image graph domains.
 
 ---
 
@@ -78,35 +61,30 @@ Foundation-Informed Message Passing (FIMP) is a GNN message-passing framework th
 
 *These points are flagged to be removed, treat them with caution.*
 
-**Mapillary label leakage concern (harsh reviewer, Sec. 4.1):** The harsh reviewer noted that geographic proximity graphs with country labels may allow "label leakage" via geographic smoothing. This is a valid observation but it is not a methodological flaw—the task is explicitly to classify country from visual features in a geographically structured graph, and spatial correlations are intrinsic to the task formulation. This is not a meaningful weakness.
+1. **Harsh Critic W1 – Architecture control claim**: The critic claimed that only $W_Q, W_K, W_V$ are reused. Verified against Section 3.3: "The final hidden representation output of the foundation model is then taken as the message $H_{ji}$"—i.e., the full FM transformer stack is used with cross-attention substituted per layer. The critic's characterization of method capacity is partially incorrect. Moreover, FIMP-base vs. FIMP+FM IS the pretraining vs. no-pretraining control the critic requested; the domain-mismatch negative result (FIMP+ViT hurts transcriptomics) provides additional evidence separating capacity from pretraining. Removed as misread.
 
-**Missing domain-specific baselines for spatial transcriptomics (Spark reviewer):** The reviewer asked for SpaGCN, STAGATE, GraphST. Per hard rules, missing related works cannot be flagged as we cannot confirm their existence independently.
+2. **Human Finder W2 – Limited evaluation on standard graph benchmarks**: Removed per soft rule—the paper is explicitly scoped to non-textual biological/image graphs and acknowledges OGB-style evaluation as future work. Critiquing the absence of citation-network results is scope creep for a paper about domain-specific scientific graph data.
 
-**"Semantic gap in attention transfer" as a weakness:** The question of *why* self-attention weights transfer to cross-node attention is interesting but it is not a flaw—the paper demonstrates empirically that this works. Flagging the absence of a theoretical explanation is overly demanding for an empirical systems paper. Moved to nice-to-haves.
+3. **Human Finder W7 / Spark – Reproducibility/hyperparameter details**: Removed per hard rule on reproducibility nitpicks. Hyperparameter grids, full training logs, and implementation details are described at appropriate level in Section 4.2 and Appendix.
 
-**Reproducibility concerns (hyperparameter details, undisclosed implementation specifics):** Per hard rules, nitpicks about reproducibility such as undisclosed hyperparameters or trivial implementation details are removed.
+4. **Human Finder W4 – Lack of expressiveness/over-smoothing analysis**: Removed as outside stated scope; the paper is an empirical systems contribution evaluated on real data, and demanding WL-hierarchy analysis or theoretical expressiveness proofs is not standard in this setting.
 
-**"Unfair comparison" with stronger GPS/GIN when given ViT embeddings (Spark reviewer's Claim 4):** Table 5 explicitly compares GPS+ViT embeddings (50.0%) to FIMP-ViT (63.2%), showing FIMP still leads. This is the right ablation to show FIMP's architectural value beyond just embeddings. The concern about GPS having fewer parameters is valid in principle but weakened by the fact that FIMP still wins by a 13-point margin even against the stronger GPS+ViT setup.
+5. **Human Finder W3 – Missing SOTA domain-specific baselines** (Spotscape, CellPLM, etc.): Removed per hard rule on missing related works—cannot verify existence of all referenced methods.
 
 ---
 
 ## Novel Insights
 
-The clearest novel insight from this paper and its reviews is the following: **token-level representation of GNN nodes is the key enabling technology that bridges pretrained non-textual foundation models and graph learning.** This is distinct from—and largely orthogonal to—the trend of applying LLMs to text-attributed graphs. Biological and image data have rich token structure (gene expressions, image patches, brain region signals) that maps naturally to FM tokenization, and the cross-node cross-attention operation created by using query tokens from the target node and key/value tokens from the source node is a principled and surprisingly effective construction. The significant gains on fMRI reconstruction (where each node is a brain region with a signal window tokenizable into temporal segments) and spatial transcriptomics (where each node is a cell with thousands of gene tokens) suggest that this representation choice—not just foundation model capacity—is responsible for much of the performance delta.
+The most genuinely novel observation arising across reviewers—and confirmed by the paper—is the **domain-alignment finding**: an out-of-domain foundation model (ViT applied to transcriptomics) actively *degrades* performance compared to FIMP-base trained from scratch (Table 1: R² drops from 0.3815 to 0.3506 on mouse hippocampus, and from 0.6955 to 0.4026 on human heart). This result is rarely seen in papers claiming foundation model benefits and provides unusually clean evidence that FIMP's gains arise from meaningful weight transfer rather than model capacity. The mechanism for why domain-aligned pretraining of tokenization statistics and attention heads transfers to cross-node message passing is not fully explained and deserves deeper investigation.
 
 ---
 
 ## Suggestions
 
-1. **Rename "zero-shot" to "frozen-encoder linear probing" or "graph-agnostic embedding transfer"** throughout the paper. Describe the protocol accurately (400 embeddings, 75%/25% split, linear classifier). This is a simple fix but eliminates the most glaring misrepresentation in the paper.
-
-2. **Add a matched-pretraining ablation for at least one bio domain.** Specifically: compare FIMP-scGPT (full system) against a standard GNN (e.g., GPS) that receives the same scGPT token embeddings as node features. This directly mirrors Table 5 for the transcriptomics setting and would significantly strengthen the core claim.
-
-3. **Address Table 2's inconsistency.** FIMP-base underperforms GPS on mouse hippocampus classification. The paper should discuss what drives this reversal—is it because classification benefits more from graph structure alone and the tokenization overhead hurts? This kind of honest analysis would strengthen credibility.
-
-4. **Specify the AGGREGATE function for token-sequence messages.** Add one line in Sec. 3.2 or the appendix explicitly stating how matrices H_{ji} are aggregated across neighbors (e.g., element-wise mean pooling) and discuss whether this loses inter-neighbor information.
-
-5. **Add a wall-clock training time table with memory consumption.** Appendix F apparently contains training time for images; a complete table across all settings would help practitioners assess feasibility.
+1. **Add BrainLM-alone baseline to Table 4** — this is the single highest-priority fix to make the fMRI results interpretable.
+2. **Reframe "zero-shot" as "linear probing" or "pretrained zero-shot embeddings"** throughout, including the abstract and contributions — the current framing is inconsistent with the actual evaluation.
+3. **Replicate the ablation from Table 5 on one transcriptomics dataset** — showing the decomposition of tokenization vs. FIMP architecture vs. FM pretraining on at least one biological domain would significantly strengthen the cross-domain generality claim.
+4. **Report parameter counts and training times** for all methods — even a simple table in the appendix would allow readers to assess the fairness of comparisons.
 
 ---
 
@@ -114,21 +92,23 @@ The clearest novel insight from this paper and its reviews is the following: **t
 
 **Calibration:**
 
-- **AMPNet** (2yBuTFvXRh): essentially FIMP-base without FM integration; scores 3,3,5,3 (avg 3.5, withdrawn/rejected). Shares the cross-node attention architecture and biological domains, but lacks FM integration, has no ablation study, and is evaluated on smaller datasets. FIMP is materially stronger.
-- **GeST** (8e9KpZyksc): spatial transcriptomics transformer, scores 3,5,5 (avg 4.3, rejected). Comparable domain coverage and scope; FIMP has broader domain evaluation and FM integration but weaker ablations.
-- **ULTRA** (jVEoydFOl9): graph FM with true zero-shot on 57 graphs, scores 6,8,5,8 (avg 6.75, accepted). Much stronger evidence for zero-shot generalization and broader coverage. FIMP's "zero-shot" claim is fundamentally weaker than ULTRA's.
-- **Spotscape** (Uc3kog3O45): spatial transcriptomics GNN, scores 6,6,5,6 (avg 5.75, rejected). Rejected at 5.75 average with stronger domain-specific focus and complete ablations.
+- **AMPNet** (direct predecessor: cross-node attention GNN for fMRI + genomics, no FM integration): Scores 3, 3, 5, 3 → Rejected. FIMP differs from AMPNet by adding pretrained FM integration (the headline claim), a third domain (images), better baselines including FM standalone comparisons, and ablation studies. These are meaningful additions.
 
-**Assessment:** FIMP clearly exceeds AMPNet's contribution level (adds FM integration, broader evaluation, ablation). However, it falls below the standard set by ULTRA, which provides the kind of genuine zero-shot evaluation that FIMP incorrectly claims. The mislabeled zero-shot claim affects one of three headline contributions. The missing bio-domain ablations mean the central claim—that pretrained FM attention is what drives gains—is unverified for the most impactful results. The large absolute gains in fMRI and image classification are real and the core idea is sound, but the paper overclaims at the abstract and contribution level. Placing this between AMPNet's 3.5 average and the acceptance threshold:
+- **GOFA** (graph+LLM foundation model for text-attributed graphs): Scores 6, 6, 6, 8 → Accepted. More architecturally ambitious but a different scope; FIMP's contribution is more focused and the experiments more concise.
 
-**Originality:** Moderate-high. The key idea of adapting FM self-attention to cross-node attention is novel in the non-textual FM context.  
-**Importance of research question:** High. Foundation models for graph-structured biological/image data is a significant open problem.  
-**Claims support:** Moderate. Core claims partially supported; zero-shot claim is inaccurate as written.  
-**Experimental soundness:** Moderate. Ablation is one-domain only; bio domains lack matched controls.  
-**Clarity:** Good overall. The method is clearly described.  
-**Value to community:** Moderate-high. The empirical gains are substantial and the approach is domain-general.
+- **DUALFormer** / **GraphBridge** (graph transformers with theoretical + empirical depth): Scores 6–8 → Accepted. Both have stronger theoretical grounding and broader graph-benchmark evaluation than FIMP.
 
-**Score: 5.0** — marginally below acceptance. The paper has a real contribution and strong empirical results, but the mislabeled zero-shot claim and incomplete ablations prevent a clear accept recommendation.
+**Assessment:** FIMP is materially better than AMPNet (avg ≈ 3.5) due to genuine FM integration contribution, multi-domain scope, and ablation design. However, it falls short of accepted papers in the 6–8 range due to the missing BrainLM baseline, single-domain ablation, zero-shot overstatement, and absent parameter controls. The paper is at the boundary — the core ideas are sound and the multi-domain empirical story is compelling, but key ablations and framing corrections are needed to fully support the central claims.
+
+**Axes evaluation:**
+- *Originality*: Moderate-high — the FM repurposing mechanism is a genuine contribution over prior cross-node attention work.
+- *Importance*: Moderate-high — bridging non-textual FMs and GNNs is a timely and underexplored problem.
+- *Claims vs. evidence*: Mixed — the fine-tuned results are well-supported; zero-shot claims are oversold.
+- *Soundness of experiments*: Moderate — strong results but missing the BrainLM-alone baseline and cross-domain ablation undermine the core story.
+- *Clarity*: Good overall, with some ambiguity in Algorithm 1 / Section 3.3.
+- *Value to community*: Moderate — mostly valuable to biological/image graph practitioners; limited evidence of generality beyond these domains.
+
+**Final score: 5.0** — Marginally below the acceptance threshold. The paper contains real contributions and the core idea is sound, but the incomplete ablation evidence and overstated zero-shot narrative leave the primary claims insufficiently supported. Minor revisions (adding BrainLM-alone, reframing zero-shot, replicating ablation on one biological dataset) would substantially strengthen the paper.
 
 MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
