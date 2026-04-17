@@ -5,19 +5,17 @@ import json
 import random
 import re
 import logging
-import sys
 import time
-import os
 from collections import defaultdict
 from pathlib import Path
-
-from tools import read_file, read_file_full, grep_file, search_file, allow_path, HUMAN_REVIEW_DIR  # glob_files removed (unused)
+from tools import read_file, read_file_full, grep_file, search_file  # glob_files removed (unused)
 import weave
 weave.init("openai-agents")
 
 from agents import Agent, OpenAIChatCompletionsModel, Runner, function_tool
 import dotenv
 dotenv.load_dotenv()
+import os
 os.environ["OPENAI_DEFAULT_MODEL"] = os.getenv("OPENAI_DEFAULT_MODEL", "z-ai/glm-5.1")
 HARSH_MODEL = os.environ.get("HARSH_MODEL", "gpt-5.4")
 # HUMAN_FINDER = "kimi-k2.5"
@@ -45,7 +43,8 @@ _error_handler = logging.FileHandler(_error_log_path, mode="a")
 _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
-CONCURRENCY = 5
+HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
+CONCURRENCY = 8
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -83,7 +82,7 @@ with open("prompts/timeline.md", "r") as f:
 
 
 PAPER_ACCESS_INJECTION = "The full paper text is included in the user message. Use it to verify reviewer claims directly."
-PAPER_ACCESS_FILE = "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly. Read through the whole file first."
+PAPER_ACCESS_FILE = "The paper path is provided in the user message. Use read_file to read the paper and verify reviewer claims directly."
 
 CAL_INSTRUCTION_WITH = """Use comparative scoring to calibrate your final score. You have access to human reviews of other papers through the review finder and search/grep tools. Search tool supports both bm25 and vector search.
 
@@ -95,14 +94,16 @@ Your calibration process:
    - If this paper has strong empirical results but overclaims, search for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
    - If this paper has a novel framing but weak baselines, search for reviews mentioning "novel framing" "missing baselines" and note those scores.
 
-3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale, **even if there is a topic mismatch**:
-   - Search for reviews of papers that were scored >7+ by humans. Read what made them strong.
-   - Search for reviews of papers that were scored <3- or below by humans. Read what made them weak.
-   - Search for reviews with similar strength/weakness patterns and sits around the same area as the current paper.
-   - Compare the paper under review against BOTH ends, not just the middle. You have to look up paper with extreme scores to understand what truly exceptional or truly weak papers look like, even if they are on different topics. If vector search cannot find extream scored papers, use keyword search to enforce hard accept/reject papers. The sarched papers must cover the full spectrum of scores.
+3. **Deliberate range anchoring**: Actively seek out both HIGH-scoring and LOW-scoring papers to anchor the extremes of your scale:
+   - Search for reviews of papers that were scored ~7+ by humans. Read what made them strong.
+   - Search for reviews of papers that were scored ~3 or below by humans. Read what made them weak.
+   - Compare the paper under review against BOTH ends, not just the middle.
 
    Examples: if reviewing a paper about privacy attacks on face recognition, search for:
    - "privacy attack face recognition strong paper" → find high-scored papers in the same area
+   - "privacy attack face recognition weak paper" → find low-scored papers in the same area
+   - "face recognition evaluation paper high score" → broaden to related topics at the high end
+   - "privacy evaluation rejected" → find low-end anchors with similar flaws
 
    If no papers are found with the same topic, you can use more general queries.
 
@@ -114,12 +115,8 @@ You can use read_file to read these files. List the papers you compared and the 
 
 Let the score distribution follow the actual quality of the paper relative to the calibration examples.
 The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
-List all papers you compared against and their human scores, and explain how you positioned the current paper relative to them.
-You HAVE TO include a few extream high and low end samples. 
 
-There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You HAVE TO also try to find papers with extreme scores to see what made a paper really good/bad, it doesn't need to be the same topic for these extream score queries. 
-
-Do NOT be afraid to give extreme scores if justified. 
+There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You can also try to find more papers with extreme scores to see what made a paper really good/bad.
 """
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
@@ -156,7 +153,7 @@ else:
     human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=model)
 
 _NO_CAL = "--no_cal" in __import__("sys").argv
-_merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_FILE, no_cal=_NO_CAL)
+_merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=_NO_CAL)
 _merger_tools = [read_file, grep_file] if _NO_CAL else _tool_agents
 
 if MERGER_MODEL.startswith("claude_sdk:"):
@@ -182,8 +179,7 @@ REVIEW_PROMPT = """Review the following paper thoroughly.
 
 NOTE: This paper was extracted from PDF by an automated parser. There may be formatting artifacts such as broken equations, garbled tables, misplaced figure references, or OCR errors. These are parser issues, NOT problems with the paper itself. Do NOT treat formatting artifacts as weaknesses.
 
-The full paper text is included below. Do NOT attempt to read the paper from disk — use the inline content.
-
+{paper_path}
 --- PAPER CONTENT START ---
 {paper_content}
 --- PAPER CONTENT END (EVERYTHING AFTER REFERENCE IS REMOVED) ---"""
@@ -193,12 +189,11 @@ The full paper text is included below. Do NOT attempt to read the paper from dis
 
 async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool = False) -> dict:
     paper_path_abs = os.path.abspath(paper_path)
-    allow_path(paper_path_abs)
     with open(paper_path, "r") as f:
         paper_content = f.read()
     paper_content = paper_content
 
-    review_prompt = REVIEW_PROMPT.format(paper_content=paper_content)
+    review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
     
     find_human_prompt = (
         f"Human reviews directory: {HUMAN_REVIEW_DIR}\n\n"
@@ -245,12 +240,9 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         agent_usages["Merger"] = None
     else:
         merger_prompt = (
-            f"Paper being reviewed (extracted from PDF — formatting artifacts are parser "
-            f"issues, not paper problems).\n\n"
-            f"Paper path: {paper_path_abs}\n"
-            f"Use read_file(abs_path, start_line, end_line) and grep_file(pattern, abs_path) "
-            f"to inspect the paper in chunks. Full-file reads of the paper are blocked — "
-            f"pass explicit line ranges.\n\n"
+            f"Here is the paper being reviewed (extracted from PDF — formatting "
+            f"artifacts are parser issues, not paper problems):\n\n"
+            f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
             f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
             f"Now produce the final consolidated review following your instructions. "
             f"Remember: many of the harsh critic's points may be nonsensical or overly "

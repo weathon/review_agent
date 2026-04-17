@@ -1,18 +1,7 @@
 
 from agents import Agent, Runner, function_tool
 import os
-HUMAN_REVIEW_DIR = os.path.abspath(os.environ.get("HUMAN_REVIEW_DIR", "../human_reviews/"))
-EMBEDDINGS_PATH = os.path.abspath(os.environ.get("EMBEDDINGS_PATH", "./human_reviews_embeddings.pkl"))
-ALLOWED_PATHS = [HUMAN_REVIEW_DIR]
-
-
-def allow_path(path: str) -> None:
-    """Register an additional directory (or file's parent) as readable by the agent tools."""
-    p = os.path.abspath(path)
-    if os.path.isfile(p):
-        p = os.path.dirname(p)
-    if p and p not in ALLOWED_PATHS:
-        ALLOWED_PATHS.append(p)
+ALLOWED_PATHS = [os.path.abspath("../human_reviews/")]
 
 from rank_bm25 import BM25Okapi
 from openai import OpenAI
@@ -46,22 +35,12 @@ print("Indexing complete. Time taken: {:.2f}s".format(time.time() - start))
 
 
 import numpy as np
-with open(EMBEDDINGS_PATH, "rb") as f:
+with open("./human_reviews_embeddings.pkl", "rb") as f:
     import pickle
     db = pickle.load(f)
 
 filenames = list(db.keys())
 vectors = np.array(list(db.values()))
-
-_embedding_names = set(filenames)
-_dir_names = {f for f in os.listdir(HUMAN_REVIEW_DIR) if f.endswith(".md") or f.endswith(".txt")}
-_missing_in_dir = _embedding_names - _dir_names
-_missing_in_embeddings = _dir_names - _embedding_names
-assert not _missing_in_dir and not _missing_in_embeddings, (
-    f"Embeddings and human review dir mismatch.\n"
-    f"  In embeddings but not in dir ({len(_missing_in_dir)}): {sorted(_missing_in_dir)[:10]}\n"
-    f"  In dir but not in embeddings ({len(_missing_in_embeddings)}): {sorted(_missing_in_embeddings)[:10]}"
-)
 
 
 # ── Tools ────────────────────────────────────────────────────────────
@@ -74,10 +53,10 @@ def read_file(abs_path: str, start_line: int = 1, end_line: int = 0) -> str:
     if not any(resolved.startswith(ap) for ap in ALLOWED_PATHS):
         print(f"  [read_file] 🔥BLOCKED: '{resolved}' is not under any allowed directory.")
         return f"ERROR: Access denied. Path '{resolved}' is not under any allowed directory."
-    if ("/papers/" in resolved or resolved.endswith("_paper.md")) and end_line == 0:
+    if ("/papers/" in abs_path or abs_path.endswith("_paper.md")) and end_line == 0:
         print(f"  [read_file] 🔥BLOCKED: Full read of '{resolved}' is not allowed. Use grep_files first to find relevant sections.")
         return "ERROR: Full paper reads blocked. Use grep_files first, then read_file with start_line/end_line."
-    with open(resolved, "r") as f:
+    with open(abs_path, "r") as f:
         lines = f.readlines()
     selected = lines[max(0, start_line - 1):end_line if end_line > 0 else len(lines)]
     return "".join(f"{start_line + i}: {line}" for i, line in enumerate(selected))
@@ -156,7 +135,7 @@ def search_file(query: str, n: int, mode: str) -> str:
         top_indices = similarities.argsort()[-n:][::-1]
         results = []
         for idx in top_indices:
-            file_path = os.path.abspath(os.path.join(HUMAN_REVIEW_DIR, filenames[idx]))
+            file_path = os.path.abspath(f"../human_reviews/{filenames[idx]}")
             score = similarities[idx]
             with open(file_path, "r", errors="replace") as file_handle:
                 content = file_handle.read()
