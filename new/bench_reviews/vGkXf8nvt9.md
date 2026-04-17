@@ -1,123 +1,106 @@
-Now I have enough context to write the final review. Let me synthesize all the information and verify the key claims against the paper text.
-
-Let me review the key issues:
-
-1. **Forget set composition / conceptual framing** - The harsh critic argues BC-Mixed contains domain-relevant data, undermining the "suppressing irrelevant knowledge" narrative. Let me verify this from the paper: "BC-Mixed: a subset combining 800 random nondomain samples from BookCorpus with 200 domain-related samples (e.g., humaneval for coding domain)." Yes, this is correct. The paper itself says BC-Mixed contains 200 domain-related samples. BC-Select removes domain-related content, BC-Cosine selects by low cosine similarity. The results show BC-Select performs best, BC-Mixed performs worst (or second-worst), and BC-Cosine is in between. So the paper's own evidence shows that including domain-relevant data in the forget set hurts. This partially validates their story but also shows the approach is fragile to forget set composition. The critic's point is partially valid but overstated: the paper shows that cleaner forget sets work better, and BC-Mixed is explicitly a *contamination* condition to test this. However, the claim that F2F "strategically suppresses irrelevant pretraining knowledge" is indeed not proven by the experiments - we don't know if the gains come from removing "irrelevant" vs "any" knowledge.
-
-2. **Lack of compute-fair baselines** - This is a valid concern. F2F does additional training (unlearning phase) before fine-tuning. Without a control condition where the same compute budget is used for additional SFT or other training, we can't distinguish "unlearning" from "more training." This is a major methodological gap.
-
-3. **Theory-practice gap** - The linear surrogate theory with orthogonal decomposition into V ⊕ U is clearly stylized and doesn't hold for LLMs. The paper acknowledges this is a "convex linear surrogate to clarify the mechanism" but still uses it to make strong claims. This is a valid concern about overclaiming but not fatal.
-
-4. **Calibration claims** - The paper claims "improved calibration on medical QA tasks, reducing overconfidence" in the abstract and conclusion, but the main text and tables only show accuracy numbers. No ECE, Brier score, or reliability diagrams are presented. This is a significant gap for a claimed contribution.
-
-5. **No statistical significance / multiple seeds** - All results are single-run. Many improvements are modest (e.g., MBPP: 31.60 vs 28.80 for Qwen 0.6B). Without variance estimates, we can't assess significance.
-
-6. **Fragility on Gemma-2B** - The unlearning phase causes catastrophic collapse (0.00 on some metrics). This is a genuine concern about reliability.
-
-7. **For Qwen-0.6B with BC-Mixed, MedMCQA regresses from 32.25 to 23.31** - This is an important negative result not discussed.
-
-8. **NPO and GA+KL methods are described but not reported in main tables** - partial concern about completeness.
-
-Let me now check the calibration claim more carefully by searching in the paper text provided:
-
-Looking at the paper text, the abstract says: "Furthermore, unlearning prior fine-tuning helps improved calibration on medical QA tasks, reducing overconfidence and mitigating reliability issues that persist under standard fine-tuning."
-
-But I don't see any calibration metrics in the tables or text. Table 2 only shows accuracy numbers. The conclusion also claims "better calibrated predictions." This appears to be an unsubstantiated claim.
-
-Now let me calibrate the score. Looking at related papers:
-- Machine Unlearning for Alleviating Negative Transfer (f5o6kWRC0A): scores 5,5,3,3 → rejected
-- A Closer Look at Machine Unlearning for LLMs (Q1MHvGmhyT): scores 6,6,6,6 → accepted poster
-- Dissecting Language Models: Machine Unlearning via Selective Pruning (8SPSIfR2e0): scores 6,5,6,6 → rejected
-- Need a Small Specialized Language Model? Plan Early! (aP3OBwf8dk): scores 8,5,5 → rejected
-- Two-stage LLM Fine-tuning (pCEgna6Qco): scores 8,6,8,5 → accepted poster
-
-The current paper has a genuinely novel framing (unlearning for domain specialization), extensive experiments across models and domains, and some impressive empirical gains. But it has significant weaknesses: unsubstantiated calibration claims, confounded compute budgets, fragile theoretical justification, and no statistical significance testing. The conceptual narrative of "suppressing irrelevant pretraining knowledge" is not well-validated by the experiments.
-
-I'd place this paper in the 4-5 range. It's an interesting idea with promising results but significant methodological gaps that undermine the core claims.</think>Now I have gathered sufficient calibration data. Let me write the consolidated review.
-
----
-
 ## Summary
 
-The paper proposes Forget-to-Focus (F2F), a two-stage protocol that first applies machine unlearning on a "forget set" of general-domain data (with an optional "retain set" for stability), then fine-tunes on a domain-specific dataset. The central claim is that actively removing irrelevant pretraining knowledge reduces negative transfer and creates a better initialization for domain specialization. Experiments across coding, medical, and mathematical domains on models from 0.6B to 72B parameters show that F2F consistently outperforms standard fine-tuning, with notable gains like +22.5% on HumanEval for Qwen-0.6B. The paper also provides representational geometry analysis (CKA, SVCCA) and a convex-theoretic convergence argument.
+The paper proposes Forget-to-Focus (F2F), a two-stage protocol that first applies machine unlearning on general-domain data (a "forget set," with an optional "retain set") via gradient ascent, then fine-tunes on domain-specific data. Experiments across five models (0.6B–72B parameters) and three domains (medical, coding, math) show that F2F often improves pass@1 accuracy over standard fine-tuning baselines. The paper also provides a convex-theoretic analysis motivating the protocol and CKA/SVCCA representational analyses.
 
 ## Strengths
 
-- **Novel conceptual reframing**: Repurposing machine unlearning from a privacy tool to a domain adaptation enhancement is creative and opens a promising research direction. This is genuinely new framing in the literature.
-- **Scale and breadth of experiments**: Testing across three diverse domains (medical, math, coding), five model families (Qwen 0.6B/72B, LLaMA 8B/13B, Gemma 2B), and multiple unlearning/fine-tuning variants provides substantial empirical coverage. The inclusion of a 72B model is particularly noteworthy from an engineering standpoint.
-- **Strong empirical gains on coding tasks**: The improvements on HumanEval and MBPP are substantial and consistent across configurations (e.g., Qwen-0.6B HumanEval: 19.50→42.07 with F2F+GA+GD+SFT vs. 31.71 with SFT alone; LLaMA 8B: 33.54→60.37 vs. 56.71).
-- **Forget set quality analysis**: The systematic comparison of BC-Select, BC-Mixed, and BC-Cosine forget sets (Table 3) provides useful practical guidance and demonstrates that forget set composition matters—BC-Select (curated, domain-irrelevant data) consistently outperforms BC-Mixed (containing domain data), which is consistent with the proposed mechanism.
-- **Representation-level analysis**: CKA and SVCCA analyses go beyond surface-level accuracy claims and provide mechanistic evidence that F2F reshapes internal representations, even if the specific interpretation of "reduced negative transfer" is not fully validated.
+- **Novel and creative framing.** Repurposing machine unlearning from a privacy tool to a domain-adaptation mechanism is genuinely new. The core question—whether actively suppressing irrelevant pretraining knowledge can improve specialization—is interesting and underexplored.
+- **Extensive experimental coverage.** The paper experiments across 5 models of different families and sizes (Qwen-0.6B, Gemma-2B, LLaMA-8B, LLaMA-13B, Qwen-72B), 3 domains, and 6 benchmarks, with multiple unlearning variants and fine-tuning methods. This breadth is logistically substantial.
+- **Some substantial empirical gains.** Improvements like Qwen-0.6B HumanEval from 19.50→42.07 (+22.57 absolute), and LLaMA-8B HumanEval from 33.54→60.37 (+26.83) are large and practically meaningful when they occur.
+- **Mechanistic analysis attempted.** CKA and SVCCA analyses (Section 4.5) go beyond accuracy to examine representational shifts, providing some insight into *how* unlearning changes internal geometry.
+- **Forget set quality ablation.** The comparison of BC-Select, BC-Mixed, and BC-Cosine (Table 3) is a useful practical contribution showing that curated, low-overlap forget sets generally work better.
 
 ## Weaknesses
 
-### Major:
+### Major
 
-1. **Missing compute-fair baselines confound the attribution of gains to "unlearning."** F2F is a two-stage procedure: unlearning (Tu steps on forget+retain data) then fine-tuning (T_retune steps). There is no baseline that uses the same total optimization budget without the unlearning objective—for example, standard fine-tuning for (T_retune + T_unlearn) steps, or continued pretraining on general data plus domain data for an equivalent number of steps. Without this, it is impossible to determine whether the improvements come from *targeted forgetting* or simply from *additional training* and data exposure. This confounds the paper's central explanatory claim and makes "unlearning" as a mechanism unsubstantiated. (Relevant calibration: the related paper "Machine Unlearning For Alleviating Negative Transfer" (f5o6kWRC0A), which had a similar methodological gap, was rejected with scores of 5,5,3,3.)
+- **Causal attribution to "forgetting harmful priors" is confounded by missing baselines.** The central claim is that "unlearning" targeted pretraining knowledge improves specialization. However, F2F adds a full pre-training phase on external data (BookCorpus) plus a retain set before fine-tuning. None of the baselines receive comparable extra training. A critical missing comparison is: *gradient descent on the same forget/retain data (without the GA component)* — i.e., just standard continued pretraining on BookCorpus for the same number of steps. Without this, the observed gains could simply reflect "more training" or "better warmup" rather than the specific mechanism of forgetting. The paper's claim that F2F "suppresses irrelevant pretraining knowledge" is not isolated from the simpler explanation that additional pretraining steps, regardless of objective, can improve initialization for downstream fine-tuning. This fundamentally undermines the core claim.
 
-2. **Calibration claims are made but not supported with calibration metrics.** The abstract prominently claims "improved calibration on medical QA tasks, reducing overconfidence and mitigating reliability issues that persist under standard fine-tuning," and the contributions list and conclusion repeat these claims. However, no calibration metrics (ECE, Brier score, reliability diagrams) appear anywhere in the main text or tables—Table 2 only shows accuracy. This is a significant evidentiary gap for a contribution that is highlighted as a key finding.
+- **The retain set creates an extra in-domain data exposure confound.** The paper states that the retain set is "often a subset of D" (the fine-tuning data). This means F2F models see part of the domain data *twice*—once during unlearning and once during fine-tuning—while baselines see it only once. This dual exposure is not controlled for. Whether the gains hold when the retain set is drawn from a different, out-of-domain source is not tested, leaving open the possibility that in-domain data leakage during unlearning drives some of the improvement.
 
-3. **The conceptual framing of "suppressing irrelevant/knowledge harming priors" is not well-validated by the experiments.** The paper claims that F2F works by removing "irrelevant" or "spurious" general-domain priors. However: (a) The forget set is not demonstrated to contain *harmful* knowledge—it contains general text that is *less similar* to the target domain, which could still contain useful linguistic structure. BC-Cosine selects by low cosine similarity to the target domain, which is a proxy for irrelevance, not a measure of harm. (b) The retain set is "a small subset of the fine-tuning data" (the target domain data), meaning the model is already exposed to domain-specific data *during the unlearning phase*, further confounding what drives the gains. (c) No direct measurement of negative transfer is provided (e.g., probing whether specific interfering features are actually suppressed). So while the empirical gains are real, the mechanistic explanation ("forgetting harmful priors") remains unverified and speculative.
+- **Calibration claims are made without quantitative evidence in the paper.** The abstract and conclusion assert that F2F "improves calibration on medical QA tasks, reducing overconfidence and mitigating reliability issues." However, neither the main paper nor any visible appendix provides calibration metrics (ECE, Brier score, reliability diagrams). Only accuracy numbers are reported for medical QA. This is a prominent claim that is entirely unsupported by the presented evidence.
 
-4. **Missing statistical significance testing.** All reported results are single-run. Many claimed improvements are modest (e.g., Qwen-0.6B MBPP: 31.60 vs 28.80; Qwen-72B HumanEval: 72.50 vs 71.90 for F2F+GA+GD+SFT vs DAPT). Without standard deviations across multiple seeds, it is difficult to assess whether these differences are meaningful or within noise, particularly for smaller benchmarks like PubMedQA.
+- **Catastrophic failures are acknowledged but under-analyzed.** Several configurations show severe degradation: Gemma-2B HumanEval drops to 0.00 after GA+GD unlearning (Table 1); LLaMA-13B reaches 0.00 on MBPP after GA (Table 3); LLaMA-8B HumanEval drops to 1.20 after GA-only. The paper briefly notes that "aggressive unlearning may overwhelm models with limited capacity," but provides no diagnostic analysis of when or why F2F fails irrecoverably. Without characterizing failure modes or providing guidance on when F2F is safe to apply, the method's reliability remains unclear.
 
-### Minor:
+### Minor
 
-5. **Theoretical analysis is stylized and overused as explanatory support.** The Proposition and Corollary assume convex losses, orthogonal V⊕U decomposition, strong convexity on irrelevant directions, and that the downstream optimum θ*∈V. These assumptions do not hold for LLMs, and the paper provides no empirical validation that the V/U structure exists or that forget-set curvature concentrates along "irrelevant" directions. The theory provides intuition but is repeatedly cited as "direct evidence" (contributions bullet 4), which it is not.
+- **Theory-practice gap is acknowledged but not addressed.** The paper explicitly notes the analysis uses "a convex linear surrogate" to "clarify the mechanism" (Section 2). This is reasonable as motivation, but the paper then interprets the theoretical results literally for LLMs (e.g., "so increasing λ/σ tightens the starting distance for finetuning"). No empirical verification of the theory's predictions (e.g., convergence speed improvement, contraction along "irrelevant" directions) is provided.
 
-6. **Fragility on smaller/less capable models.** GA-only unlearning causes catastrophic collapse (e.g., HumanEval drops to 0.00 or 1.20 for Gemma-2B and LLaMA-8B; MBPP to 0.00 for LLaMA-13B). While GA+GD mostly recovers performance, this instability suggests the method is sensitive to hyperparameters (λ, σ) and may not be reliably deployable without careful per-model tuning. The paper does not provide systematic sensitivity analysis or guidelines for choosing these.
+- **No error bars or multiple seeds.** All results are single-point estimates. This is particularly concerning on HumanEval (164 problems) and MBPP, where pass@1 is known to be high-variance across seeds. The "consistency" narrative cannot be evaluated without variance information.
 
-7. **Negative results are under-discussed.** For Qwen-0.6B with BC-Mixed forget set, MedMCQA regresses from 32.25 (baseline) to 23.31 after F2F+GA+GD+Tuning (Table 3)—a substantial regression that is not acknowledged or analyzed. For LLaMA-13B with BC-Mixed, MedMCQA also regresses (38.68 baseline → 35.43 with BC-Mixed GA+GD+Tuning). These should be discussed transparently.
+- **NPO and GA+KL unlearning variants are introduced but not experimentally evaluated.** Section 3.1 describes four unlearning algorithms (GA+GD, GA, GA+KL, NPO), but Tables 1–3 only present GA+GD and GA results. The lack of results for GA+KL and NPO makes the claim that F2F is a "protocol" that works across unlearning methods premature.
 
-### Trivial:
+- **Forget set quality analysis has inconsistencies.** Table 3 shows that BC-Mixed sometimes matches or outperforms BC-Select (e.g., LLaMA-8B HumanEval: BC-Mixed 55.76 vs. BC-Select 60.37, but LLaMA-13B MBPP: BC-Mixed 45.01 vs. BC-Select 50.31). The narrative that BC-Select "consistently" outperforms BC-Mixed is not fully supported by the data, and no statistical testing is applied.
 
-8. NPO and GA+KL unlearning variants are described (Section 3.1) but their quantitative results are not reported in the main tables (Figure 3 shows relative bar charts but no detailed numbers), limiting the comparative assessment of different unlearning strategies.
+### Trivial
+
+- **Qwen-72B uses a quantized setup (4-bit QLoRA) while other models use full or FP16 SFT.** This makes cross-scale architectural comparisons somewhat confounded, though the paper does acknowledge this.
 
 ## Nice-to-Haves
 
-- **Compute-fair baselines**: Adding a condition where the same total number of gradient steps is spent on standard fine-tuning (or continued pretraining) would enable attribution of gains to *unlearning* vs. *more training*.
-- **Direct negative transfer measurement**: Probe whether features from the forget set are actually suppressed by measuring performance on held-out general benchmarks (PIQA, BoolQ, etc.) or using probing classifiers.
-- **Calibration evaluation**: Report ECE and Brier scores for medical QA tasks to substantiate the calibration claims.
-- **Ablation on λ/σ ratio**: The theory depends critically on the forget-to-retain ratio λ/σ, but this is fixed at 1.0/0.5 across all models (except LLaMA). A systematic ablation would test this directly.
-- **Multiple seeds and variance estimates**: Report results across ≥3 random seeds with standard deviations.
+- **Compute-matched baselines:** A comparison against standard SGD on BookCorpus (same data, same steps, no gradient ascent) would directly test whether the "unlearning" mechanism is the active ingredient. This is the single most important missing experiment.
+
+- **Retain set ablation:** Test whether F2F retains its gains when the retain set is drawn from out-of-domain data rather than being a subset of the fine-tuning data.
+
+- **Calibration metrics (ECE, Brier score):** If the paper claims improved calibration, these should be reported with numbers and/or reliability diagrams.
+
+- **λ/σ sensitivity analysis:** The theory predicts that increasing λ/σ relative to each other should improve convergence, but no empirical sweep is provided.
+
+- **Computational cost reporting:** The unlearning stage adds non-trivial GPU hours. The cost-benefit tradeoff deserves quantification.
 
 ## Removed Points
 
-These points were flagged but are removed or weakened because they are either factually incorrect, misleading, or represent scope creep:
+These points are flagged to be removed, treat them with caution:
 
-- *"BC-Mixed containing domain-relevant data invalidates the entire causal story"* (from Harsh Critic #1): Overstated. BC-Mixed is explicitly a *contamination control* condition, and it performs worse than BC-Select, which is *consistent* with the paper's narrative that removing irrelevant data helps while including relevant data in the forget set hurts. The real issue is deeper—the paper doesn't demonstrate that the *irrelevant* general knowledge in BC-Select is actually *harmful* rather than just *dissimilar*.
+- **"Missing baselines like continual learning (EWC), knowledge distillation, or task arithmetic."** (Human Finder) — The paper already compares against SFT, DAPT, LoRA, and CurlLoRA. Requesting additional niche baselines beyond these standard methods is scope creep. The more critical missing baseline is a compute-matched control, which is already captured above.
 
-- *"The retain set includes in-domain data, which confounds attribution"* (from Harsh Critic #2): While true, the paper is transparent about this design choice, and the retain set serves a legitimate stability function. This is a minor confound, not a fatal one.
+- **"Formatting and presentation nitpicks."** (Spark/Neutral) — Table density, notation consistency, and writing quality issues are minor and not substantive weaknesses.
 
-- *"Missing comparison with more recent unlearning baselines like NPO+KL, RMU"* (from Human Finder #6): The paper does include NPO as a method variant. The complaint about additional baselines is a generic missing-baseline concern; the paper compares against multiple fine-tuning (SFT, DAPT, LoRA, CurlLoRA) and unlearning (GA, GA+GD, GA+KL, NPO) strategies.
+- **"Reproducibility concerns about undisclosed hyperparameters."** (Neutral) — The paper reports learning rates, batch sizes, epochs, and quantization settings (Section 3.4). The λ/σ values are specified (1.0/0.5). The only gap is the lack of sensitivity analysis, which is a nice-to-have, not a reproducibility failure.
 
-- *"Out-of-domain evaluation is missing"* (from Human Finder #3): The paper references "Retention of broad skills beyond target domains are provided in Appendix A," suggesting this evaluation was done but placed in the appendix. This is a nice-to-have, not a critical omission.
-
-- *"Reproducibility concerns about undisclosed hyperparameters"* and *"large artifacts"*: Standard experimental papers in this area use similar levels of detail. The hyperparameters (learning rates, batch sizes, epochs) are specified in Section 3.4. This falls under the trivial reproducibility concern category.
-
-- *"Formatting or presentation issues"*: Removed per the hard rule on formatting nitpicks.
+- **"Demand for domain-mixed pretraining baseline."** (Neutral Reviewer) — While this is a reasonable suggestion, the paper already includes DAPT (domain-adaptive pretraining). The more fundamental issue is the compute-matched control, which is captured in the major weaknesses.
 
 ## Novel Insights
 
-The most novel empirical finding is that *forget set quality matters in a predictable direction*: BC-Select (curated, domain-irrelevant) outperforms BC-Cosine (automatically filtered by similarity), which outperforms BC-Mixed (containing domain data). This gradient suggests that the mechanism is not merely "adding noise" or "more training," but that the specific content of what is forgotten affects downstream performance in a structured way. The CKA/SVCCA analyses showing that F2F induces larger representational shifts than standard fine-tuning further support that *something* qualitatively different is happening during the two-phase protocol, even if the exact mechanism ("suppressing harmful priors" vs. "better initialization from perturbation") remains unresolved.
+The most insightful observation across the reviews is the "retain set leakage" confound: because the retain set is drawn from the fine-tuning data, the F2F protocol gives the model an extra exposure to in-domain data before the fine-tuning phase begins. The F2F protocol's "unlearning" phase is simultaneously (a) pushing the model away from forget-set data via gradient ascent, (b) pulling the model toward retain-set data via gradient descent, and (c) providing an extra epoch on domain-relevant retain data before fine-tuning even starts. Disentangling these three effects is critical for assessing whether gradient ascent (the "unlearning" component) is the active ingredient.
 
 ## Suggestions
 
-1. **Add compute-matched baselines** to disentangle "unlearning" from "more training." The simplest version: run SFT for the same total number of gradient steps (T_unlearn + T_retune) without the unlearning phase.
-2. **Substantiate the calibration claim** by adding ECE, Brier score, and/or reliability diagrams for medical QA, or remove the claim from the abstract and contributions.
-3. **Acknowledge and analyze negative results** (e.g., MedMCQA regression with BC-Mixed on Qwen-0.6B) rather than only highlighting positive gains.
-4. **Add statistical significance** with at least 3 random seeds, especially for the smaller claimed improvements.
+1. **Add a "BookCorpus GD" baseline:** fine-tune from θ₀ on the same BookCorpus subsets using only gradient descent (no ascent component), for the same number of steps, followed by domain SFT. If F2F still wins, the unlearning mechanism is validated; if not, the gains are likely from extra pre-training.
+
+2. **Report calibration metrics** (ECE, Brier score) for medical QA, or remove the calibration claim from the abstract and conclusion.
+
+3. **Ablate the retain set source:** Run F2F with the retain set drawn from out-of-domain data vs. in-domain data vs. no retain set, to isolate the contribution of in-domain data leakage.
+
+4. **Report results across multiple random seeds** and include confidence intervals, at minimum for the headline benchmarks (HumanEval, MBPP).
+
+5. **Systematically characterize failure regimes:** At what model sizes, forget-set sizes, or λ/σ ratios does F2F degrade rather than improve performance? This would greatly increase practical value.
+
+## Evaluation
+
+**Originality:** The idea of repurposing unlearning for domain specialization is genuinely novel. The two-stage protocol is simple but creative.
+
+**Importance of research question:** Negative transfer in LLM fine-tuning is a practical and important problem. The question of whether targeted unlearning can mitigate it is worth asking.
+
+**Whether claims are well supported:** This is the paper's main weakness. The central causal claim ("F2F works because it suppresses harmful pretraining priors") is confounded by missing compute-matched baselines and retain-set leakage. The calibration claim is unsupported by evidence in the paper. The theoretical analysis, while sensible as motivation, is not empirically validated and is used to make strong mechanistic claims.
+
+**Soundness of experiments:** The breadth is a strength, but the lack of critical controls (compute-matched baselines, retain-set ablation, multiple seeds, calibration metrics) substantially limits what can be concluded.
+
+**Clarity:** The paper is generally clear in describing the protocol, though Table 3 is very dense and some results are hard to parse.
+
+**Value to community:** If the confounds were addressed and the unlearning mechanism validated against simpler alternatives, this would be a significant practical contribution. In its current form, it provides an interesting but incompletely validated recipe.
 
 ## Score and Decision
 
-**Calibration**: I compared against several related papers:
-- **Machine Unlearning For Alleviating Negative Transfer** (f5o6kWRC0A): scores 5,5,3,3 → rejected. Similar idea of unlearning for domain adaptation, but in a different (vision SFUDA) setting with limited experimental breadth. Rejected due to limited comparison, weak theory, and insufficient evaluation.
-- **A Closer Look at Machine Unlearning for LLMs** (Q1MHvGmhyT): scores 6,6,6,6 → accepted poster. An analysis-oriented paper with new metrics and methods, but similar depth of evaluation.
-- **Dissecting LLMs: Machine Unlearning via Selective Pruning** (8SPSIfR2e0): scores 6,5,6,6 → rejected. Has novelty and analysis but was rejected due to limited baselines, unclear problem definition, and lack of confidence intervals.
-- **Two-stage LLM Fine-tuning** (pCEgna6Qco): scores 8,6,8,5 → accepted poster. A two-stage method with strong empirical results and clear analysis, though limited fine-tuning tasks.
-- **Need a Small Specialized Language Model? Plan Early!** (aP3OBwf8dk): scores 8,5,5 → rejected. Novel method for small specialized models (importance sampling + projected networks); one reviewer loved it, but the paper was rejected due to presentation and clarity issues.
+Calibration against similar papers:
 
-The current paper has genuinely novel framing and substantial experimental breadth, but its core explanatory claims are undermined by (1) missing compute-fair baselines that make it impossible to isolate unlearning as the mechanism, (2) unsubstantiated calibration claims in the abstract, and (3) the lack of direct evidence that the mechanism is "suppressing irrelevant priors" rather than some other form of beneficial perturbation. These are not minor issues—they go to the heart of what the paper claims to demonstrate. The paper is above the "Machine Unlearning for Negative Transfer" paper (which was truly weak) due to its broader experiments, novel framing, and genuine empirical interest. But it falls below the "Closer Look" and "Two-stage Fine-tuning" papers that had their claims well-supported. I place it in the low-5 range—interesting idea, promising results, but significant methodological gaps that undermine the core claims.
+- **KzSGJy1PIf (SURE, selective unlearning via representation erasure)**: avg 5.7, accepted poster. More focused on privacy unlearning, smaller-scale experiments, but clean experimental design.
+- **CGfWyU28Pd (Why fine-tuning struggles with forgetting)**: avg 4.5, rejected. Had a theory-practice gap (linear regression only) similar to this paper, plus limited experiments.
+- **pCEgna6Qco (Two-stage LLM fine-tuning / ProMoT)**: avg 6.75, accepted poster. Similar concept (two-stage for better adaptation), but with stronger controls and clearer causal story.
+- **f5o6kWRC0A (Machine unlearning for negative transfer)**: avg 4.0, withdrawn/rejected. Similar motivation but weaker execution.
+- **1ExfUpmIW4 (LoKU, robust unlearning)**: avg 6.0, accepted poster. Clearer experimental validation, more focused contribution.
 
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+This paper has broader empirical scope than the rejected unlearning papers but suffers from a fundamental confound in its experimental design (missing compute-matched baseline) and unsupported calibration claims. It sits above papers like CGfWyU28Pd (4.5, rejected) and f5o6kWRC0A (4.0, rejected) due to much larger experimental scale, but below papers like pCEgna6Qco (6.75) and 1ExfUpmIW4 (6.0) due to the causal attribution issues and missing controls. The novel idea is interesting enough that with proper controls it could be a solid contribution, but the current evidence doesn't convincingly demonstrate that unlearning is the active ingredient rather than extra training.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

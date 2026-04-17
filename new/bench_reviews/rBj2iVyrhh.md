@@ -1,104 +1,85 @@
-The paper content is already provided in the user message. Let me review the key points systematically.
+Now I have a thorough understanding of both the paper and the calibration landscape. Let me compose my final review.</think>## Summary
 
-Now let me compile the final review based on thorough analysis of the paper and the three reviewer inputs.
-
-## Summary
-
-The paper proposes Classifier-Constrained Alternating Training (CCAT), a two-stage framework to mitigate modality imbalance in multimodal learning. Drawing an analogy between modality imbalance and class imbalance, CCAT first pretrains a shared classifier using bidirectional cross-attention with a mutual-information-based regularization term that penalizes modality contribution disparities, then freezes this classifier during alternating modality-wise training while adapting via modality-specific LoRA modules and sample-level secondary updates for severely imbalanced instances. Experiments on three bimodal benchmarks (CREMA-D, Kinetic-Sound, MVSA) show consistent accuracy gains over prior methods.
+The paper proposes Classifier-Constrained Alternating Training (CCAT) to address modality imbalance in multimodal learning. The key insight is that while alternating training methods reduce encoder-level interference, they fail to prevent the shared classifier from developing bias toward faster-converging modalities. Drawing an analogy to class imbalance remedies, CCAT pretrains an "unbiased" classifier with bidirectional cross-attention and contribution-balancing regularization, then freezes it during alternating modality training while using LoRA adapters for modality-specific adaptation. A sample-level secondary update mechanism targets severely imbalanced samples. Experiments on three bimodal benchmarks show consistent improvements over prior SOTA.
 
 ## Strengths
 
-- **Insightful problem identification.** The observation that alternating training methods resolve encoder-level gradient interference but still allow classifier-level bias toward faster-converging modalities is novel and well-motivated. Figure 1 provides initial empirical evidence that MLA still shows persistent contribution imbalance (1.00 → 0.92), which anchors the paper's core thesis.
+- **Clear and well-motivated problem identification.** Figure 1 provides empirical evidence that alternating training (MLA) reduces but does not eliminate modality contribution disparity (1.00→0.92), supporting the claim that encoder-level interventions alone are insufficient. This is a meaningful and previously underappreciated observation about alternating training methods.
 
-- **Coherent methodological design.** The two-stage framework is logically structured: Stage 1 addresses dataset-level imbalance by pretraining an "unbiased" classifier, and Stage 2 addresses sample-level imbalance via alternating training with a frozen classifier, LoRA adaptation, and secondary updates. Each component serves a clear purpose.
+- **Systematic and coherent framework.** Each component addresses a specific aspect of the identified problem: pretraining with regularization produces a balanced classifier, freezing prevents dominance drift, LoRA enables modality-specific adaptation without disrupting the shared decision boundary, and secondary updates target sample-level imbalance. The ablation study (Table 2) confirms all components contribute positively on CREMA-D.
 
-- **Consistent empirical improvements.** CCAT achieves gains of +1.35% on CREMA-D, +6.76% on Kinetic-Sound, and +1.92% on MVSA over prior SOTA, with particularly notable weak-modality improvements (e.g., video accuracy on CREMA-D: 73.79% vs. 68.01% for MLA). The gains are consistent across diverse modality combinations (audio-video and image-text).
+- **Strong empirical results on Kinetic-Sound.** The +6.76% improvement on Kinetic-Sound over prior SOTA (MMPareto: 72.53% → CCAT: 79.29%) is substantial and notable, demonstrating effectiveness on a dataset where modality imbalance is severe.
 
-- **Thorough ablation study.** Table 2 systematically validates each component (classifier freezing, alternating training, secondary updates, LoRA), demonstrating that all are necessary for optimal performance. The t-SNE + clustering analysis (Figure 5) provides additional qualitative support.
+- **Consistent improvements across all three benchmarks.** The method achieves improvements on every dataset (CREMA-D: +2.27%, KS: +6.76%, MVSA: +1.92%), with particularly strong gains in weaker modalities (e.g., video accuracy on CREMA-D: 73.79% vs. next best 68.01%).
 
 ## Weaknesses
 
 ### Major:
 
-- **The mutual information–based "modality contribution" measure is self-referential and never externally validated.** The entire framework hinges on the quantity $c_i^m$ (Eqs. 5–6), defined as softmax-normalized inner-product–based MI estimates between modality features and fused features. This measure is used to: (a) regularize the classifier during pretraining, (b) detect extreme-imbalance samples for secondary updates, and (c) implicitly claim that equalizing it yields "balanced" representations. However, $c_i^m$ is entirely model-internal — it depends on the current encoder and fusion parameters. During pretraining, the fusion module $f_i$ and the MI estimates are jointly optimized with the regularization, creating a circular dependency. During Stage 2, contributions are computed via the inference-stage decision-level fusion, meaning "imbalance" is defined by the very scoring function the method is trying to debias. The paper never validates that this proxy correlates with any external modality-importance measure, nor that equalizing $|c_i^1 - c_i^2|$ leads to genuinely balanced utilization rather than distortions in representation geometry. This is not merely an ablation gap — it undermines the central narrative that CCAT *measures and corrects* contribution disparities.
+- **The theoretical "framework" in Section 3.1 is informal and overclaimed.** The paper advertises "a new theoretical framework" and "profound theoretical isomorphism" between class and modality imbalance, but the actual content consists of standard cross-entropy gradient expressions (Eq. 1), a trivial approximation for minority classes (Eq. 2), and the observation that if γ₁≫γ₂ then gradients are dominated by the stronger modality (Eq. 3). This last observation is essentially tautological and does not: (a) distinguish encoder vs. classifier parameters; (b) model γ dynamics under different training schemes; (c) derive any testable prediction about when the fixed-classifier remedy should work or fail; or (d) formally justify why freezing the classifier specifically addresses the dynamics described. The "framework" functions as a narrative analogy rather than a theoretical contribution, which makes the claim of providing "a new theoretical framework" an overclaim. This matters because the paper explicitly lists this as contribution (i).
 
-- **The "theoretical isomorphism" between class and modality imbalance is overstated.** The paper claims contribution (i) as "Bridging class and modality imbalance through optimization dynamics, providing a new theoretical framework." Section 3.1 presents gradient expressions showing that both settings involve small coefficients (minority-class prediction error, weak-modality fusion weight) reducing gradient magnitude. This is an intuitive analogy — not a theoretical framework. The derivation for class imbalance leaps from Eq. 2 ($\partial \mathcal{L}/\partial w_j \approx -f$) to claims about "vicious cycles" of feature degradation without modeling encoder dynamics across classes. For modality imbalance, the linear fusion form $f = \gamma_1 f^{(1)} + \gamma_2 f^{(2)}$ does not correspond to any actual component in the implemented architecture (which uses cross-attention fusion in pretraining and decision-level fusion at inference). The "isomorphism" is a verbal analogy about early dominance bias, not a formal result, and calling it a "theoretical framework" is an overclaim.
+- **The MI-based contribution measure is underspecified and its role across stages is inconsistent.** The paper uses an InfoNCE-style mutual information estimator (Eq. 5) as the basis for both pretraining regularization and sample selection, but: (a) implementation details (negatives, temperature, batch-size dependence) are not discussed in the main text; (b) during pretraining, contributions are computed on cross-attention fused features f, while during alternating training they are computed on "decision-level" unimodal outputs — yet both are called "modality contribution" as if they measure the same thing; (c) the regularizer L_reg = (1/N)Σ|c¹−c²| forces equal MI-derived contribution by design during pretraining, and then the second-stage contributions are measured with a classifier already trained under this equality-enforcing objective, creating a circularity concern where the method measures what it shapes. No validation (e.g., synthetic settings, correlation with error analysis, comparison to simpler proxies like gradient norms) is provided.
 
-- **Lack of direct evaluation of the modality-imbalance property being targeted.** The paper's headline motivation is that modality imbalance suppresses weaker modalities, and CCAT explicitly targets this. Yet the experimental evaluation only reports classification accuracies. There is no: (a) comparison of modality contribution distributions ($c_i^m$) before vs. after CCAT; (b) analysis of how many samples are flagged as extreme and their performance changes; (c) controlled experiments with artificially induced imbalance (e.g., corrupted modality, varying signal-to-noise ratios) to test whether CCAT genuinely preserves weak-modality utilization under stress. Simply reporting higher accuracy does not distinguish CCAT as an imbalance-mitigation technique from a general training heuristic that happens to improve ensembles.
+- **Ablation design does not sufficiently disentangle component contributions.** CCAT combines five interventions (cross-attention fusion, MI-regularized pretraining, classifier freezing, LoRA, secondary updates). Table 2 toggles Fix/Alt/Sec/LoRA but ambiguously initializes the classifier: the "Fix ✗" row still uses MI-regularized pretraining, yet no baseline tests a "jointly trained classifier with the same cross-attention architecture and regularization, no alternation, no freezing, no LoRA." Without that baseline, it is unclear whether the gains primarily come from better initialization via MI-regularized cross-attention pretraining, or from the classifier-constrained alternating training per se. This matters for attributing the improvements to the paper's central thesis.
+
+- **No results reported for standard deviations or statistical significance.** All results in Table 1 are single-run values. Given that improvements on CREMA-D (+2.27% over MLA, +1.35% over the claimed SOTA LFM) and MVSA (+1.92%) are modest relative to typical run-to-run variance on these small datasets, the significance of these improvements cannot be assessed. This is a community norm issue—many papers in this space report single runs, but the small improvements on 2 of 3 datasets make it more concerning here.
 
 ### Minor:
 
-- **The L_reg regularization assumes modalities should contribute equally, which may be inappropriate when one modality is genuinely more informative.** The regularization $L_{\text{reg}} = \frac{1}{N}\sum_i |c_i^1 - c_i^2|$ forces per-sample contributions toward equality. For tasks like MVSA sentiment analysis where text is inherently more informative than images, this forced balance could distort the decision boundary even if the method's empirical results suggest it doesn't catastrophically hurt. This tension is never discussed.
+- **Limited evaluation scope.** Only three bimodal datasets with small backbones (ResNet-18/50 + BERT) are tested. The method's applicability to trimodal settings, larger architectures, or transformer-based models is untested, though the paper makes broad claims ("balanced, robust multimodal representations"). This is a minor concern as the scope is clearly defined, but the generality claims are stronger than the evidence warrants.
 
-- **The Stage 1→Stage 2 architectural shift (cross-attention fusion → decision-level fusion) creates a train-inference mismatch** that is acknowledged but not thoroughly analyzed. The pretrained classifier learns to process cross-attention fused features, but at inference it processes unimodal features + LoRA corrections. The LoRA modules must bridge this distribution shift, yet their effectiveness at doing so is not directly examined (e.g., comparing to a design that uses consistent fusion at both stages).
+- **Pretraining stage details are insufficient.** The paper does not specify: how many epochs are allocated to pretraining vs. alternating training within 150 total; whether encoders are trained or frozen during pretraining; and the "initialize {Enc_m}" in Algorithm 1 suggests encoders may restart from random weights after pretraining, which is a potentially important design choice warranting discussion.
 
-- **Hyperparameters vary substantially across datasets** (LoRA rank: 2, 2, 8; β threshold: 0.15, 0.30, 0.05) without principled guidance for selection. While grid search is documented, the lack of sensitivity analysis beyond Table 3 (LoRA rank only) makes it difficult to assess robustness.
-
-- **No variance/statistical significance reported.** All results are single-run numbers. Some improvements (e.g., +1.35% on CREMA-D) could be within normal run-to-run variance, making it impossible to assess statistical significance.
+- **Hyperparameter sensitivity is partially addressed but gaps remain.** Grid search over LoRA rank r and threshold β is reported (Table 3, Figure 4), but the regularization coefficient λ=0.001 receives no sensitivity analysis despite being conceptually central to the "unbiased classifier" claim. Optimal configurations vary substantially across datasets (β from 0.05 to 0.30, r from 2 to 8), suggesting dataset-dependent tuning.
 
 ### Trivial:
 
-- The paper mentions contribution (iii) as "Consistent SOTA improvements across three benchmarks, including over 30,000 samples." The "over 30,000 samples" claim is a weak selling point — three standard benchmarks with relatively small datasets is the norm, not an exception.
-
-- Algorithm 1 line 4 says "Freeze Cls; initialize {Enc_m}, {LoRA_m}" — it is ambiguous whether encoders are re-initialized or continue from pretraining, though the surrounding text suggests continuation. This is a minor clarity issue.
+- The LFM baseline is missing results on MVSA (shown as "-"), making the SOTA claim on that dataset incomplete.
 
 ## Nice-to-Haves
 
-- **Ablation with λ=0 during pretraining**: Testing whether the MI-based regularization in Stage 1 actually contributes, or whether simply pretraining a classifier without regularization and then freezing it suffices, would directly test whether the "unbiased" pretraining claim matters.
-
-- **Modality contribution evolution curves for CCAT**: Figure 1 shows contribution evolution for MLA only. Showing the same plot under CCAT would directly demonstrate whether the method resolves the imbalance it identifies.
-
-- **Extension beyond bimodal settings**: The framework is evaluated exclusively on two-modality datasets. A preliminary experiment on a trimodal dataset (even with synthetic or small-scale data) would strengthen confidence in generality.
-
-- **Computational cost analysis**: The two-stage training with secondary updates adds overhead. Reporting wall-clock time and FLOPs vs. baselines would help practitioners.
+- Plot CCAT's modality contribution trajectories alongside Figure 1's MLA curves to directly demonstrate that classifier freezing resolves the "entrenched bias" the paper identifies as the core problem.
+- Provide a "jointly trained with same cross-attention + MI regularization" baseline to cleanly isolate the contribution of the alternating + frozen-classifier mechanism.
+- Test on at least one trimodal or larger-scale dataset to support the generalization claims.
+- Report computational overhead (wall-clock time, FLOPs) for the two-stage pipeline with secondary updates relative to single-stage baselines like MLA.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+- **"Missing baseline SMSL (Zhou et al., 2025b)":** The human finder flagged this, but SMSL is cited in the method section for defining the MI-based contribution metric, not necessarily as a direct baseline competitor. It may be an evaluation-method paper rather than a multimodal learning method, and without external verification of its applicability as a baseline on these exact benchmarks, this point is speculative.
 
-- **"Limited novelty in combining existing components" (from Human Finder):** CCAT combines alternating training, classifier freezing, LoRA, and MI-regularization in a specific way that addresses a newly identified problem (classifier-level bias in alternating training). The combination is non-obvious — classifier freezing for modality imbalance is novel, and the LoRA-on-frozen-classifier design addresses a specific distribution-mismatch problem. This is not a trivial combination of off-the-shelf parts. Removed as an overgeneralized critique.
+- **"Novelty of bidirectional cross-attention is limited":** The paper does not claim bidirectional cross-attention as a novel contribution; it cites Cheng et al. (2024) for BiCross. This criticism misattributes novelty claims.
 
-- **"Scalability beyond bimodal" overstated as fatal (from Human Finder):** While the framework is designed and evaluated only for two modalities, this is acknowledged in the Future Work section and is a scope limitation common in this line of research (MLA also evaluated primarily on bimodal datasets). This is a valid scope concern but not a fatal flaw.
+- **"No comparison with frozen random classifier":** This is an interesting experiment but goes beyond what's standardly required. The paper does ablate frozen vs. unfrozen pretrained classifier, which already addresses the core comparison. Testing a random freeze is a nice-to-have, not a required baseline.
 
-- **"Baseline configuration fairness" concerns (from Harsh Critic, Point 5):** The paper compares against a broad set of methods across methodological categories (simple fusion, modulation-based, imbalance-aware, and recent SOTA). The claim that unimodal evaluation differs across methods is acknowledged in the paper (Section 4.1). While hyperparameter tuning parity is a valid general concern, it is not specific enough to CCAT to constitute a substantive weakness, and CCAT's improvements are consistent enough across datasets to not be solely attributable to tuning advantages. Removed as a generic concern not specific to this paper.
+- **"Theoretical analogy is imperfect because class imbalance involves sample quantity":** While true, the paper explicitly acknowledges this distinction by noting that class and modality imbalance share "early-dominance-triggered bias" dynamics. The analogy is about the optimization dynamics, not a claim that they are identical problems. This is a valid caveat but not a fatal flaw.
 
-- **"Missing comparison with combined strong baselines" (from Spark):** This asks for combinations like OGM-GE + MLA, which is an open-ended request that no paper in this field satisfies comprehensively. This is scope creep — CCAT is compared against the individual SOTA methods, which is the standard practice.
+- **"Feature distribution mismatch P(z^m|y) ≠ P(f|y)":** The paper acknowledges this mismatch in Section 3.3 and proposes LoRA specifically to address it. While more analysis of how severe this is would strengthen the paper, the criticism that it is "not rigorously analyzed" is demanding work outside the paper's core scope—LoRA is a well-established technique for distribution adaptation.
 
-- **"Forcing equal modality contributions could hurt" is listed as a minor weakness** rather than major because the empirical results suggest it does not catastrophically harm performance on these datasets, even if the conceptual tension is real. Downgraded from the Harsh Critic's structural critique.
-
-- **"Formatting/style nitpicks"** (e.g., notation inconsistency due to OCR artifacts, question-answer patterns) are removed per hard rules.
-
-- **"Reproducibility concerns about the MI estimator"**: Asking the paper to rigorously analyze the properties of an MI estimator that is cited from prior work (Zhou et al. 2025b) is scope creep. The paper uses it as a component and acknowledges its origin. Removed.
+- **"Harsh critic's demand for formal convergence analysis or conditions for when fixed classifier hurts":** This demands theoretical rigor above what's standard in empirical multimodal learning papers at this venue level. The paper provides gradient dynamics intuition and empirical validation; formal convergence guarantees would be a significant extension beyond its scope.
 
 ## Novel Insights
 
-The most novel observation synthesized from the reviews is the fundamental circularity problem in defining "modality contribution" in a self-referential way: when the same model parameters that produce the features also define what counts as a "contribution," and the regularization targets this internal measure, the framework risks optimizing for internal consistency rather than genuine balance. This is distinct from the standard critique of "no external validation" — it raises a deeper concern that the entire mechanism could be self-fulfilling. Additionally, the architectural mismatch between cross-attention fusion (pretraining) and decision-level fusion (inference) is an underappreciated design tension: the frozen classifier learned one type of input distribution but must process a different one, with LoRA bridging the gap. Understanding whether LoRA successfully captures "modality-specific adaptation" versus simply relearning discarded information would clarify what the method actually accomplishes.
+The observation that alternating training resolves encoder-level gradient interference but leaves residual classifier bias — which is structurally analogous to class imbalance in that early dominance creates a path-dependent entrenchment — is genuinely insightful, even though the formal development of this analogy is thin. The idea of importing fixed-classifier strategies from the class imbalance literature into multimodal learning is a creative mapping. However, the circularity concern around the MI-based contribution measure (where the method both enforces and evaluates balance) is an important limitation that the paper does not address.
 
 ## Suggestions
 
-1. **Report modality contribution distributions before and after CCAT** (and ideally for baselines too) to directly demonstrate the imbalance-mitigation property. This is the single most impactful addition — it would convert accuracy-based evidence into mechanism-specific evidence.
+- Run 3-5 seeds on all datasets and report mean ± std. This is the single most important improvement for credibility, given the modest margins on CREMA-D and MVSA.
+- Add one baseline: same cross-attention architecture + MI regularization + joint training (no alternation, no freezing). This cleanly tests whether the frozen-classifier alternating regime is necessary beyond better initialization.
+- Plot CCAT's modality contribution curves alongside MLA's from Figure 1 to directly validate the central claim about reducing classifier bias.
+- Provide sensitivity analysis for λ (the regularization coefficient) given its conceptual importance to the "unbiased classifier" claim.
 
-2. **Add a λ=0 ablation of the pretraining regularization** to test whether the MI-based loss term in Stage 1 matters or whether simply freezing any pretrained classifier suffices.
+## Score and Decision
 
-3. **Soften the theoretical claims**: Replace "profound theoretical isomorphism" and "new theoretical framework" with more measured language (e.g., "structural analogy," "motivating connection"), acknowledging that the analysis is heuristic rather than formal.
+**Calibration:** I compared against:
+- **MLA** (alternating unimodal adaptation, same topic): scores 3-5, rejected — concerns about limited novelty, scalability, missing baselines
+- **MMPareto** (multimodal imbalance, gradient conflict): scores 3-5 with one 8, rejected — concerns about theoretical rigor, limited experiments, computation omitted
+- **BalancedMLA** (similar domain): scores 1-5, rejected — limited novelty, limited evaluation
+- **DMI** (information-theoretic multimodal, strong theory): scores 5-6, rejected — marginal improvements, limited scope
+- **AVSAC** (bidirectional audio-visual): scores 3-6, rejected — novelty concerns about bidirectional fusion
 
-4. **Report standard deviations across multiple runs**, especially for the smaller CREMA-D improvements (+1.35%), to establish statistical significance.
+CCAT is stronger than MLA/BalancedMLA in empirical results (+6.76% on KS is notable) and has a more complete ablation. It is comparable in novelty to MMPareto (combining existing ideas into a coherent framework with moderate theoretical motivation). However, it shares similar weaknesses: informal theory that overclaims, limited dataset scope, and insufficient ablation isolation. The theoretical contribution is oversold relative to its depth.
 
-5. **Clarify whether encoders are re-initialized or continued from pretraining** in Algorithm 1, and explicitly state the inference-time fusion rule (sum/average/weighted) in the main text.
-
-## Score and Decision Calibration
-
-**Calibration papers:**
-- **MLA (JFEFORc7fP.md)**: Similar domain (alternating unimodal adaptation for modality imbalance). Scores: 5,5,5,5,3 (avg ~4.6). Withdrawn/Rejected. Weaknesses: incremental over prior methods, limited novelty, shared head constraint issues.
-- **MMPareto (JHD4Q4GbXa.md)**: Direct competitor/baseline in this paper. Scores: 3,5,5,8 (avg ~5.25). Withdrawn/Rejected. Weaknesses: overclaimed theory, unclear scalability beyond 2 modalities.
-- **BalancedMLA (V7WjTjX7AY.md)**: Similar domain. Scores: 3,5,1,3 (avg ~3). Rejected. Weaknesses: incremental architecture, limited contribution, weak experiments.
-- **MoReS (uV9KFBVaFI.md)**: Modality imbalance + LoRA. Scores: 6,5,6,8 (avg ~6.25). Rejected. Weaknesses: overclaiming modality imbalance discovery, incremental method.
-- **Two Effects One Trigger (uAFHCZRmXk.md)**: High-quality modality imbalance analysis paper. Scores: 8,8,8,8 (avg 8). Accepted (Oral). Strong controlled experiments, clear causal claims supported by evidence.
-- **MMLoRA (vwlryNhWp7.md)**: LoRA for multimodal learning. Scores: 3,3,6,5 (avg ~4.25). Rejected for lack of novelty — just applying LoRA without explaining why it works.
-
-CCAT is stronger than MLA and MMPareto empirically (genuinely outperforms these baselines), has a clearer problem identification (classifier-level bias in alternating training), and introduces a more principled two-stage pipeline. However, it shares similar weaknesses: overclaimed theory, lack of imbalance-specific evaluation, and bimodal-only evaluation. It is weaker than the high-scoring analysis paper (uAFHCZRmXk.md) because that paper provided rigorous controlled experiments supporting its causal claims, while CCAT relies on accuracy comparisons without directly validating its imbalance mechanism.
-
-The paper has real empirical contributions and identifies a genuine problem, but the overclaimed theoretical contribution and the self-referential contribution metric are substantive weaknesses that prevent it from being clearly above the acceptance bar.
+The paper sits around the range of these comparable works (scores 3-6). The substantial empirical gain on KS is a positive differentiator, but the informal theory, MI circularity concern, ablation ambiguity, and lack of statistical significance testing are material weaknesses. I place this slightly above the weakest comparable papers but below the acceptance threshold.
 
 MY FINAL SCORE: <pineapple>5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

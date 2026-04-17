@@ -1,83 +1,87 @@
-## Summary
+Now I have all the context I need. Let me write the final consolidated review.
 
-ARSS proposes a decoder-only autoregressive (GPT-style) model for novel view synthesis from a single image, conditioned on a predefined camera trajectory. The framework combines three modules: (1) a video tokenizer for temporally consistent discrete token sequences, (2) a camera autoencoder that converts Plücker raymaps into 3D positional guidance tokens, and (3) a hybrid permutation strategy that randomly shuffles spatial token order within frames while preserving temporal causality. Results on RealEstate10K, ACID, and DL3DV show competitive-but-mixed performance compared to diffusion-based and transformer-based baselines.
+## Summary
+ARSS proposes a GPT-style decoder-only autoregressive model for novel view synthesis from a single image, conditioned on a predefined camera trajectory. The framework combines three components: (1) a video tokenizer (VidTok with FSQ) for temporally coherent discrete tokenization, (2) a camera autoencoder that maps Plücker raymaps into 3D positional guidance tokens paired with each visual token, and (3) a hybrid spatial-permutation/temporal-causal token ordering strategy that enables a unidirectional transformer to exploit bidirectional spatial context within frames while maintaining temporal causality across frames. Experiments on RealEstate10K, ACID, and DL3DV show competitive PSNR/LPIPS compared to diffusion-based and feed-forward baselines.
 
 ## Strengths
 
-1. **Meaningful problem framing and first-of-kind system**: Applying decoder-only AR models to NVS with camera control is a genuinely novel direction. The paper is the first to assemble this particular pipeline, and the motivation for causal, sequential generation is clearly articulated.
+1. **Clean and well-motivated architectural design.** The decomposition into video tokenizer, camera autoencoder, and hybrid permutation strategy is conceptually coherent. Each component addresses a specific challenge (temporal consistency, 3D camera conditioning, bidirectional spatial context), and the integration is natural. The hybrid permutation preserving temporal order while randomizing spatial order (Eq. 6) is a thoughtful adaptation of RandAR-style ideas to the multi-view setting.
 
-2. **Strong and informative ablations on tokenization and permutation**: Table 2 clearly demonstrates the advantage of spatial-only permutation over raster (16.29→19.22 PSNR) and full permutation (18.76→19.22 PSNR). Table 3 shows dramatic FVD improvement with video tokenization (137.68→52.56). These ablations provide useful empirical evidence for the design choices.
+2. **Strong ablation evidence for core design choices.** Table 2 (PSNR 16.29 → 18.76 → 19.22 across raster/full-perm/spatial-only) and Table 3 (FVD 137.68 → 52.56 for video vs. image tokenizer) convincingly validate the two most architecturally distinctive choices. These are not marginal improvements; the permutation strategy gains ~3 dB PSNR and the video tokenizer cuts FVD by 62%.
 
-3. **Competitive per-pixel and perceptual metrics on some benchmarks**: On RealEstate10K, ARSS achieves the best PSNR (19.02) and LPIPS (0.269) among compared methods, demonstrating that the AR paradigm can produce high-fidelity results in some dimensions.
+3. **Competitive results under modest training budgets.** ARSS achieves the highest PSNR and best LPIPS on RealEstate10K and ACID, and competitive FVD, despite training on 8 GPUs for 100K iterations at 256×256 — substantially fewer resources than diffusion-based baselines like SEVA, which the paper explicitly acknowledges.
 
-4. **Principled 3D camera conditioning**: The Plücker raymap encoding with geometry-constrained loss (Eq. 5) is a well-motivated design, and pairing each visual token with a camera token is an elegant way to inject 3D awareness into the AR sequence.
-
-5. **Error accumulation analysis**: The per-frame metric curves (Figure 6) provide useful insight into how quality degrades along the trajectory, which is particularly relevant for the AR generation paradigm.
+4. **Error accumulation analysis (Figure 6).** Per-frame metric curves showing flatter degradation over camera trajectory steps are a genuine strength, directly addressing the motivation for causal/sequential generation and differentiating ARSS from one-shot diffusion methods.
 
 ## Weaknesses
 
-### Major:
+### Major
 
-1. **Core motivation (causal/sequential world modeling) is empirically unvalidated**: The paper's central selling point — that AR models enable incremental extension, trajectory modification, and reuse of accumulated knowledge (stated explicitly in the Introduction: "incrementally extend and reuse existing generations when the trajectory changes") — receives zero experimental validation. All experiments use fixed 17-frame trajectories; no experiment tests trajectory extension, modification, or reuse. Without this, the paper's primary architectural advantage over diffusion baselines remains entirely theoretical, and the method functions as just another NVS model.
+1. **Overclaiming relative to SOTA, especially SEVA.** The abstract says "comparable to state-of-the-art," but Section 5 states "outperforms state-of-the-art methods leveraging diffusion models and transformers." Table 1 tells a more mixed story: ARSS is better than SEVA on PSNR (19.02 vs. 18.73) and LPIPS (0.269 vs. 0.349) on Re10K, but worse on SSIM (0.624 vs. 0.670) and FID (47.60 vs. 46.98). On ACID, SEVA dominates SSIM (0.664 vs. 0.623) and FID (33.16 vs. 47.76). The paper acknowledges "minor geometric inconsistencies" but still frames ARSS as winning overall. Given that SSIM and FID are well-established proxies for structural fidelity and distributional quality, respectively, the claim of "outperforms" is not justified. The paper should clearly state the trade-offs rather than cherry-picking the favorable metrics.
 
-2. **Overclaimed "out-performs state-of-the-art" narrative**: The abstract states the method "out-performs current state-of-the-art methods," but Table 1 shows mixed results. SEVA outperforms ARSS on SSIM (0.670 vs. 0.624 on Re10K; 0.664 vs. 0.623 on ACID) and FID (46.98 vs. 47.60 on Re10K; 33.16 vs. 47.76 on ACID). The FID gap on ACID is substantial (33.16 vs. 47.76, a ~44% increase). The paper briefly acknowledges this in the text ("minor geometric inconsistencies") but the framing throughout ("out-performs," "state-of-the-art") is misleading given these tradeoffs.
+2. **Missing ablation on the camera autoencoder.** The camera autoencoder with its Plücker raymap encoding and geometric loss (Eq. 5) is a central contribution, yet no experiment compares it against simpler alternatives (e.g., direct Plücker coordinate injection, learned per-frame pose embeddings, or a simple MLP projection). Without this ablation, it is unclear whether the architectural complexity of the autoencoder is necessary or whether much simpler camera conditioning would suffice. The loss weights λ₁–λ₄ and the autoencoder's training data/procedure are also not specified, making it impossible to assess this component's contribution.
 
-3. **Camera autoencoder contribution is unverified**: One of the paper's two main conceptual contributions — the camera autoencoder producing Plücker-based 3D positional tokens — has no ablation. There is no experiment comparing against simpler alternatives (raw pose embeddings, 2D coordinate embeddings, or no camera tokens), no evaluation of how well the autoencoder reconstructs camera information, and no perturbation study showing sensitivity to camera conditioning. Without this, the actual impact of this module on the final results remains unclear.
+3. **The causal/world-model advantage is claimed but not empirically demonstrated.** The introduction motivates AR modeling by arguing that "it is desirable to process observations in a sequential and causal manner" and that diffusion methods "cannot incrementally extend and reuse existing generations when the trajectory changes." However, no experiment demonstrates trajectory adaptation, incremental extension, or reuse of past generations — the core advantages claimed for the AR paradigm. The error accumulation analysis (Figure 6) only shows per-frame quality along a fixed-length trajectory, not any compositional or adaptive generation. Without validating the central motivational claim, the paper's framing as a "world model" approach is overstated.
 
-4. **AR factorization itself is not cleanly validated**: The ablations compare only within the AR framework (different permutation strategies, different tokenizers). There is no comparison against a bidirectional (non-causal) transformer using the same video tokenizer, which would directly test whether the causal AR constraint helps or hurts. Since the spatial permutation strategy already partially breaks strict bidirectionality, the claim that "decoder-only AR" is the right paradigm for this task is not substantiated. The improvements could primarily come from the video tokenizer rather than the AR factorization itself.
+4. **No efficiency analysis for an autoregressive approach.** Generating 5×32×32 = 5,120 tokens sequentially via next-token prediction is inherently slower than parallel denoising in diffusion models. The paper claims parallel decoding is possible (Section 3.2.3) but provides zero inference time, throughput, or latency measurements. This is critical context: if the AR approach is orders of magnitude slower than diffusion baselines, the competitive quality metrics become less compelling. The paper also does not disclose model parameters, layer count, or hardware-specific timing.
 
-### Minor:
+5. **Low resolution and limited training scope constrain generality claims.** All experiments are at 256×256 resolution on RealEstate10K and ACID, with 100K training iterations. The paper acknowledges this limitation in the Discussion, but the "outperforms state-of-the-art" claim is made without acknowledging that this comparison may be atypical since baselines like SEVA operate at higher resolutions. This asymmetry in training resources and resolution makes the comparison inherently limited.
 
-- **No evaluation of inference efficiency**: AR next-token prediction over 5120 tokens per sequence is inherently slow. The paper mentions "parallel decoding" as an advantage of random spatial permutation (Section 3.2.3) but provides no runtime measurements, throughput comparisons, or even a concrete parallel decoding algorithm. This is a notable gap given that the claimed advantage over diffusion models includes efficiency-related considerations.
+### Minor
 
-- **Low resolution (256×256)**: The method operates at 256×256, notably below many competing diffusion-based NVS methods. The authors acknowledge this but it limits practical applicability and comparability.
+- **Training/inference asymmetry not fully described.** During training, the model uses teacher-forced ground-truth frames; during inference, it autoregressively generates from only the first frame. While this is standard practice, the exact training procedure (e.g., whether curriculum strategies or scheduled sampling are used) is not detailed, making it hard to assess how well the model handles the train-inference distribution shift that affects AR models.
 
-- **Limited novelty of individual components**: The video tokenizer is adopted from VidTok, the backbone from LlamaGen, and the spatial permutation from RandAR/Open-MAGVIT2. The contribution is in combining these for NVS with camera control, which is valid but incremental in terms of methodology.
+- **The video tokenizer is used off-the-shelf (VidTok), which was designed for video rather than multi-view data.** The paper acknowledges this limitation but does not quantify it, e.g., by measuring reconstruction quality on multi-view sequences versus generic video. Understanding the tokenizer's upper bound on generation quality would contextualize the results.
 
-### Trivial:
+### Trivial
 
-- The discussion section is brief and does not analyze when or why the method fails, despite the FID degradation on ACID.
+- Minor notation issues in Eq. (7) and surrounding definitions due to parsing artifacts.
 
 ## Nice-to-Haves
 
-- **Trajectory extension experiment**: Demonstrating that ARSS can generate beyond 17 frames or modify trajectories mid-generation would substantiate the paper's main motivation and be its most distinctive experimental result.
-- **Bidirectional transformer baseline with the same tokenizer**: This would cleanly test whether the AR factorization itself provides benefits beyond tokenization.
-- **Camera autoencoder ablation**: Comparing with simpler conditioning schemes would establish whether the Plücker-based encoding is necessary.
-- **Higher resolution evaluation or efficiency benchmarks**: Would clarify the practical tradeoffs of the AR approach.
-- **Failure case analysis**: Given the SSIM/FID gaps versus SEVA, understanding geometric inconsistencies would be valuable.
+- Demonstrating trajectory adaptation (e.g., extending or modifying a camera path mid-generation) would directly validate the key motivational claim about causal world modeling advantages.
+- Reporting inference latency and comparing throughput with diffusion baselines would address a major practical concern for AR approaches.
+- Ablating the camera autoencoder against simpler conditioning schemes (direct embedding, MLP) to isolate its contribution.
+- Experiments at 512×512 or higher resolution to demonstrate scaling capability.
+- 3D consistency metrics (e.g., depth error, reprojection error) beyond per-frame 2D metrics to better assess multi-view coherence.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+- **"Baselines not evaluated in standard configurations or retrained" (Harsh Critic #1):** The paper explicitly states that SEVA benefits from more resources and data, and that some baselines are excluded from DL3DV due to train/test contamination (appropriate). The training asymmetry favors the baselines (SEVA has more resources), not the authors' method, so this is not an unfair comparison against ARSS. Removed per the hard rule against criticizing unfair comparisons that favor baselines.
 
-- **"Unfair comparison because baselines use more data/compute (SEVA)":** The paper itself notes that "SEVA benefits from large-scale, high-resolution training data and heavy computational resources, whereas our approach attains competitive performance without such requirements." This is a factual observation about their respective scale, not an unfair comparison. However, it does mean the paper should frame results as "competitive despite less resources" rather than "out-performs."
+- **"Not clearly stated whether training uses single-image conditioning or multi-view" (Harsh Critic #2):** The paper clearly describes in Section 3.2.3 ("the first frame is the input, so the corresponding visual and camera tokens are always visible to the subsequent tokens") and Section 4.1 ("the first 32×32 tokens are the input tokens and their orders would not be permuted") that only the first frame is the conditioning input. Teacher-forcing during training is standard AR practice and does not constitute "multi-view conditioning" in the misleading sense.
 
-- **"Missing baselines (ZeroNVS, other methods) on DL3DV":** Per the hard rules, we do not flag missing related works. The paper's omission of SEVA/ViewCrafter/RayZer on DL3DV is actually defensible since those models were trained on DL3DV data — it avoids an unfair comparison in the other direction. However, the paper should not use DL3DV results to claim superiority over those specific omitted methods.
+- **"Missing related works" (Neutral Reviewer #5):** Per the hard rules, I do not flag missing citations as I cannot verify their existence. The paper cites relevant AR generation works (RandAR, LlamaGen, etc.) and diffusion NVS methods.
 
-- **"Results from original papers vs. reimplemented (fairness of baseline numbers)":** This is a reproducibility nitpick that falls under the hard rules for removal (undisclosed hyperparameters/benchmarking details). The standard practice in this field is to report numbers from original papers.
+- **"No confidence intervals / variance across runs" (Harsh Critic):** Single-run evaluation without variance reporting is standard practice for large-scale generative models in this community. This is a nice-to-have, not a core flaw.
 
-- **"Missing confidence intervals/standard deviations":** Single-run evaluation is the norm in this community for large-scale generation; requesting statistical significance is beyond standard practice.
+- **"Parallel decoding not evaluated" (Spark Reviewer):** The paper mentions this as an "advantage" in one sentence. It's fair to note as a limitation, but it is not a core claim of the paper — the main claim is about quality and causal structure. Moved to Nice-to-Have.
+
+- **"Failure case analysis" (Neutral Reviewer):** While useful, the absence of failure case visualization is not uncommon in the field. Moved to Nice-to-Have.
+
+- **"Missing baselines like ZeroNVS, Sin3DGM, feed-forward 3D reconstruction methods" (Human Finder):** The paper already compares against 6 baselines spanning both diffusion and non-diffusion methods. Adding more baselines is a Nice-to-Have, not a core flaw. The paper's comparison set is reasonable for its scope.
 
 ## Novel Insights
 
-The clearest novel observation from this work is that spatial-only token permutation with preserved temporal ordering significantly outperforms both raster-scan and fully-random permutation for multi-view AR generation (PSNR: 16.29→18.76→19.22). This validates the intuition that temporal causality is essential for view sequence coherence while bidirectional spatial context within frames should be exploited — a finding that generalizes beyond this specific architecture to any AR approach on multi-frame generation tasks.
+The most interesting empirical finding is how dramatically the token ordering matters: raster-scan ordering gets 16.29 PSNR while spatial-permutation-with-temporal-causality gets 19.22 — nearly a 3 dB jump. This suggests that for AR models applied to multi-view data, the ordering question is not a detail but the primary design lever, and that the bidirectional nature of spatial data in 2D frames must be explicitly addressed. The FVD gap between video (52.56) and image (137.68) tokenization also highlights that temporal consistency is largely a tokenization problem, not just a generation problem.
 
 ## Suggestions
 
-1. Revise all claims of "out-performs state-of-the-art" to "achieves competitive results" and clearly acknowledge the SSIM/FID tradeoffs against SEVA in the abstract and conclusions.
-2. Add an experiment demonstrating trajectory extension (e.g., generating 17 frames, then continuing to 34 frames without re-encoding) — this is the single most important missing validation for the paper's motivating claim.
-3. Ablate the camera autoencoder by replacing it with a simpler pose embedding (e.g., sinusoidal encoding of camera parameters) to isolate its contribution.
-4. Add a bidirectional transformer baseline on the same video tokens to test whether the AR framework specifically adds value.
-5. Report wall-clock inference time per sequence and compare against diffusion baselines.
+1. **Retitle and reframe claims**: Change "outperforms state-of-the-art" to "achieves competitive results" and present PSNR/LPIPS advantages alongside SSIM/FID trade-offs transparently.
+2. **Add a camera conditioning ablation**: Replace the camera autoencoder with a simple Plücker embedding or MLP projection to quantify its contribution.
+3. **Report inference time**: Provide wall-clock timings for generating a full 16-frame sequence, compared against diffusion baselines.
+4. **Demonstrate trajectory extension**: Generate a sequence, then extend it with additional cameras, to validate the causal/incremental generation motivation.
+5. **Specify model parameters and training details**: Report total parameters, number of transformer layers/heads, and context length for reproducibility.
 
 ## Score and Decision
 
-**Calibration papers:**
-- AR-1-to-3 (Reject, scores 5,5,5,5): Similar AR-for-NVS idea but weaker execution and evaluation. ARSS has better ablations and stronger baselines.
-- Fluid (Accept Poster, scores 6,6,5,6): Limited novelty (combining existing techniques), solid empirical study but acknowledged as incremental. ARSS has a similar novelty profile.
-- GST (Accept Poster, scores 8,6,8,3): Novel AR framework for spatial tasks with reasonable but not SOTA results.
+**Calibration comparison:**
+- **AR-1-to-3** (most similar task: autoregressive NVS): All scores 5, withdrawn. Weaknesses included error accumulation concerns, limited evaluation, unclear advantages over baselines.
+- **LVSM** (decoder-only transformer NVS): Scores 8,8,8,6,8,8, accepted as Oral. Strong quantitative results, clear scalability, but still had weaknesses in qualitative consistency and missing efficiency analysis.
+- **NOVA** (autoregressive video generation): Scores 6,6,6,8, accepted as Poster. Novel AR video framework with moderate novelty, reasonable but mixed results.
+- **GST** (autoregressive view prediction with camera tokenization): Scores 8,6,8,3, accepted as Poster. Novel camera tokenization direction, but limited evaluation scope.
 
-ARSS's main issue is that its core motivation (causal sequential generation) is unvalidated, and its claims overclaim relative to mixed empirical results. The system is well-designed with informative ablations, but the AR paradigm's advantage over alternatives is not convincingly demonstrated. This is a promising direction that needs significant additional validation. Placing it below papers like GST (which validated its core claim) and Fluid (which had cleaner framing), at a level above AR-1-to-3 (which had worse execution).
+ARSS sits between AR-1-to-3 (rejected) and NOVA/GST (accepted posters). Unlike AR-1-to-3, ARSS has stronger baselines (SEVA, etc.), better quantitative results, and meaningful ablations. Unlike NOVA/GST, ARSS does not clearly demonstrate the practical advantages it claims (causal world modeling, trajectory extension), and the overclaiming relative to SOTA is a substantive concern. The missing camera autoencoder ablation and efficiency analysis also limit the evidential completeness. However, the framework design is solid and the ablations that do exist are convincing.
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

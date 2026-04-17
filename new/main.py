@@ -18,9 +18,12 @@ dotenv.load_dotenv()
 import os
 os.environ["OPENAI_DEFAULT_MODEL"] = os.getenv("OPENAI_DEFAULT_MODEL", "z-ai/glm-5.1")
 HARSH_MODEL = os.environ.get("HARSH_MODEL", "gpt-5.4")
+NEUTRAL_MODEL = os.environ.get("NEUTRAL_MODEL")
+SPARK_MODEL = os.environ.get("SPARK_MODEL")
 # HUMAN_FINDER = "kimi-k2.5"
 HUMAN_FINDER = os.environ.get("HUMAN_FINDER", "ollama:glm-5.1:cloud")
 MERGER_MODEL = os.environ.get("MERGER_MODEL", "ollama:glm-5.1:cloud")
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1/")
 # MERGER_MODEL = "claude_sdk:claude-sonnet-4-6" # use dash instead of dot in claude sdk
 # MERGER_MODEL = "claude-sonnet-4.6"
 from openai import AsyncOpenAI
@@ -44,7 +47,7 @@ _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
 HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
-CONCURRENCY = 8
+CONCURRENCY = 3
 
 # ── Agent-level retry ────────────────────────────────────────────────
 MAX_RETRIES = 5
@@ -117,6 +120,8 @@ Let the score distribution follow the actual quality of the paper relative to th
 The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
 
 There are less papers with extreme scores, so if the paper is truly exceptional or truly weak, it is okay to give it an extreme score even if most found papers are in the middle. You can also try to find more papers with extreme scores to see what made a paper really good/bad.
+
+Limit your queries to less than 20 rounds, do not dig too deep into retrieval.
 """
 
 CAL_INSTRUCTION_WITHOUT = """Assign a score based solely on your assessment of the paper's quality. Do NOT use the search or review finder tools for calibration — score directly from the paper's merits and weaknesses as identified in the review above."""
@@ -142,15 +147,19 @@ _tool_agents = [read_file, search_file, grep_file]
     # tool_name="summarization", tool_description="Summarizing or answering questions about a specific file given **its absolute path** and question.",
 
     
-harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=HARSH_MODEL)
-neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"))
-if not HUMAN_FINDER.startswith("ollama:"):
-    human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=HUMAN_FINDER)
-else:
-    model = HUMAN_FINDER.replace("ollama:", "")
-    client = AsyncOpenAI(api_key="ollama", base_url="http://localhost:11434/v1/")
-    model = OpenAIChatCompletionsModel(model=model, openai_client=client)
-    human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=model)
+def resolve_model(spec: str | None):
+    """Return a model arg for Agent(...). Supports 'ollama:<name>' for local Ollama backend."""
+    if spec is None:
+        return None
+    if spec.startswith("ollama:"):
+        name = spec[len("ollama:"):]
+        client = AsyncOpenAI(api_key="ollama", base_url=OLLAMA_BASE_URL)
+        return OpenAIChatCompletionsModel(model=name, openai_client=client)
+    return spec
+
+harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=resolve_model(HARSH_MODEL))
+neutral_reviewer = Agent(name="Neutral Reviewer", instructions=load_prompts("neutral_reviewer.md"), model=resolve_model(NEUTRAL_MODEL))
+human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=resolve_model(HUMAN_FINDER))
 
 _NO_CAL = "--no_cal" in __import__("sys").argv
 _merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=_NO_CAL)
@@ -159,17 +168,11 @@ _merger_tools = [read_file, grep_file] if _NO_CAL else _tool_agents
 if MERGER_MODEL.startswith("claude_sdk:"):
     merger = None  # Claude SDK merger — created per-call in run_pipeline
     _MERGER_SDK_MODEL = MERGER_MODEL[len("claude_sdk:"):]
-elif MERGER_MODEL.startswith("ollama:"):
-    merger_model = MERGER_MODEL.replace("ollama:", "")
-    client = AsyncOpenAI(api_key="ollama", base_url="http://localhost:11434/v1/")
-    merger_model = OpenAIChatCompletionsModel(model=merger_model, openai_client=client)
-    merger = Agent(name="Merger", instructions=_merger_instructions, model=merger_model, tools=_merger_tools)
-    _MERGER_SDK_MODEL = None
 else:
-    merger = Agent(name="Merger", instructions=_merger_instructions, model=MERGER_MODEL, tools=_merger_tools)
+    merger = Agent(name="Merger", instructions=_merger_instructions, model=resolve_model(MERGER_MODEL), tools=_merger_tools)
     _MERGER_SDK_MODEL = None
-     
-spark = Agent(name="Spark", instructions=load_prompts("spark_finder.md"))
+
+spark = Agent(name="Spark", instructions=load_prompts("spark_finder.md"), model=resolve_model(SPARK_MODEL))
 
 # scorer = Agent(name="Scorer", instructions=load_prompts("scorer_agent_gpt.txt"), tools=_tool_agents, model=SCORER_MODEL)
 
@@ -447,18 +450,67 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
 
 import datetime
 
-async def run_single_paper(paper_path: str, no_cal: bool = False):
+def predict_acceptance_rate(csv_path: str, score: float, window: float = 0.5):
+    if not os.path.exists(csv_path):
+        print(f"  Acceptance CSV not found: {csv_path}")
+        return None
+    exact_total = exact_acc = win_total = win_acc = 0
+    all_scores = []
+    with open(csv_path, "r") as f:
+        for row in csv.DictReader(f):
+            try:
+                s = float(row["pred_score"])
+            except (ValueError, KeyError, TypeError):
+                continue
+            all_scores.append(s)
+            gt = row.get("gt_binary", "").strip()
+            if gt not in ("Accept", "Reject"):
+                continue
+            is_acc = gt == "Accept"
+            if abs(s - score) < 1e-9:
+                exact_total += 1
+                exact_acc += is_acc
+            if abs(s - score) <= window:
+                win_total += 1
+                win_acc += is_acc
+    exact_rate = (exact_acc / exact_total) if exact_total else float("nan")
+    win_rate = (win_acc / win_total) if win_total else float("nan")
+    if all_scores:
+        below = sum(1 for s in all_scores if s < score)
+        equal = sum(1 for s in all_scores if abs(s - score) < 1e-9)
+        percentile = (below + 0.5 * equal) / len(all_scores) * 100
+        pct_n = len(all_scores)
+    else:
+        percentile = float("nan")
+        pct_n = 0
+    return exact_rate, exact_total, win_rate, win_total, percentile, pct_n
+
+
+async def run_single_paper(paper_path: str, no_cal: bool = False, accept_csv: str | None = None):
     print(f"Reviewing: {paper_path}")
     result = await run_pipeline(paper_path, no_cal=no_cal)
     print(f"\n{'=' * 72}\nFINAL REVIEW\n{'=' * 72}\n{result['merged_review']}")
     score = result["scorer_output"]
+    accept_info = None
     if score != -1:
         print(f"\nPredicted score: {score}")
+        if accept_csv:
+            accept_info = predict_acceptance_rate(accept_csv, score)
+            if accept_info is not None:
+                exact_rate, exact_n, win_rate, win_n, percentile, pct_n = accept_info
+                print(f"Acceptance rate @ score={score}: {exact_rate:.2%} (n={exact_n})")
+                print(f"Acceptance rate @ score={score}±0.5: {win_rate:.2%} (n={win_n})")
+                print(f"Percentile of score={score}: {percentile:.1f}% (n={pct_n})")
     os.makedirs(os.path.join(Path(__file__).parent, "reviews"), exist_ok=True)
     with open(os.path.join(Path(__file__).parent, "reviews", os.path.basename(paper_path).split(".")[0] + f"_review_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"), "w", encoding="utf-8") as f:
         f.write(f"# Review of {paper_path}\n\n")
         f.write(result["merged_review"])
-        f.write(f"\n\n**Predicted score: {score}**\n" if score != -1 else "") 
+        f.write(f"\n\n**Predicted score: {score}**\n" if score != -1 else "")
+        if accept_info is not None:
+            exact_rate, exact_n, win_rate, win_n, percentile, pct_n = accept_info
+            f.write(f"\n**Acceptance rate @ score={score}: {exact_rate:.2%} (n={exact_n})**\n")
+            f.write(f"\n**Acceptance rate @ score={score}±0.5: {win_rate:.2%} (n={win_n})**\n")
+            f.write(f"\n**Percentile of score={score}: {percentile:.1f}% (n={pct_n})**\n")
 
 
 # ── CLI ──────────────────────────────────────────────────────────────
@@ -472,9 +524,10 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--balanced", action="store_true")
     parser.add_argument("--no_cal", action="store_true", help="Skip calibration sample search; score based on paper merits alone")
+    parser.add_argument("--accept_csv", type=str, default=None, help="Path to bench CSV; predict acceptance rate at predicted score and ±0.5")
     args = parser.parse_args()
 
     if args.single_paper:
-        asyncio.run(run_single_paper(args.single_paper, no_cal=args.no_cal))
+        asyncio.run(run_single_paper(args.single_paper, no_cal=args.no_cal, accept_csv=args.accept_csv))
     elif args.benchmark:
         asyncio.run(run_benchmark(args.benchmark, n_samples=args.n_samples, seed=args.seed, balanced=args.balanced, no_cal=args.no_cal))

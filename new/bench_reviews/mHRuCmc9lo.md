@@ -1,79 +1,101 @@
-The paper content was provided in the prompt. Let me search for relevant text within it.
+I can't grep the PDF directly, but the paper text is provided in the user message. Let me verify the key claim about approximate H-calibration from the paper text:
 
-Looking at the paper content provided, I can verify:
+The paper states in Section 2: "In the main body of the paper we focus on the H-calibration defined above, but in Appendix B we also discuss scenarios in which only approximate H-calibration is available."
 
-1. The paper does mention Appendix B for approximate H-calibration ("In the main body of the paper we focus on the H-calibration defined above, but in Appendix B we also discuss scenarios in which only approximate H-calibration is available.")
+This confirms the harsh critic's claim that approximate calibration is deferred to Appendix B and not treated in the main body.
 
-2. The linear utility assumption (Assumption 2.1) is explicitly stated and the paper acknowledges this limitation in Section 6.
+Let me now also verify the claim about experiments being only 1D regression datasets:
 
-3. The comparison to swap-regret / omniprediction literature is made in Section 4.1 and Section 1.2.
+From Section 5.1: "Bike Sharing (UCI). The UCI Bike Sharing (daily) dataset... The outcome Y ∈ [0, 1] is the rescaled total rider count" and "California Housing... median house values (rescaled to [0, 1])". Both are indeed 1-dimensional regression targets.
 
-4. The experiments are indeed limited: two datasets, one model, three actions, no error bars.
+The action sets are small: |A| = 3 in both cases.
 
-5. The paper's experiments only test H = {h(v)=v} (self-orthogonality), not decision calibration.
+Now let me check whether there's any comparison with alternative robust baselines in the experiments:
 
-Now let me compose the final review.
+The experiments compare "Plug-in" vs "Robust" under "i.i.d.", "Worst-case for robust", and "Worst-case for plug-in" settings. There's no comparison with other robust decision-making approaches.
+
+Now I'll write the final review.
 
 ## Summary
-This paper studies how a conservative decision maker should optimally act on machine learning predictions that carry only partial ("H-") calibration guarantees, rather than full calibration. The authors formulate a minimax problem—maximizing worst-case expected utility over outcome distributions consistent with H-calibration—and characterize the optimal robust decision rule via a duality argument (Theorem 3.1). They show a sharp transition: once the test class H contains decision calibration constraints, the minimax optimal rule collapses to the plug-in best response (Theorems 4.1–4.2), upgrading prior swap-regret guarantees to full minimax optimality. They also derive practical instantiations from properties arising "for free" from squared-loss training (self-orthogonality) and standard post-hoc recalibration (bin-wise calibration), and provide a small-scale empirical evaluation.
+
+This paper develops a minimax-optimal framework for decision making under partially calibrated forecasts. Given a forecaster satisfying H-calibration (where H specifies a class of test functions constraining forecast-residual correlations), the authors characterize the decision rule maximizing worst-case expected utility over all distributions consistent with the calibration guarantee. The main results are: (1) a duality-based characterization of the minimax-optimal robust policy (Theorem 3.1), (2) a sharp transition result showing that decision calibration—the weakest calibration notion that makes plug-in best response minimax-optimal—collapses the robust rule to best response (Theorems 4.1–4.2), and (3) concrete instantiations exploiting self-orthogonality from squared-loss training (Proposition 4.4) and bin-wise calibration (Proposition 4.5). Experiments on two 1D regression datasets validate the self-orthogonality instantiation.
 
 ## Strengths
-- **Principled and elegant problem formulation.** The minimax framework (Eq. 5) for partially calibrated forecasts is a natural and well-motivated interpolation between aggressive best-responding and fully conservative play. The definition of the ambiguity set Q via H-calibration constraints is conceptually clean and directly connected to the multicalibration literature.
-- **Surprising and impactful theoretical result.** The collapse of the minimax-optimal rule to plug-in best response under decision calibration (Theorems 4.1–4.2) is a sharp and non-obvious finding. It identifies a tractable, task-specific calibration threshold beyond which no additional robustness is needed, which significantly strengthens the known swap-regret guarantees for decision calibration.
-- **Clean general duality characterization.** Theorem 3.1 provides a constructive saddle-point decomposition (dual multipliers → adversarial tilt → pointwise best response) that applies to any finite-dimensional H, yielding an efficiently computable decision rule.
-- **Practical connections to standard pipelines.** Propositions 4.4 and 4.5 derive usable robust policies from properties that arise automatically from squared-loss training and cheap post-hoc recalibration, respectively, bridging the abstract framework to practice.
+
+- **Elegant and surprising theoretical result**: The identification of decision calibration as the sharp threshold where minimax-optimal robust decision making collapses to plug-in best response (Theorems 4.1–4.2) is a genuinely non-obvious finding. One might expect a gradual interpolation from pure minimax to best response as H enriches, but instead there is a phase transition—this is both theoretically interesting and practically significant, as it identifies a precisely calibrated target for forecaster design.
+
+- **Unified duality characterization (Theorem 3.1)**: The result provides a principled and computationally tractable characterization of minimax-optimal policies for any finite-dimensional H. The reduction to pointwise optimizations (computing adversarial beliefs q* and best-responding) makes the framework implementable rather than purely conceptual, and the dual-variable interpretation is clean.
+
+- **Practical H-classes from standard training procedures**: Proposition 4.4 (self-orthogonality from MSE training with linear heads) identifies a "free" calibration guarantee arising structurally from the most common training paradigm, requiring no special intervention. This gives the framework immediate applicability. Proposition 4.5 (bin-wise calibration → piecewise-constant robust rules) similarly leverages standard post-hoc methods.
+
+- **Simultaneous optimality across decisions (Corollary 4.3)**: The extension showing that a single decision-calibrated forecaster simultaneously supports plug-in optimality for multiple downstream decision problems is a practical and conceptually clean insight.
+
+- **Well-organized exposition**: The paper clearly motivates the problem, develops the framework incrementally, and provides both abstract and concrete instantiations. Figures 1 and 2 effectively communicate the interpolation property and sharp transition.
 
 ## Weaknesses
 
 ### Major:
-- **The relationship to prior omniprediction/swap-regret guarantees is insufficiently clarified.** The paper claims to "upgrade" prior swap-regret guarantees to minimax optimality, asserting that previous work only rules out policies of the form ϕ∘a_BR ("actions as a bottleneck"). However, some omniprediction results (e.g., Roth & Shi 2024, Hu & Wu 2024) consider arbitrary downstream policies in a broader loss landscape. The paper does not formally establish whether the minimax optimality notion here is strictly stronger than, equivalent to, or merely a reformulation of these existing guarantees. A precise theorem or counterexample separating the two would substantially strengthen the contribution; without it, the novelty of the main conceptual claim is unclear relative to what was already known.
 
-- **The linear-in-v utility assumption (Assumption 2.1) significantly limits the decision-theoretic scope.** The entire framework—from the ambiguity set Q to the duality and collapse results—relies on utility being linear in the conditional expectation v. This excludes risk-averse, variance-sensitive, and many other practical utility structures. The paper's motivation invokes "high-stakes decision making" and "trustworthy ML," settings where risk aversion is often central. While acknowledged in Section 6, the framing of the results as recovering "full-calibration-style trustworthiness" in the abstract and introduction is misleading without prominently foregrounding this restriction: under non-linear utilities, neither full calibration nor decision calibration ensures that acting on point predictions is optimal, and the minimax construction here does not directly apply.
+1. **Exact H-calibration assumption in main theoretical results with no quantitative approximate analysis**: All main theorems (3.1, 4.1, 4.2, Corollary 4.3) assume perfect H-calibration. Approximate H-calibration is deferred to Appendix B with no formal quantitative results in the body. This is a significant concern because: (a) the "sharp transition" at decision calibration is proved only for *perfect* calibration—small violations could permit meaningful adversarial tilts, potentially undermining the crisp dichotomy the paper presents; (b) any practical procedure (including the self-orthogonality condition from Proposition 4.4, which assumes first-order stationarity of the population loss) yields only approximate calibration; (c) the paper's core motivation—full calibration is intractable in high dimensions, so we need weaker guarantees—implicitly acknowledges that perfect calibration is unrealistic, yet the main results all assume it. A formal approximate analogue bounding worst-case suboptimality of plug-in BR in terms of calibration error ε and properties of u would substantially strengthen the contribution. This is not a logical flaw—the exact results are correct and interesting—but it means the central "trustworthiness" semantics are established only in an idealized regime that is never met in practice.
 
-- **The empirical evaluation is thin and does not test the paper's central theoretical prediction.** The experiments only evaluate H = {h(v) = v} (self-orthogonality from squared loss) on two regression datasets with 3 discrete actions each. No experiment tests the primary theoretical contribution—the collapse under decision calibration—nor the bin-wise calibration instantiation (Proposition 4.5). There are no error bars or confidence intervals; the reported utility differences (e.g., 0.402 vs. 0.410) are small enough to be noise. No comparison is made to other natural robustification approaches (e.g., simple shrinkage, distributionally robust optimization with Wasserstein balls). The experiments also only use d=1, while the paper's key motivation is high-dimensional (d>1) settings where full calibration is intractable.
+2. **Narrow experimental scope that does not test the paper's central claim**: The experiments evaluate only the self-orthogonality instantiation (H = {h(v) = v}) on two 1D regression datasets with |A| = 3 actions and specific hand-crafted utility functions. Crucially, they do not test the paper's signature theoretical result—that decision calibration collapses the robust rule to best response—nor do they test any intermediate H-class between the two extremes. No multiclass setting is considered, despite the paper's motivation being precisely the regime where full calibration is intractable due to high-dimensional outcomes. The "adversarial" distributions are constructed from the same dual as the robust policy, making the evaluation somewhat circular (validating internal consistency rather than robustness to realistic shifts). The experiments confirm that the self-orthogonality dual behaves as predicted, but provide no evidence for the broader framework's value under decision calibration or richer H-classes.
+
+3. **Linearity and finite action assumptions limit practical scope**: The paper assumes u(a, v) linear in v and A finite (Assumption 2.1). This is standard in the calibration literature and reasonable for multi-class expected-utility settings, but it excludes many high-stakes decision problems (healthcare, finance) involving risk-averse utilities, nonlinear costs, or continuous action spaces. The paper briefly acknowledges this in the conclusion and speculates about linearization via basis expansions (citing Gopalan et al., 2024b; Lu et al., 2025), but notes these bases "are not always low dimensional enough to be practical." This limitation is honestly disclosed but is consequential—it means the "trustworthiness" semantics apply to a narrower class of problems than the paper's high-stakes motivation suggests.
 
 ### Minor:
-- **Gap between theory (exact H-calibration) and practice (approximate calibration).** Proposition 4.4 guarantees self-orthogonality only at a first-order stationary point; in practice, neural networks trained with SGD are only approximately stationary, and the moment conditions hold only approximately. Although Appendix B discusses approximate H-calibration, no quantitative bounds connect the approximation level to the robust policy's suboptimality, leaving the practical theory-practice gap unquantified.
-- **The finite action set assumption limits the scope of the collapse result.** Theorems 4.1–4.2 require |A| to be finite (so that the decision regions R_a are well-defined indicators). For continuous or very large action sets, the structure of the result could differ substantially; this limitation is not discussed.
+
+- **No measurement of calibration error in experiments**: The experiments rely on approximate self-orthogonality from training, but never report the empirical calibration error E[f(X)(Y − f(X))] on held-out data. Quantifying this gap would clarify how close the practical regime is to the theory's exact calibration assumption.
+
+- **No comparison with alternative robust baselines**: The paper compares robust vs. plug-in policies but not against other approaches for robust decision-making under prediction uncertainty (e.g., distributionally robust optimization methods, conformal prediction-based rules). Including even one relevant baseline would clarify the value added by the H-calibration framework specifically.
+
+- **Scalability of decision calibration across tasks (Corollary 4.3)**: The combined test class H^all_dec grows with the total number of actions across all decision problems, which could be large in practice. The paper does not discuss the sample/computational cost of achieving calibration for this union class.
 
 ### Trivial:
-- None worth noting.
+
+- No confidence intervals or standard deviations are reported for the experimental utility numbers in Table 1.
 
 ## Nice-to-Haves
-- Experiments testing the decision-calibration collapse (e.g., post-processing a predictor for decision calibration and verifying that the robust policy coincides with best response).
-- Experiments with d > 1 (multiclass outcomes), which is the setting that primarily motivates the paper.
-- Comparison to simpler robustification heuristics (shrinkage, Wasserstein DRO, etc.) in the empirical evaluation.
-- Finite-sample analysis of how estimation error in the dual multipliers λ* propagates to the robust action.
-- Visualization of the adversarial tilt q*(v) vs. v for different H classes, illustrating the transition from full conservatism to best response.
+
+- Experiments on multiclass data where the framework's advantages are most needed, ideally including a decision-calibrated or bin-calibrated model to test whether the collapse to best response is empirically observed.
+- An approximate version of Theorem 4.1/4.2 bounding worst-case suboptimality in terms of calibration error.
+- Visualization of the adversarial tilt q*(v) vs. raw forecast v to illustrate how the robust policy modifies beliefs.
+- Evaluation under natural distribution shifts (e.g., temporal splits) rather than only adversarially constructed worst-case distributions.
 
 ## Removed Points
-- **"No empirical validation of H-calibration itself":** While it is true the paper does not measure realized calibration error, Proposition 4.4 guarantees self-orthogonality at stationarity and the calibration split is used to estimate population expectations. This is a secondary concern rather than a core methodological flaw.
-- **"Adversaries may be overly pessimistic / consider alternative ambiguity sets":** This is a scope concern—suggesting φ-divergence or Wasserstein constraints is natural, but the paper's framework is specifically about ambiguity sets defined by calibration constraints. This is a design choice, not an error.
-- **"The bin-wise calibration robust policy is just best-responding to bin means, which practitioners already do":** While true, the contribution is not the recipe itself but showing that it is *minimax optimal* within the H-calibrated ambiguity set. The optimality guarantee is the new insight.
-- **"Regularity conditions for Theorem 3.1 not explicit":** The action set A is finite and u is linear in v, ensuring compactness and continuity. Existence of saddle points follows under these conditions. This is not a real gap.
-- **"Comparison to trivial minimax baseline makes contribution look stronger than it is":** The paper motivates its framework relative to this baseline for clarity, not to inflate contributions. The real comparison is to the multicalibration/omniprediction literature, which is explicitly discussed.
+
+- **Formatting/style nitpicks**: The harsh critic mentions dense theoretical presentation with heavy notation. While notation is unavoidable in this type of work, this borders on style nitpick and is removed. — *Removed because this is a formatting/style nitpick per the rules.*
+
+- **Claim that experiments are "circular" and therefore invalid**: The harsh critic argues that constructing adversaries from the same dual as the robust policy makes the evaluation circular. However, this experimental design directly tests the theory's predictions (that the robust policy dominates worst-case adversaries consistent with H-calibration), which is a valid and standard way to validate minimax results. The criticism about lacking real distribution shifts is legitimate (and kept above), but the "circularity" framing overstates the issue. — *Removed because it mischaracterizes a valid experimental design choice; the real concern (lack of natural shifts) is captured in a less extreme form.*
+
+- **Claim that no comparison with decision calibration in experiments invalidates the paper**: The spark reviewer and harsh critic emphasize that the central claim (decision calibration → best response) is untested empirically. This is a valid concern (kept as a major weakness), but the claim that this *invalidates* the paper overstates the case—theoretical papers need not always experimentally validate every theorem, and the decision-calibration result is cleanly proved. The concern is about the scope of validation, not the validity of the theory. — *Partially removed: kept as a concern about experimental scope, but not as a claim that the theory is unsound.*
+
+- **Demand for user studies or risk-averse utility experiments**: The neutral reviewer requests evaluation on "genuine decision-making scenarios" like medical treatment decisions. Since the paper is theoretical and explicitly scopes itself to linear utility, this is scope creep. — *Removed as a demand outside stated scope.*
+
+- **Demand for continuous action space results**: The spark reviewer and others ask for extension to continuous action spaces. The paper clearly defines its scope as finite A and acknowledges this limitation. — *Removed as scope creep; the paper already honestly discloses this limitation.*
 
 ## Novel Insights
-The "sharp transition" result—that the minimax optimal policy collapses to plug-in best response as soon as H contains the decision-calibration tests, and that no intermediate H-class yields a different policy form—is a genuine and non-obvious structural insight. It implies that decision calibration is not just a useful relaxation of full calibration but is precisely the decision-theoretic "threshold" for trustworthiness, which is both theoretically elegant and practically prescriptive: practitioners need only enforce decision calibration, not full calibration, to guarantee that best-responding to forecasts is optimal.
+
+The key novel observation across the reviews is that the paper reveals a previously unknown *structural* property of the calibration hierarchy: it is not a continuum of increasingly conservative policies as H enriches, but rather exhibits a sharp phase transition at the decision-calibration boundary. This means that the practical guidance for downstream decision-makers is binary and crisp—either your forecaster is decision-calibrated for your problem (in which case simply best-respond), or it isn't (in which case you should use the duality-based robust policy). This eliminates the need for a practitioner to carefully calibrate their level of conservatism to the degree of partial calibration, at least above the decision-calibration threshold.
 
 ## Suggestions
-- Formally clarify (via theorem or example) the precise relationship between the minimax optimality guarantee here and prior omniprediction/swap-regret guarantees, so readers can assess the novelty of the conceptual contribution.
-- Add at least one experiment with a multiclass setting (d > 1) and/or an experiment using decision-calibrated predictors to validate the collapse theorem.
-- Report error bars across random seeds and include a comparison to at least one simple robust baseline.
-- Prominently note the linear-utility restriction in the abstract and introduction, rather than only in Assumption 2.1 and the limitations section.
-- Provide even informal quantitative bounds on robust policy suboptimality under approximate H-calibration, to bridge the theory-practice gap for the self-orthogonality instantiation.
 
-## Calibration and Score
+1. Add a formal approximate version of Theorems 4.1/4.2, even as a proposition with a bound on worst-case suboptimality as a function of ε-H-calibration error. This would bridge the gap between the idealized exact theory and practical application.
+2. Include at least one experiment on a multiclass classification task (even if small-scale like a tabular dataset with ~5-10 classes) using bin-wise calibration or a richer H-class, to demonstrate the framework where it is most needed.
+3. Report empirical calibration error (E[h(f(X))(Y − f(X))]) on held-out data in the experiments, and discuss how closely the practical regime approximates exact H-calibration.
+
+## Score and Decision
 
 **Calibration anchors:**
-- uy4EavBEwl.md (Reconciling Model Multiplicity for Downstream Decision Making): Accept (Poster), scores 6,6,6,6 — similar multicalibration/decision-calibration foundations, theory + limited experiments.
-- TId1SHe8JG.md (Provable Uncertainty Decomposition via Higher-Order Calibration): Accept (Spotlight), scores 6,8,8,8 — strong calibration theory, but acknowledged theoretical novelty and well-executed experiments.
-- XM7INBbvwT.md (Does Calibration Affect Human Actions?): Reject, scores 3,5,6 — calibration-for-decisions topic with weak experimental methodology.
-- MUWkqqH6e7d.md (Human Expertise Really Matters): Withdrawn, scores 5,6,6,6 — calibration + decision-making, dense presentation/limited scope concerns.
 
-This paper has a genuinely novel and elegant theoretical contribution (the collapse theorem under decision calibration, the general H-calibration duality) that advances understanding of partial calibration guarantees. However, the novelty relative to prior decision-calibration/omniprediction work is not cleanly established, the critical linearity assumption limits the practical scope that the paper claims, and the experiments are notably thin—not testing the central theoretical prediction and lacking error bars or baseline comparisons. Relative to "Reconciling Model Multiplicity" (6,6,6,6) and "Higher-Order Calibration" (6,8,8,8), this paper has comparably clean theory but weaker empirical support and a less clearly delineated contribution relative to prior work. I place it below the Reconciling paper (which had clearer novelty) but above the weak calibration experiments papers.
+- *Provable Uncertainty Decomposition via Higher-Order Calibration* (TId1SHe8JG.md): scores 6/8/8/8, Accept (Spotlight). Strong calibration theory paper with formal guarantees and experimental validation of theoretical claims on real data (image classification). More complete empirical evaluation than the current paper.
 
-**Score: 6**
+- *Reconciling Model Multiplicity for Downstream Decision Making* (uy4EavBEwl.md): scores 6/6/6/6, Accept (Poster). Related paper combining multi-calibration with downstream decision-making. Has novel theory + algorithm + experiments. The current paper has stronger standalone theoretical contributions (the sharp transition result) but weaker experiments.
 
-MY FINAL SCORE: <pineapple>6</pineapple>
+- *Does Calibration Affect Human Actions?* (XM7INBbvwT.md): scores 3/5/6, Reject. Calibration + decision making paper with limited methodology.
+
+The current paper has a genuinely novel and surprising theoretical contribution (the sharp transition at decision calibration), a clean duality characterization, and practical instantiations. This is strong theoretical work. The main weaknesses are the exact-calibration assumption without approximate analysis, and experiments that test only a very narrow slice of the framework. The theoretical core is stronger than *Reconciling Model Multiplicity* (which got 6s across the board), but the experimental gap is significant. Compared to *Higher-Order Calibration* (Spotlight with 6/8/8/8), the current paper has comparable theoretical novelty but substantially thinner experiments.
+
+Overall this paper makes a real and interesting theoretical contribution—it's definitely above the acceptance threshold but has meaningful gaps that prevent it from scoring higher. The theory is sound and intellectually compelling; the experiments support a narrow claim but not the broader framework.
+
+MY FINAL SCORE: <pineapple>6.5</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

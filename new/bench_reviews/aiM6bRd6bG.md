@@ -1,112 +1,88 @@
-Now I have enough context to write the final consolidated review. Let me synthesize all the information carefully.
+Now I have enough information to write the final consolidated review. Let me synthesize all three reviews, verifying claims against the paper text, and calibrate my score.
 
-Key issues to verify against the paper:
+**Key calibration references:**
+- LLaPA (eh1fL0zw8o): PPI prediction with data leakage concerns, missing fair baselines, cold-start problem → scores 6/5/6/5, Decision: Reject
+- MAPE-PPI (itGkF993gz): Solid PPI method with good experiments → scores 8/6/3, Decision: Accept (spotlight)
+- Network evolution (E2OAT195Le): Weak methodology, lack of statistical testing → scores 3/6/5/1, Decision: Withdrawn (Reject)
 
-1. **"Two orders of magnitude" claim**: The actual numbers in Table 1 show improvements of ~6-15× for early metrics, not 100×. This is a legitimate concern.
+This paper has a novel problem formulation but significant issues with fairness of baseline comparisons and overclaiming. It falls somewhere between LLaPA and MAPE-PPI in quality.</think>## Summary
 
-2. **Missing baselines**: The paper compares against D-SCRIPT, Topsy-Turvy, and xCAPT5 used as standalone pairwise classifiers, but does not include simple baselines like: (a) aggregation of model scores over known partners, (b) full-embedding cosine similarity without active-region masking, (c) network-based methods (e.g., random walk with restart). These are legitimate concerns.
-
-3. **Circularity/leakage in evaluation**: The re-ranking uses UniProt annotations, GO terms, biomedical text corpora, and AlphaFold-based structure — all of which may encode information about the same interactions that appear as "novel" in STRING v12. The paper partially acknowledges this ("it is uncertain if their gains reflect not only semantic generalization but also latent knowledge of interactions from the training data"), but still frames the contribution as "prospective prediction." This is a legitimate concern.
-
-4. **Re-ranking only on top-10**: The paper's re-ranking is limited to 10 candidates per protein. This is very narrow.
-
-5. **No statistical significance**: No variance, confidence intervals, or significance tests.
-
-6. **"Interpretability" terminology**: The paper explicitly acknowledges that it does not use interpretability for explanations but for feature engineering. This is partially a framing issue.
-
-7. **No ablation of the core mechanism**: The paper never compares active-region similarity against full-embedding similarity.
-
-Let me now write the review.</think>## Summary
-
-This paper introduces the problem of PPI Candidate Ranking—prioritizing which novel protein-protein interactions should be experimentally tested—and proposes a two-stage framework: (1) interpretability-guided retrieval that exploits predicted contact map activations from D-SCRIPT/Topsy-Turvy to identify active embedding regions of known partners, then ranks candidates by sliding-window cosine similarity in those regions; (2) a re-ranking module integrating multiple biological signals (interaction scores, AlphaFold2-derived structural plausibility, GO/pathway annotation overlaps, and LLM-based semantic similarity). Evaluation on STRING v11→v12 transitions shows large improvements over using raw model interaction probabilities, with PubMedBERT-based re-ranking providing the most consistent gains.
+The paper introduces PPI candidate ranking—prioritizing novel protein-protein interaction candidates for experimental validation—and proposes a two-stage framework. First, it performs interpretability-guided retrieval by extracting active embedding regions from predicted contact maps of known interactors in D-SCRIPT/Topsy-Turvy, then ranking candidates via cosine similarity to these anchors. Second, it refines the top candidates through re-ranking with complementary signals including interaction scores, structural plausibility (pDockQ), functional annotation overlap, and LLM-based semantic similarity. Evaluation on the STRING v11→v12 transition shows substantial early-ranking improvements over baseline PPI prediction models.
 
 ## Strengths
 
-- **Well-motivated and practically important problem formulation.** Casting PPI discovery as per-target candidate ranking conditioned on known interactors is genuinely useful—it mirrors how experimentalists actually approach interactome extension for a protein of interest. The prospective evaluation using successive STRING releases (v11→v12) is a step forward from purely static benchmarks.
+1. **Novel and practically motivated problem formulation.** Reframing PPI prediction as a candidate ranking task that naturally incorporates a target protein's known interactors is a meaningful departure from binary classification. This directly addresses the experimental validation bottleneck and aligns with how experimentalists actually use computational predictions.
 
-- **Substantial empirical improvements at early ranks.** The gains are not marginal: for D-SCRIPT, Recall@10 rises from ~1.2% to ~26%, and MRR improves by 4–6×. These are step-change improvements that would matter for practical candidate screening, regardless of how they are achieved.
+2. **Substantial empirical improvements over raw model scores.** Table 1 shows clear and meaningful gains: for D-SCRIPT, Recall@10 rises from ~1.2% to ~26.4%, and MRR from ~0.034 to ~0.168 (~5×). These are practically significant improvements that could meaningfully reduce experimental screening costs.
 
-- **Comprehensive multi-signal re-ranking analysis.** Table 2 provides a thorough pairwise rank-shift comparison across 9 re-ranking signals (cosine, IS, pDockQ, TF-IDF, Token/Location/KeyTerm overlaps, BioBERT, BioMedRoBERTa, PubMedBERT), revealing that semantic signals are surprisingly strong while structural plausibility (pDockQ) is better suited for filtering than ordering. This analysis of complementarity is a useful practical contribution.
+3. **Systematic multi-signal re-ranking analysis.** Table 2 provides a pairwise rank-shift comparison across 9 diverse re-ranking signals, yielding actionable insights—e.g., that PubMedBERT achieves 75.5% maintain-or-improve rate while pDockQ underperforms for early ranking (47.2%), suggesting structural plausibility is better for filtering than ordering.
 
-- **Honest discussion of select limitations.** The authors explicitly acknowledge: (a) reliance on having known partners (failing for underexplored proteins); (b) rankings remain non-interpretable despite "interpretability-guided" terminology; and (c) uncertainty about LLM gains possibly reflecting memorized interaction knowledge.
+4. **Prospective evaluation design using successive STRING releases.** Using v11 for training/retrieval and v12 novel edges as test is a more rigorous evaluation than standard within-release benchmarks, testing whether models can genuinely anticipate future discoveries.
+
+5. **Honest acknowledgment of key limitations.** The paper explicitly states (Section 6) that the approach fails for proteins with few/no known partners and that the rankings are not interpretable in a human-facing sense despite being "interpretability-guided."
 
 ## Weaknesses
 
-### Major:
+### Major
 
-- **Missing baselines that would isolate the contribution of the contact-map-guided mechanism.** The core technical claim is that selecting "active regions" via predicted contact maps improves ranking over raw model scores. However, the paper never compares against straightforward alternatives that could close much of the gap: (a) aggregating the same models' interaction scores over known partners (e.g., for target p, rank candidates by max predicted probability among p's known interactors); (b) full-embedding cosine similarity to known partners without the contact-map masking step; (c) network-based baselines leveraging STRING v11 topology (e.g., random walk with restart, common neighbors). Without these, it is impossible to determine whether the improvement comes from the specific interpretability mechanism or simply from using *any* per-target aggregation over known partners—which the baselines are denied. This is the most critical gap in the experimental design.
+1. **Unfair baseline comparison undermines the headline improvement claim.** The proposed method conditions on the set of known interactors KP(p) to define anchor embeddings, while the baselines (D-SCRIPT, Topsy-Turvy, xCAPT5) are evaluated using only their raw pairwise interaction scores without any access to KP(p). This is not an apples-to-apples comparison: the proposed method is given strictly more information. A fairer baseline would condition on the same KP(p) information—for example, ranking by the maximum of existing D-SCRIPT scores {score(pk, pc)} over known partners pk ∈ KP(p)—or using simple heuristics like average GO similarity to known partners. Without such baselines, it is impossible to determine whether the gains come from the interpretability-guided mechanism specifically or simply from exploiting the additional knowledge of known partners. This directly undermines the "two orders of magnitude" claim and the framing that the method outperforms state-of-the-art models.
 
-- **The "prospective prediction" framing is undermined by information circularity.** The re-ranking module uses UniProt/GO/Reactome/ComplexPortal annotations, biomedical LLMs pretrained on PubMed, and AlphaFold2-derived structural scores. These sources are themselves downstream of the *same* experimental literature and curation pipelines that feed STRING v12's new edges. The paper acknowledges this concern in passing ("it is uncertain if their gains reflect not only semantic generalization but also latent knowledge of interactions from the training data"), yet still frames the contribution as "anticipating novel interactions" and "prospective prediction" throughout. A more careful audit (e.g., analyzing how many v12 interactions have pre-existing textual or annotation evidence from before the v12 cutoff) would substantially clarify what the evaluation actually measures. As designed, it likely measures "STRING-consistency with external curated knowledge" more than genuine extrapolation.
+2. **"Two orders of magnitude" overclaim.** Examining Table 1, the actual improvements are more modest than stated: MRR improves ~5× (0.034→0.168), Recall@10 improves ~22× (0.012→0.264), and Precision@10 improves ~24× (0.006→0.138). While these are significant, "two orders of magnitude" (100×) is only loosely approached for a few metrics at specific cutoffs and is not representative of the typical improvement. This overclaim appears in the introduction's contribution list and abstract framing.
 
-- **"Two orders of magnitude" improvement claim is numerically unsupported.** The abstract and conclusion assert "two orders of magnitude" improvement, but Table 1 numbers show D-SCRIPT Recall@5 from 0.0071→0.0452 (~6×), Recall@10 from ~1.2%→~26% (~15×), and MRR from 0.0074→0.0340 (~5×). These are substantial, but nowhere near 100×. The claim should be revised to match the actual metric values.
+3. **Ground truth validity and circularity concerns.** The evaluation treats STRING v12-only edges as "novel interactions" constituting prospective ground truth. However, STRING integrates heterogeneous evidence including computational predictions, text mining, and co-expression. Even with the "experimental evidence > 0" filter, v12 edges may include interactions already known in the literature but not yet curated into v11, or predicted by models conceptually similar to those used here. The "prospective" framing is therefore not fully supported—this is a v11→v12 recovery task, not a demonstration that the method anticipates truly unseen experimental discoveries. This is a conceptual concern about the paper's central claim, not a fatal flaw, but it requires softer language than the current "anticipating genuine novel interactions."
 
-- **No ablation of the core interpretability-guided mechanism.** The central methodological idea—using contact-map-activated regions to select embedding sub-regions for similarity computation—lacks direct evidence of its necessity. An ablation comparing active-region cosine similarity against full-embedding cosine similarity (with the same anchor/aggregation strategy) is essential to justify this as the key contribution rather than a byproduct of the anchor-based aggregation.
+4. **LLM re-ranker data leakage risk.** PubMedBERT is pre-trained on PubMed, which includes descriptions of many interactions later curated into STRING v12. The cross-encoder is fine-tuned on v11 interactions, but PubMedBERT's pre-training corpus almost certainly contains information about proteins and interactions in the test set. The paper briefly acknowledges this ("it is uncertain if their gains reflect not only semantic generalization but also latent knowledge of interactions from the training data") but does nothing to bound or measure this effect. PubMedBERT's superior re-ranking performance (75.5%) may partially reflect memorization rather than genuine semantic generalization.
 
-### Minor:
+### Minor
 
-- **Re-ranking evaluated only on top-10 candidates per protein (2,280 pairs).** This is a very narrow re-ranking window. The rationale (computational cost) is mentioned but no sensitivity analysis is provided for other cutoffs (k=20, 50, etc.). Additionally, it is unclear how representative this 2,280-pair subset is of the full ~279k v12 positives; no distributional characterization is given.
+5. **Incomplete specification of the interpretability-guided activation selection.** The algorithm for defining "maximal contiguous segments of highly activated residues" and the thresholding procedure are not fully described. Are activation values binarized? What threshold defines "highly activated"? Is there a minimum segment length? This affects reproducibility and makes it difficult to assess whether gains come from the conceptual idea or from implementation-specific choices.
 
-- **No reporting of variance or statistical significance.** All metrics (Table 1, Table 2) are single point estimates with no standard deviations, confidence intervals, or hypothesis testing. Given the large-scale dataset, this is partially understandable for ranking metrics, but the re-ranking analysis on 2,280 pairs would benefit from such measures.
+6. **Re-ranking evaluation is narrow (top-10 only).** The re-ranking module operates only on the top 10 candidates per protein (2,280 pairs total). This means re-ranking says nothing about whether alternative signals can recover novel interactions missed by the initial retrieval. The practical impact of re-ranking at top-10 is also diminished when initial retrieval already places some true partners in the top-10.
 
-- **The "interpretability-guided" terminology is somewhat misleading.** The paper itself acknowledges that it does not produce interpretable explanations—"we do not use it as a means of generating explanations." The contribution is more accurately described as contact-map-guided or activation-guided retrieval. While the authors explain this distinction in the text, the repeated use of "interpretability-guided" in the title and abstract creates expectations the method does not meet.
+7. **No performance stratification by |KP(p)|.** The method fundamentally depends on having known interaction partners as anchors, but no analysis shows how performance degrades for proteins with few known partners—a critical question for real-world applicability since understudied proteins often have sparse interaction networks.
 
-- **No analysis of performance stratified by number of known partners.** The method critically depends on KP(p), yet no analysis shows how performance degrades as |KP(p)| decreases. This is particularly important because proteins with few known interactors are precisely where new PPI discovery is most needed.
+8. **Candidate set size is insufficiently specified.** The problem setup defines CP(p) = P \ KP(p) (the full proteome), but it is unclear whether Table 1's retrieval metrics are computed over this full space or over a pre-filtered subset. This matters because precision/recall values are heavily dependent on the candidate pool size.
 
-### Trivial:
+### Trivial
 
-- The negative sampling procedure (10:1 ratio) is described for training classifiers but the paper does not state clearly whether these synthetic negatives form the candidate pool for ranking evaluation, or whether all non-KP proteins are candidates. This affects the interpretation of precision numbers.
+9. **No statistical significance testing or variance reporting.** Results are presented as point estimates without confidence intervals or significance tests. While this is common in large-scale benchmarking, it makes it difficult to assess the robustness of observed differences.
 
 ## Nice-to-Haves
 
-- A combined/learned re-ranker that integrates multiple signals rather than evaluating each independently; this would demonstrate whether signals are complementary or redundant.
-- Evaluation on a second database transition (e.g., IntAct or an earlier STRING version) or organism to test generalizability beyond a single v11→v12 transition.
-- Qualitative case studies showing specific proteins where the method successfully promotes/incorrectly demotes true novel partners, with the active regions and semantic features responsible.
+- Add baselines that also exploit KP(p), such as max/mean of pairwise D-SCRIPT scores over known partners, or GO-similarity ranking conditioned on known partners, to isolate the contribution of the interpretability-guided mechanism from simply using known-partner information.
+- Evaluate a combined re-ranking strategy that fuses multiple signals (e.g., learned combination) rather than analyzing each independently—the paper's narrative is about integrating complementary evidence but never actually combines signals.
+- Report performance stratified by |KP(p)| (e.g., 1, 2–5, 6–10, 10+ known partners) to quantify the method's limitations for low-degree proteins.
+- Validate that identified "active residue regions" correspond to known binding interfaces (e.g., from PDB complexes) to support the interpretability mechanism's biological meaningfulness.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
-
-- **"The method fundamentally relies on the assumption that novel interactions follow patterns of known ones."** (Harsh Critic, echoed in others) — The paper explicitly states this assumption and acknowledges it as a limitation in Section 6. The authors are transparent about the cold-start problem. Criticizing the assumption as a "structural flaw" ignores that the authors have already addressed it.
-
-- **"Underexplored proteins with few known partners cannot benefit from the method."** — Again, the paper explicitly acknowledges this limitation. Raising it as a fatal flaw overstates it; it is a scope limitation, not a methodological error.
-
-- **"xDAPT5/xCAPT5 availability concerns."** — Any model cited in the paper is assumed to exist per the rules. Removed.
-
-- **"No comparison with ESM-2 or other modern PLM methods."** (Human Finder) — The paper's framework operates on top of D-SCRIPT and Topsy-Turvy, which use the Bepler & Berger encoder. Using ESM-2-based methods would require retraining the underlying PPI models, which is outside the paper's scope. The paper is about how to refine rankings from existing PPI predictors, not about building new ones.
-
-- **"Formatting and writing issues."** — Removed per rules on style nitpicks.
-
-- **"Complete training logs or hyperparameter details missing."** (implied reproducibility concern) — Removed per rules; the paper provides code in supplementary materials.
+- **"Not yet released" / availability of D-SCRIPT, Topsy-Turvy, SpeedPPI, xCAPT5**: Removed per hard rules—these are cited models and their existence is assumed.
+- **Missing related works (xCAPT5 description, other PPI methods)**: Removed per hard rules—I cannot verify whether additional citations exist or are relevant, and should not invent references.
+- **Formatting/style nitpicks (parser artifacts, equation rendering)**: Removed per hard rules—these are PDF parsing issues, not paper problems.
+- **Reproducibility concerns about hyperparameters, SpeedPPI runtime details**: Removed per hard rules—these are trivial implementation details impractical to include.
+- **Request for confidence intervals on all metrics**: Moved to trivial weakness—this is not standard practice in large-scale PPI benchmarking.
+- **Demand for theoretical proofs of interpretability mechanism**: Removed as scope creep for an empirical systems paper.
 
 ## Novel Insights
 
-The pairwise rank-shift analysis (Table 2) reveals a counterintuitive finding: lightweight annotation-based heuristics (TF-IDF, Jaccard overlaps on GO terms, localization, key terms) achieve maintain-or-improve rates of 63–75%, rivaling heavyweight structure-based AlphaFold2 re-ranking (pDockQ at ~47–63%). This suggests that much of the "missing signal" in sequence-only PPI prediction comes from basic functional and contextual coherence (shared pathways, colocalization), not from fine-grained structural complementarity. This finding, if confirmed with controls for circularity, would have practical implications for PPI prioritization pipeline design—simple, scalable annotation signals may offer more bang-for-buck than expensive structural modeling.
+The pairwise rank-shift analysis (Table 2) reveals a practically important finding: lightweight annotation-based heuristics (TF-IDF, token overlap at ~68–75% maintain-or-improve) are nearly as effective as computationally expensive structural scoring (pDockQ at 47.2%), suggesting that functional annotation coherence—rather than structural plausibility—is the stronger signal for PPI prioritization. This challenges the common assumption that structural validation should be the primary filter for computational PPI predictions and suggests a more cost-effective deployment strategy where semantic signals are used first, reserving expensive structural modeling for final validation.
 
 ## Suggestions
 
-1. **Add a full-embedding cosine similarity baseline (same anchors, same aggregation, no contact-map masking)** and a **max-score-aggregation baseline** (for target p, rank candidates by max D-SCRIPT/Topsy-Turvy interaction score over KP(p)). These are the minimum needed to isolate the contribution of the contact-map activation mechanism.
+1. **Add KP(p)-conditioned baselines.** A simple max-over-partners D-SCRIPT score baseline would isolate whether the improvement comes from the interpretability-guided mechanism or simply from exploiting known-partner information. This is the single most important addition for a revision.
+2. **Soften the "two orders of magnitude" claim.** Replace with metric-specific improvement factors (e.g., "~5–37× improvement in early-ranking metrics") or remove entirely.
+3. **Soften the "prospective" framing.** Frame the v11→v12 experiment as "recovery of newly curated interactions" rather than "anticipating genuine novel interactions," acknowledging that STRING edges include computational predictions.
+4. **Report |KP(p)|-stratified results.** This directly addresses the acknowledged limitation and clarifies where the method is most useful.
 
-2. **Revise the "two orders of magnitude" claim** to match the actual numbers (~6–15× on early metrics), and add a brief discussion of where the most dramatic improvements occur and why.
+## Score and Decision
 
-3. **Audit the circularity between re-ranking signals and evaluation labels:** Even a rough estimate of what fraction of v12 interactions have pre-existing UniProt/GO/PubMed evidence (dated before the v12 release) would significantly clarify the true "prospective" component of the evaluation.
+**Calibration papers compared:**
+- LLaPA (eh1fL0zw8o): PPI prediction with data leakage and missing fair baselines → scores 6/5/6/5, Reject
+- MAPE-PPI (itGkF993gz): Solid PPI method with novel contributions and good experiments → scores 8/6/3, Accept (spotlight)  
+- Network evolution (E2OAT195Le): Weak methodology and evaluation → scores 3/6/5/1, Reject
+- MULAN (uXLXq4ugAy): PPI with limited novelty → scores 5/3/5/5, Reject
 
-4. **Add stratified analysis by number of known partners** |KP(p)|, showing where the method works and where it degenerates.
+This paper has a genuinely novel problem formulation and interesting methodology, but the evaluation has a significant fairness gap (no KP(p)-conditioned baselines) and the "two orders of magnitude" claim is overstated. It is better than LLaPA in originality of formulation and in explicitly acknowledging limitations, but the unfair baseline comparison is a serious issue that undermines confidence in the claimed contributions. The core idea is sound and valuable, but the empirical evidence does not convincingly demonstrate that the interpretability-guided mechanism—rather than simply conditioning on known partners—is responsible for the improvements. This places it below MAPE-PPI but above clearly weak papers like the network evolution paper. A revision with fair baselines would likely qualify for acceptance.
 
-5. **Clarify the role of synthetic negatives** in the candidate pool for ranking evaluation, so that reported precision/recall numbers can be properly interpreted.
-
-## Score and Decision Calibration
-
-I compared this paper against the following calibration anchors:
-
-- **LLaPA (eh1fL0zw8o)**: PPI prediction with data leakage concerns and limited novelty; scores 5–6, rejected. Similar circularity concerns, but LLaPA had a stronger methodological contribution (novel multimodal architecture) whereas this paper is more engineering-focused.
-
-- **MAPE-PPI (itGkF993gz)**: PPI prediction with genuine architectural novelty (microenvironment codebook + masked codebook modeling); scores 3–8, accepted as spotlight. Much higher novelty bar with similarly strong results, but also received a score of 3 from one reviewer for limited clarity.
-
-- **Structural interactomics (0JOhLEf2bX)**: Combines existing tools (GNNs + structures) with little methodological innovation; scores 3–5, withdrawn/rejected. Similar pattern of combining existing methods without sufficient novelty.
-
-- **PPIformer (xcMmebCT7s)**: PPI design with strong architectural contribution; scores 3–8, accepted as poster.
-
-This paper lies between the rejected papers (limited novelty, circularity issues) and the accepted ones (genuine methodological contribution). The problem formulation and empirical magnitude are genuine strengths, but the missing baselines are a critical gap that prevents confidence in the claimed mechanism, and the overclaiming on "two orders of magnitude" and "prospective prediction" is substantial. Comparable to LLaPA in the circularity/missing-baseline dimension, but with a novel problem formulation advantage.
-
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

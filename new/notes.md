@@ -6,6 +6,9 @@ Use LLM to analysis reviews and find problems
 pair wise对比相似主题的文章，一acc一rej看看模型能不能分出来，这个2025还是2026， 2026主要是有点随机，尤其是结果，还是2025
 测试cspaper with "published" removed
 
+
+pred human range，不用linear，而是直接看分布
+
 ---
 
 ## 2026-04-17  bench 2026 为什么 pred 挤在 4.5-5.5 的调查
