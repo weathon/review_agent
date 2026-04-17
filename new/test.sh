@@ -4,4 +4,4 @@ export HUMAN_FINDER="ollama:glm-5.1:cloud"
 export MERGER_MODEL="ollama:glm-5.1:cloud" 
 export OUTPUT_CSV="bench_scores_glm.csv" 
 export MERGE_LOG="pipeline_whole_2026.log"
-python main.py --single_paper ../paper.md --accept_csv bench_scores_2026.csv
+python main.py --single_paper ../paper.md --accept_csv bench_scores_glm.csv

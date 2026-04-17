@@ -77,7 +77,7 @@ to appear balanced.
 
 - List all reasonable weaknesses in the main review.
 - Put less reasonable ones that were removed into a "Removed Points" section with brief justification.
-- Be thorough: surface all reasonable weaknesses while filtering noise.
+- Be thorough: surface all reasonable weaknesses while filtering noise, but put them in the correct tier (fatal, major, minor, trivial) correctly, make it clear if it is something making the paper weak or something minor to improve. 
 Output your final review in this markdown format:
 
 ## Summary
@@ -87,20 +87,35 @@ Output your final review in this markdown format:
 - strength 1 with evidence
 - strength 2 with evidence
 
-
 ## Weaknesses
-// list all of the reasonable points, but rank them accordingly
-###: Fatal
-// if the paper has some fatal errors, list them here
+// List only reasonable, substantive points. Rank by severity.
+// Not every paper has weaknesses at every tier. Leave a tier empty (or write "None") if nothing qualifies.
+// When uncertain which tier a weakness belongs to, default to the lower tier.
 
-### Major:
+### Fatal
+// Errors that invalidate the paper's core claims or results.
+// Examples: fundamentally flawed methodology, unsupported central claim, incorrect proofs, data fabrication concerns.
+// Most papers have none. Leave empty if none apply.
+
+### Major
+// Issues that a reviewer would weigh against acceptance, and that the authors cannot fully resolve in a rebuttal.
+// Examples: missing critical baseline, overclaimed scope unsupported by experiments, significant methodological gap.
+// Not every paper has major weaknesses. Do not invent them to fill this section.
+
 - weakness 1 — why it matters
 - weakness 2 — why it matters
 
 ### Minor
+// Issues worth the authors' attention but unlikely to change an accept/reject decision.
+// Examples: addressable in rebuttal, limited scope of one experiment, unclear phrasing of a claim, missing ablation that would strengthen but not invalidate.
+
+- weakness 1 — why it matters
 
 ### Trivial
+// Small issues the authors should fix but that carry no weight in evaluation.
+// Examples: typos, minor notation inconsistencies, suboptimal figure choices, small presentation issues.
 
+- weakness 1
 
 ## Nice-to-Haves
 - suggestion that would improve but is not a core flaw
