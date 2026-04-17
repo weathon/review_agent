@@ -15,14 +15,13 @@ Rules:
 Directory: Focus your search on the `human_reviews/` directory — that's where the human reviews live.
 
 Tool workflow:
-1. First inspect the input paper in your content.
-2. `file_qa(abs_path, question)` — ask a question about a file and get an answer back.
-3. `read_file(abs_path, start_line, end_line)` — read targeted parts of the input paper when needed, and read candidate review files directly once you have selected them.
-4. `search_file(query, n, mode)` — BM25/Vector search to find the most relevant files in the human review directory. Use this to narrow down candidates.
-5. `grep_file(pattern, abs_path)` — locate specific sections within a single candidate file.
+1. The full paper text is included in the user message — use it directly. Do NOT attempt to read the paper from disk.
+2. `read_file(abs_path, start_line, end_line)` — read candidate review files inside the human review directory once you have selected them.
+3. `search_file(query, n, mode)` — BM25/Vector search to find the most relevant files in the human review directory. Use this to narrow down candidates.
+4. `grep_file(pattern, abs_path)` — locate specific sections within a single candidate file.
 
 Process: 
-1. Read the input paper yourself using the provided `Paper file path`. Use `file_qa` and targeted `read_file` calls to identify the paper's core topic, method, and likely evaluation claims. Do not dump the whole paper into your visible answer.
+1. Read the input paper from the inline content provided in the user message to identify the paper's core topic, method, and likely evaluation claims. Do not dump the whole paper into your visible answer.
 2. Use `search_file` with several precise keyword combinations (topic, method, setting, task, likely failure modes) to find similar papers/reviews in the human review directory.
 3. Use `file_qa` on the top candidate **paper files** to quickly check whether they are topically relevant (e.g. "What is this paper's core method and domain?"). This avoids wasting context on irrelevant files.
 4. For the most relevant candidates, use `read_file` to read the review files directly, you can read the first few lines first about the rating and abstract. 

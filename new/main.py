@@ -181,7 +181,8 @@ REVIEW_PROMPT = """Review the following paper thoroughly.
 
 NOTE: This paper was extracted from PDF by an automated parser. There may be formatting artifacts such as broken equations, garbled tables, misplaced figure references, or OCR errors. These are parser issues, NOT problems with the paper itself. Do NOT treat formatting artifacts as weaknesses.
 
-{paper_path}
+The full paper text is included below. Do NOT attempt to read the paper from disk — use the inline content.
+
 --- PAPER CONTENT START ---
 {paper_content}
 --- PAPER CONTENT END (EVERYTHING AFTER REFERENCE IS REMOVED) ---"""
@@ -195,7 +196,7 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         paper_content = f.read()
     paper_content = paper_content
 
-    review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
+    review_prompt = REVIEW_PROMPT.format(paper_content=paper_content)
     
     find_human_prompt = (
         f"Human reviews directory: {HUMAN_REVIEW_DIR}\n\n"
