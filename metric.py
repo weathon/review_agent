@@ -353,6 +353,40 @@ def analyze_and_plot(path):
 
     pred_dec = df["pred_decision"].fillna("N/A").str.strip().str.lower()
     gt_dec = df["gt_binary"].str.strip().str.lower()
+    accept_label = (gt_dec == "accept").astype(int).values
+
+    # Accept-rate per 1-point score bin
+    # pred side:  one (pred_score, paper_accept) point per paper
+    # human side: one (individual_reviewer_score, paper_accept) point per (paper, reviewer)
+    # (comparing pred — a single score — to individual reviewer scores, not to gt_avg which
+    # defines gt_binary by construction and would produce a tautological step function.)
+    unit_bin_edges = np.arange(0, 11)  # [0,1), [1,2), ..., [9,10]
+    unit_bin_labels = [f"[{int(unit_bin_edges[i])},{int(unit_bin_edges[i+1])})" for i in range(len(unit_bin_edges) - 1)]
+    unit_bin_labels[-1] = unit_bin_labels[-1].replace(")", "]")
+
+    def accept_rate_by_bin(scores, labels):
+        scores = np.asarray(scores, dtype=float)
+        labels = np.asarray(labels, dtype=int)
+        idx = np.digitize(scores, unit_bin_edges[1:-1])
+        out = []
+        for i in range(len(unit_bin_labels)):
+            mask = idx == i
+            n = int(mask.sum())
+            rate = float(labels[mask].mean()) if n > 0 else None
+            out.append((n, rate))
+        return out
+
+    human_scores_flat = []
+    human_labels_flat = []
+    for i, (_, row) in enumerate(df.iterrows()):
+        label = accept_label[i]
+        for c in gt_score_cols:
+            if pd.notna(row[c]):
+                human_scores_flat.append(float(row[c]))
+                human_labels_flat.append(label)
+
+    accept_rate_pred = accept_rate_by_bin(pred, accept_label)
+    accept_rate_human = accept_rate_by_bin(human_scores_flat, human_labels_flat)
     valid_dec_mask = ~pred_dec.isin(["n/a", ""])
     dec_match = ((pred_dec == gt_dec) & valid_dec_mask).sum()
     dec_eval_mask = valid_dec_mask & pred_dec.isin(["accept", "reject"]) & gt_dec.isin(["accept", "reject"])
@@ -461,6 +495,17 @@ def analyze_and_plot(path):
     for i, label in enumerate(bin_labels):
         if bin_counts[i] > 0:
             print(f"    [{label}]: n={bin_counts[i]:>3}, MAE={bin_maes_raw[i]:.4f}, Rounded MAE={bin_maes_rounded[i]:.4f}")
+    print(f"  {'─'*45}")
+    print(f"  Accept rate per 1-point score bin (pred vs individual human reviewer):")
+    print(f"    {'bin':<8} {'pred n':>7} {'pred rate':>12}     {'human n':>8} {'human rate':>12}")
+    for i, label in enumerate(unit_bin_labels):
+        pn, pr = accept_rate_pred[i]
+        hn, hr = accept_rate_human[i]
+        pr_str = f"{pr:.0%}" if pr is not None else "   -"
+        hr_str = f"{hr:.0%}" if hr is not None else "   -"
+        if pn == 0 and hn == 0:
+            continue
+        print(f"    {label:<8} {pn:>7d} {pr_str:>12}     {hn:>8d} {hr_str:>12}")
     print(f"  {'─'*45}")
     if valid_dec_mask.any():
         valid_decisions = int(valid_dec_mask.sum())
