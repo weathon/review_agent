@@ -8,7 +8,7 @@ import logging
 import time
 from collections import defaultdict
 from pathlib import Path
-from tools import read_file, read_file_full, grep_file, search_file  # glob_files removed (unused)
+from tools import read_file, read_file_full, grep_file, search_file, allow_path  # glob_files removed (unused)
 import weave
 weave.init("openai-agents")
 
@@ -155,7 +155,7 @@ else:
     human_finder = Agent(name="Human Finder", instructions=load_prompts("find_human_match.md"), tools=_tool_agents, model=model)
 
 _NO_CAL = "--no_cal" in __import__("sys").argv
-_merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_INJECTION, no_cal=_NO_CAL)
+_merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_FILE, no_cal=_NO_CAL)
 _merger_tools = [read_file, grep_file] if _NO_CAL else _tool_agents
 
 if MERGER_MODEL.startswith("claude_sdk:"):
@@ -192,6 +192,7 @@ The full paper text is included below. Do NOT attempt to read the paper from dis
 
 async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool = False) -> dict:
     paper_path_abs = os.path.abspath(paper_path)
+    allow_path(paper_path_abs)
     with open(paper_path, "r") as f:
         paper_content = f.read()
     paper_content = paper_content
@@ -243,9 +244,12 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         agent_usages["Merger"] = None
     else:
         merger_prompt = (
-            f"Here is the paper being reviewed (extracted from PDF — formatting "
-            f"artifacts are parser issues, not paper problems):\n\n"
-            f"--- PAPER CONTENT START ---\n{paper_content}--- PAPER CONTENT END ---\n\n"
+            f"Paper being reviewed (extracted from PDF — formatting artifacts are parser "
+            f"issues, not paper problems).\n\n"
+            f"Paper path: {paper_path_abs}\n"
+            f"Use read_file(abs_path, start_line, end_line) and grep_file(pattern, abs_path) "
+            f"to inspect the paper in chunks. Full-file reads of the paper are blocked — "
+            f"pass explicit line ranges.\n\n"
             f"Here are the inputs:\n\n{chr(10).join(labeled)}\n\n"
             f"Now produce the final consolidated review following your instructions. "
             f"Remember: many of the harsh critic's points may be nonsensical or overly "

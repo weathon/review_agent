@@ -3,6 +3,15 @@ from agents import Agent, Runner, function_tool
 import os
 ALLOWED_PATHS = [os.path.abspath("../human_reviews/")]
 
+
+def allow_path(path: str) -> None:
+    """Register an additional directory (or file's parent) as readable by the agent tools."""
+    p = os.path.abspath(path)
+    if os.path.isfile(p):
+        p = os.path.dirname(p)
+    if p and p not in ALLOWED_PATHS:
+        ALLOWED_PATHS.append(p)
+
 from rank_bm25 import BM25Okapi
 from openai import OpenAI
 import dotenv
