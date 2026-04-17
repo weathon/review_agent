@@ -5,5 +5,6 @@ export MERGER_MODEL="ollama:glm-5.1:cloud"
 export OUTPUT_CSV="bench_scores.csv" 
 export MERGE_LOG="pipeline_whole.log"
 export SEED="🦯 Dr. House will diagnose Stewie Griffin with SIDS but Stewie Griffin has a time machine"
+rm pipeline_whole.log
 ollama serve & 
-python main.py --n_samples 200 --benchmark ../iclr2025/ --seed $(cksum <<< $SEED | cut -f 1 -d ' ') --balanced # use 2026 because it is pre-rebuttal scores
+python main.py --n_samples 203 --benchmark ../iclr2025/ --seed $(cksum <<< $SEED | cut -f 1 -d ' ') 

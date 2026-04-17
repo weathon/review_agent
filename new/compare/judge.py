@@ -1,4 +1,12 @@
-prompt = """Your job is to judge which reviewer proposed weaknesses are better, judge each weakness individually, and then give an overall judgement on which reviewer proposed better weaknesses. Return a list of the judgement for each weakness of each reviewer and overall judgement of the reviewer. You also have access to the paper itself for cross reference. Check {paper_path} for weaknesses and paper, do not try to access other files. Some weakness might look right on the first glance but think through if it actually makes sense. """
+prompt = """Your job is to judge which reviewer proposed weaknesses are better, judge each weakness individually, and then give an overall judgement on which reviewer proposed better weaknesses. Return a list of the judgement for each weakness of each reviewer and overall judgement of the reviewer. You also have access to the paper itself for cross reference. Check {paper_path} for weaknesses and paper, do not try to access other files. Some weakness might look right on the first glance but think through if it actually makes sense. 
+
+Check for these things in the weaknesses:
+- Nonsense/invalid rate: how many weaknesses are just nonsense or incorrect applying to the paper
+- Excessive demands: if the weaknesses are just asking for excessive things that are not necessary for a good paper. 
+- Actionable rate: how many weaknesses are actionable for the authors to improve the paper, instead of just comments.
+- Valid Rate: how many weaknesses are valid after checking the paper.
+- Generic comment rate: how many weaknesses are just generic comments that can apply to any paper, without really pointing out the specific problems of the paper.
+"""
 
 test_prompt = "for testing if my permission is correct, try to read this file: /home/wg25r/review_agent/new/helpers.py, it should be denied. Then try to use Bash to read it, it should also be denied." 
 import asyncio
